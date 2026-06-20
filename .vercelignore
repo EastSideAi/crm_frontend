@@ -1,0 +1,11 @@
+_screens/
+_specs/
+_shot.mjs
+_diag.mjs
+_smoke-frontend.mjs
+_rev.mjs
+_rev2.mjs
+_rev4.mjs
+_rev5.mjs
+_patch_ai.py
+fonts/*.txt
