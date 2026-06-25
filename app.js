@@ -2712,7 +2712,7 @@
      (файлы / фото / тексты) и тред комментариев. Менеджер раскрывает задачу,
      смотрит присланное, принимает или возвращает, комментирует.
      Пока без бэка: состояние живёт локально в RM[id]. Контракт задачи:
-       { id, stage, title, owner:'client'|'team', status, need, attach:[type],
+       { id, stage, title, owner:'client'|'team', status, need, due:'YYYY-MM-DD'|'', attach:[type],
          subs:[{kind:'image'|'file'|'text'|'link', name, src, text, at}],
          comments:[{by:'mgr'|'client', text, at}] }
        status: 'wait' | 'doing' | 'review' | 'done' | 'return'
@@ -2733,7 +2733,7 @@
     { key: 'docs',     n: 3, title: 'Подготовка документов', sub: 'Собираем и оформляем весь пакет.',
       hint: 'Дедлайны: справка о несудимости — около 15 ноября · Duolingo / IELTS — до 1 января · многое — до 1 декабря.',
       presets: [
-        { t: 'Загранпаспорт', o: 'client', need: 'Разворот с фото, чётко, без бликов.', at: ['photo'] },
+        { t: 'Загранпаспорт', o: 'client', need: 'Разворот с фото, четко, без бликов.', at: ['photo'] },
         { t: 'Аттестат или диплом', o: 'client', need: 'Аттестат и приложение с оценками. Скан или ровное фото.', at: ['photo', 'file'] },
         { t: 'Выписка оценок', o: 'client', need: 'Официальная выписка за все классы.', at: ['file'] },
         { t: 'Языковой сертификат (HSK / IELTS / Duolingo / TOEFL)', o: 'client', need: 'Скан сертификата или результата.', at: ['photo', 'file'] },
@@ -2757,7 +2757,7 @@
       presets: [ { t: 'Спланировать маршрут и прибытие', o: 'team' }, { t: 'Регистрация в вузе и заселение', o: 'team' } ] },
   ];
   var RM_STATUS = {
-    wait:   { label: 'ждём' },
+    wait:   { label: 'ждем' },
     doing:  { label: 'в работе' },
     review: { label: 'на проверке' },
     done:   { label: 'готово' },
@@ -2791,19 +2791,19 @@
       { stage: 'intro', title: 'Проанализировать профиль', owner: 'team', status: 'done' },
       { stage: 'strategy', title: 'Сформировать стратегию поступления', owner: 'team', status: 'done' },
       { stage: 'strategy', title: 'Подобрать список вузов и грантов', owner: 'team', status: 'doing' },
-      { stage: 'docs', title: 'Загранпаспорт', owner: 'client', status: 'done', need: 'Разворот с фото, чётко, без бликов.', attach: ['photo'],
+      { stage: 'docs', title: 'Загранпаспорт', owner: 'client', status: 'done', need: 'Разворот с фото, четко, без бликов.', attach: ['photo'],
         subs: [{ kind: 'image', name: 'passport.jpg', at: hrs(48) }] },
       { stage: 'docs', title: 'Аттестат или диплом', owner: 'client', status: 'review', need: 'Аттестат и приложение с оценками. Скан или ровное фото, без бликов.', attach: ['photo', 'file'],
         subs: [{ kind: 'image', name: 'attestat.jpg', at: hrs(5) }, { kind: 'image', name: 'prilozhenie.jpg', at: hrs(5) }, { kind: 'file', name: 'diplom-perevod.pdf', at: hrs(5) }],
         comments: [{ by: 'client', text: 'Прислал аттестат и приложение с оценками, плюс перевод', at: hrs(5) }] },
       { stage: 'docs', title: 'Мотивационное письмо', owner: 'client', status: 'review', need: '200–300 слов: почему Китай, почему эта специальность.', attach: ['text'],
         subs: [{ kind: 'text', text: 'С детства увлекаюсь робототехникой и хочу учиться там, где она развивается быстрее всего. Китай для меня — это…', at: hrs(2) }] },
-      { stage: 'docs', title: 'Выписка оценок', owner: 'client', status: 'doing', need: 'Официальная выписка за все классы.', attach: ['file'] },
-      { stage: 'docs', title: 'Справка о несудимости', owner: 'client', status: 'wait', need: 'Оформляется около двух недель — начни заранее.', attach: ['file'] },
+      { stage: 'docs', title: 'Выписка оценок', owner: 'client', status: 'doing', need: 'Официальная выписка за все классы.', attach: ['file'], due: todayISO(-1) },
+      { stage: 'docs', title: 'Справка о несудимости', owner: 'client', status: 'wait', need: 'Оформляется около двух недель — начни заранее.', attach: ['file'], due: todayISO(5) },
       { stage: 'docs', title: 'Нотариальные переводы документов', owner: 'team', status: 'wait' },
     ];
     var arr = T.map(function (t, i) {
-      return Object.assign({ id: 'rm' + i + '_' + s4, need: '', attach: [], subs: [], comments: [] }, t);
+      return Object.assign({ id: 'rm' + i + '_' + s4, need: '', due: '', attach: [], subs: [], comments: [] }, t);
     });
     RM_OPEN[arr[6].id] = true;  /* аттестат раскрыт по умолчанию — сразу видно поток проверки */
     return arr;
@@ -2837,8 +2837,9 @@
     var open = !!RM_OPEN[t.id];
     var attach = t.attach || [], subs = t.subs || [], comments = t.comments || [];
 
-    /* свёрнутая мета-строка */
-    var bits = [];
+    var done = t.status === 'done';
+    /* мета-строка под названием: владелец · что прислать · счётчики (тихо) */
+    var bits = ['<span class="rm-who-t">' + (isClient ? 'клиент' : 'мы') + '</span>'];
     if (isClient && attach.length) {
       bits.push('<span class="rm-need-mini">нужно ' + attach.map(function (a) {
         var m = RM_ATTACH[a]; return m ? '<i title="' + m.label + '">' + ic(m.icon, 11) + '</i>' : '';
@@ -2846,18 +2847,24 @@
     }
     if (subs.length) bits.push('<span class="rm-cnt-mini hl">' + ic('clip', 11) + subs.length + ' прислал' + (subs.length > 1 ? 'и' : '') + '</span>');
     if (comments.length) bits.push('<span class="rm-cnt-mini">' + ic('chat', 11) + comments.length + '</span>');
-    var meta = bits.length ? '<div class="rm-sub-line">' + bits.join('') + '</div>' : '';
+    var meta = '<div class="rm-sub-line">' + bits.join('<span class="rm-meta-sep"></span>') + '</div>';
+
+    /* дедлайн-чип: тихий по умолчанию, подсветка «скоро» (≤7 дней) и «просрочено» */
+    var dueChip = '';
+    if (t.due && !done) {
+      var dst = t.due < todayISO(0) ? 'over' : (t.due <= todayISO(7) ? 'soon' : 'ok');
+      dueChip = '<span class="rm-due ' + dst + '">' + ic('clock', 11) + fmtDue(t.due) + '</span>';
+    }
+    /* статус-чип: готовые — без чипа (галочка и так всё говорит), «на проверке» — якорь */
+    var statusChip = done ? '' : '<span class="rm-status st-' + t.status + '">' +
+      (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>';
 
     var head = '<div class="rm-task-head">' +
-      '<button class="rm-ck" title="Отметить готовым">' + (t.status === 'done' ? ic('check', 12) : '') + '</button>' +
+      '<button class="rm-ck" title="Отметить готовым">' + (done ? ic('check', 12) : '') + '</button>' +
       '<div class="rm-tb">' +
-        '<div class="rm-tt">' +
-          '<span class="rm-who o-' + t.owner + '">' + ic(isClient ? 'leads' : 'team', 11) + (isClient ? 'клиент' : 'мы') + '</span>' +
-          '<span class="rm-title">' + esc(t.title) + '</span>' +
-        '</div>' + meta +
+        '<div class="rm-title">' + esc(t.title) + '</div>' + meta +
       '</div>' +
-      '<div class="rm-side">' +
-        '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>' +
+      '<div class="rm-side">' + dueChip + statusChip +
         '<span class="rm-exp">' + ic('go', 14) + '</span>' +
       '</div>' +
     '</div>';
@@ -2908,12 +2915,19 @@
     var pct = tasks.length ? Math.round(totalDone / tasks.length * 100) : 0;
 
     var html = '<div class="m-ctitle">Поступление в Китай</div>' +
-      '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернёшь, оставишь комментарий.</div>';
+      '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернешь, оставишь комментарий.</div>';
 
-    html += '<div class="rm-top">' +
-      '<div class="rm-prog"><div class="rm-prog-bar"><i style="width:' + pct + '%"></i></div>' +
-        '<span class="rm-prog-l"><b class="num">' + totalDone + '</b> из <span class="num">' + tasks.length + '</span> задач готово</span></div>' +
-      (reviewN ? '<div class="rm-review-pill">' + ic('bell', 13) + '<span class="num">' + reviewN + '</span> на проверке</div>' : '') +
+    html += '<div class="rm-summary">' +
+      '<div class="rm-sum-main">' +
+        '<div class="rm-sum-figure"><b class="num">' + totalDone + '</b><span class="num">/' + tasks.length + '</span></div>' +
+        '<div class="rm-sum-meta">' +
+          '<div class="rm-sum-l">задач готово</div>' +
+          '<div class="rm-prog-bar"><i style="width:' + pct + '%"></i></div>' +
+        '</div>' +
+      '</div>' +
+      (reviewN
+        ? '<button class="rm-review-cta" data-rmreview title="Перейти к первой задаче на проверке">' + ic('bell', 14) + '<span class="num">' + reviewN + '</span> ждут проверки</button>'
+        : '<div class="rm-allclear">' + ic('check', 13) + 'все проверено</div>') +
     '</div>';
 
     html += '<div class="rm-flow">';
@@ -2923,12 +2937,13 @@
       var hasReview = list.some(function (t) { return t.status === 'review'; });
       var active = list.some(function (t) { return t.status === 'doing' || t.status === 'review'; });
       var allDone = list.length > 0 && doneN === list.length;
-      var scls = allDone ? 'done' : active ? 'cur' : 'todo';
+      var empty = list.length === 0;
+      var scls = allDone ? 'done' : active ? 'cur' : empty ? 'empty' : 'todo';
 
       var hasClientPreset = st.presets.some(function (p) { return p.o === 'client'; });
       var defOwner = hasClientPreset ? 'client' : 'team';
 
-      var rows = list.length ? list.map(rmTaskRow).join('') : '<div class="rm-empty">На этом этапе пока нет задач</div>';
+      var rows = list.map(rmTaskRow).join('');
 
       var chips = st.presets.map(function (p) {
         return '<button class="rm-chip o-' + p.o + '" data-o="' + p.o + '" data-t="' + esc(p.t) + '"' +
@@ -2944,11 +2959,11 @@
         '<div class="rm-body">' +
           '<div class="rm-shead">' +
             '<div class="rm-stitle">' + esc(st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
-            (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '') +
+            (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
           '</div>' +
           '<div class="rm-ssub">' + esc(st.sub) + '</div>' +
           (st.hint ? '<div class="rm-hint">' + ic('clock', 12) + esc(st.hint) + '</div>' : '') +
-          '<div class="rm-tasks">' + rows + '</div>' +
+          (rows ? '<div class="rm-tasks">' + rows + '</div>' : '') +
           '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>' +
           '<div class="rm-add" data-stage="' + st.key + '" data-o="' + defOwner + '" hidden>' +
             '<div class="rm-add-own">' +
@@ -2959,8 +2974,16 @@
             '<div class="rm-form">' +
               '<input class="rm-f-title" placeholder="Название своей задачи" autocomplete="off">' +
               '<input class="rm-f-need" placeholder="Что нужно сделать — по желанию" autocomplete="off">' +
-              '<div class="rm-f-attach-l">Что прислать в ответ</div>' +
-              '<div class="rm-f-attach">' + attachToggle + '</div>' +
+              '<div class="rm-f-grid">' +
+                '<div class="rm-f-cell">' +
+                  '<div class="rm-f-l">Что прислать в ответ</div>' +
+                  '<div class="rm-f-attach">' + attachToggle + '</div>' +
+                '</div>' +
+                '<div class="rm-f-cell rm-f-cell-due">' +
+                  '<div class="rm-f-l">Срок <span class="rm-f-opt">по желанию</span></div>' +
+                  '<input type="date" class="rm-f-due">' +
+                '</div>' +
+              '</div>' +
               '<button class="rm-f-add bp sm">' + ic('plus', 13) + 'Добавить задачу</button>' +
             '</div>' +
           '</div>' +
@@ -3499,6 +3522,12 @@
         rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
         rmReload();
       };
+      // «N ждут проверки» в сводке — прокрутить к первой задаче на проверке
+      var rvCta = host.querySelector('[data-rmreview]');
+      if (rvCta) rvCta.addEventListener('click', function () {
+        var first = host.querySelector('.rm-task.st-review');
+        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
       Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-task'), function (tEl) {
         var tid = tEl.getAttribute('data-tid');
         // раскрытие/сворачивание задачи (клик по шапке, но не по чекбоксу)
@@ -3559,7 +3588,7 @@
         var addTask = function (opts) {
           if (!opts.title) return;
           var t = { id: 'rm' + Date.now() + Math.floor(Math.random() * 99), stage: stage, title: opts.title,
-            owner: opts.owner, status: 'wait', need: opts.need || '', attach: opts.attach || [], subs: [], comments: [] };
+            owner: opts.owner, status: 'wait', need: opts.need || '', due: opts.due || '', attach: opts.attach || [], subs: [], comments: [] };
           rmSet(id, rmTasks(id).concat([t]));
           RM_OPEN[t.id] = true;  // раскрываем новую задачу, чтоб сразу видеть задание
           rmReload();
@@ -3580,11 +3609,11 @@
         Array.prototype.forEach.call(panel.querySelectorAll('.rm-at-t'), function (ab) {
           ab.addEventListener('click', function () { ab.classList.toggle('on'); });
         });
-        var titleIn = panel.querySelector('.rm-f-title'), needIn = panel.querySelector('.rm-f-need');
+        var titleIn = panel.querySelector('.rm-f-title'), needIn = panel.querySelector('.rm-f-need'), dueIn = panel.querySelector('.rm-f-due');
         var submitCustom = function () {
           var v = titleIn ? titleIn.value.trim() : ''; if (!v) return;
           var attach = Array.prototype.map.call(panel.querySelectorAll('.rm-at-t.on'), function (x) { return x.getAttribute('data-a'); });
-          addTask({ title: v, owner: panel.getAttribute('data-o') || 'client', need: needIn ? needIn.value.trim() : '', attach: attach });
+          addTask({ title: v, owner: panel.getAttribute('data-o') || 'client', need: needIn ? needIn.value.trim() : '', due: dueIn ? dueIn.value : '', attach: attach });
         };
         var addBtn = panel.querySelector('.rm-f-add');
         if (addBtn) addBtn.addEventListener('click', submitCustom);
