@@ -1141,7 +1141,47 @@ a { color: inherit; text-decoration: none; }
 .rm-cmt-t { font-size: 13px; line-height: 1.5; }
 .rm-cmt.by-client .rm-cmt-t { color: var(--ink); }
 .rm-cmt-empty { font-size: 12.5px; color: var(--ink-3); margin-bottom: 10px; }
-.rm-cmt-add { display: flex; gap: 8px; align-items: center; }
+
+/* вложения внутри пузыря комментария */
+.rm-catts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 7px; }
+.rm-catt { text-decoration: none; }
+.rm-catt.img { display: block; width: 118px; height: 84px; border-radius: 10px; background-size: cover;
+  background-position: center; box-shadow: inset 0 0 0 1px rgba(17,21,31,.1); transition: transform .15s, box-shadow .15s; }
+.rm-catt.img:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px rgba(47,107,255,.5), 0 10px 22px -12px rgba(21,32,59,.4); }
+.rm-catt.file { display: inline-flex; align-items: center; gap: 8px; max-width: 230px; padding: 8px 11px;
+  border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink); background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.1); transition: box-shadow .15s; }
+.rm-catt.file:hover { box-shadow: inset 0 0 0 1px rgba(47,107,255,.4); }
+.rm-catt.file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-catt.file svg { color: var(--blue); flex: none; }
+.rm-cmt.by-mgr .rm-catt.img { box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); }
+.rm-cmt.by-mgr .rm-catt.file { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
+.rm-cmt.by-mgr .rm-catt.file svg { color: #fff; }
+
+/* композер: зона превью + строка (скрепка · поле · отправка) */
+.rm-cmt-add { display: flex; flex-direction: column; gap: 9px; }
+.rm-cmt-bar { display: flex; gap: 8px; align-items: center; }
+.rm-cmt-drafts { display: none; }
+.rm-cmt-drafts.has { display: flex; flex-wrap: wrap; gap: 9px; padding: 2px 1px; }
+.rm-cdraft { position: relative; }
+.rm-cdraft.img { width: 58px; height: 58px; border-radius: 10px; background-size: cover; background-position: center;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.12); }
+.rm-cdraft.file { display: inline-flex; align-items: center; gap: 7px; padding: 9px 30px 9px 11px; border-radius: 10px;
+  font-size: 12px; font-weight: 600; color: var(--ink); background: var(--fill); box-shadow: inset 0 0 0 1px rgba(17,21,31,.1); }
+.rm-cdraft.file svg { color: var(--blue); flex: none; }
+.rm-cdraft-nm { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-cdraft-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--ink); color: #fff; box-shadow: 0 2px 6px rgba(15,19,32,.3);
+  transition: transform .15s; }
+.rm-cdraft-x:hover { transform: scale(1.1); }
+.rm-cdraft-x svg { width: 11px; height: 11px; }
+.rm-cdraft.file .rm-cdraft-x { top: 50%; right: 7px; transform: translateY(-50%); box-shadow: none;
+  background: transparent; color: var(--ink-3); width: 16px; height: 16px; }
+.rm-cdraft.file .rm-cdraft-x:hover { color: var(--red); transform: translateY(-50%) scale(1.12); }
+.rm-cmt-clip { width: 40px; height: 40px; flex: none; border-radius: 11px; display: grid; place-items: center;
+  color: var(--ink-3); background: var(--fill); box-shadow: inset 0 0 0 1px rgba(17,21,31,.08);
+  transition: color .15s, background .15s, box-shadow .15s; }
+.rm-cmt-clip:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
 .rm-cmt-in { flex: 1; min-width: 0; outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
   background: #fff; border: 1px solid rgba(17,21,31,.1); border-radius: 11px; padding: 11px 13px;
   transition: border-color .15s, box-shadow .15s; }

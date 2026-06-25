@@ -2714,7 +2714,7 @@
      Пока без бэка: состояние живёт локально в RM[id]. Контракт задачи:
        { id, stage, title, owner:'client'|'team', status, need, due:'YYYY-MM-DD'|'', attach:[type],
          subs:[{kind:'image'|'file'|'text'|'link', name, src, text, at}],
-         comments:[{by:'mgr'|'client', text, at}] }
+         comments:[{by:'mgr'|'client', text, at, atts:[{kind:'image'|'file', name, src}]}] }
        status: 'wait' | 'doing' | 'review' | 'done' | 'return'
        тип вложения (attach / sub.kind): 'photo'|'file'|'text'|'link'             */
   var RM_ATTACH = {
@@ -2795,7 +2795,10 @@
         subs: [{ kind: 'image', name: 'passport.jpg', at: hrs(48) }] },
       { stage: 'docs', title: 'Аттестат или диплом', owner: 'client', status: 'review', need: 'Аттестат и приложение с оценками. Скан или ровное фото, без бликов.', attach: ['photo', 'file'],
         subs: [{ kind: 'image', name: 'attestat.jpg', at: hrs(5) }, { kind: 'image', name: 'prilozhenie.jpg', at: hrs(5) }, { kind: 'file', name: 'diplom-perevod.pdf', at: hrs(5) }],
-        comments: [{ by: 'client', text: 'Прислал аттестат и приложение с оценками, плюс перевод', at: hrs(5) }] },
+        comments: [
+          { by: 'client', text: 'Прислал аттестат и приложение с оценками, плюс перевод', at: hrs(5) },
+          { by: 'mgr', text: 'Принял, спасибо. Вот образец печати, которую ждем на справке, и список требований.', at: hrs(4), atts: [{ kind: 'image', name: 'obrazec-pechati.jpg' }, { kind: 'file', name: 'trebovaniya.pdf' }] },
+        ] },
       { stage: 'docs', title: 'Мотивационное письмо', owner: 'client', status: 'review', need: '200–300 слов: почему Китай, почему эта специальность.', attach: ['text'],
         subs: [{ kind: 'text', text: 'С детства увлекаюсь робототехникой и хочу учиться там, где она развивается быстрее всего. Китай для меня — это…', at: hrs(2) }] },
       { stage: 'docs', title: 'Выписка оценок', owner: 'client', status: 'doing', need: 'Официальная выписка за все классы.', attach: ['file'], due: todayISO(-1) },
@@ -2829,6 +2832,50 @@
     }
     return '<a class="rm-sub rm-sub-file" href="' + (s.src || '#') + '"' + (s.src ? ' target="_blank" rel="noopener"' : '') + '>' +
       '<span class="rm-sub-fic">' + ic('doc', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || 'файл') + '</span><span class="rm-sub-open">' + ic('dl', 13) + '</span></a>';
+  }
+
+  /* черновики вложений к комментарию, по id задачи: { atts:[{kind,name,src}] } */
+  var RM_DRAFT = {};
+  /* картинку сжимаем на клиенте: ужимаем до 1400px и в jpeg ~0.82, чтобы не таскать тяжёлые исходники */
+  function rmCompressImage(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1400, w = img.width, h = img.height;
+        if (w > max || h > max) { var k = Math.min(max / w, max / h); w = Math.round(w * k); h = Math.round(h * k); }
+        var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        try { cv.getContext('2d').drawImage(img, 0, 0, w, h); cb({ kind: 'image', name: file.name, src: cv.toDataURL('image/jpeg', 0.82) }); }
+        catch (e) { cb({ kind: 'image', name: file.name, src: reader.result }); }
+      };
+      img.onerror = function () { cb({ kind: 'image', name: file.name, src: reader.result }); };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  function rmReadFile(file, cb) {
+    var reader = new FileReader();
+    reader.onload = function () { cb({ kind: 'file', name: file.name, src: reader.result }); };
+    reader.readAsDataURL(file);
+  }
+  /* превью вложения в композере (с крестиком) */
+  function rmDraftCard(a, i) {
+    if (a.kind === 'image') {
+      return '<div class="rm-cdraft img" data-i="' + i + '" style="background-image:url(\'' + a.src + '\')">' +
+        '<button class="rm-cdraft-x" title="Убрать">' + ic('x', 11) + '</button></div>';
+    }
+    return '<div class="rm-cdraft file" data-i="' + i + '">' + ic('doc', 13) +
+      '<span class="rm-cdraft-nm">' + esc(a.name || 'файл') + '</span>' +
+      '<button class="rm-cdraft-x" title="Убрать">' + ic('x', 11) + '</button></div>';
+  }
+  /* вложение внутри пузыря комментария (кликабельное) */
+  function rmCmtAttCard(a) {
+    if (a.kind === 'image') {
+      var src = a.src || rmDemoImg();
+      return '<a class="rm-catt img" href="' + src + '" target="_blank" rel="noopener" style="background-image:url(\'' + src + '\')"></a>';
+    }
+    return '<a class="rm-catt file" href="' + (a.src || '#') + '"' + (a.src ? ' download="' + esc(a.name || 'file') + '" target="_blank"' : '') + '>' +
+      ic('doc', 13) + '<span>' + esc(a.name || 'файл') + '</span></a>';
   }
 
   function rmTaskRow(t) {
@@ -2891,12 +2938,22 @@
       }
       d += '<div class="rm-dsec"><div class="rm-dh">Комментарии</div>' +
         (comments.length ? '<div class="rm-cmts">' + comments.map(function (c) {
+          var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
+          var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
           return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
             '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
             (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' +
-            '<div class="rm-cmt-t">' + esc(c.text) + '</div></div>';
+            ctxt + catts + '</div>';
         }).join('') + '</div>' : '<div class="rm-cmt-empty">Комментариев пока нет</div>') +
-        '<div class="rm-cmt-add"><input class="rm-cmt-in" placeholder="Комментарий по задаче…" autocomplete="off"><button class="rm-cmt-send" title="Отправить">' + ic('send', 14) + '</button></div></div>';
+        '<div class="rm-cmt-add">' +
+          '<div class="rm-cmt-drafts"></div>' +
+          '<div class="rm-cmt-bar">' +
+            '<button class="rm-cmt-clip" title="Прикрепить фото или документ">' + ic('clip', 16) + '</button>' +
+            '<input class="rm-cmt-in" placeholder="Комментарий по задаче…" autocomplete="off">' +
+            '<button class="rm-cmt-send" title="Отправить">' + ic('send', 14) + '</button>' +
+          '</div>' +
+          '<input type="file" class="rm-cmt-file" accept="image/*,.pdf,.doc,.docx,.heic" multiple hidden>' +
+        '</div></div>';
 
       d += '<div class="rm-dfoot"><button class="rm-del">' + ic('x', 12) + 'Убрать задачу</button></div>';
       detail = '<div class="rm-detail">' + d + '</div>';
@@ -3563,11 +3620,36 @@
         };
         if (retSend) retSend.addEventListener('click', doReturn);
         if (retIn) retIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doReturn(); } });
-        // комментарий по задаче
+        // комментарий по задаче + вложения (фото/документы)
         var cmtIn = tEl.querySelector('.rm-cmt-in'), cmtSend = tEl.querySelector('.rm-cmt-send');
+        var cmtClip = tEl.querySelector('.rm-cmt-clip'), cmtFile = tEl.querySelector('.rm-cmt-file'),
+            cmtDrafts = tEl.querySelector('.rm-cmt-drafts');
+        var draftArr = function () { if (!RM_DRAFT[tid]) RM_DRAFT[tid] = { atts: [] }; return RM_DRAFT[tid].atts; };
+        // превью черновика рисуем точечно, без полного ререндера — иначе слетал бы набранный текст
+        var renderDrafts = function () {
+          if (!cmtDrafts) return;
+          var arr = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
+          cmtDrafts.className = 'rm-cmt-drafts' + (arr.length ? ' has' : '');
+          cmtDrafts.innerHTML = arr.map(rmDraftCard).join('');
+          Array.prototype.forEach.call(cmtDrafts.querySelectorAll('.rm-cdraft-x'), function (xb) {
+            xb.addEventListener('click', function () { draftArr().splice(+xb.parentNode.getAttribute('data-i'), 1); renderDrafts(); });
+          });
+        };
+        renderDrafts();
+        if (cmtClip && cmtFile) cmtClip.addEventListener('click', function () { cmtFile.click(); });
+        if (cmtFile) cmtFile.addEventListener('change', function () {
+          var files = Array.prototype.slice.call(cmtFile.files || []); cmtFile.value = '';
+          files.forEach(function (f) {
+            var done = function (a) { draftArr().push(a); renderDrafts(); };
+            if (/^image\//.test(f.type)) rmCompressImage(f, done); else rmReadFile(f, done);
+          });
+        });
         var doCmt = function () {
-          var c = cmtIn ? cmtIn.value.trim() : ''; if (!c) return;
-          rmUpd(tid, function (t) { t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString() }]); return t; });
+          var c = cmtIn ? cmtIn.value.trim() : '';
+          var atts = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
+          if (!c && !atts.length) return;
+          var attsCopy = atts.slice(); delete RM_DRAFT[tid];
+          rmUpd(tid, function (t) { t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString(), atts: attsCopy }]); return t; });
         };
         if (cmtSend) cmtSend.addEventListener('click', doCmt);
         if (cmtIn) cmtIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doCmt(); } });
