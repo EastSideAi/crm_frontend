@@ -9,3 +9,8 @@
 *.log
 .DS_Store
 Thumbs.db
+
+# dev throwaway scripts
+/_*.mjs
+/_*.js
+shot.js

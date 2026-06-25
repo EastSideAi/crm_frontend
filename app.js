@@ -140,6 +140,8 @@
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
+      image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
+      clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -2693,15 +2695,281 @@
   /* ── DRAWER (карточка лида) ───────────────────────────── */
   /* ════ КАРТОЧКА КЛИЕНТА — центр-модалка с левой навигацией ════ */
   var MODAL_SECTIONS = [
-    { id: 'main',   label: 'Главное',    icon: 'target' },
-    { id: 'now',    label: 'Сейчас',     icon: 'flame' },
-    { id: 'path',   label: 'Путь',       icon: 'path' },
+    { id: 'main',      label: 'Главное',     icon: 'target' },
+    { id: 'now',       label: 'Сейчас',      icon: 'flame' },
+    { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
     { id: 'notify', label: 'Написать',   icon: 'send' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
+
+  /* ════ ПОСТУПЛЕНИЕ — конструктор задач по этапам пути в Китай ════
+     Путь клиента разложен на этапы. У задачи есть владелец (клиент / мы), статус,
+     задание (что сделать), список того, что нужно прислать, присланное клиентом
+     (файлы / фото / тексты) и тред комментариев. Менеджер раскрывает задачу,
+     смотрит присланное, принимает или возвращает, комментирует.
+     Пока без бэка: состояние живёт локально в RM[id]. Контракт задачи:
+       { id, stage, title, owner:'client'|'team', status, need, attach:[type],
+         subs:[{kind:'image'|'file'|'text'|'link', name, src, text, at}],
+         comments:[{by:'mgr'|'client', text, at}] }
+       status: 'wait' | 'doing' | 'review' | 'done' | 'return'
+       тип вложения (attach / sub.kind): 'photo'|'file'|'text'|'link'             */
+  var RM_ATTACH = {
+    photo: { label: 'Фото',   icon: 'image' },
+    file:  { label: 'Файл',   icon: 'doc' },
+    text:  { label: 'Текст',  icon: 'note' },
+    link:  { label: 'Ссылка', icon: 'ext' },
+  };
+  var ADMISSION_STAGES = [
+    { key: 'intro',    n: 1, title: 'Знакомство и анализ',  sub: 'Собираем профиль и понимаем, с чем работаем.',
+      presets: [ { t: 'Заполнить анкету', o: 'client', need: 'Пройти все шаги анкеты на платформе.', at: ['text'] },
+                 { t: 'Пройти консультацию', o: 'client' },
+                 { t: 'Проанализировать профиль', o: 'team' } ] },
+    { key: 'strategy', n: 2, title: 'Стратегия',            sub: 'Подбираем гранты и вузы под профиль.',
+      presets: [ { t: 'Сформировать стратегию поступления', o: 'team' }, { t: 'Подобрать список вузов и грантов', o: 'team' } ] },
+    { key: 'docs',     n: 3, title: 'Подготовка документов', sub: 'Собираем и оформляем весь пакет.',
+      hint: 'Дедлайны: справка о несудимости — около 15 ноября · Duolingo / IELTS — до 1 января · многое — до 1 декабря.',
+      presets: [
+        { t: 'Загранпаспорт', o: 'client', need: 'Разворот с фото, чётко, без бликов.', at: ['photo'] },
+        { t: 'Аттестат или диплом', o: 'client', need: 'Аттестат и приложение с оценками. Скан или ровное фото.', at: ['photo', 'file'] },
+        { t: 'Выписка оценок', o: 'client', need: 'Официальная выписка за все классы.', at: ['file'] },
+        { t: 'Языковой сертификат (HSK / IELTS / Duolingo / TOEFL)', o: 'client', need: 'Скан сертификата или результата.', at: ['photo', 'file'] },
+        { t: 'Мотивационное письмо', o: 'client', need: '200–300 слов: почему Китай, почему эта специальность.', at: ['text'] },
+        { t: 'Рекомендательные письма', o: 'client', need: 'От преподавателя последней ступени обучения.', at: ['file'] },
+        { t: 'Справка о несудимости', o: 'client', need: 'Оформляется около двух недель — начни заранее.', at: ['file'] },
+        { t: 'Медицинская справка', o: 'client', need: 'Форма для выезжающих за рубеж.', at: ['file'] },
+        { t: 'Фотографии', o: 'client', need: 'Формат для документов, белый фон.', at: ['photo'] },
+        { t: 'Проверить и подписать анкеты вузов', o: 'client', need: 'Проверь данные и пришли подписанные сканы.', at: ['file'] },
+        { t: 'Нотариальные переводы документов', o: 'team' }, { t: 'Заполнить анкеты вузов и грантов', o: 'team' },
+        { t: 'Проверить корректность пакета', o: 'team' } ] },
+    { key: 'submit',   n: 4, title: 'Подача',                sub: 'Отправляем документы в вузы.',
+      presets: [ { t: 'Подать документы в вузы', o: 'team' } ] },
+    { key: 'exam',     n: 5, title: 'Интервью и экзамены',  sub: 'Если вуз или грант их предусматривает.',
+      presets: [ { t: 'Подготовить кандидата к интервью', o: 'team' }, { t: 'Пройти собеседование или экзамен', o: 'client' } ] },
+    { key: 'result',   n: 6, title: 'Результат и выбор',    sub: 'Разбираем офферы и выбираем грант.',
+      presets: [ { t: 'Помочь с анализом офферов', o: 'team' }, { t: 'Выбрать подходящий грант', o: 'client' } ] },
+    { key: 'visa',     n: 7, title: 'Визовое оформление',   sub: 'Готовим документы на визу.',
+      presets: [ { t: 'Оформить документы на визу', o: 'team' } ] },
+    { key: 'move',     n: 8, title: 'Переезд и заселение',  sub: 'Маршрут, прибытие, регистрация в вузе.',
+      presets: [ { t: 'Спланировать маршрут и прибытие', o: 'team' }, { t: 'Регистрация в вузе и заселение', o: 'team' } ] },
+  ];
+  var RM_STATUS = {
+    wait:   { label: 'ждём' },
+    doing:  { label: 'в работе' },
+    review: { label: 'на проверке' },
+    done:   { label: 'готово' },
+    return: { label: 'вернули' },
+  };
+  var RM = {};
+  var RM_OPEN = {};  /* какие задачи раскрыты (по id) */
+
+  /* демо-превью присланного документа (пока нет реальных файлов) */
+  function rmDemoImg() {
+    var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='220' height='150'>" +
+      "<rect width='220' height='150' fill='#EEF2FB'/>" +
+      "<rect x='22' y='16' width='176' height='118' rx='8' fill='#fff' stroke='#D6E0F5'/>" +
+      "<rect x='38' y='32' width='84' height='11' rx='4' fill='#BBD0F4'/>" +
+      "<rect x='38' y='56' width='144' height='7' rx='3.5' fill='#E4EAF6'/>" +
+      "<rect x='38' y='71' width='144' height='7' rx='3.5' fill='#E4EAF6'/>" +
+      "<rect x='38' y='86' width='110' height='7' rx='3.5' fill='#E4EAF6'/>" +
+      "<rect x='38' y='108' width='56' height='15' rx='4' fill='#2F6BFF' opacity='.9'/>" +
+      "</svg>";
+    return 'data:image/svg+xml;base64,' + btoa(svg);
+  }
+  function rmSeed(id) {
+    /* демо-наполнение, чтобы прочувствовать поток: присланное, проверка, комментарии */
+    var s4 = String(id).slice(0, 4);
+    var now = Date.now();
+    var hrs = function (h) { return new Date(now - h * 3600000).toISOString(); };
+    var T = [
+      { stage: 'intro', title: 'Заполнить анкету', owner: 'client', status: 'done', need: 'Пройти все шаги анкеты на платформе.', attach: ['text'],
+        subs: [{ kind: 'text', text: 'Анкета заполнена полностью — 7 из 7 шагов.', at: hrs(72) }] },
+      { stage: 'intro', title: 'Пройти консультацию', owner: 'client', status: 'done' },
+      { stage: 'intro', title: 'Проанализировать профиль', owner: 'team', status: 'done' },
+      { stage: 'strategy', title: 'Сформировать стратегию поступления', owner: 'team', status: 'done' },
+      { stage: 'strategy', title: 'Подобрать список вузов и грантов', owner: 'team', status: 'doing' },
+      { stage: 'docs', title: 'Загранпаспорт', owner: 'client', status: 'done', need: 'Разворот с фото, чётко, без бликов.', attach: ['photo'],
+        subs: [{ kind: 'image', name: 'passport.jpg', at: hrs(48) }] },
+      { stage: 'docs', title: 'Аттестат или диплом', owner: 'client', status: 'review', need: 'Аттестат и приложение с оценками. Скан или ровное фото, без бликов.', attach: ['photo', 'file'],
+        subs: [{ kind: 'image', name: 'attestat.jpg', at: hrs(5) }, { kind: 'image', name: 'prilozhenie.jpg', at: hrs(5) }, { kind: 'file', name: 'diplom-perevod.pdf', at: hrs(5) }],
+        comments: [{ by: 'client', text: 'Прислал аттестат и приложение с оценками, плюс перевод', at: hrs(5) }] },
+      { stage: 'docs', title: 'Мотивационное письмо', owner: 'client', status: 'review', need: '200–300 слов: почему Китай, почему эта специальность.', attach: ['text'],
+        subs: [{ kind: 'text', text: 'С детства увлекаюсь робототехникой и хочу учиться там, где она развивается быстрее всего. Китай для меня — это…', at: hrs(2) }] },
+      { stage: 'docs', title: 'Выписка оценок', owner: 'client', status: 'doing', need: 'Официальная выписка за все классы.', attach: ['file'] },
+      { stage: 'docs', title: 'Справка о несудимости', owner: 'client', status: 'wait', need: 'Оформляется около двух недель — начни заранее.', attach: ['file'] },
+      { stage: 'docs', title: 'Нотариальные переводы документов', owner: 'team', status: 'wait' },
+    ];
+    var arr = T.map(function (t, i) {
+      return Object.assign({ id: 'rm' + i + '_' + s4, need: '', attach: [], subs: [], comments: [] }, t);
+    });
+    RM_OPEN[arr[6].id] = true;  /* аттестат раскрыт по умолчанию — сразу видно поток проверки */
+    return arr;
+  }
+  function rmTasks(id) { if (!RM[id]) RM[id] = rmSeed(id); return RM[id]; }
+  function rmSet(id, arr) { RM[id] = arr; }
+  function rmReviewCount(id) { return rmTasks(id).filter(function (t) { return t.status === 'review'; }).length; }
+
+  /* присланное клиентом — одна карточка вложения */
+  function rmSubCard(s) {
+    if (s.kind === 'image') {
+      var img = s.src || rmDemoImg();
+      return '<a class="rm-sub rm-sub-img" href="' + img + '" target="_blank" rel="noopener">' +
+        '<span class="rm-sub-thumb" style="background-image:url(\'' + img + '\')"></span>' +
+        '<span class="rm-sub-cap">' + esc(s.name || 'фото') + '</span></a>';
+    }
+    if (s.kind === 'text') {
+      return '<div class="rm-sub rm-sub-text">' + ic('note', 13) + '<span>' + esc(s.text || '') + '</span></div>';
+    }
+    if (s.kind === 'link') {
+      return '<a class="rm-sub rm-sub-file" href="' + esc(s.src || '#') + '" target="_blank" rel="noopener">' +
+        '<span class="rm-sub-fic">' + ic('ext', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || s.src || 'ссылка') + '</span><span class="rm-sub-open">открыть</span></a>';
+    }
+    return '<a class="rm-sub rm-sub-file" href="' + (s.src || '#') + '"' + (s.src ? ' target="_blank" rel="noopener"' : '') + '>' +
+      '<span class="rm-sub-fic">' + ic('doc', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || 'файл') + '</span><span class="rm-sub-open">' + ic('dl', 13) + '</span></a>';
+  }
+
+  function rmTaskRow(t) {
+    var sm = RM_STATUS[t.status] || RM_STATUS.wait;
+    var isClient = t.owner === 'client';
+    var open = !!RM_OPEN[t.id];
+    var attach = t.attach || [], subs = t.subs || [], comments = t.comments || [];
+
+    /* свёрнутая мета-строка */
+    var bits = [];
+    if (isClient && attach.length) {
+      bits.push('<span class="rm-need-mini">нужно ' + attach.map(function (a) {
+        var m = RM_ATTACH[a]; return m ? '<i title="' + m.label + '">' + ic(m.icon, 11) + '</i>' : '';
+      }).join('') + '</span>');
+    }
+    if (subs.length) bits.push('<span class="rm-cnt-mini hl">' + ic('clip', 11) + subs.length + ' прислал' + (subs.length > 1 ? 'и' : '') + '</span>');
+    if (comments.length) bits.push('<span class="rm-cnt-mini">' + ic('chat', 11) + comments.length + '</span>');
+    var meta = bits.length ? '<div class="rm-sub-line">' + bits.join('') + '</div>' : '';
+
+    var head = '<div class="rm-task-head">' +
+      '<button class="rm-ck" title="Отметить готовым">' + (t.status === 'done' ? ic('check', 12) : '') + '</button>' +
+      '<div class="rm-tb">' +
+        '<div class="rm-tt">' +
+          '<span class="rm-who o-' + t.owner + '">' + ic(isClient ? 'leads' : 'team', 11) + (isClient ? 'клиент' : 'мы') + '</span>' +
+          '<span class="rm-title">' + esc(t.title) + '</span>' +
+        '</div>' + meta +
+      '</div>' +
+      '<div class="rm-side">' +
+        '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>' +
+        '<span class="rm-exp">' + ic('go', 14) + '</span>' +
+      '</div>' +
+    '</div>';
+
+    var detail = '';
+    if (open) {
+      var d = '';
+      if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Задание</div><div class="rm-need">' + esc(t.need) + '</div></div>';
+      if (isClient && attach.length) {
+        d += '<div class="rm-dsec"><div class="rm-dh">Нужно прислать</div><div class="rm-achips">' + attach.map(function (a) {
+          var m = RM_ATTACH[a]; return m ? '<span class="rm-achip">' + ic(m.icon, 12) + m.label + '</span>' : '';
+        }).join('') + '</div></div>';
+      }
+      if (isClient) {
+        d += '<div class="rm-dsec"><div class="rm-dh">Прислал клиент' + (subs.length ? ' <span class="rm-dh-n">' + subs.length + '</span>' : '') + '</div>' +
+          (subs.length ? '<div class="rm-subs">' + subs.map(rmSubCard).join('') + '</div>'
+                       : '<div class="rm-subs-empty">' + ic('clip', 13) + 'Пока ничего не прислал</div>') + '</div>';
+      }
+      if (t.status === 'review') {
+        d += '<div class="rm-review-act">' +
+          '<button class="bp sm rm-accept">' + ic('check', 13) + 'Принять</button>' +
+          '<button class="rm-return">' + ic('refresh', 13) + 'Вернуть на доработку</button></div>' +
+          '<div class="rm-ret-box" hidden><input class="rm-ret-in" placeholder="Что поправить — клиент увидит это" autocomplete="off"><button class="bp sm rm-ret-send">' + ic('send', 13) + 'Вернуть</button></div>';
+      }
+      d += '<div class="rm-dsec"><div class="rm-dh">Комментарии</div>' +
+        (comments.length ? '<div class="rm-cmts">' + comments.map(function (c) {
+          return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
+            '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
+            (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' +
+            '<div class="rm-cmt-t">' + esc(c.text) + '</div></div>';
+        }).join('') + '</div>' : '<div class="rm-cmt-empty">Комментариев пока нет</div>') +
+        '<div class="rm-cmt-add"><input class="rm-cmt-in" placeholder="Комментарий по задаче…" autocomplete="off"><button class="rm-cmt-send" title="Отправить">' + ic('send', 14) + '</button></div></div>';
+
+      d += '<div class="rm-dfoot"><button class="rm-del">' + ic('x', 12) + 'Убрать задачу</button></div>';
+      detail = '<div class="rm-detail">' + d + '</div>';
+    }
+
+    return '<div class="rm-task o-' + t.owner + ' st-' + t.status + (open ? ' open' : '') + '" data-tid="' + esc(t.id) + '">' + head + detail + '</div>';
+  }
+
+  function buildAdmissionSection(ctx) {
+    var id = state.drawerId;
+    var tasks = rmTasks(id);
+    var byStage = {};
+    tasks.forEach(function (t) { (byStage[t.stage] = byStage[t.stage] || []).push(t); });
+    var totalDone = tasks.filter(function (t) { return t.status === 'done'; }).length;
+    var reviewN = tasks.filter(function (t) { return t.status === 'review'; }).length;
+    var pct = tasks.length ? Math.round(totalDone / tasks.length * 100) : 0;
+
+    var html = '<div class="m-ctitle">Поступление в Китай</div>' +
+      '<div class="m-csub">Путь клиента по этапам: что делает он, что делаем мы. Раскрой задачу — увидишь присланное, примешь или вернёшь, оставишь комментарий.</div>';
+
+    html += '<div class="rm-top">' +
+      '<div class="rm-prog"><div class="rm-prog-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<span class="rm-prog-l"><b class="num">' + totalDone + '</b> из <span class="num">' + tasks.length + '</span> задач готово</span></div>' +
+      (reviewN ? '<div class="rm-review-pill">' + ic('bell', 13) + '<span class="num">' + reviewN + '</span> на проверке</div>' : '') +
+    '</div>';
+
+    html += '<div class="rm-flow">';
+    ADMISSION_STAGES.forEach(function (st) {
+      var list = byStage[st.key] || [];
+      var doneN = list.filter(function (t) { return t.status === 'done'; }).length;
+      var hasReview = list.some(function (t) { return t.status === 'review'; });
+      var active = list.some(function (t) { return t.status === 'doing' || t.status === 'review'; });
+      var allDone = list.length > 0 && doneN === list.length;
+      var scls = allDone ? 'done' : active ? 'cur' : 'todo';
+
+      var hasClientPreset = st.presets.some(function (p) { return p.o === 'client'; });
+      var defOwner = hasClientPreset ? 'client' : 'team';
+
+      var rows = list.length ? list.map(rmTaskRow).join('') : '<div class="rm-empty">На этом этапе пока нет задач</div>';
+
+      var chips = st.presets.map(function (p) {
+        return '<button class="rm-chip o-' + p.o + '" data-o="' + p.o + '" data-t="' + esc(p.t) + '"' +
+          ' data-need="' + esc(p.need || '') + '" data-at="' + ((p.at || []).join(',')) + '">' + ic('plus', 11) + esc(p.t) + '</button>';
+      }).join('');
+
+      var attachToggle = ['photo', 'file', 'text', 'link'].map(function (a) {
+        var m = RM_ATTACH[a]; return '<button class="rm-at-t" data-a="' + a + '">' + ic(m.icon, 12) + m.label + '</button>';
+      }).join('');
+
+      html += '<div class="rm-stage ' + scls + '">' +
+        '<div class="rm-rail"><div class="rm-node">' + (allDone ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
+        '<div class="rm-body">' +
+          '<div class="rm-shead">' +
+            '<div class="rm-stitle">' + esc(st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
+            (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '') +
+          '</div>' +
+          '<div class="rm-ssub">' + esc(st.sub) + '</div>' +
+          (st.hint ? '<div class="rm-hint">' + ic('clock', 12) + esc(st.hint) + '</div>' : '') +
+          '<div class="rm-tasks">' + rows + '</div>' +
+          '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>' +
+          '<div class="rm-add" data-stage="' + st.key + '" data-o="' + defOwner + '" hidden>' +
+            '<div class="rm-add-own">' +
+              '<button data-o="client"' + (defOwner === 'client' ? ' class="on"' : '') + '>' + ic('leads', 12) + 'Клиент делает</button>' +
+              '<button data-o="team"' + (defOwner === 'team' ? ' class="on"' : '') + '>' + ic('team', 12) + 'Делаем мы</button>' +
+            '</div>' +
+            (chips ? '<div class="rm-presets">' + chips + '</div>' : '') +
+            '<div class="rm-form">' +
+              '<input class="rm-f-title" placeholder="Название своей задачи" autocomplete="off">' +
+              '<input class="rm-f-need" placeholder="Что нужно сделать — по желанию" autocomplete="off">' +
+              '<div class="rm-f-attach-l">Что прислать в ответ</div>' +
+              '<div class="rm-f-attach">' + attachToggle + '</div>' +
+              '<button class="rm-f-add bp sm">' + ic('plus', 13) + 'Добавить задачу</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    return html;
+  }
 
   function openDrawer(id, listIds) {
     state.drawerId = id;
@@ -2782,6 +3050,7 @@
     var navHtml = MODAL_SECTIONS.map(function (sct) {
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
+      else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -2844,6 +3113,7 @@
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
+    else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'path') host.innerHTML = buildPathSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
@@ -3220,6 +3490,108 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
+
+    // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
+    var rmHost = host.querySelector('.rm-flow');
+    if (rmHost) {
+      var rmReload = function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); };
+      var rmUpd = function (tid, fn) {
+        rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
+        rmReload();
+      };
+      Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-task'), function (tEl) {
+        var tid = tEl.getAttribute('data-tid');
+        // раскрытие/сворачивание задачи (клик по шапке, но не по чекбоксу)
+        var headEl = tEl.querySelector('.rm-task-head');
+        if (headEl) headEl.addEventListener('click', function (e) {
+          if (e.target.closest('.rm-ck')) return;
+          if (RM_OPEN[tid]) delete RM_OPEN[tid]; else RM_OPEN[tid] = true;
+          rmReload();
+        });
+        // чек-кружок: тогл готово
+        var ck = tEl.querySelector('.rm-ck');
+        if (ck) ck.addEventListener('click', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) { t.status = t.status === 'done' ? 'doing' : 'done'; return t; });
+        });
+        // принять
+        var acc = tEl.querySelector('.rm-accept');
+        if (acc) acc.addEventListener('click', function () { rmUpd(tid, function (t) { t.status = 'done'; return t; }); });
+        // вернуть на доработку (с комментарием в тред)
+        var ret = tEl.querySelector('.rm-return'), retBox = tEl.querySelector('.rm-ret-box');
+        if (ret && retBox) ret.addEventListener('click', function () {
+          retBox.hidden = !retBox.hidden;
+          if (!retBox.hidden) { var i = retBox.querySelector('input'); if (i) i.focus(); }
+        });
+        var retIn = tEl.querySelector('.rm-ret-in'), retSend = tEl.querySelector('.rm-ret-send');
+        var doReturn = function () {
+          var c = retIn ? retIn.value.trim() : '';
+          rmUpd(tid, function (t) {
+            t.status = 'return';
+            if (c) t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString() }]);
+            return t;
+          });
+        };
+        if (retSend) retSend.addEventListener('click', doReturn);
+        if (retIn) retIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doReturn(); } });
+        // комментарий по задаче
+        var cmtIn = tEl.querySelector('.rm-cmt-in'), cmtSend = tEl.querySelector('.rm-cmt-send');
+        var doCmt = function () {
+          var c = cmtIn ? cmtIn.value.trim() : ''; if (!c) return;
+          rmUpd(tid, function (t) { t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString() }]); return t; });
+        };
+        if (cmtSend) cmtSend.addEventListener('click', doCmt);
+        if (cmtIn) cmtIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doCmt(); } });
+        // убрать задачу
+        var del = tEl.querySelector('.rm-del');
+        if (del) del.addEventListener('click', function () { delete RM_OPEN[tid]; rmSet(id, rmTasks(id).filter(function (t) { return t.id !== tid; })); rmReload(); });
+      });
+      // раскрытие панели добавления
+      Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-add-btn'), function (b) {
+        b.addEventListener('click', function () {
+          var panel = rmHost.querySelector('.rm-add[data-stage="' + b.getAttribute('data-addstage') + '"]');
+          if (panel) { panel.hidden = !panel.hidden; b.classList.toggle('open', !panel.hidden); }
+        });
+      });
+      // панели добавления: владелец, пресеты, своя задача с заданием и вложениями
+      Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-add'), function (panel) {
+        var stage = panel.getAttribute('data-stage');
+        var addTask = function (opts) {
+          if (!opts.title) return;
+          var t = { id: 'rm' + Date.now() + Math.floor(Math.random() * 99), stage: stage, title: opts.title,
+            owner: opts.owner, status: 'wait', need: opts.need || '', attach: opts.attach || [], subs: [], comments: [] };
+          rmSet(id, rmTasks(id).concat([t]));
+          RM_OPEN[t.id] = true;  // раскрываем новую задачу, чтоб сразу видеть задание
+          rmReload();
+        };
+        Array.prototype.forEach.call(panel.querySelectorAll('.rm-add-own button'), function (ob) {
+          ob.addEventListener('click', function () {
+            panel.setAttribute('data-o', ob.getAttribute('data-o'));
+            Array.prototype.forEach.call(panel.querySelectorAll('.rm-add-own button'), function (x) { x.classList.toggle('on', x === ob); });
+          });
+        });
+        Array.prototype.forEach.call(panel.querySelectorAll('.rm-chip'), function (cp) {
+          cp.addEventListener('click', function () {
+            var at = cp.getAttribute('data-at'); at = at ? at.split(',') : [];
+            addTask({ title: cp.getAttribute('data-t'), owner: cp.getAttribute('data-o'), need: cp.getAttribute('data-need'), attach: at });
+          });
+        });
+        // мультивыбор «что прислать»
+        Array.prototype.forEach.call(panel.querySelectorAll('.rm-at-t'), function (ab) {
+          ab.addEventListener('click', function () { ab.classList.toggle('on'); });
+        });
+        var titleIn = panel.querySelector('.rm-f-title'), needIn = panel.querySelector('.rm-f-need');
+        var submitCustom = function () {
+          var v = titleIn ? titleIn.value.trim() : ''; if (!v) return;
+          var attach = Array.prototype.map.call(panel.querySelectorAll('.rm-at-t.on'), function (x) { return x.getAttribute('data-a'); });
+          addTask({ title: v, owner: panel.getAttribute('data-o') || 'client', need: needIn ? needIn.value.trim() : '', attach: attach });
+        };
+        var addBtn = panel.querySelector('.rm-f-add');
+        if (addBtn) addBtn.addEventListener('click', submitCustom);
+        if (titleIn) titleIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitCustom(); } });
+        if (needIn) needIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submitCustom(); } });
+      });
+    }
 
     // заметка
     var note = el('m-note'), noteState = el('m-notestate'), noteTimer = null;
