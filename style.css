@@ -662,7 +662,7 @@ a { color: inherit; text-decoration: none; }
 .m-pulse .plab { font-size: 10.5px; font-weight: 600; letter-spacing: .02em; }
 
 /* ── ТЕЛО: nav + контент ── */
-.m-body { flex: 1; display: flex; min-height: 0; }
+.m-body { flex: 1; display: flex; min-height: 0; position: relative; }
 .m-nav { flex: none; width: 210px; border-right: 1px solid var(--line); padding: 16px 12px;
   overflow-y: auto; background: #FBFBFC; }
 .m-nav::-webkit-scrollbar { width: 0; }
@@ -686,6 +686,15 @@ a { color: inherit; text-decoration: none; }
 .m-csub { font-size: 13px; color: var(--ink-2); margin-top: 6px; margin-bottom: 26px; line-height: 1.5; }
 
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 13px 22px; background: #fff; display: flex; gap: 10px; }
+.m-foot .bpwide { width: auto; flex: 1; }
+.m-archive { flex: none; display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; height: 44px;
+  border-radius: 12px; font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.08); transition: color .15s, background .15s, box-shadow .15s; }
+.m-archive svg { width: 14px; height: 14px; color: var(--ink-3); transition: color .15s; }
+.m-archive#m-hide:hover { color: var(--red); background: var(--red-soft); box-shadow: inset 0 0 0 1px rgba(196,42,47,.2); }
+.m-archive#m-hide:hover svg { color: var(--red); }
+.m-archive#m-unhide:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
+.m-archive#m-unhide:hover svg { color: var(--blue); }
 
 /* ── секции БЕЗ верхней полоски (воздух + подзаголовок) ── */
 .m-sec { margin-top: 30px; }
@@ -1164,6 +1173,10 @@ a { color: inherit; text-decoration: none; }
 .rm-cmt-drafts { display: none; }
 .rm-cmt-drafts.has { display: flex; flex-wrap: wrap; gap: 9px; padding: 2px 1px; }
 .rm-cdraft { position: relative; }
+.rm-cdraft.up { opacity: .7; }
+.rm-cdraft-spin { position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.5); border-top-color: var(--blue); animation: rm-spin .7s linear infinite; }
+@keyframes rm-spin { to { transform: rotate(360deg); } }
 .rm-cdraft.img { width: 58px; height: 58px; border-radius: 10px; background-size: cover; background-position: center;
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.12); }
 .rm-cdraft.file { display: inline-flex; align-items: center; gap: 7px; padding: 9px 30px 9px 11px; border-radius: 10px;
@@ -1250,6 +1263,56 @@ a { color: inherit; text-decoration: none; }
 .rm-at-t.on { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px var(--blue); }
 .rm-at-t.on svg { color: var(--blue); }
 .rm-f-add { width: 100%; justify-content: center; }
+
+/* обсуждение по задаче — триггер, открывает чат */
+.rm-discuss { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-top: 16px;
+  padding: 12px 14px; border-radius: 12px; background: var(--fill); box-shadow: inset 0 0 0 1px rgba(17,21,31,.06);
+  transition: background .15s, box-shadow .15s; }
+.rm-discuss:hover { background: #fff; box-shadow: inset 0 0 0 1px rgba(47,107,255,.3), 0 10px 26px -18px rgba(21,32,59,.3); }
+.rm-discuss-ic { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
+.rm-discuss-main { flex: 1; min-width: 0; }
+.rm-discuss-t { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+.rm-discuss-t .num { color: var(--ink-3); font-weight: 700; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.rm-discuss-prev { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.rm-discuss-go { flex: none; color: var(--ink-3); transition: transform .15s var(--ease), color .15s; }
+.rm-discuss:hover .rm-discuss-go { color: var(--blue); transform: translateX(2px); }
+
+/* чат-оверлей по задаче — просторный, лёгкий */
+.rm-chat { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; background: #fff;
+  animation: rm-chat-in .24s var(--ease); }
+@keyframes rm-chat-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+.rm-chat-head { flex: none; display: flex; align-items: center; gap: 14px; padding: 16px 26px;
+  border-bottom: 1px solid var(--line); background: #fff; }
+.rm-chat-back { width: 36px; height: 36px; flex: none; border-radius: 50%; display: grid; place-items: center;
+  color: var(--ink-2); background: var(--fill); transition: background .15s, color .15s; }
+.rm-chat-back svg { transform: rotate(180deg); }
+.rm-chat-back:hover { background: #ECEEF1; color: var(--ink); }
+.rm-chat-hid { flex: 1; min-width: 0; }
+.rm-chat-title { font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-chat-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.rm-chat-meta .rm-who-t { font-weight: 600; color: var(--ink-2); }
+.rm-chat-meta .rm-who-t.cl { color: var(--blue); }
+.rm-chat-head .rm-status { flex: none; }
+.rm-chat-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 26px 10px; background: var(--main); }
+.rm-chat-scroll::-webkit-scrollbar { width: 8px; }
+.rm-chat-scroll::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
+.rm-chat-col { max-width: 680px; margin: 0 auto; }
+.rm-chat-foot { flex: none; padding: 16px 26px 22px; border-top: 1px solid var(--line); background: #fff; }
+.rm-chat-foot .rm-chat-col { display: block; }
+/* в чате пузыри просторнее и читабельнее */
+.rm-chat .rm-cmts { gap: 14px; margin-bottom: 0; }
+.rm-chat .rm-cmt { max-width: 78%; padding: 12px 15px; border-radius: 16px; }
+.rm-chat .rm-cmt.by-mgr { border-bottom-right-radius: 6px; }
+.rm-chat .rm-cmt.by-client { border-bottom-left-radius: 6px; }
+.rm-chat .rm-cmt-h { margin-bottom: 5px; }
+.rm-chat .rm-cmt-t { font-size: 14px; line-height: 1.6; }
+.rm-chat .rm-catt.img { width: 150px; height: 108px; }
+.rm-chat-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+  color: var(--ink-3); padding: 64px 24px; font-size: 13.5px; line-height: 1.6; }
+.rm-chat-empty svg { color: var(--ink-3); opacity: .45; }
 
 /* журнал контактов — без верхней полоски */
 .comm-btns { display: flex; gap: 8px; }

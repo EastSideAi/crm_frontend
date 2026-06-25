@@ -54,6 +54,7 @@
     all:      { label: 'Пользователи',  hint: 'все, кто был на платформе — это ещё не клиенты' },
     clients:  { label: 'Клиенты',       hint: 'только те, кто оплатил — действующие клиенты' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
+    archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
   };
   var FUNNEL = {
     booked: 'оставил заявку', diagnosed: 'прошел диагностику',
@@ -1056,15 +1057,19 @@
     var c = counts();
     if (state.page === 'leads') {
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
-        var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : c.rejected;
+        var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
+          var prev = state.seg;
           state.seg = t.getAttribute('data-seg');
           state.sort = null;
-          saveUi(); renderTopbar(); renderHead(); renderView();
+          saveUi();
+          // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — при входе/выходе перезагружаем список
+          if (state.seg === 'archive' || prev === 'archive') loadLeads(false);
+          else { renderTopbar(); renderHead(); renderView(); }
         });
       });
     } else if (state.page === 'path') {
@@ -2811,9 +2816,82 @@
     RM_OPEN[arr[6].id] = true;  /* аттестат раскрыт по умолчанию — сразу видно поток проверки */
     return arr;
   }
-  function rmTasks(id) { if (!RM[id]) RM[id] = rmSeed(id); return RM[id]; }
-  function rmSet(id, arr) { RM[id] = arr; }
+  var RM_LOADED = {};     /* доска подтянута с бэка (или засеяна дефолтом) — по id лида */
+  var RM_SAVE_T = {};     /* таймеры дебаунса сохранения доски */
+  var RM_REFRESHED = {};  /* для лида уже дёрнули refreshDetail (старый кэш без доски) */
+  /* дефолтная доска нового лида — стандартный путь из пресетов всех этапов */
+  function rmDefaultBoard(id) {
+    var s4 = String(id).slice(0, 4), i = 0, out = [];
+    ADMISSION_STAGES.forEach(function (st) {
+      (st.presets || []).forEach(function (p) {
+        out.push({ id: 'rm' + (i++) + '_' + s4, stage: st.key, title: p.t, owner: p.o,
+          status: 'wait', need: p.need || '', due: '', attach: p.at || [], subs: [], comments: [] });
+      });
+    });
+    return out;
+  }
+  /* сохранённая доска из ДЕТАЛИ лида (в списке admission не приходит — ждём деталь) */
+  function rmSavedBoard(id) {
+    var d = state.details[id];
+    if (!d || !d.crm || !Array.isArray(d.crm.admission)) return null;
+    return d.crm.admission;
+  }
+  function rmTasks(id) {
+    if (RM_LOADED[id]) return RM[id] || (RM[id] = []);
+    var saved = rmSavedBoard(id);
+    if (saved === null) return RM[id] || (RM[id] = []);  // деталь ещё не загрузилась
+    RM[id] = saved.length ? JSON.parse(JSON.stringify(saved)) : rmDefaultBoard(id);
+    RM_LOADED[id] = true;
+    return RM[id];
+  }
+  /* сохранить доску на бэк (дебаунс), тихо синхронизировать кэш детали */
+  function rmSave(id) {
+    clearTimeout(RM_SAVE_T[id]);
+    RM_SAVE_T[id] = setTimeout(function () {
+      var board = RM[id] || [];
+      api('/admin/api/leads/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admission: board }),
+      }).then(function (res) {
+        if (res && res.crm) {
+          var l = findLead(id); if (l && l.crm) l.crm.admission = res.crm.admission;
+          var d = state.details[id]; if (d && d.crm) { d.crm.admission = res.crm.admission; cacheSet(id, d); }
+        }
+      }).catch(function (e) { if (e && e.message !== '403') showToast('Доска не сохранилась — проверь сеть'); });
+    }, 600);
+  }
+  function rmSet(id, arr) { RM[id] = arr; RM_LOADED[id] = true; rmSave(id); }
   function rmReviewCount(id) { return rmTasks(id).filter(function (t) { return t.status === 'review'; }).length; }
+  /* загрузка вложения на бэк → относительный url (ключ подставим при отрисовке) */
+  function rmUpload(id, att, cb) {
+    var mime = ''; var m = /^data:([^;,]+)[;,]/.exec(att.src || ''); if (m) mime = m[1];
+    api('/admin/api/attachments', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: id, name: att.name || 'file', mime: mime, kind: att.kind || 'file', data: att.src }),
+    }).then(function (res) {
+      if (res && res.url) cb({ kind: att.kind || 'file', name: att.name || 'file', url: res.url });
+      else cb(null);
+    }).catch(function () { cb(null); });
+  }
+  /* загружаемая ссылка вложения: относительный путь бэка дополняем базой и ключом; data-URL — как есть */
+  function rmAttUrl(a) {
+    var u = (a && (a.url || a.src)) || '';
+    if (u && u.charAt(0) === '/') u = API + u + (u.indexOf('?') === -1 ? '?k=' + encodeURIComponent(getKey()) : '');
+    return u;
+  }
+  /* скрыть лид (мягко, в архив) / вернуть из архива — затем обновить список */
+  function rmHideLead(id, hidden) {
+    api('/admin/api/leads/' + id, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hidden: !!hidden }),
+    }).then(function () {
+      var l = findLead(id); if (l && l.crm) l.crm.hidden = !!hidden;
+      var d = state.details[id]; if (d && d.crm) { d.crm.hidden = !!hidden; cacheSet(id, d); }
+      if (hidden) { closeDrawer(); showToast('Лид скрыт — в архиве'); }
+      else { showToast('Лид возвращён из архива'); }
+      loadLeads(true);
+    }).catch(function (e) { if (e && e.message !== '403') showToast('Не получилось — проверь сеть'); });
+  }
 
   /* присланное клиентом — одна карточка вложения */
   function rmSubCard(s) {
@@ -2860,22 +2938,143 @@
   }
   /* превью вложения в композере (с крестиком) */
   function rmDraftCard(a, i) {
+    var up = a.uploading ? ' up' : '';
     if (a.kind === 'image') {
-      return '<div class="rm-cdraft img" data-i="' + i + '" style="background-image:url(\'' + a.src + '\')">' +
+      return '<div class="rm-cdraft img' + up + '" data-i="' + i + '" style="background-image:url(\'' + rmAttUrl(a) + '\')">' +
+        (a.uploading ? '<span class="rm-cdraft-spin"></span>' : '') +
         '<button class="rm-cdraft-x" title="Убрать">' + ic('x', 11) + '</button></div>';
     }
-    return '<div class="rm-cdraft file" data-i="' + i + '">' + ic('doc', 13) +
+    return '<div class="rm-cdraft file' + up + '" data-i="' + i + '">' + ic('doc', 13) +
       '<span class="rm-cdraft-nm">' + esc(a.name || 'файл') + '</span>' +
       '<button class="rm-cdraft-x" title="Убрать">' + ic('x', 11) + '</button></div>';
   }
   /* вложение внутри пузыря комментария (кликабельное) */
   function rmCmtAttCard(a) {
+    var href = rmAttUrl(a);
     if (a.kind === 'image') {
-      var src = a.src || rmDemoImg();
+      var src = href || rmDemoImg();
       return '<a class="rm-catt img" href="' + src + '" target="_blank" rel="noopener" style="background-image:url(\'' + src + '\')"></a>';
     }
-    return '<a class="rm-catt file" href="' + (a.src || '#') + '"' + (a.src ? ' download="' + esc(a.name || 'file') + '" target="_blank"' : '') + '>' +
+    return '<a class="rm-catt file" href="' + (href || '#') + '"' + (href ? ' target="_blank" rel="noopener"' : '') + '>' +
       ic('doc', 13) + '<span>' + esc(a.name || 'файл') + '</span></a>';
+  }
+
+  /* какой задачи открыт чат-оверлей (по id) или null */
+  var RM_CHAT = null;
+  /* применить изменение к задаче и перерисовать карточку (с сохранением чата, если открыт) */
+  function rmApply(id, tid, fn) {
+    rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
+    if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+  }
+  /* композер сообщений: текст + вложения (фото/документы). Переиспользуется в чате задачи. */
+  function bindCmtComposer(scope, id, tid) {
+    var cmtIn = scope.querySelector('.rm-cmt-in'), cmtSend = scope.querySelector('.rm-cmt-send'),
+        cmtClip = scope.querySelector('.rm-cmt-clip'), cmtFile = scope.querySelector('.rm-cmt-file'),
+        cmtDrafts = scope.querySelector('.rm-cmt-drafts');
+    var draftArr = function () { if (!RM_DRAFT[tid]) RM_DRAFT[tid] = { atts: [] }; return RM_DRAFT[tid].atts; };
+    var renderDrafts = function () {
+      if (!cmtDrafts) return;
+      var arr = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
+      cmtDrafts.className = 'rm-cmt-drafts' + (arr.length ? ' has' : '');
+      cmtDrafts.innerHTML = arr.map(rmDraftCard).join('');
+      Array.prototype.forEach.call(cmtDrafts.querySelectorAll('.rm-cdraft-x'), function (xb) {
+        xb.addEventListener('click', function () { draftArr().splice(+xb.parentNode.getAttribute('data-i'), 1); renderDrafts(); });
+      });
+    };
+    renderDrafts();
+    if (cmtClip && cmtFile) cmtClip.addEventListener('click', function () { cmtFile.click(); });
+    if (cmtFile) cmtFile.addEventListener('change', function () {
+      var files = Array.prototype.slice.call(cmtFile.files || []); cmtFile.value = '';
+      files.forEach(function (f) {
+        // мгновенно показываем плитку, потом сжимаем (картинки) и грузим на бэк
+        var item = { kind: /^image\//.test(f.type) ? 'image' : 'file', name: f.name, src: null, url: null, uploading: true };
+        draftArr().push(item); renderDrafts();
+        var onRead = function (a) {
+          item.src = a.src; item.kind = a.kind; renderDrafts();
+          rmUpload(id, a, function (res) {
+            item.uploading = false;
+            if (res && res.url) item.url = res.url;
+            renderDrafts();
+          });
+        };
+        if (item.kind === 'image') rmCompressImage(f, onRead); else rmReadFile(f, onRead);
+      });
+    });
+    var doSend = function () {
+      var c = cmtIn ? cmtIn.value.trim() : '';
+      var arr = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
+      if (arr.some(function (a) { return a.uploading; })) { showToast('Секунду — вложение ещё грузится'); return; }
+      if (!c && !arr.length) return;
+      // в комментарий кладём ссылку (url) — лёгкую; base64 (src) только как запасной путь
+      var atts = arr.map(function (a) {
+        return a.url ? { kind: a.kind, name: a.name, url: a.url } : { kind: a.kind, name: a.name, src: a.src };
+      });
+      delete RM_DRAFT[tid];
+      rmApply(id, tid, function (t) { t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString(), atts: atts }]); return t; });
+    };
+    if (cmtSend) cmtSend.addEventListener('click', doSend);
+    if (cmtIn) cmtIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
+  }
+  /* просторный чат-оверлей по задаче */
+  function buildRmChat(id) {
+    var t = rmTasks(id).filter(function (x) { return x.id === RM_CHAT; })[0];
+    if (!t) return '';
+    var st = ADMISSION_STAGES.filter(function (s) { return s.key === t.stage; })[0];
+    var sm = RM_STATUS[t.status] || RM_STATUS.wait;
+    var isClient = t.owner === 'client';
+    var comments = t.comments || [];
+    var statusChip = '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>';
+    var msgs = comments.length
+      ? '<div class="rm-cmts">' + comments.map(function (c) {
+          var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
+          var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
+          return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
+            '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
+            (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' + ctxt + catts + '</div>';
+        }).join('') + '</div>'
+      : '<div class="rm-chat-empty">' + ic('chat', 26) + '<div>Тут переписка по задаче.<br>Напишите первое сообщение или прикрепите файл.</div></div>';
+    return '<div class="rm-chat" data-chat="' + esc(t.id) + '">' +
+      '<div class="rm-chat-head">' +
+        '<button class="rm-chat-back" title="Назад к задачам">' + ic('go', 16) + '</button>' +
+        '<div class="rm-chat-hid">' +
+          '<div class="rm-chat-title">' + esc(t.title) + '</div>' +
+          '<div class="rm-chat-meta"><span class="rm-who-t' + (isClient ? ' cl' : '') + '">' + (isClient ? 'клиент' : 'мы') + '</span>' +
+            '<span class="rm-meta-sep"></span>' + esc(st ? st.title : '') + '</div>' +
+        '</div>' + statusChip +
+      '</div>' +
+      '<div class="rm-chat-scroll"><div class="rm-chat-col">' + msgs + '</div></div>' +
+      '<div class="rm-chat-foot"><div class="rm-chat-col">' +
+        '<div class="rm-cmt-add">' +
+          '<div class="rm-cmt-drafts"></div>' +
+          '<div class="rm-cmt-bar">' +
+            '<button class="rm-cmt-clip" title="Прикрепить фото или документ">' + ic('clip', 18) + '</button>' +
+            '<input class="rm-cmt-in" placeholder="Сообщение по задаче…" autocomplete="off">' +
+            '<button class="rm-cmt-send" title="Отправить">' + ic('send', 16) + '</button>' +
+          '</div>' +
+          '<input type="file" class="rm-cmt-file" accept="image/*,.pdf,.doc,.docx,.heic" multiple hidden>' +
+        '</div>' +
+      '</div></div>' +
+    '</div>';
+  }
+  function bindRmChat(chat, id) {
+    var back = chat.querySelector('.rm-chat-back');
+    if (back) back.addEventListener('click', function () { RM_CHAT = null; syncRmChat(id); });
+    bindCmtComposer(chat, id, chat.getAttribute('data-chat'));
+    var inp = chat.querySelector('.rm-cmt-in'); if (inp) inp.focus();
+  }
+  /* смонтировать/снять чат-оверлей над телом модалки в зависимости от RM_CHAT */
+  function syncRmChat(id) {
+    var content = el('m-content'), body = content ? content.parentNode : null;
+    if (!body) return;
+    var existing = body.querySelector('.rm-chat');
+    if (existing) existing.parentNode.removeChild(existing);
+    if (state.modalSection !== 'admission' || !RM_CHAT) return;
+    if (!rmTasks(id).filter(function (x) { return x.id === RM_CHAT; }).length) { RM_CHAT = null; return; }
+    var wrap = document.createElement('div'); wrap.innerHTML = buildRmChat(id);
+    var chat = wrap.firstChild; if (!chat) return;
+    body.appendChild(chat);
+    bindRmChat(chat, id);
+    var sc = chat.querySelector('.rm-chat-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
   }
 
   function rmTaskRow(t) {
@@ -2936,24 +3135,17 @@
           '<button class="rm-return">' + ic('refresh', 13) + 'Вернуть на доработку</button></div>' +
           '<div class="rm-ret-box" hidden><input class="rm-ret-in" placeholder="Что поправить — клиент увидит это" autocomplete="off"><button class="bp sm rm-ret-send">' + ic('send', 13) + 'Вернуть</button></div>';
       }
-      d += '<div class="rm-dsec"><div class="rm-dh">Комментарии</div>' +
-        (comments.length ? '<div class="rm-cmts">' + comments.map(function (c) {
-          var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
-          var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
-          return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
-            '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
-            (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' +
-            ctxt + catts + '</div>';
-        }).join('') + '</div>' : '<div class="rm-cmt-empty">Комментариев пока нет</div>') +
-        '<div class="rm-cmt-add">' +
-          '<div class="rm-cmt-drafts"></div>' +
-          '<div class="rm-cmt-bar">' +
-            '<button class="rm-cmt-clip" title="Прикрепить фото или документ">' + ic('clip', 16) + '</button>' +
-            '<input class="rm-cmt-in" placeholder="Комментарий по задаче…" autocomplete="off">' +
-            '<button class="rm-cmt-send" title="Отправить">' + ic('send', 14) + '</button>' +
-          '</div>' +
-          '<input type="file" class="rm-cmt-file" accept="image/*,.pdf,.doc,.docx,.heic" multiple hidden>' +
-        '</div></div>';
+      var lastC = comments.length ? comments[comments.length - 1] : null;
+      var prevTxt = lastC ? (lastC.text || (lastC.atts && lastC.atts.length ? 'вложение' : '')) : '';
+      d += '<button class="rm-discuss" data-discuss="' + esc(t.id) + '">' +
+        '<span class="rm-discuss-ic">' + ic('chat', 16) + '</span>' +
+        '<span class="rm-discuss-main">' +
+          '<span class="rm-discuss-t">Обсуждение' + (comments.length ? ' <span class="num">' + comments.length + '</span>' : '') + '</span>' +
+          '<span class="rm-discuss-prev">' + (lastC ? esc((lastC.by === 'client' ? 'Клиент' : 'Куратор') + ': ' + prevTxt)
+                                                   : 'Открыть чат по задаче — фото и документы тоже можно') + '</span>' +
+        '</span>' +
+        '<span class="rm-discuss-go">' + ic('go', 15) + '</span>' +
+      '</button>';
 
       d += '<div class="rm-dfoot"><button class="rm-del">' + ic('x', 12) + 'Убрать задачу</button></div>';
       detail = '<div class="rm-detail">' + d + '</div>';
@@ -3055,6 +3247,7 @@
     state.drawerId = id;
     if (listIds && listIds.length) state.drawerList = listIds;
     state.modalSection = 'main';
+    RM_CHAT = null;
     renderDrawer(false);
     el('mbg').classList.add('open');
     el('modal').classList.add('open');
@@ -3067,6 +3260,7 @@
   function closeDrawer() {
     state.drawerId = null;
     state.botConvoId = null;
+    RM_CHAT = null;
     el('mbg').classList.remove('open');
     el('modal').classList.remove('open');
     document.body.style.overflow = '';
@@ -3079,6 +3273,7 @@
     if (next && next !== state.drawerId) {
       state.drawerId = next;
       state.modalSection = 'main';
+      RM_CHAT = null;
       renderDrawer(false);
       warm(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
@@ -3088,6 +3283,7 @@
   }
   function setModalSection(s) {
     state.modalSection = s;
+    RM_CHAT = null;
     var nav = el('modal').querySelector('.m-nav');
     if (nav) Array.prototype.forEach.call(nav.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-s') === s);
@@ -3168,9 +3364,18 @@
       '</div>' +
       '<div class="m-foot">' +
         '<a class="bpwide" target="_blank" rel="noopener" href="' + API + '/admin/' + esc(id) + '?k=' + encodeURIComponent(getKey()) + '">Полная аналитика клиента' + ic('go', 14) + '</a>' +
+        (crm.hidden
+          ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
+          : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
       '</div>';
 
     el('m-close').addEventListener('click', closeDrawer);
+    var hideBtn = el('m-hide');
+    if (hideBtn) hideBtn.addEventListener('click', function () {
+      if (window.confirm('Скрыть этого лида? Он уйдёт из списков в архив, данные сохранятся — можно вернуть.')) rmHideLead(id, true);
+    });
+    var unhideBtn = el('m-unhide');
+    if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -3202,6 +3407,7 @@
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     attachContentHandlers(id, ctx);
     animBars(host);
+    syncRmChat(id);
   }
   function skeletonSection(kind) {
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
@@ -3574,6 +3780,14 @@
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
     if (rmHost) {
+      // старый кэш детали (до появления доски) — подтянуть свежую деталь один раз
+      if (!RM_LOADED[id] && !RM_REFRESHED[id]) {
+        var dd = state.details[id];
+        if (dd && (!dd.crm || !Array.isArray(dd.crm.admission))) {
+          RM_REFRESHED[id] = true;
+          refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
+        }
+      }
       var rmReload = function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); };
       var rmUpd = function (tid, fn) {
         rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
@@ -3620,39 +3834,9 @@
         };
         if (retSend) retSend.addEventListener('click', doReturn);
         if (retIn) retIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doReturn(); } });
-        // комментарий по задаче + вложения (фото/документы)
-        var cmtIn = tEl.querySelector('.rm-cmt-in'), cmtSend = tEl.querySelector('.rm-cmt-send');
-        var cmtClip = tEl.querySelector('.rm-cmt-clip'), cmtFile = tEl.querySelector('.rm-cmt-file'),
-            cmtDrafts = tEl.querySelector('.rm-cmt-drafts');
-        var draftArr = function () { if (!RM_DRAFT[tid]) RM_DRAFT[tid] = { atts: [] }; return RM_DRAFT[tid].atts; };
-        // превью черновика рисуем точечно, без полного ререндера — иначе слетал бы набранный текст
-        var renderDrafts = function () {
-          if (!cmtDrafts) return;
-          var arr = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
-          cmtDrafts.className = 'rm-cmt-drafts' + (arr.length ? ' has' : '');
-          cmtDrafts.innerHTML = arr.map(rmDraftCard).join('');
-          Array.prototype.forEach.call(cmtDrafts.querySelectorAll('.rm-cdraft-x'), function (xb) {
-            xb.addEventListener('click', function () { draftArr().splice(+xb.parentNode.getAttribute('data-i'), 1); renderDrafts(); });
-          });
-        };
-        renderDrafts();
-        if (cmtClip && cmtFile) cmtClip.addEventListener('click', function () { cmtFile.click(); });
-        if (cmtFile) cmtFile.addEventListener('change', function () {
-          var files = Array.prototype.slice.call(cmtFile.files || []); cmtFile.value = '';
-          files.forEach(function (f) {
-            var done = function (a) { draftArr().push(a); renderDrafts(); };
-            if (/^image\//.test(f.type)) rmCompressImage(f, done); else rmReadFile(f, done);
-          });
-        });
-        var doCmt = function () {
-          var c = cmtIn ? cmtIn.value.trim() : '';
-          var atts = (RM_DRAFT[tid] && RM_DRAFT[tid].atts) || [];
-          if (!c && !atts.length) return;
-          var attsCopy = atts.slice(); delete RM_DRAFT[tid];
-          rmUpd(tid, function (t) { t.comments = (t.comments || []).concat([{ by: 'mgr', text: c, at: new Date().toISOString(), atts: attsCopy }]); return t; });
-        };
-        if (cmtSend) cmtSend.addEventListener('click', doCmt);
-        if (cmtIn) cmtIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doCmt(); } });
+        // обсуждение по задаче — открыть просторный чат-оверлей
+        var disc = tEl.querySelector('.rm-discuss');
+        if (disc) disc.addEventListener('click', function () { RM_CHAT = tid; syncRmChat(id); });
         // убрать задачу
         var del = tEl.querySelector('.rm-del');
         if (del) del.addEventListener('click', function () { delete RM_OPEN[tid]; rmSet(id, rmTasks(id).filter(function (t) { return t.id !== tid; })); rmReload(); });
@@ -4166,7 +4350,8 @@
     }).join('|');
   }
   function loadLeads(silent) {
-    api('/admin/api/leads').then(function (data) {
+    var archive = state.page === 'leads' && state.seg === 'archive';
+    api('/admin/api/leads' + (archive ? '?include_hidden=1' : '')).then(function (data) {
       var prevIds = {};
       if (silent) state.leads.forEach(function (l) { prevIds[l.id] = 1; });
       var prevSig = leadsSig();
