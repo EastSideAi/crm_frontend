@@ -59,6 +59,7 @@
   var FUNNEL = {
     booked: 'оставил заявку', diagnosed: 'прошел диагностику',
     submitted: 'заполнил анкету', visited: 'без анкеты',
+    manual: 'добавлен вручную',
   };
   var EVENTS_RU = {
     anketa_started: 'начал анкету',
@@ -447,7 +448,7 @@
   }
 
   /* ── производные ──────────────────────────────────────── */
-  function inQueue(l) { return !!l.booking && ACTIVE_STATUSES.indexOf(l.crm.status) !== -1; }
+  function inQueue(l) { return (!!l.booking || l.status === 'manual') && ACTIVE_STATUSES.indexOf(l.crm.status) !== -1; }
   function segBase(seg) {
     return state.leads.filter(function (l) {
       if (seg === 'queue') return inQueue(l);
@@ -735,6 +736,7 @@
           '<button data-v="table" class="' + (state.viewMode === 'table' ? 'on' : '') + '" title="Таблица">' + ic('rows', 14) + '</button>' +
           '<button data-v="kanban" class="' + (state.viewMode === 'kanban' ? 'on' : '') + '" title="Канбан">' + ic('kanban', 14) + '</button>' +
         '</div>' +
+        '<button class="bp sm lead-add" id="lead-add" title="Завести клиента вручную">' + ic('plus', 14) + '<span>Добавить</span></button>' +
       '</div>' +
       '<div class="list-quick">' + chips + '</div>';
   }
@@ -755,6 +757,8 @@
       if (wrap) wrap.classList.remove('has-val');
       rerenderListBody(); updateListCount();
     });
+    var addb = el('lead-add');
+    if (addb) addb.addEventListener('click', openAddLead);
     var ff = el('f-funnel');
     if (ff) ff.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -795,6 +799,99 @@
   }
   /* лёгкая перерисовка только тела списка (для поиска — без пересборки тулбара/фокуса) */
   function rerenderListBody() { renderListBody(); }
+
+  /* ── ДОБАВИТЬ КЛИЕНТА ВРУЧНУЮ (без анкеты) ── */
+  function openAddLead() {
+    if (typeof closeSmenu === 'function') closeSmenu();
+    if (document.querySelector('.al-ov')) return;
+    var chOpts = [['', 'Канал не указан'], ['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'],
+      ['vk', 'VK'], ['phone', 'Телефон'], ['site', 'Сайт'], ['referral', 'Рекомендация'], ['other', 'Другое']];
+    var stOpts = ACTIVE_STATUSES.concat(['client', 'rejected']).map(function (s) { return [s, CRM[s].label]; });
+    var opt = function (o, sel) { return '<option value="' + o[0] + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">CRM</div><div class="al-title">Новый клиент</div></div>' +
+          '<button class="al-x" id="al-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заводите клиента вручную — без анкеты. Карточку можно дозаполнить позже.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Имя <i>*</i></span>' +
+            '<input id="al-name" class="al-in" placeholder="Как зовут клиента" autocomplete="off" maxlength="80"></label>' +
+          '<label class="al-f"><span class="al-l">Контакт</span>' +
+            '<input id="al-contact" class="al-in" placeholder="Телефон, телеграм или почта" autocomplete="off" maxlength="120"></label>' +
+          '<div class="al-row">' +
+            '<label class="al-f"><span class="al-l">Канал</span><span class="al-selwrap">' +
+              '<select id="al-channel" class="al-sel">' + chOpts.map(function (o) { return opt(o, ''); }).join('') + '</select></span></label>' +
+            '<label class="al-f"><span class="al-l">Статус</span><span class="al-selwrap">' +
+              '<select id="al-status" class="al-sel">' + stOpts.map(function (o) { return opt(o, 'new'); }).join('') + '</select></span></label>' +
+          '</div>' +
+          '<label class="al-f"><span class="al-l">Заметка</span>' +
+            '<textarea id="al-note" class="al-in al-ta" placeholder="Контекст: откуда пришел, что хочет, договоренности" rows="2" maxlength="500"></textarea></label>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="al-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="al-save">' + ic('plus', 14) + 'Добавить клиента</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('al-x').addEventListener('click', close);
+    el('al-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var nameI = el('al-name'); if (nameI) setTimeout(function () { nameI.focus(); }, 30);
+    var save = el('al-save');
+    var submit = function () {
+      var name = (el('al-name').value || '').trim();
+      if (!name) { el('al-name').classList.add('al-err'); el('al-name').focus(); return; }
+      save.disabled = true; save.classList.add('loading');
+      createLead({
+        name: name,
+        contact: (el('al-contact').value || '').trim(),
+        channel: el('al-channel').value || '',
+        status: el('al-status').value || 'new',
+        note: (el('al-note').value || '').trim(),
+      }, function (ok) {
+        if (ok) close();
+        else { save.disabled = false; save.classList.remove('loading'); }
+      });
+    };
+    save.addEventListener('click', submit);
+    if (nameI) nameI.addEventListener('input', function () { nameI.classList.remove('al-err'); });
+    ov.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
+    });
+  }
+
+  function createLead(payload, cb) {
+    api('/admin/api/leads', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (res) {
+      var id = res && res.id;
+      showToast('Клиент добавлен: ' + payload.name);
+      state.page = 'leads';
+      if (state.seg === 'archive' || state.seg === 'rejected') state.seg = 'queue';
+      state.q = ''; state.quick = '';
+      loadLeads(true, function () { if (id) openDrawer(id, [id]); });
+      if (cb) cb(true, id);
+    }).catch(function (e) {
+      if (e && e.message === '403') { if (cb) cb(false); return; }
+      showToast('Не удалось добавить — проверьте сеть');
+      if (cb) cb(false);
+    });
+  }
 
   /* ── login ────────────────────────────────────────────── */
   function renderLogin(err) {
@@ -975,6 +1072,7 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
+    { id: 'threads', label: 'Обсуждения', icon: 'chat', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
@@ -999,6 +1097,7 @@
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
         else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="просят менеджера">' + ho + '</span>';
+        else if (it.id === 'threads') { var ta = threadsAttention(); if (ta) extra = '<span class="bdg num" title="ждут ответа">' + ta + '</span>'; }
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -1027,7 +1126,7 @@
     if (mt) {
       var hoM = botHandoffCount();
       mt.innerHTML = NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : (it.id === 'threads') ? threadsAttention() : 0;
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
@@ -1219,7 +1318,7 @@
     if (!view) return;
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
-    document.body.classList.toggle('inbox-mode', state.page === 'inbox');
+    document.body.classList.toggle('inbox-mode', state.page === 'inbox' || state.page === 'threads');
     if (!state.loaded) {
       if (state.page === 'dash') view.innerHTML = dashSkeleton();
       else if (state.page === 'leads') return renderLeads(view); // тулбар + скелетон строк
@@ -1227,6 +1326,7 @@
       return;
     }
     if (state.page === 'inbox') return renderInbox(view);  // фикс-высота, без анимации страницы
+    if (state.page === 'threads') return renderThreads(view);  // обсуждения по задачам — двухпанельный инбокс
     if (state.page === 'dash') renderDash(view);
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
@@ -2830,11 +2930,13 @@
     });
     return out;
   }
-  /* сохранённая доска из ДЕТАЛИ лида (в списке admission не приходит — ждём деталь) */
+  /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
     var d = state.details[id];
-    if (!d || !d.crm || !Array.isArray(d.crm.admission)) return null;
-    return d.crm.admission;
+    if (d && d.crm && Array.isArray(d.crm.admission)) return d.crm.admission;
+    var l = findLead(id);
+    if (l && l.crm && Array.isArray(l.crm.admission)) return l.crm.admission;
+    return null;
   }
   function rmTasks(id) {
     if (RM_LOADED[id]) return RM[id] || (RM[id] = []);
@@ -2965,6 +3067,7 @@
   function rmApply(id, tid, fn) {
     rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
     if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+    else if (state.page === 'threads') { state.threadSel = { id: id, tid: tid }; renderThreads(el('view')); }
   }
   /* композер сообщений: текст + вложения (фото/документы). Переиспользуется в чате задачи. */
   function bindCmtComposer(scope, id, tid) {
@@ -3015,6 +3118,30 @@
     if (cmtSend) cmtSend.addEventListener('click', doSend);
     if (cmtIn) cmtIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
   }
+  /* рендер ленты сообщений по задаче (переиспользуется оверлеем и инбоксом «Обсуждения») */
+  function rmMsgsHtml(comments) {
+    if (!comments || !comments.length)
+      return '<div class="rm-chat-empty">' + ic('chat', 26) + '<div>Тут переписка по задаче.<br>Напишите первое сообщение или прикрепите файл.</div></div>';
+    return '<div class="rm-cmts">' + comments.map(function (c) {
+      var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
+      var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
+      return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
+        '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
+        (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' + ctxt + catts + '</div>';
+    }).join('') + '</div>';
+  }
+  /* композер сообщения: вложения + текст + отправка (общий для оверлея и инбокса) */
+  function rmComposerHtml() {
+    return '<div class="rm-cmt-add">' +
+      '<div class="rm-cmt-drafts"></div>' +
+      '<div class="rm-cmt-bar">' +
+        '<button class="rm-cmt-clip" title="Прикрепить фото или документ">' + ic('clip', 18) + '</button>' +
+        '<input class="rm-cmt-in" placeholder="Сообщение по задаче…" autocomplete="off">' +
+        '<button class="rm-cmt-send" title="Отправить">' + ic('send', 16) + '</button>' +
+      '</div>' +
+      '<input type="file" class="rm-cmt-file" accept="image/*,.pdf,.doc,.docx,.heic" multiple hidden>' +
+    '</div>';
+  }
   /* просторный чат-оверлей по задаче */
   function buildRmChat(id) {
     var t = rmTasks(id).filter(function (x) { return x.id === RM_CHAT; })[0];
@@ -3022,17 +3149,7 @@
     var st = ADMISSION_STAGES.filter(function (s) { return s.key === t.stage; })[0];
     var sm = RM_STATUS[t.status] || RM_STATUS.wait;
     var isClient = t.owner === 'client';
-    var comments = t.comments || [];
     var statusChip = '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>';
-    var msgs = comments.length
-      ? '<div class="rm-cmts">' + comments.map(function (c) {
-          var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
-          var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
-          return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
-            '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
-            (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' + ctxt + catts + '</div>';
-        }).join('') + '</div>'
-      : '<div class="rm-chat-empty">' + ic('chat', 26) + '<div>Тут переписка по задаче.<br>Напишите первое сообщение или прикрепите файл.</div></div>';
     return '<div class="rm-chat" data-chat="' + esc(t.id) + '">' +
       '<div class="rm-chat-head">' +
         '<button class="rm-chat-back" title="Назад к задачам">' + ic('go', 16) + '</button>' +
@@ -3042,18 +3159,8 @@
             '<span class="rm-meta-sep"></span>' + esc(st ? st.title : '') + '</div>' +
         '</div>' + statusChip +
       '</div>' +
-      '<div class="rm-chat-scroll"><div class="rm-chat-col">' + msgs + '</div></div>' +
-      '<div class="rm-chat-foot"><div class="rm-chat-col">' +
-        '<div class="rm-cmt-add">' +
-          '<div class="rm-cmt-drafts"></div>' +
-          '<div class="rm-cmt-bar">' +
-            '<button class="rm-cmt-clip" title="Прикрепить фото или документ">' + ic('clip', 18) + '</button>' +
-            '<input class="rm-cmt-in" placeholder="Сообщение по задаче…" autocomplete="off">' +
-            '<button class="rm-cmt-send" title="Отправить">' + ic('send', 16) + '</button>' +
-          '</div>' +
-          '<input type="file" class="rm-cmt-file" accept="image/*,.pdf,.doc,.docx,.heic" multiple hidden>' +
-        '</div>' +
-      '</div></div>' +
+      '<div class="rm-chat-scroll"><div class="rm-chat-col">' + rmMsgsHtml(t.comments || []) + '</div></div>' +
+      '<div class="rm-chat-foot"><div class="rm-chat-col">' + rmComposerHtml() + '</div></div>' +
     '</div>';
   }
   function bindRmChat(chat, id) {
@@ -3065,16 +3172,165 @@
   /* смонтировать/снять чат-оверлей над телом модалки в зависимости от RM_CHAT */
   function syncRmChat(id) {
     var content = el('m-content'), body = content ? content.parentNode : null;
+    var modalEl = el('modal');
     if (!body) return;
     var existing = body.querySelector('.rm-chat');
     if (existing) existing.parentNode.removeChild(existing);
-    if (state.modalSection !== 'admission' || !RM_CHAT) return;
-    if (!rmTasks(id).filter(function (x) { return x.id === RM_CHAT; }).length) { RM_CHAT = null; return; }
+    var open = state.modalSection === 'admission' && RM_CHAT &&
+      rmTasks(id).filter(function (x) { return x.id === RM_CHAT; }).length;
+    if (!open) {
+      if (RM_CHAT && state.modalSection === 'admission') RM_CHAT = null;
+      if (modalEl) modalEl.classList.remove('chat-open');
+      return;
+    }
+    if (modalEl) modalEl.classList.add('chat-open');
     var wrap = document.createElement('div'); wrap.innerHTML = buildRmChat(id);
     var chat = wrap.firstChild; if (!chat) return;
     body.appendChild(chat);
     bindRmChat(chat, id);
     var sc = chat.querySelector('.rm-chat-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+  }
+
+  /* ════ ОБСУЖДЕНИЯ — инбокс переписок по задачам всех клиентов ════ */
+  /* живая доска лида: RM[id] если уже подтянута (свежее), иначе сохранённая из списка */
+  function threadBoard(l) {
+    if (RM_LOADED[l.id] && RM[l.id]) return RM[l.id];
+    return (l.crm && Array.isArray(l.crm.admission)) ? l.crm.admission : null;
+  }
+  /* собрать все треды (задачи с хотя бы одним комментарием), свежие сверху */
+  function buildThreads() {
+    var out = [];
+    (state.leads || []).forEach(function (l) {
+      var board = threadBoard(l);
+      if (!board || !board.length) return;
+      board.forEach(function (t) {
+        var cm = t.comments || [];
+        if (!cm.length) return;
+        var last = cm[cm.length - 1];
+        out.push({
+          leadId: l.id, name: leadName(l), taskId: t.id, title: t.title,
+          stage: t.stage, owner: t.owner, status: t.status,
+          last: last, lastAt: last.at || '',
+          wait: last.by === 'client' || t.status === 'review',
+        });
+      });
+    });
+    out.sort(function (a, b) { return new Date(b.lastAt || 0) - new Date(a.lastAt || 0); });
+    return out;
+  }
+  function threadsAttention() { return buildThreads().filter(function (t) { return t.wait; }).length; }
+
+  function threadRow(th, sel) {
+    var st = ADMISSION_STAGES.filter(function (s) { return s.key === th.stage; })[0];
+    var last = th.last;
+    var prev = last.text || (last.atts && last.atts.length ? 'вложение' : '');
+    var who = last.by === 'client' ? 'Клиент' : 'Куратор';
+    return '<button class="tg-row th-row' + (sel ? ' on' : '') + (th.wait ? ' unread' : '') +
+      '" data-id="' + esc(th.leadId) + '" data-tid="' + esc(th.taskId) + '">' +
+      '<span class="tg-ava sm" style="--c:#2F6BFF">' + esc(initials(th.name)) + '</span>' +
+      '<span class="tg-rb">' +
+        '<span class="tg-r1"><span class="tg-nm">' + esc(th.name) + '</span>' +
+          '<span class="tg-tm num">' + fmtWhen(th.lastAt) + '</span></span>' +
+        '<span class="th-task"><span class="th-task-t">' + esc(th.title) + '</span>' +
+          (st ? '<span class="th-stage">' + esc(st.title) + '</span>' : '') + '</span>' +
+        '<span class="tg-r2"><span class="tg-pv">' + esc(who + ': ' + prev) + '</span>' +
+          (th.wait ? '<span class="tg-badge wait"></span>' : '') + '</span>' +
+      '</span>' +
+    '</button>';
+  }
+
+  function renderThreads(view) {
+    var threads = buildThreads();
+    if (!threads.length) {
+      view.innerHTML = '<div class="tg"><div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+        '<div style="font-weight:700;color:var(--ink)">Пока нет обсуждений</div>' +
+        '<div style="max-width:400px;text-align:center;line-height:1.55">Комментарии к задачам клиентов из блока «Поступление» собираются здесь — как переписка в чате. Откройте карточку клиента, задачу и напишите первое сообщение.</div></div></div>';
+      return;
+    }
+    if (!state.threadSel || !threads.some(function (t) { return t.leadId === state.threadSel.id && t.taskId === state.threadSel.tid; })) {
+      state.threadSel = { id: threads[0].leadId, tid: threads[0].taskId };
+    }
+    var selFn = function (t) { return state.threadSel && state.threadSel.id === t.leadId && state.threadSel.tid === t.taskId; };
+    var waitN = threads.filter(function (t) { return t.wait; }).length;
+    var rows = threads.map(function (t) { return threadRow(t, selFn(t)); }).join('');
+    view.innerHTML =
+      '<div class="tg th-tg show-chat" id="th-tg">' +
+        '<aside class="tg-list">' +
+          '<div class="th-lhead"><span class="th-lh-t">Обсуждения</span>' +
+            (waitN ? '<span class="th-lh-n">' + waitN + ' ' + plural(waitN, 'ждет', 'ждут', 'ждут') + ' ответа</span>'
+                   : '<span class="th-lh-all">' + ic('check', 12) + 'все на связи</span>') + '</div>' +
+          '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) +
+            '<input id="th-q" class="search" type="search" placeholder="Поиск по клиенту или задаче" autocomplete="off"></span></div>' +
+          '<div class="tg-rows" id="th-rows">' + rows + '</div>' +
+        '</aside>' +
+        '<main class="tg-chat" id="th-chat"></main>' +
+      '</div>';
+
+    var qi = el('th-q');
+    if (qi) {
+      qi.value = state.threadQ || '';
+      qi.addEventListener('input', function () {
+        state.threadQ = this.value.trim();
+        var host = el('th-rows'); if (!host) return;
+        var qq = state.threadQ.toLowerCase();
+        var f = threads.filter(function (t) {
+          return !qq || ((t.name || '') + ' ' + (t.title || '') + ' ' + (t.last.text || '')).toLowerCase().indexOf(qq) !== -1;
+        });
+        host.innerHTML = f.length ? f.map(function (t) { return threadRow(t, selFn(t)); }).join('') : '<div class="tg-empty-list">Ничего не найдено</div>';
+        bindThreadRows(host);
+      });
+    }
+    bindThreadRows(el('th-rows'));
+    renderThreadChat();
+  }
+
+  function bindThreadRows(host) {
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.th-row[data-id]'), function (n) {
+      n.addEventListener('click', function () {
+        state.threadSel = { id: n.getAttribute('data-id'), tid: n.getAttribute('data-tid') };
+        Array.prototype.forEach.call(host.querySelectorAll('.th-row'), function (x) { x.classList.remove('on'); });
+        n.classList.add('on'); n.classList.remove('unread');
+        var b = n.querySelector('.tg-badge'); if (b) b.remove();
+        var tg = el('th-tg'); if (tg) tg.classList.add('show-chat');
+        renderThreadChat();
+      });
+    });
+  }
+
+  function renderThreadChat() {
+    var host = el('th-chat'); if (!host) return;
+    var seld = state.threadSel;
+    if (!seld) { host.innerHTML = '<div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div><div>Выберите обсуждение слева</div></div>'; return; }
+    var l = findLead(seld.id);
+    var t = l ? rmTasks(seld.id).filter(function (x) { return x.id === seld.tid; })[0] : null;
+    if (!t) { host.innerHTML = '<div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div><div>Обсуждение не найдено</div></div>'; return; }
+    var st = ADMISSION_STAGES.filter(function (s) { return s.key === t.stage; })[0];
+    var sm = RM_STATUS[t.status] || RM_STATUS.wait;
+    var isClient = t.owner === 'client';
+    var statusChip = '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>';
+    host.innerHTML =
+      '<div class="th-chat-in" data-chat="' + esc(t.id) + '">' +
+        '<div class="th-chead">' +
+          '<button class="tg-back th-back" title="К списку">' + ic('go', 16) + '</button>' +
+          '<span class="tg-ava sm" style="--c:#2F6BFF">' + esc(initials(leadName(l))) + '</span>' +
+          '<div class="th-chid">' +
+            '<div class="th-ctitle">' + esc(t.title) + '</div>' +
+            '<div class="th-cmeta"><b>' + esc(leadName(l)) + '</b><span class="rm-meta-sep"></span>' +
+              '<span class="rm-who-t' + (isClient ? ' cl' : '') + '">' + (isClient ? 'клиент' : 'мы') + '</span>' +
+              (st ? '<span class="rm-meta-sep"></span><span class="th-cstage">' + esc(st.title) + '</span>' : '') + '</div>' +
+          '</div>' +
+          statusChip +
+          '<button class="th-open" id="th-open" title="Открыть карточку клиента">' + ic('ext', 14) + '<span>Карточка</span></button>' +
+        '</div>' +
+        '<div class="rm-chat-scroll th-scroll"><div class="rm-chat-col">' + rmMsgsHtml(t.comments || []) + '</div></div>' +
+        '<div class="rm-chat-foot"><div class="rm-chat-col">' + rmComposerHtml() + '</div></div>' +
+      '</div>';
+    var sc = host.querySelector('.th-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
+    bindCmtComposer(host, seld.id, seld.tid);
+    var inp = host.querySelector('.rm-cmt-in'); if (inp) inp.focus();
+    var back = host.querySelector('.tg-back'); if (back) back.addEventListener('click', function () { var tg = el('th-tg'); if (tg) tg.classList.remove('show-chat'); });
+    var op = el('th-open'); if (op) op.addEventListener('click', function () { openDrawer(seld.id); setModalSection('admission'); });
   }
 
   function rmTaskRow(t) {
@@ -3363,7 +3619,6 @@
         '<div class="m-content" id="m-content"></div>' +
       '</div>' +
       '<div class="m-foot">' +
-        '<a class="bpwide" target="_blank" rel="noopener" href="' + API + '/admin/' + esc(id) + '?k=' + encodeURIComponent(getKey()) + '">Полная аналитика клиента' + ic('go', 14) + '</a>' +
         (crm.hidden
           ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
           : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
@@ -4349,7 +4604,7 @@
       return l.id + ':' + l.crm.status + ':' + (l.booking ? 1 : 0) + ':' + (l.score == null ? '' : l.score) + ':' + (l.crm.tasks || []).length;
     }).join('|');
   }
-  function loadLeads(silent) {
+  function loadLeads(silent, cb) {
     var archive = state.page === 'leads' && state.seg === 'archive';
     api('/admin/api/leads' + (archive ? '?include_hidden=1' : '')).then(function (data) {
       var prevIds = {};
@@ -4380,8 +4635,9 @@
         }
       }
       /* данные те же — обновляем только счётчики/время в сайдбаре, графики не трогаем (без мигания) */
-      if (unchanged) { renderSide(); renderTopbar(); return; }
+      if (unchanged) { renderSide(); renderTopbar(); if (cb) cb(); return; }
       renderAll();
+      if (cb) cb();
     }).catch(function (e) {
       if (e.message === '403' || silent) return;
       var v = el('view');
