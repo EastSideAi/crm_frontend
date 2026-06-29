@@ -23,6 +23,7 @@
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
+    planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -1074,6 +1075,7 @@
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'threads', label: 'Обсуждения', icon: 'chat', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
+    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'students' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
@@ -1332,6 +1334,7 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'team') renderTeam(view);
+    else if (state.page === 'templates') renderTemplates(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -1385,6 +1388,254 @@
   }
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах
      внутри той же страницы — иначе мелькает). CSS гасит при reduced-motion. */
+  /* ── ШАБЛОНЫ пути поступления (мастер-планы → доска «Поступление») ── */
+  function fetchTemplates(cb) {
+    if (state._templates) { if (cb) cb(state._templates); return; }
+    api('/admin/api/plan-templates').then(function (r) {
+      state._templates = (r && r.templates) || [];
+    }).catch(function () { state._templates = 'none'; }).finally(function () { if (cb) cb(state._templates); });
+  }
+  function renderTemplates(view) {
+    if (!can('students')) { view.innerHTML = '<div class="card"><div class="empty">Нет доступа к шаблонам.</div></div>'; return; }
+    if (state._tplEdit) return renderTemplateEditor(view);
+    if (!state._templates) {
+      view.innerHTML = dashSkeleton();
+      fetchTemplates(function () { if (state.page === 'templates') renderView(); });
+      return;
+    }
+    if (state._templates === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить шаблоны.</div></div>'; return; }
+    var cards = state._templates.map(function (t) {
+      return '<div class="card tpl-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">' + esc(t.name) + '</div><div class="s">' + esc(t.description || t.segment || '') + '</div></div>' +
+          '<span class="cnt num">' + (t.stages_count || 0) + ' этапов · ' + (t.tasks_count || 0) + ' задач</span></div>' +
+        '<div class="tpl-actions">' +
+          '<button class="bp ghost sm" data-tpledit="' + esc(t.id) + '">' + ic('note', 13) + 'Открыть</button>' +
+          '<button class="bp ghost sm tpl-del" data-tpldelete="' + esc(t.id) + '" title="Удалить шаблон">' + ic('x', 13) + '</button>' +
+        '</div></div>';
+    }).join('');
+    view.innerHTML = '<div class="card tpl-wrap">' +
+      '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Шаблоны пути поступления</div>' +
+        '<div class="s">мастер-болванки: разворачиваются в доску «Поступление» клиента и правятся под него</div></div>' +
+        '<button class="bp sm" id="tpl-new">' + ic('plus', 13) + 'Новый шаблон</button></div>' +
+      '<div class="tpl-list">' + (cards || '<div class="empty">Пока нет шаблонов.</div>') + '</div></div>';
+    var nb = el('tpl-new'); if (nb) nb.addEventListener('click', function () { startEditTemplate(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tpledit]'), function (b) {
+      b.addEventListener('click', function () { startEditTemplate(b.getAttribute('data-tpledit')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.tpl-del'), function (b) {
+      b.addEventListener('click', function () {
+        var tid = b.getAttribute('data-tpldelete');
+        if (window.confirm('Удалить шаблон «' + tid + '»?')) {
+          api('/admin/api/plan-templates/' + tid, { method: 'DELETE' }).then(function () {
+            state._templates = null; showToast('Шаблон удалён'); renderView();
+          });
+        }
+      });
+    });
+  }
+  function startEditTemplate(id) {
+    if (!id) {
+      state._tplEdit = 'new';
+      state._tplDraft = { id: '', name: '', segment: '', description: '', stages: [{ title: '', about: '', tasks: [] }] };
+      renderView(); return;
+    }
+    state._tplEdit = id; state._tplDraft = null; renderView();
+    api('/admin/api/plan-templates/' + id).then(function (t) {
+      state._tplDraft = {
+        id: t.id, name: t.name, segment: t.segment || '', description: t.description || '',
+        stages: (t.stages || []).map(function (st) {
+          return { title: st.title || '', about: st.about || '',
+            tasks: (st.tasks || []).map(function (tk) {
+              return { owner: tk.owner === 'eastside' ? 'eastside' : 'client', title: tk.title || '',
+                description: tk.description || '', how_to: tk.how_to || '', tip: tk.tip || '', due_rule: tk.due_rule || '' };
+            }) };
+        }),
+      };
+      if (state.page === 'templates') renderView();
+    }).catch(function () { showToast('Не удалось загрузить шаблон'); state._tplEdit = null; renderView(); });
+  }
+  function renderTemplateEditor(view) {
+    var d = state._tplDraft;
+    if (!d) { view.innerHTML = dashSkeleton(); return; }
+    var stagesHtml = d.stages.map(function (st, si) {
+      var tasks = st.tasks.map(function (tk, ti) {
+        var own = tk.owner === 'eastside' ? 'eastside' : 'client';
+        return '<div class="tpl-task">' +
+          '<div class="tpl-task-top">' +
+            '<div class="tpl-own">' +
+              '<button class="tpl-own-b ' + (own === 'client' ? 'on' : '') + '" data-own="client" data-si="' + si + '" data-ti="' + ti + '">' + ic('leads', 12) + 'Клиент</button>' +
+              '<button class="tpl-own-b ' + (own === 'eastside' ? 'on' : '') + '" data-own="eastside" data-si="' + si + '" data-ti="' + ti + '">' + ic('team', 12) + 'EastSide</button>' +
+            '</div>' +
+            '<button class="tpl-mini-del" data-deltask="' + si + '.' + ti + '" title="Удалить задачу">' + ic('x', 12) + '</button>' +
+          '</div>' +
+          '<input class="tpl-fld tpl-task-title" data-si="' + si + '" data-ti="' + ti + '" data-f="title" value="' + esc(tk.title) + '" placeholder="Название задачи">' +
+          '<input class="tpl-fld" data-si="' + si + '" data-ti="' + ti + '" data-f="description" value="' + esc(tk.description) + '" placeholder="Что нужно сделать (описание)">' +
+          '<textarea class="tpl-fld tpl-area" data-si="' + si + '" data-ti="' + ti + '" data-f="how_to" placeholder="Как выполнить — по строке на шаг">' + esc(tk.how_to) + '</textarea>' +
+          '<input class="tpl-fld" data-si="' + si + '" data-ti="' + ti + '" data-f="tip" value="' + esc(tk.tip) + '" placeholder="Совет">' +
+          '<input class="tpl-fld tpl-due" data-si="' + si + '" data-ti="' + ti + '" data-f="due_rule" value="' + esc(tk.due_rule) + '" placeholder="Срок (правило, напр. «до 1 декабря»)">' +
+        '</div>';
+      }).join('');
+      return '<div class="tpl-stage">' +
+        '<div class="tpl-stage-h">' +
+          '<input class="tpl-fld tpl-stage-t" data-si="' + si + '" data-f="stitle" value="' + esc(st.title) + '" placeholder="Этап ' + (si + 1) + ' — название">' +
+          '<button class="tpl-mini-del" data-delstage="' + si + '" title="Удалить этап">' + ic('x', 13) + '</button>' +
+        '</div>' +
+        '<input class="tpl-fld" data-si="' + si + '" data-f="sabout" value="' + esc(st.about) + '" placeholder="О чём этап — коротко">' +
+        '<div class="tpl-tasks">' + (tasks || '<div class="tpl-empty">В этапе нет задач.</div>') + '</div>' +
+        '<button class="bp ghost sm tpl-add-task" data-addtask="' + si + '">' + ic('plus', 12) + 'Добавить задачу</button>' +
+      '</div>';
+    }).join('');
+    view.innerHTML = '<div class="card tpl-wrap">' +
+      '<div class="tpl-edit-head">' +
+        '<button class="bp ghost sm" id="tpl-cancel">' + ic('go', 13) + 'К списку</button>' +
+        '<button class="bp sm" id="tpl-save">' + ic('check', 13) + 'Сохранить</button>' +
+      '</div>' +
+      '<div class="tpl-meta">' +
+        '<input class="tpl-fld tpl-name" data-f="name" value="' + esc(d.name) + '" placeholder="Название шаблона">' +
+        '<input class="tpl-fld tpl-slug" data-f="id" value="' + esc(d.id) + '" placeholder="slug (латиницей)" ' + (state._tplEdit === 'new' ? '' : 'disabled') + '>' +
+        '<input class="tpl-fld" data-f="segment" value="' + esc(d.segment) + '" placeholder="сегмент (applying / exploring)">' +
+        '<input class="tpl-fld tpl-desc" data-f="description" value="' + esc(d.description) + '" placeholder="Короткое описание">' +
+      '</div>' +
+      '<div class="tpl-stages">' + (stagesHtml || '<div class="empty">Нет этапов.</div>') + '</div>' +
+      '<button class="bp ghost tpl-add-stage" id="tpl-add-stage">' + ic('plus', 13) + 'Добавить этап</button>' +
+      '<div class="tpl-edit-foot"><span class="s">Владелец задачи: «Клиент» — делает ученик (видит и сдает), «EastSide» — делает команда. Стадии по порядку ложатся в этапы доски клиента.</span></div>' +
+    '</div>';
+    bindTemplateEditor(view);
+  }
+  function bindTemplateEditor(view) {
+    var d = state._tplDraft;
+    function rerender() { if (state.page === 'templates') renderView(); }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-f]'), function (f) {
+      var ev = f.tagName === 'TEXTAREA' || f.tagName === 'INPUT' ? 'input' : 'change';
+      f.addEventListener(ev, function () {
+        var fid = f.getAttribute('data-f'), si = f.getAttribute('data-si'), ti = f.getAttribute('data-ti');
+        if (ti !== null) d.stages[+si].tasks[+ti][fid] = f.value;
+        else if (fid === 'name') d.name = f.value;
+        else if (fid === 'id') d.id = f.value;
+        else if (fid === 'segment') d.segment = f.value;
+        else if (fid === 'description') d.description = f.value;
+        else if (fid === 'stitle') d.stages[+si].title = f.value;
+        else if (fid === 'sabout') d.stages[+si].about = f.value;
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.tpl-own-b'), function (b) {
+      b.addEventListener('click', function () {
+        d.stages[+b.getAttribute('data-si')].tasks[+b.getAttribute('data-ti')].owner = b.getAttribute('data-own');
+        rerender();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-addtask]'), function (b) {
+      b.addEventListener('click', function () {
+        d.stages[+b.getAttribute('data-addtask')].tasks.push({ owner: 'client', title: '', description: '', how_to: '', tip: '', due_rule: '' });
+        rerender();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-deltask]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = b.getAttribute('data-deltask').split('.'); d.stages[+p[0]].tasks.splice(+p[1], 1); rerender();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-delstage]'), function (b) {
+      b.addEventListener('click', function () { d.stages.splice(+b.getAttribute('data-delstage'), 1); rerender(); });
+    });
+    var addSt = el('tpl-add-stage'); if (addSt) addSt.addEventListener('click', function () { d.stages.push({ title: '', about: '', tasks: [] }); rerender(); });
+    var cancel = el('tpl-cancel'); if (cancel) cancel.addEventListener('click', function () { state._tplEdit = null; state._tplDraft = null; renderView(); });
+    var save = el('tpl-save'); if (save) save.addEventListener('click', saveTemplate);
+  }
+  function saveTemplate() {
+    var d = state._tplDraft;
+    if (!d.name.trim()) { showToast('Введите название шаблона'); return; }
+    if (state._tplEdit === 'new' && !d.id.trim()) { showToast('Введите slug (латиницей)'); return; }
+    var body = {
+      name: d.name, segment: d.segment, description: d.description,
+      stages: d.stages.map(function (st) {
+        return { title: st.title || 'Без названия', about: st.about,
+          tasks: st.tasks.filter(function (tk) { return tk.title.trim(); }).map(function (tk) {
+            return { owner: tk.owner, title: tk.title, description: tk.description, how_to: tk.how_to, tip: tk.tip, due_rule: tk.due_rule };
+          }) };
+      }),
+    };
+    var isNew = state._tplEdit === 'new';
+    var path = '/admin/api/plan-templates' + (isNew ? '' : '/' + encodeURIComponent(state._tplEdit));
+    body.id = d.id;
+    apiSend(path, isNew ? 'POST' : 'PUT', body, function () {
+      state._templates = null; state._tplEdit = null; state._tplDraft = null;
+      showToast('Шаблон сохранён'); renderView();
+    });
+  }
+
+  /* ── ТУЛБАР плана в секции «Поступление»: раскатка шаблона + публикация ── */
+  function planToolbar(id) {
+    var pst = state.planStatus[id], pub = !!(pst && pst.published);
+    var menu = '';
+    var tpls = Array.isArray(state._templates) ? state._templates : [];
+    menu = tpls.map(function (t) {
+      return '<button class="rm-rollout-i" data-rollout="' + esc(t.id) + '">' + esc(t.name) +
+        '<span class="num"> · ' + (t.tasks_count || 0) + '</span></button>';
+    }).join('');
+    return '<div class="rm-plan-tb">' +
+      '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
+        (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
+      '<div class="rm-plan-tb-act">' +
+        '<div class="rm-rollout-wrap">' +
+          '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Развернуть из шаблона</button>' +
+          '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
+        '</div>' +
+        '<button class="bp sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать ученику') + '</button>' +
+      '</div></div>';
+  }
+  function ensurePlanStatus(id) {
+    if (state.planStatus[id] !== undefined) return;
+    api('/admin/api/leads/' + id + '/plan').then(function (r) {
+      state.planStatus[id] = { published: !!(r && r.published) };
+      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+    }).catch(function () { state.planStatus[id] = { published: false }; });
+  }
+  function wirePlanToolbar(id) {
+    var host = document.querySelector('#m-content') || document.getElementById('m-content');
+    if (!host) return;
+    var btn = host.querySelector('#rm-rollout-btn');
+    var menu = host.querySelector('#rm-rollout-menu');
+    var pubBtn = host.querySelector('#rm-pub-btn');
+    if (btn && menu) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (!Array.isArray(state._templates) || !state._templates.length) {
+          fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
+          return;
+        }
+        menu.hidden = !menu.hidden;
+      });
+      Array.prototype.forEach.call(menu.querySelectorAll('[data-rollout]'), function (it) {
+        it.addEventListener('click', function () {
+          menu.hidden = true;
+          doRollout(id, it.getAttribute('data-rollout'));
+        });
+      });
+      document.addEventListener('click', function () { menu.hidden = true; }, { once: true });
+    }
+    if (pubBtn) pubBtn.addEventListener('click', function () {
+      var pub = state.planStatus[id] && state.planStatus[id].published;
+      doPublish(id, !pub);
+    });
+  }
+  function doRollout(id, tplId) {
+    apiSend('/admin/api/leads/' + id + '/plan/rollout', 'POST', { template_id: tplId, mode: 'reconcile' }, function () {
+      RM_LOADED[id] = false; delete RM[id]; delete state.planStatus[id];
+      showToast('Шаблон развёрнут в доску');
+      refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
+    });
+  }
+  function doPublish(id, on) {
+    apiSend('/admin/api/leads/' + id + '/plan/' + (on ? 'publish' : 'unpublish'), 'POST', null, function () {
+      state.planStatus[id] = { published: on };
+      showToast(on ? 'План опубликован ученику' : 'Публикация снята');
+      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+    });
+  }
+
   function pageAnim(view) {
     if (state._animPage === state.page) return;
     state._animPage = state.page;
@@ -3496,7 +3747,7 @@
       '</div>';
     });
     html += '</div>';
-    return html;
+    return planToolbar(id) + html;
   }
 
   function openDrawer(id, listIds) {
@@ -3661,6 +3912,7 @@
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     attachContentHandlers(id, ctx);
+    if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     animBars(host);
     syncRmChat(id);
   }
