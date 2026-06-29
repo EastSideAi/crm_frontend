@@ -1815,6 +1815,9 @@ a { color: inherit; text-decoration: none; }
 .tg-msg.in .tg-by { color: var(--blue); }
 .tg-msg.out.ai .tg-by { color: var(--blue); }
 .tg-msg.out.mgr .tg-by { color: var(--navy); }
+.tg-by.warn { color: var(--red-ink); }
+.tg-msg.undelivered .tg-bub { box-shadow: inset 0 0 0 1px var(--red); }
+.tg-msg.out.undelivered .tg-bub { opacity: .82; }
 /* разделитель дня в треде (Сегодня / Вчера / дата) */
 .tg-day { display: flex; justify-content: center; margin: 10px 0 4px; }
 .tg-day:first-child { margin-top: 0; }
