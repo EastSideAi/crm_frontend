@@ -105,6 +105,7 @@
       go: '<path d="M7.5 5l5 5-5 5"/>',
       check: '<path d="M16 6l-8 8-4-4"/>',
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
+      alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
@@ -2642,7 +2643,7 @@
       if (!d) return null; // ещё не загружены
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
-        return { who: who, text: m.text, at: m.at, id: m.id };
+        return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
       });
     }
     var dlg = getDialog(c.lead);
@@ -2668,11 +2669,13 @@
       var sep = '';
       var dk = m.at ? String(m.at).slice(0, 10) : '';
       if (dk && dk !== lastDay) { lastDay = dk; sep = '<div class="tg-day"><span>' + dayLabel(m.at) + '</span></div>'; }
-      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + '">' +
+      var foot = m.undelivered
+        ? '<span class="tg-by warn" title="' + esc(m.reason || '') + '">' + ic('alert', 9) + 'не доставлено клиенту</span>'
+        : (by ? '<span class="tg-by">' + (m.who === 'bot' ? ic('bot', 9) : ic('hand', 9)) + by + '</span>' : '');
+      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + '">' +
         '<div class="tg-bub">' + mdMsg(m.text) + '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
           (m.id ? '<button class="tg-del" data-del="' + m.id + '" title="Удалить сообщение">' + ic('x', 11) + '</button>' : '') +
-        '</div>' +
-        (by ? '<span class="tg-by">' + (m.who === 'bot' ? ic('bot', 9) : ic('hand', 9)) + by + '</span>' : '') + '</div>';
+        '</div>' + foot + '</div>';
     }).join('');
   }
   /* единый бейдж статуса диалога (список + точечное обновление при тумблере) */
@@ -2718,9 +2721,16 @@
       var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO };
       if (d) d.messages = (d.messages || []).concat([tmp]);
       if (c.ai_on !== false) inboxSetAi(c, false); else renderView();
-      // реальная доставка; при ошибке — откатываем пузырь, чтобы не казалось, что ушло
+      // реальная доставка. Бэк отвечает {delivered, reason}: не ушло клиенту — помечаем пузырь
+      // (не удаляем — менеджер видит свой текст и причину), сетевой сбой — откатываем.
       api('/admin/api/bot/conversations/' + c.id + '/send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }),
+      }).then(function (res) {
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          if (state.page === 'inbox') renderView();
+        }
       }).catch(function () {
         var dd = state.bot.msgs[c.id];
         if (dd && dd.messages) dd.messages = dd.messages.filter(function (m) { return m !== tmp; });
