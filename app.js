@@ -3183,17 +3183,6 @@
   var RM_LOADED = {};     /* доска подтянута с бэка (или засеяна дефолтом) — по id лида */
   var RM_SAVE_T = {};     /* таймеры дебаунса сохранения доски */
   var RM_REFRESHED = {};  /* для лида уже дёрнули refreshDetail (старый кэш без доски) */
-  /* дефолтная доска нового лида — стандартный путь из пресетов всех этапов */
-  function rmDefaultBoard(id) {
-    var s4 = String(id).slice(0, 4), i = 0, out = [];
-    ADMISSION_STAGES.forEach(function (st) {
-      (st.presets || []).forEach(function (p) {
-        out.push({ id: 'rm' + (i++) + '_' + s4, stage: st.key, title: p.t, owner: p.o,
-          status: 'wait', need: p.need || '', due: '', attach: p.at || [], subs: [], comments: [] });
-      });
-    });
-    return out;
-  }
   /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
     var d = state.details[id];
@@ -3206,7 +3195,9 @@
     if (RM_LOADED[id]) return RM[id] || (RM[id] = []);
     var saved = rmSavedBoard(id);
     if (saved === null) return RM[id] || (RM[id] = []);  // деталь ещё не загрузилась
-    RM[id] = saved.length ? JSON.parse(JSON.stringify(saved)) : rmDefaultBoard(id);
+    // Новый лид = ПУСТАЯ доска. Задачи появляются только когда команда
+    // осознанно развернёт план (шаблон) или добавит задачи вручную — не по дефолту.
+    RM[id] = saved.length ? JSON.parse(JSON.stringify(saved)) : [];
     RM_LOADED[id] = true;
     return RM[id];
   }
