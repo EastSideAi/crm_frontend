@@ -1590,12 +1590,16 @@
         '<button class="bp sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать ученику') + '</button>' +
       '</div></div>';
   }
-  function ensurePlanStatus(id) {
-    if (state.planStatus[id] !== undefined) return;
+  function ensurePlanStatus(id, force) {
+    if (!force && state.planStatus[id] !== undefined) return;
+    if (state.planStatus[id] === 'loading') return;
+    state.planStatus[id] = state.planStatus[id] || 'loading';
     api('/admin/api/leads/' + id + '/plan').then(function (r) {
       state.planStatus[id] = { published: !!(r && r.published) };
       if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    }).catch(function () { state.planStatus[id] = { published: false }; });
+    }).catch(function () {
+      if (state.planStatus[id] === 'loading') state.planStatus[id] = { published: false };
+    });
   }
   function wirePlanToolbar(id) {
     var host = document.querySelector('#m-content') || document.getElementById('m-content');
@@ -1633,11 +1637,19 @@
     });
   }
   function doPublish(id, on) {
-    apiSend('/admin/api/leads/' + id + '/plan/' + (on ? 'publish' : 'unpublish'), 'POST', null, function () {
-      state.planStatus[id] = { published: on };
-      showToast(on ? 'План опубликован ученику' : 'Публикация снята');
-      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    });
+    var rerender = function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); };
+    api('/admin/api/leads/' + id + '/plan/' + (on ? 'publish' : 'unpublish'), { method: 'POST' })
+      .then(function (r) {
+        // Правда — ответ сервера, не локальный флип: кэш не разъезжается с бэком.
+        state.planStatus[id] = { published: !!(r && r.published) };
+        showToast(state.planStatus[id].published ? 'План опубликован ученику' : 'Публикация снята');
+        rerender();
+      })
+      .catch(function (e) {
+        if (e && e.message !== '403') showToast('Не сохранилось — проверь сеть');
+        ensurePlanStatus(id, true); // пересинхронизировать реальный статус с бэка
+        rerender();
+      });
   }
 
   function pageAnim(view) {
@@ -3795,6 +3807,8 @@
   function setModalSection(s) {
     state.modalSection = s;
     RM_CHAT = null;
+    // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
+    if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
     var nav = el('modal').querySelector('.m-nav');
     if (nav) Array.prototype.forEach.call(nav.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-s') === s);
