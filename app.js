@@ -1318,7 +1318,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, products: 1, grants: 1, marketing: 1, partners: 1 };
+  var STUB_PAGES = { students: 1, products: 1, grants: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1339,6 +1339,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
+    else if (state.page === 'marketing') renderMarketing(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -1390,6 +1391,270 @@
       });
     });
   }
+  /* ── МАРКЕТИНГ: воронки бота + трекинг-ссылки + статистика ──────────────────
+     Данные — /admin/api/marketing/overview (общая БД с ботом): воронка, сохранённая
+     здесь, сразу живёт в боте. Код работает 4 способами: кодовое слово в директ,
+     go.истсайд.рф/<код> (сайт/инста/ютюб, 302 с utm + клик), t.me deep-link, vk ref. */
+  var MK_BOT_TG = 'eastsideai_bot';
+  var MK_VK_GROUP = 'eastside_study';
+  var MK_GO = 'https://go.истсайд.рф/';
+  var MK_CODE_RE = /^[a-z0-9_-]{1,64}$/;
+  var MK_STEP_LABEL = { text: 'Сообщение', file: 'Файл', ask: 'Вопрос (ответ сохраняется)', wait: 'Пауза (часы)' };
+
+  function mkUrl(kind, code) {
+    if (kind === 'tg') return 'https://t.me/' + MK_BOT_TG + '?start=' + code;
+    if (kind === 'vk') return 'https://vk.me/' + MK_VK_GROUP + '?ref=' + code;
+    return MK_GO + code;
+  }
+  function mkChips(code) {
+    return '<span class="mk-chips" data-code="' + esc(code) + '">' +
+      ['go', 'tg', 'vk'].map(function (k) {
+        return '<button class="mk-chip" data-k="' + k + '" title="Скопировать ссылку ' + k + '">' + k + ic('copy', 10) + '</button>';
+      }).join('') + '</span>';
+  }
+  function mkBindChips(scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll('.mk-chip'), function (b) {
+      b.addEventListener('click', function () {
+        var code = b.parentNode.getAttribute('data-code');
+        copyText(mkUrl(b.getAttribute('data-k'), code), b);
+        showToast('Ссылка скопирована');
+      });
+    });
+  }
+  function fetchMk(cb) {
+    api('/admin/api/marketing/overview').then(function (r) {
+      state._mk = r;
+      if (cb) cb(); else if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._mk = 'none'; if (state.page === 'marketing') renderView(); }
+    });
+  }
+
+  function renderMarketing(view) {
+    if (!state._mk) {
+      view.innerHTML = dashSkeleton();
+      fetchMk();
+      return;
+    }
+    if (state._mk === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить маркетинг — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    if (state._mkEdit) return renderMkEdit(view);
+    var d = state._mk, st = d.stats || { clicks: {}, users: {}, handoffs: {} };
+    function n(map, code) { return (map && map[code]) || 0; }
+
+    /* воронки */
+    var frows = (d.funnels || []).map(function (f) {
+      return '<div class="mk-row' + (f.active ? '' : ' off') + '">' +
+        '<div class="mk-i"><div class="mk-n">' + esc(f.title || f.code) +
+          (f.active ? '' : ' <span class="mk-off">выкл</span>') + '</div>' +
+        '<div class="mk-l"><span class="mk-code num">' + esc(f.code) + '</span>' +
+          (f.keywords || []).map(function (w) { return '<span class="mk-kw">' + esc(w) + '</span>'; }).join('') +
+          ' · ' + (f.steps || []).length + ' ' + plural((f.steps || []).length, 'шаг', 'шага', 'шагов') + '</div></div>' +
+        '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, f.code) + ' · ' + n(st.users, f.code) + ' · ' + n(st.handoffs, f.code) + '</div>' +
+        mkChips(f.code) +
+        '<button class="mk-btn" data-edit="' + esc(f.code) + '">Изменить</button></div>';
+    }).join('');
+
+    /* трекинг-ссылки */
+    var lrows = (d.links || []).filter(function (l) { return l.active; }).map(function (l) {
+      return '<div class="mk-row"><div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
+        '<div class="mk-l"><span class="mk-code num">' + esc(l.code) + '</span>' +
+          (l.funnel_code ? ' → воронка «' + esc(l.funnel_code) + '»' : ' → без воронки') +
+          (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') + '</div></div>' +
+        '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, l.code) + ' · ' + n(st.users, l.code) + ' · ' + n(st.handoffs, l.code) + '</div>' +
+        mkChips(l.code) +
+        '<button class="mk-btn danger" data-linkoff="' + esc(l.code) + '" title="Выключить код">' + ic('x', 12) + '</button></div>';
+    }).join('');
+
+    /* форма новой ссылки */
+    var fopts = (d.funnels || []).map(function (f) {
+      return '<option value="' + esc(f.code) + '">' + esc(f.title || f.code) + '</option>';
+    }).join('');
+    var linkForm = !state._mkLinkOpen ? '' :
+      '<div class="mk-form">' +
+        '<div class="mk-fr"><input id="mk-lt" class="mk-inp" placeholder="Название (Лето · ВК таргет)">' +
+        '<select id="mk-lf" class="mk-inp">' + fopts + '<option value="">без воронки (только сайт)</option></select>' +
+        '<input id="mk-lc" class="mk-inp" placeholder="код: leto_vk (латиница/цифры/-_)"></div>' +
+        '<div class="mk-fr"><input id="mk-ls" class="mk-inp" placeholder="utm_source (vk / instagram / youtube)">' +
+        '<input id="mk-lm" class="mk-inp" placeholder="utm_medium (post / reels / target)">' +
+        '<input id="mk-lg" class="mk-inp" placeholder="utm_campaign (leto2026)">' +
+        '<input id="mk-lu" class="mk-inp" placeholder="куда вести /go (пусто = как у воронки)"></div>' +
+        '<div class="mk-fr"><button class="mk-btn primary" id="mk-lsave">Создать код</button>' +
+        '<button class="mk-btn" id="mk-lcancel">Отмена</button></div></div>';
+
+    /* ответы сегментации */
+    var byF = {};
+    (d.answers || []).forEach(function (a) {
+      (byF[a.funnel_code] = byF[a.funnel_code] || []).push(a);
+    });
+    var arows = Object.keys(byF).map(function (fc) {
+      return '<div class="mk-ans"><div class="mk-ans-t">' + esc(fc) + '</div>' + byF[fc].map(function (a) {
+        return '<div class="mk-ans-r"><span>' + esc(a.key) + ' · ' + esc(a.value) + '</span><span class="num">' + a.count + '</span></div>';
+      }).join('') + '</div>';
+    }).join('');
+
+    view.innerHTML =
+      '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
+        '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span><div><div class="t">Воронки бота</div>' +
+        '<div class="s">кодовые слова и лидмагниты — человек пишет слово или приходит по ссылке, бот ведёт по шагам</div></div>' +
+        '<button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
+        '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — создай первую.</div>') + '</div>' +
+        '<div class="mk-hint">цифры: клики по ссылке → людей вошло в бота → дошли до менеджера. Кнопки go/tg/vk копируют готовую ссылку.</div></div>' +
+      '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
+        '<div class="sec-head"><span class="ic">' + ic('ext', 14) + '</span><div><div class="t">Трекинг-ссылки</div>' +
+        '<div class="s">коды под каналы (leto_vk, leto_inst) — видно, какая площадка привела; utm подставляются сами</div></div>' +
+        '<button class="mk-btn primary" id="mk-newl">' + ic('plus', 12) + 'Ссылка</button></div>' +
+        linkForm +
+        '<div class="mk-list">' + (lrows || '<div class="empty">Кодов пока нет. Базовые коды воронок уже работают (кнопки выше).</div>') + '</div></div>' +
+      (arows ? '<div class="card" style="padding:22px 24px">' +
+        '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span><div><div class="t">Ответы сегментации</div>' +
+        '<div class="s">что люди отвечают на вопросы воронок</div></div></div>' + arows + '</div>' : '');
+
+    mkBindChips(view);
+    var nf = el('mk-newf');
+    if (nf) nf.addEventListener('click', function () {
+      state._mkEdit = { isNew: true, code: '', title: '', keywords: '', target_url: '',
+        utm: {}, active: true, steps: [{ type: 'text', text: '' }] };
+      renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-edit]'), function (b) {
+      b.addEventListener('click', function () {
+        var f = (state._mk.funnels || []).filter(function (x) { return x.code === b.getAttribute('data-edit'); })[0];
+        if (!f) return;
+        state._mkEdit = JSON.parse(JSON.stringify(f));
+        state._mkEdit.keywords = (f.keywords || []).join(', ');
+        state._mkEdit.utm = f.utm || {};
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-linkoff]'), function (b) {
+      b.addEventListener('click', function () {
+        apiSend('/admin/api/marketing/link/' + b.getAttribute('data-linkoff'), 'DELETE', null, function () {
+          showToast('Код выключен'); fetchMk();
+        });
+      });
+    });
+    var nl = el('mk-newl');
+    if (nl) nl.addEventListener('click', function () { state._mkLinkOpen = !state._mkLinkOpen; renderView(); });
+    var lc = el('mk-lcancel');
+    if (lc) lc.addEventListener('click', function () { state._mkLinkOpen = false; renderView(); });
+    var ls = el('mk-lsave');
+    if (ls) ls.addEventListener('click', function () {
+      var code = (el('mk-lc').value || '').trim().toLowerCase();
+      if (!MK_CODE_RE.test(code)) { showToast('Код: латиница/цифры/-_ до 64 символов'); return; }
+      var utm = {};
+      if (el('mk-ls').value.trim()) utm.source = el('mk-ls').value.trim();
+      if (el('mk-lm').value.trim()) utm.medium = el('mk-lm').value.trim();
+      if (el('mk-lg').value.trim()) utm.campaign = el('mk-lg').value.trim();
+      apiSend('/admin/api/marketing/link', 'POST', {
+        code: code, title: el('mk-lt').value.trim(), funnel_code: el('mk-lf').value || null,
+        target_url: el('mk-lu').value.trim() || null,
+        utm: Object.keys(utm).length ? utm : null,
+      }, function () { state._mkLinkOpen = false; showToast('Код создан — ссылки готовы'); fetchMk(); });
+    });
+  }
+
+  /* редактор воронки: шаги text/file/ask/wait, живёт в state._mkEdit (черновик) */
+  function renderMkEdit(view) {
+    var f = state._mkEdit;
+    function stepFields(s, i) {
+      if (s.type === 'wait')
+        return '<input class="mk-inp sm" data-f="hours" data-i="' + i + '" type="number" min="0.1" step="0.5" value="' + esc(String(s.hours || 3)) + '" placeholder="часов">';
+      if (s.type === 'ask')
+        return '<input class="mk-inp sm" data-f="key" data-i="' + i + '" value="' + esc(s.key || '') + '" placeholder="ключ ответа (age)">' +
+          '<textarea class="mk-inp" data-f="text" data-i="' + i + '" rows="3" placeholder="текст вопроса">' + esc(s.text || '') + '</textarea>';
+      if (s.type === 'file')
+        return '<input class="mk-inp" data-f="url" data-i="' + i + '" value="' + esc(s.url || '') + '" placeholder="ссылка на файл (url)">' +
+          '<textarea class="mk-inp" data-f="caption" data-i="' + i + '" rows="2" placeholder="подпись к файлу">' + esc(s.caption || '') + '</textarea>';
+      return '<textarea class="mk-inp" data-f="text" data-i="' + i + '" rows="4" placeholder="текст сообщения">' + esc(s.text || '') + '</textarea>';
+    }
+    var steps = (f.steps || []).map(function (s, i) {
+      return '<div class="mk-step"><div class="mk-step-h">' +
+        '<select class="mk-inp sm" data-type="' + i + '">' + Object.keys(MK_STEP_LABEL).map(function (t) {
+          return '<option value="' + t + '"' + (s.type === t ? ' selected' : '') + '>' + MK_STEP_LABEL[t] + '</option>';
+        }).join('') + '</select>' +
+        '<span class="mk-step-n num">шаг ' + (i + 1) + '</span>' +
+        '<button class="mk-btn sm" data-up="' + i + '" title="выше">↑</button>' +
+        '<button class="mk-btn sm" data-down="' + i + '" title="ниже">↓</button>' +
+        '<button class="mk-btn sm danger" data-del="' + i + '" title="удалить">' + ic('x', 11) + '</button></div>' +
+        stepFields(s, i) + '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card" style="padding:22px 24px">' +
+      '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span><div>' +
+      '<div class="t">' + (f.isNew ? 'Новая воронка' : 'Воронка «' + esc(f.title || f.code) + '»') + '</div>' +
+      '<div class="s">сохранится в бота сразу — без программиста и деплоя</div></div></div>' +
+      '<div class="mk-form"><div class="mk-fr">' +
+        '<input id="mk-ft" class="mk-inp" value="' + esc(f.title || '') + '" placeholder="Название (Летние программы)">' +
+        '<input id="mk-fc" class="mk-inp" value="' + esc(f.code || '') + '"' + (f.isNew ? '' : ' disabled') + ' placeholder="код: leto (латиница/-_)">' +
+        '<input id="mk-fk" class="mk-inp" value="' + esc(f.keywords || '') + '" placeholder="кодовые слова через запятую: лето, leto"></div>' +
+      '<div class="mk-fr">' +
+        '<input id="mk-fu" class="mk-inp" value="' + esc(f.target_url || '') + '" placeholder="куда ведёт /go (https://…)">' +
+        '<input id="mk-fs" class="mk-inp sm" value="' + esc((f.utm && f.utm.source) || '') + '" placeholder="utm_source">' +
+        '<input id="mk-fm" class="mk-inp sm" value="' + esc((f.utm && f.utm.medium) || '') + '" placeholder="utm_medium">' +
+        '<input id="mk-fg" class="mk-inp sm" value="' + esc((f.utm && f.utm.campaign) || '') + '" placeholder="utm_campaign">' +
+        '<label class="mk-tgl"><input type="checkbox" id="mk-fa"' + (f.active ? ' checked' : '') + '> включена</label></div></div>' +
+      '<div class="mk-steps">' + steps + '</div>' +
+      '<div class="mk-fr" style="margin-top:12px">' +
+        '<button class="mk-btn" id="mk-addstep">' + ic('plus', 12) + 'Шаг</button>' +
+        '<span style="flex:1"></span>' +
+        '<button class="mk-btn" id="mk-back">Отмена</button>' +
+        '<button class="mk-btn primary" id="mk-save">Сохранить</button></div></div>';
+
+    function syncTop() {
+      f.title = el('mk-ft').value; f.keywords = el('mk-fk').value;
+      f.target_url = el('mk-fu').value;
+      f.utm = {};
+      if (el('mk-fs').value.trim()) f.utm.source = el('mk-fs').value.trim();
+      if (el('mk-fm').value.trim()) f.utm.medium = el('mk-fm').value.trim();
+      if (el('mk-fg').value.trim()) f.utm.campaign = el('mk-fg').value.trim();
+      f.active = el('mk-fa').checked;
+      if (f.isNew) f.code = (el('mk-fc').value || '').trim().toLowerCase();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-f]'), function (inp) {
+      inp.addEventListener('input', function () {
+        var s = f.steps[+inp.getAttribute('data-i')];
+        if (s) s[inp.getAttribute('data-f')] = inp.getAttribute('data-f') === 'hours' ? +inp.value : inp.value;
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-type]'), function (sel) {
+      sel.addEventListener('change', function () {
+        syncTop();
+        f.steps[+sel.getAttribute('data-type')].type = sel.value;
+        renderView();
+      });
+    });
+    function move(i, d) { syncTop(); var s = f.steps.splice(i, 1)[0]; f.steps.splice(i + d, 0, s); renderView(); }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-up]'), function (b) {
+      b.addEventListener('click', function () { var i = +b.getAttribute('data-up'); if (i > 0) move(i, -1); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-down]'), function (b) {
+      b.addEventListener('click', function () { var i = +b.getAttribute('data-down'); if (i < f.steps.length - 1) move(i, 1); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-del]'), function (b) {
+      b.addEventListener('click', function () { syncTop(); f.steps.splice(+b.getAttribute('data-del'), 1); renderView(); });
+    });
+    el('mk-addstep').addEventListener('click', function () { syncTop(); f.steps.push({ type: 'text', text: '' }); renderView(); });
+    el('mk-back').addEventListener('click', function () { state._mkEdit = null; renderView(); });
+    el('mk-save').addEventListener('click', function () {
+      syncTop();
+      if (!MK_CODE_RE.test(f.code)) { showToast('Код: латиница/цифры/-_ до 64 символов'); return; }
+      var body = {
+        code: f.code, title: f.title.trim(),
+        keywords: f.keywords.split(',').map(function (w) { return w.trim(); }).filter(Boolean),
+        steps: f.steps, target_url: f.target_url.trim() || null,
+        utm: Object.keys(f.utm).length ? f.utm : null, active: f.active,
+      };
+      apiSend('/admin/api/marketing/funnel', 'POST', body, function () {
+        state._mkEdit = null;
+        showToast('Воронка сохранена — уже живёт в боте');
+        fetchMk();
+      });
+    });
+  }
+
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах
      внутри той же страницы — иначе мелькает). CSS гасит при reduced-motion. */
   /* ── ШАБЛОНЫ пути поступления (мастер-планы → доска «Поступление») ── */
