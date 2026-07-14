@@ -1573,22 +1573,36 @@
   /* ── ТУЛБАР плана в секции «Поступление»: раскатка шаблона + публикация ── */
   function planToolbar(id) {
     var pst = state.planStatus[id], pub = !!(pst && pst.published);
-    var menu = '';
     var tpls = Array.isArray(state._templates) ? state._templates : [];
-    menu = tpls.map(function (t) {
+    var menu = tpls.map(function (t) {
       return '<button class="rm-rollout-i" data-rollout="' + esc(t.id) + '">' + esc(t.name) +
         '<span class="num"> · ' + (t.tasks_count || 0) + '</span></button>';
     }).join('');
     return '<div class="rm-plan-tb">' +
-      '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
-        (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
-      '<div class="rm-plan-tb-act">' +
-        '<div class="rm-rollout-wrap">' +
-          '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Развернуть из шаблона</button>' +
-          '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
+        '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
+          (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
+        '<div class="rm-plan-tb-act">' +
+          '<button class="bp sm rm-ai-btn" id="rm-ai-btn">' + ic('spark', 14) + 'AI собрать план</button>' +
+          '<div class="rm-rollout-wrap">' +
+            '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Из шаблона</button>' +
+            '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
+          '</div>' +
+          '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
-        '<button class="bp sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать ученику') + '</button>' +
-      '</div></div>';
+      '</div>' +
+      // AI-композер: свернут по умолчанию, раскрывается кнопкой «AI собрать план»
+      '<div class="rm-ai" id="rm-ai" hidden>' +
+        '<div class="rm-ai-head">' + ic('spark', 15) + '<span>AI соберет план поступления под этого ученика — по анкете, диагностике и требованиям вузов</span></div>' +
+        '<textarea class="rm-ai-note" id="rm-ai-note" rows="2" placeholder="Что учесть? Например: язык слабый, год не горит — сначала язык и запасные вузы. Можно оставить пустым — соберу по анкете и диагностике."></textarea>' +
+        '<div class="rm-ai-foot" id="rm-ai-foot">' +
+          '<div class="rm-ai-mode" id="rm-ai-mode">' +
+            '<button class="rm-ai-m on" data-mode="replace">Собрать заново</button>' +
+            '<button class="rm-ai-m" data-mode="merge">Дополнить</button>' +
+          '</div>' +
+          '<button class="bp sm rm-ai-go" id="rm-ai-go">Собрать план' + ic('go', 13) + '</button>' +
+        '</div>' +
+        '<div class="rm-ai-load" id="rm-ai-load" hidden><span class="rm-ai-spin"></span>AI собирает план под ученика — это до минуты…</div>' +
+      '</div>';
   }
   function ensurePlanStatus(id, force) {
     if (!force && state.planStatus[id] !== undefined) return;
@@ -1604,12 +1618,45 @@
   function wirePlanToolbar(id) {
     var host = document.querySelector('#m-content') || document.getElementById('m-content');
     if (!host) return;
+    // Шаблоны подгружаем заранее (на открытии секции), чтобы меню открывалось сразу
+    // одним кликом, а не «пусто -> фетч -> второй клик».
+    if (state._templates === null || state._templates === undefined) {
+      fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
+    }
     var btn = host.querySelector('#rm-rollout-btn');
     var menu = host.querySelector('#rm-rollout-menu');
     var pubBtn = host.querySelector('#rm-pub-btn');
+    var aiBtn = host.querySelector('#rm-ai-btn');
+    var aiPanel = host.querySelector('#rm-ai');
+
+    // ── AI-композер ──
+    if (aiBtn && aiPanel) {
+      aiBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (menu) menu.hidden = true;
+        var open = aiPanel.hidden;
+        aiPanel.hidden = !open;
+        aiBtn.classList.toggle('on', open);
+        if (open) { var ta = host.querySelector('#rm-ai-note'); if (ta) ta.focus(); }
+      });
+      var modeWrap = host.querySelector('#rm-ai-mode');
+      if (modeWrap) modeWrap.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.rm-ai-m'); if (!b) return;
+        Array.prototype.forEach.call(modeWrap.querySelectorAll('.rm-ai-m'), function (x) { x.classList.toggle('on', x === b); });
+      });
+      var goBtn = host.querySelector('#rm-ai-go');
+      if (goBtn) goBtn.addEventListener('click', function () {
+        var ta = host.querySelector('#rm-ai-note');
+        var m = host.querySelector('#rm-ai-mode .rm-ai-m.on');
+        doAiPlan(id, ((ta && ta.value) || '').trim(), (m && m.getAttribute('data-mode')) || 'replace', host);
+      });
+    }
+
+    // ── Из шаблона ──
     if (btn && menu) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (aiPanel) { aiPanel.hidden = true; if (aiBtn) aiBtn.classList.remove('on'); }
         if (!Array.isArray(state._templates) || !state._templates.length) {
           fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
           return;
@@ -1627,6 +1674,33 @@
     if (pubBtn) pubBtn.addEventListener('click', function () {
       var pub = state.planStatus[id] && state.planStatus[id].published;
       doPublish(id, !pub);
+    });
+  }
+
+  // AI-сборка плана: зовет /plan/ai (крутится на умной модели, до минуты), кладет
+  // задачи в доску (replace = заново, merge = дополнить недостающим) и публикует статус.
+  function doAiPlan(id, note, mode, host) {
+    var foot = host.querySelector('#rm-ai-foot');
+    var load = host.querySelector('#rm-ai-load');
+    if (load && !load.hidden) return;            // уже считает — не дублируем
+    if (foot) foot.style.display = 'none';
+    if (load) load.hidden = false;
+    api('/admin/api/leads/' + id + '/plan/ai', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: note || '', mode: mode }),
+    }).then(function (res) {
+      var tasks = res && res.tasks;
+      if (!Array.isArray(tasks) || !tasks.length) throw new Error('empty');
+      var next = (mode === 'merge') ? (rmTasks(id) || []).concat(tasks) : tasks;
+      rmSet(id, next);
+      delete state.planStatus[id];
+      showToast('AI собрал план — ' + tasks.length + (mode === 'merge' ? ' задач добавлено' : ' задач'));
+      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+    }).catch(function (e) {
+      if (foot) foot.style.display = '';
+      if (load) load.hidden = true;
+      if (e && e.message === '403') return;
+      showToast(e && e.message === 'empty' ? 'AI не собрал задачи — попробуйте ещё раз или уточните приписку' : 'AI не ответил — попробуйте ещё раз');
     });
   }
   function doRollout(id, tplId) {

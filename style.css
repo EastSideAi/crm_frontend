@@ -2044,4 +2044,35 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-rollout-i:hover { background: var(--fill); }
 .rm-rollout-i .num { color: var(--ink-3); font-size: 11.5px; }
 .rm-rollout-empty { padding: 10px 12px; font-size: 12.5px; color: var(--ink-3); }
+.rm-rollout-menu { animation: rmPop .16s ease; }
+
+/* ── AI-композер плана поступления ─────────────────────────────────────── */
+.rm-ai-btn { background: var(--blue); }
+.rm-ai-btn.on, .rm-ai-btn:hover { background: var(--blue-d); }
+.rm-ai { margin-top: 12px; padding: 15px 16px; background: var(--blue-tint);
+  border: 1px solid var(--line-2); border-radius: var(--r-lg); animation: rmPop .18s ease; }
+.rm-ai-head { display: flex; align-items: flex-start; gap: 9px; margin-bottom: 11px;
+  font-size: 12.5px; line-height: 1.45; font-weight: 600; color: var(--navy); }
+.rm-ai-head svg { flex: none; margin-top: 1px; color: var(--blue); }
+.rm-ai-note { width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px;
+  padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--card);
+  color: var(--ink); font-family: inherit; font-size: 13.5px; line-height: 1.5; outline: none;
+  transition: border-color .15s, box-shadow .15s; }
+.rm-ai-note::placeholder { color: var(--ink-3); }
+.rm-ai-note:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,107,255,.14); }
+.rm-ai-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 11px; }
+.rm-ai-mode { display: inline-flex; background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); padding: 3px; }
+.rm-ai-m { border: 0; background: transparent; color: var(--ink-2); font-family: inherit;
+  font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: var(--r-pill); cursor: pointer; transition: .15s; }
+.rm-ai-m:hover { color: var(--ink); }
+.rm-ai-m.on { background: var(--blue); color: #fff; }
+.rm-ai-go { background: var(--blue); box-shadow: 0 6px 16px rgba(47,107,255,.24); }
+.rm-ai-go:hover { background: var(--blue-d); }
+.rm-ai-load { display: flex; align-items: center; gap: 10px; margin-top: 4px;
+  font-size: 12.5px; font-weight: 500; color: var(--ink-2); }
+.rm-ai-spin { flex: none; width: 15px; height: 15px; border: 2px solid var(--line-2);
+  border-top-color: var(--blue); border-radius: 50%; animation: rmSpin .7s linear infinite; }
+@keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes rmSpin { to { transform: rotate(360deg); } }
 
