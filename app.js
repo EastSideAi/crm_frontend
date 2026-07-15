@@ -4338,7 +4338,24 @@
     }).join('');
 
     return '<div class="m-ctitle">Оплаты</div>' +
-      '<div class="m-csub">Финансовый учет по клиенту. Позже подвяжем ЮKassa — будет автоматически.</div>' +
+      '<div class="m-csub">Счет выставляется здесь — клиент видит его в кабинете и платит через ЮKassa, статус обновится сам. Ручной учет ниже — для оплат мимо кассы.</div>' +
+      '<div class="m-sec"><div class="m-sec-h">Счета на оплату' +
+        '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
+      '</div>' +
+      '<div class="m-sec"><div class="m-sec-h">Выставить счет</div>' +
+        '<div class="pay-form">' +
+          '<select id="ord-tariff" class="ord-sel"><option value="">Произвольный счет (без тарифа)</option></select>' +
+          '<input id="ord-title" placeholder="За что — например «Сопровождение до поступления»">' +
+          '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
+            '<button data-v="installment">рассрочка</button></span>' +
+          '<div class="pay-grid">' +
+            '<input id="ord-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+            '<input id="ord-n" inputmode="numeric" placeholder="Взносов" value="4" disabled title="Число взносов — при рассрочке">' +
+            '<button class="bp sm" id="ord-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить</button>' +
+          '</div>' +
+        '</div></div>' +
+      '<div class="m-sec-h" style="margin-top:14px">Ручной учет</div>' +
       board +
       (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Платежей пока нет.</div>') +
       '<div class="m-sec" style="margin-top:14px"><div class="m-sec-h">Добавить платеж</div>' +
@@ -4591,6 +4608,97 @@
     if (rcptPick) rcptPick.addEventListener('click', function () { attachTo = null; if (rcptFile) rcptFile.click(); });
 
     // оплаты: добавить (статус-сегмент + дата)
+    /* ── Счета ЮKassa (заказы) ── */
+    var ordList = el('ord-list');
+    if (ordList) {
+      var ORD_ST = {
+        awaiting_payment: { label: 'ждет оплаты', sev: 'contacted' },
+        partially_paid:   { label: 'частично оплачен', sev: 'offer_sent' },
+        paid:             { label: 'оплачен', sev: 'client' },
+        canceled:         { label: 'отменен', sev: 'rejected' },
+      };
+      var renderOrders = function (orders) {
+        if (!orders || !orders.length) {
+          ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
+          return;
+        }
+        ordList.innerHTML = orders.map(function (o) {
+          var st = ORD_ST[o.status] || ORD_ST.awaiting_payment;
+          var inst = o.installments || [];
+          var paidN = inst.filter(function (i) { return i.status === 'paid'; }).length;
+          var next = inst.filter(function (i) { return i.status !== 'paid' && i.status !== 'refunded'; })[0];
+          var meta = [];
+          if (o.pay_mode === 'installment') meta.push('рассрочка: взнос ' + Math.min(paidN + 1, inst.length) + ' из ' + inst.length);
+          if (next) meta.push('след. ' + next.due_date.slice(8, 10) + '.' + next.due_date.slice(5, 7) + ' · ' + fmtMoney(next.amount) + ' ₽');
+          if (o.paid_total) meta.push('внесено ' + fmtMoney(o.paid_total) + ' ₽');
+          return '<div class="pay-row">' +
+            '<div class="doc-b"><div class="doc-n">' + esc(o.title) +
+              ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
+              '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
+            '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
+        }).join('');
+      };
+      var loadOrders = function () {
+        api('/admin/api/leads/' + id + '/orders').then(function (r) { renderOrders(r.orders); })
+          .catch(function (e) { if (e.message !== '403') ordList.innerHTML = '<div class="field-empty">Не загрузились — обновите.</div>'; });
+      };
+      loadOrders();
+      var ordRefresh = el('ord-refresh');
+      if (ordRefresh) ordRefresh.addEventListener('click', loadOrders);
+
+      // тарифы-пресеты: выбор заполняет название и сумму (можно править перед выставлением)
+      var ordTariff = el('ord-tariff'), tariffById = {};
+      api('/api/tariffs').then(function (r) {
+        (r.tariffs || []).forEach(function (t) {
+          tariffById[t.id] = t;
+          var op = document.createElement('option');
+          op.value = t.id;
+          op.textContent = t.name + (t.price_amount ? ' — ' + fmtMoney(t.price_amount) + ' ₽' : '');
+          ordTariff.appendChild(op);
+        });
+      }).catch(function () {});
+      ordTariff.addEventListener('change', function () {
+        var t = tariffById[ordTariff.value];
+        if (t) {
+          el('ord-title').value = t.name;
+          if (t.price_amount) el('ord-amt').value = String(Math.round(t.price_amount));
+        }
+      });
+
+      var ordMode = 'full', ordModeEl = el('ord-mode');
+      if (ordModeEl) Array.prototype.forEach.call(ordModeEl.children, function (b) {
+        b.addEventListener('click', function () {
+          ordMode = b.getAttribute('data-v');
+          Array.prototype.forEach.call(ordModeEl.children, function (x) { x.classList.toggle('on', x === b); });
+          el('ord-n').disabled = ordMode !== 'installment';
+        });
+      });
+      var ordBtn = el('ord-add-btn');
+      if (ordBtn) ordBtn.addEventListener('click', function () {
+        var title = (el('ord-title').value || '').trim();
+        var amt = parseInt((el('ord-amt').value || '').replace(/\D/g, ''), 10) || 0;
+        var n = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
+        if (!title) { el('ord-title').focus(); return; }
+        if (!amt) { el('ord-amt').focus(); return; }
+        ordBtn.disabled = true;
+        api('/admin/api/leads/' + id + '/orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tariff_id: ordTariff.value || null, title: title, amount_total: amt,
+            pay_mode: ordMode, installments_count: ordMode === 'installment' ? n : 1,
+          }),
+        }).then(function () {
+          ordBtn.disabled = false;
+          el('ord-title').value = ''; el('ord-amt').value = ''; ordTariff.value = '';
+          showToast('Счет выставлен — клиент увидит его в кабинете');
+          loadOrders();
+        }).catch(function (e) {
+          ordBtn.disabled = false;
+          if (e.message !== '403') showToast('Счет не выставился — проверьте сеть');
+        });
+      });
+    }
+
     var payBtn = el('pay-add-btn');
     if (payBtn) {
       var payStEl = el('pay-st'), payStatus = 'paid';

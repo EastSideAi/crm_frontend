@@ -893,6 +893,11 @@ a { color: inherit; text-decoration: none; }
   background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px; min-width: 0; }
 .pay-grid input:focus { background: #fff; border-color: #DCE7FF; }
 .pay-form .bp { align-self: flex-start; }
+.pay-form .ord-sel { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px;
+  appearance: none; -webkit-appearance: none; cursor: pointer; }
+.pay-form .ord-sel:focus { background: #fff; border-color: #DCE7FF; }
+.pay-grid input:disabled { opacity: .45; cursor: not-allowed; }
 .field-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 26px 10px; }
 
 /* загрузчик (запасной — финансы/прочее) */
