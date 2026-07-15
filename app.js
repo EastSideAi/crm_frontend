@@ -1435,9 +1435,11 @@
     if (kind === 'vk') return 'https://vk.me/' + MK_VK_GROUP + '?ref=' + code;
     return MK_GO + code;
   }
-  function mkChips(code) {
+  function mkChips(code, withBot) {
+    /* tg/vk-ссылки ведут В БОТА — имеют смысл только у кодов с воронкой;
+       «просто страница сайта» получает одну go-ссылку */
     return '<span class="mk-chips" data-code="' + esc(code) + '">' +
-      ['go', 'tg', 'vk'].map(function (k) {
+      (withBot ? ['go', 'tg', 'vk'] : ['go']).map(function (k) {
         return '<button class="mk-chip" data-k="' + k + '" title="Скопировать ссылку ' + k + '">' + k + ic('copy', 10) + '</button>';
       }).join('') + '</span>';
   }
@@ -1482,7 +1484,7 @@
           (f.keywords || []).map(function (w) { return '<span class="mk-kw">' + esc(w) + '</span>'; }).join('') +
           ' · ' + (f.steps || []).length + ' ' + plural((f.steps || []).length, 'шаг', 'шага', 'шагов') + '</div></div>' +
         '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, f.code) + ' · ' + n(st.users, f.code) + ' · ' + n(st.handoffs, f.code) + '</div>' +
-        mkChips(f.code) +
+        mkChips(f.code, true) +
         '<button class="mk-btn" data-edit="' + esc(f.code) + '">Изменить</button></div>';
     }).join('');
 
@@ -1493,7 +1495,7 @@
           (l.funnel_code ? ' → воронка «' + esc(l.funnel_code) + '»' : ' → без воронки') +
           (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') + '</div></div>' +
         '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, l.code) + ' · ' + n(st.users, l.code) + ' · ' + n(st.handoffs, l.code) + '</div>' +
-        mkChips(l.code) +
+        mkChips(l.code, !!l.funnel_code) +
         '<button class="mk-btn danger" data-linkoff="' + esc(l.code) + '" title="Выключить код">' + ic('x', 12) + '</button></div>';
     }).join('');
 
@@ -1521,19 +1523,24 @@
         '<button class="mk-btn primary" id="mk-lsave">Создать ссылки</button></div></div>';
     }
 
-    /* результат: куда какую ссылку вставлять */
+    /* результат: куда какую ссылку вставлять. tg/vk (ссылки В БОТА) — только у воронок */
     var doneBox = '';
     if (state._mkDone) {
-      var dc = state._mkDone;
+      var dn = state._mkDone;
+      var dnRows = [['Сайт · Instagram · YouTube · TikTok · Дзен', 'go']];
+      if (dn.hasFunnel) {
+        dnRows.push(['Telegram — открывает диалог с ботом', 'tg'],
+                    ['ВКонтакте — открывает диалог с ботом', 'vk']);
+      }
       doneBox = '<div class="mk-done mk-in"><div class="mk-done-t">' + ic('check', 13) + 'Готово! Вставляй ссылку туда, где размещаешь:</div>' +
-        [['Сайт · Instagram · YouTube · TikTok · Дзен', 'go'],
-         ['Telegram (пост, кнопка, описание канала)', 'tg'],
-         ['ВКонтакте (пост, кнопка, сообщение)', 'vk']].map(function (p) {
+        dnRows.map(function (p) {
           return '<div class="mk-done-r"><div class="mk-done-w">' + p[0] + '</div>' +
-            '<div class="mk-done-u num">' + esc(mkUrl(p[1], dc)) + '</div>' +
+            '<div class="mk-done-u num">' + esc(mkUrl(p[1], dn.code)) + '</div>' +
             '<button class="mk-btn sm" data-cp="' + p[1] + '">' + ic('copy', 11) + 'Скопировать</button></div>';
         }).join('') +
-        '<div class="mk-fr"><span class="mk-hint" style="margin:0">Кто перейдёт — появится в цифрах этого кода.</span>' +
+        '<div class="mk-fr"><span class="mk-hint" style="margin:0">' +
+        (dn.hasFunnel ? 'Первая — на страницу, две нижние — сразу в диалог с ботом (воронка стартует сама). ' : '') +
+        'Кто перейдёт — появится в цифрах этого кода.</span>' +
         '<span style="flex:1"></span><button class="mk-btn sm" id="mk-doneok">Понятно</button></div></div>';
     }
 
@@ -1582,8 +1589,17 @@
         renderView();
       });
     });
+    /* выключение — в два клика (первый «взводит» кнопку, через 3с сбрасывается) */
     Array.prototype.forEach.call(view.querySelectorAll('[data-linkoff]'), function (b) {
       b.addEventListener('click', function () {
+        if (!b.classList.contains('arm')) {
+          b.classList.add('arm');
+          b.textContent = 'Выключить?';
+          setTimeout(function () {
+            if (b.isConnected && b.classList.contains('arm')) { b.classList.remove('arm'); b.innerHTML = ic('x', 12); }
+          }, 3000);
+          return;
+        }
         apiSend('/admin/api/marketing/link/' + b.getAttribute('data-linkoff'), 'DELETE', null, function () {
           showToast('Код выключен'); fetchMk();
         });
@@ -1631,11 +1647,11 @@
         funnel_code: wz.funnel || null,
         target_url: wz.funnel === '' ? wz.target.trim() : null,
         utm: { source: chan.src, medium: med.utm, campaign: wz.funnel || code },
-      }, function () { state._mkL = null; state._mkDone = code; fetchMk(); });
+      }, function () { state._mkL = null; state._mkDone = { code: code, hasFunnel: !!wz.funnel }; fetchMk(); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-cp]'), function (b) {
       b.addEventListener('click', function () {
-        copyText(mkUrl(b.getAttribute('data-cp'), state._mkDone), b);
+        copyText(mkUrl(b.getAttribute('data-cp'), state._mkDone.code), b);
         showToast('Ссылка скопирована');
       });
     });

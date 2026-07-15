@@ -2128,3 +2128,5 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 @keyframes mk-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mk-in { animation: none; } }
 @media (max-width: 960px) { .mk-done-r { flex-wrap: wrap; } .mk-done-w { flex-basis: 100%; } }
+/* «взведённая» кнопка выключения — второй клик подтверждает */
+.mk-btn.arm { background: var(--red-soft); border-color: var(--red); color: var(--red-ink); font-weight: 700; }
