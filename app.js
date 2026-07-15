@@ -4439,16 +4439,19 @@
         '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>';
     }).join('');
 
+    var manualCount = pays.length;
     return '<div class="m-ctitle">Оплаты</div>' +
-      '<div class="m-csub">Счет выставляется здесь — клиент видит его в кабинете и платит через ЮKassa, статус обновится сам. Ручной учет ниже — для оплат мимо кассы.</div>' +
-      '<div class="m-sec"><div class="m-sec-h">Счета на оплату' +
+      '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
+      board +
+      '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
-      '</div>' +
-      '<div class="m-sec"><div class="m-sec-h">Выставить счет</div>' +
         '<div class="ord-b">' +
-          '<div class="ord-add"><select id="ord-pick" class="ord-sel">' +
-            '<option value="">+ Добавить в счет…</option></select></div>' +
+          '<div class="ord-newh">Новый счет</div>' +
+          '<div class="ord-addwrap">' +
+            '<button type="button" class="ord-addbtn" id="ord-addbtn">' + ic('plus', 13) + 'Добавить в счет' + ic('go', 12) + '</button>' +
+            '<div class="ord-menu" id="ord-menu" hidden></div>' +
+          '</div>' +
           '<div id="ord-items" class="ord-items"></div>' +
           '<div class="ord-total"><span>Итого</span><span id="ord-total-v" class="num">0 ₽</span></div>' +
           '<div class="ord-foot">' +
@@ -4458,21 +4461,25 @@
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
         '</div></div>' +
-      '<div class="m-sec-h" style="margin-top:14px">Ручной учет</div>' +
-      board +
-      (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Платежей пока нет.</div>') +
-      '<div class="m-sec" style="margin-top:14px"><div class="m-sec-h">Добавить платеж</div>' +
-        '<div class="pay-form">' +
-          '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
-            '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
-          '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
-          '<div class="pay-grid">' +
-            '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
-            '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
-            '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
-          '</div>' +
-          '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
-        '</div></div>' +
+      '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
+        '<summary><span class="pm-t">Записать оплату вручную</span>' +
+          '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
+          ic('go', 13) + '</summary>' +
+        '<div class="pay-manual__body">' +
+          (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Ручных платежей нет. Оплаты через кассу учитываются автоматически.</div>') +
+          '<div class="m-sec" style="margin-top:12px"><div class="m-sec-h">Добавить платеж</div>' +
+            '<div class="pay-form">' +
+              '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
+                '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
+              '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
+              '<div class="pay-grid">' +
+                '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+                '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
+                '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
+              '</div>' +
+              '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
+            '</div></div>' +
+        '</div></details>' +
       '<input type="file" id="pay-rcpt-file" style="display:none">';
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
@@ -4752,24 +4759,32 @@
       /* Конструктор счета: собираем позиции из тарифов/допов, каждую правим, итог сам.
          Тариф раскладываем на позицию (по дефолту его цена — можно поменять/скинуть),
          допы добавляем сверху. Бэк принимает items[] + amount_total. */
-      var ordPick = el('ord-pick'), tariffById = {}, ordItems = [];
+      var tariffById = {}, ordItems = [];
+      var ordMenu = el('ord-menu'), ordAddBtn = el('ord-addbtn');
+      var addItem;  // задаётся ниже
+      var closeMenu = function () { if (ordMenu) { ordMenu.hidden = true; ordAddBtn.classList.remove('on'); } };
+      if (ordAddBtn) ordAddBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ordMenu.hidden = !ordMenu.hidden;
+        ordAddBtn.classList.toggle('on', !ordMenu.hidden);
+      });
+      document.addEventListener('click', function (e) { if (ordMenu && !ordMenu.hidden && !ordMenu.contains(e.target) && e.target !== ordAddBtn) closeMenu(); });
       api('/api/tariffs').then(function (r) {
         var tar = [], add = [];
         (r.tariffs || []).forEach(function (t) { tariffById[t.id] = t; (/^addon-/.test(t.id) ? add : tar).push(t); });
-        var grp = function (label, list) {
-          if (!list.length) return;
-          var og = document.createElement('optgroup'); og.label = label;
-          list.forEach(function (t) {
-            var op = document.createElement('option');
-            op.value = t.id;
-            op.textContent = t.name + (t.price_amount ? ' — ' + fmtMoney(t.price_amount) + ' ₽' : (t.price_note ? ' — ' + t.price_note : ''));
-            og.appendChild(op);
-          });
-          ordPick.appendChild(og);
+        var chips = function (label, list, cls) {
+          if (!list.length) return '';
+          return '<div class="ordm-g">' + esc(label) + '</div><div class="ordm-chips">' + list.map(function (t) {
+            var price = t.price_amount ? fmtMoney(t.price_amount) + ' ₽' : (t.price_note || '');
+            return '<button type="button" class="ordm-chip ' + cls + '" data-tid="' + esc(t.id) + '">' +
+              '<span class="ordm-n">' + esc(t.name) + '</span>' + (price ? '<span class="ordm-p num">' + esc(price) + '</span>' : '') + '</button>';
+          }).join('') + '</div>';
         };
-        grp('Тарифы', tar); grp('Дополнительные услуги', add);
-        var cop = document.createElement('option'); cop.value = '__custom'; cop.textContent = 'Своя позиция…';
-        ordPick.appendChild(cop);
+        ordMenu.innerHTML = chips('Тарифы', tar, 'tar') + chips('Дополнительные услуги', add, 'add') +
+          '<div class="ordm-chips"><button type="button" class="ordm-chip custom" data-tid="__custom">' + ic('plus', 12) + 'Своя позиция</button></div>';
+        Array.prototype.forEach.call(ordMenu.querySelectorAll('.ordm-chip'), function (b) {
+          b.addEventListener('click', function () { addItem(b.getAttribute('data-tid')); closeMenu(); });
+        });
       }).catch(function () {});
 
       var renderItems = function () {
@@ -4802,15 +4817,14 @@
       };
       renderItems();
 
-      ordPick.addEventListener('change', function () {
-        var v = ordPick.value; ordPick.value = '';
+      addItem = function (v) {
         if (!v) return;
         if (v === '__custom') { ordItems.push({ title: '', amount: 0, product_id: null }); renderItems();
           setTimeout(function () { var ins = el('ord-items').querySelector('.ord-row:last-child .ord-it-t'); if (ins) ins.focus(); }, 20); return; }
         var t = tariffById[v]; if (!t) return;
         ordItems.push({ title: t.name, amount: t.price_amount ? Math.round(t.price_amount) : 0, product_id: t.id });
         renderItems();
-      });
+      };
 
       var ordMode = 'full', ordModeEl = el('ord-mode');
       if (ordModeEl) Array.prototype.forEach.call(ordModeEl.children, function (b) {
@@ -5018,7 +5032,8 @@
     }
     var catalog = state._catalog;
     var saved = {};
-    leadOffers(ctx.id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    // ctx у leadCtx без id — витрина всегда про открытую карточку (state.drawerId)
+    leadOffers(state.drawerId).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
     var onCount = catalog.filter(function (p) { var o = saved[p.id]; return o && o.on && !o.bought; }).length;
 
     var html = '<div class="m-ctitle">Витрина продуктов</div>' +
