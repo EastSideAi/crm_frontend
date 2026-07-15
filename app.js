@@ -1318,7 +1318,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, products: 1, grants: 1, marketing: 1, partners: 1 };
+  var STUB_PAGES = { students: 1, grants: 1, marketing: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1339,6 +1339,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
+    else if (state.page === 'products') renderProducts(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -1399,6 +1400,103 @@
       state._templates = (r && r.templates) || [];
     }).catch(function () { state._templates = 'none'; }).finally(function () { if (cb) cb(state._templates); });
   }
+  /* ── Продукты — живой каталог платформы (вкл/выкл, цена, описание) ── */
+  function renderProducts(view) {
+    if (!state._catalogAll) {
+      view.innerHTML = dashSkeleton();
+      api('/api/products?active_only=false').then(function (r) {
+        state._catalogAll = Array.isArray(r) ? r : [];
+        if (state.page === 'products') renderView();
+      }).catch(function (e) {
+        if (e.message !== '403') { state._catalogAll = 'none'; if (state.page === 'products') renderView(); }
+      });
+      return;
+    }
+    if (state._catalogAll === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить каталог.</div></div>'; return; }
+    var items = state._catalogAll;
+    var activeN = items.filter(function (p) { return p.is_active; }).length;
+    var byCat = {};
+    items.forEach(function (p) { (byCat[p.category] = byCat[p.category] || []).push(p); });
+    var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
+      .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
+
+    var html = '<div class="card pd-wrap">' +
+      '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Каталог продуктов</div>' +
+        '<div class="s">что продаём на платформе: выключенный продукт исчезает из витрин и AI-подбора</div></div>' +
+        '<span class="cnt num">' + activeN + ' из ' + items.length + ' активны</span></div>';
+    cats.forEach(function (cat) {
+      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
+      byCat[cat].forEach(function (p) {
+        var open = state._pdEdit === p.id;
+        html += '<div class="pd-row' + (p.is_active ? '' : ' off') + (open ? ' open' : '') + '" data-pd="' + esc(p.id) + '">' +
+          '<button type="button" class="ai-toggle pd-tgl' + (p.is_active ? ' on' : '') + '" data-pdtgl="' + esc(p.id) + '" title="' + (p.is_active ? 'Выключить' : 'Включить') + '"><span class="ait-dot"></span></button>' +
+          '<div class="pd-info" data-pdopen="' + esc(p.id) + '">' +
+            '<div class="of-name">' + esc(p.name) + '</div>' +
+            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
+          '</div>' +
+          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+        '</div>';
+        if (open) {
+          html += '<div class="pd-edit" data-pdform="' + esc(p.id) + '">' +
+            '<label>Название<input class="pd-in" data-f="name" value="' + esc(p.name) + '"></label>' +
+            '<label>Описание<textarea class="pd-in" data-f="description" rows="3">' + esc(p.description || '') + '</textarea></label>' +
+            '<div class="pd-cols">' +
+              '<label>Цена, ₽ (пусто — по запросу)<input class="pd-in num" data-f="price_amount" inputmode="numeric" value="' + (p.price_amount != null ? Math.round(p.price_amount) : '') + '"></label>' +
+              '<label>Пояснение к цене<input class="pd-in" data-f="price_note" value="' + esc(p.price_note || '') + '" placeholder="в месяц / разово / по запросу"></label>' +
+            '</div>' +
+            '<div class="pd-foot"><button class="bp sm" data-pdsave="' + esc(p.id) + '">Сохранить</button>' +
+            '<button class="bp ghost sm" data-pdclose="1">Закрыть</button></div>' +
+          '</div>';
+        }
+      });
+    });
+    html += '</div>';
+    view.innerHTML = html;
+
+    function put(p, cb) {
+      apiSend('/api/products/' + encodeURIComponent(p.id), 'PUT', p, function (r) {
+        state._catalog = null;            // витрина в карточке лида берёт active-only — сброс
+        if (cb) cb(r);
+      });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdtgl]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = items.find(function (x) { return x.id === b.getAttribute('data-pdtgl'); });
+        if (!p) return;
+        p.is_active = !p.is_active;
+        put(p, function () { showToast(p.is_active ? 'Продукт включён' : 'Продукт выключен', p.name); });
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdopen]'), function (n) {
+      n.addEventListener('click', function () {
+        var pid = n.getAttribute('data-pdopen');
+        state._pdEdit = state._pdEdit === pid ? null : pid;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdsave]'), function (b) {
+      b.addEventListener('click', function () {
+        var pid = b.getAttribute('data-pdsave');
+        var p = items.find(function (x) { return x.id === pid; });
+        var form = view.querySelector('[data-pdform="' + pid + '"]');
+        if (!p || !form) return;
+        Array.prototype.forEach.call(form.querySelectorAll('.pd-in'), function (inp) {
+          var f = inp.getAttribute('data-f'), v = inp.value.trim();
+          if (f === 'price_amount') p.price_amount = v === '' ? null : (parseInt(v.replace(/\D/g, ''), 10) || null);
+          else p[f] = v;
+        });
+        put(p, function () { showToast('Сохранено', p.name); });
+        state._pdEdit = null;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdclose]'), function (b) {
+      b.addEventListener('click', function () { state._pdEdit = null; renderView(); });
+    });
+  }
+
   function renderTemplates(view) {
     if (!can('students')) { view.innerHTML = '<div class="card"><div class="empty">Нет доступа к шаблонам.</div></div>'; return; }
     if (state._tplEdit) return renderTemplateEditor(view);
@@ -3153,6 +3251,7 @@
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
@@ -4003,14 +4102,17 @@
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
+    else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     attachContentHandlers(id, ctx);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
+    if (s === 'offers' && ctx.d) wireOffersSection(id);
     animBars(host);
     syncRmChat(id);
   }
   function skeletonSection(kind) {
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
+                 offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -4344,15 +4446,16 @@
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
       '</div>' +
       '<div class="m-sec"><div class="m-sec-h">Выставить счет</div>' +
-        '<div class="pay-form">' +
-          '<select id="ord-tariff" class="ord-sel"><option value="">Произвольный счет (без тарифа)</option></select>' +
-          '<input id="ord-title" placeholder="За что — например «Сопровождение до поступления»">' +
-          '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
-            '<button data-v="installment">рассрочка</button></span>' +
-          '<div class="pay-grid">' +
-            '<input id="ord-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
-            '<input id="ord-n" inputmode="numeric" placeholder="Взносов" value="4" disabled title="Число взносов — при рассрочке">' +
-            '<button class="bp sm" id="ord-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить</button>' +
+        '<div class="ord-b">' +
+          '<div class="ord-add"><select id="ord-pick" class="ord-sel">' +
+            '<option value="">+ Добавить в счет…</option></select></div>' +
+          '<div id="ord-items" class="ord-items"></div>' +
+          '<div class="ord-total"><span>Итого</span><span id="ord-total-v" class="num">0 ₽</span></div>' +
+          '<div class="ord-foot">' +
+            '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
+              '<button data-v="installment">рассрочка</button></span>' +
+            '<label class="ord-n-wrap" id="ord-n-wrap" hidden>взносов <input id="ord-n" class="ord-n" inputmode="numeric" value="4"></label>' +
+            '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
         '</div></div>' +
       '<div class="m-sec-h" style="margin-top:14px">Ручной учет</div>' +
@@ -4646,23 +4749,67 @@
       var ordRefresh = el('ord-refresh');
       if (ordRefresh) ordRefresh.addEventListener('click', loadOrders);
 
-      // тарифы-пресеты: выбор заполняет название и сумму (можно править перед выставлением)
-      var ordTariff = el('ord-tariff'), tariffById = {};
+      /* Конструктор счета: собираем позиции из тарифов/допов, каждую правим, итог сам.
+         Тариф раскладываем на позицию (по дефолту его цена — можно поменять/скинуть),
+         допы добавляем сверху. Бэк принимает items[] + amount_total. */
+      var ordPick = el('ord-pick'), tariffById = {}, ordItems = [];
       api('/api/tariffs').then(function (r) {
-        (r.tariffs || []).forEach(function (t) {
-          tariffById[t.id] = t;
-          var op = document.createElement('option');
-          op.value = t.id;
-          op.textContent = t.name + (t.price_amount ? ' — ' + fmtMoney(t.price_amount) + ' ₽' : '');
-          ordTariff.appendChild(op);
-        });
+        var tar = [], add = [];
+        (r.tariffs || []).forEach(function (t) { tariffById[t.id] = t; (/^addon-/.test(t.id) ? add : tar).push(t); });
+        var grp = function (label, list) {
+          if (!list.length) return;
+          var og = document.createElement('optgroup'); og.label = label;
+          list.forEach(function (t) {
+            var op = document.createElement('option');
+            op.value = t.id;
+            op.textContent = t.name + (t.price_amount ? ' — ' + fmtMoney(t.price_amount) + ' ₽' : (t.price_note ? ' — ' + t.price_note : ''));
+            og.appendChild(op);
+          });
+          ordPick.appendChild(og);
+        };
+        grp('Тарифы', tar); grp('Дополнительные услуги', add);
+        var cop = document.createElement('option'); cop.value = '__custom'; cop.textContent = 'Своя позиция…';
+        ordPick.appendChild(cop);
       }).catch(function () {});
-      ordTariff.addEventListener('change', function () {
-        var t = tariffById[ordTariff.value];
-        if (t) {
-          el('ord-title').value = t.name;
-          if (t.price_amount) el('ord-amt').value = String(Math.round(t.price_amount));
-        }
+
+      var renderItems = function () {
+        var host = el('ord-items'); if (!host) return;
+        if (!ordItems.length) { host.innerHTML = '<div class="ord-empty">Пусто. Добавьте тариф или услугу сверху — соберите счет из позиций.</div>'; }
+        else host.innerHTML = ordItems.map(function (it, i) {
+          return '<div class="ord-row" data-i="' + i + '">' +
+            '<input class="ord-it-t" data-i="' + i + '" value="' + esc(it.title) + '" placeholder="Название позиции">' +
+            '<input class="ord-it-a num" data-i="' + i + '" inputmode="numeric" value="' + (it.amount || '') + '" placeholder="₽">' +
+            '<button class="icobtn del ord-it-x" data-i="' + i + '" title="Убрать">' + ic('x', 14) + '</button></div>';
+        }).join('');
+        var total = ordItems.reduce(function (s, it) { return s + (parseInt(it.amount, 10) || 0); }, 0);
+        el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
+        el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+        // навесить правку/удаление
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-t'), function (n) {
+          n.addEventListener('input', function () { ordItems[+n.getAttribute('data-i')].title = n.value; });
+        });
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-a'), function (n) {
+          n.addEventListener('input', function () {
+            ordItems[+n.getAttribute('data-i')].amount = parseInt(n.value.replace(/\D/g, ''), 10) || 0;
+            var total = ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0);
+            el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
+            el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+          });
+        });
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-x'), function (b) {
+          b.addEventListener('click', function () { ordItems.splice(+b.getAttribute('data-i'), 1); renderItems(); });
+        });
+      };
+      renderItems();
+
+      ordPick.addEventListener('change', function () {
+        var v = ordPick.value; ordPick.value = '';
+        if (!v) return;
+        if (v === '__custom') { ordItems.push({ title: '', amount: 0, product_id: null }); renderItems();
+          setTimeout(function () { var ins = el('ord-items').querySelector('.ord-row:last-child .ord-it-t'); if (ins) ins.focus(); }, 20); return; }
+        var t = tariffById[v]; if (!t) return;
+        ordItems.push({ title: t.name, amount: t.price_amount ? Math.round(t.price_amount) : 0, product_id: t.id });
+        renderItems();
       });
 
       var ordMode = 'full', ordModeEl = el('ord-mode');
@@ -4670,26 +4817,29 @@
         b.addEventListener('click', function () {
           ordMode = b.getAttribute('data-v');
           Array.prototype.forEach.call(ordModeEl.children, function (x) { x.classList.toggle('on', x === b); });
-          el('ord-n').disabled = ordMode !== 'installment';
+          el('ord-n-wrap').hidden = ordMode !== 'installment';
         });
       });
       var ordBtn = el('ord-add-btn');
       if (ordBtn) ordBtn.addEventListener('click', function () {
-        var title = (el('ord-title').value || '').trim();
-        var amt = parseInt((el('ord-amt').value || '').replace(/\D/g, ''), 10) || 0;
+        var items = ordItems.filter(function (it) { return (it.title || '').trim() && (it.amount || 0) > 0; });
+        if (!items.length) { showToast('Добавьте хотя бы одну позицию с суммой'); return; }
+        var total = items.reduce(function (s, it) { return s + it.amount; }, 0);
         var n = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
-        if (!title) { el('ord-title').focus(); return; }
-        if (!amt) { el('ord-amt').focus(); return; }
+        // название счета = единственная позиция или «тариф + N услуг»
+        var title = items.length === 1 ? items[0].title : (items[0].title + ' + ещё ' + (items.length - 1));
         ordBtn.disabled = true;
         api('/admin/api/leads/' + id + '/orders', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tariff_id: ordTariff.value || null, title: title, amount_total: amt,
+            title: title,
+            items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
+            amount_total: total,
             pay_mode: ordMode, installments_count: ordMode === 'installment' ? n : 1,
           }),
         }).then(function () {
           ordBtn.disabled = false;
-          el('ord-title').value = ''; el('ord-amt').value = ''; ordTariff.value = '';
+          ordItems = []; renderItems();
           showToast('Счет выставлен — клиент увидит его в кабинете');
           loadOrders();
         }).catch(function (e) {
@@ -4829,6 +4979,161 @@
   function sec(title, inner, extra) {
     if (!inner) return '';
     return '<div class="dr-sec"><div class="dr-h">' + title + (extra || '') + '</div>' + inner + '</div>';
+  }
+
+  /* ════ ВИТРИНА — продукты, которые семья видит на платформе ════
+     Источник: каталог GET /api/products + lead_crm.offers ([{pid,on,reason,src,bought}]).
+     AI-подбор: POST /admin/api/leads/:id/offers/ai {prompt} → {offers}. Сохранение —
+     PATCH /admin/api/leads/:id {offers}. Включённые (on) продукты семья видит на
+     платформе с фразой reason; bought — куплено, на витрину не возвращаем. */
+  var PRODUCT_CAT_RU = { flagship: 'Флагман', strategy: 'Стратегия', language: 'Язык',
+    exam: 'Экзамены', profile: 'Усиление профиля', documents: 'Документы', grants: 'Гранты',
+    discovery: 'Профориентация', admissions: 'Поступление', short_program: 'Поездки', service: 'Сервис' };
+  var PRODUCT_CAT_ORDER = ['flagship', 'strategy', 'short_program', 'discovery', 'language',
+    'exam', 'profile', 'documents', 'grants', 'admissions', 'service'];
+
+  function fetchCatalog(cb) {
+    if (state._catalog) { cb(state._catalog); return; }
+    api('/api/products').then(function (r) {
+      state._catalog = Array.isArray(r) ? r : [];
+      cb(state._catalog);
+    }).catch(function (e) { if (e.message !== '403') cb(null); });
+  }
+
+  function fmtPrice(p) {
+    if (p.price_amount == null) return 'по запросу';
+    var n = Math.round(p.price_amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return n + ' ₽' + (p.price_note ? ' · ' + p.price_note : '');
+  }
+
+  function leadOffers(id) {
+    var d = state.details[id];
+    return (d && d.crm && Array.isArray(d.crm.offers)) ? d.crm.offers : [];
+  }
+
+  function buildOffersSection(ctx) {
+    if (!state._catalog) {
+      fetchCatalog(function () { if (state.modalSection === 'offers') renderModalContent(); });
+      return skeletonSection('offers');
+    }
+    var catalog = state._catalog;
+    var saved = {};
+    leadOffers(ctx.id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    var onCount = catalog.filter(function (p) { var o = saved[p.id]; return o && o.on && !o.bought; }).length;
+
+    var html = '<div class="m-ctitle">Витрина продуктов</div>' +
+      '<div class="m-csub">Что семья видит на платформе: включи продукты и подпиши, почему это им. ' +
+      'AI подберёт сам — по анкете, диагностике, доске и твоим заметкам.</div>' +
+      '<div class="of-bar">' +
+        '<button class="bp sm" id="of-ai-btn">' + ic('spark', 13) + 'AI подобрать витрину</button>' +
+        '<span class="of-cnt' + (onCount ? ' has' : '') + '">На витрине: <b class="num">' + onCount + '</b></span>' +
+      '</div>' +
+      '<div class="of-ai" id="of-ai" hidden>' +
+        '<textarea id="of-ai-note" rows="2" placeholder="Что учесть? Например: бюджет ограничен, подсветить язык, убрать поездки…"></textarea>' +
+        '<div class="of-ai-foot"><button class="bp sm" id="of-ai-go">Подобрать</button>' +
+        '<span class="of-ai-load" id="of-ai-load" hidden>AI собирает витрину — до минуты…</span></div>' +
+      '</div>';
+
+    var byCat = {};
+    catalog.forEach(function (p) { (byCat[p.category] = byCat[p.category] || []).push(p); });
+    var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
+      .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
+
+    cats.forEach(function (cat) {
+      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
+      byCat[cat].forEach(function (p) {
+        var o = saved[p.id] || {};
+        var on = !!o.on && !o.bought;
+        html += '<div class="of-row' + (on ? ' on' : '') + (o.bought ? ' bought' : '') + '" data-pid="' + esc(p.id) + '">' +
+          '<button type="button" class="ai-toggle of-tgl' + (on ? ' on' : '') + '" data-oftgl="' + esc(p.id) + '"' +
+            (o.bought ? ' disabled title="Уже куплено"' : '') + '><span class="ait-dot"></span></button>' +
+          '<div class="of-info">' +
+            '<div class="of-name">' + esc(p.name) +
+              (o.bought ? '<span class="of-b">куплено</span>' : '') +
+              (on && o.src === 'ai' ? '<span class="of-src">' + ic('spark', 10) + 'AI</span>' : '') + '</div>' +
+            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
+            '<input class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300"' +
+              ' placeholder="Почему это им — эту фразу увидит семья" value="' + esc(o.reason || '') + '"' +
+              (on ? '' : ' hidden') + '>' +
+          '</div>' +
+          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+        '</div>';
+      });
+    });
+    return html;
+  }
+
+  /* собрать полный массив offers из DOM-состояния и сохранить */
+  function collectOffers(id) {
+    var saved = {};
+    leadOffers(id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    var out = [];
+    (state._catalog || []).forEach(function (p) {
+      var row = document.querySelector('.of-row[data-pid="' + p.id + '"]');
+      var was = saved[p.id] || {};
+      if (!row) { out.push({ pid: p.id, on: !!was.on, reason: was.reason || '', src: was.src || 'mgr', bought: !!was.bought }); return; }
+      var on = row.classList.contains('on');
+      var inp = row.querySelector('.of-reason');
+      var reason = on && inp ? inp.value.trim() : '';
+      var srcWas = was.src || 'mgr';
+      out.push({ pid: p.id, on: on, reason: reason,
+        src: (on === !!was.on && reason === (was.reason || '')) ? srcWas : 'mgr',
+        bought: !!was.bought });
+    });
+    return out;
+  }
+
+  function saveOffers(id, offers, cb) {
+    var d = state.details[id];
+    if (d && d.crm) { d.crm.offers = offers; cacheSet(id, d); }
+    apiSend('/admin/api/leads/' + id, 'PATCH', { offers: offers }, function () { if (cb) cb(); });
+  }
+
+  function wireOffersSection(id) {
+    var host = el('m-content');
+    if (!host) return;
+    var aiBtn = el('of-ai-btn'), aiPanel = el('of-ai'), aiGo = el('of-ai-go'), aiLoad = el('of-ai-load');
+    if (aiBtn) aiBtn.addEventListener('click', function () {
+      if (aiPanel) { aiPanel.hidden = !aiPanel.hidden; if (!aiPanel.hidden) { var t = el('of-ai-note'); if (t) t.focus(); } }
+    });
+    if (aiGo) aiGo.addEventListener('click', function () {
+      var note = el('of-ai-note');
+      aiGo.disabled = true; if (aiLoad) aiLoad.hidden = false;
+      api('/admin/api/leads/' + id + '/offers/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: note ? note.value.trim() : '' }),
+      }).then(function (r) {
+        var offers = (r && r.offers) || [];
+        if (!offers.length) throw new Error('empty');
+        saveOffers(id, offers);
+        var n = offers.filter(function (o) { return o.on && !o.bought; }).length;
+        showToast('AI собрал витрину — ' + n + ' ' + plural(n, 'продукт', 'продукта', 'продуктов'));
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('AI не справился — попробуй ещё раз');
+        aiGo.disabled = false; if (aiLoad) aiLoad.hidden = true;
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-oftgl]'), function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.of-row');
+        if (!row) return;
+        row.classList.toggle('on');
+        b.classList.toggle('on', row.classList.contains('on'));
+        var inp = row.querySelector('.of-reason');
+        if (inp) { inp.hidden = !row.classList.contains('on'); if (!inp.hidden) inp.focus(); }
+        saveOffers(id, collectOffers(id));
+        var cnt = host.querySelector('.of-cnt');
+        if (cnt) {
+          var n = host.querySelectorAll('.of-row.on').length;
+          cnt.classList.toggle('has', n > 0);
+          cnt.innerHTML = 'На витрине: <b class="num">' + n + '</b>';
+        }
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.of-reason'), function (inp) {
+      inp.addEventListener('change', function () { saveOffers(id, collectOffers(id)); });
+    });
   }
 
   function aiSec(title, inner, hr) {
