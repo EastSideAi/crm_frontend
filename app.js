@@ -1496,7 +1496,7 @@
           (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') + '</div></div>' +
         '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, l.code) + ' · ' + n(st.users, l.code) + ' · ' + n(st.handoffs, l.code) + '</div>' +
         mkChips(l.code, !!l.funnel_code) +
-        '<button class="mk-btn danger" data-linkoff="' + esc(l.code) + '" title="Выключить код">' + ic('x', 12) + '</button></div>';
+        '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '" title="Удалить ссылку">' + ic('x', 12) + '</button></div>';
     }).join('');
 
     /* мастер новой ссылки: 3 понятных вопроса, utm подставляются сами */
@@ -1555,7 +1555,19 @@
       }).join('') + '</div>';
     }).join('');
 
-    view.innerHTML =
+    /* всплывашка подтверждения удаления (дизайн-модалка, не браузерный confirm) */
+    var delBox = '';
+    if (state._mkDel) {
+      var dl = (d.links || []).filter(function (x) { return x.code === state._mkDel; })[0] || { code: state._mkDel };
+      delBox = '<div class="mk-ovl" id="mk-ovl"><div class="mk-modal mk-in">' +
+        '<div class="mk-modal-t">Удалить ссылку?</div>' +
+        '<div class="mk-modal-s">«' + esc(dl.title || dl.code) + '» — код <span class="mk-code num">' + esc(dl.code) + '</span> перестанет работать везде, где уже размещён. Статистика прошлых кликов сохранится.</div>' +
+        '<div class="mk-fr" style="justify-content:flex-end;margin-top:4px">' +
+        '<button class="mk-btn" id="mk-del-no">Отмена</button>' +
+        '<button class="mk-btn del" id="mk-del-yes">Удалить</button></div></div></div>';
+    }
+
+    view.innerHTML = delBox +
       '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
         '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span><div><div class="t">Воронки бота</div>' +
         '<div class="s">кодовые слова и лидмагниты — человек пишет слово или приходит по ссылке, бот ведёт по шагам</div></div>' +
@@ -1589,22 +1601,20 @@
         renderView();
       });
     });
-    /* выключение — в два клика (первый «взводит» кнопку, через 3с сбрасывается) */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-linkoff]'), function (b) {
-      b.addEventListener('click', function () {
-        if (!b.classList.contains('arm')) {
-          b.classList.add('arm');
-          b.textContent = 'Выключить?';
-          setTimeout(function () {
-            if (b.isConnected && b.classList.contains('arm')) { b.classList.remove('arm'); b.innerHTML = ic('x', 12); }
-          }, 3000);
-          return;
-        }
-        apiSend('/admin/api/marketing/link/' + b.getAttribute('data-linkoff'), 'DELETE', null, function () {
-          showToast('Код выключен'); fetchMk();
+    /* удаление — через всплывашку подтверждения */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dellink]'), function (b) {
+      b.addEventListener('click', function () { state._mkDel = b.getAttribute('data-dellink'); renderView(); });
+    });
+    var ovl = el('mk-ovl');
+    if (ovl) {
+      ovl.addEventListener('click', function (e) { if (e.target === ovl) { state._mkDel = null; renderView(); } });
+      el('mk-del-no').addEventListener('click', function () { state._mkDel = null; renderView(); });
+      el('mk-del-yes').addEventListener('click', function () {
+        apiSend('/admin/api/marketing/link/' + state._mkDel, 'DELETE', null, function () {
+          state._mkDel = null; showToast('Ссылка удалена'); fetchMk();
         });
       });
-    });
+    }
     var nl = el('mk-newl');
     if (nl) nl.addEventListener('click', function () {
       if (state._mkL) { state._mkL = null; renderView(); return; }
@@ -1689,16 +1699,15 @@
       '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span><div>' +
       '<div class="t">' + (f.isNew ? 'Новая воронка' : 'Воронка «' + esc(f.title || f.code) + '»') + '</div>' +
       '<div class="s">сохранится в бота сразу — без программиста и деплоя</div></div></div>' +
-      '<div class="mk-form"><div class="mk-fr">' +
-        '<input id="mk-ft" class="mk-inp" value="' + esc(f.title || '') + '" placeholder="Название (Летние программы)">' +
-        '<input id="mk-fc" class="mk-inp" value="' + esc(f.code || '') + '"' + (f.isNew ? '' : ' disabled') + ' placeholder="код: leto (латиница/-_)">' +
+      '<div class="mk-form">' +
+        '<div class="mk-q">Название и кодовые слова <span class="mk-q-s">бот запускает воронку, когда человек пишет одно из этих слов</span></div>' +
+        '<div class="mk-fr">' +
+        '<input id="mk-ft" class="mk-inp" value="' + esc(f.title || '') + '" placeholder="Название — для вас (Летние программы)">' +
+        '<input id="mk-fc" class="mk-inp sm num" value="' + esc(f.code || '') + '"' + (f.isNew ? '' : ' disabled') + ' placeholder="код: leto">' +
         '<input id="mk-fk" class="mk-inp" value="' + esc(f.keywords || '') + '" placeholder="кодовые слова через запятую: лето, leto"></div>' +
-      '<div class="mk-fr">' +
-        '<input id="mk-fu" class="mk-inp" value="' + esc(f.target_url || '') + '" placeholder="куда ведёт /go (https://…)">' +
-        '<input id="mk-fs" class="mk-inp sm" value="' + esc((f.utm && f.utm.source) || '') + '" placeholder="utm_source">' +
-        '<input id="mk-fm" class="mk-inp sm" value="' + esc((f.utm && f.utm.medium) || '') + '" placeholder="utm_medium">' +
-        '<input id="mk-fg" class="mk-inp sm" value="' + esc((f.utm && f.utm.campaign) || '') + '" placeholder="utm_campaign">' +
-        '<label class="mk-tgl"><input type="checkbox" id="mk-fa"' + (f.active ? ' checked' : '') + '> включена</label></div></div>' +
+        '<div class="mk-q">Страница, куда ведёт ссылка <span class="mk-q-s">откроется у человека после клика по ссылке этой воронки</span></div>' +
+        '<div class="mk-fr"><input id="mk-fu" class="mk-inp" value="' + esc(f.target_url || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>' +
+        '<div class="mk-fr"><label class="mk-tgl"><input type="checkbox" id="mk-fa"' + (f.active ? ' checked' : '') + '><span class="mk-sw"></span>Воронка работает — бот отвечает на кодовые слова и ссылки</label></div></div>' +
       '<div class="mk-steps">' + steps + '</div>' +
       '<div class="mk-fr" style="margin-top:12px">' +
         '<button class="mk-btn" id="mk-addstep">' + ic('plus', 12) + 'Шаг</button>' +
@@ -1709,10 +1718,6 @@
     function syncTop() {
       f.title = el('mk-ft').value; f.keywords = el('mk-fk').value;
       f.target_url = el('mk-fu').value;
-      f.utm = {};
-      if (el('mk-fs').value.trim()) f.utm.source = el('mk-fs').value.trim();
-      if (el('mk-fm').value.trim()) f.utm.medium = el('mk-fm').value.trim();
-      if (el('mk-fg').value.trim()) f.utm.campaign = el('mk-fg').value.trim();
       f.active = el('mk-fa').checked;
       if (f.isNew) f.code = (el('mk-fc').value || '').trim().toLowerCase();
     }
@@ -1748,7 +1753,7 @@
         code: f.code, title: f.title.trim(),
         keywords: f.keywords.split(',').map(function (w) { return w.trim(); }).filter(Boolean),
         steps: f.steps, target_url: f.target_url.trim() || null,
-        utm: Object.keys(f.utm).length ? f.utm : null, active: f.active,
+        active: f.active, // utm не шлём — кампания ставится на бэке сама (по коду)
       };
       apiSend('/admin/api/marketing/funnel', 'POST', body, function () {
         state._mkEdit = null;

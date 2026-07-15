@@ -2130,3 +2130,21 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 @media (max-width: 960px) { .mk-done-r { flex-wrap: wrap; } .mk-done-w { flex-basis: 100%; } }
 /* «взведённая» кнопка выключения — второй клик подтверждает */
 .mk-btn.arm { background: var(--red-soft); border-color: var(--red); color: var(--red-ink); font-weight: 700; }
+/* всплывашка подтверждения удаления + тумблер воронки */
+.mk-ovl { position: fixed; inset: 0; background: rgba(17,21,31,.45); z-index: 90;
+  display: flex; align-items: center; justify-content: center; }
+.mk-modal { background: var(--card); border-radius: var(--r-xl); padding: 22px 24px;
+  width: min(460px, calc(100vw - 40px)); box-shadow: 0 24px 64px rgba(0,0,0,.28);
+  display: flex; flex-direction: column; gap: 10px; }
+.mk-modal-t { font-size: 16px; font-weight: 800; color: var(--ink); }
+.mk-modal-s { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.mk-btn.del { background: var(--red); border-color: var(--red); color: #fff; }
+.mk-btn.del:hover { background: var(--red-ink); border-color: var(--red-ink); }
+.mk-tgl input { display: none; }
+.mk-sw { width: 34px; height: 20px; border-radius: 999px; background: var(--line-2);
+  position: relative; flex: none; transition: background .15s; }
+.mk-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.22);
+  transition: transform .15s var(--ease); }
+.mk-tgl input:checked + .mk-sw { background: var(--green); }
+.mk-tgl input:checked + .mk-sw::after { transform: translateX(14px); }
