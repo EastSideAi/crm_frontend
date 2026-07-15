@@ -1400,6 +1400,35 @@
   var MK_GO = 'https://go.истсайд.рф/';
   var MK_CODE_RE = /^[a-z0-9_-]{1,64}$/;
   var MK_STEP_LABEL = { text: 'Сообщение', file: 'Файл', ask: 'Вопрос (ответ сохраняется)', wait: 'Пауза (часы)' };
+  /* каналы и форматы — Катя выбирает по-человечески, utm_source/medium подставляются сами */
+  var MK_CHANNELS = [
+    { id: 'vk', label: 'ВКонтакте', src: 'vk' },
+    { id: 'inst', label: 'Instagram', src: 'instagram' },
+    { id: 'yt', label: 'YouTube', src: 'youtube' },
+    { id: 'tt', label: 'TikTok', src: 'tiktok' },
+    { id: 'tgch', label: 'Телеграм-канал', src: 'telegram' },
+    { id: 'dzen', label: 'Дзен', src: 'dzen' },
+    { id: 'site', label: 'Другое место', src: 'other' },
+  ];
+  var MK_MEDIUMS = [
+    { id: 'post', label: 'Пост', utm: 'post' },
+    { id: 'reels', label: 'Рилс / Shorts', utm: 'reels' },
+    { id: 'stories', label: 'Сторис', utm: 'stories' },
+    { id: 'ads', label: 'Реклама / таргет', utm: 'ads' },
+    { id: 'bio', label: 'Описание профиля', utm: 'bio' },
+  ];
+  /* автокод: воронка_канал (leto_vk); при занятости — leto_vk2, leto_vk3… */
+  function mkAutoCode(d) {
+    var w = state._mkL;
+    if (!w || w.touched) return;
+    var base = (w.funnel || 'site') + '_' + w.chan;
+    var used = {};
+    (d.funnels || []).forEach(function (f) { used[f.code] = 1; });
+    (d.links || []).forEach(function (l) { used[l.code] = 1; });
+    var code = base, n = 2;
+    while (used[code]) { code = base + n; n++; }
+    w.code = code;
+  }
 
   function mkUrl(kind, code) {
     if (kind === 'tg') return 'https://t.me/' + MK_BOT_TG + '?start=' + code;
@@ -1468,21 +1497,45 @@
         '<button class="mk-btn danger" data-linkoff="' + esc(l.code) + '" title="Выключить код">' + ic('x', 12) + '</button></div>';
     }).join('');
 
-    /* форма новой ссылки */
-    var fopts = (d.funnels || []).map(function (f) {
-      return '<option value="' + esc(f.code) + '">' + esc(f.title || f.code) + '</option>';
-    }).join('');
-    var linkForm = !state._mkLinkOpen ? '' :
-      '<div class="mk-form">' +
-        '<div class="mk-fr"><input id="mk-lt" class="mk-inp" placeholder="Название (Лето · ВК таргет)">' +
-        '<select id="mk-lf" class="mk-inp">' + fopts + '<option value="">без воронки (только сайт)</option></select>' +
-        '<input id="mk-lc" class="mk-inp" placeholder="код: leto_vk (латиница/цифры/-_)"></div>' +
-        '<div class="mk-fr"><input id="mk-ls" class="mk-inp" placeholder="utm_source (vk / instagram / youtube)">' +
-        '<input id="mk-lm" class="mk-inp" placeholder="utm_medium (post / reels / target)">' +
-        '<input id="mk-lg" class="mk-inp" placeholder="utm_campaign (leto2026)">' +
-        '<input id="mk-lu" class="mk-inp" placeholder="куда вести /go (пусто = как у воронки)"></div>' +
-        '<div class="mk-fr"><button class="mk-btn primary" id="mk-lsave">Создать код</button>' +
-        '<button class="mk-btn" id="mk-lcancel">Отмена</button></div></div>';
+    /* мастер новой ссылки: 3 понятных вопроса, utm подставляются сами */
+    var w = state._mkL;
+    function chips(items, sel, attr) {
+      return '<div class="mk-chan">' + items.map(function (it) {
+        return '<button class="mk-chip2' + (sel === it.id ? ' on' : '') + '" data-' + attr + '="' + esc(it.id) + '">' + esc(it.label) + '</button>';
+      }).join('') + '</div>';
+    }
+    var linkForm = '';
+    if (w) {
+      var fitems = (d.funnels || []).filter(function (f) { return f.active; }).map(function (f) {
+        return { id: f.code, label: f.title || f.code };
+      }).concat([{ id: '', label: 'Просто страница сайта' }]);
+      linkForm = '<div class="mk-form mk-in">' +
+        '<div class="mk-q">1 · Что рекламируем?</div>' + chips(fitems, w.funnel, 'wf') +
+        '<div class="mk-q">2 · Где будет размещена ссылка?</div>' + chips(MK_CHANNELS, w.chan, 'wc') +
+        '<div class="mk-q">3 · В каком виде? <span class="mk-q-s">необязательно</span></div>' + chips(MK_MEDIUMS, w.med, 'wm') +
+        (w.funnel === '' ? '<div class="mk-fr"><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="адрес страницы: https://истсайд.рф/…"></div>' : '') +
+        '<div class="mk-fr" style="margin-top:4px"><span class="mk-q" style="margin:0">Код ссылки:</span>' +
+        '<input id="mk-lc" class="mk-inp sm num" value="' + esc(w.code) + '">' +
+        '<span style="flex:1"></span>' +
+        '<button class="mk-btn" id="mk-lcancel">Отмена</button>' +
+        '<button class="mk-btn primary" id="mk-lsave">Создать ссылки</button></div></div>';
+    }
+
+    /* результат: куда какую ссылку вставлять */
+    var doneBox = '';
+    if (state._mkDone) {
+      var dc = state._mkDone;
+      doneBox = '<div class="mk-done mk-in"><div class="mk-done-t">' + ic('check', 13) + 'Готово! Вставляй ссылку туда, где размещаешь:</div>' +
+        [['Сайт · Instagram · YouTube · TikTok · Дзен', 'go'],
+         ['Telegram (пост, кнопка, описание канала)', 'tg'],
+         ['ВКонтакте (пост, кнопка, сообщение)', 'vk']].map(function (p) {
+          return '<div class="mk-done-r"><div class="mk-done-w">' + p[0] + '</div>' +
+            '<div class="mk-done-u num">' + esc(mkUrl(p[1], dc)) + '</div>' +
+            '<button class="mk-btn sm" data-cp="' + p[1] + '">' + ic('copy', 11) + 'Скопировать</button></div>';
+        }).join('') +
+        '<div class="mk-fr"><span class="mk-hint" style="margin:0">Кто перейдёт — появится в цифрах этого кода.</span>' +
+        '<span style="flex:1"></span><button class="mk-btn sm" id="mk-doneok">Понятно</button></div></div>';
+    }
 
     /* ответы сегментации */
     var byF = {};
@@ -1503,11 +1556,11 @@
         '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — создай первую.</div>') + '</div>' +
         '<div class="mk-hint">цифры: клики по ссылке → людей вошло в бота → дошли до менеджера. Кнопки go/tg/vk копируют готовую ссылку.</div></div>' +
       '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
-        '<div class="sec-head"><span class="ic">' + ic('ext', 14) + '</span><div><div class="t">Трекинг-ссылки</div>' +
-        '<div class="s">коды под каналы (leto_vk, leto_inst) — видно, какая площадка привела; utm подставляются сами</div></div>' +
+        '<div class="sec-head"><span class="ic">' + ic('ext', 14) + '</span><div><div class="t">Ссылки для размещения</div>' +
+        '<div class="s">каждому месту — своя ссылка: создал → скопировал → вставил. Кто пришёл по ней — видно в цифрах</div></div>' +
         '<button class="mk-btn primary" id="mk-newl">' + ic('plus', 12) + 'Ссылка</button></div>' +
-        linkForm +
-        '<div class="mk-list">' + (lrows || '<div class="empty">Кодов пока нет. Базовые коды воронок уже работают (кнопки выше).</div>') + '</div></div>' +
+        doneBox + linkForm +
+        '<div class="mk-list">' + (lrows || '<div class="empty">Ссылок под площадки пока нет — жми «+ Ссылка». Базовые ссылки воронок уже работают (кнопки go/tg/vk выше).</div>') + '</div></div>' +
       (arows ? '<div class="card" style="padding:22px 24px">' +
         '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span><div><div class="t">Ответы сегментации</div>' +
         '<div class="s">что люди отвечают на вопросы воронок</div></div></div>' + arows + '</div>' : '');
@@ -1537,23 +1590,57 @@
       });
     });
     var nl = el('mk-newl');
-    if (nl) nl.addEventListener('click', function () { state._mkLinkOpen = !state._mkLinkOpen; renderView(); });
+    if (nl) nl.addEventListener('click', function () {
+      if (state._mkL) { state._mkL = null; renderView(); return; }
+      var f0 = ((d.funnels || []).filter(function (x) { return x.active; })[0] || {}).code || '';
+      state._mkDone = null;
+      state._mkL = { funnel: f0, chan: 'vk', med: 'post', code: '', touched: false, target: '' };
+      mkAutoCode(d);
+      renderView();
+    });
+    function wSet(attr, key) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-' + attr + ']'), function (b) {
+        b.addEventListener('click', function () {
+          var wz = state._mkL; if (!wz) return;
+          var t = el('mk-lu'); if (t) wz.target = t.value;
+          wz[key] = b.getAttribute('data-' + attr);
+          if (key !== 'med') { wz.touched = false; mkAutoCode(d); }
+          renderView();
+        });
+      });
+    }
+    wSet('wf', 'funnel'); wSet('wc', 'chan'); wSet('wm', 'med');
+    var lci = el('mk-lc');
+    if (lci) lci.addEventListener('input', function () { if (state._mkL) { state._mkL.code = lci.value; state._mkL.touched = true; } });
+    var lui = el('mk-lu');
+    if (lui) lui.addEventListener('input', function () { if (state._mkL) state._mkL.target = lui.value; });
     var lc = el('mk-lcancel');
-    if (lc) lc.addEventListener('click', function () { state._mkLinkOpen = false; renderView(); });
+    if (lc) lc.addEventListener('click', function () { state._mkL = null; renderView(); });
     var ls = el('mk-lsave');
     if (ls) ls.addEventListener('click', function () {
+      var wz = state._mkL;
       var code = (el('mk-lc').value || '').trim().toLowerCase();
-      if (!MK_CODE_RE.test(code)) { showToast('Код: латиница/цифры/-_ до 64 символов'); return; }
-      var utm = {};
-      if (el('mk-ls').value.trim()) utm.source = el('mk-ls').value.trim();
-      if (el('mk-lm').value.trim()) utm.medium = el('mk-lm').value.trim();
-      if (el('mk-lg').value.trim()) utm.campaign = el('mk-lg').value.trim();
+      if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (leto_vk)'); return; }
+      if (wz.funnel === '' && !(wz.target || '').trim()) { showToast('Укажи адрес страницы — куда вести ссылку'); return; }
+      var chan = MK_CHANNELS.filter(function (c) { return c.id === wz.chan; })[0] || MK_CHANNELS[0];
+      var med = MK_MEDIUMS.filter(function (m) { return m.id === wz.med; })[0] || MK_MEDIUMS[0];
+      var fun = (d.funnels || []).filter(function (f) { return f.code === wz.funnel; })[0];
       apiSend('/admin/api/marketing/link', 'POST', {
-        code: code, title: el('mk-lt').value.trim(), funnel_code: el('mk-lf').value || null,
-        target_url: el('mk-lu').value.trim() || null,
-        utm: Object.keys(utm).length ? utm : null,
-      }, function () { state._mkLinkOpen = false; showToast('Код создан — ссылки готовы'); fetchMk(); });
+        code: code,
+        title: (fun ? (fun.title || fun.code) : 'Сайт') + ' · ' + chan.label + (med.id !== 'post' ? ' · ' + med.label : ''),
+        funnel_code: wz.funnel || null,
+        target_url: wz.funnel === '' ? wz.target.trim() : null,
+        utm: { source: chan.src, medium: med.utm, campaign: wz.funnel || code },
+      }, function () { state._mkL = null; state._mkDone = code; fetchMk(); });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cp]'), function (b) {
+      b.addEventListener('click', function () {
+        copyText(mkUrl(b.getAttribute('data-cp'), state._mkDone), b);
+        showToast('Ссылка скопирована');
+      });
+    });
+    var dok = el('mk-doneok');
+    if (dok) dok.addEventListener('click', function () { state._mkDone = null; renderView(); });
   }
 
   /* редактор воронки: шаги text/file/ask/wait, живёт в state._mkEdit (черновик) */
