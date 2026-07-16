@@ -1507,8 +1507,7 @@
         '<div class="mk-l"><span class="mk-code num">' + esc(f.code) + '</span>' +
           (f.keywords || []).map(function (w) { return '<span class="mk-kw">' + esc(w) + '</span>'; }).join('') +
           ' · ' + (f.steps || []).length + ' ' + plural((f.steps || []).length, 'шаг', 'шага', 'шагов') + '</div></div>' +
-        '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, f.code) + ' · ' + n(st.users, f.code) + ' · ' + n(st.handoffs, f.code) + '</div>' +
-        mkChips(f.code, true) +
+        '<div class="mk-st num" title="людей вошло → дошли до менеджера">' + n(st.users, f.code) + ' · ' + n(st.handoffs, f.code) + '</div>' +
         '<button class="mk-btn" data-edit="' + esc(f.code) + '">Изменить</button></div>';
     }).join('');
 
@@ -1517,7 +1516,8 @@
       return '<div class="mk-row"><div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
         '<div class="mk-l"><span class="mk-code num">' + esc(l.code) + '</span>' +
           (l.funnel_code ? ' → воронка «' + esc(l.funnel_code) + '»' : ' → без воронки') +
-          (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') + '</div></div>' +
+          (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') +
+          (l.note ? '<span class="mk-note">' + esc(l.note) + '</span>' : '') + '</div></div>' +
         '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, l.code) + ' · ' + n(st.users, l.code) + ' · ' + n(st.handoffs, l.code) + '</div>' +
         mkChips(l.code, !!l.funnel_code) +
         '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '" title="Удалить ссылку">' + ic('x', 12) + '</button></div>';
@@ -1541,6 +1541,7 @@
         (w.funnel === '' ? '<div class="mk-fr"><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="какая страница откроется: истсайд.рф/…"></div>' : '') +
         '<div class="mk-q">2 · Где будет размещена ссылка?</div>' + chips(MK_CHANNELS, w.chan, 'wc') +
         '<div class="mk-q">3 · В каком виде? <span class="mk-q-s">необязательно</span></div>' + chips(MK_MEDIUMS, w.med, 'wm') +
+        '<div class="mk-fr"><input id="mk-ln" class="mk-inp" value="' + esc(w.note || '') + '" placeholder="Комментарий для себя, необязательно: «рилс от 15 июля про кампусы»"></div>' +
         '<div class="mk-fr" style="margin-top:4px"><span class="mk-q" style="margin:0">Код ссылки:</span>' +
         '<input id="mk-lc" class="mk-inp sm num" value="' + esc(w.code) + '">' +
         '<span style="flex:1"></span>' +
@@ -1586,7 +1587,7 @@
         '<div class="s">кодовые слова и лидмагниты — человек пишет слово или приходит по ссылке, бот ведёт по шагам</div></div>' +
         '<button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
         '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — создай первую.</div>') + '</div>' +
-        '<div class="mk-hint">цифры: клики по ссылке → людей вошло в бота → дошли до менеджера. Кнопки go/tg/vk копируют готовую ссылку.</div></div>' +
+        '<div class="mk-hint">цифры: людей вошло → дошли до менеджера. Ссылки на воронку делаются в разделе ниже — каждому месту размещения своя.</div></div>' +
       '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
         '<div class="sec-head"><span class="ic">' + ic('ext', 14) + '</span><div><div class="t">Ссылки для размещения</div>' +
         '<div class="s">каждому месту — своя ссылка: создал → скопировал → вставил. Кто пришёл по ней — видно в цифрах</div></div>' +
@@ -1624,7 +1625,7 @@
       if (state._mkL) { state._mkL = null; renderView(); return; }
       var f0 = ((d.funnels || []).filter(function (x) { return x.active; })[0] || {}).code || '';
       state._mkDone = null;
-      state._mkL = { funnel: f0, chan: 'vk', med: 'post', code: '', touched: false, target: '' };
+      state._mkL = { funnel: f0, chan: 'vk', med: 'post', code: '', touched: false, target: '', note: '' };
       mkAutoCode(d);
       renderView();
     });
@@ -1633,6 +1634,7 @@
         b.addEventListener('click', function () {
           var wz = state._mkL; if (!wz) return;
           var t = el('mk-lu'); if (t) wz.target = t.value;
+          var nn = el('mk-ln'); if (nn) wz.note = nn.value;
           wz[key] = b.getAttribute('data-' + attr);
           if (key !== 'med') { wz.touched = false; mkAutoCode(d); }
           renderView();
@@ -1644,6 +1646,8 @@
     if (lci) lci.addEventListener('input', function () { if (state._mkL) { state._mkL.code = lci.value; state._mkL.touched = true; } });
     var lui = el('mk-lu');
     if (lui) lui.addEventListener('input', function () { if (state._mkL) state._mkL.target = lui.value; });
+    var lni = el('mk-ln');
+    if (lni) lni.addEventListener('input', function () { if (state._mkL) state._mkL.note = lni.value; });
     var lc = el('mk-lcancel');
     if (lc) lc.addEventListener('click', function () { state._mkL = null; renderView(); });
     var ls = el('mk-lsave');
@@ -1661,6 +1665,7 @@
         funnel_code: wz.funnel || null,
         target_url: wz.funnel === '' ? wz.target.trim() : null,
         utm: { source: chan.src, medium: med.utm, campaign: wz.funnel || code },
+        note: (wz.note || '').trim() || null,
       }, function () { state._mkL = null; state._mkDone = { code: code, hasFunnel: !!wz.funnel }; fetchMk(); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-cp]'), function (b) {
@@ -1681,7 +1686,8 @@
         return '<input class="mk-inp sm" data-f="hours" data-i="' + i + '" type="number" min="0.1" step="0.5" value="' + esc(String(s.hours || 3)) + '" placeholder="часов">';
       if (s.type === 'ask')
         return '<input class="mk-inp sm" data-f="key" data-i="' + i + '" value="' + esc(s.key || '') + '" placeholder="ключ ответа (age)">' +
-          '<textarea class="mk-inp" data-f="text" data-i="' + i + '" rows="3" placeholder="текст вопроса">' + esc(s.text || '') + '</textarea>';
+          '<textarea class="mk-inp" data-f="text" data-i="' + i + '" rows="3" placeholder="текст вопроса">' + esc(s.text || '') + '</textarea>' +
+          '<input class="mk-inp" data-f="options" data-i="' + i + '" value="' + esc((s.options || []).join(' | ')) + '" placeholder="варианты — станут кнопками, через |: 12–14 лет | 15–17 лет | 18+ (пусто = свободный ответ)">';
       if (s.type === 'file')
         return '<input class="mk-inp" data-f="url" data-i="' + i + '" value="' + esc(s.url || '') + '" placeholder="ссылка на файл (url)">' +
           '<textarea class="mk-inp" data-f="caption" data-i="' + i + '" rows="2" placeholder="подпись к файлу">' + esc(s.caption || '') + '</textarea>';
@@ -1728,7 +1734,11 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-f]'), function (inp) {
       inp.addEventListener('input', function () {
         var s = f.steps[+inp.getAttribute('data-i')];
-        if (s) s[inp.getAttribute('data-f')] = inp.getAttribute('data-f') === 'hours' ? +inp.value : inp.value;
+        if (!s) return;
+        var fld = inp.getAttribute('data-f');
+        if (fld === 'hours') s.hours = +inp.value;
+        else if (fld === 'options') s.options = inp.value.split('|').map(function (o) { return o.trim(); }).filter(Boolean);
+        else s[fld] = inp.value;
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-type]'), function (sel) {

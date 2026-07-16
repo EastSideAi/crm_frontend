@@ -2155,3 +2155,4 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 @keyframes mk-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mk-pop { from { opacity: 0; transform: scale(.95) translateY(8px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mk-ovl, .mk-modal { animation: none; } }
+.mk-note { display: block; width: 100%; color: var(--ink-3); font-size: 11.5px; font-style: italic; }
