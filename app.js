@@ -2159,45 +2159,19 @@
     });
   }
 
-  /* ── ТУЛБАР плана в секции «Поступление»: раскатка шаблона + публикация ── */
+  /* ── ТУЛБАР плана в секции «Поступление»: статус + публикация ──────────────
+     Композер «AI собрать план» и раскатка шаблонов удалены: единственная точка
+     входа — чат-помощник справа (он и собирает план с нуля, и правит точечно). */
   function planToolbar(id) {
     var pst = state.planStatus[id], pub = !!(pst && pst.published);
-    var tpls = Array.isArray(state._templates) ? state._templates : [];
-    var menu = tpls.map(function (t) {
-      return '<button class="rm-rollout-i" data-rollout="' + esc(t.id) + '">' + esc(t.name) +
-        '<span class="num"> · ' + (t.tasks_count || 0) + '</span></button>';
-    }).join('');
     return '<div class="rm-plan-tb">' +
         '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
           (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
         '<div class="rm-plan-tb-act">' +
-          '<button class="bp sm rm-ai-btn" id="rm-ai-btn">' + ic('spark', 14) + 'AI собрать план</button>' +
-          // правка словами — работает только по существующему плану, пустой править нечего
-          (rmTasks(id).length
-            ? '<button class="bp ghost sm' + (state.planChat === id ? ' on' : '') + '" id="rm-chat-btn">' +
-                ic('chat', 13) + 'Править в чате</button>'
-            : '') +
-          '<div class="rm-rollout-wrap">' +
-            '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Из шаблона</button>' +
-            '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
-          '</div>' +
           '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
       '</div>' +
-      // AI-композер: свернут по умолчанию, раскрывается кнопкой «AI собрать план»
-      '<div class="rm-ai" id="rm-ai" hidden>' +
-        '<div class="rm-ai-head">' + ic('spark', 15) + '<span>AI соберет план поступления под этого ученика — по анкете, диагностике и требованиям вузов</span></div>' +
-        '<textarea class="rm-ai-note" id="rm-ai-note" rows="2" placeholder="Что учесть? Например: язык слабый, год не горит — сначала язык и запасные вузы. Можно оставить пустым — соберу по анкете и диагностике."></textarea>' +
-        '<div class="rm-ai-foot" id="rm-ai-foot">' +
-          '<div class="rm-ai-mode" id="rm-ai-mode">' +
-            '<button class="rm-ai-m on" data-mode="replace">Собрать заново</button>' +
-            '<button class="rm-ai-m" data-mode="merge">Дополнить</button>' +
-          '</div>' +
-          '<button class="bp sm rm-ai-go" id="rm-ai-go">Собрать план' + ic('go', 13) + '</button>' +
-        '</div>' +
-        '<div class="rm-ai-load" id="rm-ai-load" hidden><span class="rm-ai-spin"></span>AI собирает план под ученика — это до минуты…</div>' +
-        aiReasonBlock(id) +
-      '</div>';
+      aiReasonBlock(id);
   }
 
   /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
@@ -2206,19 +2180,28 @@
      Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
   function planChatPanel(id) {
     // чат живёт только рядом с доской: в других секциях модалки ему нечего править
-    if (state.planChat !== id || state.modalSection !== 'admission') return '';
+    if (state.modalSection !== 'admission') return '';
     var msgs = PCHAT[id] || [];
+    var emptyBoard = !(rmTasks(id) || []).length;
     var body;
     if (!PCHAT_LOADED[id]) {
       body = '<div class="pchat-empty">Загружаю…</div>';
     } else if (!msgs.length) {
-      body = '<div class="pchat-empty">' +
-        '<div class="pchat-empty-t">Скажите, что поправить</div>' +
-        '<div class="pchat-empty-s">Правлю точечно — статусы, комментарии и файлы ученика не трогаю.</div>' +
-        '<div class="pchat-hints">' +
-          ['Сдвинь сроки документов на месяц',
+      // подсказки зависят от состояния доски: пустая — собираем план, полная — правим
+      var hints = emptyBoard
+        ? ['Собери план по анкете и диагностике',
+           'Собери план: сначала язык, вузы запасные',
+           'Собери короткий план — только ближайшие шаги']
+        : ['Сдвинь сроки документов на месяц',
            'Добавь задачу на экзамен по английскому',
-           'Убери задачи по визе — до нее еще далеко'].map(function (h) {
+           'Убери задачи по визе — до нее еще далеко'];
+      body = '<div class="pchat-empty">' +
+        '<div class="pchat-empty-t">' + (emptyBoard ? 'Плана еще нет' : 'Скажите, что поправить') + '</div>' +
+        '<div class="pchat-empty-s">' + (emptyBoard
+          ? 'Скажите — соберу с нуля по анкете, диагностике и требованиям вузов.'
+          : 'Правлю точечно — статусы, комментарии и файлы ученика не трогаю.') + '</div>' +
+        '<div class="pchat-hints">' +
+          hints.map(function (h) {
             return '<button class="pchat-hint" data-hint="' + esc(h) + '">' + esc(h) + '</button>';
           }).join('') +
         '</div></div>';
@@ -2234,16 +2217,18 @@
       // показываем живой ход мысли: три точки + сменяющаяся строка, что он сейчас делает.
       body += '<div class="pchat-m ai"><div class="pchat-b pchat-wait">' +
         '<span class="pchat-dots"><i></i><i></i><i></i></span>' +
-        '<span class="pchat-wait-t" id="pchat-wait-t">Читаю план</span></div></div>';
+        '<span class="pchat-wait-t" id="pchat-wait-t">' +
+          (PCHAT_BUSY[id] === 'build' ? 'Изучаю анкету и диагностику' : 'Читаю план') +
+        '</span></div></div>';
     }
     return '<aside class="pchat" id="pchat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
-        '<span class="pchat-title">Правка плана</span>' +
-        '<button class="pchat-x" id="pchat-x" title="Закрыть">' + ic('x', 13) + '</button>' +
+        '<span class="pchat-title">План с AI</span>' +
       '</div>' +
       '<div class="pchat-list" id="pchat-list">' + body + '</div>' +
       '<div class="pchat-foot">' +
-        '<textarea class="pchat-in" id="pchat-in" rows="1" placeholder="Что поправить в плане?"' +
+        '<textarea class="pchat-in" id="pchat-in" rows="1" placeholder="' +
+          (emptyBoard ? 'Какой план собрать?' : 'Что поправить в плане?') + '"' +
           (PCHAT_BUSY[id] ? ' disabled' : '') + '></textarea>' +
         '<button class="pchat-go" id="pchat-go" title="Отправить"' +
           (PCHAT_BUSY[id] ? ' disabled' : '') + '>' + ic('go', 14) + '</button>' +
@@ -2259,8 +2244,9 @@
     exam: 'Экзамены', result: 'Результат', visa: 'Виза', move: 'Переезд',
   };
   var PCHAT_FIELD_RU = {
-    title: 'название', need: 'инструкция', due: 'срок', owner: 'кто делает',
-    stage: 'этап', status: 'статус', how_to: 'как сделать', tip: 'подсказка',
+    title: 'название', need: 'описание', due: 'срок', owner: 'кто делает',
+    stage: 'этап', status: 'статус', how_to: 'инструкция', tip: 'совет',
+    submit: 'ответ ученика',
   };
   var PCHAT_OWNER_RU = { client: 'клиент', team: 'мы', student: 'ученик', parent: 'родитель' };
   var PCHAT_STATUS_RU = { wait: 'ждет', doing: 'в работе', review: 'на проверке', done: 'готово', return: 'вернули' };
@@ -2277,6 +2263,7 @@
     if (field === 'owner') return PCHAT_OWNER_RU[v] || v;
     if (field === 'status') return PCHAT_STATUS_RU[v] || v;
     if (field === 'stage') return PCHAT_STAGE_RU[v] || v;
+    if (field === 'submit') return RM_SUBMIT_RU[v] || v;
     var s = String(v);
     return s.length > 42 ? s.slice(0, 42) + '…' : s;
   }
@@ -2326,14 +2313,30 @@
         PCHAT[id].push({ me: false, text: m.reply, report: m.report });
       });
       PCHAT_LOADED[id] = true;
-      if (state.drawerId === id && state.planChat === id) renderDrawer(true);
+      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
     }).catch(function () { PCHAT_LOADED[id] = true; });
+  }
+
+  /* Шиммер по изменённым задачам: id → true. Ставится после ответа чата,
+     карточки получают класс rm-flash (переливающаяся полоска света). */
+  var RM_FLASH = {};
+  function pchatFlash(id, ids) {
+    RM_FLASH = {};
+    (ids || []).forEach(function (tid) { if (tid) RM_FLASH[tid] = true; });
+    renderDrawer(true);
+    var first = document.querySelector('.rm-task.rm-flash');
+    if (first) first.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    setTimeout(function () { RM_FLASH = {}; }, 3000);
   }
 
   function pchatSend(id, text) {
     if (!text || PCHAT_BUSY[id]) return;
     PCHAT[id] = PCHAT[id] || [];
     PCHAT[id].push({ me: true, text: text });
+    var emptyBoard = !(rmTasks(id) || []).length;
+    // Пустая доска: реплика уходит в ПОЛНУЮ сборку плана (plan/ai — с логикой трека,
+    // этапами и reasoning), а не в чат-операции. Дальше — точечные правки чатом.
+    if (emptyBoard) { pchatBuild(id, text); return; }
     PCHAT_BUSY[id] = true;
     renderDrawer(true);
     api('/admin/api/leads/' + id + '/plan/chat', {
@@ -2348,6 +2351,10 @@
         if (Array.isArray(r.admission_stages)) RM_STAGES[id] = r.admission_stages;
         var l = findLead(id); if (l && l.crm) l.crm.admission = r.admission;
         var d = state.details[id]; if (d && d.crm) { d.crm.admission = r.admission; cacheSet(id, d); }
+        var touched = (r.report || []).filter(function (x) { return x.ok && x.id; })
+          .map(function (x) { return x.id; });
+        pchatFlash(id, touched);
+        return;
       }
       renderDrawer(true);
     }).catch(function (e) {
@@ -2359,9 +2366,40 @@
     });
   }
 
+  /* Сборка плана с нуля из чата: та же кнопка «отправить», другой маршрут. */
+  function pchatBuild(id, text) {
+    PCHAT_BUSY[id] = 'build';
+    renderDrawer(true);
+    api('/admin/api/leads/' + id + '/plan/ai', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: text || '', mode: 'replace' }),
+    }).then(function (res) {
+      PCHAT_BUSY[id] = false;
+      var tasks = res && res.tasks;
+      if (!Array.isArray(tasks) || !tasks.length) throw new Error('empty');
+      if (Array.isArray(res.stages) && res.stages.length) RM_STAGES[id] = res.stages;
+      RM_REASON[id] = res.reasoning || null;
+      rmSet(id, tasks);
+      delete state.planStatus[id];
+      var why = (res.reasoning && res.reasoning.why) || '';
+      // Отчёт-простыню из 20+ «Добавил» не показываем: сборку целиком видно по доске
+      // (шиммер) и по блоку «Как AI собрал этот план» над ней.
+      PCHAT[id].push({ me: false,
+        text: 'Собрал план: ' + tasks.length + ' задач. ' + why +
+          ' Дальше правьте словами — меняю точечно. Логика сборки — над доской.' });
+      pchatFlash(id, tasks.map(function (t) { return t.id; }));
+    }).catch(function (e) {
+      if (PCHAT_BUSY[id]) PCHAT_BUSY[id] = false;
+      if (!(e && e.message === '403')) {
+        PCHAT[id].push({ me: false, text: e && e.message === 'empty'
+          ? 'Не собрал задачи — попробуйте еще раз или уточните, что важно.'
+          : 'Не получилось — AI не ответил. Попробуйте еще раз.' });
+      }
+      renderDrawer(true);
+    });
+  }
+
   function bindPlanChat(id) {
-    var x = el('pchat-x');
-    if (x) x.addEventListener('click', function () { state.planChat = null; renderDrawer(true); });
     var inp = el('pchat-in'), go = el('pchat-go');
     var fire = function () {
       if (!inp) return;
@@ -2378,7 +2416,8 @@
         inp.style.height = 'auto';
         inp.style.height = Math.min(inp.scrollHeight, 132) + 'px';
       });
-      inp.focus();
+      // без автофокуса: чат теперь открыт всегда, и перерисовка доски (чекбокс,
+      // раскрытие задачи) не должна воровать фокус у того, что делает куратор
     }
     var list = el('pchat-list');
     if (list) list.scrollTop = list.scrollHeight;
@@ -2393,7 +2432,9 @@
   function pchatWaitTicker(id) {
     var node = el('pchat-wait-t');
     if (!node) return;
-    var steps = ['Читаю план', 'Сверяю со сроками и вузами', 'Собираю правки'];
+    var steps = PCHAT_BUSY[id] === 'build'
+      ? ['Изучаю анкету и диагностику', 'Подбираю вузы и сроки под профиль', 'Собираю этапы и задачи']
+      : ['Читаю план', 'Сверяю со сроками и вузами', 'Собираю правки'];
     var i = 0;
     var t = setInterval(function () {
       var n = el('pchat-wait-t');
@@ -2441,7 +2482,13 @@
     if (state.planStatus[id] === 'loading') return;
     state.planStatus[id] = state.planStatus[id] || 'loading';
     api('/admin/api/leads/' + id + '/plan').then(function (r) {
-      state.planStatus[id] = { published: !!(r && r.published) };
+      // мета этапов (личные названия/описания от AI) — чтобы доска куратора показывала
+      // те же заголовки, что видит ученик, а не сухой словарь
+      var meta = {};
+      ((r && r.plan && r.plan.stages) || []).forEach(function (s) {
+        if (s && s.key) meta[s.key] = { title: s.title || '', about: s.about || '' };
+      });
+      state.planStatus[id] = { published: !!(r && r.published), meta: meta };
       if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
     }).catch(function () {
       if (state.planStatus[id] === 'loading') state.planStatus[id] = { published: false };
@@ -2450,109 +2497,14 @@
   function wirePlanToolbar(id) {
     var host = document.querySelector('#m-content') || document.getElementById('m-content');
     if (!host) return;
-    // Шаблоны подгружаем заранее (на открытии секции), чтобы меню открывалось сразу
-    // одним кликом, а не «пусто -> фетч -> второй клик».
-    if (state._templates === null || state._templates === undefined) {
-      fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
-    }
-    var btn = host.querySelector('#rm-rollout-btn');
-    var menu = host.querySelector('#rm-rollout-menu');
     var pubBtn = host.querySelector('#rm-pub-btn');
-    var aiBtn = host.querySelector('#rm-ai-btn');
-    var aiPanel = host.querySelector('#rm-ai');
-
-    // ── AI-композер ──
-    if (aiBtn && aiPanel) {
-      aiBtn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (menu) menu.hidden = true;
-        var open = aiPanel.hidden;
-        aiPanel.hidden = !open;
-        aiBtn.classList.toggle('on', open);
-        if (open) { var ta = host.querySelector('#rm-ai-note'); if (ta) ta.focus(); }
-      });
-      var modeWrap = host.querySelector('#rm-ai-mode');
-      if (modeWrap) modeWrap.addEventListener('click', function (e) {
-        var b = e.target.closest && e.target.closest('.rm-ai-m'); if (!b) return;
-        Array.prototype.forEach.call(modeWrap.querySelectorAll('.rm-ai-m'), function (x) { x.classList.toggle('on', x === b); });
-      });
-      var goBtn = host.querySelector('#rm-ai-go');
-      if (goBtn) goBtn.addEventListener('click', function () {
-        var ta = host.querySelector('#rm-ai-note');
-        var m = host.querySelector('#rm-ai-mode .rm-ai-m.on');
-        doAiPlan(id, ((ta && ta.value) || '').trim(), (m && m.getAttribute('data-mode')) || 'replace', host);
-      });
-    }
-
-    // ── Из шаблона ──
-    if (btn && menu) {
-      btn.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (aiPanel) { aiPanel.hidden = true; if (aiBtn) aiBtn.classList.remove('on'); }
-        if (!Array.isArray(state._templates) || !state._templates.length) {
-          fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
-          return;
-        }
-        menu.hidden = !menu.hidden;
-      });
-      Array.prototype.forEach.call(menu.querySelectorAll('[data-rollout]'), function (it) {
-        it.addEventListener('click', function () {
-          menu.hidden = true;
-          doRollout(id, it.getAttribute('data-rollout'));
-        });
-      });
-      document.addEventListener('click', function () { menu.hidden = true; }, { once: true });
-    }
     if (pubBtn) pubBtn.addEventListener('click', function () {
       var pub = state.planStatus[id] && state.planStatus[id].published;
       doPublish(id, !pub);
     });
-
-    var chatBtn = host.querySelector('#rm-chat-btn');
-    if (chatBtn) chatBtn.addEventListener('click', function () {
-      state.planChat = (state.planChat === id) ? null : id;
-      if (state.planChat === id) loadPlanChat(id);
-      renderDrawer(true);
-    });
-    if (state.planChat === id) bindPlanChat(id);
-  }
-
-  // AI-сборка плана: зовет /plan/ai (крутится на умной модели, до минуты), кладет
-  // задачи в доску (replace = заново, merge = дополнить недостающим) и публикует статус.
-  function doAiPlan(id, note, mode, host) {
-    var foot = host.querySelector('#rm-ai-foot');
-    var load = host.querySelector('#rm-ai-load');
-    if (load && !load.hidden) return;            // уже считает — не дублируем
-    if (foot) foot.style.display = 'none';
-    if (load) load.hidden = false;
-    api('/admin/api/leads/' + id + '/plan/ai', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: note || '', mode: mode }),
-    }).then(function (res) {
-      var tasks = res && res.tasks;
-      if (!Array.isArray(tasks) || !tasks.length) throw new Error('empty');
-      var next = (mode === 'merge') ? (rmTasks(id) || []).concat(tasks) : tasks;
-      // Мета этапов (личные названия и описания от AI) — их читает кабинет ученика.
-      // При merge этапы могли добавиться, поэтому берём свежую мету в обоих режимах.
-      if (Array.isArray(res.stages) && res.stages.length) RM_STAGES[id] = res.stages;
-      RM_REASON[id] = res.reasoning || null;
-      rmSet(id, next);
-      delete state.planStatus[id];
-      showToast('AI собрал план — ' + tasks.length + (mode === 'merge' ? ' задач добавлено' : ' задач'));
-      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    }).catch(function (e) {
-      if (foot) foot.style.display = '';
-      if (load) load.hidden = true;
-      if (e && e.message === '403') return;
-      showToast(e && e.message === 'empty' ? 'AI не собрал задачи — попробуйте ещё раз или уточните приписку' : 'AI не ответил — попробуйте ещё раз');
-    });
-  }
-  function doRollout(id, tplId) {
-    apiSend('/admin/api/leads/' + id + '/plan/rollout', 'POST', { template_id: tplId, mode: 'reconcile' }, function () {
-      RM_LOADED[id] = false; delete RM[id]; delete state.planStatus[id];
-      showToast('Шаблон развёрнут в доску');
-      refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
-    });
+    // чат-помощник всегда открыт рядом с доской
+    loadPlanChat(id);
+    bindPlanChat(id);
   }
   function doPublish(id, on) {
     var rerender = function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); };
@@ -4527,6 +4479,18 @@
     var op = el('th-open'); if (op) op.addEventListener('click', function () { openDrawer(seld.id); setModalSection('admission'); });
   }
 
+  /* тип ответа задачи: явное поле submit, для старых задач — вывод из attach[] */
+  var RM_SUBMIT_RU = { file: 'файл', text: 'текст', both: 'файл + текст', none: 'без сдачи' };
+  function rmSubmitKind(t) {
+    if (RM_SUBMIT_RU[t.submit]) return t.submit;
+    var attach = t.attach || [];
+    var hasFile = attach.some(function (a) { return a === 'photo' || a === 'file' || a === 'link'; });
+    var hasText = attach.indexOf('text') !== -1;
+    if (hasFile && hasText) return 'both';
+    if (hasText) return 'text';
+    return 'file';
+  }
+
   function rmTaskRow(t) {
     var sm = RM_STATUS[t.status] || RM_STATUS.wait;
     var isClient = t.owner === 'client';
@@ -4534,12 +4498,11 @@
     var attach = t.attach || [], subs = t.subs || [], comments = t.comments || [];
 
     var done = t.status === 'done';
-    /* мета-строка под названием: владелец · что прислать · счётчики (тихо) */
+    /* мета-строка под названием: владелец · тип ответа · счётчики (тихо) */
     var bits = ['<span class="rm-who-t">' + (isClient ? 'клиент' : 'мы') + '</span>'];
-    if (isClient && attach.length) {
-      bits.push('<span class="rm-need-mini">нужно ' + attach.map(function (a) {
-        var m = RM_ATTACH[a]; return m ? '<i title="' + m.label + '">' + ic(m.icon, 11) + '</i>' : '';
-      }).join('') + '</span>');
+    if (isClient) {
+      var subKind = rmSubmitKind(t);
+      if (subKind !== 'none') bits.push('<span class="rm-need-mini">' + RM_SUBMIT_RU[subKind] + '</span>');
     }
     if (subs.length) bits.push('<span class="rm-cnt-mini hl">' + ic('clip', 11) + subs.length + ' прислал' + (subs.length > 1 ? 'и' : '') + '</span>');
     if (comments.length) bits.push('<span class="rm-cnt-mini">' + ic('chat', 11) + comments.length + '</span>');
@@ -4568,11 +4531,21 @@
     var detail = '';
     if (open) {
       var d = '';
-      if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Задание</div><div class="rm-need">' + esc(t.need) + '</div></div>';
-      if (isClient && attach.length) {
-        d += '<div class="rm-dsec"><div class="rm-dh">Нужно прислать</div><div class="rm-achips">' + attach.map(function (a) {
-          var m = RM_ATTACH[a]; return m ? '<span class="rm-achip">' + ic(m.icon, 12) + m.label + '</span>' : '';
-        }).join('') + '</div></div>';
+      if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Описание — его видит ученик</div><div class="rm-need">' + esc(t.need) + '</div></div>';
+      // пошаговая инструкция и совет — то, что ученик видит в попапе задачи
+      var steps = String(t.how_to || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      if (steps.length) {
+        d += '<div class="rm-dsec"><div class="rm-dh">Как выполнить</div><ol class="rm-howto">' +
+          steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol></div>';
+      }
+      if (t.tip) d += '<div class="rm-dsec"><div class="rm-dh">Совет ученику</div><div class="rm-need rm-tip">' + esc(t.tip) + '</div></div>';
+      if (isClient) {
+        // тип ответа: что попап ученика попросит в конце задачи
+        var sub = rmSubmitKind(t);
+        d += '<div class="rm-dsec"><div class="rm-dh">Ответ ученика</div><div class="rm-submit-seg" data-tid="' + esc(t.id) + '">' +
+          [['file', 'Файл'], ['text', 'Текст'], ['both', 'Файл + текст'], ['none', 'Без сдачи']].map(function (o) {
+            return '<button class="rm-sub-t' + (sub === o[0] ? ' on' : '') + '" data-sub="' + o[0] + '">' + o[1] + '</button>';
+          }).join('') + '</div></div>';
       }
       if (isClient) {
         d += '<div class="rm-dsec"><div class="rm-dh">Прислал клиент' + (subs.length ? ' <span class="rm-dh-n">' + subs.length + '</span>' : '') + '</div>' +
@@ -4601,7 +4574,8 @@
       detail = '<div class="rm-detail">' + d + '</div>';
     }
 
-    return '<div class="rm-task o-' + t.owner + ' st-' + t.status + (open ? ' open' : '') + '" data-tid="' + esc(t.id) + '">' + head + detail + '</div>';
+    return '<div class="rm-task o-' + t.owner + ' st-' + t.status + (open ? ' open' : '') +
+      (RM_FLASH[t.id] ? ' rm-flash' : '') + '" data-tid="' + esc(t.id) + '">' + head + detail + '</div>';
   }
 
   function buildAdmissionSection(ctx) {
@@ -4629,8 +4603,11 @@
         : '<div class="rm-allclear">' + ic('check', 13) + 'все проверено</div>') +
     '</div>';
 
+    // личные названия/описания этапов от AI (то, что видит ученик) поверх словаря
+    var stMeta = (state.planStatus[id] && state.planStatus[id].meta) || {};
     html += '<div class="rm-flow">';
     ADMISSION_STAGES.forEach(function (st) {
+      var meta = stMeta[st.key] || {};
       var list = byStage[st.key] || [];
       var doneN = list.filter(function (t) { return t.status === 'done'; }).length;
       var hasReview = list.some(function (t) { return t.status === 'review'; });
@@ -4649,18 +4626,20 @@
           ' data-need="' + esc(p.need || '') + '" data-at="' + ((p.at || []).join(',')) + '">' + ic('plus', 11) + esc(p.t) + '</button>';
       }).join('');
 
-      var attachToggle = ['photo', 'file', 'text', 'link'].map(function (a) {
-        var m = RM_ATTACH[a]; return '<button class="rm-at-t" data-a="' + a + '">' + ic(m.icon, 12) + m.label + '</button>';
-      }).join('');
+      // тип ответа новой задачи: то, что попап ученика попросит в конце
+      var submitToggle = [['file', 'Файл'], ['text', 'Текст'], ['both', 'Файл + текст'], ['none', 'Без сдачи']]
+        .map(function (o, i) {
+          return '<button class="rm-at-t' + (i === 0 ? ' on' : '') + '" data-sub="' + o[0] + '">' + o[1] + '</button>';
+        }).join('');
 
       html += '<div class="rm-stage ' + scls + '">' +
         '<div class="rm-rail"><div class="rm-node">' + (allDone ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
         '<div class="rm-body">' +
           '<div class="rm-shead">' +
-            '<div class="rm-stitle">' + esc(st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
+            '<div class="rm-stitle">' + esc(meta.title || st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
             (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
           '</div>' +
-          '<div class="rm-ssub">' + esc(st.sub) + '</div>' +
+          '<div class="rm-ssub">' + esc(meta.about || st.sub) + '</div>' +
           (st.hint ? '<div class="rm-hint">' + ic('clock', 12) + esc(st.hint) + '</div>' : '') +
           (rows ? '<div class="rm-tasks">' + rows + '</div>' : '') +
           '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>' +
@@ -4675,8 +4654,8 @@
               '<input class="rm-f-need" placeholder="Что нужно сделать — по желанию" autocomplete="off">' +
               '<div class="rm-f-grid">' +
                 '<div class="rm-f-cell">' +
-                  '<div class="rm-f-l">Что прислать в ответ</div>' +
-                  '<div class="rm-f-attach">' + attachToggle + '</div>' +
+                  '<div class="rm-f-l">Ответ клиента</div>' +
+                  '<div class="rm-f-attach">' + submitToggle + '</div>' +
                 '</div>' +
                 '<div class="rm-f-cell rm-f-cell-due">' +
                   '<div class="rm-f-l">Срок <span class="rm-f-opt">по желанию</span></div>' +
@@ -4794,7 +4773,7 @@
     ].filter(Boolean).join('<span class="dot-sep"></span>');
 
     // с открытым чатом правок окно шире: доска слева должна остаться читаемой
-    modal.classList.toggle('pchat-open', state.planChat === id && state.modalSection === 'admission');
+    modal.classList.toggle('pchat-open', state.modalSection === 'admission');
 
     modal.innerHTML =
       '<div class="m-head">' +
@@ -5324,6 +5303,13 @@
         // убрать задачу
         var del = tEl.querySelector('.rm-del');
         if (del) del.addEventListener('click', function () { delete RM_OPEN[tid]; rmSet(id, rmTasks(id).filter(function (t) { return t.id !== tid; })); rmReload(); });
+        // тип ответа ученика (file/text/both/none) — сохраняется сразу
+        Array.prototype.forEach.call(tEl.querySelectorAll('.rm-submit-seg .rm-sub-t'), function (sb) {
+          sb.addEventListener('click', function (e) {
+            e.stopPropagation();
+            rmUpd(tid, function (t) { t.submit = sb.getAttribute('data-sub'); return t; });
+          });
+        });
       });
       // раскрытие панели добавления
       Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-add-btn'), function (b) {
@@ -5338,7 +5324,9 @@
         var addTask = function (opts) {
           if (!opts.title) return;
           var t = { id: 'rm' + Date.now() + Math.floor(Math.random() * 99), stage: stage, title: opts.title,
-            owner: opts.owner, status: 'wait', need: opts.need || '', due: opts.due || '', attach: opts.attach || [], subs: [], comments: [] };
+            owner: opts.owner, status: 'wait', need: opts.need || '', due: opts.due || '',
+            submit: opts.submit || (opts.owner === 'team' ? 'none' : 'file'),
+            attach: opts.attach || [], subs: [], comments: [] };
           rmSet(id, rmTasks(id).concat([t]));
           RM_OPEN[t.id] = true;  // раскрываем новую задачу, чтоб сразу видеть задание
           rmReload();
@@ -5352,18 +5340,27 @@
         Array.prototype.forEach.call(panel.querySelectorAll('.rm-chip'), function (cp) {
           cp.addEventListener('click', function () {
             var at = cp.getAttribute('data-at'); at = at ? at.split(',') : [];
-            addTask({ title: cp.getAttribute('data-t'), owner: cp.getAttribute('data-o'), need: cp.getAttribute('data-need'), attach: at });
+            var hasFile = at.some(function (a) { return a === 'photo' || a === 'file' || a === 'link'; });
+            var hasText = at.indexOf('text') !== -1;
+            var sub = hasFile && hasText ? 'both' : hasText ? 'text' : 'file';
+            addTask({ title: cp.getAttribute('data-t'), owner: cp.getAttribute('data-o'),
+              need: cp.getAttribute('data-need'), attach: at, submit: sub });
           });
         });
-        // мультивыбор «что прислать»
+        // тип ответа — один из четырех (file/text/both/none)
         Array.prototype.forEach.call(panel.querySelectorAll('.rm-at-t'), function (ab) {
-          ab.addEventListener('click', function () { ab.classList.toggle('on'); });
+          ab.addEventListener('click', function () {
+            Array.prototype.forEach.call(panel.querySelectorAll('.rm-at-t'), function (x) { x.classList.toggle('on', x === ab); });
+          });
         });
         var titleIn = panel.querySelector('.rm-f-title'), needIn = panel.querySelector('.rm-f-need'), dueIn = panel.querySelector('.rm-f-due');
         var submitCustom = function () {
           var v = titleIn ? titleIn.value.trim() : ''; if (!v) return;
-          var attach = Array.prototype.map.call(panel.querySelectorAll('.rm-at-t.on'), function (x) { return x.getAttribute('data-a'); });
-          addTask({ title: v, owner: panel.getAttribute('data-o') || 'client', need: needIn ? needIn.value.trim() : '', due: dueIn ? dueIn.value : '', attach: attach });
+          var on = panel.querySelector('.rm-at-t.on');
+          var sub = (on && on.getAttribute('data-sub')) || 'file';
+          var attach = sub === 'both' ? ['file', 'text'] : sub === 'none' ? [] : [sub];
+          addTask({ title: v, owner: panel.getAttribute('data-o') || 'client', need: needIn ? needIn.value.trim() : '',
+            due: dueIn ? dueIn.value : '', submit: sub, attach: attach });
         };
         var addBtn = panel.querySelector('.rm-f-add');
         if (addBtn) addBtn.addEventListener('click', submitCustom);
