@@ -2163,6 +2163,71 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-why-warn { display: flex; align-items: flex-start; gap: 7px; margin-top: 12px; padding: 9px 11px;
   border-radius: 10px; background: rgba(214, 106, 60, .08); font-size: 12px; line-height: 1.45; color: #8a4520; }
 .rm-why-warn svg { flex: none; margin-top: 2px; }
+
+/* ── ЧАТ ПРАВОК ПЛАНА: колонка справа от доски ──────────────────────────────
+   Окно шире, пока чат открыт, — иначе доска слева сжимается до нечитаемой. */
+.modal.pchat-open { width: 1400px; }
+.pchat { flex: 0 0 372px; display: flex; flex-direction: column; min-height: 0;
+  border-left: 1px solid var(--line); background: #FBFBFC;
+  animation: pchat-in .22s var(--ease); }
+@keyframes pchat-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.pchat-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 15px 16px 14px;
+  border-bottom: 1px solid var(--line); }
+.pchat-head > svg { color: var(--blue); }
+.pchat-title { flex: 1; font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.pchat-x { width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center;
+  color: var(--ink-3); transition: .14s; }
+.pchat-x:hover { background: #ECEEF1; color: var(--ink); }
+
+.pchat-list { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.pchat-list::-webkit-scrollbar { width: 7px; }
+.pchat-list::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
+.pchat-m { display: flex; flex-direction: column; gap: 7px; max-width: 100%; }
+.pchat-m.me { align-items: flex-end; }
+.pchat-b { padding: 10px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; }
+.pchat-m.me .pchat-b { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; max-width: 88%; }
+.pchat-m.ai .pchat-b { background: var(--card); border: 1px solid var(--line-2); color: var(--ink);
+  border-bottom-left-radius: 5px; }
+.pchat-wait { display: flex; align-items: center; gap: 9px; color: var(--ink-2); }
+
+/* отчёт: что именно легло в доску */
+.pchat-rep { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.pchat-rep li { position: relative; padding: 3px 0 3px 16px; font-size: 12px; line-height: 1.45; color: var(--ink-2); }
+.pchat-rep li::before { content: ''; position: absolute; left: 2px; top: 9px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--ink-3); }
+.pchat-rep li.add::before { background: var(--green); }
+.pchat-rep li.edit::before { background: var(--blue); }
+.pchat-rep li.remove::before { background: var(--red); }
+.pchat-rep.bad li { color: var(--amber-ink); }
+.pchat-rep.bad li::before { background: var(--amber); }
+
+.pchat-empty { margin: auto 0; text-align: center; padding: 8px 6px; }
+.pchat-empty-t { font-size: 13.5px; font-weight: 650; color: var(--ink); }
+.pchat-empty-s { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.pchat-hints { margin-top: 18px; display: flex; flex-direction: column; gap: 7px; }
+.pchat-hint { padding: 9px 12px; border-radius: 11px; border: 1px solid var(--line-2); background: var(--card);
+  font-size: 12.5px; line-height: 1.4; color: var(--ink-2); text-align: left; transition: .14s; }
+.pchat-hint:hover { border-color: var(--blue); color: var(--ink); }
+
+.pchat-foot { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 12px 14px 14px;
+  border-top: 1px solid var(--line); background: #fff; }
+.pchat-in { flex: 1; min-width: 0; resize: none; max-height: 132px; padding: 10px 12px;
+  border: 1px solid var(--line-2); border-radius: 12px; background: var(--card); color: var(--ink);
+  font-family: inherit; font-size: 13px; line-height: 1.5; outline: none; transition: border-color .15s; }
+.pchat-in:focus { border-color: var(--blue); }
+.pchat-in:disabled { background: var(--fill); color: var(--ink-3); }
+.pchat-go { flex: none; width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--blue); color: #fff; transition: .14s; }
+.pchat-go:hover:not(:disabled) { background: var(--blue-d); }
+.pchat-go:disabled { background: var(--line-2); color: var(--ink-3); cursor: default; }
+
+/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы */
+@media (max-width: 1180px) {
+  .modal.pchat-open { width: 1020px; }
+  .modal.pchat-open .m-content, .modal.pchat-open .m-nav { display: none; }
+  .pchat { flex: 1; border-left: 0; }
+}
 @keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes rmDot { 0%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 

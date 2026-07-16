@@ -27,6 +27,7 @@
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
+    planChat: null,   // id лида, у которого открыт чат правок плана
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -1681,6 +1682,11 @@
           (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
         '<div class="rm-plan-tb-act">' +
           '<button class="bp sm rm-ai-btn" id="rm-ai-btn">' + ic('spark', 14) + 'AI собрать план</button>' +
+          // правка словами — работает только по существующему плану, пустой править нечего
+          (rmTasks(id).length
+            ? '<button class="bp ghost sm' + (state.planChat === id ? ' on' : '') + '" id="rm-chat-btn">' +
+                ic('chat', 13) + 'Править в чате</button>'
+            : '') +
           '<div class="rm-rollout-wrap">' +
             '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Из шаблона</button>' +
             '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
@@ -1702,6 +1708,143 @@
         '<div class="rm-ai-load" id="rm-ai-load" hidden><span class="rm-ai-spin"></span>AI собирает план под ученика — это до минуты…</div>' +
         aiReasonBlock(id) +
       '</div>';
+  }
+
+  /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
+     Куратор говорит словами, что поправить; модель отвечает операциями по id задач,
+     бэкенд применяет их сам и возвращает готовую доску (см. app/plan_ops.py).
+     Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
+  function planChatPanel(id) {
+    // чат живёт только рядом с доской: в других секциях модалки ему нечего править
+    if (state.planChat !== id || state.modalSection !== 'admission') return '';
+    var msgs = PCHAT[id] || [];
+    var body;
+    if (!PCHAT_LOADED[id]) {
+      body = '<div class="pchat-empty">Загружаю…</div>';
+    } else if (!msgs.length) {
+      body = '<div class="pchat-empty">' +
+        '<div class="pchat-empty-t">Скажите, что поправить</div>' +
+        '<div class="pchat-empty-s">Правлю точечно — статусы, комментарии и файлы ученика не трогаю.</div>' +
+        '<div class="pchat-hints">' +
+          ['Сдвинь сроки документов на месяц',
+           'Добавь задачу на экзамен по английскому',
+           'Убери задачи по визе — до нее еще далеко'].map(function (h) {
+            return '<button class="pchat-hint" data-hint="' + esc(h) + '">' + esc(h) + '</button>';
+          }).join('') +
+        '</div></div>';
+    } else {
+      body = msgs.map(function (m) {
+        if (m.me) return '<div class="pchat-m me"><div class="pchat-b">' + esc(m.text) + '</div></div>';
+        return '<div class="pchat-m ai"><div class="pchat-b">' + esc(m.text) + '</div>' +
+          pchatReport(m.report) + '</div>';
+      }).join('');
+    }
+    if (PCHAT_BUSY[id]) {
+      body += '<div class="pchat-m ai"><div class="pchat-b pchat-wait">' +
+        '<span class="rm-ai-spin"></span>Правлю план…</div></div>';
+    }
+    return '<aside class="pchat" id="pchat">' +
+      '<div class="pchat-head">' + ic('spark', 14) +
+        '<span class="pchat-title">Правка плана</span>' +
+        '<button class="pchat-x" id="pchat-x" title="Закрыть">' + ic('x', 13) + '</button>' +
+      '</div>' +
+      '<div class="pchat-list" id="pchat-list">' + body + '</div>' +
+      '<div class="pchat-foot">' +
+        '<textarea class="pchat-in" id="pchat-in" rows="1" placeholder="Что поправить в плане?"' +
+          (PCHAT_BUSY[id] ? ' disabled' : '') + '></textarea>' +
+        '<button class="pchat-go" id="pchat-go" title="Отправить"' +
+          (PCHAT_BUSY[id] ? ' disabled' : '') + '>' + ic('go', 14) + '</button>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  /* Что именно AI сделал с доской: по одной строке на правку. Отклонённые показываем
+     тоже — молчать о том, что правка не легла, нельзя. */
+  function pchatReport(report) {
+    if (!Array.isArray(report) || !report.length) return '';
+    var WORD = { add: 'добавил', edit: 'поправил', remove: 'удалил', stage: 'этап' };
+    var rows = report.filter(function (r) { return r.ok; }).map(function (r) {
+      return '<li class="' + esc(r.op) + '">' + (WORD[r.op] || r.op) + ' · ' +
+        esc(r.title || r.key || r.id || '') + '</li>';
+    });
+    var bad = report.filter(function (r) { return !r.ok && r.why && r.why !== 'нечего менять'; });
+    var out = rows.length ? '<ul class="pchat-rep">' + rows.join('') + '</ul>' : '';
+    if (bad.length) {
+      out += '<ul class="pchat-rep bad">' + bad.map(function (r) {
+        return '<li>не применил · ' + esc(r.why) + '</li>';
+      }).join('') + '</ul>';
+    }
+    return out;
+  }
+
+  function loadPlanChat(id) {
+    if (PCHAT_LOADED[id]) return;
+    api('/admin/api/leads/' + id + '/plan/chat').then(function (r) {
+      PCHAT[id] = [];
+      (r && r.messages || []).forEach(function (m) {
+        PCHAT[id].push({ me: true, text: m.message });
+        PCHAT[id].push({ me: false, text: m.reply, report: m.report });
+      });
+      PCHAT_LOADED[id] = true;
+      if (state.drawerId === id && state.planChat === id) renderDrawer(true);
+    }).catch(function () { PCHAT_LOADED[id] = true; });
+  }
+
+  function pchatSend(id, text) {
+    if (!text || PCHAT_BUSY[id]) return;
+    PCHAT[id] = PCHAT[id] || [];
+    PCHAT[id].push({ me: true, text: text });
+    PCHAT_BUSY[id] = true;
+    renderDrawer(true);
+    api('/admin/api/leads/' + id + '/plan/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    }).then(function (r) {
+      PCHAT_BUSY[id] = false;
+      PCHAT[id].push({ me: false, text: (r && r.reply) || 'Готово.', report: r && r.report });
+      // Бэкенд применил правки и сохранил сам — забираем готовую доску, а не склеиваем.
+      if (r && r.changed && Array.isArray(r.admission)) {
+        RM[id] = r.admission; RM_LOADED[id] = true;
+        if (Array.isArray(r.admission_stages)) RM_STAGES[id] = r.admission_stages;
+        var l = findLead(id); if (l && l.crm) l.crm.admission = r.admission;
+        var d = state.details[id]; if (d && d.crm) { d.crm.admission = r.admission; cacheSet(id, d); }
+      }
+      renderDrawer(true);
+    }).catch(function (e) {
+      PCHAT_BUSY[id] = false;
+      if (!(e && e.message === '403')) {
+        PCHAT[id].push({ me: false, text: 'Не получилось — AI не ответил. Попробуйте еще раз.' });
+      }
+      renderDrawer(true);
+    });
+  }
+
+  function bindPlanChat(id) {
+    var x = el('pchat-x');
+    if (x) x.addEventListener('click', function () { state.planChat = null; renderDrawer(true); });
+    var inp = el('pchat-in'), go = el('pchat-go');
+    var fire = function () {
+      if (!inp) return;
+      var v = (inp.value || '').trim();
+      if (v) { inp.value = ''; pchatSend(id, v); }
+    };
+    if (go) go.addEventListener('click', fire);
+    if (inp) {
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fire(); }
+      });
+      // поле растёт под текст, но не бесконечно
+      inp.addEventListener('input', function () {
+        inp.style.height = 'auto';
+        inp.style.height = Math.min(inp.scrollHeight, 132) + 'px';
+      });
+      inp.focus();
+    }
+    var list = el('pchat-list');
+    if (list) list.scrollTop = list.scrollHeight;
+    Array.prototype.forEach.call(document.querySelectorAll('.pchat-hint'), function (b) {
+      b.addEventListener('click', function () { pchatSend(id, b.getAttribute('data-hint')); });
+    });
   }
 
   /* Логика последней AI-сборки: почему такой трек, ключевые решения и какие этапы
@@ -1808,6 +1951,14 @@
       var pub = state.planStatus[id] && state.planStatus[id].published;
       doPublish(id, !pub);
     });
+
+    var chatBtn = host.querySelector('#rm-chat-btn');
+    if (chatBtn) chatBtn.addEventListener('click', function () {
+      state.planChat = (state.planChat === id) ? null : id;
+      if (state.planChat === id) loadPlanChat(id);
+      renderDrawer(true);
+    });
+    if (state.planChat === id) bindPlanChat(id);
   }
 
   // AI-сборка плана: зовет /plan/ai (крутится на умной модели, до минуты), кладет
@@ -3408,6 +3559,9 @@
   var RM_SAVE_T = {};     /* таймеры дебаунса сохранения доски */
   var RM_STAGES = {};     /* мета этапов от AI [{position,key,title,about}] — уходит вместе с доской */
   var RM_REASON = {};     /* логика последней AI-сборки: трек, решения, пропущенные этапы */
+  var PCHAT = {};         /* лента чата правок плана по id лида: [{me, text, report, at}] */
+  var PCHAT_LOADED = {};  /* тред подтянут с бэка */
+  var PCHAT_BUSY = {};    /* ждём ответ модели — не шлём вторую реплику */
   var RM_REFRESHED = {};  /* для лида уже дёрнули refreshDetail (старый кэш без доски) */
   /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
@@ -4083,6 +4237,9 @@
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
     ].filter(Boolean).join('<span class="dot-sep"></span>');
 
+    // с открытым чатом правок окно шире: доска слева должна остаться читаемой
+    modal.classList.toggle('pchat-open', state.planChat === id && state.modalSection === 'admission');
+
     modal.innerHTML =
       '<div class="m-head">' +
         '<div class="m-navfloat">' +
@@ -4103,6 +4260,7 @@
       '<div class="m-body">' +
         '<nav class="m-nav">' + navHtml + '</nav>' +
         '<div class="m-content" id="m-content"></div>' +
+        planChatPanel(id) +
       '</div>' +
       '<div class="m-foot">' +
         (crm.hidden
