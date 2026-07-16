@@ -2176,3 +2176,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-sl-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--fill); overflow: hidden; }
 .mk-sl-fill { height: 100%; border-radius: 999px; background: var(--blue); transition: width .3s var(--ease); }
 .mk-sl-n { font-size: 12px; color: var(--ink-2); flex: 0 0 70px; text-align: right; }
+/* попап аналитики логики: шире + большие цифры */
+.mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow-y: auto; }
+.mk-kpis { display: flex; gap: 10px; margin-top: 4px; }
+.mk-kpi { flex: 1; background: var(--fill); border-radius: var(--r-lg); padding: 12px 16px; }
+.mk-kpi-n { font-size: 24px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.mk-kpi-l { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+.mk-modal-t { display: flex; align-items: center; gap: 8px; }
