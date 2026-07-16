@@ -1793,16 +1793,13 @@
 
   function pchatReport(report) {
     if (!Array.isArray(report) || !report.length) return '';
-    var VERB = { add: 'Добавил', edit: 'Поправил', remove: 'Удалил', stage: 'Переименовал этап' };
+    var VERB = { add: 'Добавил', edit: 'Поправил', remove: 'Удалил', stage: 'Переименовал' };
     var ok = report.filter(function (r) { return r.ok; });
     var bad = report.filter(function (r) { return !r.ok && r.why && r.why !== 'нечего менять'; });
     if (!ok.length && !bad.length) return '';
 
     var rows = ok.map(function (r) {
       var stage = r.stage ? '<span class="pchat-rw-st">' + esc(PCHAT_STAGE_RU[r.stage] || r.stage) + '</span>' : '';
-      var head = '<div class="pchat-rw-h"><span class="pchat-rw-v">' + (VERB[r.op] || r.op) + '</span>' +
-        stage + '</div>';
-      var name = '<div class="pchat-rw-t">' + esc(r.title || r.key || '') + '</div>';
       var diff = '';
       if (r.op === 'edit' && Array.isArray(r.changes) && r.changes.length) {
         diff = '<div class="pchat-diff">' + r.changes.map(function (c) {
@@ -1812,16 +1809,22 @@
             '<span class="pchat-df-b">' + esc(pchatVal(c.field, c.to)) + '</span></div>';
         }).join('') + '</div>';
       }
-      return '<div class="pchat-rw ' + esc(r.op) + '">' + head + name + diff + '</div>';
+      return '<div class="pchat-rw ' + esc(r.op) + '">' +
+        '<div class="pchat-rw-h"><span class="pchat-rw-v">' + (VERB[r.op] || r.op) + '</span>' + stage + '</div>' +
+        '<div class="pchat-rw-t">' + esc(r.title || r.key || '') + '</div>' + diff + '</div>';
     }).join('');
 
-    var badRows = bad.map(function (r) {
-      return '<div class="pchat-rw bad"><div class="pchat-rw-h">' +
-        '<span class="pchat-rw-v">Не применил</span></div>' +
-        '<div class="pchat-rw-t">' + esc(r.title || r.id || '') + ' — ' + esc(r.why) + '</div></div>';
-    }).join('');
-
-    return '<div class="pchat-rep">' + rows + badRows + '</div>';
+    // Отклонённое схлопываем в одну строку: три подряд «Не применил» — это шум,
+    // куратору хватает факта и причины.
+    var badRow = '';
+    if (bad.length) {
+      var why = bad.map(function (r) { return r.why; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      badRow = '<div class="pchat-rw bad"><div class="pchat-rw-h">' +
+        '<span class="pchat-rw-v">Не применил</span>' +
+        '<span class="pchat-rw-st">' + bad.length + '</span></div>' +
+        '<div class="pchat-rw-t">' + esc(why.join('; ')) + '</div></div>';
+    }
+    return '<div class="pchat-rep">' + rows + badRow + '</div>';
   }
 
   function loadPlanChat(id) {

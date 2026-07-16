@@ -2146,56 +2146,56 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* ── «Как AI собрал этот план»: логика решения для куратора ──────────────── */
 .rm-why { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-2); }
 .rm-why-h { display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
-  font-size: 12px; font-weight: 650; color: var(--ink); letter-spacing: -.004em; }
+  font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -.012em; }
 .rm-why-h svg { flex: none; color: var(--blue); }
-.rm-why-track { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 12px; }
+.rm-why-track { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 10px; }
 .rm-why-pill { flex: none; padding: 4px 11px; border-radius: var(--r-pill); background: var(--card);
-  border: 1px solid var(--line-2); font-size: 11.5px; font-weight: 650; color: var(--ink); }
-.rm-why-txt { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  border: 1px solid var(--line-2); font-size: 12.5px; font-weight: 650; color: var(--ink); }
+.rm-why-txt { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+/* Решения — не маркированный список: точки-буллеты тут визуальный мусор. Каждое
+   решение отделено волосяной линией и читается как абзац. */
 .rm-why-list { margin: 0; padding: 0; list-style: none; }
-.rm-why-list li { position: relative; padding: 0 0 0 15px; margin-bottom: 7px;
-  font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
-.rm-why-list li::before { content: ''; position: absolute; left: 0; top: 8px; width: 4px; height: 4px;
-  border-radius: 50%; background: var(--ink-3); }
-.rm-why-list.skip li::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.rm-why-list li { padding: 8px 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.rm-why-list li + li { border-top: 1px solid var(--line); }
 .rm-why-list.skip b { color: var(--ink); font-weight: 650; }
-.rm-why-sub { margin: 14px 0 9px; font-size: 11.5px; font-weight: 650; color: var(--ink-2); }
-.rm-why-warn { display: flex; align-items: flex-start; gap: 7px; margin-top: 12px; padding: 9px 11px;
-  border-radius: 10px; background: rgba(214, 106, 60, .08); font-size: 12px; line-height: 1.45; color: #8a4520; }
+.rm-why-sub { margin: 16px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.rm-why-warn { display: flex; align-items: flex-start; gap: 7px; margin-top: 12px; padding: 10px 12px;
+  border-radius: 10px; background: rgba(214, 106, 60, .08); font-size: 13px; line-height: 1.45; color: #8a4520; }
 .rm-why-warn svg { flex: none; margin-top: 2px; }
 
 /* ── ЧАТ ПРАВОК ПЛАНА: колонка справа от доски ──────────────────────────────
    Окно шире, пока чат открыт, — иначе доска слева сжимается до нечитаемой. */
 .modal.pchat-open { width: 1400px; }
-.pchat { flex: 0 0 372px; display: flex; flex-direction: column; min-height: 0;
+.pchat { flex: 0 0 396px; display: flex; flex-direction: column; min-height: 0;
   border-left: 1px solid var(--line); background: #FBFBFC;
   animation: pchat-in .22s var(--ease); }
 @keyframes pchat-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
-.pchat-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 15px 16px 14px;
+.pchat-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 15px 18px 14px;
   border-bottom: 1px solid var(--line); }
 .pchat-head > svg { color: var(--blue); }
-.pchat-title { flex: 1; font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; }
+.pchat-title { flex: 1; font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
 .pchat-x { width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center;
   color: var(--ink-3); transition: .14s; }
 .pchat-x:hover { background: #ECEEF1; color: var(--ink); }
 
-.pchat-list { flex: 1; overflow-y: auto; padding: 18px 16px 22px; display: flex; flex-direction: column; }
+.pchat-list { flex: 1; overflow-y: auto; padding: 20px 18px 24px; display: flex; flex-direction: column; }
 .pchat-list::-webkit-scrollbar { width: 7px; }
 .pchat-list::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
 /* Воздух неравномерный: реплика жмётся к своему отчёту, но между ходами диалога — пауза.
    Так видно, где кончается один обмен и начинается следующий. */
-.pchat-m { display: flex; flex-direction: column; gap: 7px; max-width: 100%; animation: pchat-m-in .2s var(--ease); }
-.pchat-m + .pchat-m { margin-top: 8px; }
-.pchat-m.ai + .pchat-m.me { margin-top: 20px; }
+.pchat-m { display: flex; flex-direction: column; gap: 10px; max-width: 100%; animation: pchat-m-in .2s var(--ease); }
+.pchat-m + .pchat-m { margin-top: 10px; }
+.pchat-m.ai + .pchat-m.me { margin-top: 26px; }
 .pchat-m.me { align-items: flex-end; }
 @keyframes pchat-m-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.pchat-b { padding: 10px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5;
-  white-space: pre-wrap; overflow-wrap: anywhere; }
-.pchat-m.me .pchat-b { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; max-width: 88%; }
-.pchat-m.ai .pchat-b { background: var(--card); border: 1px solid var(--line-2); color: var(--ink);
-  border-bottom-left-radius: 5px; }
+/* Реплика помощника — якорь панели: она без рамки и крупнее отчёта, потому что её
+   читают, а отчёт сверяют. Реплика куратора — плотная синяя пилюля. */
+.pchat-b { font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pchat-m.me .pchat-b { padding: 10px 14px; border-radius: 15px; border-bottom-right-radius: 6px;
+  background: var(--blue); color: #fff; max-width: 88%; font-size: 13.5px; }
+.pchat-m.ai .pchat-b { padding: 0 2px; color: var(--ink); }
 .pchat-wait { display: flex; align-items: center; gap: 10px; color: var(--ink-2); }
-.pchat-wait-t { font-size: 12.5px; }
+.pchat-wait-t { font-size: 13.5px; }
 .pchat-dots { flex: none; display: inline-flex; gap: 4px; }
 .pchat-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--blue);
   animation: pchat-dot 1.1s ease-in-out infinite; }
@@ -2203,45 +2203,50 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .pchat-dots i:nth-child(3) { animation-delay: .3s; }
 @keyframes pchat-dot { 0%, 100% { opacity: .22; transform: translateY(0); } 45% { opacity: 1; transform: translateY(-3px); } }
 
-/* ── Отчёт о правках: не «поправил задачу», а ЧТО стало другим ─────────────── */
-.pchat-rep { display: flex; flex-direction: column; gap: 6px; }
-.pchat-rw { position: relative; padding: 9px 11px 9px 12px; border-radius: 11px;
-  background: var(--card); border: 1px solid var(--line); overflow: hidden; }
-/* цвет несёт тонкая грань слева — глагол правки читается до чтения текста */
-.pchat-rw::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--ink-3); }
-.pchat-rw.add::before { background: var(--green); }
-.pchat-rw.edit::before { background: var(--blue); }
-.pchat-rw.remove::before { background: var(--red); }
-.pchat-rw.stage::before { background: var(--navy); }
-.pchat-rw.bad::before { background: var(--amber); }
-.pchat-rw-h { display: flex; align-items: center; gap: 7px; }
-.pchat-rw-v { font-size: 11.5px; font-weight: 700; color: var(--ink); }
+/* ── Отчёт о правках ────────────────────────────────────────────────────────
+   Главное в панели — РЕЧЬ помощника, отчёт вторичен. Поэтому никаких карточек с
+   рамками на каждую правку (стопка боксов кричала громче самой реплики) и никаких
+   маркеров-точек: правки привязаны к реплике одной вертикальной линией, как цитата,
+   и разделены волосяной линией. */
+.pchat-rep { margin-left: 2px; padding-left: 13px; border-left: 2px solid var(--line-2);
+  display: flex; flex-direction: column; }
+.pchat-rw { padding: 9px 0; }
+.pchat-rw + .pchat-rw { border-top: 1px solid var(--line); }
+.pchat-rw:first-child { padding-top: 2px; }
+.pchat-rw:last-child { padding-bottom: 2px; }
+.pchat-rw-h { display: flex; align-items: center; gap: 8px; }
+/* тип правки несёт цвет самого глагола — отдельная плашка тут лишняя */
+.pchat-rw-v { font-size: 13px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.pchat-rw.add .pchat-rw-v { color: var(--green-ink); }
+.pchat-rw.edit .pchat-rw-v { color: var(--blue); }
+.pchat-rw.remove .pchat-rw-v { color: var(--red-ink); }
 .pchat-rw.bad .pchat-rw-v { color: var(--amber-ink); }
-.pchat-rw-st { padding: 1.5px 7px; border-radius: var(--r-pill); background: var(--fill);
-  font-size: 10.5px; font-weight: 600; color: var(--ink-2); }
-.pchat-rw-t { margin-top: 3px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); overflow-wrap: anywhere; }
+.pchat-rw-st { padding: 2px 8px; border-radius: var(--r-pill); background: var(--fill);
+  font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.pchat-rw-t { margin-top: 4px; font-size: 13.5px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
 .pchat-rw.remove .pchat-rw-t { text-decoration: line-through; color: var(--ink-3); }
+.pchat-rw.bad .pchat-rw-t { color: var(--ink-2); }
 
-.pchat-diff { margin-top: 7px; display: flex; flex-direction: column; gap: 3px; }
-.pchat-df { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 11.5px; line-height: 1.45; }
+.pchat-diff { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.pchat-df { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; font-size: 13px; line-height: 1.45; }
 .pchat-df-f { color: var(--ink-3); }
 .pchat-df-a { color: var(--ink-3); text-decoration: line-through; }
 .pchat-df-ar { color: var(--ink-3); }
 .pchat-df-b { font-weight: 650; color: var(--ink); }
 
 .pchat-empty { margin: auto 0; text-align: center; padding: 8px 6px; }
-.pchat-empty-t { font-size: 13.5px; font-weight: 650; color: var(--ink); }
-.pchat-empty-s { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
-.pchat-hints { margin-top: 18px; display: flex; flex-direction: column; gap: 7px; }
-.pchat-hint { padding: 9px 12px; border-radius: 11px; border: 1px solid var(--line-2); background: var(--card);
-  font-size: 12.5px; line-height: 1.4; color: var(--ink-2); text-align: left; transition: .14s; }
+.pchat-empty-t { font-size: 15px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.pchat-empty-s { margin-top: 7px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.pchat-hints { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+.pchat-hint { padding: 10px 13px; border-radius: 11px; border: 1px solid var(--line-2); background: var(--card);
+  font-size: 13.5px; line-height: 1.4; color: var(--ink-2); text-align: left; transition: .14s; }
 .pchat-hint:hover { border-color: var(--blue); color: var(--ink); }
 
 .pchat-foot { flex: none; display: flex; align-items: flex-end; gap: 8px; padding: 12px 14px 14px;
   border-top: 1px solid var(--line); background: #fff; }
-.pchat-in { flex: 1; min-width: 0; resize: none; max-height: 132px; padding: 10px 12px;
+.pchat-in { flex: 1; min-width: 0; resize: none; max-height: 132px; padding: 11px 13px;
   border: 1px solid var(--line-2); border-radius: 12px; background: var(--card); color: var(--ink);
-  font-family: inherit; font-size: 13px; line-height: 1.5; outline: none; transition: border-color .15s; }
+  font-family: inherit; font-size: 13.5px; line-height: 1.5; outline: none; transition: border-color .15s; }
 .pchat-in:focus { border-color: var(--blue); }
 .pchat-in:disabled { background: var(--fill); color: var(--ink-3); }
 .pchat-go { flex: none; width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
