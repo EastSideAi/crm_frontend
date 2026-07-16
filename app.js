@@ -1391,13 +1391,15 @@
       });
     });
   }
-  /* ── МАРКЕТИНГ: логики бота (read-only + аналитика шагов) + трекинг-ссылки ──
-     Поведение бота (логики) живёт в репо eastside-bot (logics/*.md) и правится через
-     агента песочницы — CRM только смотрит: какие логики есть, где люди отваливаются,
-     и делает ссылки. Ссылка = вход с этикеткой площадки; создание — попапом. */
-  var MK_BOT_TG = 'eastsideai_bot';
-  var MK_VK_GROUP = 'eastside_study';
-  var MK_GO = 'https://go.истсайд.рф/';
+  /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
+  /* копируемый /go-адрес: прод-бэкенд → красивый go.истсайд.рф; локаль/staging
+     (EASTSIDE_API_BASE на другой хост) — рабочий /go ЭТОГО окружения, иначе
+     скопированная ссылка вела бы на прод, где превью-данных нет */
+  var MK_GO = (function () {
+    var base = window.EASTSIDE_API_BASE || '';
+    if (!base || /истсайд\.рф|xn--80aikf2bag/.test(base)) return 'https://go.истсайд.рф/';
+    return base + '/go/';
+  })();
   var MK_CODE_RE = /^[a-z0-9_-]{1,64}$/;
   var MK_CHANNELS = [
     { id: 'vk', label: 'ВКонтакте', src: 'vk' },
@@ -1415,14 +1417,31 @@
     { id: 'ads', label: 'Реклама / таргет', utm: 'ads' },
     { id: 'bio', label: 'Описание профиля', utm: 'bio' },
   ];
+  /* WhatsApp появится в выборе, когда бот заработает в WA; отображение wa-ссылок
+     из БД оставлено в MK_KIND_INFO, чтобы старые данные не показывались как WEB */
+  var MK_KINDS = [
+    { id: 'tg', label: 'В бот · Telegram', short: 'TG' },
+    { id: 'vk', label: 'В бот · VK', short: 'VK' },
+    { id: 'page', label: 'На страницу', short: 'WEB' },
+  ];
+  var MK_KIND_INFO = {
+    tg: MK_KINDS[0], vk: MK_KINDS[1], page: MK_KINDS[2],
+    wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
+  };
+  var MK_SOURCE_NAMES = {
+    direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
+    tiktok: 'TikTok', telegram: 'Telegram', whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+  };
 
-  function mkUrl(kind, code) {
-    if (kind === 'tg') return 'https://t.me/' + MK_BOT_TG + '?start=' + code;
-    if (kind === 'vk') return 'https://vk.me/' + MK_VK_GROUP + '?ref=' + code;
+  function mkUrl(code) {
     return MK_GO + code;
   }
-  /* логика бота = ровно 2 неизменные ссылки (TG/VK — платформа сама и есть канал,
-     ничего выбирать не нужно). GO — только у самостоятельных ссылок для размещения. */
+  function mkKind(kind) {
+    return MK_KIND_INFO[kind] || MK_KIND_INFO.page;
+  }
+  function mkSourceName(source) {
+    return MK_SOURCE_NAMES[source] || source || 'Другое';
+  }
   function mkChips(code, kinds) {
     return '<span class="mk-chips" data-code="' + esc(code) + '">' +
       kinds.map(function (k) {
@@ -1433,7 +1452,7 @@
     Array.prototype.forEach.call(scope.querySelectorAll('.mk-chip'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
-        copyText(mkUrl(b.getAttribute('data-k'), b.parentNode.getAttribute('data-code')), b);
+        copyText(mkUrl(b.parentNode.getAttribute('data-code')), b);
         showToast('Ссылка скопирована');
       });
     });
@@ -1444,15 +1463,18 @@
     return (f.keywords || []).filter(function (w) { return w.toLowerCase() !== f.code.toLowerCase(); })
       .map(function (w) { return '<span class="mk-kw">' + esc(w) + '</span>'; }).join('');
   }
-  /* автокод: канал (+номер, если занято): vk, vk2, vk3… */
+  /* автокод: воронка + тип + площадка + формат (+номер, если занят) —
+     tg/vk/page входит в код, чтобы разные назначения не сталкивались */
   function mkAutoCode(d) {
     var w = state._mkL;
     if (!w || w.touched) return;
     var used = {};
     (d.funnels || []).forEach(function (f) { used[f.code] = 1; });
     (d.links || []).forEach(function (l) { used[l.code] = 1; });
-    var code = w.chan, n = 2;
-    while (used[code]) { code = w.chan + n; n++; }
+    var base = [w.funnel, w.kind, w.chan, w.med && w.med !== 'post' ? w.med : '']
+      .filter(Boolean).join('_').slice(0, 58);
+    var code = base, n = 2;
+    while (used[code]) { code = (base + n).slice(0, 64); n++; }
     w.code = code;
   }
   function fetchMk(cb) {
@@ -1463,22 +1485,46 @@
       if (e.message !== '403') { state._mk = 'none'; if (state.page === 'marketing') renderView(); }
     });
   }
+  function mkRequest(path, method, body) {
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var data = {};
+        try { data = text ? JSON.parse(text) : {}; } catch (e) {}
+        if (r.status === 403) {
+          localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
+          throw new Error('403');
+        }
+        if (!r.ok) throw new Error(data.detail || 'Не сохранилось — проверь данные');
+        return data;
+      });
+    });
+  }
+  function mkFail(e) {
+    if (e && e.message !== '403') showToast(e.message || 'Не сохранилось — проверь данные');
+  }
 
   /* ── попапы (в body, НЕ в #view: transform анимации страницы ломает fixed) ──
-     Три состояния: state._mkDel (удаление) / state._mkL (мастер) / state._mkDone (готово) */
+     Воронка/форма/ссылка/удаление живут в одном дизайн-паттерне. */
   /* ESC закрывает любой открытый попап маркетинга (навешивается один раз) */
   if (!window._mkEscBound) {
     window._mkEscBound = true;
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' || !document.getElementById('mk-ovl')) return;
-      state._mkDel = null; state._mkL = null; state._mkDone = null; state._mkStats = null; state._mkClicks = null;
+      state._mkDel = null; state._mkL = null; state._mkDone = null; state._mkStats = null;
+      state._mkClicks = null; state._mkFForm = null; state._mkSource = null;
       mkModal(state._mk && state._mk !== 'none' ? state._mk : null);
     });
   }
 
   function mkModal(d) {
     var host = document.getElementById('mk-ovl-host');
-    if (!state._mkDel && !state._mkL && !state._mkDone && !state._mkStats && !state._mkClicks) { if (host) host.remove(); return; }
+    if (!state._mkDel && !state._mkL && !state._mkDone && !state._mkStats &&
+        !state._mkClicks && !state._mkFForm) { if (host) host.remove(); return; }
     if (!host) { host = document.createElement('div'); host.id = 'mk-ovl-host'; document.body.appendChild(host); }
     var inner = '';
     var wide = false;
@@ -1504,18 +1550,33 @@
           '<div class="mk-modal-s">' + esc(cl.title || '') + '</div>' +
           '<div class="mk-kpis"><div class="mk-kpi"><div class="mk-kpi-n num">' + cl.data.total + '</div><div class="mk-kpi-l">кликов всего</div></div></div>' +
           '<div class="mk-q" style="margin:10px 0 4px">Последние 14 дней</div>' +
-          '<div class="mk-cd-chart">' + bars2.join('') + '</div>' +
-          '<div class="mk-fr" style="margin-top:10px;justify-content:flex-end"><button class="mk-btn" id="mk-x-ok">Закрыть</button></div>';
+          '<div class="mk-cd-chart">' + bars2.join('') + '</div>';
       }
-    } else if (state._mkStats) {
-      /* попап аналитики логики: большие цифры + отвал по шагам + ответы */
+    } else if (state._mkStats && !state._mkDel && !state._mkDone && !state._mkL && !state._mkFForm) {
+      /* Воронка: аналитика с фильтром площадки + её ссылки. Шаги только read-only. */
       wide = true;
       var sf = ((d && d.funnels) || []).filter(function (x) { return x.code === state._mkStats; })[0];
       if (sf) {
+        var seg = (d && d.segments) || { reach: [], answers: [], handoffs: [] };
+        var selected = state._mkSource || 'all';
+        var sourceSet = {};
+        (seg.reach || []).forEach(function (r) { if (r.funnel_code === sf.code) sourceSet[r.source] = 1; });
+        /* источники видны сразу по ссылкам воронки, не только после первого трафика */
+        ((d && d.links) || []).forEach(function (l) {
+          if (l.funnel_code === sf.code && l.active && l.utm && l.utm.source) sourceSet[l.utm.source] = 1;
+        });
+        var sources = Object.keys(sourceSet).sort();
+        var sourceChips = '<button class="mk-chip2' + (selected === 'all' ? ' on' : '') + '" data-mksource="all">Все источники</button>' +
+          sources.map(function (src) {
+            return '<button class="mk-chip2' + (selected === src ? ' on' : '') + '" data-mksource="' + esc(src) + '">' + esc(mkSourceName(src)) + '</button>';
+          }).join('');
+        var reachRows = selected === 'all' ? ((d && d.reach) || []) : (seg.reach || []).filter(function (r) { return r.source === selected; });
         var rm = {};
-        ((d && d.reach) || []).forEach(function (r) { if (r.funnel_code === sf.code) rm[r.step] = r.users; });
+        reachRows.forEach(function (r) { if (r.funnel_code === sf.code) rm[r.step] = (rm[r.step] || 0) + r.users; });
         var entered = rm[0] || 0;
-        var ho = ((d && d.stats && d.stats.handoffs) || {})[sf.code] || 0;
+        var ho = (seg.handoffs || []).filter(function (r) {
+          return r.funnel_code === sf.code && (selected === 'all' || r.source === selected);
+        }).reduce(function (n, r) { return n + r.users; }, 0);
         var bars = (sf.steps || []).map(function (s, i) {
           var t = s.type === 'ask' ? 'Вопрос' : s.type === 'wait' ? 'Пауза ' + (s.hours || '') + ' ч'
             : s.type === 'file' ? 'Файл' : 'Сообщение';
@@ -1527,38 +1588,78 @@
             '<div class="mk-sl-bar"><div class="mk-sl-fill" style="width:' + pct + '%"></div></div>' +
             '<span class="mk-sl-n num">' + got + ' · ' + pct + '%</span></div>';
         }).join('');
-        var ans = (((d && d.answers) || [])).filter(function (a) { return a.funnel_code === sf.code; })
-          .map(function (a) {
-            return '<div class="mk-ans-r"><span>' + esc(a.key) + ' · ' + esc(a.value) + '</span><span class="num">' + a.count + '</span></div>';
-          }).join('');
-        inner = '<div class="mk-modal-t">' + ic('bot', 15) + ' ' + esc(sf.title || sf.code) + '</div>' +
+        var answerRows = selected === 'all' ? (((d && d.answers) || [])) : (seg.answers || []).filter(function (a) { return a.source === selected; });
+        var ans = answerRows.filter(function (a) { return a.funnel_code === sf.code; }).map(function (a) {
+          return '<div class="mk-ans-r"><span>' + esc(a.key) + ' · ' + esc(a.value) + '</span><span class="num">' + a.count + '</span></div>';
+        }).join('');
+        var st = (d && d.stats) || { clicks: {}, users: {}, handoffs: {} };
+        function sn(map, code) { return (map && map[code]) || 0; }
+        var flinks = ((d && d.links) || []).filter(function (l) {
+          var src = l.utm && l.utm.source;
+          return l.funnel_code === sf.code && l.active && (selected === 'all' || src === selected);
+        });
+        var linkRows = flinks.map(function (l) {
+          var kind = mkKind(l.kind);
+          return '<div class="mk-row mk-click" data-clicks="' + esc(l.code) + '">' +
+            '<div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
+            '<div class="mk-l"><span class="mk-kind">' + kind.short + '</span> <span class="mk-code num">' + esc(l.code) + '</span> · ' +
+            esc(mkSourceName(l.utm && l.utm.source)) + (l.note ? '<span class="mk-note">' + esc(l.note) + '</span>' : '') + '</div></div>' +
+            '<div class="mk-st num" title="кликов по ссылке">' + sn(st.clicks, l.code) + '</div>' +
+            mkChips(l.code, [kind.short]) + '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '">' + ic('x', 12) + '</button></div>';
+        }).join('');
+        /* шаги показываем, если они есть в БД — даже пока файл агента не подцепился
+           (переходное состояние до деплоя бота); нет шагов — честно «ждёт агента» */
+        var stepsBlock = bars || (sf.logic_managed
+          ? '<div class="mk-logic-empty">Файл шагов подключён, но сценарий пока пуст.</div>'
+          : '<div class="mk-logic-empty">Шагов пока нет — воронка ждёт агента. Файл: <span class="mk-code num">logics/' + esc(sf.code) + '.md</span></div>');
+        inner = '<div class="mk-modal-t">' + ic('funnel', 15) + ' ' + esc(sf.title || sf.code) + '</div>' +
           '<div class="mk-modal-s"><span class="mk-lbl">код</span> <span class="mk-code num">' + esc(sf.code) + '</span>' +
           (mkKwChips(sf) ? ' <span class="mk-lbl">слова</span> ' + mkKwChips(sf) : '') + '</div>' +
+          '<div class="mk-sourcebar"><span class="mk-q" style="margin:0">Источник</span><div class="mk-chan">' + sourceChips + '</div></div>' +
           '<div class="mk-kpis">' +
             '<div class="mk-kpi"><div class="mk-kpi-n num">' + entered + '</div><div class="mk-kpi-l">вошло людей</div></div>' +
             '<div class="mk-kpi"><div class="mk-kpi-n num">' + ho + '</div><div class="mk-kpi-l">до менеджера</div></div>' +
             '<div class="mk-kpi"><div class="mk-kpi-n num">' + (entered ? Math.round(ho / entered * 100) : 0) + '%</div><div class="mk-kpi-l">конверсия</div></div>' +
           '</div>' +
           '<div class="mk-q" style="margin:6px 0 0">Дошли по шагам <span class="mk-q-s">с момента включения аналитики</span></div>' +
-          (bars || '<div class="empty" style="padding:14px 0">Пока никто не заходил — цифры появятся с первыми людьми.</div>') +
+          stepsBlock +
           (ans ? '<div class="mk-q" style="margin:10px 0 0">Ответы на вопросы</div>' + ans : '') +
-          '<div class="mk-fr" style="margin-top:8px"><span class="mk-hint" style="margin:0">Изменить тексты и шаги — через агента песочницы (репо бота, папка logics).</span>' +
-          '<span style="flex:1"></span><button class="mk-btn" id="mk-x-ok">Закрыть</button></div>';
+          '<div class="mk-q" style="margin:10px 0 0;display:flex;align-items:center;gap:8px">Ссылки для размещения' +
+            '<span style="flex:1"></span><button class="mk-btn primary sm" id="mk-add-link">' + ic('plus', 12) + 'Ссылка</button></div>' +
+          (linkRows || '<div class="empty" style="padding:10px 0">Ссылок пока нет — жми «+ Ссылка»: каждому месту размещения своя.</div>') +
+          '<div class="mk-fr" style="margin-top:8px"><span class="mk-hint" style="margin:0">Тексты и шаги меняет агент песочницы (репо бота, папка logics).</span>' +
+          '<span style="flex:1"></span><button class="mk-btn" id="mk-edit-funnel">Редактировать</button><button class="mk-btn danger" id="mk-del-funnel">Удалить</button></div>';
       }
     } else if (state._mkDel) {
-      var dl = ((d && d.links) || []).filter(function (x) { return x.code === state._mkDel; })[0] || { code: state._mkDel };
-      inner = '<div class="mk-modal-t">Удалить ссылку?</div>' +
-        '<div class="mk-modal-s">«' + esc(dl.title || dl.code) + '» — код <span class="mk-code num">' + esc(dl.code) + '</span> перестанет работать везде, где уже размещён. Статистика прошлых кликов сохранится.</div>' +
+      var del = state._mkDel;
+      var isFunnel = del.type === 'funnel';
+      var dl = isFunnel
+        ? (((d && d.funnels) || []).filter(function (x) { return x.code === del.code; })[0] || { code: del.code })
+        : (((d && d.links) || []).filter(function (x) { return x.code === del.code; })[0] || { code: del.code });
+      inner = '<div class="mk-modal-t">Удалить ' + (isFunnel ? 'воронку' : 'ссылку') + '?</div>' +
+        '<div class="mk-modal-s">«' + esc(dl.title || dl.code) + '» — код <span class="mk-code num">' + esc(dl.code) + '</span> ' +
+        (isFunnel ? 'и все его ссылки исчезнут из CRM. История шагов и кликов останется в аналитике; файл шагов агент удаляет отдельно.'
+          : 'перестанет работать везде, где уже размещён. История прошлых кликов сохранится.') + '</div>' +
         '<div class="mk-fr" style="justify-content:flex-end;margin-top:4px">' +
         '<button class="mk-btn" id="mk-x-no">Отмена</button>' +
         '<button class="mk-btn del" id="mk-x-yes">Удалить</button></div>';
     } else if (state._mkDone) {
       var dn = state._mkDone;
       inner = '<div class="mk-modal-t">' + ic('check', 14) + ' Ссылка готова</div>' +
-        '<div class="mk-done-r"><div class="mk-done-u num">' + esc(mkUrl('go', dn.code)) + '</div>' +
+        '<div class="mk-modal-s">Ведёт: ' + esc(mkKind(dn.kind).label) + '</div>' +
+        '<div class="mk-done-r"><div class="mk-done-u num">' + esc(mkUrl(dn.code)) + '</div>' +
         '<button class="mk-btn sm" data-cp="go">' + ic('copy', 11) + 'Скопировать</button></div>' +
-        '<div class="mk-fr"><span class="mk-hint" style="margin:0">Вставляй куда размещаешь. Кто перейдёт — появится в цифрах кода <span class="mk-code num">' + esc(dn.code) + '</span>.</span>' +
+        '<div class="mk-fr"><span class="mk-hint" style="margin:0">Ссылка сначала фиксирует клик, затем ведёт по назначению.</span>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-x-ok">Понятно</button></div>';
+    } else if (state._mkFForm) {
+      var fw = state._mkFForm;
+      inner = '<div class="mk-modal-t">' + (fw.edit ? 'Настройки воронки' : 'Новая воронка') + '</div>' +
+        '<div class="mk-modal-s">Название, слова и страница хранятся в БД. Шаги появятся только после файла агента.</div>' +
+        '<div class="mk-field-grid"><div class="mk-qblock"><div class="mk-q">Название</div><input id="mk-ft" class="mk-inp" value="' + esc(fw.title || '') + '" placeholder="Летние программы"></div>' +
+        '<div class="mk-qblock"><div class="mk-q">Код</div><input id="mk-fc" class="mk-inp num" value="' + esc(fw.code || '') + '" ' + (fw.edit ? 'disabled' : '') + ' placeholder="leto"></div></div>' +
+        '<div class="mk-qblock"><div class="mk-q">Кодовые слова <span class="mk-q-s">через запятую</span></div><input id="mk-fk" class="mk-inp" value="' + esc(fw.keywords || '') + '" placeholder="лето, leto"></div>' +
+        '<div class="mk-qblock"><div class="mk-q">Основная страница <span class="mk-q-s">необязательно</span></div><input id="mk-fu" class="mk-inp" value="' + esc(fw.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>' +
+        '<div class="mk-fr" style="justify-content:flex-end"><button class="mk-btn" id="mk-x-no">Отмена</button><button class="mk-btn primary" id="mk-f-save">Сохранить</button></div>';
     } else if (state._mkL) {
       var w = state._mkL;
       function chips2(items, sel, attr) {
@@ -1566,9 +1667,11 @@
           return '<button class="mk-chip2' + (sel === it.id ? ' on' : '') + '" data-' + attr + '="' + esc(it.id) + '">' + esc(it.label) + '</button>';
         }).join('') + '</div>';
       }
-      inner = '<div class="mk-modal-t">Новая ссылка</div>' +
-        '<div class="mk-qblock"><div class="mk-q">Куда ведёт ссылка?</div>' +
-        '<input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>' +
+      var targetBlock = w.kind === 'page'
+        ? '<div class="mk-qblock"><div class="mk-q">Куда ведёт страница?</div><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="истсайд.рф/shanghai_summer.html"></div>'
+        : '';
+      inner = '<div class="mk-modal-t">Новая ссылка · <span class="mk-code num">' + esc(w.funnel) + '</span></div>' +
+        '<div class="mk-qblock"><div class="mk-q">Куда ведёт?</div>' + chips2(MK_KINDS, w.kind, 'wk') + '</div>' + targetBlock +
         '<div class="mk-qblock"><div class="mk-q">Где будет размещена?</div>' + chips2(MK_CHANNELS, w.chan, 'wc') + '</div>' +
         '<div class="mk-qblock"><div class="mk-q">В каком виде? <span class="mk-q-s">необязательно</span></div>' + chips2(MK_MEDIUMS, w.med, 'wm') + '</div>' +
         '<div class="mk-qblock"><div class="mk-q">Комментарий для себя <span class="mk-q-s">необязательно</span></div>' +
@@ -1580,27 +1683,104 @@
         '<button class="mk-btn primary" id="mk-x-save">Создать ссылку</button></div>';
     }
 
-    host.innerHTML = '<div class="mk-ovl" id="mk-ovl"><div class="mk-modal' + (wide ? ' wide' : '') + '">' + inner + '</div></div>';
+    /* попап уже открыт → содержимое просто заменяется, анимация появления не
+       переигрывается (иначе блинк при каждом клике по фильтру/чипу) */
+    var wasOpen = !!document.getElementById('mk-ovl');
+    host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="mk-ovl">' +
+      '<div class="mk-modal' + (wide ? ' wide' : '') + '">' +
+      '<button class="mk-xbtn" id="mk-x-top" title="Закрыть">' + ic('x', 14) + '</button>' +
+      inner + '</div></div>';
+    mkBindChips(host); // чипы копирования в строках ссылок
 
-    function closeAll() {
-      state._mkDel = null; state._mkL = null; state._mkDone = null; state._mkStats = null; state._mkClicks = null;
+    function closeTop() {
+      if (state._mkClicks) state._mkClicks = null;
+      else if (state._mkDel) state._mkDel = null;
+      else if (state._mkDone) state._mkDone = null;
+      else if (state._mkL) state._mkL = null;
+      else if (state._mkFForm) state._mkFForm = null;
+      else { state._mkStats = null; state._mkSource = null; }
       mkModal(d);
     }
     var ovl = el('mk-ovl');
-    ovl.addEventListener('click', function (e) { if (e.target === ovl) closeAll(); });
-    var no = el('mk-x-no'); if (no) no.addEventListener('click', closeAll);
-    var ok = el('mk-x-ok'); if (ok) ok.addEventListener('click', closeAll);
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) closeTop(); });
+    var xt = el('mk-x-top'); if (xt) xt.addEventListener('click', closeTop);
+    var no = el('mk-x-no'); if (no) no.addEventListener('click', closeTop);
+    var ok = el('mk-x-ok'); if (ok) ok.addEventListener('click', closeTop);
     var yes = el('mk-x-yes');
     if (yes) yes.addEventListener('click', function () {
-      apiSend('/admin/api/marketing/link/' + state._mkDel, 'DELETE', null, function () {
-        closeAll(); showToast('Ссылка удалена'); fetchMk();
-      });
+      var del = state._mkDel;
+      var path = del.type === 'funnel' ? '/admin/api/marketing/funnel/' : '/admin/api/marketing/link/';
+      mkRequest(path + encodeURIComponent(del.code), 'DELETE').then(function () {
+        state._mkDel = null;
+        if (del.type === 'funnel') { state._mkStats = null; state._mkSource = null; }
+        showToast(del.type === 'funnel' ? 'Воронка удалена' : 'Ссылка удалена');
+        fetchMk(function () { if (state.page === 'marketing') renderView(); mkModal(state._mk); });
+      }).catch(mkFail);
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-cp]'), function (b) {
       b.addEventListener('click', function () {
-        copyText(mkUrl(b.getAttribute('data-cp'), state._mkDone.code), b);
+        copyText(mkUrl(state._mkDone.code), b);
         showToast('Ссылка скопирована');
       });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-mksource]'), function (b) {
+      b.addEventListener('click', function () { state._mkSource = b.getAttribute('data-mksource'); mkModal(d); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-clicks]'), function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.mk-chip') || e.target.closest('[data-dellink]')) return;
+        var code = row.getAttribute('data-clicks');
+        var l = (d.links || []).filter(function (x) { return x.code === code; })[0];
+        state._mkClicks = { code: code, title: l && l.title, data: null };
+        mkModal(d);
+        api('/admin/api/marketing/link/' + code + '/clicks').then(function (r) {
+          if (state._mkClicks && state._mkClicks.code === code) { state._mkClicks.data = r; mkModal(d); }
+        }).catch(function () {});
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dellink]'), function (b) {
+      b.addEventListener('click', function () {
+        state._mkDel = { type: 'link', code: b.getAttribute('data-dellink') }; mkModal(d);
+      });
+    });
+    var addLink = el('mk-add-link');
+    if (addLink) addLink.addEventListener('click', function () {
+      var f = (d.funnels || []).filter(function (x) { return x.code === state._mkStats; })[0];
+      state._mkL = { funnel: f.code, kind: 'tg', chan: 'inst', med: 'post', code: '', touched: false,
+        target: f.target_url || '', note: '' };
+      mkAutoCode(d); mkModal(d);
+    });
+    var editF = el('mk-edit-funnel');
+    if (editF) editF.addEventListener('click', function () {
+      var f = (d.funnels || []).filter(function (x) { return x.code === state._mkStats; })[0];
+      state._mkFForm = { edit: true, code: f.code, title: f.title || '',
+        keywords: (f.keywords || []).join(', '), target: f.target_url || '' };
+      mkModal(d);
+    });
+    var delF = el('mk-del-funnel');
+    if (delF) delF.addEventListener('click', function () {
+      state._mkDel = { type: 'funnel', code: state._mkStats }; mkModal(d);
+    });
+    var saveF = el('mk-f-save');
+    if (saveF) saveF.addEventListener('click', function () {
+      var fw = state._mkFForm;
+      var code = (el('mk-fc').value || '').trim().toLowerCase();
+      var title = (el('mk-ft').value || '').trim();
+      var keywords = (el('mk-fk').value || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      var target = (el('mk-fu').value || '').trim();
+      if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (leto_2026)'); return; }
+      if (!title) { showToast('Укажи название воронки'); return; }
+      /* создание и правка — разные действия: POST падает 409 на занятом коде,
+         PUT явно меняет существующую (код зафиксирован) */
+      mkRequest(fw.edit ? '/admin/api/marketing/funnel/' + encodeURIComponent(fw.code)
+        : '/admin/api/marketing/funnel', fw.edit ? 'PUT' : 'POST', {
+        code: code, title: title, keywords: keywords, target_url: target || null, active: true,
+      }).then(function () {
+        state._mkFForm = null; state._mkStats = code; state._mkSource = 'all';
+        showToast(fw.edit ? 'Воронка обновлена' : 'Воронка создана',
+          fw.edit ? '' : 'Шаги настроит агент: logics/' + code + '.md');
+        fetchMk(function () { if (state.page === 'marketing') renderView(); mkModal(state._mk); });
+      }).catch(mkFail);
     });
     /* мастер: выборы, поля, сохранение */
     function keep() {
@@ -1609,12 +1789,17 @@
       var nn = el('mk-ln'); if (nn) w.note = nn.value;
       var c = el('mk-lc'); if (c && c.value !== w.code) { w.code = c.value; w.touched = true; }
     }
-    ['wc', 'wm'].forEach(function (attr) {
+    ['wk', 'wc', 'wm'].forEach(function (attr) {
       Array.prototype.forEach.call(host.querySelectorAll('[data-' + attr + ']'), function (b) {
         b.addEventListener('click', function () {
           keep();
-          state._mkL[attr === 'wc' ? 'chan' : 'med'] = b.getAttribute('data-' + attr);
-          if (attr === 'wc') { state._mkL.touched = false; mkAutoCode(d); }
+          var key = attr === 'wk' ? 'kind' : (attr === 'wc' ? 'chan' : 'med');
+          state._mkL[key] = b.getAttribute('data-' + attr);
+          state._mkL.touched = false; mkAutoCode(d); // тип входит в код — пересчёт на любом выборе
+          if (attr === 'wk' && state._mkL.kind === 'page') {
+            var f = (d.funnels || []).filter(function (x) { return x.code === state._mkL.funnel; })[0];
+            state._mkL.target = (f && f.target_url) || '';
+          }
           mkModal(d);
         });
       });
@@ -1624,20 +1809,23 @@
       keep();
       var w = state._mkL;
       var code = (w.code || '').trim().toLowerCase();
-      if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (vk_post)'); return; }
-      if (!(w.target || '').trim()) { showToast('Укажи адрес страницы — куда вести ссылку'); return; }
+      if (!MK_CODE_RE.test(code)) { showToast('Код — латиницей, без пробелов (leto_tg_inst)'); return; }
+      if (w.kind === 'page' && !(w.target || '').trim()) { showToast('Укажи адрес страницы'); return; }
       var chan = MK_CHANNELS.filter(function (c) { return c.id === w.chan; })[0] || MK_CHANNELS[0];
       var med = MK_MEDIUMS.filter(function (m) { return m.id === w.med; })[0] || MK_MEDIUMS[0];
-      apiSend('/admin/api/marketing/link', 'POST', {
+      var kind = mkKind(w.kind);
+      mkRequest('/admin/api/marketing/link', 'POST', {
         code: code,
-        title: chan.label + (med.id !== 'post' ? ' · ' + med.label : ''),
-        target_url: w.target.trim(),
-        utm: { source: chan.src, medium: med.utm, campaign: code },
+        title: kind.short + ' · ' + chan.label + (med.id !== 'post' ? ' · ' + med.label : ''),
+        funnel_code: w.funnel, kind: w.kind,
+        target_url: w.kind === 'page' ? w.target.trim() : null,
+        utm: { source: chan.src, medium: med.utm },
         note: (w.note || '').trim() || null,
-      }, function () {
-        state._mkL = null; state._mkDone = { code: code };
-        mkModal(d); fetchMk(function () { if (state.page === 'marketing') renderView(); });
-      });
+      }).then(function () {
+        state._mkL = null; state._mkDone = { code: code, kind: w.kind };
+        mkModal(d); // сразу показать «готово», свежие цифры дотянутся следом
+        fetchMk(function () { if (state.page === 'marketing') renderView(); mkModal(state._mk); });
+      }).catch(mkFail);
     });
   }
 
@@ -1651,77 +1839,44 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить маркетинг — проверь сеть или доступ.</div></div>';
       return;
     }
-    var d = state._mk, st = d.stats || { clicks: {}, users: {}, handoffs: {} };
-    function n(map, code) { return (map && map[code]) || 0; }
+    var d = state._mk;
     /* reach: code → {step: users} — «дошло до шага» из лога бота */
     var reach = {};
     (d.reach || []).forEach(function (r) { (reach[r.funnel_code] = reach[r.funnel_code] || {})[r.step] = r.users; });
-    /* логики: read-only строка + свои TG/VK-ссылки (платформа сама и есть канал —
-       выбирать нечего, поэтому доступны сразу, без мастера); клик по строке — аналитика */
+    var segHandoffs = ((d.segments || {}).handoffs || []);
     var frows = (d.funnels || []).filter(function (f) { return f.active; }).map(function (f) {
       var entered = (reach[f.code] || {})[0] || 0;
-      return '<div class="mk-row mk-click" data-stats="' + esc(f.code) + '" title="Аналитика по шагам">' +
+      var ho = segHandoffs.filter(function (r) { return r.funnel_code === f.code; })
+        .reduce(function (n, r) { return n + r.users; }, 0);
+      var linkN = (d.links || []).filter(function (l) { return l.active && l.funnel_code === f.code; }).length;
+      return '<div class="mk-row mk-click" data-stats="' + esc(f.code) + '" title="Открыть воронку">' +
         '<div class="mk-i"><div class="mk-n">' + esc(f.title || f.code) + '</div>' +
         '<div class="mk-l"><span class="mk-code num">' + esc(f.code) + '</span>' + mkKwChips(f) +
-        ' · ' + (f.steps || []).length + ' ' + plural((f.steps || []).length, 'шаг', 'шага', 'шагов') + '</div></div>' +
-        '<div class="mk-st num" title="вошло → дошли до менеджера">' + entered + ' · ' + n(st.handoffs, f.code) + '</div>' +
-        mkChips(f.code, ['tg', 'vk']) + '</div>';
-    }).join('');
-
-    /* ссылки для размещения (GO): всегда просто страница, без выбора логики */
-    var lrows = (d.links || []).filter(function (l) { return l.active; }).map(function (l) {
-      return '<div class="mk-row mk-click" data-clicks="' + esc(l.code) + '" title="Клики по дням">' +
-        '<div class="mk-i"><div class="mk-n">' + esc(l.title || l.code) + '</div>' +
-        '<div class="mk-l"><span class="mk-code num">' + esc(l.code) + '</span>' +
-        (l.utm && l.utm.source ? ' · ' + esc(l.utm.source) : '') +
-        (l.note ? '<span class="mk-note">' + esc(l.note) + '</span>' : '') + '</div></div>' +
-        '<div class="mk-st num" title="кликов → людей → до менеджера">' + n(st.clicks, l.code) + ' · ' + n(st.users, l.code) + ' · ' + n(st.handoffs, l.code) + '</div>' +
-        mkChips(l.code, ['go']) +
-        '<button class="mk-btn danger" data-dellink="' + esc(l.code) + '" title="Удалить ссылку">' + ic('x', 12) + '</button></div>';
+        ' · ' + (f.steps || []).length + ' ' + plural((f.steps || []).length, 'шаг', 'шага', 'шагов') +
+        ' · ' + linkN + ' ' + plural(linkN, 'ссылка', 'ссылки', 'ссылок') + '</div></div>' +
+        '<span class="mk-logic-badge ' + (f.logic_managed ? 'ok' : 'wait') + '">' +
+          (f.logic_managed ? 'шаги подключены' : 'ждёт агента') + '</span>' +
+        '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
     view.innerHTML =
-      '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
-        '<div class="sec-head"><span class="ic">' + ic('bot', 14) + '</span><div><div class="t">Логики бота</div>' +
-        '<div class="s">как бот встречает людей (кодовые слова и лидмагниты). Клик по логике — аналитика шагов; правки — через агента песочницы</div></div></div>' +
-        '<div class="mk-list">' + (frows || '<div class="empty">Логик пока нет — они добавляются в репо бота (папка logics).</div>') + '</div></div>' +
-      '<div class="card" style="padding:22px 24px">' +
-        '<div class="sec-head"><span class="ic">' + ic('ext', 14) + '</span><div><div class="t">Ссылки для размещения</div>' +
-        '<div class="s">каждому месту — своя ссылка: создал → скопировал → вставил. Кто пришёл по ней — видно в цифрах</div></div>' +
-        '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newl">' + ic('plus', 12) + 'Ссылка</button></div>' +
-        '<div class="mk-list">' + (lrows || '<div class="empty">Ссылок пока нет — жми «+ Ссылка».</div>') + '</div></div>';
+      '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
+        '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
+        '<div class="mk-list">' + (frows || '<div class="empty">Воронок пока нет — жми «+ Воронка».</div>') + '</div></div>';
 
-    mkBindChips(view);
-    /* клик по строке логики — попап аналитики шагов */
     Array.prototype.forEach.call(view.querySelectorAll('[data-stats]'), function (row) {
       row.addEventListener('click', function () {
         state._mkStats = row.getAttribute('data-stats');
+        state._mkSource = 'all';
         mkModal(d);
       });
     });
-    /* клик по строке ссылки — попап кликов по дням (грузим по запросу) */
-    Array.prototype.forEach.call(view.querySelectorAll('[data-clicks]'), function (row) {
-      row.addEventListener('click', function (e) {
-        if (e.target.closest('.mk-chip') || e.target.closest('[data-dellink]')) return;
-        var code = row.getAttribute('data-clicks');
-        var l = (d.links || []).filter(function (x) { return x.code === code; })[0];
-        state._mkClicks = { code: code, title: l && l.title, data: null };
-        mkModal(d);
-        api('/admin/api/marketing/link/' + code + '/clicks').then(function (r) {
-          if (state._mkClicks && state._mkClicks.code === code) { state._mkClicks.data = r; mkModal(d); }
-        }).catch(function () {});
-      });
-    });
-    /* «+ Ссылка» — попап мастера (страница + место размещения) */
-    var nl = el('mk-newl');
-    if (nl) nl.addEventListener('click', function () {
+    var nf = el('mk-newf');
+    if (nf) nf.addEventListener('click', function () {
       state._mkDel = null; state._mkDone = null; state._mkStats = null; state._mkClicks = null;
-      state._mkL = { chan: 'vk', med: 'post', code: '', touched: false, target: '', note: '' };
-      mkAutoCode(d);
+      state._mkFForm = { edit: false, code: '', title: '', keywords: '', target: '' };
       mkModal(d);
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-dellink]'), function (b) {
-      b.addEventListener('click', function () { state._mkDel = b.getAttribute('data-dellink'); mkModal(d); });
     });
   }
 

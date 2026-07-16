@@ -2135,7 +2135,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   animation: mk-fade .18s ease; }
-.mk-modal { background: var(--card); border-radius: var(--r-xl); padding: 22px 24px;
+.mk-modal { position: relative; background: var(--card); border-radius: var(--r-xl); padding: 22px 24px;
   width: min(560px, calc(100vw - 40px)); box-shadow: 0 24px 64px rgba(0,0,0,.28);
   display: flex; flex-direction: column; gap: 10px;
   animation: mk-pop .22s var(--ease); }
@@ -2178,11 +2178,35 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-sl-n { font-size: 12px; color: var(--ink-2); flex: 0 0 70px; text-align: right; }
 /* попап аналитики логики: шире + большие цифры */
 .mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow-y: auto; }
+/* прокрутка попапа — тонкая, в стиле остальных панелей (дефолтная урезала скругление) */
+.mk-modal.wide::-webkit-scrollbar { width: 8px; }
+.mk-modal.wide::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
+.mk-modal.wide::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+/* крестик закрытия: absolute — не участвует в потоке, отступы попапа не плывут */
+.mk-xbtn { position: absolute; top: 12px; right: 12px; z-index: 6;
+  width: 32px; height: 32px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--ink-3); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; }
+.mk-xbtn:hover { background: var(--fill); color: var(--ink); }
 .mk-kpis { display: flex; gap: 10px; margin-top: 4px; }
 .mk-kpi { flex: 1; background: var(--fill); border-radius: var(--r-lg); padding: 12px 16px; }
 .mk-kpi-n { font-size: 24px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
 .mk-kpi-l { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
 .mk-modal-t { display: flex; align-items: center; gap: 8px; }
+.mk-sourcebar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+/* попап уже открыт → пере-рендер содержимого без переигрывания появления (блинк) */
+.mk-ovl.no-anim, .mk-ovl.no-anim .mk-modal { animation: none; }
+.mk-logic-empty { padding: 13px 14px; border: 1px dashed var(--line-2); border-radius: var(--r-lg);
+  background: var(--fill); color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.mk-logic-badge { flex: none; border-radius: var(--r-pill); padding: 5px 9px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+.mk-logic-badge.ok { color: var(--green-ink); background: var(--green-soft); }
+.mk-logic-badge.wait { color: var(--amber-ink); background: var(--amber-soft); }
+.mk-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
+  padding: 2px 6px; border-radius: 7px; background: var(--blue-soft); color: var(--blue);
+  font-size: 10px; font-weight: 800; letter-spacing: .2px; }
+.mk-field-grid { display: grid; grid-template-columns: 1fr 180px; gap: 10px; }
+.mk-field-grid .mk-qblock + .mk-qblock { margin: 0; padding: 0; border: 0; }
 /* мастер ссылки: чёткие блоки-вопросы вместо сплошной колонки */
 .mk-qblock { display: flex; flex-direction: column; gap: 8px; }
 .mk-qblock + .mk-qblock { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -2192,3 +2216,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
 .mk-cd-fill { width: 100%; background: var(--blue); border-radius: 4px 4px 0 0; min-height: 2px; transition: height .3s var(--ease); }
+@media (max-width: 700px) {
+  .mk-field-grid { grid-template-columns: 1fr; }
+  .mk-kpis { flex-wrap: wrap; }
+  .mk-kpi { min-width: 120px; }
+  .mk-logic-badge { order: 3; }
+}
