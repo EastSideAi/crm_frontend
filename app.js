@@ -1684,10 +1684,18 @@
     function stepFields(s, i) {
       if (s.type === 'wait')
         return '<input class="mk-inp sm" data-f="hours" data-i="' + i + '" type="number" min="0.1" step="0.5" value="' + esc(String(s.hours || 3)) + '" placeholder="часов">';
-      if (s.type === 'ask')
+      if (s.type === 'ask') {
+        var opts = (s.options || []).map(function (o, oi) {
+          return '<div class="mk-opt">' +
+            '<input class="mk-inp" data-oi="' + i + ':' + oi + '" value="' + esc(o) + '" placeholder="текст кнопки: 12–14 лет">' +
+            '<button class="mk-btn sm danger" data-odel="' + i + ':' + oi + '" title="убрать кнопку">' + ic('x', 11) + '</button></div>';
+        }).join('');
         return '<input class="mk-inp sm" data-f="key" data-i="' + i + '" value="' + esc(s.key || '') + '" placeholder="ключ ответа (age)">' +
           '<textarea class="mk-inp" data-f="text" data-i="' + i + '" rows="3" placeholder="текст вопроса">' + esc(s.text || '') + '</textarea>' +
-          '<input class="mk-inp" data-f="options" data-i="' + i + '" value="' + esc((s.options || []).join(' | ')) + '" placeholder="варианты — станут кнопками, через |: 12–14 лет | 15–17 лет | 18+ (пусто = свободный ответ)">';
+          '<div class="mk-opts">' + opts +
+          '<div class="mk-fr"><button class="mk-btn sm" data-oadd="' + i + '">' + ic('plus', 11) + 'Кнопка-вариант</button>' +
+          '<span class="mk-hint" style="margin:0">' + ((s.options || []).length ? 'человек ответит нажатием кнопки' : 'кнопок нет — человек ответит свободным текстом') + '</span></div></div>';
+      }
       if (s.type === 'file')
         return '<input class="mk-inp" data-f="url" data-i="' + i + '" value="' + esc(s.url || '') + '" placeholder="ссылка на файл (url)">' +
           '<textarea class="mk-inp" data-f="caption" data-i="' + i + '" rows="2" placeholder="подпись к файлу">' + esc(s.caption || '') + '</textarea>';
@@ -1737,8 +1745,31 @@
         if (!s) return;
         var fld = inp.getAttribute('data-f');
         if (fld === 'hours') s.hours = +inp.value;
-        else if (fld === 'options') s.options = inp.value.split('|').map(function (o) { return o.trim(); }).filter(Boolean);
         else s[fld] = inp.value;
+      });
+    });
+    /* кнопки-варианты вопроса: правка текста / добавить / убрать */
+    function optRef(attr) { var p = attr.split(':'); return { s: f.steps[+p[0]], oi: +p[1] }; }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-oi]'), function (inp) {
+      inp.addEventListener('input', function () {
+        var r = optRef(inp.getAttribute('data-oi'));
+        if (r.s && r.s.options) r.s.options[r.oi] = inp.value;
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-odel]'), function (b) {
+      b.addEventListener('click', function () {
+        var r = optRef(b.getAttribute('data-odel'));
+        syncTop();
+        if (r.s && r.s.options) r.s.options.splice(r.oi, 1);
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-oadd]'), function (b) {
+      b.addEventListener('click', function () {
+        syncTop();
+        var s = f.steps[+b.getAttribute('data-oadd')];
+        (s.options = s.options || []).push('');
+        renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-type]'), function (sel) {
@@ -1763,10 +1794,18 @@
     el('mk-save').addEventListener('click', function () {
       syncTop();
       if (!MK_CODE_RE.test(f.code)) { showToast('Код: латиница/цифры/-_ до 64 символов'); return; }
+      // пустые кнопки-варианты не сохраняем
+      var steps = f.steps.map(function (s) {
+        if (s.type !== 'ask') return s;
+        var c = {}; for (var k in s) c[k] = s[k];
+        c.options = (s.options || []).map(function (o) { return String(o).trim(); }).filter(Boolean);
+        if (!c.options.length) delete c.options;
+        return c;
+      });
       var body = {
         code: f.code, title: f.title.trim(),
         keywords: f.keywords.split(',').map(function (w) { return w.trim(); }).filter(Boolean),
-        steps: f.steps, target_url: f.target_url.trim() || null,
+        steps: steps, target_url: f.target_url.trim() || null,
         active: f.active, // utm не шлём — кампания ставится на бэке сама (по коду)
       };
       apiSend('/admin/api/marketing/funnel', 'POST', body, function () {
