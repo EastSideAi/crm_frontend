@@ -2136,7 +2136,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   display: flex; align-items: center; justify-content: center;
   animation: mk-fade .18s ease; }
 .mk-modal { background: var(--card); border-radius: var(--r-xl); padding: 22px 24px;
-  width: min(460px, calc(100vw - 40px)); box-shadow: 0 24px 64px rgba(0,0,0,.28);
+  width: min(560px, calc(100vw - 40px)); box-shadow: 0 24px 64px rgba(0,0,0,.28);
   display: flex; flex-direction: column; gap: 10px;
   animation: mk-pop .22s var(--ease); }
 .mk-modal-t { font-size: 16px; font-weight: 800; color: var(--ink); }
@@ -2162,3 +2162,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-opt > .mk-inp { flex: 1; width: auto; max-width: 420px; }
 /* сайдбар: при нехватке высоты — скролл, а не сжатие блоков (промо «съезжал») */
 .side > * { flex-shrink: 0; }
+/* логики: кликабельная строка + разворот аналитики шагов */
+.mk-click { cursor: pointer; }
+.mk-click:hover { border-color: var(--line-2); background: var(--fill); }
+.mk-row.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.mk-arr { color: var(--ink-3); transform: rotate(90deg); transition: transform .15s var(--ease); display: inline-flex; }
+.mk-arr.up { transform: rotate(-90deg); }
+.mk-detail { border: 1px solid var(--line); border-top: none; border-radius: 0 0 var(--r-lg) var(--r-lg);
+  padding: 14px 16px; margin-top: -8px; background: var(--card); }
+.mk-sl { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.mk-sl-t { font-size: 12.5px; font-weight: 600; color: var(--ink); flex: 0 0 130px; }
+.mk-sl-p { font-size: 12px; color: var(--ink-3); flex: 0 1 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-sl-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.mk-sl-fill { height: 100%; border-radius: 999px; background: var(--blue); transition: width .3s var(--ease); }
+.mk-sl-n { font-size: 12px; color: var(--ink-2); flex: 0 0 70px; text-align: right; }
