@@ -1452,6 +1452,30 @@
       });
     });
   }
+  /* модалка удаления живёт в body (НЕ в #view): анимация страницы делает transform,
+     из-за которого fixed-оверлей внутри view не накрывал топбар */
+  function mkOverlay(d) {
+    var host = document.getElementById('mk-ovl-host');
+    if (!state._mkDel) { if (host) host.remove(); return; }
+    if (!host) { host = document.createElement('div'); host.id = 'mk-ovl-host'; document.body.appendChild(host); }
+    var dl = ((d && d.links) || []).filter(function (x) { return x.code === state._mkDel; })[0] || { code: state._mkDel };
+    host.innerHTML = '<div class="mk-ovl" id="mk-ovl"><div class="mk-modal">' +
+      '<div class="mk-modal-t">Удалить ссылку?</div>' +
+      '<div class="mk-modal-s">«' + esc(dl.title || dl.code) + '» — код <span class="mk-code num">' + esc(dl.code) + '</span> перестанет работать везде, где уже размещён. Статистика прошлых кликов сохранится.</div>' +
+      '<div class="mk-fr" style="justify-content:flex-end;margin-top:4px">' +
+      '<button class="mk-btn" id="mk-del-no">Отмена</button>' +
+      '<button class="mk-btn del" id="mk-del-yes">Удалить</button></div></div></div>';
+    function closeOvl() { state._mkDel = null; mkOverlay(d); }
+    var ovl = el('mk-ovl');
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) closeOvl(); });
+    el('mk-del-no').addEventListener('click', closeOvl);
+    el('mk-del-yes').addEventListener('click', function () {
+      apiSend('/admin/api/marketing/link/' + state._mkDel, 'DELETE', null, function () {
+        state._mkDel = null; mkOverlay(d); showToast('Ссылка удалена'); fetchMk();
+      });
+    });
+  }
+
   function fetchMk(cb) {
     api('/admin/api/marketing/overview').then(function (r) {
       state._mk = r;
@@ -1512,10 +1536,11 @@
         return { id: f.code, label: f.title || f.code };
       }).concat([{ id: '', label: 'Просто страница сайта' }]);
       linkForm = '<div class="mk-form mk-in">' +
-        '<div class="mk-q">1 · Что рекламируем?</div>' + chips(fitems, w.funnel, 'wf') +
+        '<div class="mk-q">1 · Что получит человек по ссылке? <span class="mk-q-s">предложения из «Воронок» выше — бот сам встретит и поведёт диалог; или просто страница сайта без бота</span></div>' +
+        chips(fitems, w.funnel, 'wf') +
+        (w.funnel === '' ? '<div class="mk-fr"><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="какая страница откроется: истсайд.рф/…"></div>' : '') +
         '<div class="mk-q">2 · Где будет размещена ссылка?</div>' + chips(MK_CHANNELS, w.chan, 'wc') +
         '<div class="mk-q">3 · В каком виде? <span class="mk-q-s">необязательно</span></div>' + chips(MK_MEDIUMS, w.med, 'wm') +
-        (w.funnel === '' ? '<div class="mk-fr"><input id="mk-lu" class="mk-inp" value="' + esc(w.target || '') + '" placeholder="адрес страницы: https://истсайд.рф/…"></div>' : '') +
         '<div class="mk-fr" style="margin-top:4px"><span class="mk-q" style="margin:0">Код ссылки:</span>' +
         '<input id="mk-lc" class="mk-inp sm num" value="' + esc(w.code) + '">' +
         '<span style="flex:1"></span>' +
@@ -1555,19 +1580,7 @@
       }).join('') + '</div>';
     }).join('');
 
-    /* всплывашка подтверждения удаления (дизайн-модалка, не браузерный confirm) */
-    var delBox = '';
-    if (state._mkDel) {
-      var dl = (d.links || []).filter(function (x) { return x.code === state._mkDel; })[0] || { code: state._mkDel };
-      delBox = '<div class="mk-ovl" id="mk-ovl"><div class="mk-modal mk-in">' +
-        '<div class="mk-modal-t">Удалить ссылку?</div>' +
-        '<div class="mk-modal-s">«' + esc(dl.title || dl.code) + '» — код <span class="mk-code num">' + esc(dl.code) + '</span> перестанет работать везде, где уже размещён. Статистика прошлых кликов сохранится.</div>' +
-        '<div class="mk-fr" style="justify-content:flex-end;margin-top:4px">' +
-        '<button class="mk-btn" id="mk-del-no">Отмена</button>' +
-        '<button class="mk-btn del" id="mk-del-yes">Удалить</button></div></div></div>';
-    }
-
-    view.innerHTML = delBox +
+    view.innerHTML =
       '<div class="card" style="padding:22px 24px;margin-bottom:14px">' +
         '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span><div><div class="t">Воронки бота</div>' +
         '<div class="s">кодовые слова и лидмагниты — человек пишет слово или приходит по ссылке, бот ведёт по шагам</div></div>' +
@@ -1605,16 +1618,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dellink]'), function (b) {
       b.addEventListener('click', function () { state._mkDel = b.getAttribute('data-dellink'); renderView(); });
     });
-    var ovl = el('mk-ovl');
-    if (ovl) {
-      ovl.addEventListener('click', function (e) { if (e.target === ovl) { state._mkDel = null; renderView(); } });
-      el('mk-del-no').addEventListener('click', function () { state._mkDel = null; renderView(); });
-      el('mk-del-yes').addEventListener('click', function () {
-        apiSend('/admin/api/marketing/link/' + state._mkDel, 'DELETE', null, function () {
-          state._mkDel = null; showToast('Ссылка удалена'); fetchMk();
-        });
-      });
-    }
+    mkOverlay(d);
     var nl = el('mk-newl');
     if (nl) nl.addEventListener('click', function () {
       if (state._mkL) { state._mkL = null; renderView(); return; }
