@@ -1700,7 +1700,42 @@
           '<button class="bp sm rm-ai-go" id="rm-ai-go">Собрать план' + ic('go', 13) + '</button>' +
         '</div>' +
         '<div class="rm-ai-load" id="rm-ai-load" hidden><span class="rm-ai-spin"></span>AI собирает план под ученика — это до минуты…</div>' +
+        aiReasonBlock(id) +
       '</div>';
+  }
+
+  /* Логика последней AI-сборки: почему такой трек, ключевые решения и какие этапы
+     пропущены и почему. Без этого куратор видел готовый план и не понимал, откуда он. */
+  function aiReasonBlock(id) {
+    var r = RM_REASON[id];
+    if (!r) return '';
+    var TRACK = {
+      guided: 'Полное сопровождение до зачисления', explore: 'Прогрев — сначала присмотреться',
+      early: 'Ранний старт', service: 'Сервис — место уже есть', prep: 'Сначала язык и профиль',
+    };
+    var out = '<div class="rm-why"><div class="rm-why-h">' + ic('spark', 13) + 'Как AI собрал этот план</div>';
+    if (r.track || r.why) {
+      out += '<div class="rm-why-track">' +
+        (r.track ? '<span class="rm-why-pill">' + esc(TRACK[r.track] || r.track) + '</span>' : '') +
+        (r.why ? '<span class="rm-why-txt">' + esc(r.why) + '</span>' : '') + '</div>';
+    }
+    if (Array.isArray(r.decisions) && r.decisions.length) {
+      out += '<ul class="rm-why-list">' + r.decisions.map(function (d) {
+        return '<li>' + esc(d) + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (Array.isArray(r.skipped) && r.skipped.length) {
+      out += '<div class="rm-why-sub">Этапы, которые AI сознательно пропустил</div>' +
+        '<ul class="rm-why-list skip">' + r.skipped.map(function (s) {
+          return '<li><b>' + esc(s.title || s.stage) + '</b>' + (s.why ? ' — ' + esc(s.why) : '') + '</li>';
+        }).join('') + '</ul>';
+    }
+    if (Array.isArray(r.dropped) && r.dropped.length) {
+      out += '<div class="rm-why-warn">' + ic('alert', 13) +
+        'Не разобрал этап у ' + r.dropped.length + ' задач — они не попали в план: ' +
+        esc(r.dropped.map(function (d) { return d.title; }).join('; ')) + '</div>';
+    }
+    return out + '</div>';
   }
   function ensurePlanStatus(id, force) {
     if (!force && state.planStatus[id] !== undefined) return;
@@ -1790,6 +1825,10 @@
       var tasks = res && res.tasks;
       if (!Array.isArray(tasks) || !tasks.length) throw new Error('empty');
       var next = (mode === 'merge') ? (rmTasks(id) || []).concat(tasks) : tasks;
+      // Мета этапов (личные названия и описания от AI) — их читает кабинет ученика.
+      // При merge этапы могли добавиться, поэтому берём свежую мету в обоих режимах.
+      if (Array.isArray(res.stages) && res.stages.length) RM_STAGES[id] = res.stages;
+      RM_REASON[id] = res.reasoning || null;
       rmSet(id, next);
       delete state.planStatus[id];
       showToast('AI собрал план — ' + tasks.length + (mode === 'merge' ? ' задач добавлено' : ' задач'));
@@ -3367,6 +3406,8 @@
   }
   var RM_LOADED = {};     /* доска подтянута с бэка (или засеяна дефолтом) — по id лида */
   var RM_SAVE_T = {};     /* таймеры дебаунса сохранения доски */
+  var RM_STAGES = {};     /* мета этапов от AI [{position,key,title,about}] — уходит вместе с доской */
+  var RM_REASON = {};     /* логика последней AI-сборки: трек, решения, пропущенные этапы */
   var RM_REFRESHED = {};  /* для лида уже дёрнули refreshDetail (старый кэш без доски) */
   /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
@@ -3391,9 +3432,12 @@
     clearTimeout(RM_SAVE_T[id]);
     RM_SAVE_T[id] = setTimeout(function () {
       var board = RM[id] || [];
+      var payload = { admission: board };
+      // мету этапов шлём только когда AI её собрал — иначе не затираем ту, что уже в базе
+      if (RM_STAGES[id]) payload.admission_stages = RM_STAGES[id];
       api('/admin/api/leads/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admission: board }),
+        body: JSON.stringify(payload),
       }).then(function (res) {
         if (res && res.crm) {
           var l = findLead(id); if (l && l.crm) l.crm.admission = res.crm.admission;

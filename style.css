@@ -2118,10 +2118,13 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-ai-head { display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
   font-size: 12px; line-height: 1.4; font-weight: 600; color: var(--ink-2); letter-spacing: -.004em; }
 .rm-ai-head svg { flex: none; color: var(--ink-3); }
+/* margin-bottom: у textarea снизу прижимался футер — поле упиралось в кнопки.
+   Свой отступ на поле, а не только margin-top у соседа: так поле дышит и когда
+   его растянули ручкой resize. */
 .rm-ai-note { display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 72px;
-  padding: 15px 17px; border: 1px solid var(--line-2); border-radius: 13px; background: var(--card);
-  color: var(--ink); font-family: inherit; font-size: 13.5px; line-height: 1.55; outline: none;
-  transition: border-color .15s, box-shadow .15s; }
+  margin: 0 0 4px; padding: 15px 17px; border: 1px solid var(--line-2); border-radius: 13px;
+  background: var(--card); color: var(--ink); font-family: inherit; font-size: 13.5px;
+  line-height: 1.55; outline: none; transition: border-color .15s, box-shadow .15s; }
 .rm-ai-note::placeholder { color: var(--ink-3); }
 .rm-ai-note:focus { border-color: var(--ink-3); box-shadow: 0 0 0 3px rgba(20,25,40,.05); }
 .rm-ai-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
@@ -2139,6 +2142,27 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-ai-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); animation: rmDot 1s ease-in-out infinite; }
 .rm-ai-dots i:nth-child(2) { animation-delay: .16s; }
 .rm-ai-dots i:nth-child(3) { animation-delay: .32s; }
+
+/* ── «Как AI собрал этот план»: логика решения для куратора ──────────────── */
+.rm-why { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-2); }
+.rm-why-h { display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
+  font-size: 12px; font-weight: 650; color: var(--ink); letter-spacing: -.004em; }
+.rm-why-h svg { flex: none; color: var(--blue); }
+.rm-why-track { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 12px; }
+.rm-why-pill { flex: none; padding: 4px 11px; border-radius: var(--r-pill); background: var(--card);
+  border: 1px solid var(--line-2); font-size: 11.5px; font-weight: 650; color: var(--ink); }
+.rm-why-txt { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.rm-why-list { margin: 0; padding: 0; list-style: none; }
+.rm-why-list li { position: relative; padding: 0 0 0 15px; margin-bottom: 7px;
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.rm-why-list li::before { content: ''; position: absolute; left: 0; top: 8px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--ink-3); }
+.rm-why-list.skip li::before { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.rm-why-list.skip b { color: var(--ink); font-weight: 650; }
+.rm-why-sub { margin: 14px 0 9px; font-size: 11.5px; font-weight: 650; color: var(--ink-2); }
+.rm-why-warn { display: flex; align-items: flex-start; gap: 7px; margin-top: 12px; padding: 9px 11px;
+  border-radius: 10px; background: rgba(214, 106, 60, .08); font-size: 12px; line-height: 1.45; color: #8a4520; }
+.rm-why-warn svg { flex: none; margin-top: 2px; }
 @keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes rmDot { 0%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
