@@ -2160,3 +2160,5 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-opts { display: flex; flex-direction: column; gap: 6px; }
 .mk-opt { display: flex; gap: 6px; align-items: center; }
 .mk-opt > .mk-inp { flex: 1; width: auto; max-width: 420px; }
+/* сайдбар: при нехватке высоты — скролл, а не сжатие блоков (промо «съезжал») */
+.side > * { flex-shrink: 0; }
