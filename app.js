@@ -1740,8 +1740,11 @@
       }).join('');
     }
     if (PCHAT_BUSY[id]) {
+      // Модель думает до минуты. Спиннер на такой срок читается как «зависло», поэтому
+      // показываем живой ход мысли: три точки + сменяющаяся строка, что он сейчас делает.
       body += '<div class="pchat-m ai"><div class="pchat-b pchat-wait">' +
-        '<span class="rm-ai-spin"></span>Правлю план…</div></div>';
+        '<span class="pchat-dots"><i></i><i></i><i></i></span>' +
+        '<span class="pchat-wait-t" id="pchat-wait-t">Читаю план</span></div></div>';
     }
     return '<aside class="pchat" id="pchat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
@@ -1758,23 +1761,67 @@
     '</aside>';
   }
 
-  /* Что именно AI сделал с доской: по одной строке на правку. Отклонённые показываем
-     тоже — молчать о том, что правка не легла, нельзя. */
+  /* Что именно AI сделал с доской. Куратору важно не «поправил задачу», а ЧТО стало
+     другим — поэтому у правки показываем сам дифф «было → стало». Отклонённое
+     показываем тоже: молчать о том, что правка не легла, нельзя. */
+  var PCHAT_STAGE_RU = {
+    intro: 'Знакомство', strategy: 'Стратегия', docs: 'Документы', submit: 'Подача',
+    exam: 'Экзамены', result: 'Результат', visa: 'Виза', move: 'Переезд',
+  };
+  var PCHAT_FIELD_RU = {
+    title: 'название', need: 'инструкция', due: 'срок', owner: 'кто делает',
+    stage: 'этап', status: 'статус', how_to: 'как сделать', tip: 'подсказка',
+  };
+  var PCHAT_OWNER_RU = { client: 'клиент', team: 'мы', student: 'ученик', parent: 'родитель' };
+  var PCHAT_STATUS_RU = { wait: 'ждет', doing: 'в работе', review: 'на проверке', done: 'готово', return: 'вернули' };
+
+  function pchatVal(field, v) {
+    if (v === null || v === undefined || v === '') return 'пусто';
+    // Дата в диффе — голая (ДД.ММ.ГГ): fmtDue лепит «просрочено ·», а это не про «было».
+    // Но в старых задачах due — свободный текст («к 20 октября»), его резать по позициям
+    // нельзя: получится каша. Форматируем только настоящий ISO.
+    if (field === 'due') {
+      var s = String(v);
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(2, 4) : s;
+    }
+    if (field === 'owner') return PCHAT_OWNER_RU[v] || v;
+    if (field === 'status') return PCHAT_STATUS_RU[v] || v;
+    if (field === 'stage') return PCHAT_STAGE_RU[v] || v;
+    var s = String(v);
+    return s.length > 42 ? s.slice(0, 42) + '…' : s;
+  }
+
   function pchatReport(report) {
     if (!Array.isArray(report) || !report.length) return '';
-    var WORD = { add: 'добавил', edit: 'поправил', remove: 'удалил', stage: 'этап' };
-    var rows = report.filter(function (r) { return r.ok; }).map(function (r) {
-      return '<li class="' + esc(r.op) + '">' + (WORD[r.op] || r.op) + ' · ' +
-        esc(r.title || r.key || r.id || '') + '</li>';
-    });
+    var VERB = { add: 'Добавил', edit: 'Поправил', remove: 'Удалил', stage: 'Переименовал этап' };
+    var ok = report.filter(function (r) { return r.ok; });
     var bad = report.filter(function (r) { return !r.ok && r.why && r.why !== 'нечего менять'; });
-    var out = rows.length ? '<ul class="pchat-rep">' + rows.join('') + '</ul>' : '';
-    if (bad.length) {
-      out += '<ul class="pchat-rep bad">' + bad.map(function (r) {
-        return '<li>не применил · ' + esc(r.why) + '</li>';
-      }).join('') + '</ul>';
-    }
-    return out;
+    if (!ok.length && !bad.length) return '';
+
+    var rows = ok.map(function (r) {
+      var stage = r.stage ? '<span class="pchat-rw-st">' + esc(PCHAT_STAGE_RU[r.stage] || r.stage) + '</span>' : '';
+      var head = '<div class="pchat-rw-h"><span class="pchat-rw-v">' + (VERB[r.op] || r.op) + '</span>' +
+        stage + '</div>';
+      var name = '<div class="pchat-rw-t">' + esc(r.title || r.key || '') + '</div>';
+      var diff = '';
+      if (r.op === 'edit' && Array.isArray(r.changes) && r.changes.length) {
+        diff = '<div class="pchat-diff">' + r.changes.map(function (c) {
+          return '<div class="pchat-df"><span class="pchat-df-f">' + esc(PCHAT_FIELD_RU[c.field] || c.field) + '</span>' +
+            '<span class="pchat-df-a">' + esc(pchatVal(c.field, c.from)) + '</span>' +
+            '<span class="pchat-df-ar">→</span>' +
+            '<span class="pchat-df-b">' + esc(pchatVal(c.field, c.to)) + '</span></div>';
+        }).join('') + '</div>';
+      }
+      return '<div class="pchat-rw ' + esc(r.op) + '">' + head + name + diff + '</div>';
+    }).join('');
+
+    var badRows = bad.map(function (r) {
+      return '<div class="pchat-rw bad"><div class="pchat-rw-h">' +
+        '<span class="pchat-rw-v">Не применил</span></div>' +
+        '<div class="pchat-rw-t">' + esc(r.title || r.id || '') + ' — ' + esc(r.why) + '</div></div>';
+    }).join('');
+
+    return '<div class="pchat-rep">' + rows + badRows + '</div>';
   }
 
   function loadPlanChat(id) {
@@ -1845,6 +1892,22 @@
     Array.prototype.forEach.call(document.querySelectorAll('.pchat-hint'), function (b) {
       b.addEventListener('click', function () { pchatSend(id, b.getAttribute('data-hint')); });
     });
+    pchatWaitTicker(id);
+  }
+
+  /* Пока модель думает — строка меняется, чтобы ожидание читалось как работа, а не как
+     зависший спиннер. Таймер живёт только пока висит его же узел. */
+  function pchatWaitTicker(id) {
+    var node = el('pchat-wait-t');
+    if (!node) return;
+    var steps = ['Читаю план', 'Сверяю со сроками и вузами', 'Собираю правки'];
+    var i = 0;
+    var t = setInterval(function () {
+      var n = el('pchat-wait-t');
+      if (!n || !PCHAT_BUSY[id]) { clearInterval(t); return; }
+      i = Math.min(i + 1, steps.length - 1);
+      n.textContent = steps[i];
+    }, 4500);
   }
 
   /* Логика последней AI-сборки: почему такой трек, ключевые решения и какие этапы
