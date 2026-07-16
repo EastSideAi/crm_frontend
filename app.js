@@ -27,6 +27,7 @@
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
+    planChat: null,   // id лида, у которого открыт чат правок плана
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -1318,7 +1319,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, products: 1, grants: 1, partners: 1 };
+  var STUB_PAGES = { students: 1, grants: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1340,6 +1341,7 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'products') renderProducts(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -1889,6 +1891,103 @@
       state._templates = (r && r.templates) || [];
     }).catch(function () { state._templates = 'none'; }).finally(function () { if (cb) cb(state._templates); });
   }
+  /* ── Продукты — живой каталог платформы (вкл/выкл, цена, описание) ── */
+  function renderProducts(view) {
+    if (!state._catalogAll) {
+      view.innerHTML = dashSkeleton();
+      api('/api/products?active_only=false').then(function (r) {
+        state._catalogAll = Array.isArray(r) ? r : [];
+        if (state.page === 'products') renderView();
+      }).catch(function (e) {
+        if (e.message !== '403') { state._catalogAll = 'none'; if (state.page === 'products') renderView(); }
+      });
+      return;
+    }
+    if (state._catalogAll === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить каталог.</div></div>'; return; }
+    var items = state._catalogAll;
+    var activeN = items.filter(function (p) { return p.is_active; }).length;
+    var byCat = {};
+    items.forEach(function (p) { (byCat[p.category] = byCat[p.category] || []).push(p); });
+    var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
+      .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
+
+    var html = '<div class="card pd-wrap">' +
+      '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Каталог продуктов</div>' +
+        '<div class="s">что продаём на платформе: выключенный продукт исчезает из витрин и AI-подбора</div></div>' +
+        '<span class="cnt num">' + activeN + ' из ' + items.length + ' активны</span></div>';
+    cats.forEach(function (cat) {
+      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
+      byCat[cat].forEach(function (p) {
+        var open = state._pdEdit === p.id;
+        html += '<div class="pd-row' + (p.is_active ? '' : ' off') + (open ? ' open' : '') + '" data-pd="' + esc(p.id) + '">' +
+          '<button type="button" class="ai-toggle pd-tgl' + (p.is_active ? ' on' : '') + '" data-pdtgl="' + esc(p.id) + '" title="' + (p.is_active ? 'Выключить' : 'Включить') + '"><span class="ait-dot"></span></button>' +
+          '<div class="pd-info" data-pdopen="' + esc(p.id) + '">' +
+            '<div class="of-name">' + esc(p.name) + '</div>' +
+            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
+          '</div>' +
+          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+        '</div>';
+        if (open) {
+          html += '<div class="pd-edit" data-pdform="' + esc(p.id) + '">' +
+            '<label>Название<input class="pd-in" data-f="name" value="' + esc(p.name) + '"></label>' +
+            '<label>Описание<textarea class="pd-in" data-f="description" rows="3">' + esc(p.description || '') + '</textarea></label>' +
+            '<div class="pd-cols">' +
+              '<label>Цена, ₽ (пусто — по запросу)<input class="pd-in num" data-f="price_amount" inputmode="numeric" value="' + (p.price_amount != null ? Math.round(p.price_amount) : '') + '"></label>' +
+              '<label>Пояснение к цене<input class="pd-in" data-f="price_note" value="' + esc(p.price_note || '') + '" placeholder="в месяц / разово / по запросу"></label>' +
+            '</div>' +
+            '<div class="pd-foot"><button class="bp sm" data-pdsave="' + esc(p.id) + '">Сохранить</button>' +
+            '<button class="bp ghost sm" data-pdclose="1">Закрыть</button></div>' +
+          '</div>';
+        }
+      });
+    });
+    html += '</div>';
+    view.innerHTML = html;
+
+    function put(p, cb) {
+      apiSend('/api/products/' + encodeURIComponent(p.id), 'PUT', p, function (r) {
+        state._catalog = null;            // витрина в карточке лида берёт active-only — сброс
+        if (cb) cb(r);
+      });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdtgl]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = items.find(function (x) { return x.id === b.getAttribute('data-pdtgl'); });
+        if (!p) return;
+        p.is_active = !p.is_active;
+        put(p, function () { showToast(p.is_active ? 'Продукт включён' : 'Продукт выключен', p.name); });
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdopen]'), function (n) {
+      n.addEventListener('click', function () {
+        var pid = n.getAttribute('data-pdopen');
+        state._pdEdit = state._pdEdit === pid ? null : pid;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdsave]'), function (b) {
+      b.addEventListener('click', function () {
+        var pid = b.getAttribute('data-pdsave');
+        var p = items.find(function (x) { return x.id === pid; });
+        var form = view.querySelector('[data-pdform="' + pid + '"]');
+        if (!p || !form) return;
+        Array.prototype.forEach.call(form.querySelectorAll('.pd-in'), function (inp) {
+          var f = inp.getAttribute('data-f'), v = inp.value.trim();
+          if (f === 'price_amount') p.price_amount = v === '' ? null : (parseInt(v.replace(/\D/g, ''), 10) || null);
+          else p[f] = v;
+        });
+        put(p, function () { showToast('Сохранено', p.name); });
+        state._pdEdit = null;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pdclose]'), function (b) {
+      b.addEventListener('click', function () { state._pdEdit = null; renderView(); });
+    });
+  }
+
   function renderTemplates(view) {
     if (!can('students')) { view.innerHTML = '<div class="card"><div class="empty">Нет доступа к шаблонам.</div></div>'; return; }
     if (state._tplEdit) return renderTemplateEditor(view);
@@ -2063,39 +2162,333 @@
   /* ── ТУЛБАР плана в секции «Поступление»: раскатка шаблона + публикация ── */
   function planToolbar(id) {
     var pst = state.planStatus[id], pub = !!(pst && pst.published);
-    var menu = '';
     var tpls = Array.isArray(state._templates) ? state._templates : [];
-    menu = tpls.map(function (t) {
+    var menu = tpls.map(function (t) {
       return '<button class="rm-rollout-i" data-rollout="' + esc(t.id) + '">' + esc(t.name) +
         '<span class="num"> · ' + (t.tasks_count || 0) + '</span></button>';
     }).join('');
     return '<div class="rm-plan-tb">' +
-      '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
-        (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
-      '<div class="rm-plan-tb-act">' +
-        '<div class="rm-rollout-wrap">' +
-          '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Развернуть из шаблона</button>' +
-          '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
+        '<span class="rm-pub ' + (pub ? 'on' : 'off') + '"><i class="rm-pub-dot"></i>' +
+          (pub ? 'Опубликовано ученику' : 'Черновик — ученику не виден') + '</span>' +
+        '<div class="rm-plan-tb-act">' +
+          '<button class="bp sm rm-ai-btn" id="rm-ai-btn">' + ic('spark', 14) + 'AI собрать план</button>' +
+          // правка словами — работает только по существующему плану, пустой править нечего
+          (rmTasks(id).length
+            ? '<button class="bp ghost sm' + (state.planChat === id ? ' on' : '') + '" id="rm-chat-btn">' +
+                ic('chat', 13) + 'Править в чате</button>'
+            : '') +
+          '<div class="rm-rollout-wrap">' +
+            '<button class="bp ghost sm" id="rm-rollout-btn">' + ic('box', 13) + 'Из шаблона</button>' +
+            '<div class="rm-rollout-menu" id="rm-rollout-menu" hidden>' + (menu || '<div class="rm-rollout-empty">Нет шаблонов</div>') + '</div>' +
+          '</div>' +
+          '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
-        '<button class="bp sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать ученику') + '</button>' +
-      '</div></div>';
+      '</div>' +
+      // AI-композер: свернут по умолчанию, раскрывается кнопкой «AI собрать план»
+      '<div class="rm-ai" id="rm-ai" hidden>' +
+        '<div class="rm-ai-head">' + ic('spark', 15) + '<span>AI соберет план поступления под этого ученика — по анкете, диагностике и требованиям вузов</span></div>' +
+        '<textarea class="rm-ai-note" id="rm-ai-note" rows="2" placeholder="Что учесть? Например: язык слабый, год не горит — сначала язык и запасные вузы. Можно оставить пустым — соберу по анкете и диагностике."></textarea>' +
+        '<div class="rm-ai-foot" id="rm-ai-foot">' +
+          '<div class="rm-ai-mode" id="rm-ai-mode">' +
+            '<button class="rm-ai-m on" data-mode="replace">Собрать заново</button>' +
+            '<button class="rm-ai-m" data-mode="merge">Дополнить</button>' +
+          '</div>' +
+          '<button class="bp sm rm-ai-go" id="rm-ai-go">Собрать план' + ic('go', 13) + '</button>' +
+        '</div>' +
+        '<div class="rm-ai-load" id="rm-ai-load" hidden><span class="rm-ai-spin"></span>AI собирает план под ученика — это до минуты…</div>' +
+        aiReasonBlock(id) +
+      '</div>';
   }
-  function ensurePlanStatus(id) {
-    if (state.planStatus[id] !== undefined) return;
+
+  /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
+     Куратор говорит словами, что поправить; модель отвечает операциями по id задач,
+     бэкенд применяет их сам и возвращает готовую доску (см. app/plan_ops.py).
+     Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
+  function planChatPanel(id) {
+    // чат живёт только рядом с доской: в других секциях модалки ему нечего править
+    if (state.planChat !== id || state.modalSection !== 'admission') return '';
+    var msgs = PCHAT[id] || [];
+    var body;
+    if (!PCHAT_LOADED[id]) {
+      body = '<div class="pchat-empty">Загружаю…</div>';
+    } else if (!msgs.length) {
+      body = '<div class="pchat-empty">' +
+        '<div class="pchat-empty-t">Скажите, что поправить</div>' +
+        '<div class="pchat-empty-s">Правлю точечно — статусы, комментарии и файлы ученика не трогаю.</div>' +
+        '<div class="pchat-hints">' +
+          ['Сдвинь сроки документов на месяц',
+           'Добавь задачу на экзамен по английскому',
+           'Убери задачи по визе — до нее еще далеко'].map(function (h) {
+            return '<button class="pchat-hint" data-hint="' + esc(h) + '">' + esc(h) + '</button>';
+          }).join('') +
+        '</div></div>';
+    } else {
+      body = msgs.map(function (m) {
+        if (m.me) return '<div class="pchat-m me"><div class="pchat-b">' + esc(m.text) + '</div></div>';
+        return '<div class="pchat-m ai"><div class="pchat-b">' + esc(m.text) + '</div>' +
+          pchatReport(m.report) + '</div>';
+      }).join('');
+    }
+    if (PCHAT_BUSY[id]) {
+      // Модель думает до минуты. Спиннер на такой срок читается как «зависло», поэтому
+      // показываем живой ход мысли: три точки + сменяющаяся строка, что он сейчас делает.
+      body += '<div class="pchat-m ai"><div class="pchat-b pchat-wait">' +
+        '<span class="pchat-dots"><i></i><i></i><i></i></span>' +
+        '<span class="pchat-wait-t" id="pchat-wait-t">Читаю план</span></div></div>';
+    }
+    return '<aside class="pchat" id="pchat">' +
+      '<div class="pchat-head">' + ic('spark', 14) +
+        '<span class="pchat-title">Правка плана</span>' +
+        '<button class="pchat-x" id="pchat-x" title="Закрыть">' + ic('x', 13) + '</button>' +
+      '</div>' +
+      '<div class="pchat-list" id="pchat-list">' + body + '</div>' +
+      '<div class="pchat-foot">' +
+        '<textarea class="pchat-in" id="pchat-in" rows="1" placeholder="Что поправить в плане?"' +
+          (PCHAT_BUSY[id] ? ' disabled' : '') + '></textarea>' +
+        '<button class="pchat-go" id="pchat-go" title="Отправить"' +
+          (PCHAT_BUSY[id] ? ' disabled' : '') + '>' + ic('go', 14) + '</button>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  /* Что именно AI сделал с доской. Куратору важно не «поправил задачу», а ЧТО стало
+     другим — поэтому у правки показываем сам дифф «было → стало». Отклонённое
+     показываем тоже: молчать о том, что правка не легла, нельзя. */
+  var PCHAT_STAGE_RU = {
+    intro: 'Знакомство', strategy: 'Стратегия', docs: 'Документы', submit: 'Подача',
+    exam: 'Экзамены', result: 'Результат', visa: 'Виза', move: 'Переезд',
+  };
+  var PCHAT_FIELD_RU = {
+    title: 'название', need: 'инструкция', due: 'срок', owner: 'кто делает',
+    stage: 'этап', status: 'статус', how_to: 'как сделать', tip: 'подсказка',
+  };
+  var PCHAT_OWNER_RU = { client: 'клиент', team: 'мы', student: 'ученик', parent: 'родитель' };
+  var PCHAT_STATUS_RU = { wait: 'ждет', doing: 'в работе', review: 'на проверке', done: 'готово', return: 'вернули' };
+
+  function pchatVal(field, v) {
+    if (v === null || v === undefined || v === '') return 'пусто';
+    // Дата в диффе — голая (ДД.ММ.ГГ): fmtDue лепит «просрочено ·», а это не про «было».
+    // Но в старых задачах due — свободный текст («к 20 октября»), его резать по позициям
+    // нельзя: получится каша. Форматируем только настоящий ISO.
+    if (field === 'due') {
+      var s = String(v);
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(2, 4) : s;
+    }
+    if (field === 'owner') return PCHAT_OWNER_RU[v] || v;
+    if (field === 'status') return PCHAT_STATUS_RU[v] || v;
+    if (field === 'stage') return PCHAT_STAGE_RU[v] || v;
+    var s = String(v);
+    return s.length > 42 ? s.slice(0, 42) + '…' : s;
+  }
+
+  function pchatReport(report) {
+    if (!Array.isArray(report) || !report.length) return '';
+    var VERB = { add: 'Добавил', edit: 'Поправил', remove: 'Удалил', stage: 'Переименовал' };
+    var ok = report.filter(function (r) { return r.ok; });
+    var bad = report.filter(function (r) { return !r.ok && r.why && r.why !== 'нечего менять'; });
+    if (!ok.length && !bad.length) return '';
+
+    var rows = ok.map(function (r) {
+      var stage = r.stage ? '<span class="pchat-rw-st">' + esc(PCHAT_STAGE_RU[r.stage] || r.stage) + '</span>' : '';
+      var diff = '';
+      if (r.op === 'edit' && Array.isArray(r.changes) && r.changes.length) {
+        diff = '<div class="pchat-diff">' + r.changes.map(function (c) {
+          return '<div class="pchat-df"><span class="pchat-df-f">' + esc(PCHAT_FIELD_RU[c.field] || c.field) + '</span>' +
+            '<span class="pchat-df-a">' + esc(pchatVal(c.field, c.from)) + '</span>' +
+            '<span class="pchat-df-ar">→</span>' +
+            '<span class="pchat-df-b">' + esc(pchatVal(c.field, c.to)) + '</span></div>';
+        }).join('') + '</div>';
+      }
+      return '<div class="pchat-rw ' + esc(r.op) + '">' +
+        '<div class="pchat-rw-h"><span class="pchat-rw-v">' + (VERB[r.op] || r.op) + '</span>' + stage + '</div>' +
+        '<div class="pchat-rw-t">' + esc(r.title || r.key || '') + '</div>' + diff + '</div>';
+    }).join('');
+
+    // Отклонённое схлопываем в одну строку: три подряд «Не применил» — это шум,
+    // куратору хватает факта и причины.
+    var badRow = '';
+    if (bad.length) {
+      var why = bad.map(function (r) { return r.why; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      badRow = '<div class="pchat-rw bad"><div class="pchat-rw-h">' +
+        '<span class="pchat-rw-v">Не применил</span>' +
+        '<span class="pchat-rw-st">' + bad.length + '</span></div>' +
+        '<div class="pchat-rw-t">' + esc(why.join('; ')) + '</div></div>';
+    }
+    return '<div class="pchat-rep">' + rows + badRow + '</div>';
+  }
+
+  function loadPlanChat(id) {
+    if (PCHAT_LOADED[id]) return;
+    api('/admin/api/leads/' + id + '/plan/chat').then(function (r) {
+      PCHAT[id] = [];
+      (r && r.messages || []).forEach(function (m) {
+        PCHAT[id].push({ me: true, text: m.message });
+        PCHAT[id].push({ me: false, text: m.reply, report: m.report });
+      });
+      PCHAT_LOADED[id] = true;
+      if (state.drawerId === id && state.planChat === id) renderDrawer(true);
+    }).catch(function () { PCHAT_LOADED[id] = true; });
+  }
+
+  function pchatSend(id, text) {
+    if (!text || PCHAT_BUSY[id]) return;
+    PCHAT[id] = PCHAT[id] || [];
+    PCHAT[id].push({ me: true, text: text });
+    PCHAT_BUSY[id] = true;
+    renderDrawer(true);
+    api('/admin/api/leads/' + id + '/plan/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    }).then(function (r) {
+      PCHAT_BUSY[id] = false;
+      PCHAT[id].push({ me: false, text: (r && r.reply) || 'Готово.', report: r && r.report });
+      // Бэкенд применил правки и сохранил сам — забираем готовую доску, а не склеиваем.
+      if (r && r.changed && Array.isArray(r.admission)) {
+        RM[id] = r.admission; RM_LOADED[id] = true;
+        if (Array.isArray(r.admission_stages)) RM_STAGES[id] = r.admission_stages;
+        var l = findLead(id); if (l && l.crm) l.crm.admission = r.admission;
+        var d = state.details[id]; if (d && d.crm) { d.crm.admission = r.admission; cacheSet(id, d); }
+      }
+      renderDrawer(true);
+    }).catch(function (e) {
+      PCHAT_BUSY[id] = false;
+      if (!(e && e.message === '403')) {
+        PCHAT[id].push({ me: false, text: 'Не получилось — AI не ответил. Попробуйте еще раз.' });
+      }
+      renderDrawer(true);
+    });
+  }
+
+  function bindPlanChat(id) {
+    var x = el('pchat-x');
+    if (x) x.addEventListener('click', function () { state.planChat = null; renderDrawer(true); });
+    var inp = el('pchat-in'), go = el('pchat-go');
+    var fire = function () {
+      if (!inp) return;
+      var v = (inp.value || '').trim();
+      if (v) { inp.value = ''; pchatSend(id, v); }
+    };
+    if (go) go.addEventListener('click', fire);
+    if (inp) {
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fire(); }
+      });
+      // поле растёт под текст, но не бесконечно
+      inp.addEventListener('input', function () {
+        inp.style.height = 'auto';
+        inp.style.height = Math.min(inp.scrollHeight, 132) + 'px';
+      });
+      inp.focus();
+    }
+    var list = el('pchat-list');
+    if (list) list.scrollTop = list.scrollHeight;
+    Array.prototype.forEach.call(document.querySelectorAll('.pchat-hint'), function (b) {
+      b.addEventListener('click', function () { pchatSend(id, b.getAttribute('data-hint')); });
+    });
+    pchatWaitTicker(id);
+  }
+
+  /* Пока модель думает — строка меняется, чтобы ожидание читалось как работа, а не как
+     зависший спиннер. Таймер живёт только пока висит его же узел. */
+  function pchatWaitTicker(id) {
+    var node = el('pchat-wait-t');
+    if (!node) return;
+    var steps = ['Читаю план', 'Сверяю со сроками и вузами', 'Собираю правки'];
+    var i = 0;
+    var t = setInterval(function () {
+      var n = el('pchat-wait-t');
+      if (!n || !PCHAT_BUSY[id]) { clearInterval(t); return; }
+      i = Math.min(i + 1, steps.length - 1);
+      n.textContent = steps[i];
+    }, 4500);
+  }
+
+  /* Логика последней AI-сборки: почему такой трек, ключевые решения и какие этапы
+     пропущены и почему. Без этого куратор видел готовый план и не понимал, откуда он. */
+  function aiReasonBlock(id) {
+    var r = RM_REASON[id];
+    if (!r) return '';
+    var TRACK = {
+      guided: 'Полное сопровождение до зачисления', explore: 'Прогрев — сначала присмотреться',
+      early: 'Ранний старт', service: 'Сервис — место уже есть', prep: 'Сначала язык и профиль',
+    };
+    var out = '<div class="rm-why"><div class="rm-why-h">' + ic('spark', 13) + 'Как AI собрал этот план</div>';
+    if (r.track || r.why) {
+      out += '<div class="rm-why-track">' +
+        (r.track ? '<span class="rm-why-pill">' + esc(TRACK[r.track] || r.track) + '</span>' : '') +
+        (r.why ? '<span class="rm-why-txt">' + esc(r.why) + '</span>' : '') + '</div>';
+    }
+    if (Array.isArray(r.decisions) && r.decisions.length) {
+      out += '<ul class="rm-why-list">' + r.decisions.map(function (d) {
+        return '<li>' + esc(d) + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (Array.isArray(r.skipped) && r.skipped.length) {
+      out += '<div class="rm-why-sub">Этапы, которые AI сознательно пропустил</div>' +
+        '<ul class="rm-why-list skip">' + r.skipped.map(function (s) {
+          return '<li><b>' + esc(s.title || s.stage) + '</b>' + (s.why ? ' — ' + esc(s.why) : '') + '</li>';
+        }).join('') + '</ul>';
+    }
+    if (Array.isArray(r.dropped) && r.dropped.length) {
+      out += '<div class="rm-why-warn">' + ic('alert', 13) +
+        'Не разобрал этап у ' + r.dropped.length + ' задач — они не попали в план: ' +
+        esc(r.dropped.map(function (d) { return d.title; }).join('; ')) + '</div>';
+    }
+    return out + '</div>';
+  }
+  function ensurePlanStatus(id, force) {
+    if (!force && state.planStatus[id] !== undefined) return;
+    if (state.planStatus[id] === 'loading') return;
+    state.planStatus[id] = state.planStatus[id] || 'loading';
     api('/admin/api/leads/' + id + '/plan').then(function (r) {
       state.planStatus[id] = { published: !!(r && r.published) };
       if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    }).catch(function () { state.planStatus[id] = { published: false }; });
+    }).catch(function () {
+      if (state.planStatus[id] === 'loading') state.planStatus[id] = { published: false };
+    });
   }
   function wirePlanToolbar(id) {
     var host = document.querySelector('#m-content') || document.getElementById('m-content');
     if (!host) return;
+    // Шаблоны подгружаем заранее (на открытии секции), чтобы меню открывалось сразу
+    // одним кликом, а не «пусто -> фетч -> второй клик».
+    if (state._templates === null || state._templates === undefined) {
+      fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
+    }
     var btn = host.querySelector('#rm-rollout-btn');
     var menu = host.querySelector('#rm-rollout-menu');
     var pubBtn = host.querySelector('#rm-pub-btn');
+    var aiBtn = host.querySelector('#rm-ai-btn');
+    var aiPanel = host.querySelector('#rm-ai');
+
+    // ── AI-композер ──
+    if (aiBtn && aiPanel) {
+      aiBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (menu) menu.hidden = true;
+        var open = aiPanel.hidden;
+        aiPanel.hidden = !open;
+        aiBtn.classList.toggle('on', open);
+        if (open) { var ta = host.querySelector('#rm-ai-note'); if (ta) ta.focus(); }
+      });
+      var modeWrap = host.querySelector('#rm-ai-mode');
+      if (modeWrap) modeWrap.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.rm-ai-m'); if (!b) return;
+        Array.prototype.forEach.call(modeWrap.querySelectorAll('.rm-ai-m'), function (x) { x.classList.toggle('on', x === b); });
+      });
+      var goBtn = host.querySelector('#rm-ai-go');
+      if (goBtn) goBtn.addEventListener('click', function () {
+        var ta = host.querySelector('#rm-ai-note');
+        var m = host.querySelector('#rm-ai-mode .rm-ai-m.on');
+        doAiPlan(id, ((ta && ta.value) || '').trim(), (m && m.getAttribute('data-mode')) || 'replace', host);
+      });
+    }
+
+    // ── Из шаблона ──
     if (btn && menu) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (aiPanel) { aiPanel.hidden = true; if (aiBtn) aiBtn.classList.remove('on'); }
         if (!Array.isArray(state._templates) || !state._templates.length) {
           fetchTemplates(function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); });
           return;
@@ -2114,6 +2507,45 @@
       var pub = state.planStatus[id] && state.planStatus[id].published;
       doPublish(id, !pub);
     });
+
+    var chatBtn = host.querySelector('#rm-chat-btn');
+    if (chatBtn) chatBtn.addEventListener('click', function () {
+      state.planChat = (state.planChat === id) ? null : id;
+      if (state.planChat === id) loadPlanChat(id);
+      renderDrawer(true);
+    });
+    if (state.planChat === id) bindPlanChat(id);
+  }
+
+  // AI-сборка плана: зовет /plan/ai (крутится на умной модели, до минуты), кладет
+  // задачи в доску (replace = заново, merge = дополнить недостающим) и публикует статус.
+  function doAiPlan(id, note, mode, host) {
+    var foot = host.querySelector('#rm-ai-foot');
+    var load = host.querySelector('#rm-ai-load');
+    if (load && !load.hidden) return;            // уже считает — не дублируем
+    if (foot) foot.style.display = 'none';
+    if (load) load.hidden = false;
+    api('/admin/api/leads/' + id + '/plan/ai', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: note || '', mode: mode }),
+    }).then(function (res) {
+      var tasks = res && res.tasks;
+      if (!Array.isArray(tasks) || !tasks.length) throw new Error('empty');
+      var next = (mode === 'merge') ? (rmTasks(id) || []).concat(tasks) : tasks;
+      // Мета этапов (личные названия и описания от AI) — их читает кабинет ученика.
+      // При merge этапы могли добавиться, поэтому берём свежую мету в обоих режимах.
+      if (Array.isArray(res.stages) && res.stages.length) RM_STAGES[id] = res.stages;
+      RM_REASON[id] = res.reasoning || null;
+      rmSet(id, next);
+      delete state.planStatus[id];
+      showToast('AI собрал план — ' + tasks.length + (mode === 'merge' ? ' задач добавлено' : ' задач'));
+      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
+    }).catch(function (e) {
+      if (foot) foot.style.display = '';
+      if (load) load.hidden = true;
+      if (e && e.message === '403') return;
+      showToast(e && e.message === 'empty' ? 'AI не собрал задачи — попробуйте ещё раз или уточните приписку' : 'AI не ответил — попробуйте ещё раз');
+    });
   }
   function doRollout(id, tplId) {
     apiSend('/admin/api/leads/' + id + '/plan/rollout', 'POST', { template_id: tplId, mode: 'reconcile' }, function () {
@@ -2123,11 +2555,19 @@
     });
   }
   function doPublish(id, on) {
-    apiSend('/admin/api/leads/' + id + '/plan/' + (on ? 'publish' : 'unpublish'), 'POST', null, function () {
-      state.planStatus[id] = { published: on };
-      showToast(on ? 'План опубликован ученику' : 'Публикация снята');
-      if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    });
+    var rerender = function () { if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true); };
+    api('/admin/api/leads/' + id + '/plan/' + (on ? 'publish' : 'unpublish'), { method: 'POST' })
+      .then(function (r) {
+        // Правда — ответ сервера, не локальный флип: кэш не разъезжается с бэком.
+        state.planStatus[id] = { published: !!(r && r.published) };
+        showToast(state.planStatus[id].published ? 'План опубликован ученику' : 'Публикация снята');
+        rerender();
+      })
+      .catch(function (e) {
+        if (e && e.message !== '403') showToast('Не сохранилось — проверь сеть');
+        ensurePlanStatus(id, true); // пересинхронизировать реальный статус с бэка
+        rerender();
+      });
   }
 
   function pageAnim(view) {
@@ -3557,6 +3997,7 @@
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
@@ -3672,18 +4113,12 @@
   }
   var RM_LOADED = {};     /* доска подтянута с бэка (или засеяна дефолтом) — по id лида */
   var RM_SAVE_T = {};     /* таймеры дебаунса сохранения доски */
+  var RM_STAGES = {};     /* мета этапов от AI [{position,key,title,about}] — уходит вместе с доской */
+  var RM_REASON = {};     /* логика последней AI-сборки: трек, решения, пропущенные этапы */
+  var PCHAT = {};         /* лента чата правок плана по id лида: [{me, text, report, at}] */
+  var PCHAT_LOADED = {};  /* тред подтянут с бэка */
+  var PCHAT_BUSY = {};    /* ждём ответ модели — не шлём вторую реплику */
   var RM_REFRESHED = {};  /* для лида уже дёрнули refreshDetail (старый кэш без доски) */
-  /* дефолтная доска нового лида — стандартный путь из пресетов всех этапов */
-  function rmDefaultBoard(id) {
-    var s4 = String(id).slice(0, 4), i = 0, out = [];
-    ADMISSION_STAGES.forEach(function (st) {
-      (st.presets || []).forEach(function (p) {
-        out.push({ id: 'rm' + (i++) + '_' + s4, stage: st.key, title: p.t, owner: p.o,
-          status: 'wait', need: p.need || '', due: '', attach: p.at || [], subs: [], comments: [] });
-      });
-    });
-    return out;
-  }
   /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
     var d = state.details[id];
@@ -3696,7 +4131,9 @@
     if (RM_LOADED[id]) return RM[id] || (RM[id] = []);
     var saved = rmSavedBoard(id);
     if (saved === null) return RM[id] || (RM[id] = []);  // деталь ещё не загрузилась
-    RM[id] = saved.length ? JSON.parse(JSON.stringify(saved)) : rmDefaultBoard(id);
+    // Новый лид = ПУСТАЯ доска. Задачи появляются только когда команда
+    // осознанно развернёт план (шаблон) или добавит задачи вручную — не по дефолту.
+    RM[id] = saved.length ? JSON.parse(JSON.stringify(saved)) : [];
     RM_LOADED[id] = true;
     return RM[id];
   }
@@ -3705,9 +4142,12 @@
     clearTimeout(RM_SAVE_T[id]);
     RM_SAVE_T[id] = setTimeout(function () {
       var board = RM[id] || [];
+      var payload = { admission: board };
+      // мету этапов шлём только когда AI её собрал — иначе не затираем ту, что уже в базе
+      if (RM_STAGES[id]) payload.admission_stages = RM_STAGES[id];
       api('/admin/api/leads/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admission: board }),
+        body: JSON.stringify(payload),
       }).then(function (res) {
         if (res && res.crm) {
           var l = findLead(id); if (l && l.crm) l.crm.admission = res.crm.admission;
@@ -4294,6 +4734,8 @@
   function setModalSection(s) {
     state.modalSection = s;
     RM_CHAT = null;
+    // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
+    if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
     var nav = el('modal').querySelector('.m-nav');
     if (nav) Array.prototype.forEach.call(nav.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-s') === s);
@@ -4351,6 +4793,9 @@
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
     ].filter(Boolean).join('<span class="dot-sep"></span>');
 
+    // с открытым чатом правок окно шире: доска слева должна остаться читаемой
+    modal.classList.toggle('pchat-open', state.planChat === id && state.modalSection === 'admission');
+
     modal.innerHTML =
       '<div class="m-head">' +
         '<div class="m-navfloat">' +
@@ -4371,6 +4816,7 @@
       '<div class="m-body">' +
         '<nav class="m-nav">' + navHtml + '</nav>' +
         '<div class="m-content" id="m-content"></div>' +
+        planChatPanel(id) +
       '</div>' +
       '<div class="m-foot">' +
         (crm.hidden
@@ -4414,14 +4860,17 @@
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
+    else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     attachContentHandlers(id, ctx);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
+    if (s === 'offers' && ctx.d) wireOffersSection(id);
     animBars(host);
     syncRmChat(id);
   }
   function skeletonSection(kind) {
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
+                 offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -4748,22 +5197,47 @@
         '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>';
     }).join('');
 
+    var manualCount = pays.length;
     return '<div class="m-ctitle">Оплаты</div>' +
-      '<div class="m-csub">Финансовый учет по клиенту. Позже подвяжем ЮKassa — будет автоматически.</div>' +
+      '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
       board +
-      (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Платежей пока нет.</div>') +
-      '<div class="m-sec" style="margin-top:14px"><div class="m-sec-h">Добавить платеж</div>' +
-        '<div class="pay-form">' +
-          '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
-            '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
-          '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
-          '<div class="pay-grid">' +
-            '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
-            '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
-            '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
+      '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
+        '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
+        '<div class="ord-b">' +
+          '<div class="ord-newh">Новый счет</div>' +
+          '<div class="ord-addwrap">' +
+            '<button type="button" class="ord-addbtn" id="ord-addbtn">' + ic('plus', 13) + 'Добавить в счет' + ic('go', 12) + '</button>' +
+            '<div class="ord-menu" id="ord-menu" hidden></div>' +
           '</div>' +
-          '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
+          '<div id="ord-items" class="ord-items"></div>' +
+          '<div class="ord-total"><span>Итого</span><span id="ord-total-v" class="num">0 ₽</span></div>' +
+          '<div class="ord-foot">' +
+            '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
+              '<button data-v="installment">рассрочка</button></span>' +
+            '<label class="ord-n-wrap" id="ord-n-wrap" hidden>взносов <input id="ord-n" class="ord-n" inputmode="numeric" value="4"></label>' +
+            '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
+          '</div>' +
         '</div></div>' +
+      '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
+        '<summary><span class="pm-t">Записать оплату вручную</span>' +
+          '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
+          ic('go', 13) + '</summary>' +
+        '<div class="pay-manual__body">' +
+          (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Ручных платежей нет. Оплаты через кассу учитываются автоматически.</div>') +
+          '<div class="m-sec" style="margin-top:12px"><div class="m-sec-h">Добавить платеж</div>' +
+            '<div class="pay-form">' +
+              '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
+                '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
+              '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
+              '<div class="pay-grid">' +
+                '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+                '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
+                '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
+              '</div>' +
+              '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
+            '</div></div>' +
+        '</div></details>' +
       '<input type="file" id="pay-rcpt-file" style="display:none">';
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
@@ -5002,6 +5476,151 @@
     if (rcptPick) rcptPick.addEventListener('click', function () { attachTo = null; if (rcptFile) rcptFile.click(); });
 
     // оплаты: добавить (статус-сегмент + дата)
+    /* ── Счета ЮKassa (заказы) ── */
+    var ordList = el('ord-list');
+    if (ordList) {
+      var ORD_ST = {
+        awaiting_payment: { label: 'ждет оплаты', sev: 'contacted' },
+        partially_paid:   { label: 'частично оплачен', sev: 'offer_sent' },
+        paid:             { label: 'оплачен', sev: 'client' },
+        canceled:         { label: 'отменен', sev: 'rejected' },
+      };
+      var renderOrders = function (orders) {
+        if (!orders || !orders.length) {
+          ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
+          return;
+        }
+        ordList.innerHTML = orders.map(function (o) {
+          var st = ORD_ST[o.status] || ORD_ST.awaiting_payment;
+          var inst = o.installments || [];
+          var paidN = inst.filter(function (i) { return i.status === 'paid'; }).length;
+          var next = inst.filter(function (i) { return i.status !== 'paid' && i.status !== 'refunded'; })[0];
+          var meta = [];
+          if (o.pay_mode === 'installment') meta.push('рассрочка: взнос ' + Math.min(paidN + 1, inst.length) + ' из ' + inst.length);
+          if (next) meta.push('след. ' + next.due_date.slice(8, 10) + '.' + next.due_date.slice(5, 7) + ' · ' + fmtMoney(next.amount) + ' ₽');
+          if (o.paid_total) meta.push('внесено ' + fmtMoney(o.paid_total) + ' ₽');
+          return '<div class="pay-row">' +
+            '<div class="doc-b"><div class="doc-n">' + esc(o.title) +
+              ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
+              '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
+            '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
+        }).join('');
+      };
+      var loadOrders = function () {
+        api('/admin/api/leads/' + id + '/orders').then(function (r) { renderOrders(r.orders); })
+          .catch(function (e) { if (e.message !== '403') ordList.innerHTML = '<div class="field-empty">Не загрузились — обновите.</div>'; });
+      };
+      loadOrders();
+      var ordRefresh = el('ord-refresh');
+      if (ordRefresh) ordRefresh.addEventListener('click', loadOrders);
+
+      /* Конструктор счета: собираем позиции из тарифов/допов, каждую правим, итог сам.
+         Тариф раскладываем на позицию (по дефолту его цена — можно поменять/скинуть),
+         допы добавляем сверху. Бэк принимает items[] + amount_total. */
+      var tariffById = {}, ordItems = [];
+      var ordMenu = el('ord-menu'), ordAddBtn = el('ord-addbtn');
+      var addItem;  // задаётся ниже
+      var closeMenu = function () { if (ordMenu) { ordMenu.hidden = true; ordAddBtn.classList.remove('on'); } };
+      if (ordAddBtn) ordAddBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ordMenu.hidden = !ordMenu.hidden;
+        ordAddBtn.classList.toggle('on', !ordMenu.hidden);
+      });
+      document.addEventListener('click', function (e) { if (ordMenu && !ordMenu.hidden && !ordMenu.contains(e.target) && e.target !== ordAddBtn) closeMenu(); });
+      api('/api/tariffs').then(function (r) {
+        var tar = [], add = [];
+        (r.tariffs || []).forEach(function (t) { tariffById[t.id] = t; (/^addon-/.test(t.id) ? add : tar).push(t); });
+        var chips = function (label, list, cls) {
+          if (!list.length) return '';
+          return '<div class="ordm-g">' + esc(label) + '</div><div class="ordm-chips">' + list.map(function (t) {
+            var price = t.price_amount ? fmtMoney(t.price_amount) + ' ₽' : (t.price_note || '');
+            return '<button type="button" class="ordm-chip ' + cls + '" data-tid="' + esc(t.id) + '">' +
+              '<span class="ordm-n">' + esc(t.name) + '</span>' + (price ? '<span class="ordm-p num">' + esc(price) + '</span>' : '') + '</button>';
+          }).join('') + '</div>';
+        };
+        ordMenu.innerHTML = chips('Тарифы', tar, 'tar') + chips('Дополнительные услуги', add, 'add') +
+          '<div class="ordm-chips"><button type="button" class="ordm-chip custom" data-tid="__custom">' + ic('plus', 12) + 'Своя позиция</button></div>';
+        Array.prototype.forEach.call(ordMenu.querySelectorAll('.ordm-chip'), function (b) {
+          b.addEventListener('click', function () { addItem(b.getAttribute('data-tid')); closeMenu(); });
+        });
+      }).catch(function () {});
+
+      var renderItems = function () {
+        var host = el('ord-items'); if (!host) return;
+        if (!ordItems.length) { host.innerHTML = '<div class="ord-empty">Пусто. Добавьте тариф или услугу сверху — соберите счет из позиций.</div>'; }
+        else host.innerHTML = ordItems.map(function (it, i) {
+          return '<div class="ord-row" data-i="' + i + '">' +
+            '<input class="ord-it-t" data-i="' + i + '" value="' + esc(it.title) + '" placeholder="Название позиции">' +
+            '<input class="ord-it-a num" data-i="' + i + '" inputmode="numeric" value="' + (it.amount || '') + '" placeholder="₽">' +
+            '<button class="icobtn del ord-it-x" data-i="' + i + '" title="Убрать">' + ic('x', 14) + '</button></div>';
+        }).join('');
+        var total = ordItems.reduce(function (s, it) { return s + (parseInt(it.amount, 10) || 0); }, 0);
+        el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
+        el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+        // навесить правку/удаление
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-t'), function (n) {
+          n.addEventListener('input', function () { ordItems[+n.getAttribute('data-i')].title = n.value; });
+        });
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-a'), function (n) {
+          n.addEventListener('input', function () {
+            ordItems[+n.getAttribute('data-i')].amount = parseInt(n.value.replace(/\D/g, ''), 10) || 0;
+            var total = ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0);
+            el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
+            el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+          });
+        });
+        Array.prototype.forEach.call(host.querySelectorAll('.ord-it-x'), function (b) {
+          b.addEventListener('click', function () { ordItems.splice(+b.getAttribute('data-i'), 1); renderItems(); });
+        });
+      };
+      renderItems();
+
+      addItem = function (v) {
+        if (!v) return;
+        if (v === '__custom') { ordItems.push({ title: '', amount: 0, product_id: null }); renderItems();
+          setTimeout(function () { var ins = el('ord-items').querySelector('.ord-row:last-child .ord-it-t'); if (ins) ins.focus(); }, 20); return; }
+        var t = tariffById[v]; if (!t) return;
+        ordItems.push({ title: t.name, amount: t.price_amount ? Math.round(t.price_amount) : 0, product_id: t.id });
+        renderItems();
+      };
+
+      var ordMode = 'full', ordModeEl = el('ord-mode');
+      if (ordModeEl) Array.prototype.forEach.call(ordModeEl.children, function (b) {
+        b.addEventListener('click', function () {
+          ordMode = b.getAttribute('data-v');
+          Array.prototype.forEach.call(ordModeEl.children, function (x) { x.classList.toggle('on', x === b); });
+          el('ord-n-wrap').hidden = ordMode !== 'installment';
+        });
+      });
+      var ordBtn = el('ord-add-btn');
+      if (ordBtn) ordBtn.addEventListener('click', function () {
+        var items = ordItems.filter(function (it) { return (it.title || '').trim() && (it.amount || 0) > 0; });
+        if (!items.length) { showToast('Добавьте хотя бы одну позицию с суммой'); return; }
+        var total = items.reduce(function (s, it) { return s + it.amount; }, 0);
+        var n = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
+        // название счета = единственная позиция или «тариф + N услуг»
+        var title = items.length === 1 ? items[0].title : (items[0].title + ' + ещё ' + (items.length - 1));
+        ordBtn.disabled = true;
+        api('/admin/api/leads/' + id + '/orders', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title,
+            items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
+            amount_total: total,
+            pay_mode: ordMode, installments_count: ordMode === 'installment' ? n : 1,
+          }),
+        }).then(function () {
+          ordBtn.disabled = false;
+          ordItems = []; renderItems();
+          showToast('Счет выставлен — клиент увидит его в кабинете');
+          loadOrders();
+        }).catch(function (e) {
+          ordBtn.disabled = false;
+          if (e.message !== '403') showToast('Счет не выставился — проверьте сеть');
+        });
+      });
+    }
+
     var payBtn = el('pay-add-btn');
     if (payBtn) {
       var payStEl = el('pay-st'), payStatus = 'paid';
@@ -5132,6 +5751,162 @@
   function sec(title, inner, extra) {
     if (!inner) return '';
     return '<div class="dr-sec"><div class="dr-h">' + title + (extra || '') + '</div>' + inner + '</div>';
+  }
+
+  /* ════ ВИТРИНА — продукты, которые семья видит на платформе ════
+     Источник: каталог GET /api/products + lead_crm.offers ([{pid,on,reason,src,bought}]).
+     AI-подбор: POST /admin/api/leads/:id/offers/ai {prompt} → {offers}. Сохранение —
+     PATCH /admin/api/leads/:id {offers}. Включённые (on) продукты семья видит на
+     платформе с фразой reason; bought — куплено, на витрину не возвращаем. */
+  var PRODUCT_CAT_RU = { flagship: 'Флагман', strategy: 'Стратегия', language: 'Язык',
+    exam: 'Экзамены', profile: 'Усиление профиля', documents: 'Документы', grants: 'Гранты',
+    discovery: 'Профориентация', admissions: 'Поступление', short_program: 'Поездки', service: 'Сервис' };
+  var PRODUCT_CAT_ORDER = ['flagship', 'strategy', 'short_program', 'discovery', 'language',
+    'exam', 'profile', 'documents', 'grants', 'admissions', 'service'];
+
+  function fetchCatalog(cb) {
+    if (state._catalog) { cb(state._catalog); return; }
+    api('/api/products').then(function (r) {
+      state._catalog = Array.isArray(r) ? r : [];
+      cb(state._catalog);
+    }).catch(function (e) { if (e.message !== '403') cb(null); });
+  }
+
+  function fmtPrice(p) {
+    if (p.price_amount == null) return 'по запросу';
+    var n = Math.round(p.price_amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return n + ' ₽' + (p.price_note ? ' · ' + p.price_note : '');
+  }
+
+  function leadOffers(id) {
+    var d = state.details[id];
+    return (d && d.crm && Array.isArray(d.crm.offers)) ? d.crm.offers : [];
+  }
+
+  function buildOffersSection(ctx) {
+    if (!state._catalog) {
+      fetchCatalog(function () { if (state.modalSection === 'offers') renderModalContent(); });
+      return skeletonSection('offers');
+    }
+    var catalog = state._catalog;
+    var saved = {};
+    // ctx у leadCtx без id — витрина всегда про открытую карточку (state.drawerId)
+    leadOffers(state.drawerId).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    var onCount = catalog.filter(function (p) { var o = saved[p.id]; return o && o.on && !o.bought; }).length;
+
+    var html = '<div class="m-ctitle">Витрина продуктов</div>' +
+      '<div class="m-csub">Что семья видит на платформе: включи продукты и подпиши, почему это им. ' +
+      'AI подберёт сам — по анкете, диагностике, доске и твоим заметкам.</div>' +
+      '<div class="of-bar">' +
+        '<button class="bp sm" id="of-ai-btn">' + ic('spark', 13) + 'AI подобрать витрину</button>' +
+        '<span class="of-cnt' + (onCount ? ' has' : '') + '">На витрине: <b class="num">' + onCount + '</b></span>' +
+      '</div>' +
+      '<div class="of-ai" id="of-ai" hidden>' +
+        '<textarea id="of-ai-note" rows="2" placeholder="Что учесть? Например: бюджет ограничен, подсветить язык, убрать поездки…"></textarea>' +
+        '<div class="of-ai-foot"><button class="bp sm" id="of-ai-go">Подобрать</button>' +
+        '<span class="of-ai-load" id="of-ai-load" hidden>AI собирает витрину — до минуты…</span></div>' +
+      '</div>';
+
+    var byCat = {};
+    catalog.forEach(function (p) { (byCat[p.category] = byCat[p.category] || []).push(p); });
+    var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
+      .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
+
+    cats.forEach(function (cat) {
+      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
+      byCat[cat].forEach(function (p) {
+        var o = saved[p.id] || {};
+        var on = !!o.on && !o.bought;
+        html += '<div class="of-row' + (on ? ' on' : '') + (o.bought ? ' bought' : '') + '" data-pid="' + esc(p.id) + '">' +
+          '<button type="button" class="ai-toggle of-tgl' + (on ? ' on' : '') + '" data-oftgl="' + esc(p.id) + '"' +
+            (o.bought ? ' disabled title="Уже куплено"' : '') + '><span class="ait-dot"></span></button>' +
+          '<div class="of-info">' +
+            '<div class="of-name">' + esc(p.name) +
+              (o.bought ? '<span class="of-b">куплено</span>' : '') +
+              (on && o.src === 'ai' ? '<span class="of-src">' + ic('spark', 10) + 'AI</span>' : '') + '</div>' +
+            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
+            '<input class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300"' +
+              ' placeholder="Почему это им — эту фразу увидит семья" value="' + esc(o.reason || '') + '"' +
+              (on ? '' : ' hidden') + '>' +
+          '</div>' +
+          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+        '</div>';
+      });
+    });
+    return html;
+  }
+
+  /* собрать полный массив offers из DOM-состояния и сохранить */
+  function collectOffers(id) {
+    var saved = {};
+    leadOffers(id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    var out = [];
+    (state._catalog || []).forEach(function (p) {
+      var row = document.querySelector('.of-row[data-pid="' + p.id + '"]');
+      var was = saved[p.id] || {};
+      if (!row) { out.push({ pid: p.id, on: !!was.on, reason: was.reason || '', src: was.src || 'mgr', bought: !!was.bought }); return; }
+      var on = row.classList.contains('on');
+      var inp = row.querySelector('.of-reason');
+      var reason = on && inp ? inp.value.trim() : '';
+      var srcWas = was.src || 'mgr';
+      out.push({ pid: p.id, on: on, reason: reason,
+        src: (on === !!was.on && reason === (was.reason || '')) ? srcWas : 'mgr',
+        bought: !!was.bought });
+    });
+    return out;
+  }
+
+  function saveOffers(id, offers, cb) {
+    var d = state.details[id];
+    if (d && d.crm) { d.crm.offers = offers; cacheSet(id, d); }
+    apiSend('/admin/api/leads/' + id, 'PATCH', { offers: offers }, function () { if (cb) cb(); });
+  }
+
+  function wireOffersSection(id) {
+    var host = el('m-content');
+    if (!host) return;
+    var aiBtn = el('of-ai-btn'), aiPanel = el('of-ai'), aiGo = el('of-ai-go'), aiLoad = el('of-ai-load');
+    if (aiBtn) aiBtn.addEventListener('click', function () {
+      if (aiPanel) { aiPanel.hidden = !aiPanel.hidden; if (!aiPanel.hidden) { var t = el('of-ai-note'); if (t) t.focus(); } }
+    });
+    if (aiGo) aiGo.addEventListener('click', function () {
+      var note = el('of-ai-note');
+      aiGo.disabled = true; if (aiLoad) aiLoad.hidden = false;
+      api('/admin/api/leads/' + id + '/offers/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: note ? note.value.trim() : '' }),
+      }).then(function (r) {
+        var offers = (r && r.offers) || [];
+        if (!offers.length) throw new Error('empty');
+        saveOffers(id, offers);
+        var n = offers.filter(function (o) { return o.on && !o.bought; }).length;
+        showToast('AI собрал витрину — ' + n + ' ' + plural(n, 'продукт', 'продукта', 'продуктов'));
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('AI не справился — попробуй ещё раз');
+        aiGo.disabled = false; if (aiLoad) aiLoad.hidden = true;
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-oftgl]'), function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.of-row');
+        if (!row) return;
+        row.classList.toggle('on');
+        b.classList.toggle('on', row.classList.contains('on'));
+        var inp = row.querySelector('.of-reason');
+        if (inp) { inp.hidden = !row.classList.contains('on'); if (!inp.hidden) inp.focus(); }
+        saveOffers(id, collectOffers(id));
+        var cnt = host.querySelector('.of-cnt');
+        if (cnt) {
+          var n = host.querySelectorAll('.of-row.on').length;
+          cnt.classList.toggle('has', n > 0);
+          cnt.innerHTML = 'На витрине: <b class="num">' + n + '</b>';
+        }
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.of-reason'), function (inp) {
+      inp.addEventListener('change', function () { saveOffers(id, collectOffers(id)); });
+    });
   }
 
   function aiSec(title, inner, hr) {
