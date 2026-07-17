@@ -4479,16 +4479,20 @@
     var op = el('th-open'); if (op) op.addEventListener('click', function () { openDrawer(seld.id); setModalSection('admission'); });
   }
 
-  /* тип ответа задачи: явное поле submit, для старых задач — вывод из attach[] */
+  /* тип ответа задачи: явное поле submit, для старых задач — вывод из attach[];
+     без attach решаем по тексту (та же эвристика, что plans._task_submit_kind на
+     бэке — иначе CRM показывала бы «файл» там, где ученик видит «без сдачи») */
   var RM_SUBMIT_RU = { file: 'файл', text: 'текст', both: 'файл + текст', none: 'без сдачи' };
+  var RM_DOC_WORDS = /загруз|прикреп|скан|фото|справк|сертификат|паспорт|аттестат|диплом|документ|перевод|письм|эссе|резюме|портфолио|выписк|согласи|апостил/i;
   function rmSubmitKind(t) {
     if (RM_SUBMIT_RU[t.submit]) return t.submit;
     var attach = t.attach || [];
     var hasFile = attach.some(function (a) { return a === 'photo' || a === 'file' || a === 'link'; });
     var hasText = attach.indexOf('text') !== -1;
     if (hasFile && hasText) return 'both';
+    if (hasFile) return 'file';
     if (hasText) return 'text';
-    return 'file';
+    return RM_DOC_WORDS.test((t.title || '') + ' ' + (t.need || '')) ? 'file' : 'none';
   }
 
   function rmTaskRow(t) {
