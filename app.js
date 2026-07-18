@@ -23,6 +23,7 @@
     pathSel: null, pathPeriod: '',
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
+    inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
@@ -1078,7 +1079,6 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
-    { id: 'threads', label: 'Обсуждения', icon: 'chat', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'students' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
@@ -1098,13 +1098,12 @@
     var NAV = navItems();
     var nav = el('side-nav');
     if (nav) {
-      var ho = botHandoffCount();
+      var ho = inboxAttention();
       nav.innerHTML = NAV.map(function (it) {
         var extra = '';
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
-        else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="просят менеджера">' + ho + '</span>';
-        else if (it.id === 'threads') { var ta = threadsAttention(); if (ta) extra = '<span class="bdg num" title="ждут ответа">' + ta + '</span>'; }
+        else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="ждут ответа">' + ho + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -1131,9 +1130,9 @@
     }
     var mt = el('mtabs');
     if (mt) {
-      var hoM = botHandoffCount();
+      var hoM = inboxAttention();
       mt.innerHTML = NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : (it.id === 'threads') ? threadsAttention() : 0;
+        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
@@ -1202,7 +1201,8 @@
         });
       });
     } else if (state.page === 'inbox') {
-      var bsrc = state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс';
+      var bsrc = state.inboxMode === 'threads' ? 'обсуждения по задачам'
+        : (state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс');
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('chat', 11) + '</span>' + bsrc + '</div>';
     } else if (state.page === 'analytics') {
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('bolt', 11) + '</span>аналитика бота</div>';
@@ -1325,15 +1325,18 @@
     if (!view) return;
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
-    document.body.classList.toggle('inbox-mode', state.page === 'inbox' || state.page === 'threads');
+    // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
+    if (state.page === 'threads') { state.page = 'inbox'; state.inboxMode = 'threads'; }
+    if (state.inboxMode === 'threads' && !can('clients')) state.inboxMode = 'bot';
+    document.body.classList.toggle('inbox-mode', state.page === 'inbox');
     if (!state.loaded) {
       if (state.page === 'dash') view.innerHTML = dashSkeleton();
       else if (state.page === 'leads') return renderLeads(view); // тулбар + скелетон строк
       else view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return;
     }
-    if (state.page === 'inbox') return renderInbox(view);  // фикс-высота, без анимации страницы
-    if (state.page === 'threads') return renderThreads(view);  // обсуждения по задачам — двухпанельный инбокс
+    // «Диалоги» = одна поверхность с тумблером: переписки бота ↔ обсуждения по задачам
+    if (state.page === 'inbox') return state.inboxMode === 'threads' ? renderThreads(view) : renderInbox(view);
     if (state.page === 'dash') renderDash(view);
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
@@ -1911,22 +1914,29 @@
     var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
       .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
 
-    var html = '<div class="card pd-wrap">' +
-      '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
-        '<div><div class="t">Каталог продуктов</div>' +
-        '<div class="s">что продаём на платформе: выключенный продукт исчезает из витрин и AI-подбора</div></div>' +
-        '<span class="cnt num">' + activeN + ' из ' + items.length + ' активны</span></div>';
+    var html = '<div class="pd-wrap">' +
+      '<div class="pd-head">' +
+        '<div><h2 class="pd-h1">Каталог продуктов</h2>' +
+        '<div class="pd-sub">Что продаём на платформе. Выключенный продукт исчезает из витрин и AI-подбора — клиент его не увидит.</div></div>' +
+        '<span class="pd-cnt"><b class="num">' + activeN + '</b> из <span class="num">' + items.length + '</span> в продаже</span></div>';
     cats.forEach(function (cat) {
-      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
-      byCat[cat].forEach(function (p) {
+      var grp = byCat[cat], grpOn = grp.filter(function (p) { return p.is_active; }).length;
+      html += '<div class="pd-grp">' +
+        '<div class="pd-grp-h"><span class="pd-grp-t">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</span>' +
+          '<span class="pd-grp-n num">' + grpOn + '/' + grp.length + '</span></div>';
+      grp.forEach(function (p) {
         var open = state._pdEdit === p.id;
         html += '<div class="pd-row' + (p.is_active ? '' : ' off') + (open ? ' open' : '') + '" data-pd="' + esc(p.id) + '">' +
-          '<button type="button" class="ai-toggle pd-tgl' + (p.is_active ? ' on' : '') + '" data-pdtgl="' + esc(p.id) + '" title="' + (p.is_active ? 'Выключить' : 'Включить') + '"><span class="ait-dot"></span></button>' +
-          '<div class="pd-info" data-pdopen="' + esc(p.id) + '">' +
-            '<div class="of-name">' + esc(p.name) + '</div>' +
-            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
+          '<div class="pd-info" data-pdopen="' + esc(p.id) + '" title="Нажмите, чтобы отредактировать">' +
+            '<div class="pd-nm">' + esc(p.name) + '<span class="pd-edit-hint">' + ic('go', 12) + 'изменить</span></div>' +
+            '<div class="pd-desc">' + esc(p.description || '') + '</div>' +
           '</div>' +
-          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+          '<span class="pd-price num">' + esc(fmtPrice(p)) + '</span>' +
+          '<button type="button" class="pd-sw' + (p.is_active ? ' on' : '') + '" data-pdtgl="' + esc(p.id) + '" ' +
+            'title="' + (p.is_active ? 'Снять с продажи' : 'Вернуть в продажу') + '">' +
+            '<span class="pd-sw-l">' + (p.is_active ? 'В продаже' : 'Выключен') + '</span>' +
+            '<span class="pd-sw-t"><span class="pd-sw-k"></span></span>' +
+          '</button>' +
         '</div>';
         if (open) {
           html += '<div class="pd-edit" data-pdform="' + esc(p.id) + '">' +
@@ -1941,6 +1951,7 @@
           '</div>';
         }
       });
+      html += '</div>';
     });
     html += '</div>';
     view.innerHTML = html;
@@ -2178,9 +2189,19 @@
      Куратор говорит словами, что поправить; модель отвечает операциями по id задач,
      бэкенд применяет их сам и возвращает готовую доску (см. app/plan_ops.py).
      Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
+  /* Правый столбец карточки лида: у «Поступления» — чат по плану, у «Витрины» — чат
+     по продуктам. Один и тот же материал (.pchat), разные предметные области. */
+  function hasSidePanel() {
+    return state.modalSection === 'admission' || state.modalSection === 'offers';
+  }
+
+  function drawerChatPanel(id) {
+    if (state.modalSection === 'admission') return planChatPanel(id);
+    if (state.modalSection === 'offers') return offersChatPanel(id);
+    return '';
+  }
+
   function planChatPanel(id) {
-    // чат живёт только рядом с доской: в других секциях модалки ему нечего править
-    if (state.modalSection !== 'admission') return '';
     var msgs = PCHAT[id] || [];
     var emptyBoard = !(rmTasks(id) || []).length;
     var body;
@@ -3426,6 +3447,10 @@
     }
     return 0;
   }
+  /* сколько всего ждет ответа в «Диалогах» — обе вкладки вместе (бейдж в наве) */
+  function inboxAttention() {
+    return botHandoffCount() + (can('clients') ? threadsAttention() : 0);
+  }
   /* фоновое обновление диалогов бота (поллинг) — чтобы хэндофф всплывал сам */
   function refreshBot(cb) {
     api('/admin/api/bot/conversations').then(function (r) {
@@ -3631,20 +3656,48 @@
     }
   }
 
+  /* тумблер поверхностей инбокса: переписки бота ↔ обсуждения по задачам */
+  function inboxSwitch() {
+    if (!can('clients')) return '';   // нет доступа к клиентам → обсуждений нет, тумблер не нужен
+    var ho = botHandoffCount(), ta = threadsAttention();
+    function seg(mode, label, n) {
+      return '<button class="ibsw-b' + (state.inboxMode === mode ? ' on' : '') + '" data-m="' + mode + '">' +
+        '<span>' + label + '</span>' + (n ? '<span class="ibsw-n num">' + n + '</span>' : '') + '</button>';
+    }
+    return '<div class="ibsw">' + seg('bot', 'Диалоги', ho) + seg('threads', 'Обсуждения', ta) + '</div>';
+  }
+  function bindInboxSwitch(scope) {
+    if (!scope) return;
+    Array.prototype.forEach.call(scope.querySelectorAll('.ibsw-b'), function (b) {
+      b.addEventListener('click', function () {
+        var m = b.getAttribute('data-m');
+        if (m === state.inboxMode) return;
+        state.inboxMode = m;
+        renderView(); renderSide(); renderTopbar();
+      });
+    });
+  }
+  /* пустой/служебный экран инбокса — с тумблером сверху, чтобы можно было уйти на вторую вкладку */
+  function inboxBlank(inner) {
+    return '<div class="tg"><div class="ib-solo">' + inboxSwitch() + '<div class="tg-blank">' + inner + '</div></div></div>';
+  }
+
   function renderInbox(view) {
     if (!state.bot.loaded) {
       // скелетон инбокса: список-плейсхолдеры + пустая панель чата (не три точки)
       var skRows = ''; for (var i = 0; i < 7; i++) skRows += '<div class="tg-skrow"><span class="shim tg-skava"></span><span class="tg-skrb"><span class="shim tg-skl w50"></span><span class="shim tg-skl w30"></span></span></div>';
-      view.innerHTML = '<div class="tg show-chat"><aside class="tg-list"><div class="tg-search"><span class="searchwrap"><span class="shim" style="width:100%;height:34px;border-radius:9px;display:block"></span></span></div><div class="tg-rows">' + skRows + '</div></aside><main class="tg-chat"><div class="tg-sk">' +
+      view.innerHTML = '<div class="tg show-chat"><aside class="tg-list">' + inboxSwitch() + '<div class="tg-search"><span class="searchwrap"><span class="shim" style="width:100%;height:34px;border-radius:9px;display:block"></span></span></div><div class="tg-rows">' + skRows + '</div></aside><main class="tg-chat"><div class="tg-sk">' +
         '<span class="shim tg-skb in" style="width:48%"></span><span class="shim tg-skb out" style="width:40%"></span><span class="shim tg-skb in" style="width:60%"></span></div></main></div>';
+      bindInboxSwitch(view);
       loadBotData(function () { if (state.page === 'inbox') renderView(); });
       return;
     }
     if (state.bot.source !== 'api') {
-      view.innerHTML = '<div class="tg"><div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+      view.innerHTML = inboxBlank('<div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
         '<div style="font-weight:600;color:var(--ink)">Бот ещё не подключён к CRM</div>' +
         '<div style="max-width:360px;text-align:center;line-height:1.5">Как только бэкенд получит доступ к базе бота, сюда поедут реальные переписки из Telegram. Демо-данных больше нет.</div>' +
-        '<button class="bp" id="ib-retry">' + ic('refresh', 14) + 'Проверить снова</button></div></div>';
+        '<button class="bp" id="ib-retry">' + ic('refresh', 14) + 'Проверить снова</button>');
+      bindInboxSwitch(view);
       var rb = el('ib-retry'); if (rb) rb.addEventListener('click', function () { state.bot.loaded = false; renderInbox(view); });
       return;
     }
@@ -3688,7 +3741,7 @@
 
     view.innerHTML =
       '<div class="tg' + (state.inboxSel ? ' show-chat' : '') + '" id="tg">' +
-        '<aside class="tg-list">' +
+        '<aside class="tg-list">' + inboxSwitch() +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) + '<input id="tg-q" class="search" type="search" placeholder="Поиск диалога" autocomplete="off"></span></div>' +
           '<div class="tg-fchips">' + chips + '</div>' +
           '<div class="tg-rows" id="tg-rows">' + rows + '</div>' +
@@ -3696,6 +3749,7 @@
         '<main class="tg-chat" id="tg-chat"></main>' +
       '</div>';
 
+    bindInboxSwitch(view);
     var qi = el('tg-q');
     if (qi) {
       qi.value = state.inboxQ || '';
@@ -4074,10 +4128,17 @@
   /* сохранённая доска: сперва из ДЕТАЛИ лида, иначе из СПИСКА (admission приходит и там) */
   function rmSavedBoard(id) {
     var d = state.details[id];
-    if (d && d.crm && Array.isArray(d.crm.admission)) return d.crm.admission;
+    var detB = (d && d.crm && Array.isArray(d.crm.admission)) ? d.crm.admission : null;
     var l = findLead(id);
-    if (l && l.crm && Array.isArray(l.crm.admission)) return l.crm.admission;
-    return null;
+    var listB = (l && l.crm && Array.isArray(l.crm.admission)) ? l.crm.admission : null;
+    // Обе доски — один и тот же persisted admission, но кэш ДЕТАЛИ мог сняться
+    // ДО того, как пришли комментарии (тогда «Обсуждения» показывали строку, а
+    // клик открывал пустой чат). Берём ту доску, где комментарии реально есть —
+    // это всегда самая свежая версия; при равенстве приоритет у детали.
+    var hasC = function (b) { return b && b.some(function (t) { return (t.comments || []).length; }); };
+    if (hasC(detB)) return detB;
+    if (hasC(listB)) return listB;
+    return detB || listB;
   }
   function rmTasks(id) {
     if (RM_LOADED[id]) return RM[id] || (RM[id] = []);
@@ -4213,7 +4274,7 @@
   function rmApply(id, tid, fn) {
     rmSet(id, rmTasks(id).map(function (t) { return t.id === tid ? fn(Object.assign({}, t)) : t; }));
     if (state.drawerId === id && state.modalSection === 'admission') renderDrawer(true);
-    else if (state.page === 'threads') { state.threadSel = { id: id, tid: tid }; renderThreads(el('view')); }
+    else if (state.page === 'inbox' && state.inboxMode === 'threads') { state.threadSel = { id: id, tid: tid }; renderThreads(el('view')); }
   }
   /* композер сообщений: текст + вложения (фото/документы). Переиспользуется в чате задачи. */
   function bindCmtComposer(scope, id, tid) {
@@ -4373,14 +4434,16 @@
     var who = last.by === 'client' ? 'Клиент' : 'Куратор';
     return '<button class="tg-row th-row' + (sel ? ' on' : '') + (th.wait ? ' unread' : '') +
       '" data-id="' + esc(th.leadId) + '" data-tid="' + esc(th.taskId) + '">' +
-      '<span class="tg-ava sm" style="--c:#2F6BFF">' + esc(initials(th.name)) + '</span>' +
+      // анатомия строки — один в один с «Диалогами»: аватар, имя+время, превью, тег снизу
+      '<span class="tg-ava" style="--c:#2F6BFF">' + esc(initials(th.name)) +
+        '<span class="tg-ch" style="background:#2F6BFF">' + ic('chat', 8) + '</span></span>' +
       '<span class="tg-rb">' +
         '<span class="tg-r1"><span class="tg-nm">' + esc(th.name) + '</span>' +
           '<span class="tg-tm num">' + fmtWhen(th.lastAt) + '</span></span>' +
-        '<span class="th-task"><span class="th-task-t">' + esc(th.title) + '</span>' +
-          (st ? '<span class="th-stage">' + esc(st.title) + '</span>' : '') + '</span>' +
         '<span class="tg-r2"><span class="tg-pv">' + esc(who + ': ' + prev) + '</span>' +
           (th.wait ? '<span class="tg-badge wait"></span>' : '') + '</span>' +
+        '<span class="tg-r3"><span class="tg-tag tsk' + (th.wait ? ' wait' : ' ai') + '">' + ic('box', 10) + '<span class="tg-tag-t">' + esc(th.title) + '</span></span>' +
+          (st ? '<span class="tg-tag st">' + esc(st.title) + '</span>' : '') + '</span>' +
       '</span>' +
     '</button>';
   }
@@ -4388,9 +4451,10 @@
   function renderThreads(view) {
     var threads = buildThreads();
     if (!threads.length) {
-      view.innerHTML = '<div class="tg"><div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+      view.innerHTML = inboxBlank('<div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
         '<div style="font-weight:700;color:var(--ink)">Пока нет обсуждений</div>' +
-        '<div style="max-width:400px;text-align:center;line-height:1.55">Комментарии к задачам клиентов из блока «Поступление» собираются здесь — как переписка в чате. Откройте карточку клиента, задачу и напишите первое сообщение.</div></div></div>';
+        '<div style="max-width:400px;text-align:center;line-height:1.55">Комментарии к задачам клиентов из блока «Поступление» собираются здесь — как переписка в чате. Откройте карточку клиента, задачу и напишите первое сообщение.</div>');
+      bindInboxSwitch(view);
       return;
     }
     if (!state.threadSel || !threads.some(function (t) { return t.leadId === state.threadSel.id && t.taskId === state.threadSel.tid; })) {
@@ -4401,10 +4465,8 @@
     var rows = threads.map(function (t) { return threadRow(t, selFn(t)); }).join('');
     view.innerHTML =
       '<div class="tg th-tg show-chat" id="th-tg">' +
-        '<aside class="tg-list">' +
-          '<div class="th-lhead"><span class="th-lh-t">Обсуждения</span>' +
-            (waitN ? '<span class="th-lh-n">' + waitN + ' ' + plural(waitN, 'ждет', 'ждут', 'ждут') + ' ответа</span>'
-                   : '<span class="th-lh-all">' + ic('check', 12) + 'все на связи</span>') + '</div>' +
+        '<aside class="tg-list">' + inboxSwitch() +
+          (waitN ? '' : '<div class="th-lhead"><span class="th-lh-all">' + ic('check', 12) + 'все на связи</span></div>') +
           '<div class="tg-search"><span class="searchwrap">' + ic('leads', 15) +
             '<input id="th-q" class="search" type="search" placeholder="Поиск по клиенту или задаче" autocomplete="off"></span></div>' +
           '<div class="tg-rows" id="th-rows">' + rows + '</div>' +
@@ -4426,6 +4488,7 @@
         bindThreadRows(host);
       });
     }
+    bindInboxSwitch(view);
     bindThreadRows(el('th-rows'));
     renderThreadChat();
   }
@@ -4457,14 +4520,15 @@
     var statusChip = '<span class="rm-status st-' + t.status + '">' + (t.status === 'review' ? '<i class="rm-pulse"></i>' : '') + sm.label + '</span>';
     host.innerHTML =
       '<div class="th-chat-in" data-chat="' + esc(t.id) + '">' +
-        '<div class="th-chead">' +
+        // шапка чата — та же конструкция, что у «Диалогов» (.tg-chead / .tg-ci)
+        '<div class="tg-chead th-chead">' +
           '<button class="tg-back th-back" title="К списку">' + ic('go', 16) + '</button>' +
           '<span class="tg-ava sm" style="--c:#2F6BFF">' + esc(initials(leadName(l))) + '</span>' +
-          '<div class="th-chid">' +
-            '<div class="th-ctitle">' + esc(t.title) + '</div>' +
-            '<div class="th-cmeta"><b>' + esc(leadName(l)) + '</b><span class="rm-meta-sep"></span>' +
+          '<div class="tg-ci">' +
+            '<div class="tg-cn">' + esc(t.title) + '</div>' +
+            '<div class="tg-cs"><b>' + esc(leadName(l)) + '</b>' +
               '<span class="rm-who-t' + (isClient ? ' cl' : '') + '">' + (isClient ? 'клиент' : 'мы') + '</span>' +
-              (st ? '<span class="rm-meta-sep"></span><span class="th-cstage">' + esc(st.title) + '</span>' : '') + '</div>' +
+              (st ? '<span class="th-cstage">' + esc(st.title) + '</span>' : '') + '</div>' +
           '</div>' +
           statusChip +
           '<button class="th-open" id="th-open" title="Открыть карточку клиента">' + ic('ext', 14) + '<span>Карточка</span></button>' +
@@ -4777,7 +4841,7 @@
     ].filter(Boolean).join('<span class="dot-sep"></span>');
 
     // с открытым чатом правок окно шире: доска слева должна остаться читаемой
-    modal.classList.toggle('pchat-open', state.modalSection === 'admission');
+    modal.classList.toggle('pchat-open', hasSidePanel());
 
     modal.innerHTML =
       '<div class="m-head">' +
@@ -4799,7 +4863,7 @@
       '<div class="m-body">' +
         '<nav class="m-nav">' + navHtml + '</nav>' +
         '<div class="m-content" id="m-content"></div>' +
-        planChatPanel(id) +
+        '<div id="m-side"></div>' +
       '</div>' +
       '<div class="m-foot">' +
         (crm.hidden
@@ -4844,9 +4908,20 @@
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
+    // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
+    // модалка под ним шире, поэтому класс тоже переключаем здесь
+    var side = el('m-side');
+    if (side) side.innerHTML = drawerChatPanel(id);
+    var mdl = el('modal');
+    if (mdl) mdl.classList.toggle('pchat-open', hasSidePanel());
     attachContentHandlers(id, ctx);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
-    if (s === 'offers' && ctx.d) wireOffersSection(id);
+    if (s === 'offers' && ctx.d) {
+      wireOffersSection(id);
+      // чат витрины всегда открыт рядом — как чат плана у доски
+      loadOffersChat(id);
+      bindOffersChat(id);
+    }
     animBars(host);
     syncRmChat(id);
   }
@@ -5784,130 +5859,414 @@
     return (d && d.crm && Array.isArray(d.crm.offers)) ? d.crm.offers : [];
   }
 
+  /* Витрина = то, что реально увидит родитель, поэтому и собрана она как экран родителя:
+     сверху шапка блока (ее текст правится тут же), ниже карточки в том порядке, в каком
+     они лягут в кабинете, у каждой — персональный заголовок и фраза «почему это вам».
+     Каталог целиком не вываливаем: он живет ниже, свернутым, как источник добавления. */
+  function offerRow(p, o, i, total) {
+    var price = fmtPrice(p);
+    return '<div class="of-card" data-pid="' + esc(p.id) + '">' +
+      '<div class="of-c-h">' +
+        '<span class="of-c-n">' + esc(p.name) + '</span>' +
+        (o.src === 'ai' ? '<span class="of-src">' + ic('spark', 10) + 'AI</span>' : '') +
+        '<span class="of-c-sp"></span>' +
+        '<span class="of-ord">' +
+          '<button class="of-mv" data-mv="up" data-pid="' + esc(p.id) + '"' + (i === 0 ? ' disabled' : '') + ' title="Выше">' + ic('go', 12) + '</button>' +
+          '<button class="of-mv dn" data-mv="down" data-pid="' + esc(p.id) + '"' + (i === total - 1 ? ' disabled' : '') + ' title="Ниже">' + ic('go', 12) + '</button>' +
+        '</span>' +
+        '<button class="of-rm" data-ofoff="' + esc(p.id) + '" title="Убрать из витрины">' + ic('x', 12) + '</button>' +
+      '</div>' +
+      '<input class="of-hl" data-ofhl="' + esc(p.id) + '" maxlength="90" value="' + esc(o.headline || '') + '"' +
+        ' placeholder="Заголовок карточки — 3-6 слов, польза для этого ребенка">' +
+      '<textarea class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300" rows="2"' +
+        ' placeholder="Почему это им — эту фразу увидит родитель">' + esc(o.reason || '') + '</textarea>' +
+      '<div class="of-c-f">' +
+        '<label class="of-pr"><input type="checkbox" data-ofprice="' + esc(p.id) + '"' +
+          (o.price_show === false ? '' : ' checked') + '><span>Показывать цену</span></label>' +
+        '<span class="of-c-price num">' + esc(price) + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+
   function buildOffersSection(ctx) {
     if (!state._catalog) {
       fetchCatalog(function () { if (state.modalSection === 'offers') renderModalContent(); });
       return skeletonSection('offers');
     }
+    var id = state.drawerId;
     var catalog = state._catalog;
+    var byPid = {}; catalog.forEach(function (p) { byPid[p.id] = p; });
     var saved = {};
-    // ctx у leadCtx без id — витрина всегда про открытую карточку (state.drawerId)
-    leadOffers(state.drawerId).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
-    var onCount = catalog.filter(function (p) { var o = saved[p.id]; return o && o.on && !o.bought; }).length;
+    leadOffers(id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
+    var meta = leadShowcaseMeta(id);
+
+    // витрину кто-то трогал руками или через AI → алгоритм ее больше не пересобирает
+    var authored = Object.keys(saved).some(function (pid) {
+      return saved[pid].src === 'mgr' || saved[pid].src === 'ai';
+    });
+    var shown = Object.keys(saved)
+      .filter(function (pid) { var o = saved[pid]; return o.on && !o.bought && byPid[pid]; })
+      .sort(function (a, b) { return (saved[a].pos || 0) - (saved[b].pos || 0); });
+    var bought = Object.keys(saved).filter(function (pid) { return saved[pid].bought && byPid[pid]; });
 
     var html = '<div class="m-ctitle">Витрина продуктов</div>' +
-      '<div class="m-csub">Что семья видит на платформе: включи продукты и подпиши, почему это им. ' +
-      'AI подберёт сам — по анкете, диагностике, доске и твоим заметкам.</div>' +
-      '<div class="of-bar">' +
-        '<button class="bp sm" id="of-ai-btn">' + ic('spark', 13) + 'AI подобрать витрину</button>' +
-        '<span class="of-cnt' + (onCount ? ' has' : '') + '">На витрине: <b class="num">' + onCount + '</b></span>' +
-      '</div>' +
-      '<div class="of-ai" id="of-ai" hidden>' +
-        '<textarea id="of-ai-note" rows="2" placeholder="Что учесть? Например: бюджет ограничен, подсветить язык, убрать поездки…"></textarea>' +
-        '<div class="of-ai-foot"><button class="bp sm" id="of-ai-go">Подобрать</button>' +
-        '<span class="of-ai-load" id="of-ai-load" hidden>AI собирает витрину — до минуты…</span></div>' +
-      '</div>';
+      '<div class="m-csub">Ровно это родитель увидит у себя в кабинете. Тексты — персональные: ' +
+      'их пишете вы или AI справа. Пока витрину никто не трогал, она живет сама: ' +
+      'пересобирается под этап пути и то, что семья уже купила. Как только вы или AI ее правите — ' +
+      'алгоритм отходит в сторону и больше в нее не лезет.</div>';
 
+    // шапка блока предложений у родителя
+    html += '<div class="of-banner">' +
+      '<input class="of-bt" id="of-bt" maxlength="120" value="' + esc(meta.title || '') + '"' +
+        ' placeholder="Заголовок блока у родителя — «Для Артема: что усилит путь»">' +
+      '<input class="of-bn" id="of-bn" maxlength="240" value="' + esc(meta.note || '') + '"' +
+        ' placeholder="Строка под заголовком — одна спокойная фраза">' +
+    '</div>';
+
+    html += '<div class="of-bar">' +
+      '<span class="of-cnt' + (shown.length ? ' has' : '') + '">В витрине: <b class="num">' + shown.length + '</b></span>' +
+      '<span class="of-mode' + (authored ? ' mgr' : '') + '">' +
+        (authored ? 'настроена вручную' : 'собирается автоматически') + '</span>' +
+      '<button class="bp ghost sm" id="of-def" title="Вернуть автоматический подбор: набор и тексты соберутся заново по этапу пути, классу и покупкам. Ваши правки в витрине пропадут.">' +
+        ic('refresh', 13) + 'Пересобрать заново</button>' +
+    '</div>';
+
+    if (!shown.length) {
+      html += '<div class="of-empty"><div class="of-empty-t">Витрина пустая</div>' +
+        '<div class="of-empty-s">Родитель предложений не видит. Скажите AI справа, что подобрать, ' +
+        'или соберите по умолчанию — потом поправите руками.</div></div>';
+    } else {
+      html += '<div class="of-cards">' +
+        shown.map(function (pid, i) { return offerRow(byPid[pid], saved[pid], i, shown.length); }).join('') +
+        '</div>';
+    }
+
+    if (bought.length) {
+      html += '<div class="of-sub-h">Уже куплено</div><div class="of-bought">' +
+        bought.map(function (pid) {
+          return '<span class="of-bt-chip">' + ic('check', 11) + esc(byPid[pid].name) + '</span>';
+        }).join('') + '</div>';
+    }
+
+    // каталог — источник добавления, свернут по категориям
     var byCat = {};
-    catalog.forEach(function (p) { (byCat[p.category] = byCat[p.category] || []).push(p); });
+    catalog.forEach(function (p) {
+      if (saved[p.id] && (saved[p.id].on || saved[p.id].bought)) return;
+      (byCat[p.category] = byCat[p.category] || []).push(p);
+    });
     var cats = PRODUCT_CAT_ORDER.filter(function (c) { return byCat[c]; })
       .concat(Object.keys(byCat).filter(function (c) { return PRODUCT_CAT_ORDER.indexOf(c) === -1; }));
-
-    cats.forEach(function (cat) {
-      html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
-      byCat[cat].forEach(function (p) {
-        var o = saved[p.id] || {};
-        var on = !!o.on && !o.bought;
-        html += '<div class="of-row' + (on ? ' on' : '') + (o.bought ? ' bought' : '') + '" data-pid="' + esc(p.id) + '">' +
-          '<button type="button" class="ai-toggle of-tgl' + (on ? ' on' : '') + '" data-oftgl="' + esc(p.id) + '"' +
-            (o.bought ? ' disabled title="Уже куплено"' : '') + '><span class="ait-dot"></span></button>' +
-          '<div class="of-info">' +
-            '<div class="of-name">' + esc(p.name) +
-              (o.bought ? '<span class="of-b">куплено</span>' : '') +
-              (on && o.src === 'ai' ? '<span class="of-src">' + ic('spark', 10) + 'AI</span>' : '') + '</div>' +
-            '<div class="of-desc">' + esc(p.description || '') + '</div>' +
-            '<input class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300"' +
-              ' placeholder="Почему это им — эту фразу увидит семья" value="' + esc(o.reason || '') + '"' +
-              (on ? '' : ' hidden') + '>' +
-          '</div>' +
-          '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
-        '</div>';
+    if (cats.length) {
+      html += '<details class="of-more"' + (shown.length ? '' : ' open') + '>' +
+        '<summary>Добавить из каталога</summary><div class="of-more-b">';
+      cats.forEach(function (cat) {
+        html += '<div class="of-group">' + esc(PRODUCT_CAT_RU[cat] || cat) + '</div>';
+        byCat[cat].forEach(function (p) {
+          html += '<div class="of-add" data-pid="' + esc(p.id) + '">' +
+            '<div class="of-a-i"><div class="of-name">' + esc(p.name) + '</div>' +
+            '<div class="of-desc">' + esc(p.description || '') + '</div></div>' +
+            '<span class="of-price num">' + esc(fmtPrice(p)) + '</span>' +
+            '<button class="bp ghost sm of-plus" data-ofon="' + esc(p.id) + '">В витрину</button>' +
+          '</div>';
+        });
       });
-    });
+      html += '</div></details>';
+    }
     return html;
   }
 
-  /* собрать полный массив offers из DOM-состояния и сохранить */
+  function leadShowcaseMeta(id) {
+    var d = state.details[id];
+    return (d && d.crm && d.crm.showcaseMeta) || {};
+  }
+
+  /* Собрать полный массив offers из DOM + сохраненного состояния. Порядок = порядок карточек. */
   function collectOffers(id) {
     var saved = {};
     leadOffers(id).forEach(function (o) { if (o && o.pid) saved[o.pid] = o; });
     var out = [];
-    (state._catalog || []).forEach(function (p) {
-      var row = document.querySelector('.of-row[data-pid="' + p.id + '"]');
-      var was = saved[p.id] || {};
-      if (!row) { out.push({ pid: p.id, on: !!was.on, reason: was.reason || '', src: was.src || 'mgr', bought: !!was.bought }); return; }
-      var on = row.classList.contains('on');
-      var inp = row.querySelector('.of-reason');
-      var reason = on && inp ? inp.value.trim() : '';
-      var srcWas = was.src || 'mgr';
-      out.push({ pid: p.id, on: on, reason: reason,
-        src: (on === !!was.on && reason === (was.reason || '')) ? srcWas : 'mgr',
-        bought: !!was.bought });
+    var pos = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('.of-card[data-pid]'), function (card) {
+      var pid = card.getAttribute('data-pid');
+      var was = saved[pid] || {};
+      var hl = card.querySelector('.of-hl'), rs = card.querySelector('.of-reason'),
+          pr = card.querySelector('[data-ofprice]');
+      var headline = hl ? hl.value.trim() : (was.headline || '');
+      var reason = rs ? rs.value.trim() : (was.reason || '');
+      var priceShow = pr ? pr.checked : (was.price_show !== false);
+      // src переводим в «менеджер», только если куратор реально изменил текст
+      var same = headline === (was.headline || '') && reason === (was.reason || '') &&
+                 priceShow === (was.price_show !== false) && was.on;
+      out.push({ pid: pid, on: true, bought: false, src: same ? (was.src || 'mgr') : 'mgr',
+                 reason: reason, headline: headline, pos: pos++, price_show: priceShow });
+    });
+    // все остальное сохраняем как было (скрытые и купленные)
+    Object.keys(saved).forEach(function (pid) {
+      if (out.some(function (o) { return o.pid === pid; })) return;
+      var o = saved[pid];
+      out.push({ pid: pid, on: false, bought: !!o.bought, src: o.src || 'mgr',
+                 reason: o.reason || '', headline: o.headline || '',
+                 pos: pos++, price_show: o.price_show !== false });
     });
     return out;
   }
 
-  function saveOffers(id, offers, cb) {
+  function collectShowcaseMeta(id) {
+    var t = el('of-bt'), n = el('of-bn');
+    var meta = Object.assign({}, leadShowcaseMeta(id));
+    if (t) meta.title = t.value.trim();
+    if (n) meta.note = n.value.trim();
+    if (t || n) meta.src = 'mgr';
+    return meta;
+  }
+
+  function saveOffers(id, offers, meta, cb) {
     var d = state.details[id];
-    if (d && d.crm) { d.crm.offers = offers; cacheSet(id, d); }
-    apiSend('/admin/api/leads/' + id, 'PATCH', { offers: offers }, function () { if (cb) cb(); });
+    if (d && d.crm) {
+      d.crm.offers = offers;
+      if (meta) d.crm.showcaseMeta = meta;
+      cacheSet(id, d);
+    }
+    var body = { offers: offers };
+    if (meta) body.showcase_meta = meta;
+    apiSend('/admin/api/leads/' + id, 'PATCH', body, function () { if (cb) cb(); });
+  }
+
+  /* сохранить текущее состояние DOM и перерисовать секцию */
+  function offersApply(id, redraw) {
+    saveOffers(id, collectOffers(id), collectShowcaseMeta(id));
+    if (redraw) renderModalContent();
   }
 
   function wireOffersSection(id) {
     var host = el('m-content');
     if (!host) return;
-    var aiBtn = el('of-ai-btn'), aiPanel = el('of-ai'), aiGo = el('of-ai-go'), aiLoad = el('of-ai-load');
-    if (aiBtn) aiBtn.addEventListener('click', function () {
-      if (aiPanel) { aiPanel.hidden = !aiPanel.hidden; if (!aiPanel.hidden) { var t = el('of-ai-note'); if (t) t.focus(); } }
+
+    function setOn(pid, on) {
+      var offers = collectOffers(id);
+      var row = offers.filter(function (o) { return o.pid === pid; })[0];
+      if (!row) { offers.push({ pid: pid, on: on, bought: false, src: 'mgr', reason: '', headline: '', pos: offers.length, price_show: true }); }
+      else { row.on = on; row.src = 'mgr'; if (on) row.pos = -1; }
+      offers.sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
+      offers.forEach(function (o, i) { o.pos = i; });
+      saveOffers(id, offers, collectShowcaseMeta(id));
+      renderModalContent();
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ofon]'), function (b) {
+      b.addEventListener('click', function () { setOn(b.getAttribute('data-ofon'), true); });
     });
-    if (aiGo) aiGo.addEventListener('click', function () {
-      var note = el('of-ai-note');
-      aiGo.disabled = true; if (aiLoad) aiLoad.hidden = false;
-      api('/admin/api/leads/' + id + '/offers/ai', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: note ? note.value.trim() : '' }),
-      }).then(function (r) {
-        var offers = (r && r.offers) || [];
-        if (!offers.length) throw new Error('empty');
-        saveOffers(id, offers);
-        var n = offers.filter(function (o) { return o.on && !o.bought; }).length;
-        showToast('AI собрал витрину — ' + n + ' ' + plural(n, 'продукт', 'продукта', 'продуктов'));
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ofoff]'), function (b) {
+      b.addEventListener('click', function () { setOn(b.getAttribute('data-ofoff'), false); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-mv]'), function (b) {
+      b.addEventListener('click', function () {
+        var card = b.closest('.of-card'), box = card && card.parentNode;
+        if (!card || !box) return;
+        if (b.getAttribute('data-mv') === 'up' && card.previousElementSibling) {
+          box.insertBefore(card, card.previousElementSibling);
+        } else if (b.getAttribute('data-mv') === 'down' && card.nextElementSibling) {
+          box.insertBefore(card.nextElementSibling, card);
+        }
+        offersApply(id, true);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.of-hl, .of-reason, .of-bt, .of-bn'), function (inp) {
+      inp.addEventListener('change', function () { offersApply(id); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ofprice]'), function (inp) {
+      inp.addEventListener('change', function () { offersApply(id); });
+    });
+
+    var def = el('of-def');
+    if (def) def.addEventListener('click', function () {
+      if (!window.confirm('Пересобрать витрину заново по этапу пути, классу и покупкам? Ваши правки и тексты AI в ней пропадут.')) return;
+      def.disabled = true;
+      api('/admin/api/leads/' + id + '/offers/default', { method: 'POST' }).then(function (r) {
+        var d = state.details[id];
+        if (d && d.crm) { d.crm.offers = (r && r.offers) || []; d.crm.showcaseMeta = (r && r.showcaseMeta) || {}; cacheSet(id, d); }
+        showToast('Собрал витрину по умолчанию');
         renderModalContent();
       }).catch(function (e) {
-        if (e.message !== '403') showToast('AI не справился — попробуй ещё раз');
-        aiGo.disabled = false; if (aiLoad) aiLoad.hidden = true;
+        def.disabled = false;
+        if (e.message !== '403') showToast('Не получилось собрать витрину');
       });
     });
-    Array.prototype.forEach.call(host.querySelectorAll('[data-oftgl]'), function (b) {
-      b.addEventListener('click', function () {
-        var row = b.closest('.of-row');
-        if (!row) return;
-        row.classList.toggle('on');
-        b.classList.toggle('on', row.classList.contains('on'));
-        var inp = row.querySelector('.of-reason');
-        if (inp) { inp.hidden = !row.classList.contains('on'); if (!inp.hidden) inp.focus(); }
-        saveOffers(id, collectOffers(id));
-        var cnt = host.querySelector('.of-cnt');
-        if (cnt) {
-          var n = host.querySelectorAll('.of-row.on').length;
-          cnt.classList.toggle('has', n > 0);
-          cnt.innerHTML = 'На витрине: <b class="num">' + n + '</b>';
+  }
+
+  /* ── ЧАТ ВИТРИНЫ (правый столбец секции «Витрина») ──────────────────────────
+     Тот же агент-коллега, что и в «Поступлении», только предметная область другая:
+     он правит витрину операциями, а бэкенд их применяет и сохраняет сам. */
+  var OCHAT = {}, OCHAT_LOADED = {}, OCHAT_BUSY = {};
+
+  function offersChatPanel(id) {
+    var msgs = OCHAT[id] || [];
+    var empty = !leadOffers(id).some(function (o) { return o && o.on && !o.bought; });
+    var body;
+    if (!OCHAT_LOADED[id]) {
+      body = '<div class="pchat-empty">Загружаю…</div>';
+    } else if (!msgs.length) {
+      var hints = empty
+        ? ['Подбери витрину под этого клиента',
+           'Собери витрину: бюджет ограничен, начни с входного продукта',
+           'Что этой семье сейчас реально нужно?']
+        : ['Перепиши описания под их ситуацию',
+           'Убери лишнее — оставь два самых важных',
+           'Сделай заголовки мягче, родитель тревожный'];
+      body = '<div class="pchat-empty">' +
+        '<div class="pchat-empty-t">' + (empty ? 'Витрины еще нет' : 'Скажите, что поправить') + '</div>' +
+        '<div class="pchat-empty-s">' + (empty
+          ? 'Подберу продукты по анкете, диагностике и этапу пути и напишу тексты для родителя.'
+          : 'Правлю точечно: набор, тексты, порядок и заголовок блока у родителя.') + '</div>' +
+        '<div class="pchat-hints">' +
+          hints.map(function (h) {
+            return '<button class="pchat-hint" data-ohint="' + esc(h) + '">' + esc(h) + '</button>';
+          }).join('') +
+        '</div></div>';
+    } else {
+      body = msgs.map(function (m) {
+        if (m.me) return '<div class="pchat-m me"><div class="pchat-b">' + esc(m.text) + '</div></div>';
+        return '<div class="pchat-m ai"><div class="pchat-b">' + esc(m.text) + '</div>' +
+          ochatReport(m.report) + '</div>';
+      }).join('');
+    }
+    if (OCHAT_BUSY[id]) {
+      body += '<div class="pchat-m ai"><div class="pchat-b pchat-wait">' +
+        '<span class="pchat-dots"><i></i><i></i><i></i></span>' +
+        '<span class="pchat-wait-t" id="ochat-wait-t">Читаю профиль клиента</span></div></div>';
+    }
+    return '<aside class="pchat" id="ochat">' +
+      '<div class="pchat-head">' + ic('spark', 14) +
+        '<span class="pchat-title">Витрина с AI</span>' +
+      '</div>' +
+      '<div class="pchat-list" id="ochat-list">' + body + '</div>' +
+      '<div class="pchat-foot">' +
+        '<textarea class="pchat-in" id="ochat-in" rows="1" placeholder="' +
+          (empty ? 'Что подобрать этой семье?' : 'Что поправить в витрине?') + '"' +
+          (OCHAT_BUSY[id] ? ' disabled' : '') + '></textarea>' +
+        '<button class="pchat-go" id="ochat-go" title="Отправить"' +
+          (OCHAT_BUSY[id] ? ' disabled' : '') + '>' + ic('go', 14) + '</button>' +
+      '</div>' +
+    '</aside>';
+  }
+
+  /* Что AI сделал с витриной: куратору важно видеть не «поправил», а что именно стало
+     другим — тексты читает родитель, тихая подмена недопустима. */
+  function ochatReport(report) {
+    if (!Array.isArray(report) || !report.length) return '';
+    var VERB = { show: 'Поставил', hide: 'Убрал', edit: 'Поправил', order: 'Порядок', banner: 'Шапка' };
+    var FIELD = { reason: 'фраза для родителя', headline: 'заголовок', price_show: 'цена',
+      title: 'заголовок блока', note: 'подпись' };
+    var ok = report.filter(function (r) { return r.ok; });
+    var bad = report.filter(function (r) { return !r.ok && r.why && r.why !== 'нечего менять'; });
+    if (!ok.length && !bad.length) return '';
+    var rows = ok.map(function (r) {
+      var diff = '';
+      if (Array.isArray(r.changes) && r.changes.length) {
+        diff = '<div class="pchat-diff">' + r.changes.map(function (c) {
+          var from = c.from === true ? 'видна' : c.from === false ? 'скрыта' : (c.from || '—');
+          var to = c.to === true ? 'видна' : c.to === false ? 'скрыта' : (c.to || '—');
+          return '<div class="pchat-df"><span class="pchat-df-f">' + esc(FIELD[c.field] || c.field) + '</span>' +
+            '<span class="pchat-df-a">' + esc(String(from).slice(0, 90)) + '</span>' +
+            '<span class="pchat-df-ar">→</span>' +
+            '<span class="pchat-df-b">' + esc(String(to).slice(0, 90)) + '</span></div>';
+        }).join('') + '</div>';
+      }
+      var title = r.name || (r.names ? r.names.join(' · ') : '');
+      return '<div class="pchat-rw ' + esc(r.op === 'hide' ? 'remove' : r.op === 'show' ? 'add' : 'edit') + '">' +
+        '<div class="pchat-rw-h"><span class="pchat-rw-v">' + (VERB[r.op] || r.op) + '</span></div>' +
+        (title ? '<div class="pchat-rw-t">' + esc(title) + '</div>' : '') + diff + '</div>';
+    }).join('');
+    var badRow = '';
+    if (bad.length) {
+      var why = bad.map(function (r) { return r.why; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
+      badRow = '<div class="pchat-rw bad"><div class="pchat-rw-h">' +
+        '<span class="pchat-rw-v">Не применил</span>' +
+        '<span class="pchat-rw-st">' + bad.length + '</span></div>' +
+        '<div class="pchat-rw-t">' + esc(why.join('; ')) + '</div></div>';
+    }
+    return '<div class="pchat-rep">' + rows + badRow + '</div>';
+  }
+
+  function loadOffersChat(id) {
+    if (OCHAT_LOADED[id]) return;
+    api('/admin/api/leads/' + id + '/offers/chat').then(function (r) {
+      OCHAT[id] = [];
+      (r && r.messages || []).forEach(function (m) {
+        OCHAT[id].push({ me: true, text: m.message });
+        OCHAT[id].push({ me: false, text: m.reply, report: m.report });
+      });
+      OCHAT_LOADED[id] = true;
+      if (state.drawerId === id && state.modalSection === 'offers') renderDrawer(true);
+    }).catch(function () {
+      OCHAT_LOADED[id] = true;
+      if (state.drawerId === id && state.modalSection === 'offers') renderDrawer(true);
+    });
+  }
+
+  function ochatSend(id, text) {
+    if (!text || OCHAT_BUSY[id]) return;
+    OCHAT[id] = OCHAT[id] || [];
+    OCHAT[id].push({ me: true, text: text });
+    OCHAT_BUSY[id] = true;
+    renderDrawer(true);
+    api('/admin/api/leads/' + id + '/offers/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    }).then(function (r) {
+      OCHAT_BUSY[id] = false;
+      OCHAT[id].push({ me: false, text: (r && r.reply) || 'Готово.', report: r && r.report });
+      // бэкенд применил операции и сохранил сам — забираем готовую витрину
+      if (r && r.changed) {
+        var d = state.details[id];
+        if (d && d.crm) {
+          if (Array.isArray(r.offers)) d.crm.offers = r.offers;
+          if (r.showcaseMeta) d.crm.showcaseMeta = r.showcaseMeta;
+          cacheSet(id, d);
         }
+      }
+      renderDrawer(true);
+    }).catch(function (e) {
+      OCHAT_BUSY[id] = false;
+      if (!(e && e.message === '403')) {
+        OCHAT[id].push({ me: false, text: 'Не получилось — AI не ответил. Попробуйте еще раз.' });
+      }
+      renderDrawer(true);
+    });
+  }
+
+  function bindOffersChat(id) {
+    var inp = el('ochat-in'), go = el('ochat-go');
+    var fire = function () {
+      if (!inp) return;
+      var v = (inp.value || '').trim();
+      if (v) { inp.value = ''; ochatSend(id, v); }
+    };
+    if (go) go.addEventListener('click', fire);
+    if (inp) {
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fire(); }
       });
+      inp.addEventListener('input', function () {
+        inp.style.height = 'auto';
+        inp.style.height = Math.min(inp.scrollHeight, 132) + 'px';
+      });
+    }
+    var list = el('ochat-list');
+    if (list) list.scrollTop = list.scrollHeight;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ohint]'), function (b) {
+      b.addEventListener('click', function () { ochatSend(id, b.getAttribute('data-ohint')); });
     });
-    Array.prototype.forEach.call(host.querySelectorAll('.of-reason'), function (inp) {
-      inp.addEventListener('change', function () { saveOffers(id, collectOffers(id)); });
-    });
+    if (OCHAT_BUSY[id]) {
+      var steps = ['Читаю профиль клиента', 'Сверяю с продуктовой матрицей', 'Пишу тексты для родителя'];
+      var i = 0;
+      var t = setInterval(function () {
+        var n = el('ochat-wait-t');
+        if (!n || !OCHAT_BUSY[id]) { clearInterval(t); return; }
+        i = Math.min(i + 1, steps.length - 1);
+        n.textContent = steps[i];
+      }, 4500);
+    }
   }
 
   function aiSec(title, inner, hr) {
