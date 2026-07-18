@@ -2373,7 +2373,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 
 /* ── ЧАТ ПРАВОК ПЛАНА: колонка справа от доски ──────────────────────────────
    Окно шире, пока чат открыт, — иначе доска слева сжимается до нечитаемой. */
-.modal.pchat-open { width: 1400px; }
+/* Ширина карточки — свойство самого экрана, а не состояния JS: есть правый столбец
+   (чат плана или витрины) — карточка широкая. :has() снимает вопрос «в какой-то момент
+   класс не проставился»: правило смотрит на реальный DOM, а не на порядок перерисовок.
+   Класс .pchat-open оставлен запасным путем для браузеров без :has(). */
+.modal.pchat-open,
+.modal:has(.pchat) { width: 1400px; }
+/* Узкий ноутбук: чат ужимаем, но экран не схлопываем — контент важнее полей чата. */
+@media (max-width: 1440px) {
+  .modal.pchat-open, .modal:has(.pchat) { width: min(1400px, calc(100vw - 48px)); }
+  .pchat { flex-basis: 340px; }
+}
 /* контейнер правого столбца: пустой — не занимает места, с чатом — фиксированная колонка */
 #m-side { display: contents; }
 .pchat { flex: 0 0 396px; display: flex; flex-direction: column; min-height: 0;
@@ -2521,26 +2531,53 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .of-bt:focus, .of-bn:focus, .of-hl:focus { outline: none; border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
 
-.of-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-.of-card { padding: 14px; border-radius: var(--r-lg); border: 1px solid rgba(47,107,255,.28);
-  background: #FBFCFF; display: flex; flex-direction: column; gap: 8px; }
-.of-c-h { display: flex; align-items: center; gap: 8px; }
+.of-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+/* Карточка витрины = то, что редактирует куратор, и одновременно превью для родителя.
+   Поля без рамок-коробок: подчеркнутая строка читается как сам текст, а не как форма. */
+.of-card { position: relative; padding: 16px 18px 14px; border-radius: var(--r-lg);
+  border: 1px solid var(--line); background: var(--card);
+  display: flex; flex-direction: column; gap: 12px; transition: border-color .14s; }
+.of-card:focus-within { border-color: rgba(47,107,255,.4); }
+.of-c-h { display: flex; align-items: center; gap: 9px; }
+.of-num { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 6px;
+  font-size: 11px; font-weight: 700; color: var(--blue); background: var(--blue-tint); }
 .of-c-n { font-size: 13.5px; font-weight: 700; color: var(--ink); }
 .of-c-sp { flex: 1; }
 .of-ord { display: inline-flex; gap: 2px; }
-.of-mv { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px;
+.of-mv, .of-rm { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px;
   color: var(--ink-3); background: transparent; cursor: pointer; transition: .14s; }
 .of-mv svg { transform: rotate(-90deg); }
 .of-mv.dn svg { transform: rotate(90deg); }
 .of-mv:hover:not(:disabled) { color: var(--ink); background: var(--fill); }
 .of-mv:disabled { opacity: .3; cursor: default; }
-.of-rm { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px;
-  color: var(--ink-3); background: transparent; cursor: pointer; transition: .14s; }
 .of-rm:hover { color: var(--coral); background: var(--coral-soft); }
-.of-hl { width: 100%; box-sizing: border-box; border: 1px solid var(--line-2); border-radius: 9px;
-  background: var(--card); font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink); padding: 8px 11px; }
-.of-card .of-reason { margin-top: 0; min-height: 54px; resize: vertical; }
-.of-c-f { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.of-f { display: flex; flex-direction: column; gap: 5px; }
+.of-lb { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.of-hl, .of-card .of-reason, .of-pitch-in { width: 100%; box-sizing: border-box; border: 0;
+  border-bottom: 1px solid var(--line-2); border-radius: 0; background: transparent;
+  font-family: inherit; color: var(--ink); padding: 5px 0 7px; resize: none;
+  transition: border-color .14s; }
+.of-hl { font-size: 14.5px; font-weight: 700; letter-spacing: -.01em; }
+.of-card .of-reason { font-size: 13px; line-height: 1.5; margin: 0; min-height: 42px; }
+.of-hl:focus, .of-card .of-reason:focus, .of-pitch-in:focus { outline: none;
+  border-bottom-color: var(--blue); box-shadow: none; }
+.of-hl::placeholder, .of-card .of-reason::placeholder, .of-pitch-in::placeholder { color: var(--ink-3); font-weight: 400; }
+
+.of-pitch { border-top: 1px solid var(--line); padding-top: 11px; }
+.of-pitch summary { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  cursor: pointer; list-style: none; }
+.of-pitch summary::-webkit-details-marker { display: none; }
+.of-pitch summary:hover .of-lb { color: var(--ink); }
+.of-pl { font-size: 11.5px; font-weight: 600; color: var(--ink-3); background: var(--fill);
+  border-radius: var(--r-pill); padding: 3px 9px; white-space: nowrap; }
+.of-pl.has { color: var(--blue); background: var(--blue-tint); }
+.of-pitch-in { margin-top: 10px; font-size: 13px; line-height: 1.6; resize: vertical;
+  border: 1px solid var(--line-2); border-radius: 10px; padding: 11px 13px; background: var(--fill); }
+.of-pitch-in:focus { border-color: var(--blue); background: var(--card); }
+
+.of-c-f { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border-top: 1px solid var(--line); padding-top: 11px; }
 .of-pr { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 .of-pr input { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; }
 .of-c-price { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }

@@ -5864,9 +5864,10 @@
      они лягут в кабинете, у каждой — персональный заголовок и фраза «почему это вам».
      Каталог целиком не вываливаем: он живет ниже, свернутым, как источник добавления. */
   function offerRow(p, o, i, total) {
-    var price = fmtPrice(p);
+    var pitch = o.pitch || '';
     return '<div class="of-card" data-pid="' + esc(p.id) + '">' +
       '<div class="of-c-h">' +
+        '<span class="of-num num">' + (i + 1) + '</span>' +
         '<span class="of-c-n">' + esc(p.name) + '</span>' +
         (o.src === 'ai' ? '<span class="of-src">' + ic('spark', 10) + 'AI</span>' : '') +
         '<span class="of-c-sp"></span>' +
@@ -5876,14 +5877,25 @@
         '</span>' +
         '<button class="of-rm" data-ofoff="' + esc(p.id) + '" title="Убрать из витрины">' + ic('x', 12) + '</button>' +
       '</div>' +
-      '<input class="of-hl" data-ofhl="' + esc(p.id) + '" maxlength="90" value="' + esc(o.headline || '') + '"' +
-        ' placeholder="Заголовок карточки — 3-6 слов, польза для этого ребенка">' +
-      '<textarea class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300" rows="2"' +
-        ' placeholder="Почему это им — эту фразу увидит родитель">' + esc(o.reason || '') + '</textarea>' +
+      // то, что родитель видит на самой карточке
+      '<label class="of-f"><span class="of-lb">Заголовок карточки</span>' +
+        '<input class="of-hl" data-ofhl="' + esc(p.id) + '" maxlength="90" value="' + esc(o.headline || '') + '"' +
+        ' placeholder="3-6 слов: польза для этого ребенка"></label>' +
+      '<label class="of-f"><span class="of-lb">Короткая фраза под заголовком</span>' +
+        '<textarea class="of-reason" data-ofreason="' + esc(p.id) + '" maxlength="300" rows="2"' +
+        ' placeholder="Почему это им — одно-два предложения">' + esc(o.reason || '') + '</textarea></label>' +
+      // длинный текст: его родитель читает, открыв карточку
+      '<details class="of-pitch"' + (pitch ? '' : '') + '>' +
+        '<summary><span class="of-lb">Полный текст — родитель видит, открыв карточку</span>' +
+          '<span class="of-pl' + (pitch ? ' has' : '') + '">' +
+            (pitch ? pitch.length + ' знаков' : 'пусто — покажем общее описание') + '</span></summary>' +
+        '<textarea class="of-pitch-in" data-ofpitch="' + esc(p.id) + '" maxlength="1400" rows="7"' +
+          ' placeholder="Зачем это нужно именно их ребенку: что у него сейчас, что мы делаем, что будет на выходе и кому это не нужно. 3-5 абзацев.">' + esc(pitch) + '</textarea>' +
+      '</details>' +
       '<div class="of-c-f">' +
         '<label class="of-pr"><input type="checkbox" data-ofprice="' + esc(p.id) + '"' +
           (o.price_show === false ? '' : ' checked') + '><span>Показывать цену</span></label>' +
-        '<span class="of-c-price num">' + esc(price) + '</span>' +
+        '<span class="of-c-price num">' + esc(fmtPrice(p)) + '</span>' +
       '</div>' +
     '</div>';
   }
@@ -5990,22 +6002,25 @@
       var pid = card.getAttribute('data-pid');
       var was = saved[pid] || {};
       var hl = card.querySelector('.of-hl'), rs = card.querySelector('.of-reason'),
-          pr = card.querySelector('[data-ofprice]');
+          pt = card.querySelector('.of-pitch-in'), pr = card.querySelector('[data-ofprice]');
       var headline = hl ? hl.value.trim() : (was.headline || '');
       var reason = rs ? rs.value.trim() : (was.reason || '');
+      var pitch = pt ? pt.value.trim() : (was.pitch || '');
       var priceShow = pr ? pr.checked : (was.price_show !== false);
       // src переводим в «менеджер», только если куратор реально изменил текст
       var same = headline === (was.headline || '') && reason === (was.reason || '') &&
+                 pitch === (was.pitch || '') &&
                  priceShow === (was.price_show !== false) && was.on;
       out.push({ pid: pid, on: true, bought: false, src: same ? (was.src || 'mgr') : 'mgr',
-                 reason: reason, headline: headline, pos: pos++, price_show: priceShow });
+                 reason: reason, headline: headline, pitch: pitch,
+                 pos: pos++, price_show: priceShow });
     });
     // все остальное сохраняем как было (скрытые и купленные)
     Object.keys(saved).forEach(function (pid) {
       if (out.some(function (o) { return o.pid === pid; })) return;
       var o = saved[pid];
       out.push({ pid: pid, on: false, bought: !!o.bought, src: o.src || 'mgr',
-                 reason: o.reason || '', headline: o.headline || '',
+                 reason: o.reason || '', headline: o.headline || '', pitch: o.pitch || '',
                  pos: pos++, price_show: o.price_show !== false });
     });
     return out;
@@ -6045,7 +6060,7 @@
     function setOn(pid, on) {
       var offers = collectOffers(id);
       var row = offers.filter(function (o) { return o.pid === pid; })[0];
-      if (!row) { offers.push({ pid: pid, on: on, bought: false, src: 'mgr', reason: '', headline: '', pos: offers.length, price_show: true }); }
+      if (!row) { offers.push({ pid: pid, on: on, bought: false, src: 'mgr', reason: '', headline: '', pitch: '', pos: offers.length, price_show: true }); }
       else { row.on = on; row.src = 'mgr'; if (on) row.pos = -1; }
       offers.sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); });
       offers.forEach(function (o, i) { o.pos = i; });
@@ -6071,7 +6086,7 @@
         offersApply(id, true);
       });
     });
-    Array.prototype.forEach.call(host.querySelectorAll('.of-hl, .of-reason, .of-bt, .of-bn'), function (inp) {
+    Array.prototype.forEach.call(host.querySelectorAll('.of-hl, .of-reason, .of-pitch-in, .of-bt, .of-bn'), function (inp) {
       inp.addEventListener('change', function () { offersApply(id); });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-ofprice]'), function (inp) {
