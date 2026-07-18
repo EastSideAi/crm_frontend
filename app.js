@@ -900,6 +900,239 @@
     });
   }
 
+  /* ══ БАГ-ТРЕКЕР КОМАНДЫ ══════════════════════════════════════════════════
+     Футер сайдбара → «Сообщить о баге». Одна панель: форма сабмита + общий
+     список со сменой статуса. Бэкенд — /admin/api/bugs (миграция 041). */
+  var BUG_KIND = {
+    platform: { label: 'Платформа', icon: 'dash' },
+    bot:      { label: 'Бот',       icon: 'bot' },
+  };
+  var BUG_SEV = {
+    low:    { label: 'низкий',  dot: 'var(--ink-3)' },
+    normal: { label: 'обычный', dot: 'var(--blue)' },
+    high:   { label: 'срочный', dot: 'var(--red)' },
+  };
+  var BUG_ST = {
+    new:     { label: 'новый',    tone: 'blue' },
+    doing:   { label: 'в работе', tone: 'amber' },
+    resolved:{ label: 'решен',    tone: 'green' },
+    wontfix: { label: 'не баг',   tone: 'mute' },
+  };
+  var BUG_ST_ORDER = ['new', 'doing', 'resolved', 'wontfix'];
+  var bugState = { open: false, view: 'report', kind: 'platform', sev: 'normal',
+    filter: 'open', items: null, loading: false, count: null };
+
+  function pageLabel() {
+    for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === state.page) return NAV_ALL[i].label;
+    return 'CRM';
+  }
+
+  /* тихий счётчик открытых багов на кнопке футера */
+  function refreshBugCount() {
+    api('/admin/api/bugs?status=new').then(function (r) {
+      var open = (r && r.counts && r.counts.open) != null ? r.counts.open : ((r && r.items) ? r.items.length : 0);
+      bugState.count = open;
+      var b = el('side-bug-n');
+      if (b) { b.textContent = open ? open : ''; b.style.display = open ? '' : 'none'; }
+    }).catch(function () {});
+  }
+
+  function openBugPanel(view) {
+    if (document.querySelector('.bug-ov')) return;
+    bugState.open = true;
+    bugState.view = view || 'report';
+    bugState.items = null;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov bug-ov';
+    ov.innerHTML =
+      '<div class="al-card bug-card" role="dialog" aria-modal="true">' +
+        '<div class="bug-head">' +
+          '<div class="bug-htxt"><div class="bug-title">Баги платформы и бота</div>' +
+            '<div class="bug-sub">Заметили сбой — опишите. Команда видит список и берет в работу.</div></div>' +
+          '<button class="al-x" id="bug-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="bug-tabs" id="bug-tabs"></div>' +
+        '<div class="bug-body" id="bug-body"></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true; bugState.open = false;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('bug-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    bugState._close = close;
+    paintBugTabs();
+    paintBugBody();
+    if (bugState.view === 'list') loadBugs();
+  }
+
+  function paintBugTabs() {
+    var t = el('bug-tabs'); if (!t) return;
+    var n = bugState.count;
+    t.innerHTML =
+      '<button class="bug-tab' + (bugState.view === 'report' ? ' on' : '') + '" data-v="report">' + ic('plus', 14) + 'Сообщить</button>' +
+      '<button class="bug-tab' + (bugState.view === 'list' ? ' on' : '') + '" data-v="list">' + ic('rows', 14) + 'Все баги' +
+        (n ? '<span class="bug-tab-n num">' + n + '</span>' : '') + '</button>';
+    Array.prototype.forEach.call(t.children, function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-v');
+        if (bugState.view === v) return;
+        bugState.view = v; paintBugTabs(); paintBugBody();
+        if (v === 'list') loadBugs();
+      });
+    });
+  }
+
+  function paintBugBody() {
+    var host = el('bug-body'); if (!host) return;
+    if (bugState.view === 'report') { host.innerHTML = bugReportHtml(); wireBugReport(host); return; }
+    host.innerHTML = bugListHtml();
+    wireBugList(host);
+  }
+
+  function bugReportHtml() {
+    var kinds = Object.keys(BUG_KIND).map(function (kk) {
+      return '<button class="bug-seg' + (bugState.kind === kk ? ' on' : '') + '" data-k="' + kk + '">' +
+        ic(BUG_KIND[kk].icon, 15) + BUG_KIND[kk].label + '</button>';
+    }).join('');
+    var sevs = Object.keys(BUG_SEV).map(function (sk) {
+      return '<button class="bug-sev' + (bugState.sev === sk ? ' on' : '') + '" data-s="' + sk + '">' +
+        '<span class="bug-dot" style="background:' + BUG_SEV[sk].dot + '"></span>' + BUG_SEV[sk].label + '</button>';
+    }).join('');
+    return '<div class="bug-form">' +
+      '<div class="bug-fld"><div class="bug-lab">Где баг</div><div class="bug-segs">' + kinds + '</div></div>' +
+      '<div class="bug-fld"><div class="bug-lab">Что случилось</div>' +
+        '<textarea id="bug-text" class="bug-ta" rows="4" maxlength="4000" ' +
+          'placeholder="Что вы делали, что пошло не так, что ожидали увидеть. Чем конкретнее — тем быстрее починим."></textarea></div>' +
+      '<div class="bug-row2">' +
+        '<div class="bug-fld"><div class="bug-lab">Приоритет</div><div class="bug-segs">' + sevs + '</div></div>' +
+        '<div class="bug-fld"><div class="bug-lab">Раздел</div>' +
+          '<input id="bug-page" class="bug-in" maxlength="120" value="' + esc(pageLabel()) + '"></div>' +
+      '</div>' +
+      '<div class="bug-foot"><button class="bp bug-send" id="bug-send">' + ic('send', 14) + 'Отправить баг</button></div>' +
+    '</div>';
+  }
+
+  function wireBugReport(host) {
+    Array.prototype.forEach.call(host.querySelectorAll('.bug-seg'), function (b) {
+      b.addEventListener('click', function () { bugState.kind = b.getAttribute('data-k'); paintBugBody(); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.bug-sev'), function (b) {
+      b.addEventListener('click', function () { bugState.sev = b.getAttribute('data-s'); paintBugBody(); });
+    });
+    var ta = host.querySelector('#bug-text'); if (ta) setTimeout(function () { ta.focus(); }, 40);
+    var send = host.querySelector('#bug-send');
+    var submit = function () {
+      var body = (ta.value || '').trim();
+      if (!body) { ta.classList.add('bug-err'); ta.focus(); return; }
+      send.disabled = true; send.classList.add('loading');
+      api('/admin/api/bugs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: bugState.kind, severity: bugState.sev, body: body,
+          page: (host.querySelector('#bug-page').value || '').trim() }),
+      }).then(function () {
+        showToast('Спасибо — баг записан, команда увидит');
+        bugState.sev = 'normal'; bugState.items = null;
+        bugState.view = 'list'; paintBugTabs(); paintBugBody(); loadBugs(); refreshBugCount();
+      }).catch(function (e) {
+        send.disabled = false; send.classList.remove('loading');
+        if (e.message !== '403') showToast('Не отправилось — проверьте сеть');
+      });
+    };
+    if (send) send.addEventListener('click', submit);
+    if (ta) ta.addEventListener('input', function () { ta.classList.remove('bug-err'); });
+  }
+
+  function loadBugs() {
+    bugState.loading = true;
+    if (bugState.view === 'list') paintBugBody();
+    api('/admin/api/bugs').then(function (r) {
+      bugState.loading = false;
+      bugState.items = (r && r.items) || [];
+      if (r && r.counts) { bugState.count = r.counts.open != null ? r.counts.open : bugState.count; paintBugTabs(); }
+      if (bugState.view === 'list') paintBugBody();
+      var b = el('side-bug-n');
+      if (b && bugState.count != null) { b.textContent = bugState.count ? bugState.count : ''; b.style.display = bugState.count ? '' : 'none'; }
+    }).catch(function (e) {
+      bugState.loading = false; bugState.items = 'err';
+      if (bugState.view === 'list' && e.message !== '403') paintBugBody();
+    });
+  }
+
+  function bugListHtml() {
+    if (bugState.loading && bugState.items == null) {
+      return '<div class="bug-list">' + '<div class="bug-sk"></div><div class="bug-sk"></div><div class="bug-sk"></div>'.replace(/bug-sk/g, 'bug-sk') + '</div>';
+    }
+    if (bugState.items === 'err') return '<div class="bug-empty">Не удалось загрузить список. Обновите позже.</div>';
+    var all = bugState.items || [];
+    var isOpen = function (b) { return b.status === 'new' || b.status === 'doing'; };
+    var counts = { open: 0, resolved: 0 };
+    all.forEach(function (b) { if (isOpen(b)) counts.open++; else counts.resolved++; });
+    var filt = all.filter(function (b) {
+      if (bugState.filter === 'open') return isOpen(b);
+      if (bugState.filter === 'closed') return !isOpen(b);
+      return true;
+    });
+    var chips = [['open', 'В работе', counts.open], ['closed', 'Закрытые', counts.resolved], ['all', 'Все', all.length]]
+      .map(function (c) {
+        return '<button class="bug-fchip' + (bugState.filter === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' +
+          c[1] + '<span class="bug-fn num">' + c[2] + '</span></button>';
+      }).join('');
+    var rows = filt.length ? filt.map(bugRowHtml).join('')
+      : '<div class="bug-empty">' + (bugState.filter === 'open' ? 'Открытых багов нет — чисто.' : 'Здесь пусто.') + '</div>';
+    return '<div class="bug-filters">' + chips + '</div><div class="bug-list">' + rows + '</div>';
+  }
+
+  function bugRowHtml(b) {
+    var k = BUG_KIND[b.kind] || BUG_KIND.platform;
+    var sev = BUG_SEV[b.severity] || BUG_SEV.normal;
+    var meta = [b.reporter || 'аноним', fmtWhen(b.created_at), b.page].filter(Boolean).join(' · ');
+    var st = BUG_ST_ORDER.map(function (sk) {
+      return '<button class="bug-st bug-st--' + BUG_ST[sk].tone + (b.status === sk ? ' on' : '') + '" ' +
+        'data-id="' + b.id + '" data-st="' + sk + '">' + BUG_ST[sk].label + '</button>';
+    }).join('');
+    var closed = b.status === 'resolved' || b.status === 'wontfix';
+    return '<div class="bug-item' + (closed ? ' closed' : '') + '">' +
+      '<div class="bug-itop">' +
+        '<span class="bug-kind"><span class="bug-dot" style="background:' + sev.dot + '" title="' + esc(sev.label) + '"></span>' +
+          ic(k.icon, 13) + k.label + '</span>' +
+        '<span class="bug-when num">' + fmtWhen(b.created_at) + '</span>' +
+      '</div>' +
+      '<div class="bug-text">' + esc(b.body) + '</div>' +
+      '<div class="bug-meta">' + esc(meta) + (b.resolver && closed ? ' · закрыл ' + esc(b.resolver) : '') + '</div>' +
+      '<div class="bug-sts">' + st + '</div>' +
+    '</div>';
+  }
+
+  function wireBugList(host) {
+    Array.prototype.forEach.call(host.querySelectorAll('.bug-fchip'), function (b) {
+      b.addEventListener('click', function () { bugState.filter = b.getAttribute('data-f'); paintBugBody(); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.bug-st'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-id'), st = b.getAttribute('data-st');
+        var item = (bugState.items || []).filter(function (x) { return x.id === id; })[0];
+        if (!item || item.status === st) return;
+        var prev = item.status; item.status = st;
+        paintBugBody(); refreshBugCount();
+        api('/admin/api/bugs/' + id, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: st }),
+        }).then(function () { loadBugs(); }).catch(function (e) {
+          item.status = prev; paintBugBody();
+          if (e.message !== '403') showToast('Не сохранилось — проверьте сеть');
+        });
+      });
+    });
+  }
+
   /* ── login ────────────────────────────────────────────── */
   function renderLogin(err) {
     document.body.classList.remove('dock-open');
@@ -974,7 +1207,12 @@
           '<div class="side-sub" id="welc-sub"></div>' +
           '<nav id="side-nav"></nav>' +
           '<button class="navi mt" id="logout">' + ic('exit') + 'Выйти</button>' +
-          '<div class="promo" id="promo" style="margin-top:auto"></div>' +
+          '<div class="side-foot">' +
+            '<div class="promo" id="promo"></div>' +
+            '<button class="side-bug" id="side-bug" title="Нашли баг платформы или бота — расскажите">' +
+              ic('alert', 15) + '<span>Сообщить о баге</span>' +
+              '<span class="side-bug-n num" id="side-bug-n"></span></button>' +
+          '</div>' +
         '</aside>' +
         '<main class="main">' +
           '<div class="topbar"><div id="tb-left"></div>' +
@@ -993,6 +1231,9 @@
       '<nav class="mtabs" id="mtabs"></nav>';
 
     el('logout').addEventListener('click', logout);
+    var bugBtn = el('side-bug');
+    if (bugBtn) bugBtn.addEventListener('click', function () { openBugPanel(); });
+    refreshBugCount();
     // меню профиля: кто ты + обновить + сменить аккаунт
     var prof = el('profile');
     if (prof) prof.addEventListener('click', function (e) {
@@ -4202,9 +4443,34 @@
     }).catch(function (e) { if (e && e.message !== '403') showToast('Не получилось — проверь сеть'); });
   }
 
+  /* Реальная сдача хранит doc_id (ссылка на client_docs), не готовый src — сам файл
+     лежит в Storage за подписанной ссылкой, которую нужно резолвить запросом. Раньше
+     rmSubCard рисовал либо мёртвую ссылку (href="#"), либо для картинок вообще
+     демо-заглушку вместо присланного фото: куратор физически не мог посмотреть,
+     что прислал клиент. Для doc_id-карточек оставляем href="#" + data-docid,
+     резолвим асинхронно (см. resolveDocLink) — картинки сразу для превью, файлы
+     по клику. */
+  var RM_DOC_LINK_CACHE = {};
+  function resolveDocLink(docId, cb) {
+    if (RM_DOC_LINK_CACHE[docId]) { cb(RM_DOC_LINK_CACHE[docId]); return; }
+    fetch(API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) { if (url) RM_DOC_LINK_CACHE[docId] = url; cb(url || null); })
+      .catch(function () { cb(null); });
+  }
+
   /* присланное клиентом — одна карточка вложения */
   function rmSubCard(s) {
     if (s.kind === 'image') {
+      if (s.doc_id && !s.src) {
+        return '<a class="rm-sub rm-sub-img rm-sub-pending" data-docid="' + s.doc_id + '" href="#" rel="noopener">' +
+          '<span class="rm-sub-thumb rm-sub-thumb--load"></span>' +
+          '<span class="rm-sub-cap">' + esc(s.name || 'фото') + '</span></a>';
+      }
       var img = s.src || rmDemoImg();
       return '<a class="rm-sub rm-sub-img" href="' + img + '" target="_blank" rel="noopener">' +
         '<span class="rm-sub-thumb" style="background-image:url(\'' + img + '\')"></span>' +
@@ -4216,6 +4482,10 @@
     if (s.kind === 'link') {
       return '<a class="rm-sub rm-sub-file" href="' + esc(s.src || '#') + '" target="_blank" rel="noopener">' +
         '<span class="rm-sub-fic">' + ic('ext', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || s.src || 'ссылка') + '</span><span class="rm-sub-open">открыть</span></a>';
+    }
+    if (s.doc_id && !s.src) {
+      return '<a class="rm-sub rm-sub-file" data-docid="' + s.doc_id + '" href="#" rel="noopener">' +
+        '<span class="rm-sub-fic">' + ic('doc', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || 'файл') + '</span><span class="rm-sub-open">' + ic('dl', 13) + '</span></a>';
     }
     return '<a class="rm-sub rm-sub-file" href="' + (s.src || '#') + '"' + (s.src ? ' target="_blank" rel="noopener"' : '') + '>' +
       '<span class="rm-sub-fic">' + ic('doc', 14) + '</span><span class="rm-sub-nm">' + esc(s.name || 'файл') + '</span><span class="rm-sub-open">' + ic('dl', 13) + '</span></a>';
@@ -4336,6 +4606,27 @@
         '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
         (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' + ctxt + catts + '</div>';
     }).join('') + '</div>';
+  }
+  /* лента обсуждения по задаче В СТИЛЕ «ДИАЛОГОВ» — те же пузыри .tg-msg (клиент слева,
+     куратор справа), с днями-разделителями и вложениями; используется инбоксом «Обсуждения» */
+  function buildThreadFromComments(comments) {
+    if (!comments || !comments.length)
+      return '<div class="tg-thread-empty">' + ic('chat', 24) +
+        '<span>Тут переписка по задаче. Напишите первое сообщение или прикрепите файл.</span></div>';
+    var lastDay = null;
+    return comments.map(function (c) {
+      var isClient = c.by === 'client';
+      var side = isClient ? 'in' : 'out';
+      var sep = '';
+      var dk = c.at ? String(c.at).slice(0, 10) : '';
+      if (dk && dk !== lastDay) { lastDay = dk; sep = '<div class="tg-day"><span>' + dayLabel(c.at) + '</span></div>'; }
+      var atts = c.atts && c.atts.length ? '<div class="tg-atts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
+      var foot = isClient ? '' : '<span class="tg-by">' + ic('hand', 9) + 'Куратор</span>';
+      return sep + '<div class="tg-msg ' + side + (isClient ? '' : ' mgr') + '">' +
+        '<div class="tg-bub">' + atts + (c.text ? '<span class="tg-txt">' + mdMsg(c.text) + '</span>' : '') +
+          '<span class="tg-mt num">' + fmtTime(c.at) + '</span></div>' + foot +
+      '</div>';
+    }).join('');
   }
   /* композер сообщения: вложения + текст + отправка (общий для оверлея и инбокса) */
   function rmComposerHtml() {
@@ -4533,8 +4824,8 @@
           statusChip +
           '<button class="th-open" id="th-open" title="Открыть карточку клиента">' + ic('ext', 14) + '<span>Карточка</span></button>' +
         '</div>' +
-        '<div class="rm-chat-scroll th-scroll"><div class="rm-chat-col">' + rmMsgsHtml(t.comments || []) + '</div></div>' +
-        '<div class="rm-chat-foot"><div class="rm-chat-col">' + rmComposerHtml() + '</div></div>' +
+        '<div class="tg-thread th-scroll">' + buildThreadFromComments(t.comments || []) + '</div>' +
+        '<div class="th-foot">' + rmComposerHtml() + '</div>' +
       '</div>';
     var sc = host.querySelector('.th-scroll'); if (sc) sc.scrollTop = sc.scrollHeight;
     bindCmtComposer(host, seld.id, seld.tid);
@@ -5065,14 +5356,240 @@
     return html;
   }
 
-  /* Путь — единый богатый таймлайн: 7 шагов платформы + под-события из лога */
+  /* ── ПУТЬ И ИСПОЛЬЗОВАНИЕ ─────────────────────────────────────────────────
+     Полная картина клиента на одном экране: где он в воронке и как «дышит»
+     (герой-пульс) → чем реально пользуется (сетка панелей: поступление,
+     продукты, деньги, документы, диагностика, касания, обучение/бот/семья) →
+     как шел по платформе (таймлайн событий). Все из живых данных карточки. */
   function buildPathSection(ctx) {
-    var lead = ctx.lead, d = ctx.d, base = ctx.base;
-    var L = lead || base;
-    var html = '<div class="m-ctitle">Путь по платформе</div>' +
-      '<div class="m-csub">Что человек сделал и где остановился — с этим заходи на разговор.</div>';
+    var d = ctx.d, base = ctx.base;
+    var L = ctx.lead || base;
+    var id = state.drawerId;
+    if (!state._catalog) fetchCatalog(function () {
+      if (state.drawerId === id && state.modalSection === 'path') renderModalContent();
+    });
+    var html = '<div class="m-ctitle">Путь и использование</div>' +
+      '<div class="m-csub">Кто это, как пользуется платформой и где остановился — вся картина на одном экране.</div>';
+    html += buildUsageDash(ctx, L);
+    html += '<div class="uz-jh"><span>Как шел по платформе</span><i></i></div>';
     html += buildPathTimeline(L, d || null);
     return html;
+  }
+
+  /* герой-пульс + сетка панелей использования */
+  function buildUsageDash(ctx, L) {
+    var d = ctx.d, base = ctx.base, crm = ctx.crm || {};
+    var id = state.drawerId;
+    var A = (d && d.answers) || (L.answers) || {};
+
+    /* — воронка платформы: глубина и точка остановки — */
+    var depth = 0, nextStep = null;
+    for (var i = 0; i < FSTEPS.length; i++) {
+      if (FSTEPS[i].test(L)) depth++;
+      else { nextStep = FSTEPS[i]; break; }
+    }
+    var reached = depth > 0 ? FSTEPS[depth - 1] : null;
+    var milestone = reached ? reached.label : 'Только зашли на платформу';
+    var mSub = nextStep
+      ? (depth === 0 ? 'сессия создана, дальше не пошел' : 'остановился на шаге: ' + esc(nextStep.label))
+      : 'дошел до конца воронки платформы';
+
+    /* — пульс — */
+    var created = (d && d.created_at) || base.created_at || L.created_at;
+    var lastAct = L.last_activity || (d && d.events && d.events.length ? d.events[d.events.length - 1].at : null) || created;
+    var days = created ? Math.max(0, Math.floor((Date.now() - new Date(created).getTime()) / 86400000)) : null;
+    var evCount = d && d.events ? d.events.length : (L.events ? L.events.length : 0);
+    var st = crm.status && CRM[crm.status] ? CRM[crm.status] : CRM.new;
+
+    var pulse = [
+      ['На платформе', days == null ? '—' : (days === 0 ? 'сегодня' : days + ' ' + plural(days, 'день', 'дня', 'дней'))],
+      ['Активность', lastAct ? ago(lastAct) + ' назад' : '—'],
+      ['Действий', evCount ? String(evCount) : '—'],
+    ].map(function (p) {
+      return '<div class="uz-pz"><div class="uz-pz-v num">' + esc(p[1]) + '</div><div class="uz-pz-l">' + p[0] + '</div></div>';
+    }).join('');
+
+    /* профиль-чипы (кто это) */
+    var pchips = [];
+    if (A.grade) pchips.push(esc(fmtVal(A.grade)) + ' класс');
+    if (A.target_year) pchips.push('поступление ' + esc(fmtVal(A.target_year)));
+    var dirs = A.directions || A.direction;
+    if (dirs) { var dd = Array.isArray(dirs) ? dirs[0] : dirs; if (dd) pchips.push(esc(fmtVal(dd))); }
+    var geo = L.geo || (d && d.geo);
+    if (geo && geo.city) pchips.push(esc(geo.city));
+    var pchipsHtml = pchips.length ? '<div class="uz-prof">' + pchips.map(function (c) {
+      return '<span class="uz-chip">' + c + '</span>';
+    }).join('') + '</div>' : '';
+
+    var hero = '<div class="uz-hero">' +
+      '<div class="uz-hm">' +
+        '<div class="uz-hm-l">Где сейчас' +
+          '<span class="uz-st"><span class="uz-st-d" style="background:' + st.dot + '"></span>' + esc(st.label) + '</span></div>' +
+        '<div class="uz-hm-t">' + esc(milestone) + '</div>' +
+        '<div class="uz-hm-s">' + mSub + '</div>' +
+        pchipsHtml +
+      '</div>' +
+      '<div class="uz-pulse">' + pulse + '</div>' +
+    '</div>';
+
+    /* — панели использования — */
+    var panels = [];
+    panels.push(usageAdmission(crm, id));
+    var grid = [usageProducts(id), usageMoney(d), usageDocs(d), usageDiag(d), usageTouch(crm)];
+    if (d && d.usage) {
+      grid.push(usageLearning(d.usage.learning));
+      grid.push(usageBot(d.usage.bot));
+      grid.push(usageFamily(d.usage.family));
+    }
+    grid = grid.filter(Boolean);
+    var gridHtml = grid.length ? '<div class="uz-grid">' + grid.join('') + '</div>' : '';
+
+    return '<div class="uz">' + hero + panels.filter(Boolean).join('') + gridHtml + '</div>';
+  }
+
+  /* карточка-панель: иконка + заголовок + значение + строка; опц. ссылка на вкладку */
+  function uzPanel(o) {
+    var link = o.goto ? '<button class="uz-go" data-goto="' + o.goto + '">' + (o.golabel || 'открыть') + ic('go', 12) + '</button>' : '';
+    return '<div class="uz-p' + (o.mute ? ' mute' : '') + (o.wide ? ' wide' : '') + '">' +
+      '<div class="uz-p-h"><span class="uz-p-ic">' + ic(o.icon, 15) + '</span><span class="uz-p-t">' + o.title + '</span>' + link + '</div>' +
+      '<div class="uz-p-b">' + o.body + '</div>' +
+    '</div>';
+  }
+
+  function usageAdmission(crm, id) {
+    var board = (crm && Array.isArray(crm.admission)) ? crm.admission : [];
+    if (!board.length) return null;
+    var by = { wait: 0, doing: 0, review: 0, done: 0, return: 0 };
+    var client = 0, team = 0;
+    var isClientSide = function (o) { return o === 'client' || o === 'student' || o === 'parent'; };
+    board.forEach(function (t) {
+      by[t.status] = (by[t.status] || 0) + 1;
+      if (t.status !== 'done') { if (isClientSide(t.owner)) client++; else team++; }
+    });
+    var total = board.length, done = by.done || 0;
+    var pct = total ? Math.round(done / total * 100) : 0;
+    // следующая задача: приоритет review → return → doing → wait
+    var order = { review: 0, return: 1, doing: 2, wait: 3, done: 9 };
+    var pend = board.filter(function (t) { return t.status !== 'done'; })
+      .sort(function (a, b) { return (order[a.status] || 5) - (order[b.status] || 5); });
+    var next = pend[0];
+    var chips = [];
+    if (by.review) chips.push(['на проверке', by.review, 'rev']);
+    if (by.return) chips.push(['вернули', by.return, 'ret']);
+    if (client) chips.push(['на клиенте', client, 'cli']);
+    if (team) chips.push(['на нас', team, 'team']);
+    var chipsHtml = chips.map(function (c) {
+      return '<span class="uz-tag uz-tag--' + c[2] + '">' + c[0] + '<b class="num">' + c[1] + '</b></span>';
+    }).join('');
+    var nextHtml = next
+      ? '<div class="uz-next"><span class="uz-next-l">Следующее</span>' + esc(next.title) +
+          '<span class="uz-next-o">' + (isClientSide(next.owner) ? 'клиент' : 'мы') + '</span></div>'
+      : '<div class="uz-next done">' + ic('check', 12) + 'Все задачи закрыты</div>';
+    var body =
+      '<div class="uz-prog"><div class="uz-prog-bar"><span style="width:' + pct + '%"></span></div>' +
+        '<span class="uz-prog-n num">' + done + '/' + total + '</span></div>' +
+      (chipsHtml ? '<div class="uz-tags">' + chipsHtml + '</div>' : '') +
+      nextHtml;
+    return uzPanel({ icon: 'cap', title: 'Работа по поступлению', body: body, goto: 'admission', golabel: 'доска', wide: true });
+  }
+
+  function usageProducts(id) {
+    var offers = leadOffers(id);
+    var cat = state._catalog, byPid = {};
+    if (cat) cat.forEach(function (p) { byPid[p.id] = p; });
+    var pname = function (o) { return (byPid[o.pid] && byPid[o.pid].name) || o.headline || 'продукт'; };
+    var bought = offers.filter(function (o) { return o && o.bought; });
+    var shown = offers.filter(function (o) { return o && o.on && !o.bought; });
+    if (!bought.length && !shown.length) {
+      return uzPanel({ icon: 'box', title: 'Продукты', mute: true, goto: 'offers', golabel: 'витрина',
+        body: '<div class="uz-empty">Витрина еще не собрана</div>' });
+    }
+    var body = '';
+    if (bought.length) {
+      body += '<div class="uz-mini">Куплено</div><div class="uz-chips">' + bought.map(function (o) {
+        return '<span class="uz-chip on">' + ic('check', 11) + esc(pname(o)) + '</span>';
+      }).join('') + '</div>';
+    }
+    body += '<div class="uz-line">' +
+      (bought.length ? '<b class="num">' + bought.length + '</b> куплено' : 'ничего не куплено') +
+      (shown.length ? ' · <b class="num">' + shown.length + '</b> в витрине' : '') + '</div>';
+    return uzPanel({ icon: 'box', title: 'Продукты', body: body, goto: 'offers', golabel: 'витрина' });
+  }
+
+  function usageMoney(d) {
+    var pays = (d && d.payments) || [];
+    if (!pays.length) return uzPanel({ icon: 'coins', title: 'Деньги', mute: true, goto: 'pay', golabel: 'оплаты',
+      body: '<div class="uz-empty">Оплат пока нет</div>' });
+    var paid = 0, pend = 0;
+    pays.forEach(function (p) { if (p.status === 'paid') paid += (p.amount_rub || 0); else if (p.status === 'pending') pend += (p.amount_rub || 0); });
+    var body = '<div class="uz-big num">' + fmtMoney(paid) + ' <span>₽</span></div>' +
+      '<div class="uz-line">оплачено · <b class="num">' + pays.length + '</b> ' + plural(pays.length, 'платеж', 'платежа', 'платежей') +
+      (pend ? ' · ждем <b class="num">' + fmtMoney(pend) + ' ₽</b>' : '') + '</div>';
+    return uzPanel({ icon: 'coins', title: 'Деньги', body: body, goto: 'pay', golabel: 'оплаты' });
+  }
+
+  function usageDocs(d) {
+    var docs = (d && d.docs) || [];
+    if (!docs.length) return uzPanel({ icon: 'doc', title: 'Документы', mute: true, goto: 'docs', golabel: 'архив',
+      body: '<div class="uz-empty">Файлов нет</div>' });
+    var withFile = docs.filter(function (x) { return x.has_file || x.link; }).length;
+    var body = '<div class="uz-big num">' + docs.length + '</div>' +
+      '<div class="uz-line">' + plural(docs.length, 'документ', 'документа', 'документов') +
+      (withFile ? ' · <b class="num">' + withFile + '</b> с файлом' : '') + '</div>';
+    return uzPanel({ icon: 'doc', title: 'Документы', body: body, goto: 'docs', golabel: 'архив' });
+  }
+
+  function usageDiag(d) {
+    var dg = d && d.diagnostics;
+    if (!dg || dg.score == null) return uzPanel({ icon: 'spark', title: 'Диагностика', mute: true, goto: 'ai', golabel: 'разбор',
+      body: '<div class="uz-empty">Разбор не готов</div>' });
+    var tone = scoreTone(dg.score);
+    var body = '<div class="uz-big num" style="color:' + tone.c + '">' + dg.score + '<span>/100</span></div>' +
+      '<div class="uz-line">' + esc(tone.label) + '</div>';
+    return uzPanel({ icon: 'spark', title: 'Диагностика', body: body, goto: 'ai', golabel: 'разбор' });
+  }
+
+  function usageTouch(crm) {
+    var comms = (crm && crm.comms) || [];
+    if (!comms.length) return uzPanel({ icon: 'phone', title: 'Касания', mute: true, goto: 'notes', golabel: 'заметки',
+      body: '<div class="uz-empty">Еще не связывались</div>' });
+    var last = comms[comms.length - 1];
+    var body = '<div class="uz-big num">' + comms.length + '</div>' +
+      '<div class="uz-line">' + plural(comms.length, 'касание', 'касания', 'касаний') +
+      ' · последнее ' + ago(last.at) + ' назад</div>';
+    return uzPanel({ icon: 'phone', title: 'Касания', body: body, goto: 'notes', golabel: 'заметки' });
+  }
+
+  /* панели из d.usage (появятся после расширения бэкенда — миграция usage) */
+  function usageLearning(lr) {
+    if (!lr) return null;
+    if (!lr.submissions) return uzPanel({ icon: 'chart', title: 'Обучение', mute: true, body: '<div class="uz-empty">Еще не занимался</div>' });
+    var body = '<div class="uz-big num">' + lr.submissions + '</div>' +
+      '<div class="uz-line">' + plural(lr.submissions, 'работа', 'работы', 'работ') + ' сдано' +
+      (lr.avg_score != null ? ' · средний <b class="num">' + lr.avg_score + '</b>' : '') +
+      (lr.last_at ? ' · ' + ago(lr.last_at) + ' назад' : '') + '</div>';
+    return uzPanel({ icon: 'chart', title: 'Обучение', body: body });
+  }
+
+  function usageBot(bt) {
+    if (!bt) return null;
+    if (!bt.messages) return uzPanel({ icon: 'bot', title: 'Бот', mute: true, body: '<div class="uz-empty">Не писал боту</div>' });
+    var body = '<div class="uz-big num">' + bt.messages + '</div>' +
+      '<div class="uz-line">' + plural(bt.messages, 'сообщение', 'сообщения', 'сообщений') +
+      (bt.last_at ? ' · ' + ago(bt.last_at) + ' назад' : '') +
+      (bt.channel ? ' · ' + esc(bt.channel) : '') + '</div>';
+    return uzPanel({ icon: 'bot', title: 'Активность в боте', body: body });
+  }
+
+  function usageFamily(fam) {
+    if (!fam || !fam.length) return null;
+    var body = '<div class="uz-chips">' + fam.map(function (m) {
+      var role = m.relation === 'parent' ? 'родитель' : (m.relation === 'self' ? 'ученик' : (m.role || ''));
+      return '<span class="uz-chip' + (m.connected ? ' on' : '') + '">' + esc(m.name || role) +
+        (role ? '<i>' + esc(role) + '</i>' : '') + '</span>';
+    }).join('') + '</div>' +
+      '<div class="uz-line"><b class="num">' + fam.length + '</b> ' + plural(fam.length, 'участник', 'участника', 'участников') + ' семьи</div>';
+    return uzPanel({ icon: 'team', title: 'Семья', body: body });
   }
 
   /* группирует реальные события под шаги платформы */
@@ -5310,6 +5827,10 @@
     Array.prototype.forEach.call(host.querySelectorAll('[data-adv]'), function (b) {
       b.addEventListener('click', function () { patch(id, { status: b.getAttribute('data-adv') }); });
     });
+    // переход на другую вкладку карточки (ссылки «открыть доску / оплаты» из «Пути»)
+    Array.prototype.forEach.call(host.querySelectorAll('[data-goto]'), function (b) {
+      b.addEventListener('click', function () { setModalSection(b.getAttribute('data-goto')); });
+    });
     var cc = el('c-copy'), ndc = el('nd-copy');
     var contact = ((ctx.base.booking || {}).contact) || '';
     if (cc) cc.addEventListener('click', function () { copyText(contact, cc); });
@@ -5382,6 +5903,33 @@
         // убрать задачу
         var del = tEl.querySelector('.rm-del');
         if (del) del.addEventListener('click', function () { delete RM_OPEN[tid]; rmSet(id, rmTasks(id).filter(function (t) { return t.id !== tid; })); rmReload(); });
+        // вложения задачи: doc_id → реальная ссылка. Картинки резолвим сразу для
+        // превью-миниатюры; файлы — по клику (self-host Storage медленный, незачем
+        // тащить трафик за карточки, которые никто не откроет).
+        Array.prototype.forEach.call(tEl.querySelectorAll('.rm-sub[data-docid]'), function (a) {
+          var docId = a.getAttribute('data-docid');
+          if (a.classList.contains('rm-sub-img')) {
+            resolveDocLink(docId, function (url) {
+              if (!url) return;
+              a.href = url;
+              var thumb = a.querySelector('.rm-sub-thumb');
+              if (thumb) { thumb.classList.remove('rm-sub-thumb--load'); thumb.style.backgroundImage = "url('" + url + "')"; }
+            });
+          } else {
+            a.addEventListener('click', function (e) {
+              if (a.getAttribute('data-resolved') === '1') return; // href уже настоящий — обычный переход
+              e.preventDefault();
+              if (a.classList.contains('rm-sub-loading')) return;
+              a.classList.add('rm-sub-loading');
+              resolveDocLink(docId, function (url) {
+                a.classList.remove('rm-sub-loading');
+                if (!url) return;
+                a.href = url; a.setAttribute('data-resolved', '1');
+                window.open(url, '_blank', 'noopener');
+              });
+            });
+          }
+        });
         // тип ответа ученика (file/text/both/none) — сохраняется сразу
         Array.prototype.forEach.call(tEl.querySelectorAll('.rm-submit-seg .rm-sub-t'), function (sb) {
           sb.addEventListener('click', function (e) {
