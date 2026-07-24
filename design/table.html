@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Таблицы и списки лидов</title>
+<!-- Таблицы и списки лидов. Когда берем: главный рабочий инструмент — все в одной карточке .listcard (тулбар → срезы → thead → строки). Классы: .listcard .list-tools .searchwrap .cdd .vseg .list-count .list-quick .qchip .trow .lr-grid .thead .th .sev .t-ttl .t-sub .t-contact .t-when .t-go .score .strack .list-empty .kb-wrap .kb-col .kb-card. Живой код: style.css:382. Правила: высота строки 58px, грид-колонки под контент; ховер = фон #FBFBFC + левая цветная полоска ::before; приоритет/статус цветом полоски и чипа .sev, НЕ заливкой строки; числа tnum; никаких зебр, вертикальных линеек и жирных рамок — только нижние 1px var(--line). -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background:#E5E7EC; padding:0; }
+  .sc-wrap { max-width:1120px; margin:0 auto; padding:38px 26px 90px; }
+  .sc-h1 { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#11151F; }
+  .sc-sub { margin-top:8px; font-size:14px; color:#697086; max-width:74ch; line-height:1.55; }
+  .sc-sec { margin-top:38px; }
+  .sc-lab { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#A6ABB8; margin-bottom:13px; }
+  .sc-note { font-size:12.5px; color:#697086; margin-top:12px; line-height:1.55; }
+  .sc-row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+  /* карточка-обертка примеров, как в main */
+  .sc-panel { background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+
+  <div class="sc-top">
+    <div class="sc-h1">Таблицы и списки лидов</div>
+    <div class="sc-sub">Список — главный рабочий объект CRM. Все в одной карточке <b>.listcard</b>: тулбар, быстрые срезы, шапка, строки. Плотно (58px строка), быстро (.12–.15s), с ховер-подсказкой цветом. Ниже — настоящая анатомия из <b>style.css</b>.</div>
+  </div>
+
+  <!-- ── ПОЛНЫЙ СПИСОК ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.listcard — тулбар + срезы + thead + строки (.lr-grid)</div>
+    <div class="sc-panel listcard">
+
+      <!-- ряд 1: поиск / фильтр / вид -->
+      <div class="list-tools">
+        <div class="searchwrap has-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search" value="Ван" placeholder="Поиск по имени, контакту, городу" />
+          <button class="s-clear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+        <button class="cdd active">Все статусы <span class="cdd-ch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></button>
+        <button class="cdd attn">Просрочки <span class="n">4</span></button>
+        <span class="list-count"><b>18</b> из 142</span>
+        <div class="vseg">
+          <button class="on" title="Таблица"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+          <button title="Канбан"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18"/><rect x="14" y="3" width="7" height="11"/></svg></button>
+        </div>
+      </div>
+
+      <!-- ряд 2: быстрые срезы -->
+      <div class="list-quick">
+        <button class="qchip hot on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Горячие <span class="qn">7</span></button>
+        <button class="qchip on">Новые <span class="qn">23</span></button>
+        <button class="qchip">Созвон назначен <span class="qn">12</span></button>
+        <button class="qchip">Предложение <span class="qn">9</span></button>
+        <button class="qchip">Клиенты <span class="qn">38</span></button>
+      </div>
+
+      <!-- тело: thead + строки -->
+      <div class="list-body">
+        <div class="trow lr-grid thead">
+          <span class="th sortable act" data-sort="crm">Статус <span class="dir"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span></span>
+          <span class="th sortable">Лид</span>
+          <span class="th sortable hidem">Балл</span>
+          <span class="th hidem">Контакт</span>
+          <span class="th sortable r">Пришел</span>
+          <span class="th hidem"></span>
+        </div>
+
+        <!-- горячий (ждет связи) — критический приоритет -->
+        <div class="trow lr-grid r-crit">
+          <span class="pill-st"><span class="sev s-hot">ждет связи</span></span>
+          <div class="t-cell">
+            <div class="t-ttl"><span class="nveo"></span>Ван Мэйлинь
+              <span class="minib warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>
+            </div>
+            <div class="t-sub">11 класс · поступление 2027 · Алматы</div>
+          </div>
+          <div class="score hidem"><b class="num" style="color:#18A957">78</b><span class="strack"><i style="width:78%; background:#18A957"></i></span></div>
+          <div class="t-contact hidem"><a href="#">@meilin</a></div>
+          <div class="t-when num today">сегодня, 09:14</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+        <!-- связались -->
+        <div class="trow lr-grid">
+          <span class="pill-st"><span class="sev s-contacted">связались</span></span>
+          <div class="t-cell">
+            <div class="t-ttl">Дмитрий Соколов
+              <span class="minib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>2</span>
+            </div>
+            <div class="t-sub">10 класс · поступление 2028 · Ташкент</div>
+          </div>
+          <div class="score hidem"><b class="num" style="color:#E0922F">55</b><span class="strack"><i style="width:55%; background:#E0922F"></i></span></div>
+          <div class="t-contact hidem"><a href="#">+7 700 •••</a></div>
+          <div class="t-when num">вчера, 18:40</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+        <!-- созвон назначен -->
+        <div class="trow lr-grid">
+          <span class="pill-st"><span class="sev s-call_scheduled">созвон назначен</span></span>
+          <div class="t-cell">
+            <div class="t-ttl">Ли Чжэнь</div>
+            <div class="t-sub">11 класс · поступление 2027 · Бишкек</div>
+          </div>
+          <div class="score hidem"><b class="num" style="color:#18A957">71</b><span class="strack"><i style="width:71%; background:#18A957"></i></span></div>
+          <div class="t-contact hidem"><a href="#">@lizhen</a></div>
+          <div class="t-when num">2 дня назад</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+        <!-- предложение — средний приоритет -->
+        <div class="trow lr-grid r-mid">
+          <span class="pill-st"><span class="sev s-offer_sent">предложение</span></span>
+          <div class="t-cell">
+            <div class="t-ttl">Айгерим Нурлан</div>
+            <div class="t-sub">выпускник · поступление 2026 · Астана</div>
+          </div>
+          <div class="score hidem"><b class="num" style="color:#18A957">64</b><span class="strack"><i style="width:64%; background:#18A957"></i></span></div>
+          <div class="t-contact hidem"><a href="#">+7 701 •••</a></div>
+          <div class="t-when num">3 дня назад</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+        <!-- клиент -->
+        <div class="trow lr-grid">
+          <span class="pill-st"><span class="sev s-client">клиент</span></span>
+          <div class="t-cell">
+            <div class="t-ttl">Чжан Вэй</div>
+            <div class="t-sub">11 класс · поступление 2027 · Душанбе</div>
+          </div>
+          <div class="score hidem"><b class="num" style="color:#18A957">82</b><span class="strack"><i style="width:82%; background:#18A957"></i></span></div>
+          <div class="t-contact hidem"><a href="#">@zhangwei</a></div>
+          <div class="t-when num">неделю назад</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+        <!-- аноним + отказ + без контакта/балла -->
+        <div class="trow lr-grid r-mid">
+          <span class="pill-st"><span class="sev s-rejected">отказ</span></span>
+          <div class="t-cell">
+            <div class="t-ttl anon">Лид без имени</div>
+            <div class="t-sub">анкета не завершена · Самарканд</div>
+          </div>
+          <div class="score hidem"><span style="color:var(--ink-3)">—</span></div>
+          <div class="t-contact hidem"><span class="none">—</span></div>
+          <div class="t-when num">3 недели назад</div>
+          <div class="t-go hidem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="sc-note">Наведите на строку — фон становится <b>#FBFBFC</b> и слева проступает цветная полоска <b>::before</b> (ховер синяя; приоритеты <b>.r-crit</b> коралл, <b>.r-high</b> амбер, <b>.r-mid</b> серая), стрелка <b>.t-go</b> заливается синим. Непрочитанное — синяя точка <b>.nveo</b>; дата <b>.t-when.today</b> синяя жирная.</div>
+  </div>
+
+  <!-- ── СТАТУС-ПИЛЮЛИ .sev — формула цвет/-ink/-soft ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.sev — статус-пилюли (семантика -ink на -soft, без точек-индикаторов)</div>
+    <div class="sc-panel" style="padding:20px 22px;">
+      <div class="sc-row">
+        <span class="sev s-new">новый</span>
+        <span class="sev s-hot">ждет связи</span>
+        <span class="sev s-contacted">связались</span>
+        <span class="sev s-call_scheduled">созвон назначен</span>
+        <span class="sev s-call_done">разбор проведен</span>
+        <span class="sev s-offer_sent">предложение</span>
+        <span class="sev s-client">клиент</span>
+        <span class="sev s-rejected">отказ</span>
+      </div>
+    </div>
+    <div class="sc-note">Один премиальный стиль <b>.sev</b> + модификатор статуса. Красный = горячее/срочное, амбер = в работе/ждет, синий = процесс, зеленый = клиент, серый = нейтраль/отказ.</div>
+  </div>
+
+  <!-- ── КАНБАН ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.kb-wrap / .kb-col / .kb-card — альтернативный вид (горизонтальный скролл)</div>
+    <div class="sc-panel" style="padding:0;">
+      <div class="kb-wrap" style="padding:18px 16px;">
+
+        <div class="kb-col">
+          <div class="kb-head"><span class="kb-title">Новые</span><span class="kb-n">3</span></div>
+          <div class="kb-cards">
+            <div class="kb-card"><div class="kb-name">Ван Мэйлинь</div><div class="kb-meta"><span class="kb-score" style="color:#18A957">78</span><span>Алматы</span><span class="kb-when">сегодня</span></div></div>
+            <div class="kb-card"><div class="kb-name anon">Лид без имени</div><div class="kb-meta"><span class="kb-score" style="color:#E0922F">51</span><span class="kb-when">вчера</span></div></div>
+          </div>
+        </div>
+
+        <div class="kb-col">
+          <div class="kb-head"><span class="kb-title">Созвон назначен</span><span class="kb-n">2</span></div>
+          <div class="kb-cards">
+            <div class="kb-card dragging"><div class="kb-name">Ли Чжэнь</div><div class="kb-meta"><span class="kb-score" style="color:#18A957">71</span><span>Бишкек</span><span class="kb-when">2 дня</span></div></div>
+            <div class="kb-card"><div class="kb-name">Дмитрий Соколов</div><div class="kb-meta"><span class="kb-score" style="color:#E0922F">55</span><span class="kb-when">вчера</span></div></div>
+          </div>
+        </div>
+
+        <div class="kb-col dragover">
+          <div class="kb-head"><span class="kb-title">Предложение</span><span class="kb-n">1</span></div>
+          <div class="kb-cards">
+            <div class="kb-card"><div class="kb-name">Айгерим Нурлан</div><div class="kb-meta"><span class="kb-score" style="color:#18A957">64</span><span>Астана</span><span class="kb-when">3 дня</span></div></div>
+          </div>
+        </div>
+
+        <div class="kb-col">
+          <div class="kb-head"><span class="kb-title">Клиенты</span><span class="kb-n">1</span></div>
+          <div class="kb-cards">
+            <div class="kb-card"><div class="kb-name">Чжан Вэй</div><div class="kb-meta"><span class="kb-score" style="color:#18A957">82</span><span class="kb-when">неделю</span></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="sc-note">Колонка <b>.kb-col</b> 248px на фоне #ECEEF2; перетаскиваемая карточка — <b>.dragging</b> (opacity .45), колонка-приемник под курсором — <b>.dragover</b> (синеет). Карточка несет имя (<b>.anon</b> серый) + мету: балл, город, дата.</div>
+  </div>
+
+  <!-- ── ПУСТОЕ СОСТОЯНИЕ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.list-empty — пустота как состояние с действием, не белая дыра</div>
+    <div class="sc-panel listcard">
+      <div class="list-empty">
+        <span class="le-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+        <div class="le-t">Ничего не нашлось</div>
+        <div class="le-s">По запросу «Ван» нет совпадений. Проверьте написание или сбросьте поиск.</div>
+        <button class="le-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>Сбросить поиск</button>
+      </div>
+    </div>
+    <div class="sc-note">Пагинации нет — список целиком плюс счетчик <b>.list-count</b>. Скелетон загрузки — <b>.sk-list</b>/<b>.sk-row</b> на общем шиммере <b>.shim</b>.</div>
+  </div>
+
+</div>
+</body>
+</html>

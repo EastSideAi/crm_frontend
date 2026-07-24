@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Карточка лида</title>
+<!-- Карточка лида. Когда берем: открытие любого лида — ЦЕНТРИРОВАННАЯ модалка .modal (исторически «drawer»), большая рабочая поверхность поверх списка. Классы: .mbg .modal .m-head .m-ava .m-name .m-sub .m-navfloat .m-arrow .m-pulse .m-body .m-nav .m-ni .m-content .m-foot .m-sec .m-sec-h .now-do .who .ed-field .main-hero .pipe .pstep .msg. Живой код: style.css:615. Правила: один объект = одна карточка, не плодить вложенные модалки; вторичное — инлайн-редактированием или секцией; секции строго через .m-sec-h, новый блок = новая секция, не «карточка в карточке»; цвета ролей в чате фиксированы (серый входящий / синий бот / зеленый менеджер). -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background:#E5E7EC; padding:0; }
+  .sc-wrap { max-width:1120px; margin:0 auto; padding:38px 26px 90px; }
+  .sc-h1 { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#11151F; }
+  .sc-sub { margin-top:8px; font-size:14px; color:#697086; max-width:74ch; line-height:1.55; }
+  .sc-sec { margin-top:38px; }
+  .sc-lab { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#A6ABB8; margin-bottom:13px; }
+  .sc-note { font-size:12.5px; color:#697086; margin-top:12px; line-height:1.55; }
+  .sc-panel { background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); padding:20px 22px; }
+  /* СЦЕНА: показываем реальную .modal в потоке (снят fixed/overlay, стиль карточки настоящий) */
+  .sc-stage .mbg { position:static; opacity:1; visibility:visible; -webkit-backdrop-filter:none; backdrop-filter:none; background:transparent; z-index:auto; }
+  .sc-stage .modal { position:static; transform:none; opacity:1; visibility:visible; width:100%; max-width:1020px; height:680px; max-height:none; margin:0 auto; box-shadow:0 30px 90px -46px rgba(15,19,32,.4); }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+
+  <div class="sc-top">
+    <div class="sc-h1">Карточка лида</div>
+    <div class="sc-sub">Главный рабочий объект. В коде зовется «drawer», но реализована как <b>центрированная модалка</b> <b>.modal</b> — большая рабочая поверхность поверх списка. Шапка · внутренняя навигация · секции контента · футер действий. Ниже — настоящая карточка из <b>style.css</b> (снята подложка, стиль сохранен).</div>
+  </div>
+
+  <!-- ── ЖИВАЯ КАРТОЧКА ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.mbg + .modal — шапка .m-head · тело .m-body (.m-nav + .m-content) · футер .m-foot</div>
+    <div class="sc-stage">
+      <div class="mbg open">
+        <div class="modal open">
+
+          <!-- ШАПКА -->
+          <div class="m-head">
+            <div class="m-ava">ВМ</div>
+            <div class="m-id">
+              <div class="m-name-row">
+                <div class="m-name">Ван Мэйлинь</div>
+                <button class="m-edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+              </div>
+              <div class="m-sub">
+                <span class="sev s-hot">ждет связи</span>
+                <span class="dot-sep"></span><span>11 класс · поступление 2027</span>
+                <span class="dot-sep"></span><span>Алматы</span>
+                <span class="dot-sep"></span><span class="sess">сессия #A3F19C</span>
+              </div>
+            </div>
+            <div class="m-pulse">
+              <div class="pv">78<small>/100</small></div>
+              <div class="ptrack"><i style="width:78%; background:#18A957"></i></div>
+              <div class="plab" style="color:#0E7C3F">сильный балл</div>
+            </div>
+            <div class="m-navfloat">
+              <button class="m-arrow" disabled><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+              <button class="m-arrow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+              <button class="m-arrow" id="m-close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            </div>
+          </div>
+
+          <!-- ТЕЛО -->
+          <div class="m-body">
+
+            <!-- внутренняя навигация -->
+            <nav class="m-nav">
+              <button class="m-ni on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Сейчас</button>
+              <button class="m-ni"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg>Главное</button>
+              <button class="m-ni"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Переписка <span class="cnt">14</span></button>
+              <button class="m-ni"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Оплаты <span class="dotw"></span></button>
+              <button class="m-ni"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Документы</button>
+              <button class="m-ni"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Задачи <span class="cnt">2</span></button>
+            </nav>
+
+            <!-- контент -->
+            <div class="m-content">
+
+              <!-- секция «Сейчас» -->
+              <div class="m-sec">
+                <div class="m-sec-h">Сейчас</div>
+                <div class="now-do warn">
+                  <div class="nd-k">срочно</div>
+                  <div class="nd-t">Позвоните — лид оставил анкету 2 часа назад и ждет связи</div>
+                  <div class="nd-s">Балл 78 — сильный кандидат. Не остывает первые сутки; лучшее окно для звонка — сегодня до вечера.</div>
+                  <div class="nd-act">
+                    <button class="bp sm">Назначить созвон</button>
+                    <button class="bp ghost sm">Написать в чат</button>
+                  </div>
+                </div>
+
+                <div class="who" style="margin-top:14px;">
+                  <div class="ed-field">
+                    <span class="ef-ic" style="background:var(--blue-tint); color:var(--blue)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                    <span class="ef-k">Имя</span>
+                    <span class="ef-v">Ван Мэйлинь</span>
+                    <button class="ef-copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  </div>
+                  <div class="ed-field">
+                    <span class="ef-ic" style="background:var(--blue-tint); color:var(--blue)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                    <span class="ef-k">Контакт</span>
+                    <span class="ef-v"><a href="#">@meilin</a></span>
+                    <button class="ef-copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                  </div>
+                  <div class="ed-field">
+                    <span class="ef-ic" style="background:var(--fill); color:var(--ink-3)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+                    <span class="ef-k">Город</span>
+                    <span class="ef-v empty">не указан — добавить</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- секция «Главное» -->
+              <div class="m-sec">
+                <div class="m-sec-h">Главное <a class="hr">открыть диагностику</a></div>
+                <div class="main-hero">
+                  <div class="mh-st">
+                    <span class="sev s-call_scheduled">созвон назначен</span>
+                    <span class="mh-slot"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>завтра, 15:00</span>
+                  </div>
+                  <div class="mh-score"><b class="num">78<small>/100</small></b><span style="color:#0E7C3F">сильный балл</span></div>
+                </div>
+
+                <div class="pipe" style="margin-top:16px;">
+                  <button class="pstep past"><span class="pdot"></span><span class="plbl">Новый</span></button>
+                  <button class="pstep past"><span class="pdot"></span><span class="plbl">Связались</span></button>
+                  <button class="pstep cur"><span class="pdot"></span><span class="plbl">Созвон назначен</span></button>
+                  <button class="pstep next"><span class="pdot"></span><span class="plbl">Разбор проведен</span></button>
+                  <button class="pstep next"><span class="pdot"></span><span class="plbl">Предложение</span></button>
+                  <button class="pstep next"><span class="pdot"></span><span class="plbl">Клиент</span></button>
+                </div>
+              </div>
+
+              <!-- секция «Переписка» -->
+              <div class="m-sec">
+                <div class="m-sec-h">Переписка</div>
+                <div style="display:flex; flex-direction:column; gap:14px;">
+                  <div class="msg in"><div class="msg-b">Здравствуйте! Заполнила анкету, но не поняла, что дальше по срокам подачи?</div><div class="msg-t">09:14</div></div>
+                  <div class="msg out"><div class="msg-h"><span class="msg-by ai"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg>Ассистент</span></div><div class="msg-b">Диагностика готова — балл 78. Куратор свяжется сегодня и разберет сроки подачи в выбранные вузы.</div><div class="msg-t">09:15</div></div>
+                  <div class="msg-sys"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Куратор Артем подключился к диалогу</div>
+                  <div class="msg out mgr"><div class="msg-h"><span class="msg-by hum"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Артем · куратор</span></div><div class="msg-b">Мэйлинь, добрый день! Предлагаю созвон завтра в 15:00 — покажу маршрут по вашим вузам. Удобно?</div><div class="msg-t">09:22</div></div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ФУТЕР -->
+          <div class="m-foot">
+            <button class="m-archive" id="m-hide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>В архив</button>
+            <button class="bp ghost">Заметка</button>
+            <button class="bp">Назначить созвон</button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="sc-note">Аватар <b>.m-ava</b> — единственный градиент (140deg #4C7DFF→navy). «Пульс» <b>.m-pulse</b> — балл 26px + мини-трек. Стрелки <b>.m-navfloat</b> листают лидов не закрывая карточку. Слева — навигация <b>.m-nav</b> (активный <b>.m-ni.on</b> = белая плашка с синей иконкой; счетчик <b>.cnt</b>, точка внимания <b>.dotw</b>). С открытым AI-чатом модалка расширяется до 1400px, а <b>.m-foot</b> скрывается.</div>
+  </div>
+
+  <!-- ── РОЛИ В ПЕРЕПИСКЕ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.msg — фиксированные цвета ролей: серый входящий · синий бот · зеленый менеджер</div>
+    <div class="sc-panel">
+      <div style="display:flex; flex-direction:column; gap:14px; max-width:560px;">
+        <div class="msg in"><div class="msg-h"><span class="msg-by">Клиент</span></div><div class="msg-b">Входящее — серый пузырь <b>.msg.in</b>, срезан левый нижний угол.</div><div class="msg-t">10:02</div></div>
+        <div class="msg out"><div class="msg-h"><span class="msg-by ai"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg>Ассистент</span></div><div class="msg-b">Ответ бота — синий пузырь <b>.msg.out</b>.</div><div class="msg-t">10:03</div></div>
+        <div class="msg out mgr"><div class="msg-h"><span class="msg-by hum"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Менеджер</span></div><div class="msg-b">Ответ менеджера — зеленый пузырь <b>.msg.out.mgr</b>.</div><div class="msg-t">10:05</div></div>
+        <div class="msg-sys"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Системное — зеленая пилюля по центру</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── СТЕППЕР ВОРОНКИ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.pipe / .pstep — состояния: past (синий) · cur (залит) · cur.s-client (зеленый) · next</div>
+    <div class="sc-panel">
+      <div class="pipe">
+        <button class="pstep past"><span class="pdot"></span><span class="plbl">Новый</span></button>
+        <button class="pstep past"><span class="pdot"></span><span class="plbl">Связались</span></button>
+        <button class="pstep past"><span class="pdot"></span><span class="plbl">Созвон</span></button>
+        <button class="pstep past"><span class="pdot"></span><span class="plbl">Разбор</span></button>
+        <button class="pstep past"><span class="pdot"></span><span class="plbl">Предложение</span></button>
+        <button class="pstep cur s-client"><span class="pdot"></span><span class="plbl">Клиент</span></button>
+      </div>
+    </div>
+    <div class="sc-note">Текущий шаг <b>.cur</b> заливается синим; когда клиент дошел до конца — <b>.cur.s-client</b> зеленый. Пройденные <b>.past</b> — синяя точка, будущие <b>.next</b> — тусклые.</div>
+  </div>
+
+</div>
+</body>
+</html>

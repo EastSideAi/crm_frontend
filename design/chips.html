@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Чипы и статусы</title>
+<!-- Чипы, статусы, бейджи. Когда берем: любая семантика — статус лида, тип, дельта, тег использования, счетчик. Классы: .sev.s-*, .kd.good/.bad/.mid, .pt-node/.pt-tag, .uz-tag--rev/ret/cli/team, .bdg/.cnt/.minib/.ch-badge, .bug-st, иконка-плашка .sp/.ic. Живой код: style.css:405,258,894,870,543,2850. Правила: формула строго -soft фон + -ink текст (насыщенный цвет — только точкам/полоскам/активной навигации); чип только семантика, не украшение; статус r8, дельта/срез — пилюля; один чип на ячейку, счетчики бейджем. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background: #E5E7EC; }
+  .sc-wrap { max-width: 1060px; margin: 0 auto; padding: 54px 28px 96px; }
+  .sc-h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+  .sc-sub { color: var(--ink-2); font-size: 14px; margin-top: 9px; max-width: 64ch; line-height: 1.55; }
+  .sc-sec { margin-top: 26px; padding: 22px 24px 26px; }
+  .sc-sec-t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+  .sc-sec-s { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; margin-bottom: 18px; }
+  .sc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+  .sc-grid { display: flex; flex-wrap: wrap; gap: 20px 26px; }
+  .sc-cell { display: flex; flex-direction: column; gap: 10px; }
+  .sc-lab { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+  .sc-note { font-size: 12.5px; color: var(--ink-3); margin-top: 16px; line-height: 1.5; max-width: 72ch; }
+  .sc-hr { border: 0; height: 1px; background: var(--line); margin: 24px 0; }
+  /* компактный контекст пути для нод — без вертикальной рельсы */
+  .sc-nodes { display: flex; flex-wrap: wrap; gap: 18px 24px; align-items: flex-start; }
+  .sc-node { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .sc-node .sc-lab { font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="sc-wrap">
+    <h1 class="sc-h1">Чипы, статусы, бейджи</h1>
+    <p class="sc-sub">Вся семантика CRM держится на одной формуле: <b>цвет / <code>-ink</code> (темный текст) / <code>-soft</code> (пастельная заливка)</b>. Чип = <code>-soft</code> фон + <code>-ink</code> текст. Насыщенный цвет — только точкам, полоскам и заливке активной навигации.</p>
+
+    <!-- СТАТУСЫ ЛИДА -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Статус лида · .sev</div>
+      <div class="sc-sec-s">Прямоугольный чип r8 (НЕ пилюля), без точек-индикаторов. Восемь ключей воронки — каждый по формуле <code>-soft</code>+<code>-ink</code>.</div>
+      <div class="sc-row">
+        <span class="sev s-hot">Горячий</span>
+        <span class="sev s-new">Новый</span>
+        <span class="sev s-contacted">Был контакт</span>
+        <span class="sev s-call_scheduled">Созвон назначен</span>
+        <span class="sev s-call_done">Созвон проведен</span>
+        <span class="sev s-offer_sent">Оффер отправлен</span>
+        <span class="sev s-client">Клиент</span>
+        <span class="sev s-rejected">Отказ</span>
+      </div>
+    </section>
+
+    <!-- ДЕЛЬТЫ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Дельты · .kd</div>
+      <div class="sc-sec-s">Универсальный «плюс-минус» — пилюля <code>r-pill</code>, цвет + <code>-soft</code> фон. В KPI (<code>.kpi .kd</code>) и в полосе метрик (<code>.stat .kd</code>, где mid — нейтральный серый).</div>
+      <div class="sc-grid">
+        <div class="sc-cell"><span class="sc-lab">.stat .kd</span>
+          <div class="sc-row">
+            <span class="kd good">↑ 12%</span>
+            <span class="kd bad">↓ 8%</span>
+            <span class="kd mid">без изменений</span>
+          </div></div>
+      </div>
+    </section>
+
+    <!-- НОДЫ ПУТИ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Узлы этапов пути · .pt-node · .pt-tag</div>
+      <div class="sc-sec-s">Кружок 26px с цветным ореолом-инсетом: done зеленый, cur синий <code>+4px --blue-tint</code>, drop амбер, todo серый. Теги <code>.pt-tag</code> — пилюли drop/cur.</div>
+      <div class="sc-nodes">
+        <div class="sc-node"><span class="sc-lab">done</span>
+          <div class="pt-step done"><span class="pt-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div></div>
+        <div class="sc-node"><span class="sc-lab">cur</span>
+          <div class="pt-step cur"><span class="pt-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg></span></div></div>
+        <div class="sc-node"><span class="sc-lab">drop</span>
+          <div class="pt-step drop"><span class="pt-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 8v5M12 16.5v.01"/></svg></span></div></div>
+        <div class="sc-node"><span class="sc-lab">todo</span>
+          <div class="pt-step todo"><span class="pt-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="3"/></svg></span></div></div>
+      </div>
+      <hr class="sc-hr" />
+      <div class="sc-cell"><span class="sc-lab">теги узла · .pt-tag</span>
+        <div class="sc-row"><span class="pt-tag cur">текущий</span><span class="pt-tag drop">риск отвала</span></div></div>
+    </section>
+
+    <!-- ТЕГИ ИСПОЛЬЗОВАНИЯ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Теги использования · .uz-tag</div>
+      <div class="sc-sec-s">Пилюли дашборда «Путь». Каждый вариант — своя семантика по той же формуле.</div>
+      <div class="sc-row">
+        <span class="uz-tag uz-tag--rev"><b>12</b> активных</span>
+        <span class="uz-tag uz-tag--ret"><b>3</b> под риском</span>
+        <span class="uz-tag uz-tag--cli"><b>8</b> клиентов</span>
+        <span class="uz-tag uz-tag--team"><b>5</b> команда</span>
+      </div>
+    </section>
+
+    <!-- БЕЙДЖИ И СЧЕТЧИКИ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Бейджи и счетчики</div>
+      <div class="sc-sec-s"><code>.bdg</code> коралловый — требует внимания; <code>.cnt</code> серый — просто число; <code>.minib</code> — мини-бейдж в строке; <code>.ch-badge</code> — канал, тон от <code>--c</code> через <code>color-mix</code>.</div>
+      <div class="sc-grid">
+        <div class="sc-cell"><span class="sc-lab">сайдбар · .navi › .bdg / .cnt</span>
+          <div style="width:220px">
+            <div class="navi on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>Лиды<span class="bdg">7</span></div>
+            <div class="navi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H5.2L4 18Z"/></svg>Обзор<span class="cnt">142</span></div>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">мини-бейдж строки · .minib</span>
+          <div class="sc-row" style="font-size:13px;color:var(--ink)">
+            <span>Задачи<span class="minib">4</span></span>
+            <span>Просрочка<span class="minib warn">2</span></span>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">каналы · .ch-badge</span>
+          <div class="sc-row">
+            <span class="ch-badge" style="--c:#2AABEE"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="m21.9 4.3-3.3 15.6c-.25 1.1-.9 1.37-1.83.85l-5.05-3.72-2.43 2.34c-.27.27-.5.5-1 .5l.36-5.14L18 5.5c.4-.36-.09-.56-.63-.2L6.44 12.1l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6l19.44-7.5c.9-.33 1.7.22 1.4 1.86z"/></svg>Telegram</span>
+            <span class="ch-badge" style="--c:#0077FF"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12.8 16.3c-6 0-9.7-4.2-9.85-11.1h3c.1 5.1 2.4 7.2 4.2 7.65V5.2h2.85v4.35c1.8-.2 3.7-2.25 4.3-4.35h2.85c-.5 2.6-2.5 4.65-3.95 5.5 1.45.7 3.7 2.5 4.6 5.6h-3.15c-.7-2.2-2.4-3.9-4.65-4.15v4.15z"/></svg>ВКонтакте</span>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">статус бага · .bug-st</span>
+          <div class="sc-row">
+            <button class="bug-st on bug-st--blue" type="button">В работе</button>
+            <button class="bug-st on bug-st--amber" type="button">Ждет</button>
+            <button class="bug-st on bug-st--green" type="button">Готово</button>
+            <button class="bug-st" type="button">Все</button>
+          </div></div>
+      </div>
+    </section>
+
+    <!-- ИКОНКА-ПЛАШКА -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Иконка-плашка · фирменный микроэлемент</div>
+      <div class="sc-sec-s">Квадрат 25–30px r7–9, заливка <code>--blue-tint</code>, синяя line-иконка. Варианты <code>.warn</code> красная, <code>.gold</code> амбер. В KPI-лейблах, заголовках секций, панелях «Пути».</div>
+      <div class="sc-row" style="gap:22px">
+        <div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span><div><div class="t">Синяя · базовая</div></div></div>
+        <div class="sec-head"><span class="ic warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17v.01M10.3 3.9 2.4 18a1.9 1.9 0 0 0 1.7 2.9h15.8a1.9 1.9 0 0 0 1.7-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg></span><div><div class="t">Красная · .warn</div></div></div>
+        <div class="sec-head"><span class="ic gold"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.8l-5.8 3.05 1.1-6.45-4.7-4.6 6.5-.95Z"/></svg></span><div><div class="t">Золотая · .gold</div></div></div>
+      </div>
+      <p class="sc-note">Формула строго <code>-soft</code> + <code>-ink</code>: насыщенный цвет фоном чипа не бывает — только у точки, полоски и активной навигации. Один чип на ячейку; счетчики — бейджем, не текстом в скобках.</p>
+    </section>
+  </div>
+</body>
+</html>

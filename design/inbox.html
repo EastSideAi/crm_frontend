@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Инбокс</title>
+<!-- Инбокс. Когда берем: страницы «Диалоги» (омниканальный TG/VK/WA-чат) и «Обсуждения» (треды по задачам). Классы: .tg/.tg-list/.tg-row/.tg-ava, .tg-chat/.tg-thread/.tg-bub, .tg-hint, .handoff-banner/.ib-banner, .tg-compose, .ibsw, .th-*. Живой код: style.css:1918 (каркас+чат), 1489 (обсуждения+тумблер), 2069 (баннер хэндоффа). Правила: цвета ролей фиксированы — белый входящий/синий бот/navy менеджер; канал всегда виден (точка на аватаре + --c); кто отвечает — всегда явно (хинт-полоса ai/mgr); новые чат-поверхности строим из .tg-*-рецептов. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background:#E5E7EC; padding:40px 0 90px; }
+  .sc-wrap { max-width:1000px; margin:0 auto; padding:0 32px; }
+  .sc-h1 { font-size:26px; font-weight:800; letter-spacing:-.03em; color:var(--ink); }
+  .sc-lead { margin-top:8px; font-size:14px; line-height:1.55; color:var(--ink-2); max-width:70ch; }
+  .sc-sec { margin-top:46px; }
+  .sc-lab { font-size:12.5px; font-weight:700; color:var(--ink-3); margin:0 2px 14px; }
+  .sc-note { font-size:12.5px; color:var(--ink-3); line-height:1.5; margin:14px 2px 0; max-width:74ch; }
+  /* инбокс живет на всю высоту — даем стенду фиксированную высоту */
+  .sc-inbox .tg { height:600px; }
+  .sc-solo { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:20px;
+    overflow:hidden; background:#fff; max-width:640px; padding-bottom:12px; }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+  <h1 class="sc-h1">Инбокс</h1>
+  <p class="sc-lead">Самая плотная чат-поверхность CRM: слева список диалогов, справа тред. Омниканально — TG, VK, WA. Роли различаются цветом пузыря, канал виден точкой на аватаре, а кто сейчас отвечает — бот или менеджер — показывает хинт-полоса над композером.</p>
+
+  <div class="ib-banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>
+    Все каналы в одном месте. Бот отвечает сам, пока менеджер не перехватит диалог.
+  </div>
+
+  <!-- ── Диалоги: список + тред ── -->
+  <section class="sc-sec sc-inbox">
+    <div class="sc-lab">ДИАЛОГИ · .tg + .tg-thread · style.css:1918</div>
+    <div class="tg">
+      <!-- список -->
+      <div class="tg-list">
+        <div class="tg-search">
+          <div class="searchwrap"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><input class="search" placeholder="Поиск диалога" /></div>
+        </div>
+        <div class="tg-fchips">
+          <button class="tg-fch on">Все <span class="tg-fn">18</span></button>
+          <button class="tg-fch" style="--c:#29A9EA"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M22 4 2 12l6 2 2 6 3-4 5 4z"/></svg>TG</button>
+          <button class="tg-fch" style="--c:#4A76A8"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>VK</button>
+        </div>
+        <div class="tg-rows">
+          <button class="tg-row on unread" style="--c:#29A9EA">
+            <span class="tg-ava">МК<span class="tg-ch" style="background:#29A9EA"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 4 2 12l6 2 2 6 3-4 5 4z"/></svg></span></span>
+            <span class="tg-rb">
+              <span class="tg-r1"><span class="tg-nm">Марина К.</span><span class="tg-tm">14:20</span></span>
+              <span class="tg-r2"><span class="tg-pv">А сколько по времени займет язык?</span><span class="tg-badge wait"></span></span>
+              <span class="tg-r3"><span class="tg-tag ai">Бот</span><span class="tg-tag wait">Ждет ответа</span></span>
+            </span>
+          </button>
+          <button class="tg-row" style="--c:#4A76A8">
+            <span class="tg-ava">ДС<span class="tg-ch" style="background:#4A76A8"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg></span></span>
+            <span class="tg-rb">
+              <span class="tg-r1"><span class="tg-nm">Дмитрий С.</span><span class="tg-tm">13:05</span></span>
+              <span class="tg-r2"><span class="tg-pv">Спасибо, все понятно!</span></span>
+              <span class="tg-r3"><span class="tg-tag mgr">Менеджер</span><span class="tg-tag st">Клиент</span></span>
+            </span>
+          </button>
+          <button class="tg-row" style="--c:#29A9EA">
+            <span class="tg-ava sm anon">?<span class="tg-ch" style="background:#29A9EA"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 4 2 12l6 2 2 6 3-4 5 4z"/></svg></span></span>
+            <span class="tg-rb">
+              <span class="tg-r1"><span class="tg-nm anon">Без имени</span><span class="tg-tm">вчера</span></span>
+              <span class="tg-r2"><span class="tg-pv">Здравствуйте, хочу узнать про Китай</span></span>
+              <span class="tg-r3"><span class="tg-tag ai">Бот</span></span>
+            </span>
+          </button>
+          <!-- скелетон загрузки -->
+          <div class="tg-skrow"><div class="tg-skava sk"></div><div class="tg-skrb"><div class="tg-skl w50 sk"></div><div class="tg-skl w30 sk"></div></div></div>
+        </div>
+      </div>
+
+      <!-- тред -->
+      <div class="tg-chat">
+        <div class="tg-chead">
+          <span class="tg-ava sm" style="--c:#29A9EA">МК</span>
+          <div class="tg-ci">
+            <div class="tg-cn">Марина К.</div>
+            <div class="tg-cs"><span class="tg-st ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>Отвечает бот</span></div>
+          </div>
+        </div>
+        <div class="tg-thread">
+          <div class="tg-day"><span>Сегодня</span></div>
+          <div class="tg-msg in"><div class="tg-bub">Здравствуйте! Дочь хочет в медицинский в Китае. С чего начать?<span class="tg-mt">14:02</span></div></div>
+          <div class="tg-msg out ai"><div class="tg-bub">Здравствуйте! Начинаем с бесплатной диагностики — она покажет реальные шансы и что подтянуть. Займет 10 минут.<span class="tg-mt">14:03</span></div><div class="tg-by">Бот</div></div>
+          <div class="tg-msg in"><div class="tg-bub">А сколько по времени займет язык?<span class="tg-mt">14:20</span></div></div>
+          <div class="tg-msg out mgr"><div class="tg-bub">Марина, при старте с нуля до уровня подачи — около 8 месяцев интенсива. Расскажу подробнее на созвоне.<span class="tg-mt">14:24</span></div><div class="tg-by">Анна · куратор</div></div>
+          <div class="tg-msg out mgr undelivered"><div class="tg-bub">Удобно завтра в 18:00?<span class="tg-mt">14:25</span></div><div class="tg-by warn">Не доставлено</div></div>
+        </div>
+        <div class="handoff-banner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <div><b>Менеджер перехватил бота</b><span>Пока вы в диалоге, бот молчит. Верните управление, чтобы он снова отвечал сам.</span></div>
+        </div>
+        <div class="tg-hint mgr">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          <span><b>Отвечаете вы.</b> Бот на паузе в этом диалоге.</span>
+        </div>
+        <div class="tg-compose">
+          <input placeholder="Написать сообщение…" />
+          <button class="tg-send"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <p class="sc-note">Фон ленты <code>#F3F5F8</code> — единственный «не белый» фон контента в CRM. Пузыри: входящий белый с тонкой тенью, бот синий, менеджер navy, недоставленный — красная инсет-рамка. Разделитель дней <code>.tg-day</code>, подпись автора <code>.tg-by</code>.</p>
+  </section>
+
+  <!-- ── Хинт-полосы ── -->
+  <section class="sc-sec">
+    <div class="sc-lab">ХИНТ-ПОЛОСЫ НАД КОМПОЗЕРОМ · .tg-hint</div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:520px;border:1px solid var(--line);border-radius:14px;overflow:hidden;">
+      <div class="tg-hint ai"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg><span><b>Отвечает бот.</b> Он ведет диалог сам — вмешайтесь, если нужно.</span></div>
+      <div class="tg-hint mgr"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span><b>Отвечаете вы.</b> Бот на паузе в этом диалоге.</span></div>
+    </div>
+    <p class="sc-note">Кто отвечает — всегда явно: <code>.ai</code> голубая (бот ведет), <code>.mgr</code> амбер (менеджер перехватил). Полоса обязательна в каждом треде.</p>
+  </section>
+
+  <!-- ── Обсуждения ── -->
+  <section class="sc-sec">
+    <div class="sc-lab">ОБСУЖДЕНИЯ · .ibsw + .th-* · style.css:1489</div>
+    <div class="sc-solo ib-solo">
+      <div class="ibsw" style="width:100%;">
+        <button class="ibsw-b">Диалоги</button>
+        <button class="ibsw-b on">Обсуждения <span class="ibsw-n">3</span></button>
+      </div>
+      <div class="th-lhead" style="width:100%;">
+        <span class="th-lh-t">По задачам поступления</span>
+        <span class="th-lh-n">3 новых</span>
+      </div>
+      <div class="tg-rows" style="width:100%;flex:none;">
+        <button class="tg-row th-row on">
+          <span class="tg-ava sm" style="--c:#2F6BFF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8M4 12v6a2 2 0 0 0 2 2h12"/></svg></span>
+          <span class="tg-rb">
+            <span class="tg-r1"><span class="tg-nm">Марина К.</span><span class="tg-tm">2ч</span></span>
+            <span class="tg-r2"><span class="tg-pv">Куратор: загрузил черновик мотивационного письма</span></span>
+            <span class="tg-r3"><span class="tg-tag st">Подача · документы</span></span>
+          </span>
+        </button>
+        <button class="tg-row th-row">
+          <span class="tg-ava sm" style="--c:#18A957"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8M4 12v6a2 2 0 0 0 2 2h12"/></svg></span>
+          <span class="tg-rb">
+            <span class="tg-r1"><span class="tg-nm">Дмитрий С.</span><span class="tg-tm">вчера</span></span>
+            <span class="tg-r2"><span class="tg-pv">Виза одобрена — переходим к переезду</span></span>
+            <span class="tg-r3"><span class="tg-tag st">Виза</span></span>
+          </span>
+        </button>
+      </div>
+    </div>
+    <p class="sc-note">Тумблер <code>.ibsw</code> переключает «Диалоги ↔ Обсуждения» на одной поверхности; счетчик <code>.ibsw-n</code> коралловый. Треды задач используют те же <code>.tg-row</code>-строки, но с тегом задачи вместо статуса бота; шапка треда дает кнопку <code>.th-open</code> — перейти к задаче.</p>
+  </section>
+</div>
+</body>
+</html>

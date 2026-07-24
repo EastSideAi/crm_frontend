@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Оверлеи</title>
+<!-- Оверлеи. Когда берем: модалка-форма (.al-*), баг-панель (.bug-*), тост (#toast) и контекст-меню (#smenu) — все, что всплывает поверх страницы. Классы: .al-ov/.al-card/.al-head/.al-in, .bug-card/.bug-tab/.bug-seg/.bug-st, #toast, #smenu/.profmenu. Живой код: style.css:1541 (форма), 2768 (баг), 1790 (тост), 1776 (меню). Правила: вуаль rgba(17,21,31,.34-.42)+blur3-7px; один уровень модальности; вход .2-.3s; радиусы меню14/тост13/форма20. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  /* витринный каркас — только раскладка примеров, компоненты не переопределяем */
+  body { background:#E5E7EC; padding:40px 0 90px; }
+  .sc-wrap { max-width:1000px; margin:0 auto; padding:0 32px; }
+  .sc-h1 { font-size:26px; font-weight:800; letter-spacing:-.03em; color:var(--ink); }
+  .sc-lead { margin-top:8px; font-size:14px; line-height:1.55; color:var(--ink-2); max-width:70ch; }
+  .sc-sec { margin-top:46px; }
+  .sc-lab { font-size:12.5px; font-weight:700; color:var(--ink-3); margin:0 2px 14px; }
+  .sc-note { font-size:12.5px; color:var(--ink-3); line-height:1.5; margin:12px 2px 0; max-width:74ch; }
+  .sc-cols { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+  /* стенд оверлея: fixed → contained, чтобы вуаль и блюр были видны в потоке */
+  .sc-stage { position:relative; height:520px; border-radius:20px; overflow:hidden;
+    border:1px solid var(--line); background:var(--main); flex:1; min-width:340px; }
+  .sc-stage .al-ov { position:absolute; }
+  .sc-stage.short { height:400px; }
+  .sc-stage.bug { height:650px; }
+  .sc-bg { padding:22px 24px; display:flex; flex-direction:column; gap:12px; }
+  .sc-bg .r { height:12px; border-radius:6px; background:var(--fill); }
+  .sc-bg .r.w40 { width:40%; } .sc-bg .r.w70 { width:70%; } .sc-bg .r.w55 { width:55%; }
+  .sc-bg .card { height:74px; border-radius:14px; background:#fff; border:1px solid var(--line); }
+  /* тост и меню — снимаем fixed, показываем на месте */
+  .sc-inline #toast { position:relative; left:auto; bottom:auto; transform:none; display:inline-block; }
+  .sc-inline #smenu { position:relative; z-index:1; }
+  .sc-menus { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+  <h1 class="sc-h1">Оверлеи</h1>
+  <p class="sc-lead">Все, что всплывает поверх CRM: модалка-форма, баг-панель, тост и контекст-меню. Белые карты, мягкая глубокая тень, быстрый анимированный вход. Вуаль — полупрозрачная с блюром, глухого черного нет.</p>
+
+  <!-- ── Модалка-форма ── -->
+  <section class="sc-sec">
+    <div class="sc-lab">МОДАЛКА-ФОРМА · .al-ov + .al-card · style.css:1541</div>
+    <div class="sc-stage">
+      <div class="sc-bg">
+        <div class="r w40"></div><div class="card"></div><div class="r w70"></div><div class="r w55"></div><div class="card"></div>
+      </div>
+      <div class="al-ov show">
+        <div class="al-card">
+          <div class="al-head">
+            <div>
+              <div class="al-eyebrow">Новый лид</div>
+              <div class="al-title">Добавить клиента</div>
+            </div>
+            <button class="al-x" aria-label="Закрыть">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <div class="al-sub">Заполните контакт — путь и диагностику соберем после первого созвона.</div>
+          <div class="al-body">
+            <div class="al-row">
+              <div class="al-f"><label class="al-l">Имя <i>*</i></label><input class="al-in" value="Марина" /></div>
+              <div class="al-f"><label class="al-l">Фамилия</label><input class="al-in" placeholder="необязательно" /></div>
+            </div>
+            <div class="al-f"><label class="al-l">Телефон <i>*</i></label><input class="al-in al-err" value="+7 900" /></div>
+            <div class="al-f"><label class="al-l">Источник</label>
+              <div class="al-selwrap">
+                <select class="al-sel"><option>Instagram</option><option>Рекомендация</option><option>Сайт</option></select>
+              </div>
+            </div>
+            <div class="al-f"><label class="al-l">Комментарий</label><textarea class="al-in al-ta" placeholder="Что важно помнить о лиде"></textarea></div>
+          </div>
+          <div class="al-foot">
+            <button class="al-cancel">Отмена</button>
+            <button class="bp al-save">Добавить лид</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="sc-note">Поля — рецепт №2 из controls: инсет-рамка <code>inset 0 0 0 1px</code>, на фокусе синее кольцо. Ошибка (<code>.al-err</code>) — та же рамка красным. Обязательное поле помечает синяя <code>&lt;i&gt;</code>.</p>
+  </section>
+
+  <!-- ── Баг-панель ── -->
+  <section class="sc-sec">
+    <div class="sc-lab">ПАНЕЛЬ «СООБЩИТЬ О БАГЕ» · .bug-card · style.css:2768</div>
+    <div class="sc-cols">
+      <div class="sc-stage bug">
+        <div class="al-ov show" style="align-items:flex-start;padding-top:26px;">
+          <div class="al-card bug-card">
+            <div class="bug-head">
+              <div>
+                <div class="bug-title">Сообщить о баге</div>
+                <div class="bug-sub">Что сломалось или мешает работать — опишем и почините.</div>
+              </div>
+              <button class="al-x" aria-label="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+            <div class="bug-tabs">
+              <button class="bug-tab on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Сообщить</button>
+              <button class="bug-tab"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Список <span class="bug-tab-n">4</span></button>
+            </div>
+            <div class="bug-body">
+              <div class="bug-form">
+                <div class="bug-fld">
+                  <label class="bug-lab">Что это</label>
+                  <div class="bug-segs">
+                    <button class="bug-seg on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Баг</button>
+                    <button class="bug-seg"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2"/></svg>Идея</button>
+                  </div>
+                </div>
+                <div class="bug-fld">
+                  <label class="bug-lab">Важность</label>
+                  <div class="bug-segs">
+                    <button class="bug-sev"><span class="bug-dot" style="background:var(--ink-3)"></span>Мелочь</button>
+                    <button class="bug-sev on"><span class="bug-dot" style="background:var(--amber)"></span>Мешает</button>
+                    <button class="bug-sev"><span class="bug-dot" style="background:var(--red)"></span>Блокирует</button>
+                  </div>
+                </div>
+                <div class="bug-fld">
+                  <label class="bug-lab">Что произошло</label>
+                  <textarea class="bug-ta" placeholder="Опишите шаги и что ожидали увидеть">Пилюля статуса не открывает меню на странице «Лиды».</textarea>
+                </div>
+                <div class="bug-foot"><button class="bp bug-send">Отправить</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sc-stage bug">
+        <div class="al-ov show" style="align-items:flex-start;padding-top:26px;">
+          <div class="al-card bug-card">
+            <div class="bug-head">
+              <div><div class="bug-title">Сообщить о баге</div><div class="bug-sub">Что уже в работе.</div></div>
+              <button class="al-x" aria-label="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </div>
+            <div class="bug-tabs">
+              <button class="bug-tab"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Сообщить</button>
+              <button class="bug-tab on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Список <span class="bug-tab-n">4</span></button>
+            </div>
+            <div class="bug-body">
+              <div class="bug-filters">
+                <button class="bug-fchip on">Все <span class="bug-fn">4</span></button>
+                <button class="bug-fchip">Открытые <span class="bug-fn">2</span></button>
+                <button class="bug-fchip">Закрытые <span class="bug-fn">2</span></button>
+              </div>
+              <div class="bug-list">
+                <div class="bug-item">
+                  <div class="bug-itop">
+                    <div class="bug-kind"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Баг · Мешает</div>
+                    <div class="bug-when">2 часа назад</div>
+                  </div>
+                  <div class="bug-text">Пилюля статуса не открывает меню на «Лиды».</div>
+                  <div class="bug-sts">
+                    <button class="bug-st on bug-st--blue">В работе</button>
+                    <button class="bug-st">Позже</button>
+                    <button class="bug-st">Готово</button>
+                  </div>
+                </div>
+                <div class="bug-item closed">
+                  <div class="bug-itop">
+                    <div class="bug-kind"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4m10-10h-4M6 12H2"/></svg>Идея · Мелочь</div>
+                    <div class="bug-when">вчера</div>
+                  </div>
+                  <div class="bug-text">Добавить экспорт таблицы лидов в CSV.</div>
+                  <div class="bug-sts"><button class="bug-st on bug-st--green">Готово</button></div>
+                </div>
+                <div class="bug-sk"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="sc-note">Вкладки «Сообщить / Список» (активная синяя). Важность — точка <code>.bug-dot</code> в цвет семантики. Статус-чипы <code>.bug-st.on--blue/amber/green/mute</code>. Скелетон <code>.bug-sk</code> с собственным шиммером <code>bugShim</code>.</p>
+  </section>
+
+  <!-- ── Тост ── -->
+  <section class="sc-sec sc-inline">
+    <div class="sc-lab">ТОСТ · #toast · style.css:1790</div>
+    <div class="sc-cols" style="align-items:center;">
+      <div id="toast" class="show">Лид добавлен — <span>открыть карточку</span></div>
+      <div id="toast" class="show">Статус изменен на <span>Созвон назначен</span></div>
+    </div>
+    <p class="sc-note">Один тост, снизу по центру (темный <code>--black</code>, акцент внутри — голубой <code>#9FC0FF</code>). Никаких стеков уведомлений по углам.</p>
+  </section>
+
+  <!-- ── Контекст-меню ── -->
+  <section class="sc-sec sc-inline">
+    <div class="sc-lab">КОНТЕКСТ-МЕНЮ · #smenu · style.css:1776</div>
+    <div class="sc-menus">
+      <div id="smenu" class="smenu-status">
+        <button><span class="sev s-new">Новый</span><span class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12l5 5L20 6"/></svg></span></button>
+        <button class="cur"><span class="sev s-contacted">Связались</span><span class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12l5 5L20 6"/></svg></span></button>
+        <button><span class="sev s-call_scheduled">Созвон назначен</span><span class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12l5 5L20 6"/></svg></span></button>
+        <button><span class="sev s-client">Клиент</span><span class="chk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12l5 5L20 6"/></svg></span></button>
+      </div>
+
+      <div id="smenu" class="profmenu">
+        <div class="pm-head">
+          <div class="av">АК</div>
+          <div><div class="pm-n">Анна Крылова</div><div class="pm-r">Куратор</div></div>
+        </div>
+        <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Профиль</button>
+        <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3.9a7 7 0 0 0-1.7-1L16.5 2h-4l-.4 2.5a7 7 0 0 0-1.7 1l-2.3-.9-2 3.4L5 10a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7 7 0 0 0 1.7-1l2.3.9 2-3.4-2-1.5c.1-.3.1-.6.1-1Z"/></svg>Настройки</button>
+        <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Выйти</button>
+      </div>
+    </div>
+    <p class="sc-note">На <code>#smenu</code> строятся меню статусов (пилюли с галочкой у текущего), дропдауны фильтров и меню профиля <code>.profmenu</code> с аватаром-градиентом. Подтверждений-диалогов нет — опасное краснеет на ховере и требует повторного клика.</p>
+  </section>
+</div>
+</body>
+</html>

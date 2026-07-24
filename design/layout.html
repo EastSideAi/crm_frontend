@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Каркас и layout</title>
+<!-- Каркас и layout. Когда берем: любая страница CRM — две плавающие панели .side/.main на сером холсте, контент внутри .content → .chead → .grid из .card. Классы: .app .side .navi .navlab .promo .main .topbar .tabs .tbr .icocirc .profile .content .chead .grid .sp7/.sp5/.sp8/.sp4/.sp12 .card .sec-head .stub .mtabs. Живой код: style.css:36. Правила: ничего на холст — только внутрь .side/.main; новая страница = .content+.chead+.grid из .card, каркас не изобретать; sticky только топбар и thead; глубина бордером, не тенью. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background:#E5E7EC; padding:0; }
+  .sc-wrap { max-width:1200px; margin:0 auto; padding:38px 26px 90px; }
+  .sc-h1 { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#11151F; }
+  .sc-sub { margin-top:8px; font-size:14px; color:#697086; max-width:74ch; line-height:1.55; }
+  .sc-sec { margin-top:40px; }
+  .sc-lab { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#A6ABB8; margin-bottom:13px; }
+  .sc-note { font-size:12.5px; color:#697086; margin-top:10px; line-height:1.5; }
+  .sc-frame { height:700px; border-radius:22px; overflow:hidden; border:1px solid #E3E5EB; background:#E5E7EC; }
+  .sc-frame .app { height:100%; }
+  /* превью мобильного таббара вне медиазапроса */
+  .sc-mtabs { position:relative; display:inline-flex; gap:6px; background:#fff; border:1px solid #EDEEF2; border-radius:18px; padding:10px; }
+  .sc-mtabs .mtab { display:flex; flex-direction:column; align-items:center; gap:3px; padding:9px 16px; border-radius:12px; font-size:11px; font-weight:600; color:var(--ink-2); position:relative; }
+  .sc-mtabs .mtab svg { width:18px; height:18px; }
+  .sc-mtabs .mtab.on { color:#fff; background:var(--blue); }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+
+  <div class="sc-top">
+    <div class="sc-h1">Каркас и layout</div>
+    <div class="sc-sub">CRM — две плавающие белые панели на холодном сером холсте. Сайдбар и main — отдельные карточки с зазором 10px; все скроллится ВНУТРИ main. Никакой «страницы с шапкой». Живой каркас ниже собран из настоящих классов <b>style.css</b>.</div>
+  </div>
+
+  <!-- ── ЖИВОЙ КАРКАС .app ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.app — сайдбар + main (сдвинуто в рамку, реальная разметка)</div>
+    <div class="sc-frame">
+      <div class="app">
+
+        <!-- САЙДБАР -->
+        <aside class="side">
+          <div class="logo">
+            <div class="mk">И</div>
+            <div class="nm">ИстСайд<small>CRM команды</small></div>
+          </div>
+
+          <div class="navlab">Рабочее</div>
+          <button class="navi mt">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            Диалоги <span class="bdg">7</span>
+          </button>
+          <button class="navi on">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg>
+            Лиды <span class="cnt">142</span>
+          </button>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+            Обзор
+          </button>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M4 19V9l6-4 6 3 4-2v13"/></svg>
+            Путь
+          </button>
+
+          <div class="navlab">Управление</div>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            Маркетинг
+          </button>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            Финансы
+          </button>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            Продукты
+          </button>
+          <button class="navi">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Команда
+          </button>
+
+          <div class="promo">
+            <div class="pt">Подключите бота</div>
+            <div class="pp">Ответы менеджера уходят ученику омниканально — из карточки лида.</div>
+            <span class="pb">Настроить</span>
+          </div>
+        </aside>
+
+        <!-- MAIN -->
+        <div class="main">
+          <div class="topbar">
+            <div class="tabs">
+              <button class="tab on">Все лиды <span class="n">142</span></button>
+              <button class="tab">Горячие <span class="n">7</span></button>
+              <button class="tab">Клиенты <span class="n">38</span></button>
+            </div>
+            <div class="tbr">
+              <button class="icocirc">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              </button>
+              <div class="profile">
+                <div class="av">АК</div>
+                <div class="pinfo"><div class="pn">Артем К.</div><div class="pe">куратор</div></div>
+                <span class="pchev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="chead">
+              <div>
+                <h2>Обзор недели</h2>
+                <div class="verdict"><span class="vspark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg></span><span><b>7 горячих лидов</b> ждут связи. Средний балл диагностики вырос до 61 — самый сильный поток за месяц.</span></div>
+              </div>
+              <div class="hactions">
+                <span class="freshchip"><span class="fok"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>данные свежие</span>
+              </div>
+            </div>
+
+            <div class="grid">
+              <div class="card sp8" style="padding:20px 22px;">
+                <div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></span><div><div class="t">Воронка потока</div><div class="s">за 30 дней</div></div><span class="cnt">142 лида</span></div>
+                <div style="height:118px; margin-top:18px; border-radius:12px; background:var(--fill); display:grid; place-items:center; color:var(--ink-3); font-size:12.5px;">область графика</div>
+              </div>
+              <div class="card sp4" style="padding:20px 22px;">
+                <div class="sec-head"><span class="ic warn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><div><div class="t">Требуют внимания</div></div></div>
+                <div style="height:118px; margin-top:18px; border-radius:12px; background:var(--fill);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="sc-note">Пункт <b>.navi</b>: hover — <b>--fill</b>; активный <b>.on</b> — сплошной синий с белым текстом (единственная «залитая» навигация). Счетчики: <b>.bdg</b> коралл (внимание) и <b>.cnt</b> серый. Топбар <b>.topbar</b> — sticky, белый, нижний бордер; табы-пилюли <b>.tabs</b>, круглые иконкнопки <b>.icocirc</b>, профиль-пилюля с аватаром-градиентом.</div>
+  </div>
+
+  <!-- ── СЕТКА И КАРТОЧКА ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.grid (12 колонок, gap 20) + .card — глубина бордером, не тенью</div>
+    <div class="grid">
+      <div class="card sp7" style="padding:18px 20px;"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><div class="t">.sp7 — левая колонка</div></div></div>
+      <div class="card sp5" style="padding:18px 20px;"><div class="sec-head"><span class="ic gold"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg></span><div class="t">.sp5 — правая</div></div></div>
+      <div class="card sp8" style="padding:18px 20px;"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span><div class="t">.sp8</div></div></div>
+      <div class="card sp4" style="padding:18px 20px;"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span><div class="t">.sp4</div></div></div>
+      <div class="card sp12" style="padding:18px 20px;"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span><div class="t">.sp12 — во всю ширину</div></div></div>
+    </div>
+    <div class="sc-note">Типовые пары спанов: 7+5, 8+4. <b>align-items:stretch</b> — парные карточки равной высоты. Заголовок секции <b>.sec-head</b>: иконка-плашка 30px в blue-tint (варианты <b>.warn</b> красная, <b>.gold</b> амбер) + заголовок 16px + счетчик/ссылка справа.</div>
+  </div>
+
+  <!-- ── ЗАГЛУШКА И МОБИЛЬНЫЙ ТАББАР ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.stub — заглушка будущего раздела (не пустая страница)</div>
+    <div class="stub">
+      <span class="stub-ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+      <div class="stub-t">Маркетинг</div>
+      <div class="stub-s">Сквозная аналитика источников и когорт. Собираем данные — раздел откроется, когда накопится статистика по каналам.</div>
+      <span class="stub-tag"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>скоро</span>
+    </div>
+  </div>
+
+  <div class="sc-sec">
+    <div class="sc-lab">.mtabs / .mtab — мобильный фикс-таббар (появляется на ≤960; показан статично)</div>
+    <div class="sc-mtabs">
+      <button class="mtab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Лиды</button>
+      <button class="mtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Диалоги</button>
+      <button class="mtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/></svg>Обзор</button>
+      <button class="mtab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16M4 19V9l6-4 6 3 4-2v13"/></svg>Путь</button>
+    </div>
+    <div class="sc-note">На главном сломе ≤960 <b>.app</b> становится блоком, сайдбар скрыт, снизу — фикс-таббар <b>.mtabs</b>; модалка лида раскрывается во весь экран, таблицы прячут <b>.hidem</b>.</div>
+  </div>
+
+</div>
+</body>
+</html>

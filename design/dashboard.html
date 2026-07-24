@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Дашборд</title>
+<!-- Дашборды: Обзор и «Путь». Когда берем: плотные белые карточки с крупными числами-героями — KPI, полоса метрик, графики, воронка, лестница, финансы, скелетоны. Классы: .kpi, .statbar/.stat/.sv/.sdot, .chart/.b1/.b2, .cvc, .dwrap/.dpie, .lose-big, .banner, .uz-hero/.uz-grid/.uz-p/.uz-big/.uz-go/.uz-prog, .lad-row/.lad-fill/.lad-drop, .mini-funnel, .fin-*, .shim. Живой код: style.css:248,268,492,503,376,553,816,566,585,1871,343. Правила: число — герой (32-46px, tnum, минус-трекинг), цвет только у маркеров и дельт; крупное число чернилами --ink, красное только негатив; одна .statbar лучше 4 KPI-карточек; не больше одного «декоративного» блока на экран; каждая метрика-ссылка ведет к списку. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background: #E5E7EC; }
+  .sc-wrap { max-width: 1080px; margin: 0 auto; padding: 54px 28px 96px; }
+  .sc-h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+  .sc-sub { color: var(--ink-2); font-size: 14px; margin-top: 9px; max-width: 64ch; line-height: 1.55; }
+  .sc-lbl { font-size: 11px; font-weight: 600; color: var(--ink-3); margin: 32px 2px 12px; }
+  .sc-lbl:first-of-type { margin-top: 26px; }
+  .sc-pad { padding: 22px 24px 24px; }
+  .sc-two { display: grid; grid-template-columns: 7fr 5fr; gap: 16px; align-items: stretch; }
+  @media (max-width: 760px) { .sc-two { grid-template-columns: 1fr; } }
+  .sc-sh { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }
+  .sc-donut { display: flex; align-items: center; gap: 22px; }
+  .sc-dleg { display: flex; flex-direction: column; gap: 9px; font-size: 13px; }
+  .sc-dleg .r { display: flex; align-items: center; gap: 9px; }
+  .sc-dleg .dd { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .sc-dleg b { margin-left: auto; font-weight: 700; letter-spacing: -.02em; }
+</style>
+</head>
+<body>
+  <div class="sc-wrap">
+    <h1 class="sc-h1">Дашборды: Обзор и «Путь»</h1>
+    <p class="sc-sub">Плотные белые карточки с крупными числами. Число — герой: 32–46px, вес 600–800, отрицательный трекинг, <code>tnum</code>. Цвет — только у маркеров и дельт.</p>
+
+    <!-- KPI -->
+    <div class="sc-lbl">KPI-КАРТОЧКИ · .kpi (лучше одной полосой, чем четырьмя)</div>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kl"><span class="sp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg></span>Новых лидов</div>
+        <div class="kn">142</div>
+        <div class="ks"><span class="kd good">↑ 12%</span> к прошлой неделе</div>
+      </div>
+      <div class="kpi">
+        <div class="kl"><span class="sp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4 12 14l-3-3"/></svg></span>Дошли до созвона</div>
+        <div class="kn">58</div>
+        <div class="ks"><span class="kd mid">= стабильно</span></div>
+      </div>
+      <div class="kpi hot">
+        <div class="kl"><span class="sp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s6 4.5 6 10a6 6 0 0 1-12 0c0-2 1-3.5 1-3.5s.5 2 2 2.5c0-3 3-6 3-9Z"/></svg></span>Горячих сейчас</div>
+        <div class="kn">7</div>
+        <div class="ks"><span class="kd bad">↓ 3</span> нужен контакт</div>
+      </div>
+      <div class="kpi">
+        <div class="kl"><span class="sp"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>Выручка, ₽</div>
+        <div class="kn">1,84 <span style="font-size:15px;font-weight:500;color:var(--ink-3)">млн</span></div>
+        <div class="ks"><span class="kd good">↑ 24%</span> за месяц</div>
+      </div>
+    </div>
+
+    <!-- STATBAR -->
+    <div class="sc-lbl">ПОЛОСА МЕТРИК · .statbar (4 метрики в одной карточке, кликабельные синеют)</div>
+    <div class="card statbar">
+      <button class="stat go" type="button"><div class="sl"><span class="sdot blue"></span>В работе</div><div class="sv">36</div><div class="sd"><span class="kd good">↑ 5</span></div></button>
+      <button class="stat go" type="button"><div class="sl"><span class="sdot navy"></span>Созвоны</div><div class="sv">58</div><div class="sd"><span class="smut">на неделю</span></div></button>
+      <button class="stat go" type="button"><div class="sl"><span class="sdot green"></span>Клиенты</div><div class="sv">21</div><div class="sd"><span class="kd good">↑ 3</span></div></button>
+      <button class="stat go" type="button"><div class="sl"><span class="sdot red"></span>Отказы</div><div class="sv">14</div><div class="sd"><span class="kd bad">↓ 2</span></div></button>
+    </div>
+
+    <!-- ГРАФИК + ВОРОНКА -->
+    <div class="sc-lbl">ГРАФИК 14 ДНЕЙ · .chart · и ВОРОНКА · .cvc</div>
+    <div class="sc-two">
+      <div class="card sc-pad">
+        <div class="sc-sh"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></span><div><div class="t">Лиды за 14 дней</div><div class="s">navy — новые · синий — дошли</div></div></div></div>
+        <div class="chart">
+          <div class="ch-day"><div class="b2" style="height:22%"></div><div class="b1" style="height:38%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:30%"></div><div class="b1" style="height:46%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:18%"></div><div class="b1" style="height:32%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:40%"></div><div class="b1" style="height:52%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:34%"></div><div class="b1" style="height:60%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:26%"></div><div class="b1" style="height:44%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:48%"></div><div class="b1" style="height:70%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:36%"></div><div class="b1" style="height:55%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:52%"></div><div class="b1" style="height:78%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:30%"></div><div class="b1" style="height:50%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:44%"></div><div class="b1" style="height:66%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:58%"></div><div class="b1" style="height:84%"></div></div>
+          <div class="ch-day"><div class="b2" style="height:40%"></div><div class="b1" style="height:62%"></div></div>
+          <div class="ch-day today"><div class="b2" style="height:24%"></div><div class="b1" style="height:30%"></div></div>
+        </div>
+      </div>
+      <div class="card sc-pad">
+        <div class="sc-sh"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8v6l-4 2v-8Z"/></svg></span><div><div class="t">Воронка</div></div></div></div>
+        <div class="cvc-body">
+          <div class="cvc-left">
+            <div class="cvc-big">15%</div>
+            <div class="cvc-lbl">заявка → клиент</div>
+            <div class="cvc-note">Слабее всего на шаге <b>оффер → оплата</b></div>
+          </div>
+          <div class="cvc-rows">
+            <div class="cvc-row"><div class="cvc-nm">Заявка</div><div class="cvc-track"><div class="cvc-fill" style="width:100%"></div></div><div class="cvc-c">142</div><div class="cvc-p">100%</div></div>
+            <div class="cvc-row"><div class="cvc-nm">Созвон</div><div class="cvc-track"><div class="cvc-fill" style="width:41%"></div></div><div class="cvc-c">58</div><div class="cvc-p">41%</div></div>
+            <div class="cvc-row weak"><div class="cvc-nm">Оффер</div><div class="cvc-track"><div class="cvc-fill" style="width:23%"></div></div><div class="cvc-c">33</div><div class="cvc-p">23%</div></div>
+            <div class="cvc-row"><div class="cvc-nm">Клиент</div><div class="cvc-track"><div class="cvc-fill" style="width:15%"></div></div><div class="cvc-c">21</div><div class="cvc-p">15%</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ДОНАТ + ПОТЕРИ + БАННЕР -->
+    <div class="sc-lbl">ДОНАТ · .dpie · «ГДЕ ТЕРЯЕМ» · .lose-big · ЧЕРНЫЙ БАННЕР · .banner</div>
+    <div class="sc-two">
+      <div class="card sc-pad">
+        <div class="sc-sh"><div class="sec-head"><span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10h-10Z"/><path d="M12 2v10h10A10 10 0 0 0 12 2Z"/></svg></span><div><div class="t">Источники лидов</div></div></div></div>
+        <div class="sc-donut">
+          <div class="dwrap"><div class="dpie" style="background:conic-gradient(var(--blue) 0 52%, var(--navy) 52% 78%, var(--amber) 78% 100%)"></div></div>
+          <div class="sc-dleg">
+            <div class="r"><span class="dd" style="background:var(--blue)"></span>Telegram <b>52%</b></div>
+            <div class="r"><span class="dd" style="background:var(--navy)"></span>ВКонтакте <b>26%</b></div>
+            <div class="r"><span class="dd" style="background:var(--amber)"></span>Сайт <b>22%</b></div>
+          </div>
+        </div>
+        <hr style="border:0;height:1px;background:var(--line);margin:22px 0 18px" />
+        <div class="lose-big"><b>38</b><span>лидов ушли без ответа за 30 дней</span></div>
+      </div>
+      <a class="banner" style="text-decoration:none">
+        <div class="banner-top">
+          <span class="banner-pill">Второй план</span>
+          <span class="banner-go"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+        </div>
+        <div class="banner-t">7 горячих лидов ждут звонка сегодня</div>
+        <div class="banner-s">Черный баннер — акцентная вставка «второго уровня». Не больше одного декоративного блока на экран.</div>
+      </a>
+    </div>
+
+    <!-- ХЕРО-ПУЛЬС ПУТИ -->
+    <div class="sc-lbl">ХЕРО-ПУЛЬС «ПУТИ» · .uz-hero (максимум «декора» в CRM)</div>
+    <div class="uz-hero">
+      <div class="uz-hm">
+        <div class="uz-st"><span class="uz-st-d" style="background:var(--green)"></span>Активность за неделю</div>
+        <div style="font-size:21px;font-weight:700;letter-spacing:-.025em;margin-top:10px">Семья Ивана держит темп</div>
+        <div class="uz-chips" style="margin-top:14px">
+          <span class="uz-chip on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Учится <i>5 из 7 дней</i></span>
+          <span class="uz-chip on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Заходил <i>вчера</i></span>
+          <span class="uz-chip">Тест уровня <i>не начат</i></span>
+        </div>
+      </div>
+      <div class="uz-pulse">
+        <div class="uz-pz"><div class="uz-pz-v">4,2 ч</div><div class="uz-pz-l">в неделю</div></div>
+        <div class="uz-pz"><div class="uz-pz-v">18</div><div class="uz-pz-l">уроков всего</div></div>
+      </div>
+    </div>
+
+    <!-- СЕТКА ПАНЕЛЕЙ + ПРОГРЕСС -->
+    <div class="sc-lbl">СЕТКА ПАНЕЛЕЙ · .uz-p · и ПРОГРЕСС ПОСТУПЛЕНИЯ · .uz-prog</div>
+    <div class="uz-grid">
+      <div class="uz-p">
+        <div class="uz-p-h"><span class="uz-p-ic" style="background:var(--blue-tint);color:var(--blue)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg></span><div class="uz-p-t">Уроки</div><button class="uz-go" type="button">открыть<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+        <div class="uz-p-b"><div class="uz-big">18<span> / 32</span></div></div>
+      </div>
+      <div class="uz-p">
+        <div class="uz-p-h"><span class="uz-p-ic" style="background:var(--green-soft);color:var(--green-ink)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1M22 4 12 14l-3-3"/></svg></span><div class="uz-p-t">Тесты сданы</div><button class="uz-go" type="button">открыть<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+        <div class="uz-p-b"><div class="uz-big">9<span> / 12</span></div></div>
+      </div>
+      <div class="uz-p mute">
+        <div class="uz-p-h"><span class="uz-p-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"/></svg></span><div class="uz-p-t">Не заходил</div></div>
+        <div class="uz-p-b"><div class="uz-big" style="color:var(--ink-3)">2<span style="color:var(--ink-3)"> дня</span></div></div>
+      </div>
+    </div>
+    <div class="card sc-pad" style="margin-top:11px">
+      <div class="uz-prog">
+        <span style="font-size:13px;font-weight:600">Поступление</span>
+        <div class="uz-prog-bar"><span style="width:64%"></span></div>
+        <span style="font-size:13px;font-weight:700;letter-spacing:-.02em">64%</span>
+      </div>
+      <div class="uz-tags">
+        <span class="uz-tag uz-tag--rev"><b>4</b> вехи закрыты</span>
+        <span class="uz-tag uz-tag--ret"><b>1</b> под риском</span>
+        <span class="uz-tag uz-tag--cli">до подачи 3 месяца</span>
+      </div>
+    </div>
+
+    <!-- ЛЕСТНИЦА + МИНИ-ВОРОНКА -->
+    <div class="sc-lbl">КОНВЕРСИОННАЯ ЛЕСТНИЦА · .lad-row · и МИНИ-ВОРОНКА · .mini-funnel</div>
+    <div class="card sc-pad">
+      <div class="lad-row sel"><div style="font-size:13.5px;font-weight:600">Заявка оставлена</div><div class="lad-track"><div class="lad-fill" style="width:100%"></div></div><div style="font-weight:700;text-align:right">142</div><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span class="lad-conv">100%</span><span class="lad-drop zero">—</span></div></div>
+      <div class="lad-row"><div style="font-size:13.5px;font-weight:600">Созвон проведен</div><div class="lad-track"><div class="lad-fill" style="width:41%"></div></div><div style="font-weight:700;text-align:right">58</div><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span class="lad-conv">41%</span><span class="lad-drop">−59%</span></div></div>
+      <div class="lad-row worst"><div style="font-size:13.5px;font-weight:600">Оффер отправлен</div><div class="lad-track"><div class="lad-fill" style="width:23%"></div></div><div style="font-weight:700;text-align:right">33</div><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span class="lad-conv">23%</span><span class="lad-drop">−43%</span></div></div>
+      <div class="lad-row"><div style="font-size:13.5px;font-weight:600">Клиент</div><div class="lad-track"><div class="lad-fill" style="width:15%"></div></div><div style="font-weight:700;text-align:right">21</div><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><span class="lad-conv">15%</span><span class="lad-drop">−36%</span></div></div>
+      <hr style="border:0;height:1px;background:var(--line);margin:20px 0 6px" />
+      <div class="mini-funnel">
+        <div class="fcol"><div class="bar on" style="height:100%"></div><div class="vn">142</div><div class="lb">Заявка</div></div>
+        <div class="fcol"><div class="bar on" style="height:41%"></div><div class="vn">58</div><div class="lb">Созвон</div></div>
+        <div class="fcol"><div class="bar" style="height:23%"></div><div class="vn">33</div><div class="lb">Оффер</div></div>
+        <div class="fcol"><div class="bar" style="height:15%"></div><div class="vn">21</div><div class="lb">Клиент</div></div>
+      </div>
+    </div>
+
+    <!-- ФИНАНСЫ -->
+    <div class="sc-lbl">ФИНАНСЫ · .fin-banner · .fin-stack · .fin-leg</div>
+    <div class="card sc-pad">
+      <div class="fin-banner"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17v.01M10.3 3.9 2.4 18a1.9 1.9 0 0 0 1.7 2.9h15.8a1.9 1.9 0 0 0 1.7-2.9L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z"/></svg>Ожидают оплаты <b>3 счета на 240 000 ₽</b></div>
+      <div class="fin-stack"><i class="paid" style="width:62%"></i><i class="pending" style="width:26%"></i><i class="refunded" style="width:12%"></i></div>
+      <div class="fin-leg">
+        <div class="r"><span class="dd2" style="background:var(--green)"></span><span class="nm">Оплачено</span><span class="am">1 840 000 ₽</span></div>
+        <div class="r"><span class="dd2" style="background:var(--amber)"></span><span class="nm">Ожидает</span><span class="am">240 000 ₽</span></div>
+        <div class="r"><span class="dd2" style="background:var(--red)"></span><span class="nm">Возвраты</span><span class="am muted">96 000 ₽</span></div>
+      </div>
+    </div>
+
+    <!-- СКЕЛЕТОНЫ -->
+    <div class="sc-lbl">СКЕЛЕТОНЫ · .shim (единый шиммер — повторяет каркас будущего блока)</div>
+    <div class="card sk-statbar">
+      <div class="sk-stat"><div class="shim l"></div><div class="shim b"></div><div class="shim s"></div></div>
+      <div class="sk-stat"><div class="shim l"></div><div class="shim b"></div><div class="shim s"></div></div>
+      <div class="sk-stat"><div class="shim l"></div><div class="shim b"></div><div class="shim s"></div></div>
+      <div class="sk-stat"><div class="shim l"></div><div class="shim b"></div><div class="shim s"></div></div>
+    </div>
+  </div>
+</body>
+</html>

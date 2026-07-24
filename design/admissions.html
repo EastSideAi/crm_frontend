@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Поступление</title>
+<!-- Поступление. Когда берем: вкладка «Поступление» карточки лида — конструктор пути клиента (лента этапов, задачи с приемкой, комментарии, публикация, шаблоны). Классы: .rm-summary/.rm-prog-bar/.rm-review-cta/.rm-allclear, .rm-flow/.rm-stage(.cur/.done/.todo/.empty)/.rm-node/.rm-shead, .rm-task(.o-client/.st-review/.st-return/.st-done/.st-doing)/.rm-ck/.rm-title/.rm-due(.soon/.over)/.rm-status/.rm-pulse/.rm-flash, .rm-detail/.rm-dh/.rm-howto/.rm-submit-seg, .rm-subs/.rm-sub-*/.rm-review-act/.rm-return, .rm-discuss, .rm-add/.rm-chip/.rm-presets/.rm-at-t/.rm-add-btn, .rm-plan-tb/.rm-pub/.rm-rollout, .tpl-card/.tpl-fld/.tpl-stage/.tpl-task/.tpl-own. Живой код: style.css:1104-1487, 2182-2243. Правила: владелец задачи всегда виден (левый кант — клиент синий); «на проверке» — единственный громкий якорь ленты; правки AI — временный шиммер .rm-flash, не заливка; менеджер синий / клиент белый; новые сущности плана — только из .rm-*-рецептов, чипы/сегменты — из controls.md. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body{background:#E5E7EC;margin:0;padding:40px 28px 90px;}
+  .wrap{max-width:860px;margin:0 auto;}
+  .doc-h{font-size:22px;font-weight:700;letter-spacing:-.02em;color:var(--ink);margin:0 0 4px;}
+  .doc-s{font-size:13px;color:var(--ink-2);margin:0 0 30px;}
+  .lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--ink-3);margin:34px 0 12px;}
+  .demo{background:#fff;border:1px solid var(--line);border-radius:var(--r-xl);padding:20px 22px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1 class="doc-h">Поступление</h1>
+  <p class="doc-s">Конструктор пути клиента. Самый большой словарь CRM — style.css:1104-1487, 2182-2243.</p>
+
+  <!-- ── Сводка ── -->
+  <div class="lbl">Сводка пути · .rm-summary</div>
+  <div class="rm-summary">
+    <div class="rm-sum-main">
+      <div class="rm-sum-figure"><b>7</b><span>/12</span></div>
+      <div class="rm-sum-meta">
+        <div class="rm-sum-l">Готово задач</div>
+        <div class="rm-prog-bar"><i style="width:58%"></i></div>
+      </div>
+    </div>
+    <button class="rm-review-cta">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      На проверке <span class="num">3</span>
+    </button>
+  </div>
+  <div style="height:10px"></div>
+  <div class="rm-summary">
+    <div class="rm-sum-main">
+      <div class="rm-sum-figure"><b>12</b><span>/12</span></div>
+      <div class="rm-sum-meta">
+        <div class="rm-sum-l">Готово задач</div>
+        <div class="rm-prog-bar"><i style="width:100%"></i></div>
+      </div>
+    </div>
+    <span class="rm-allclear">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      Все чисто
+    </span>
+  </div>
+
+  <!-- ── Лента этапов ── -->
+  <div class="lbl">Лента этапов · .rm-flow / .rm-stage (.done / .cur / .todo / .empty)</div>
+  <div class="demo">
+    <div class="rm-flow">
+      <div class="rm-stage done">
+        <div class="rm-rail"><div class="rm-node"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div><div class="rm-line"></div></div>
+        <div class="rm-body">
+          <div class="rm-shead"><span class="rm-stitle">Знакомство и цель</span><span class="rm-scount">4/4</span></div>
+        </div>
+      </div>
+      <div class="rm-stage cur">
+        <div class="rm-rail"><div class="rm-node">2</div><div class="rm-line"></div></div>
+        <div class="rm-body">
+          <div class="rm-shead"><span class="rm-stitle"><span class="rm-shead-dot"></span>Документы для подачи</span><span class="rm-scount">3/6</span></div>
+          <div class="rm-ssub">Собираем аттестат, паспорт и мотивационное письмо.</div>
+          <div class="rm-hint">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            Клиент задерживает нотариальный перевод — напомнили в чате.
+          </div>
+        </div>
+      </div>
+      <div class="rm-stage todo">
+        <div class="rm-rail"><div class="rm-node">3</div><div class="rm-line"></div></div>
+        <div class="rm-body">
+          <div class="rm-shead"><span class="rm-stitle">Подача в вузы</span><span class="rm-scount">0/5</span></div>
+        </div>
+      </div>
+      <div class="rm-stage empty">
+        <div class="rm-rail"><div class="rm-node" style="border-radius:50%;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(17,21,31,.13) 3px,rgba(17,21,31,.13) 6px);box-shadow:none;"></div></div>
+        <div class="rm-body">
+          <div class="rm-shead"><span class="rm-stitle">Виза и переезд</span><span class="rm-stag">черновик</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Карточки задач ── -->
+  <div class="lbl">Карточки задач · .rm-task — статусы и владелец</div>
+  <div class="demo">
+    <div class="rm-tasks">
+
+      <!-- в работе, владелец клиент -->
+      <div class="rm-task o-client st-doing">
+        <div class="rm-task-head">
+          <div class="rm-ck"></div>
+          <div class="rm-tb">
+            <div class="rm-title">Загрузить скан аттестата с нотариальным переводом</div>
+            <div class="rm-sub-line"><span class="rm-who-t">Клиент</span><span class="rm-meta-sep"></span><span class="rm-cnt-mini hl"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>2</span></div>
+          </div>
+          <div class="rm-side">
+            <span class="rm-due soon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>завтра</span>
+            <span class="rm-status st-doing"><span class="rm-pulse" style="background:var(--blue)"></span>В работе</span>
+            <span class="rm-exp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- на проверке (громкий якорь), раскрыта -->
+      <div class="rm-task o-client st-review open">
+        <div class="rm-task-head">
+          <div class="rm-ck"></div>
+          <div class="rm-tb">
+            <div class="rm-title">Мотивационное письмо на английском</div>
+            <div class="rm-sub-line"><span class="rm-who-t">Клиент</span><span class="rm-meta-sep"></span>прислано 2 файла</div>
+          </div>
+          <div class="rm-side">
+            <span class="rm-due"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>5 авг</span>
+            <span class="rm-status st-review"><span class="rm-pulse"></span>На проверке</span>
+            <span class="rm-exp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          </div>
+        </div>
+        <div class="rm-detail">
+          <div class="rm-dsec">
+            <div class="rm-dh"><span class="rm-dh-n">Шаг 3</span>Как выполнить</div>
+            <ol class="rm-howto">
+              <li>Опишите, почему выбрали Китай и эту специальность.</li>
+              <li>Приведите один конкретный пример достижения.</li>
+              <li>Объем — до 500 слов, файл PDF.</li>
+            </ol>
+          </div>
+          <div class="rm-dsec">
+            <div class="rm-dh">Что прислал клиент</div>
+            <div class="rm-subs">
+              <a class="rm-sub rm-sub-img"><span class="rm-sub-thumb" style="background:linear-gradient(135deg,#dfe7fb,#c9d8f7)"></span><span class="rm-sub-cap">letter-draft.jpg</span></a>
+              <a class="rm-sub"><span class="rm-sub-file"><span class="rm-sub-fic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg></span><span class="rm-sub-nm">motivation.pdf</span><span class="rm-sub-open">Открыть</span></span></a>
+            </div>
+          </div>
+          <div class="rm-dsec">
+            <div class="rm-review-act">
+              <button class="bp sm">Принять</button>
+              <button class="rm-return"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6M21 17a9 9 0 00-15-6.7L3 13"/></svg>Вернуть на доработку</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- возврат -->
+      <div class="rm-task o-client st-return">
+        <div class="rm-task-head">
+          <div class="rm-ck"></div>
+          <div class="rm-tb">
+            <div class="rm-title">Фото на визу по требованиям</div>
+            <div class="rm-sub-line"><span class="rm-who-t">Клиент</span><span class="rm-meta-sep"></span>вернули: фон не белый</div>
+          </div>
+          <div class="rm-side">
+            <span class="rm-due over"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>просрочено</span>
+            <span class="rm-status st-return">Возврат</span>
+            <span class="rm-exp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- задача команды, готова -->
+      <div class="rm-task st-done">
+        <div class="rm-task-head">
+          <div class="rm-ck"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="rm-tb">
+            <div class="rm-title">Проверить список вузов под балл диагностики</div>
+            <div class="rm-sub-line"><span class="rm-who-t">Куратор</span></div>
+          </div>
+          <div class="rm-side"><span class="rm-status">Готово</span></div>
+        </div>
+      </div>
+
+      <!-- маркер правки AI -->
+      <div class="rm-task o-client st-doing rm-flash">
+        <div class="rm-task-head">
+          <div class="rm-ck"></div>
+          <div class="rm-tb">
+            <div class="rm-title">Заполнить онлайн-анкету университета Цинхуа</div>
+            <div class="rm-sub-line"><span class="rm-who-t">Клиент</span><span class="rm-meta-sep"></span>изменено AI</div>
+          </div>
+          <div class="rm-side">
+            <span class="rm-due"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>12 авг</span>
+            <span class="rm-exp"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- тред по задаче -->
+    <button class="rm-discuss">
+      <span class="rm-discuss-ic" style="background:var(--blue-tint);color:var(--blue)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+      <span class="rm-discuss-main">
+        <span class="rm-discuss-t">Обсуждение задачи<span class="num">4</span></span>
+        <span class="rm-discuss-prev">Клиент: загрузил новую версию письма, посмотрите</span>
+      </span>
+      <span class="rm-discuss-go"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+    </button>
+  </div>
+
+  <!-- ── Добавление задачи ── -->
+  <div class="lbl">Добавить задачу · .rm-add / .rm-chip / .rm-at-t</div>
+  <div class="demo">
+    <div class="rm-add" data-o="client">
+      <div class="rm-add-own">
+        <button class="on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Клиент</button>
+        <button><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>Команда</button>
+      </div>
+      <div class="rm-presets">
+        <button class="rm-chip o-client"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Загрузить документ</button>
+        <button class="rm-chip o-client"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Заполнить анкету</button>
+        <button class="rm-chip o-client"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Оплатить сбор</button>
+      </div>
+      <div class="rm-fr" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:13px">
+        <input class="rm-f-due" type="text" value="15 авг" style="max-width:120px" />
+        <button class="rm-at-t on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Файл</button>
+        <button class="rm-at-t"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Текст</button>
+      </div>
+      <button class="rm-add-btn open"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Добавить задачу</button>
+    </div>
+  </div>
+
+  <!-- ── Тулбар публикации ── -->
+  <div class="lbl">Публикация плана · .rm-plan-tb / .rm-pub</div>
+  <div class="rm-plan-tb">
+    <span class="rm-pub on"><span class="rm-pub-dot"></span>План опубликован — виден клиенту</span>
+    <div class="rm-plan-tb-act">
+      <button class="bp ghost sm">Скрыть</button>
+      <button class="bp sm">Выкатить на лидов</button>
+    </div>
+  </div>
+  <div style="height:10px"></div>
+  <div class="rm-plan-tb">
+    <span class="rm-pub off"><span class="rm-pub-dot"></span>Черновик — клиент еще не видит</span>
+    <div class="rm-plan-tb-act"><button class="bp sm">Опубликовать</button></div>
+  </div>
+
+  <!-- ── Шаблоны ── -->
+  <div class="lbl">Шаблоны пути · .tpl-card / .tpl-stage / .tpl-task (style.css:2182-2221)</div>
+  <div class="card tpl-card" style="max-width:420px">
+    <div class="sec-head">
+      <div class="ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+      <div><div class="t">Бакалавриат, гранты</div><div class="s">5 этапов · 18 задач</div></div>
+    </div>
+    <div class="tpl-actions">
+      <button class="bp ghost sm">Редактировать</button>
+      <button class="bp sm">Применить</button>
+    </div>
+  </div>
+
+  <div style="height:12px"></div>
+  <div class="card" style="padding:18px 20px;max-width:520px">
+    <div class="tpl-stages">
+      <div class="tpl-stage">
+        <div class="tpl-stage-h"><span class="tpl-stage-t">Документы для подачи</span></div>
+        <div class="tpl-tasks">
+          <div class="tpl-task">
+            <div class="tpl-task-top">
+              <span class="tpl-own">
+                <span class="tpl-own-b on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Клиент</span>
+                <span class="tpl-own-b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Команда</span>
+              </span>
+              <button class="tpl-mini-del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg></button>
+            </div>
+            <input class="tpl-fld" value="Загрузить скан аттестата" />
+          </div>
+        </div>
+        <button class="bp ghost sm tpl-add-task"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Задача</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

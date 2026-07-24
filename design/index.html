@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ИстСайд CRM — библиотека компонентов</title>
+<!-- Галерея дизайн-системы CRM. Каждая карточка ведет в самодостаточный HTML-компонент
+     (линкует реальный ../style.css, использует настоящие классы). Правила — ../design.md.
+     CRM — отдельный плоский язык, не смешивать с глассморфизмом платформы. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;background:#E5E7EC;color:var(--ink,#11151F);
+    font-family:'Manrope','Inter',system-ui,sans-serif;font-feature-settings:'tnum';}
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 26px 100px;}
+  .head{margin:0 0 34px;max-width:64ch;}
+  .head h1{margin:0 0 10px;font-size:32px;font-weight:800;letter-spacing:-.03em;line-height:1.05;}
+  .head p{margin:0;font-size:15px;line-height:1.55;color:var(--ink-2,#697086);}
+  .head a{color:var(--blue,#2F6BFF);text-decoration:none;font-weight:600;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(256px,1fr));gap:14px;}
+  .c{display:block;text-decoration:none;color:inherit;background:#fff;
+    border:1px solid var(--line,#EDEEF2);border-radius:16px;padding:18px 18px 16px;
+    transition:border-color .13s cubic-bezier(.22,1,.36,1), transform .13s;}
+  .c:hover{border-color:var(--blue,#2F6BFF);transform:translateY(-2px);}
+  .c h2{margin:0 0 5px;font-size:16px;font-weight:700;letter-spacing:-.01em;}
+  .c .when{margin:0 0 11px;font-size:13px;line-height:1.4;color:var(--ink-2,#697086);}
+  .c code{font-size:11px;color:var(--blue-d,#1E50E6);background:var(--blue-tint,#EAF0FF);
+    border-radius:6px;padding:2px 7px;font-family:ui-monospace,Menlo,monospace;}
+  .debt{display:inline-block;margin-left:6px;font-size:10.5px;font-weight:700;color:var(--amber-ink,#9A5B12);
+    background:var(--amber-soft,#FBF0DD);border-radius:5px;padding:1px 6px;vertical-align:middle;}
+  .foot{margin-top:40px;font-size:13px;line-height:1.6;color:var(--ink-2,#697086);max-width:72ch;}
+  .foot code{font-size:12px;color:var(--blue-d,#1E50E6);background:var(--blue-tint,#EAF0FF);border-radius:5px;padding:1px 6px;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>Библиотека компонентов CRM</h1>
+      <p>Плоская светлая админка: скорость и плотность данных. Каждый компонент — самодостаточный файл на реальном <code style="background:var(--blue-tint);padding:1px 6px;border-radius:5px;">style.css</code>. Правила языка — в <a href="../design.md">design.md</a>. Рецепты платформы сюда не переносим.</p>
+    </div>
+
+    <div class="grid">
+      <a class="c" href="./layout.html"><h2>Каркас</h2><p class="when">Сайдбар, топбар, гриды, мобильный таббар.</p><code>.app .side .main .topbar</code></a>
+      <a class="c" href="./table.html"><h2>Списки и канбан</h2><p class="when">Таблица лидов, поиск, фильтры, доска.</p><code>.listcard .trow .sev .kb-*</code></a>
+      <a class="c" href="./lead-card.html"><h2>Карточка лида</h2><p class="when">Центрированная модалка лида.</p><code>.modal .m-head .m-nav .msg .pipe</code></a>
+      <a class="c" href="./controls.html"><h2>Контролы</h2><p class="when">Кнопки, инпуты, селекты, сегменты.</p><code>.bp .icobtn .al-in .dperiod</code></a>
+      <a class="c" href="./chips.html"><h2>Чипы и статусы</h2><p class="when">Статус, бейдж, тег, дельта.</p><code>.sev .kd .uz-tag .bdg .cnt</code></a>
+      <a class="c" href="./dashboard.html"><h2>Дашборды</h2><p class="when">Обзор / Путь / Финансы.</p><code>.kpi .statbar .chart .uz-* .fin-*</code></a>
+      <a class="c" href="./overlays.html"><h2>Оверлеи</h2><p class="when">Модалка-форма, баг-панель, тост, меню.</p><code>.al-* .bug-* #toast #smenu</code></a>
+      <a class="c" href="./ai.html"><h2>AI и каталог</h2><p class="when">AI-блоки, диагностика, витрина продуктов.</p><code>.ai-hero .diag-* .pchat .pd-*</code></a>
+      <a class="c" href="./inbox.html"><h2>Инбокс</h2><p class="when">«Диалоги» + «Обсуждения».</p><code>.tg-* .th-* .ibsw</code></a>
+      <a class="c" href="./admissions.html"><h2>Поступление</h2><p class="when">План, задачи, шаблоны.</p><code>.rm-* .tpl-*</code></a>
+      <a class="c" href="./marketing.html"><h2>Маркетинг <span class="debt">долг</span></h2><p class="when">Страница кампаний. Свои кнопка/свитч/модалка мимо системы.</p><code>.mk-*</code></a>
+    </div>
+
+    <p class="foot">Новый UI собираем из этих компонентов на настоящих классах <code>style.css</code>: нашел рецепт — используй; нет — собери из соседних, и если паттерн повторится, оформи новым файлом и добавь строку в <code>../design.md §8</code>. Инварианты (фокус-кольцо, сегмент, семантика <code>-soft+-ink</code>) — там же.</p>
+  </div>
+</body>
+</html>

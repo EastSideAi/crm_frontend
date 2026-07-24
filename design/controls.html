@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Контролы</title>
+<!-- Контролы. Когда берем: любые действия и ввод в CRM — кнопки, иконкнопки, поля, периоды, чекбоксы, сегменты. Классы: .bp/.bp.ghost/.bp.sm/.bpwide, .icobtn/.icocirc, .al-in/.al-sel/.ed-input/.linkrow input/.note-ta, .dperiod/.pay-seg/.due-seg/.vseg, .task-chk. Живой код: style.css:717,940,762,1563,295,1080. Правила: primary один + .ghost рядом; фокус всегда виден (белый + #DCE7FF/кольцо rgba(47,107,255,.1)); тень у кнопок запрещена кроме AI; только два рецепта инпута — не вводить третий. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background: #E5E7EC; }
+  .sc-wrap { max-width: 1060px; margin: 0 auto; padding: 54px 28px 96px; }
+  .sc-h1 { font-size: 30px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+  .sc-sub { color: var(--ink-2); font-size: 14px; margin-top: 9px; max-width: 62ch; line-height: 1.55; }
+  .sc-sec { margin-top: 26px; padding: 22px 24px 26px; }
+  .sc-sec-t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+  .sc-sec-s { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; margin-bottom: 18px; }
+  .sc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+  .sc-grid { display: flex; flex-wrap: wrap; gap: 22px 26px; }
+  .sc-cell { display: flex; flex-direction: column; gap: 10px; }
+  .sc-lab { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+  .sc-field { width: 260px; }
+  .sc-note { font-size: 12.5px; color: var(--ink-3); margin-top: 16px; line-height: 1.5; max-width: 70ch; }
+  .sc-hr { border: 0; height: 1px; background: var(--line); margin: 24px 0; }
+</style>
+</head>
+<body>
+  <div class="sc-wrap">
+    <h1 class="sc-h1">Контролы</h1>
+    <p class="sc-sub">Плоские и серые до касания: заливка <code>--fill</code> без рамки, на фокусе «просыпаются» — белеют и получают голубой бордер или кольцо. Никаких стеклянных эффектов, теней у кнопок и третьих рецептов ввода.</p>
+
+    <!-- КНОПКИ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Кнопки</div>
+      <div class="sc-sec-s">Primary <code>.bp</code> на экране один; рядом — <code>.ghost</code>. Темная <code>.bpwide</code> — широкий CTA второго плана, не конкурент синей.</div>
+      <div class="sc-grid">
+        <div class="sc-cell"><span class="sc-lab">primary · .bp</span>
+          <button class="bp" type="button">Добавить клиента</button></div>
+        <div class="sc-cell"><span class="sc-lab">вторичная · .bp.ghost</span>
+          <button class="bp ghost" type="button">Отмена</button></div>
+        <div class="sc-cell"><span class="sc-lab">компактная · .bp.sm</span>
+          <button class="bp sm" type="button">Сохранить</button></div>
+        <div class="sc-cell" style="min-width:220px;flex:1"><span class="sc-lab">широкая второго плана · .bpwide</span>
+          <button class="bpwide" type="button">Открыть карточку лида</button></div>
+      </div>
+
+      <hr class="sc-hr" />
+
+      <div class="sc-sec-t">Иконкнопки</div>
+      <div class="sc-sec-s">Квадрат <code>.icobtn</code> в карточках (ховер синеет, <code>.del</code> — краснеет) и круг <code>.icocirc</code> в топбаре.</div>
+      <div class="sc-grid">
+        <div class="sc-cell"><span class="sc-lab">.icobtn</span>
+          <div class="sc-row">
+            <button class="icobtn" type="button" aria-label="Редактировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <button class="icobtn" type="button" aria-label="Копировать"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a1.9 1.9 0 0 1-2-2V4a1.9 1.9 0 0 1 2-2h9a1.9 1.9 0 0 1 2 2v1"/></svg></button>
+            <button class="icobtn del" type="button" aria-label="Удалить"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">.icocirc · топбар</span>
+          <div class="sc-row">
+            <button class="icocirc" type="button" aria-label="Уведомления"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+            <button class="icocirc bell-on" type="button" aria-label="Уведомления активны"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+          </div></div>
+      </div>
+      <p class="sc-note">Тень у кнопок запрещена — глубина цветом, не тенью (исключение — AI-акцент с <code>0 4px 14px -2px rgba(47,107,255,.32)</code>).</p>
+    </section>
+
+    <!-- ПОЛЯ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Поля ввода — два рецепта, не смешивать</div>
+      <div class="sc-sec-s">Рецепт 1 — строчный внутри карточек (серый <code>--fill</code>, бордер на фокусе). Рецепт 2 — формы в модалках (рамка инсетом, кольцо на фокусе).</div>
+      <div class="sc-grid">
+        <div class="sc-cell sc-field"><span class="sc-lab">рецепт 1 · .linkrow input · покой</span>
+          <div class="linkrow"><input type="text" placeholder="https://t.me/ivan" value="https://t.me/ivan_petrov" /></div></div>
+        <div class="sc-cell sc-field"><span class="sc-lab">рецепт 2 · .al-in · покой</span>
+          <input class="al-in" type="text" placeholder="Имя и фамилия" /></div>
+        <div class="sc-cell sc-field"><span class="sc-lab">рецепт 2 · .al-in · ошибка</span>
+          <input class="al-in al-err" type="text" value="почта неверна" /></div>
+        <div class="sc-cell sc-field"><span class="sc-lab">селект · .al-selwrap › .al-sel</span>
+          <label class="al-selwrap"><select class="al-sel"><option>Источник: Telegram</option><option>ВКонтакте</option><option>Сайт</option></select></label></div>
+        <div class="sc-cell sc-field"><span class="sc-lab">заметка · .note-ta</span>
+          <textarea class="note-ta" placeholder="Комментарий менеджера…"></textarea></div>
+        <div class="sc-cell sc-field"><span class="sc-lab">инлайн-правка · .ed-input (белый + кольцо)</span>
+          <input class="ed-input" type="text" value="Иван Петров" /></div>
+      </div>
+      <p class="sc-note"><b>Фокус всегда виден.</b> <code>.ed-input</code> показан в активном состоянии правки — тот самый «белый + голубое кольцо» <code>0 0 0 3px rgba(47,107,255,.12)</code>. Кликните любое поле выше, чтобы увидеть переход из серого покоя в фокус. Нативный вид селекта не показываем — стрелка своим псевдоэлементом.</p>
+    </section>
+
+    <!-- СЕГМЕНТЫ -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Сегмент-переключатели — единый паттерн</div>
+      <div class="sc-sec-s">Серая капсула, активная кнопка — белая плашка с тенью <code>0 1px 2px</code>. <code>.pay-seg</code> красит активный статус (paid зеленый / refunded красный).</div>
+      <div class="sc-grid">
+        <div class="sc-cell"><span class="sc-lab">период дашборда · .dperiod</span>
+          <div class="dperiod">
+            <button type="button">7 дней</button>
+            <button class="on" type="button">30 дней</button>
+            <button type="button">Квартал</button>
+            <button class="dp-custom" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Свой</button>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">срок задачи · .due-seg</span>
+          <div class="due-seg">
+            <button class="on" type="button">Сегодня</button>
+            <button type="button">Завтра</button>
+            <button type="button">Неделя</button>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">вид списка · .vseg</span>
+          <div class="vseg" style="margin-left:0">
+            <button class="on" type="button" aria-label="Список"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+            <button type="button" aria-label="Канбан"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="18" rx="1.6"/><rect x="14" y="3" width="7" height="11" rx="1.6"/></svg></button>
+          </div></div>
+        <div class="sc-cell"><span class="sc-lab">статус оплаты · .pay-seg (семантичный активный)</span>
+          <div class="pay-seg">
+            <button data-v="paid" class="on" type="button">Оплачено</button>
+            <button type="button">Ожидает</button>
+            <button data-v="refunded" type="button">Возврат</button>
+          </div></div>
+      </div>
+    </section>
+
+    <!-- ЧЕКБОКС -->
+    <section class="card sc-sec">
+      <div class="sc-sec-t">Чекбокс задачи</div>
+      <div class="sc-sec-s"><code>.task-chk</code> — круглый 20px; done — синяя заливка с галочкой, текст зачеркнут. Нативные чекбоксы — <code>accent-color: var(--blue)</code>.</div>
+      <div style="max-width:420px">
+        <div class="task done">
+          <span class="task-chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div class="task-body"><div class="task-text">Позвонить родителю Ивана</div></div>
+        </div>
+        <div class="task">
+          <span class="task-chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div class="task-body"><div class="task-text">Отправить договор на подпись</div><div class="task-due">до 25 июля</div></div>
+        </div>
+        <div class="task overdue">
+          <span class="task-chk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div class="task-body"><div class="task-text">Согласовать оплату второго этапа</div><div class="task-due">просрочено на 2 дня</div></div>
+        </div>
+      </div>
+      <div class="sc-cell" style="margin-top:18px"><span class="sc-lab">нативный · accent-color: var(--blue)</span>
+        <div class="sc-row"><input type="checkbox" checked style="accent-color:var(--blue);width:16px;height:16px" /><input type="checkbox" style="accent-color:var(--blue);width:16px;height:16px" /></div></div>
+    </section>
+  </div>
+</body>
+</html>
