@@ -1,0 +1,61 @@
+name: deploy-crm-selectel
+# Автодеплой CRM на Selectel (crm.истсайд.рф).
+# Репозиторий статический — сборки нет, отдаём файлы из корня как есть
+# (ровно то, что делал Vercel: outputDirectory "."). Исключения повторяют
+# .vercelignore плюс служебные папки, чтобы на сервер не уезжали спеки и дизайн-исходники.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-crm-selectel
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Собрать пакет для выкладки
+        run: |
+          set -eo pipefail
+          test -f index.html || { echo "нет index.html в корне — выкладку отменяю"; exit 1; }
+          mkdir -p _out
+          tar -czf _out/site.tgz \
+            --exclude='./.git' \
+            --exclude='./.github' \
+            --exclude='./_out' \
+            --exclude='./_specs' \
+            --exclude='./_screens' \
+            --exclude='./design' \
+            --exclude='./design.md' \
+            --exclude='./CLAUDE.md' \
+            --exclude='./vercel.json' \
+            --exclude='./.vercelignore' \
+            --exclude='./_*.mjs' \
+            --exclude='./_*.py' \
+            --exclude='./fonts/*.txt' \
+            -C . .
+          tar -tzf _out/site.tgz | head -20
+
+      - name: Deploy to Selectel (jailed forced-command)
+        env:
+          DEPLOY_HOST: ${{ secrets.SELECTEL_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.SELECTEL_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.SELECTEL_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.SELECTEL_DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.SELECTEL_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Ключ привязан к одному скрипту и одной папке: утёкший ключ = максимум
+          # подмена статики CRM, не сервер и не соседние фронты.
+          ssh -i ~/.ssh/id_deploy -p "$DEPLOY_PORT" \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            "$DEPLOY_USER@$DEPLOY_HOST" < _out/site.tgz
+          rm -f ~/.ssh/id_deploy
