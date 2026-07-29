@@ -415,6 +415,7 @@ a { color: inherit; text-decoration: none; }
 .sev.s-offer_sent    { color: var(--amber-ink); background: var(--amber-soft); }
 .sev.s-client        { color: var(--green-ink); background: var(--green-soft); }
 .sev.s-rejected      { color: var(--ink-3);     background: var(--fill); }
+.sev.s-wait          { color: var(--amber-ink); background: var(--amber-soft); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -1560,8 +1561,10 @@ a { color: inherit; text-decoration: none; }
 .al-f { display: flex; flex-direction: column; gap: 6px; }
 .al-l { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em; }
 .al-l i { color: var(--blue); font-style: normal; }
+/* border: 0 — иначе браузер рисует свою серую рамку поверх нашей inset-обводки,
+   и поле выбивается из системы (видно было на баллах DET и ссылке на тест) */
 .al-in { width: 100%; font: 500 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
-  border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
+  border: 0; border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
   transition: box-shadow .15s, background .15s; }
 .al-in::placeholder { color: var(--ink-3); }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
@@ -2150,7 +2153,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .m-nav { width: auto; flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 12px 14px;
     border-right: 0; border-bottom: 1px solid var(--line); }
   .m-ni { flex-direction: column; gap: 5px; padding: 8px 12px; white-space: nowrap; font-size: 11px; min-width: 64px; position: relative; }
-  .m-ni .cnt, .m-ni .dotw { position: absolute; top: 4px; right: 6px; margin: 0; }
+  .m-ni .cnt, .m-ni .dotw { position: absolute; top: 3px; right: 4px; margin: 0;
+    font-size: 10px; padding: 1px 5px; }
   .m-content { padding: 20px 18px 28px; }
   .pipe { flex-wrap: wrap; }
   .pstep { flex: 1 1 28%; }
@@ -2859,3 +2863,95 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background-size: 220% 100%; animation: bugShim 1.3s infinite; }
 @keyframes bugShim { to { background-position: -120% 0; } }
 @media (max-width: 620px) { .bug-row2 { flex-direction: column; gap: 17px; } }
+
+/* ════ РАЗДЕЛ «Английский» — входной тест DET ════
+   Рецепты берем готовые: плашка-метрика = .pay-cell, тумблер = .pd-sw, чип = .sev.
+   Свое тут только герой с баллом и сетка автопроверки. */
+/* Плита нейтральная: цвет на ней несет вердикт и дельта, а не фон (§3.2 — семантика
+   ходит парой цвет/-soft, две семьи на одной поверхности гасят друг друга). */
+.det-hero { display: flex; align-items: center; gap: 22px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.det-hero.empty { gap: 16px; }
+.det-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.det-score { flex: none; display: flex; align-items: baseline; gap: 7px; }
+.det-num { font-size: 46px; font-weight: 800; letter-spacing: -.045em; line-height: .9; color: var(--ink); }
+.det-scale { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.det-hero-b { min-width: 0; }
+.det-verdict { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--navy); line-height: 1.35; }
+.det-verdict.good { color: var(--green-ink); }
+.det-verdict.warn { color: var(--amber-ink); }
+.det-verdict.bad { color: var(--red-ink); }
+.det-verdict.muted { color: var(--ink-2); font-weight: 600; }
+.det-partial { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 7px;
+  font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: var(--r-pill);
+  color: var(--amber-ink); background: var(--amber-soft); }
+.det-partial svg { color: var(--amber-ink); }
+.det-hero-m { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); }
+.det-note { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.det-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.det-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.det-board { grid-template-columns: repeat(4, 1fr); margin-bottom: 0; }
+.det-board .pc-v { font-size: 20px; }
+
+.det-delta { flex: none; font-size: 12.5px; font-weight: 700; padding: 4px 8px; border-radius: 8px; }
+.det-delta.up { color: var(--green-ink); background: var(--green-soft); }
+.det-delta.down { color: var(--red-ink); background: var(--red-soft); }
+
+.det-row { display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-radius: var(--r-lg);
+  cursor: pointer; position: relative; transition: background .13s; }
+.det-row:hover { background: #FBFBFC; }
+.det-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.det-row:hover::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+  border-radius: 3px; background: var(--blue); }
+.det-row.open { background: var(--fill); }
+.det-row-v { flex: none; min-width: 46px; font-size: 21px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+.det-row-b { flex: 1; min-width: 0; }
+.det-row-t { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.det-row-m { margin-top: 4px; font-size: 12px; color: var(--ink-3); }
+.det-row-go { flex: none; color: var(--ink-3); transition: transform .15s var(--ease); }
+.det-row.open .det-row-go { transform: rotate(90deg); color: var(--blue); }
+
+.det-detail { padding: 4px 14px 18px; }
+.det-lbl { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 10px; }
+.det-marks { display: flex; flex-wrap: wrap; gap: 5px; }
+.det-mark { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700; color: var(--ink-2); background: var(--fill); }
+.det-mark.ok { color: var(--green-ink); background: var(--green-soft); }
+.det-mark.part { color: var(--amber-ink); background: var(--amber-soft); }
+.det-mark.bad { color: var(--red-ink); background: var(--red-soft); }
+
+.det-open { margin-top: 16px; padding: 14px 15px; background: #fff; border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--line-2); }
+.det-open-h { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.det-open-h i { font-style: normal; font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.det-open-q { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.det-open-a { margin: 10px 0; padding: 11px 13px; background: var(--fill); border-radius: 11px;
+  font-size: 13px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+.det-open-a.muted { color: var(--ink-3); }
+
+.det-grade { margin-top: 18px; padding: 15px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.det-grade-r { display: flex; align-items: flex-end; gap: 12px; margin-top: 4px; }
+.det-grade-r label { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.det-gi { width: 104px; }
+.det-grade-hint { margin-top: 10px; font-size: 11.5px; color: var(--ink-3); }
+
+.det-sw-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.det-sw-row:first-of-type { border-top: 0; }
+.det-sw-b { flex: 1; min-width: 0; }
+.det-sw-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.det-sw-s { margin-top: 4px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.det-sw-by { font-size: 11.5px; color: var(--ink-3); padding-bottom: 4px; }
+.det-linkh { margin-top: 20px; }
+.det-link { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.det-url { flex: 1; font-size: 12.5px; color: var(--ink-2); }
+.det-link-none { flex: 1; font-size: 12.5px; color: var(--ink-3); }
+.det-link-m { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
+.det-pr { font-size: 13px; color: var(--ink-2); }
+
+@media (max-width: 620px) {
+  .det-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .det-board { grid-template-columns: repeat(2, 1fr); }
+  .det-sw-row { flex-wrap: wrap; }
+  .det-link { flex-wrap: wrap; }
+}
