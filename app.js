@@ -158,6 +158,8 @@
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
+      globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
+      play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -4251,6 +4253,7 @@
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
@@ -5124,6 +5127,7 @@
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
+      else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -5205,6 +5209,7 @@
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
+    else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -5227,6 +5232,7 @@
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
+                 det: ['Английский', 'Поднимаю тест DET'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -5240,6 +5246,215 @@
     }
     return '<div class="m-ctitle">' + head[0] + '</div>' +
       (head[1] ? '<div class="m-csub">' + head[1] + '</div>' : '') + body;
+  }
+
+  /* ── РАЗДЕЛ «Английский»: входной тест DET, пересдачи, доступ ──
+     Балл считает бэкенд (шкала 10-160), тут только показываем и открываем доступ.
+     Тест бесплатный и один раз: повтор и тренажеры включает сотрудник тумблером. */
+  var DET = {};          // id лида -> блок с бэка
+  var DET_BUSY = {};     // id лида -> идет загрузка
+  var DET_ITEM = {};     // id попытки -> разбор заданий
+  var DET_SHOW = null;   // какая попытка раскрыта
+
+  var DET_KIND = { entry: 'входной', progress: 'пересдача', final: 'итоговый' };
+  var DET_SKILLS = [['reading', 'Чтение'], ['listening', 'Аудирование'],
+                    ['writing', 'Письмо'], ['speaking', 'Речь']];
+
+  /* Что балл значит для продажи. Пороги — наша внутренняя шкала, не правило вуза:
+     менеджеру нужен ответ «что предлагать», а не голое число. */
+  function detVerdict(v) {
+    if (v == null) return { cls: '', t: 'Балл еще не посчитан' };
+    if (v <= 55) return { cls: 'bad', t: 'Начальный уровень — до подачи нужен курс с преподавателем' };
+    if (v < 95) return { cls: 'warn', t: 'Ниже порога большинства программ — предлагай подготовку' };
+    if (v < 115) return { cls: 'warn', t: 'Почти порог — небольшая подготовка закроет разрыв' };
+    return { cls: 'good', t: 'Уверенный уровень — подготовка нужна только под конкретный вуз' };
+  }
+
+  function loadDet(id, force) {
+    if (DET_BUSY[id]) return;
+    if (force) delete DET[id];
+    DET_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/det').then(function (r) {
+      DET_BUSY[id] = false; DET[id] = r;
+      if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+    }).catch(function (e) {
+      DET_BUSY[id] = false;
+      if (e.message !== '403') { DET[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function detDelta(v) {
+    if (v == null || !v) return '';
+    var up = v > 0;
+    return '<span class="det-delta' + (up ? ' up' : ' down') + '">' + (up ? '+' : '') + v + '</span>';
+  }
+
+  function detAttemptRow(a, prev) {
+    var d = (a.overall != null && prev != null) ? a.overall - prev : null;
+    var when = a.finished_at || a.started_at;
+    var st = a.status === 'scored' ? '<span class="sev s-client">проверен</span>'
+      : a.status === 'submitted' ? '<span class="sev s-wait">ждет проверки</span>'
+      : a.status === 'in_progress' ? '<span class="sev s-new">проходит сейчас</span>'
+      : '<span class="sev s-rejected">брошен</span>';
+    return '<div class="det-row' + (DET_SHOW === a.id ? ' open' : '') + '" role="button" tabindex="0" data-det="' + esc(a.id) + '">' +
+      '<span class="det-row-v num">' + (a.overall != null ? a.overall : '—') + '</span>' +
+      '<div class="det-row-b"><div class="det-row-t">' + (DET_KIND[a.kind] || a.kind) + ' тест ' + st + '</div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(when)) +
+          (a.scored_by ? ' · проверил ' + esc(String(a.scored_by).replace('teacher:', '')) : '') + '</div></div>' +
+      detDelta(d) + '<span class="det-row-go">' + ic('go', 13) + '</span></div>' +
+      (DET_SHOW === a.id ? '<div class="det-detail" id="det-detail">' + detDetailHtml(a) + '</div>' : '');
+  }
+
+  function detDetailHtml(a) {
+    var det = DET_ITEM[a.id];
+    if (!det) return '<div class="field-empty">Открываю разбор…</div>';
+    var open = det.items.filter(function (i) { return i.type_code === 'writing_prompt' || i.type_code === 'speaking_prompt'; });
+    var auto = det.items.filter(function (i) { return open.indexOf(i) === -1; });
+    var right = auto.filter(function (i) { return i.score >= 0.999; }).length;
+
+    var marks = auto.map(function (i) {
+      var cls = i.score == null ? 'skip' : (i.score >= 0.999 ? 'ok' : (i.score > 0 ? 'part' : 'bad'));
+      return '<span class="det-mark ' + cls + '" title="' + esc(i.skill_tag) + ', сложность ' + i.band + '">' + (i.idx + 1) + '</span>';
+    }).join('');
+
+    var openHtml = open.map(function (i) {
+      var text = (i.response && i.response.text) || '';
+      var audio = i.doc_id
+        ? '<a class="bp ghost sm" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + i.doc_id +
+          '/download?k=' + encodeURIComponent(getKey()) + '">' + ic('play', 13) + 'Послушать ответ</a>'
+        : '';
+      var task = (i.payload && (i.payload.prompt || i.payload.question || i.payload.text)) || '';
+      return '<div class="det-open">' +
+        '<div class="det-open-h">' + (i.type_code === 'writing_prompt' ? 'Письмо' : 'Речь') +
+          '<i>сложность ' + i.band + '</i></div>' +
+        (task ? '<div class="det-open-q">' + esc(task) + '</div>' : '') +
+        (text ? '<div class="det-open-a">' + esc(text) + '</div>' : (audio ? '' : '<div class="det-open-a muted">Ответа нет</div>')) +
+        audio + '</div>';
+    }).join('');
+
+    var form = '';
+    if (can('students') && a.status !== 'in_progress') {
+      var m = det.attempt;
+      form = '<div class="det-grade">' +
+        '<div class="det-lbl">Балл за письмо и речь</div>' +
+        '<div class="det-grade-r">' +
+          '<label>Письмо<input class="al-in det-gi" id="det-gw" inputmode="numeric" placeholder="10-160" value="' +
+            (m.writing != null ? m.writing : '') + '"></label>' +
+          '<label>Речь<input class="al-in det-gi" id="det-gs" inputmode="numeric" placeholder="10-160" value="' +
+            (m.speaking != null ? m.speaking : '') + '"></label>' +
+          '<button class="bp sm" id="det-gsave" data-aid="' + esc(a.id) + '">' + ic('check', 13) + 'Сохранить</button>' +
+        '</div>' +
+        '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы.</div></div>';
+    }
+
+    return '<div class="det-lbl">Задания с автопроверкой · ' + right + ' из ' + auto.length + ' верно</div>' +
+      '<div class="det-marks">' + marks + '</div>' + openHtml + form;
+  }
+
+  function buildDetSection(id) {
+    var b = DET[id];
+    if (!b) { loadDet(id); return skeletonSection('det'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Английский</div>' +
+        '<div class="m-csub">Не удалось загрузить тест. Обновите страницу.</div>';
+    }
+    var head = '<div class="m-ctitle">Английский</div>' +
+      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, письмо и речь ставит преподаватель. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
+
+    var latest = b.latest;
+    // Пока преподаватель не поставил письмо и речь, балл неполный. Вердикт цветом тут
+    // не даем: менеджер прочитает «начальный уровень» как приговор, а это половина теста.
+    var partial = !!latest && latest.status !== 'scored';
+    var hero;
+    if (!latest) {
+      hero = '<div class="det-hero empty">' +
+        '<div class="det-hero-ic">' + ic('globe', 20) + '</div>' +
+        '<div><div class="det-empty-t">Тест еще не проходили</div>' +
+        '<div class="det-empty-s">Выдайте ссылку — результат придет сюда сам, и будет видно, что предлагать.</div></div></div>';
+    } else {
+      var vd = detVerdict(latest.overall);
+      hero = '<div class="det-hero">' +
+        '<div class="det-score"><span class="det-num num">' + (latest.overall != null ? latest.overall : '—') + '</span>' +
+          '<span class="det-scale">из 160</span></div>' +
+        '<div class="det-hero-b">' +
+          (partial
+            ? '<div class="det-partial">' + ic('clock', 13) + 'Балл предварительный — письмо и речь у преподавателя</div>' +
+              '<div class="det-verdict muted">' + vd.t + '</div>'
+            : '<div class="det-verdict ' + vd.cls + '">' + vd.t + '</div>') +
+          '<div class="det-hero-m">' + esc(fmtWhen(latest.finished_at || latest.started_at)) +
+            (b.delta ? ' · к прошлому ' + detDelta(b.delta) : '') + '</div>' +
+          (b.note ? '<div class="det-note">' + esc(b.note) + '</div>' : '') +
+        '</div></div>' +
+        '<div class="pay-board det-board">' + DET_SKILLS.map(function (s) {
+          var v = latest[s[0]];
+          return '<div class="pay-cell' + (v == null ? ' muted' : '') + '">' +
+            '<div class="pc-l">' + s[1] + '</div>' +
+            '<div class="pc-v num">' + (v == null ? '—' : v) + '</div></div>';
+        }).join('') + '</div>';
+    }
+
+    var attempts = (b.attempts || []).slice().reverse();
+    var prevOf = {};
+    var scored = (b.attempts || []).filter(function (a) { return a.overall != null; });
+    scored.forEach(function (a, i) { if (i) prevOf[a.id] = scored[i - 1].overall; });
+    var rows = attempts.length
+      ? attempts.map(function (a) { return detAttemptRow(a, prevOf[a.id]); }).join('')
+      : '<div class="field-empty">Попыток пока нет</div>';
+
+    var acc = b.access || {};
+    var inv = b.invite;
+    // Синим — то, что делают каждый раз. «Новая ссылка» обесценивает уже выданную,
+    // поэтому primary она получает только когда ссылки еще нет.
+    var link = '<div class="det-link">' +
+      (inv
+        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(inv.url) + '">' +
+          '<button class="bp sm" id="det-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="det-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылки нет — создайте, и отправьте ее человеку</span>' +
+          '<button class="bp sm" id="det-newlink">' + ic('plus', 13) + 'Создать ссылку</button>') +
+      '</div>' +
+      (inv ? '<div class="det-link-m">' + (inv.used_count >= inv.max_uses ? 'по ссылке уже прошли' : 'ссылка активна') +
+        ' · до ' + esc(fmtWhen(inv.expires_at)) + '</div>' : '');
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Разрешить повторный тест</div>' +
+          '<div class="det-sw-s">' + (acc.attempts_used
+            ? 'Попыток пройдено: ' + acc.attempts_used + '. Разрешение одноразовое — уйдет на следующий тест.'
+            : 'Первый тест человек проходит сам, разрешение не нужно.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.retakes > 0 ? ' on' : '') + '" id="det-sw-retake">' +
+          '<span class="pd-sw-l">' + (acc.retakes > 0 ? 'Разрешен' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажеры</div>' +
+          '<div class="det-sw-s">Тренировки на платформе между тестами. Открывайте после оплаты занятий.</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
+          '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
+      '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
+
+    var pr = b.practice || {};
+    var practice = pr.total
+      ? '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
+        '<div class="det-pr">' + pr.total + ' ' + plural(pr.total, 'подход', 'подхода', 'подходов') +
+        ', за неделю ' + pr.week + (pr.last_at ? ' · последний раз ' + esc(ago(pr.last_at)) + ' назад' : '') + '</div></div>'
+      : '';
+
+    var it = b.intensive;
+    var intensive = it
+      ? '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>' +
+        '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
+        ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
+        (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
+        (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
+        '<div class="det-sw-by">свели по телефону — интенсив живет отдельным приложением</div></div>'
+      : '';
+
+    return head + hero +
+      '<div class="m-sec"><div class="m-sec-h">Попытки' +
+        '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
+      access + practice + intensive;
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -5825,6 +6040,73 @@
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 
   /* ── обработчики активного раздела ── */
+  /* Обработчики раздела «Английский». Все действия — отдельные ручки бэка; после каждой
+     перечитываем блок целиком, чтобы на экране был ответ сервера, а не наша догадка. */
+  function wireDet(id, host) {
+    function reload() { loadDet(id, true); }
+    function post(path, body, okMsg) {
+      return api(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) { if (okMsg) showToast(okMsg); reload(); return r; })
+        .catch(function (e) { if (e.message !== '403') showToast('Не получилось: ' + e.message); });
+    }
+
+    var rf = el('det-refresh');
+    if (rf) rf.addEventListener('click', reload);
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-det]'), function (row) {
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
+      });
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.det-detail')) return;
+        var aid = row.getAttribute('data-det');
+        DET_SHOW = DET_SHOW === aid ? null : aid;
+        renderModalContent();
+        if (DET_SHOW && !DET_ITEM[DET_SHOW]) {
+          api('/admin/api/det/attempts/' + DET_SHOW).then(function (r) {
+            DET_ITEM[aid] = r;
+            if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+          }).catch(function (err) { if (err.message !== '403') showToast('Разбор не открылся'); });
+        }
+      });
+    });
+
+    var gs = el('det-gsave');
+    if (gs) gs.addEventListener('click', function () {
+      var w = (el('det-gw').value || '').trim(), s = (el('det-gs').value || '').trim();
+      var body = {};
+      if (w) body.writing = parseInt(w, 10);
+      if (s) body.speaking = parseInt(s, 10);
+      var bad = Object.keys(body).some(function (kk) { return !(body[kk] >= 10 && body[kk] <= 160); });
+      if (!Object.keys(body).length || bad) { showToast('Балл — число от 10 до 160'); return; }
+      var aid = gs.getAttribute('data-aid');
+      delete DET_ITEM[aid];
+      post('/admin/api/det/attempts/' + aid + '/score', body, 'Балл сохранен');
+    });
+
+    var b = DET[id] || {}, acc = b.access || {};
+    var sr = el('det-sw-retake');
+    if (sr) sr.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/access', { retake: !(acc.retakes > 0) },
+           acc.retakes > 0 ? 'Повторный тест закрыт' : 'Повторный тест разрешен');
+    });
+    var sp = el('det-sw-practice');
+    if (sp) sp.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
+           acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
+    });
+
+    var nl = el('det-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/invite', {}, 'Ссылка на тест готова');
+    });
+    var cp = el('det-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var f = el('det-url'); if (f) copyText(f.value, cp);
+    });
+  }
+
   function attachContentHandlers(id, ctx) {
     var host = el('m-content');
     if (!host) return;
@@ -5846,6 +6128,9 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
+
+    // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
+    if (state.modalSection === 'det') wireDet(id, host);
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
