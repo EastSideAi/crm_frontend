@@ -5282,6 +5282,23 @@
     return '<span class="det-delta' + (up ? ' up' : ' down') + '">' + (up ? '+' : '') + v + '</span>';
   }
 
+  /* Чего в балле еще не хватает. Сочинение проверяет модель, речь — человек, и менеджер
+     должен видеть разницу: балл от модели можно оспорить, балл преподавателя — нет. */
+  function detPartial(a) {
+    var g = a.graded_by || {};
+    if (g.writing === 'teacher' && g.speaking === 'teacher') return '';
+    if (!g.speaking && !g.writing) return 'Балл предварительный — письмо и речь еще не проверены';
+    if (!g.speaking) return 'Речь ждет преподавателя' + (g.writing === 'ai' ? ', сочинение проверила модель' : '');
+    return 'Сочинение проверила модель — преподаватель может поправить балл';
+  }
+
+  function detWho(a) {
+    var by = String(a.scored_by || '');
+    if (!by) return '';
+    return by.indexOf('ai:') === 0 ? ' · сочинение проверила модель'
+      : ' · проверил ' + esc(by.replace('teacher:', ''));
+  }
+
   function detAttemptRow(a, prev) {
     var d = (a.overall != null && prev != null) ? a.overall - prev : null;
     var when = a.finished_at || a.started_at;
@@ -5292,8 +5309,7 @@
     return '<div class="det-row' + (DET_SHOW === a.id ? ' open' : '') + '" role="button" tabindex="0" data-det="' + esc(a.id) + '">' +
       '<span class="det-row-v num">' + (a.overall != null ? a.overall : '—') + '</span>' +
       '<div class="det-row-b"><div class="det-row-t">' + (DET_KIND[a.kind] || a.kind) + ' тест ' + st + '</div>' +
-        '<div class="det-row-m">' + esc(fmtWhen(when)) +
-          (a.scored_by ? ' · проверил ' + esc(String(a.scored_by).replace('teacher:', '')) : '') + '</div></div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(when)) + detWho(a) + '</div></div>' +
       detDelta(d) + '<span class="det-row-go">' + ic('go', 13) + '</span></div>' +
       (DET_SHOW === a.id ? '<div class="det-detail" id="det-detail">' + detDetailHtml(a) + '</div>' : '');
   }
@@ -5325,9 +5341,32 @@
         audio + '</div>';
     }).join('');
 
+    // Разбор модели: по нему преподаватель либо соглашается, либо ставит свой балл.
+    var ai = det.ai;
+    var aiHtml = '';
+    if (ai && ai.criteria) {
+      var teacherSet = (a.graded_by || {}).writing === 'teacher';
+      aiHtml = '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
+        '<div class="det-ai-h">' + ic('spark', 13) +
+          (teacherSet ? 'Что говорила модель (балл уже ваш)' : 'Сочинение проверила модель') +
+          (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
+        '<div class="det-ai-c">' + ai.criteria.map(function (c) {
+          return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
+            '<span class="det-ai-v num">' + c.score + '</span>' +
+            (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
+        }).join('') + '</div>' +
+        (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
+        (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
+        (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
+        '</div>';
+    }
+
     var form = '';
     if (can('students') && a.status !== 'in_progress') {
       var m = det.attempt;
+      var regrade = (a.graded_by || {}).writing === 'teacher' ? ''
+        : '<button class="bp ghost sm" id="det-regrade" data-aid="' + esc(a.id) + '">' + ic('spark', 13) +
+          (ai ? 'Перепроверить сочинение' : 'Проверить сочинение моделью') + '</button>';
       form = '<div class="det-grade">' +
         '<div class="det-lbl">Балл за письмо и речь</div>' +
         '<div class="det-grade-r">' +
@@ -5336,12 +5375,16 @@
           '<label>Речь<input class="al-in det-gi" id="det-gs" inputmode="numeric" placeholder="10-160" value="' +
             (m.speaking != null ? m.speaking : '') + '"></label>' +
           '<button class="bp sm" id="det-gsave" data-aid="' + esc(a.id) + '">' + ic('check', 13) + 'Сохранить</button>' +
+          regrade +
         '</div>' +
-        '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы.</div></div>';
+        '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы. ' +
+          ((a.graded_by || {}).writing === 'ai'
+            ? 'В поле «письмо» стоит балл модели — сохраните, если согласны, или поставьте свой.'
+            : '') + '</div></div>';
     }
 
     return '<div class="det-lbl">Задания с автопроверкой · ' + right + ' из ' + auto.length + ' верно</div>' +
-      '<div class="det-marks">' + marks + '</div>' + openHtml + form;
+      '<div class="det-marks">' + marks + '</div>' + openHtml + aiHtml + form;
   }
 
   function buildDetSection(id) {
@@ -5352,12 +5395,13 @@
         '<div class="m-csub">Не удалось загрузить тест. Обновите страницу.</div>';
     }
     var head = '<div class="m-ctitle">Английский</div>' +
-      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, письмо и речь ставит преподаватель. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
+      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение проверяет модель, речь слушает преподаватель. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
 
     var latest = b.latest;
-    // Пока преподаватель не поставил письмо и речь, балл неполный. Вердикт цветом тут
-    // не даем: менеджер прочитает «начальный уровень» как приговор, а это половина теста.
-    var partial = !!latest && latest.status !== 'scored';
+    // Пока оценены не все навыки, балл неполный. Вердикт цветом тут не даем: менеджер
+    // прочитает «начальный уровень» как приговор, а это еще не весь тест.
+    var partialText = latest ? detPartial(latest) : '';
+    var partial = !!partialText;
     var hero;
     if (!latest) {
       hero = '<div class="det-hero empty">' +
@@ -5371,7 +5415,7 @@
           '<span class="det-scale">из 160</span></div>' +
         '<div class="det-hero-b">' +
           (partial
-            ? '<div class="det-partial">' + ic('clock', 13) + 'Балл предварительный — письмо и речь у преподавателя</div>' +
+            ? '<div class="det-partial">' + ic('clock', 13) + esc(partialText) + '</div>' +
               '<div class="det-verdict muted">' + vd.t + '</div>'
             : '<div class="det-verdict ' + vd.cls + '">' + vd.t + '</div>') +
           '<div class="det-hero-m">' + esc(fmtWhen(latest.finished_at || latest.started_at)) +
@@ -6076,6 +6120,20 @@
       var aid = gs.getAttribute('data-aid');
       delete DET_ITEM[aid];
       post('/admin/api/det/attempts/' + aid + '/score', body, 'Балл сохранен');
+    });
+
+    var rg = el('det-regrade');
+    if (rg) rg.addEventListener('click', function () {
+      var aid = rg.getAttribute('data-aid');
+      rg.disabled = true; rg.textContent = 'Проверяю…';
+      delete DET_ITEM[aid];
+      api('/admin/api/det/attempts/' + aid + '/regrade', { method: 'POST' })
+        .then(function (r) {
+          showToast(r.ok ? 'Сочинение проверено' : 'Модель не ответила — попробуйте еще раз');
+          return api('/admin/api/det/attempts/' + aid).then(function (d) { DET_ITEM[aid] = d; });
+        })
+        .catch(function (e) { if (e.message !== '403') showToast('Не получилось: ' + e.message); })
+        .then(reload);
     });
 
     var b = DET[id] || {}, acc = b.access || {};
