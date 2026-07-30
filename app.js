@@ -5289,20 +5289,26 @@
     return '<span class="det-delta' + (up ? ' up' : ' down') + '">' + (up ? '+' : '') + v + '</span>';
   }
 
-  /* Чего в балле еще не хватает. Сочинение проверяет модель, речь — человек, и менеджер
+  /* Чего в балле еще не хватает. Письмо и речь сначала проверяет модель, и менеджер
      должен видеть разницу: балл от модели можно оспорить, балл преподавателя — нет. */
+  var DET_SKILL_RU = { writing: 'сочинение', speaking: 'устный ответ' };
+
   function detPartial(a) {
     var g = a.graded_by || {};
-    if (g.writing === 'teacher' && g.speaking === 'teacher') return '';
-    if (!g.speaking && !g.writing) return 'Балл предварительный — письмо и речь еще не проверены';
-    if (!g.speaking) return 'Речь ждет преподавателя' + (g.writing === 'ai' ? ', сочинение проверила модель' : '');
-    return 'Сочинение проверила модель — преподаватель может поправить балл';
+    var wait = [], byAi = [];
+    ['writing', 'speaking'].forEach(function (s) {
+      if (!g[s]) wait.push(DET_SKILL_RU[s]);
+      else if (g[s] === 'ai') byAi.push(DET_SKILL_RU[s]);
+    });
+    if (wait.length) return 'Балл неполный — ' + wait.join(' и ') + ' еще не проверены';
+    if (byAi.length) return 'Проверила модель: ' + byAi.join(' и ') + ' — можете поправить балл';
+    return '';
   }
 
   function detWho(a) {
     var by = String(a.scored_by || '');
     if (!by) return '';
-    return by.indexOf('ai:') === 0 ? ' · сочинение проверила модель'
+    return by.indexOf('ai:') === 0 ? ' · первым проверила модель'
       : ' · проверил ' + esc(by.replace('teacher:', ''));
   }
 
@@ -5349,31 +5355,40 @@
     }).join('');
 
     // Разбор модели: по нему преподаватель либо соглашается, либо ставит свой балл.
-    var ai = det.ai;
-    var aiHtml = '';
-    if (ai && ai.criteria) {
-      var teacherSet = (a.graded_by || {}).writing === 'teacher';
-      aiHtml = '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
-        '<div class="det-ai-h">' + ic('spark', 13) +
-          (teacherSet ? 'Что говорила модель (балл уже ваш)' : 'Сочинение проверила модель') +
-          (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
-        '<div class="det-ai-c">' + ai.criteria.map(function (c) {
-          return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
-            '<span class="det-ai-v num">' + c.score + '</span>' +
-            (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
-        }).join('') + '</div>' +
-        (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
-        (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
-        (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
-        '</div>';
-    }
+    var aiHtml = [['writing', det.ai, 'Сочинение проверила модель'],
+                  ['speaking', det.ai_speaking, 'Устный ответ проверила модель']]
+      .map(function (b) {
+        var ai = b[1];
+        if (!ai || !ai.criteria) return '';
+        var teacherSet = (a.graded_by || {})[b[0]] === 'teacher';
+        return '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
+          '<div class="det-ai-h">' + ic('spark', 13) +
+            (teacherSet ? 'Что говорила модель про ' + DET_SKILL_RU[b[0]] + ' (балл уже ваш)' : b[2]) +
+            (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
+          '<div class="det-ai-c">' + ai.criteria.map(function (c) {
+            return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
+              '<span class="det-ai-v num">' + c.score + '</span>' +
+              (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
+          }).join('') + '</div>' +
+          (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
+          (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
+          // Расшифровка речи — чтобы не переслушивать запись ради одной фразы. Ученику
+          // ее не показываем: спорить с тем, как машина расслышала, тут не о чем.
+          (ai.transcript ? '<div class="det-ai-tr">' + esc(ai.transcript) + '</div>' : '') +
+          (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
+          '</div>';
+      }).join('');
 
     var form = '';
     if (can('students') && a.status !== 'in_progress') {
       var m = det.attempt;
-      var regrade = (a.graded_by || {}).writing === 'teacher' ? ''
+      // Перепроверяем только то, что человек еще не оценил сам: свой балл модель не трогает.
+      var g = a.graded_by || {};
+      var canRegrade = ['writing', 'speaking'].filter(function (s) { return g[s] !== 'teacher'; });
+      var regrade = !canRegrade.length ? ''
         : '<button class="bp ghost sm" id="det-regrade" data-aid="' + esc(a.id) + '">' + ic('spark', 13) +
-          (ai ? 'Перепроверить сочинение' : 'Проверить сочинение моделью') + '</button>';
+          (canRegrade.some(function (s) { return g[s] === 'ai'; }) ? 'Перепроверить моделью' : 'Проверить моделью') +
+          '</button>';
       form = '<div class="det-grade">' +
         '<div class="det-lbl">Балл за письмо и речь</div>' +
         '<div class="det-grade-r">' +
@@ -5385,8 +5400,8 @@
           regrade +
         '</div>' +
         '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы. ' +
-          ((a.graded_by || {}).writing === 'ai'
-            ? 'В поле «письмо» стоит балл модели — сохраните, если согласны, или поставьте свой.'
+          (['writing', 'speaking'].some(function (s) { return g[s] === 'ai'; })
+            ? 'Где балл поставила модель, он уже стоит в поле — сохраните, если согласны, или впишите свой.'
             : '') + '</div></div>';
     }
 
@@ -5402,7 +5417,7 @@
         '<div class="m-csub">Не удалось загрузить тест. Обновите страницу.</div>';
     }
     var head = '<div class="m-ctitle">Английский</div>' +
-      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение проверяет модель, речь слушает преподаватель. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
+      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение и устный ответ сначала проверяет модель, а вы можете поправить ее балл. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
 
     var latest = b.latest;
     // Пока оценены не все навыки, балл неполный. Вердикт цветом тут не даем: менеджер

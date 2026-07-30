@@ -2943,6 +2943,12 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-ai-n { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
 .det-ai-s { margin-top: 11px; font-size: 12.5px; color: var(--ink); line-height: 1.5; }
 .det-ai-s.muted { margin-top: 5px; color: var(--ink-3); }
+/* расшифровка записи: рабочий материал, читается тише разбора и явно как чужая речь */
+.det-ai-tr {
+  margin-top: 11px; padding: 9px 11px; border-radius: 9px;
+  font-size: 12px; line-height: 1.55; color: var(--ink-2); font-style: italic;
+  background: rgba(17, 24, 39, .03); box-shadow: inset 0 0 0 1px rgba(17, 24, 39, .05);
+}
 .det-ai-f { margin-top: 9px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink); }
 
 .det-grade { margin-top: 18px; padding: 15px 16px; background: var(--fill); border-radius: var(--r-lg); }
