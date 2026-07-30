@@ -7,7 +7,14 @@
   // Боевой бэкенд (self-host Selectel). Punycode домена api.истсайд.рф — чтобы работало
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
-  var API = window.EASTSIDE_API_BASE || 'https://api.xn--80aikf2bag.xn--p1ai';
+  // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
+  // из-за рубежа (зона .рф резолвится не везде — публичный DNS Google не разрешает
+  // api.истсайд.рф). С зеркала ходим в api.eastside.study, иначе CRM открывается, но
+  // ни один запрос не проходит.
+  var API = window.EASTSIDE_API_BASE
+    || (/(^|\.)eastside\.study$/.test(location.hostname)
+        ? 'https://api.eastside.study'
+        : 'https://api.xn--80aikf2bag.xn--p1ai');
   var KEY_LS = 'eastside_crm_key';
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
