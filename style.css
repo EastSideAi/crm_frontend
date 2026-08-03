@@ -651,6 +651,16 @@ a { color: inherit; text-decoration: none; }
   font-size: 12.5px; color: var(--ink-3); }
 .m-sub .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); opacity: .55; }
 .m-sub .sess { font-feature-settings: 'tnum'; letter-spacing: -.01em; }
+/* «Ссылка на клиента» — копирует адрес карточки, чтобы кинуть команде */
+.m-copylink { display: inline-flex; align-items: center; gap: 6px; height: 25px; padding: 0 10px;
+  border-radius: 8px; font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); margin-left: 2px;
+  transition: color .15s, background .15s, box-shadow .15s; }
+.m-copylink svg { width: 12px; height: 12px; color: var(--ink-3); transition: color .15s; }
+.m-copylink:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
+.m-copylink:hover svg { color: var(--blue); }
+
+.m-load { padding: 64px 26px; text-align: center; font-size: 13.5px; color: var(--ink-3); }
 
 .m-pulse { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 7px;
   margin-right: 116px; }
@@ -2143,6 +2153,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .modal.open { transform: none; }
   .m-head { flex-wrap: wrap; gap: 12px; padding: 16px 16px 14px; }
   .m-id { padding-right: 110px; }
+  /* узкий экран: подстрочник и так переносится — техническую «сессию» и точки-
+     разделители убираем, чтобы «Ссылка на клиента» встала в одну строку */
+  .m-sub { gap: 8px 10px; }
+  .m-sub .sess, .m-sub .dot-sep { display: none; }
   .m-pulse { margin-right: 0; flex-direction: row; align-items: center; gap: 10px; width: 100%; }
   .m-pulse .ptrack { flex: 1; width: auto; }
   .m-name { font-size: 20px; }

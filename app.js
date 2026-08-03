@@ -179,7 +179,7 @@
   function el(id) { return document.getElementById(id); }
   function getKey() {
     var m = location.search.match(/[?&]k=([^&]+)/);
-    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname); }
+    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname + location.hash); }
     return localStorage.getItem(KEY_LS) || '';
   }
   function pad(n) { return ('0' + n).slice(-2); }
@@ -257,9 +257,12 @@
   }
   function copyText(text, btn) {
     var done = function () {
-      var t = btn.textContent;
-      btn.textContent = 'Скопировано';
-      setTimeout(function () { btn.textContent = t; }, 1400);
+      if (!btn) return;
+      // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
+      if (btn._cpHtml == null) btn._cpHtml = btn.innerHTML;
+      btn.innerHTML = btn.textContent.trim() ? ic('check', 13) + 'Скопировано' : ic('check', 13);
+      clearTimeout(btn._cpT);
+      btn._cpT = setTimeout(function () { btn.innerHTML = btn._cpHtml; btn._cpHtml = null; }, 1400);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, done);
@@ -272,6 +275,28 @@
   }
   function findLead(id) {
     return state.leads.filter(function (l) { return l.id === id; })[0] || null;
+  }
+  /* ── прямая ссылка на карточку клиента ─────────────────────
+     Адрес вида crm.истсайд.рф/#lead/<id>: кто из команды откроет его (уже войдя
+     в CRM), сразу попадёт в карточку этого клиента. Копируем ВСЕГДА боевой адрес,
+     а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
+     оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
+  var CRM_HOME = 'https://crm.истсайд.рф/';
+  function leadUrl(id) {
+    return CRM_HOME + '#lead/' + encodeURIComponent(id);
+  }
+  function hashLeadId() {
+    var m = String(location.hash || '').match(/^#lead\/(.+)$/);
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  /* адрес в строке браузера всегда показывает открытую карточку — ссылку можно
+     скопировать и оттуда; replaceState, чтобы не засорять историю «назад» */
+  function syncHash(id) {
+    try {
+      if (hashLeadId() === (id || '')) return;
+      history.replaceState(null, '', id ? '#lead/' + encodeURIComponent(id) : location.pathname + location.search);
+    } catch (e) {}
   }
   function isNewLead(l) {
     return state.seenBefore && l.created_at && new Date(l.created_at).getTime() > state.seenBefore;
@@ -5040,16 +5065,21 @@
     if (listIds && listIds.length) state.drawerList = listIds;
     state.modalSection = 'main';
     RM_CHAT = null;
+    syncHash(id);
     renderDrawer(false);
     el('mbg').classList.add('open');
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
     if (!state.details[id]) fetchDetail(id, function (got) {
-      if (state.drawerId === id && got) renderDrawer(true);
+      if (state.drawerId !== id) return;
+      if (got) renderDrawer(true);
+      // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
+      else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
     });
   }
   function closeDrawer() {
+    syncHash('');
     state.drawerId = null;
     state.botConvoId = null;
     RM_CHAT = null;
@@ -5066,6 +5096,7 @@
       state.drawerId = next;
       state.modalSection = 'main';
       RM_CHAT = null;
+      syncHash(next);
       renderDrawer(false);
       warm(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
@@ -5103,7 +5134,14 @@
 
     var ctx = leadCtx(id);
     var lead = ctx.lead, d = ctx.d, base = ctx.base, crm = ctx.crm;
-    if (!base) { modal.innerHTML = ''; return; }
+    if (!base) {
+      // карточку открыли по прямой ссылке — данных ещё нет, ждём ответ бэка
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="m-close">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем карточку…</div>';
+      var mcl = el('m-close');
+      if (mcl) mcl.addEventListener('click', closeDrawer);
+      return;
+    }
     var diag = (d && d.diagnostics) || {};
     var score = lead && lead.score != null ? lead.score : diag.score;
     var tone = score != null ? scoreTone(score) : null;
@@ -5133,7 +5171,9 @@
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
-    ].filter(Boolean).join('<span class="dot-sep"></span>');
+    ].filter(Boolean).join('<span class="dot-sep"></span>') +
+      '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
+      ic('copy', 12) + 'Ссылка на клиента</button>';
 
     // с открытым чатом правок окно шире: доска слева должна остаться читаемой
     modal.classList.toggle('pchat-open', hasSidePanel());
@@ -5173,6 +5213,8 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var lnk = el('m-link');
+    if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -7103,13 +7145,26 @@
   }
 
   /* ── boot ─────────────────────────────────────────────── */
+  /* ссылка на карточку: #lead/<id> в адресе — открываем этого клиента */
+  function openFromHash() {
+    var id = hashLeadId();
+    if (!id || id === state.drawerId) return;
+    openDrawer(id, [id]);
+  }
+  window.addEventListener('hashchange', function () {
+    if (!state.loaded) return;
+    var id = hashLeadId();
+    if (id) openFromHash();
+    else if (state.drawerId) closeDrawer();
+  });
   function startApp() {
     state.seenBefore = parseInt(localStorage.getItem(SEEN_LS) || '0', 10);
     localStorage.setItem(SEEN_LS, String(Date.now()));
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     renderShell();
-    loadLeads(false);
+    // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
+    loadLeads(false, openFromHash);
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
