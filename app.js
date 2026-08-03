@@ -278,11 +278,12 @@
   }
   /* ── прямая ссылка на карточку клиента ─────────────────────
      Адрес вида crm.истсайд.рф/#lead/<id>: кто из команды откроет его (уже войдя
-     в CRM), сразу попадёт в карточку этого клиента. Punycode-хост из адресной
-     строки в переписке нечитаем — отдаём кириллицу, как в /go-ссылках. */
+     в CRM), сразу попадёт в карточку этого клиента. Копируем ВСЕГДА боевой адрес,
+     а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
+     оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
+  var CRM_HOME = 'https://crm.истсайд.рф/';
   function leadUrl(id) {
-    var base = (location.origin + location.pathname).replace('xn--80aikf2bag.xn--p1ai', 'истсайд.рф');
-    return base + '#lead/' + encodeURIComponent(id);
+    return CRM_HOME + '#lead/' + encodeURIComponent(id);
   }
   function hashLeadId() {
     var m = String(location.hash || '').match(/^#lead\/(.+)$/);
