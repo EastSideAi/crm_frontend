@@ -1716,9 +1716,11 @@
           (u.leads ? '<span class="tm-leads">' + u.leads + ' ' + plural(u.leads, 'клиент', 'клиента', 'клиентов') + '</span>' : '') +
           '</div></div>' +
         '<select class="tm-sel" data-uid="' + u.id + '"' + (off ? ' disabled' : '') + '>' + legacy + opts + '</select>' +
-        '<button class="tm-act" data-pwd="' + u.id + '" title="Выпустить новый пароль">' + ic('refresh', 13) + '</button>' +
-        '<button class="tm-act' + (off ? ' on' : '') + '" data-off="' + u.id + '" title="' +
-          (off ? 'Вернуть доступ' : 'Отключить доступ') + '">' + ic(off ? 'check' : 'exit', 13) + '</button>' +
+        // подписи, а не голые иконки: страницей пользуются раз в месяц, и угадывать,
+        // что делает кружок со стрелкой, тут никто не должен
+        '<button class="tm-act" data-pwd="' + u.id + '">' + ic('refresh', 13) + 'Пароль</button>' +
+        '<button class="tm-act' + (off ? ' on' : '') + '" data-off="' + u.id + '">' +
+          ic(off ? 'check' : 'exit', 13) + (off ? 'Вернуть' : 'Отключить') + '</button>' +
         '</div>';
     }).join('');
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
@@ -1764,7 +1766,10 @@
 
   /* Пароль показываем один раз: в базе только хеш, второй раз взять его неоткуда. */
   function showPassword(name, login, pwd) {
-    if (document.querySelector('.al-ov')) return;
+    // предыдущую модалку сносим сразу, а не выходим по guard: форма «новый сотрудник»
+    // ещё доигрывает анимацию закрытия, и по guard пароль просто не показывался
+    var old = document.querySelector('.al-ov');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card" role="dialog" aria-modal="true">' +

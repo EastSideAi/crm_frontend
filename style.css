@@ -479,10 +479,13 @@ a { color: inherit; text-decoration: none; }
 .tm-off { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); background: var(--fill); border-radius: var(--r-pill); padding: 2px 8px; margin-left: 8px; }
 .tm-leads { margin-left: 10px; color: var(--ink-2); font-weight: 600; }
-.tm-act { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
-  color: var(--ink-3); background: var(--fill); transition: background .12s var(--ease), color .12s var(--ease); }
+.tm-act { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px;
+  border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--fill);
+  transition: background .12s var(--ease), color .12s var(--ease); }
 .tm-act:hover { background: var(--blue-tint); color: var(--blue); }
 .tm-act.on { color: var(--green-ink); background: var(--green-soft); }
+@media (max-width: 760px) { .tm-act { padding: 0 9px; font-size: 0; gap: 0; width: 32px; justify-content: center; }
+  .tm-act svg { width: 14px; height: 14px; } }
 /* выданный пароль: показывается один раз, в базе только хеш */
 .pw-box { background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px;
   display: flex; flex-direction: column; gap: 8px; }
