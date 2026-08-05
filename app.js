@@ -1241,6 +1241,7 @@
       '<div class="app">' +
         '<aside class="side">' +
           '<div class="logo"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+          '<div class="spaces" id="spaces"></div>' +
           '<div class="side-sub" id="welc-sub"></div>' +
           '<nav id="side-nav"></nav>' +
           '<button class="navi mt" id="logout">' + ic('exit') + 'Выйти</button>' +
@@ -1371,16 +1372,68 @@
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
-    { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors' },
+    { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
   ];
-  function navItems() { return NAV_ALL.filter(function (it) { return can(it.cap); }); }
+
+  /* ── Два рабочих пространства в одной CRM ─────────────────────────────────
+     Работа с клиентами и работа с самозанятыми — разные задачи разных людей, и
+     модуль самозанятых по плану вырастет еще на шесть разделов (задания, акты,
+     выплаты, чеки, риски, отчеты). В одном меню это двадцать пунктов вперемешку,
+     где обычная CRM тонет. Поэтому левая колонка переключается целиком.
+
+     Отдельным продуктом со своим входом это не делаем: второй логин тем же людям,
+     права в двух местах неминуемо разъедутся, а модулю нужны данные CRM.
+
+     Текущее пространство НЕ храним отдельно — выводим из открытой страницы. Так
+     ссылка на раздел всегда открывает его в правильном окружении, а состояние не
+     может разъехаться с тем, что на экране. */
+  var SPACES = [
+    { id: 'crm', label: 'Клиенты' },
+    { id: 'cz', label: 'Самозанятые' },
+  ];
+  function navSpace(it) { return it.space || 'crm'; }
+  function spaceOf(page) {
+    for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) return navSpace(NAV_ALL[i]);
+    return 'crm';
+  }
+  function curSpace() { return spaceOf(state.page); }
+  function navItems(space) {
+    var s = space || curSpace();
+    return NAV_ALL.filter(function (it) { return can(it.cap) && navSpace(it) === s; });
+  }
+  /* Переключатель показываем, только если человеку доступно больше одного
+     пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
+  function openSpaces() {
+    return SPACES.filter(function (s) { return navItems(s.id).length; });
+  }
   function pageCap(page) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) return NAV_ALL[i].cap; return 'dash'; }
-  function firstAllowedPage() { var n = navItems(); return n.length ? n[0].id : 'dash'; }
+  function firstAllowedPage(space) {
+    var n = navItems(space);
+    // пространство пустое для этой роли — уводим в любой доступный раздел, а не в никуда
+    if (!n.length) n = NAV_ALL.filter(function (it) { return can(it.cap); });
+    return n.length ? n[0].id : 'dash';
+  }
   function renderSide() {
     var c = counts();
-    var NAV = navItems();
+    var space = curSpace();
+    var NAV = navItems(space);
+    var sw = el('spaces');
+    if (sw) {
+      var open = openSpaces();
+      if (open.length < 2) { sw.style.display = 'none'; sw.innerHTML = ''; }
+      else {
+        sw.style.display = '';
+        sw.innerHTML = open.map(function (s) {
+          return '<button class="' + (s.id === space ? 'on' : '') + '" data-sp="' + s.id + '">' +
+            esc(s.label) + '</button>';
+        }).join('');
+        Array.prototype.forEach.call(sw.children, function (b) {
+          b.addEventListener('click', function () { setSpace(b.getAttribute('data-sp')); });
+        });
+      }
+    }
     var nav = el('side-nav');
     if (nav) {
       var ho = inboxAttention();
@@ -1397,10 +1450,18 @@
       });
     }
     var ws = el('welc-sub');
-    if (ws) ws.textContent = c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—');
+    if (ws) {
+      // подпись под логотипом — про то пространство, в котором сейчас работают
+      var czn = (CZ.list || []).length;
+      ws.textContent = space === 'cz'
+        ? (CZ.list === null ? 'исполнители' : czn + ' ' + plural(czn, 'исполнитель', 'исполнителя', 'исполнителей'))
+        : c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' +
+          (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—');
+    }
     var promo = el('promo');
     if (promo) {
-      if (!can('path')) { promo.style.display = 'none'; }
+      // промо про воронку платформы к работе с исполнителями отношения не имеет
+      if (space === 'cz' || !can('path')) { promo.style.display = 'none'; }
       else {
         promo.style.display = '';
         var worst = worstStep(funnelData(''));
@@ -1416,17 +1477,34 @@
     var mt = el('mtabs');
     if (mt) {
       var hoM = inboxAttention();
-      mt.innerHTML = NAV.map(function (it) {
+      // На телефоне левой колонки нет, поэтому переключатель пространств живет
+      // отдельной вкладкой в конце ленты — иначе с телефона в раздел не попасть.
+      var jump = openSpaces().filter(function (s) { return s.id !== space; })
+        .map(function (s) {
+          return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +
+            ic(s.id === 'cz' ? 'badge' : 'leads') + '<span>' + esc(s.label) + '</span></button>';
+        }).join('');
+      mt.innerHTML = jump + NAV.map(function (it) {
         var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
       }).join('');
       Array.prototype.forEach.call(mt.children, function (b) {
-        b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
+        b.addEventListener('click', function () {
+          var sp = b.getAttribute('data-sp');
+          if (sp) setSpace(sp); else setPage(b.getAttribute('data-p'));
+        });
       });
     }
     document.title = (c.hot ? '(' + c.hot + ') ' : '') + 'ИстСайд · CRM';
+  }
+
+  /* Переключение пространства = переход на первый его раздел. Отдельного состояния
+     нет намеренно: пространство всегда выводится из открытой страницы. */
+  function setSpace(id) {
+    if (curSpace() === id) return;
+    setPage(firstAllowedPage(id));
   }
 
   function setPage(p) {
@@ -8084,6 +8162,9 @@
   function openFromHash() {
     var id = hashLeadId();
     if (!id || id === state.drawerId) return;
+    // ссылку на клиента могли вставить, стоя в разделе самозанятых: возвращаем в
+    // клиентское пространство, чтобы после закрытия карточки человек остался при делах
+    if (curSpace() !== 'crm') setPage(firstAllowedPage('crm'));
     openDrawer(id, [id]);
   }
   window.addEventListener('hashchange', function () {
