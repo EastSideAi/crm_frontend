@@ -151,6 +151,9 @@
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
+      badge: '<rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/>',
+      shield: '<path d="M10 2.6 16 5v4.6c0 3.6-2.4 6.2-6 7.8-3.6-1.6-6-4.2-6-7.8V5l6-2.4z"/><path d="M7.4 9.9 9.3 12l3.4-3.7"/>',
+      search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.2 13.2 17 17"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -1287,7 +1290,9 @@
         });
       });
     });
-    el('mbg').addEventListener('click', closeDrawer);
+    // затемнение общее для карточки клиента и карточки исполнителя — закрываем ту,
+    // что сейчас открыта (одновременно они не открываются)
+    el('mbg').addEventListener('click', function () { if (CZ.openId) closeCz(); else closeDrawer(); });
     document.addEventListener('click', function (e) {
       if (smenu && !smenu.contains(e.target)) closeSmenu();
     });
@@ -1296,6 +1301,7 @@
       var typing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT');
       if (e.key === 'Escape') {
         if (typing && a.id === 'search') { a.value = ''; state.q = ''; a.blur(); renderView(); return; }
+        if (CZ.openId) { closeCz(); return; }
         if (state.drawerId) closeDrawer();
         return;
       }
@@ -1316,12 +1322,15 @@
      Возможности (caps) = что роль видит/делает. Роль = набор caps. Чтобы добавить
      новый блок: (1) заведи cap в CAP_ALL, (2) добавь его нужным ролям ниже,
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
+  // 'contractors' — раздел «Исполнители» (самозанятые): ИНН, реквизиты, суммы выплат.
+  // Отдельный cap намеренно: это не те же данные, что клиентские, и видеть их должна
+  // не вся команда. Зеркало на бэке — routers/admin.py ROLE_CAPS.
+  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
@@ -1353,6 +1362,7 @@
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
+    { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
   ];
@@ -1412,6 +1422,7 @@
 
   function setPage(p) {
     if (state.page === p) return;
+    if (CZ.openId) closeCz();   // карточка исполнителя не переезжает в другой раздел
     state.page = p;
     state.sort = null;
     saveUi();
@@ -1575,6 +1586,17 @@
       html = '<div><h2>Финансы</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase2 + '</span></div></div>';
     }
+    if (state.page === 'contractors') {
+      var s = CZ.stats;
+      var phrase3;
+      if (!s) phrase3 = 'Загружаю исполнителей…';
+      else if (!s.total) phrase3 = 'Исполнителей пока нет. Заведите первого — дальше на него можно будет ставить задания.';
+      else if (s.problem) phrase3 = '<b>' + s.problem + ' ' + plural(s.problem, 'исполнителю', 'исполнителям', 'исполнителям') + '</b> платить сейчас нельзя. Начните с них.';
+      else if (s.new) phrase3 = 'Проблем нет, но <b>' + s.new + ' ' + plural(s.new, 'человек', 'человека', 'человек') + '</b> не довели до конца — не хватает данных или подписи.';
+      else phrase3 = 'Все исполнители готовы к работе: статус в налоговой подтвержден, документы подписаны, реквизиты есть.';
+      html = '<div><h2>Исполнители</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase3 + '</span></div></div>';
+    }
     ch.innerHTML = html;
   }
   function plural(n, one, few, many) {
@@ -1611,6 +1633,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'contractors') renderContractors(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -1632,6 +1655,553 @@
       '<div class="stub-s">' + esc(STUB_TEXT[state.page] || 'Раздел в разработке.') + '</div>' +
       '<div class="stub-tag">' + ic('spark', 12) + 'В разработке</div></div>';
   }
+  /* ── ИСПОЛНИТЕЛИ-САМОЗАНЯТЫЕ (модуль самозанятых, этап 1) ───────────────────
+     Справочник людей, которым мы платим как самозанятым, и их готовность к работе.
+     Главное здесь — не контакты, а ответ на один вопрос: можно ли этому человеку
+     ставить задание и платить. Выплата тому, у кого слетел статус плательщика НПД,
+     превращается в выплату обычному физлицу — с НДФЛ, взносами и штрафом сверху.
+     Поэтому статус берется из налоговой (проверка каждое утро и по кнопке), а не со
+     слов человека, и «готов работать» складывается из статуса + документов +
+     реквизитов. Правило считает бэкенд (routers/contractors.py: readiness), здесь
+     только показываем: на этапе 6 то же правило будет блокировать выплату, и двух
+     копий логики быть не должно.
+     ТЗ и план этапов — _specs/samozanyatye/. */
+  var CZ_STATE = {
+    ok:      { label: 'Готов работать', cls: 'cz-ok' },
+    problem: { label: 'Есть проблемы',  cls: 'cz-bad' },
+    new:     { label: 'Не завершил',    cls: 'cz-new' },
+    blocked: { label: 'Заблокирован',   cls: 'cz-off' },
+  };
+  var CZ_DOCS = [
+    ['contract', 'Договор оказания услуг'],
+    ['pdn', 'Согласие на обработку персональных данных'],
+    ['nda', 'Соглашение о неразглашении'],
+  ];
+  var CZ_DOC_ST = [['none', 'Не отправлен'], ['sent', 'Отправлен'], ['signed', 'Подписан']];
+  var CZ_SOURCE = { invite: 'Приглашение', import: 'Импорт', migration: 'Миграция', manual: 'Заведен вручную' };
+  var CZ = { list: null, stats: null, err: '', q: '', filter: 'all', archived: false,
+             openId: null, detail: {}, dirty: {}, busy: false };
+
+  /* Запрос с человеческим текстом ошибки. Бэкенд отвечает {"detail": "..."} — там
+     фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
+  function czSend(path, method, body) {
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (r.ok) return j;
+        throw new Error((j && typeof j.detail === 'string' && j.detail) ||
+          'Не удалось сохранить — попробуйте еще раз');
+      });
+    });
+  }
+  function czLoad(cb) {
+    api('/admin/api/contractors' + (CZ.archived ? '?archived=1' : '')).then(function (r) {
+      CZ.list = r.contractors || []; CZ.stats = r.stats || null; CZ.err = '';
+      if (state.page === 'contractors') renderAll();
+      if (cb) cb(true);
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      CZ.list = CZ.list || []; CZ.stats = CZ.stats || null;
+      CZ.err = 'Не удалось загрузить исполнителей. Проверьте связь и обновите страницу.';
+      if (state.page === 'contractors') renderAll();
+      if (cb) cb(false);
+    });
+  }
+  function czFind(id) {
+    var l = CZ.list || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+    return null;
+  }
+  /* Обновленную карточку кладем и в список, и в кэш открытой карточки — экран не
+     должен показывать два разных состояния одного человека. */
+  function czPut(c) {
+    if (!c) return;
+    CZ.detail[c.id] = CZ.detail[c.id] || {};
+    CZ.detail[c.id].contractor = c;
+    var l = CZ.list || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === c.id) { l[i] = c; return; }
+  }
+
+  function czRows() {
+    var q = CZ.q.trim().toLowerCase();
+    return (CZ.list || []).filter(function (c) {
+      if (CZ.filter === 'ready' && c.state !== 'ok') return false;
+      if (CZ.filter === 'prob' && c.state !== 'problem' && c.state !== 'blocked') return false;
+      if (CZ.filter === 'new' && c.state !== 'new') return false;
+      if (!q) return true;
+      // телефон ищем и без разделителей: в CRM он записан с пробелами, в голове — цифрами
+      var hay = [c.full_name, c.email, c.inn, c.phone, String(c.phone || '').replace(/[^\d+]/g, '')];
+      return hay.some(function (v) { return String(v || '').toLowerCase().indexOf(q) !== -1; });
+    });
+  }
+
+  function renderContractors(view) {
+    if (CZ.list === null) { view.innerHTML = dashSkeleton(); czLoad(); return; }
+    var s = CZ.stats || { total: 0, ready: 0, problem: 0, new: 0 };
+    var rows = czRows();
+
+    /* Статполосы здесь нет намеренно: те же три числа уже стоят в вердикте под
+       заголовком и в фильтрах-чипах, а якорь экрана — список имен, ради которого его
+       и открывают. Так же сделано на «Людях». */
+    var quick =[['all', 'Все', s.total], ['ready', 'Готовы', s.ready],
+                 ['prob', 'Нельзя платить', s.problem], ['new', 'Не завершили', s.new]]
+      .map(function (f) {
+        return '<button class="qchip' + (CZ.filter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' +
+          f[1] + ' <span class="qn">' + f[2] + '</span></button>';
+      }).join('');
+
+    var body = CZ.err
+      ? '<div class="empty">' + esc(CZ.err) + '</div>'
+      : (!rows.length
+        ? '<div class="empty">' + (CZ.q
+            ? 'По запросу «' + esc(CZ.q) + '» никого не нашли. Проверьте написание или очистите поиск.'
+            : (CZ.archived ? 'В архиве пусто.' : 'Здесь пока никого. Заведите первого исполнителя — дальше на него можно будет ставить задания.')) + '</div>'
+        : rows.map(czRow).join(''));
+
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div class="searchwrap' + (CZ.q ? ' has-val' : '') + '">' + ic('search', 16) +
+            '<input class="search" id="cz-q" placeholder="Поиск по имени, телефону, почте или ИНН" value="' + esc(CZ.q) + '">' +
+            (CZ.q ? '<button class="s-clear" id="cz-qx">' + ic('x', 13) + '</button>' : '') +
+          '</div>' +
+          '<button class="cdd' + (CZ.archived ? ' active' : '') + '" id="cz-arch">' +
+            (CZ.archived ? 'Архив' : 'В работе') + '</button>' +
+          '<span class="list-count"><b>' + rows.length + '</b> из ' + (CZ.list || []).length + '</span>' +
+          '<button class="bp sm cz-add" id="cz-add">' + ic('plus', 14) + 'Добавить исполнителя</button>' +
+        '</div>' +
+        '<div class="list-quick">' + quick + '</div>' +
+        '<div class="trow cz-grid thead">' +
+          '<span class="th">Исполнитель</span><span class="th">ИНН</span>' +
+          '<span class="th">Готовность</span><span class="th">Что мешает работать</span>' +
+          '<span class="th r">Документы</span><span class="th"></span>' +
+        '</div>' + body +
+      '</div>';
+
+    var qi = el('cz-q');
+    if (qi) {
+      qi.addEventListener('input', function () { CZ.q = qi.value; czRepaintList(); });
+      qi.addEventListener('keydown', function (e) { if (e.key === 'Escape') { CZ.q = ''; renderView(); } });
+    }
+    var qx = el('cz-qx');
+    if (qx) qx.addEventListener('click', function () { CZ.q = ''; renderView(); });
+    var arch = el('cz-arch');
+    if (arch) arch.addEventListener('click', function () {
+      CZ.archived = !CZ.archived; CZ.list = null; renderView();
+    });
+    el('cz-add').addEventListener('click', openAddCz);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cf]'), function (b) {
+      b.addEventListener('click', function () { CZ.filter = b.getAttribute('data-cf'); renderView(); });
+    });
+    czBindRows(view);
+    pageAnim(view);
+  }
+  /* Перерисовка только строк: поиск не должен ронять фокус из инпута */
+  function czRepaintList() {
+    var host = el('view');
+    if (!host) return;
+    var card = host.querySelector('.listcard');
+    if (!card) return;
+    var rows = czRows();
+    Array.prototype.forEach.call(card.querySelectorAll('.trow:not(.thead)'), function (n) { n.remove(); });
+    var emptyOld = card.querySelector('.empty');
+    if (emptyOld) emptyOld.remove();
+    card.insertAdjacentHTML('beforeend', rows.length ? rows.map(czRow).join('')
+      : '<div class="empty">По запросу «' + esc(CZ.q) + '» никого не нашли. Проверьте написание или очистите поиск.</div>');
+    var cnt = card.querySelector('.list-count');
+    if (cnt) cnt.innerHTML = '<b>' + rows.length + '</b> из ' + (CZ.list || []).length;
+    czBindRows(card);
+  }
+  function czBindRows(host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-cz]'), function (r) {
+      r.addEventListener('click', function () { openCz(r.getAttribute('data-cz')); });
+    });
+  }
+  function czRow(c) {
+    var st = CZ_STATE[c.state] || CZ_STATE.new;
+    // В списке показываем подписанные документы, а не доход: выплаты пойдут через
+    // платформу только с этапа 6, до тех пор столбец был бы из одних нулей. Счетчик
+    // дохода и шкала к лимиту 2,4 млн живут в карточке.
+    var docs = c.docs || [];
+    var signed = docs.filter(function (x) { return x.status === 'signed'; }).length;
+    // Показываем первую помеху и счетчик остальных: одна строка не должна создавать
+    // впечатление, что до работы человеку остался один шаг, если их три.
+    var more = c.problems && c.problems.length > 1
+      ? '<span class="cz-more">и еще ' + (c.problems.length - 1) + '</span>' : '';
+    var problem = c.problems && c.problems.length
+      ? '<span class="cz-prob' + (c.state === 'ok' ? '' : ' on') + '">' + esc(c.problems[0]) + more + '</span>'
+      : '<span class="cz-fine">ничего, можно ставить задания</span>';
+    return '<div class="trow cz-grid' + (c.state === 'problem' || c.state === 'blocked' ? ' r-crit' : '') + '" data-cz="' + esc(c.id) + '">' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(c.full_name) + '</div>' +
+        '<div class="t-sub">' + esc(c.phone || c.email || 'контакты не указаны') + '</div>' +
+        // на узком экране колонка «что мешает» не помещается — та же строка уезжает
+        // под имя, иначе на телефоне остаются одни многоточия
+        '<div class="t-sub cz-mobprob' + (c.state === 'ok' ? '' : ' on') + '">' +
+          (c.problems && c.problems.length ? esc(c.problems[0]) + more : 'можно ставить задания') + '</div></div>' +
+      '<div class="cz-inn num">' + esc(c.inn || '—') + '</div>' +
+      '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '<div class="cz-cell">' + problem + '</div>' +
+      '<div class="cz-docs' + (signed === docs.length && docs.length ? ' full' : '') + '">' +
+        '<span class="num">' + signed + '</span> из ' + (docs.length || 3) + '</div>' +
+      '<div class="t-go">' + ic('go', 13) + '</div></div>';
+  }
+
+  /* ── карточка исполнителя ─────────────────────────────────────────────────
+     Одна прокручиваемая карточка, без вкладок: данных немного, а листать вкладки
+     ради трех полей — лишняя работа руками. Правки копятся в CZ.dirty и уходят
+     одним PATCH по кнопке: молча сохранять реквизиты и ИНН нельзя. */
+  function openCz(id) {
+    CZ.openId = id;
+    CZ.dirty = {};
+    el('mbg').classList.add('open');
+    el('modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderCzCard();
+    if (!CZ.detail[id]) {
+      api('/admin/api/contractors/' + id).then(function (r) {
+        CZ.detail[id] = r;
+        if (CZ.openId === id) renderCzCard();
+      }).catch(function () {
+        if (CZ.openId === id) { closeCz(); showToast('Не удалось открыть карточку'); }
+      });
+    }
+  }
+  function closeCz() {
+    CZ.openId = null; CZ.dirty = {};
+    el('mbg').classList.remove('open');
+    el('modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  var CZ_MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  /* ГГГГ-ММ-ДД → «2 апреля 2026»: в поле ввода дата остается машинной, а глазами
+     человек читает обычную. */
+  function czDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return iso || '—';
+    return Number(m[3]) + ' ' + CZ_MON[Number(m[2]) - 1] + ' ' + m[1];
+  }
+  function czRow2(k, v) {
+    return '<div class="r"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
+  }
+  /* Поля карточки — на общем рецепте формы (.al-f/.al-l/.al-in), том же, что в форме
+     заведения: третьего рецепта инпута в системе быть не должно. */
+  function czField(f, label, val, ph, type) {
+    return '<label class="al-f"><span class="al-l">' + esc(label) + '</span>' +
+      '<input class="al-in" type="' + (type || 'text') + '" data-f="' + f + '" ' +
+      'value="' + esc(val == null ? '' : val) + '" ' +
+      'placeholder="' + esc(ph || '') + '" autocomplete="off"></label>';
+  }
+  function renderCzCard() {
+    var modal = el('modal');
+    var id = CZ.openId;
+    if (!modal || !id) return;
+    var d = CZ.detail[id];
+    var c = (d && d.contractor) || czFind(id);
+    if (!c) {
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="cz-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем карточку…</div>';
+      el('cz-x').addEventListener('click', closeCz);
+      return;
+    }
+    var st = CZ_STATE[c.state] || CZ_STATE.new;
+    var checks = (d && d.checks) || [];
+    var docs = {};
+    (c.docs || []).forEach(function (x) { docs[x.kind] = x; });
+
+    /* 1. Готовность — главный ответ экрана: можно ли ставить задание и платить */
+    var readiness = '<div class="cz-ready ' + st.cls + '">' +
+      '<div class="cz-ready-t">' + st.label + '</div>' +
+      (c.problems && c.problems.length
+        ? '<ul class="cz-plist">' + c.problems.map(function (p) {
+            return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
+        : '<div class="cz-ready-s">Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.</div>') +
+      '</div>';
+
+    /* 2. Налоговый статус — откуда цифра и когда смотрели */
+    var checked = c.npd_checked_at ? fmtWhen(c.npd_checked_at) : 'ни разу';
+    var npdChip = c.npd_status === 'active' ? '<span class="sev cz-ok">Плательщик НПД</span>'
+      : c.npd_status === 'inactive' ? '<span class="sev cz-bad">Статуса нет</span>'
+      : '<span class="sev cz-new">Не проверяли</span>';
+    /* История — отдельная секция, а не подзаголовок внутри статуса: капс-микролейбл в
+       системе один уровень иерархии, второй такой же внутри секции читается как соседняя. */
+    var history = '<div class="m-sec"><div class="m-sec-h">История проверок</div>' + (checks.length
+      ? '<div class="cz-hist">' + checks.slice(0, 6).map(function (ch) {
+          var cls = ch.status === 'active' ? 'ok' : ch.status === 'inactive' ? 'bad' : 'mute';
+          return '<div class="cz-h ' + cls + '"><span class="cz-h-t">' + esc(ch.message || '') + '</span>' +
+            '<span class="cz-h-d">' + fmtWhen(ch.created_at) +
+            (ch.source === 'auto' ? ' · автоматически' : ' · вручную') + '</span></div>';
+        }).join('') + '</div>'
+      : '<div class="field-empty">Проверок еще не было.</div>') + '</div>';
+
+    /* Счетчик дохода к лимиту самозанятого. Выплаты пойдут через платформу на этапе 6 —
+       до первой из них секции просто нет: заголовок с пустотой под ним не сообщает
+       ничего, а место в карточке занимает. */
+    var lim = c.income_limit || 2400000;
+    var money = (c.income_year || 0) > 0
+      ? '<div class="m-sec"><div class="m-sec-h">Доход через нас за год</div>' +
+          '<div class="cz-year">' +
+          '<div class="cz-year-v num">' + fmtMoney(c.income_year) + ' ₽</div>' +
+          '<div class="strack wide"><i style="width:' +
+            Math.min(100, Math.round(c.income_year / lim * 100)) + '%"></i></div>' +
+          '<div class="cz-year-s">из ' + fmtMoney(lim) + ' ₽ — лимит самозанятого на год. ' +
+            'Считаем только то, что выплатили через платформу.</div></div></div>'
+      : '';
+
+    var docRows = CZ_DOCS.map(function (dk) {
+      var cur = (docs[dk[0]] && docs[dk[0]].status) || 'none';
+      return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + '</span>' +
+        /* сегмент — общий системный рецепт .pay-seg: та же логика «три состояния,
+           последнее хорошее», активное красится через data-v */
+        '<span class="pay-seg">' + CZ_DOC_ST.map(function (o) {
+          return '<button class="' + (cur === o[0] ? 'on' : '') + '" data-v="' + o[0] + '"' +
+            ' data-doc="' + dk[0] + '" data-st="' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</span></div>';
+    }).join('');
+
+    modal.classList.remove('pchat-open');
+    modal.innerHTML =
+      '<div class="m-head">' +
+        '<div class="m-navfloat"><button class="m-arrow" id="cz-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-ava">' + esc(initials(c.full_name)) + '</div>' +
+        '<div class="m-id"><div class="m-name-row"><div class="m-name cz-name">' + esc(c.full_name) + '</div></div>' +
+          '<div class="m-sub"><span class="sev ' + st.cls + '">' + st.label + '</span>' +
+            '<span class="dot-sep"></span><span>ИНН ' + esc(c.inn || 'не указан') + '</span>' +
+            '<span class="dot-sep"></span><span>проверен в налоговой: ' + esc(checked) + '</span>' +
+          '</div></div>' +
+      '</div>' +
+      '<div class="m-body"><div class="m-content" id="cz-content">' +
+        readiness +
+        '<div class="m-sec"><div class="m-sec-h">Статус в налоговой' +
+          '<button class="hr" id="cz-check">Проверить сейчас</button></div>' +
+          '<div class="ab">' + czRow2('Сейчас', npdChip) +
+            czRow2('Тип занятости', c.employment === 'other' ? 'Другой' : 'Самозанятый') +
+            czRow2('Подключен', c.connected_at ? esc(czDate(c.connected_at)) : '—') +
+            czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
+        '</div>' +
+        history +
+        money +
+        '<div class="m-sec"><div class="m-sec-h">Контакты и ИНН</div><div class="cz-form">' +
+          czField('full_name', 'ФИО', c.full_name, 'Как в паспорте') +
+          czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
+          czField('email', 'Почта', c.email, 'name@mail.ru') +
+          czField('inn', 'ИНН', c.inn, '12 цифр') +
+          czField('citizenship', 'Гражданство', c.citizenship, 'РФ') +
+          czField('connected_at', 'Дата подключения', c.connected_at, '', 'date') +
+        '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Реквизиты для выплаты</div><div class="cz-form">' +
+          czField('pay_account', 'Счет', c.pay_account, '20 цифр') +
+          czField('pay_bic', 'БИК', c.pay_bic, '9 цифр') +
+          czField('pay_bank', 'Банк', c.pay_bank, 'Т-Банк') +
+          czField('pay_receiver', 'Получатель', c.pay_receiver, 'если отличается от ФИО') +
+        '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Документы</div>' + docRows + '</div>' +
+        '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
+          '<textarea class="al-in al-ta" data-f="note" rows="3" placeholder="Что важно помнить об этом человеке">' + esc(c.note || '') + '</textarea>' +
+        '</div>' +
+      '</div></div>' +
+      '<div class="m-foot cz-foot">' +
+        (c.blocked
+          ? '<button class="m-archive" id="cz-unblock">' + ic('check', 14) + 'Снять блокировку</button>'
+          : '<button class="m-archive" id="cz-block">' + ic('alert', 14) + 'Заблокировать</button>') +
+        (c.archived
+          ? '<button class="m-archive" id="cz-restore">' + ic('refresh', 14) + 'Вернуть из архива</button>'
+          : '<button class="m-archive" id="cz-arch2">' + ic('x', 14) + 'В архив</button>') +
+        '<button class="bp cz-save" id="cz-save" disabled>Сохранить</button>' +
+      '</div>';
+
+    el('cz-x').addEventListener('click', closeCz);
+    el('cz-check').addEventListener('click', czCheckNow);
+    el('cz-save').addEventListener('click', czSave);
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-f]'), function (inp) {
+      inp.addEventListener('input', function () {
+        var f = inp.getAttribute('data-f');
+        var was = c[f] == null ? '' : String(c[f]);
+        if (inp.value === was) delete CZ.dirty[f]; else CZ.dirty[f] = inp.value;
+        var save = el('cz-save');
+        if (save) save.disabled = !Object.keys(CZ.dirty).length;
+      });
+    });
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-doc]'), function (b) {
+      b.addEventListener('click', function () {
+        czSetDoc(id, b.getAttribute('data-doc'), b.getAttribute('data-st'));
+      });
+    });
+    var bl = el('cz-block');
+    if (bl) bl.addEventListener('click', function () {
+      var why = window.prompt('Почему блокируем? Причину увидит тот, кто будет ее снимать.');
+      if (why && why.trim()) czPatch(id, { blocked: true, blocked_reason: why.trim() });
+    });
+    var ub = el('cz-unblock');
+    if (ub) ub.addEventListener('click', function () { czPatch(id, { blocked: false, blocked_reason: '' }); });
+    var ar = el('cz-arch2');
+    if (ar) ar.addEventListener('click', function () {
+      if (window.confirm('Убрать исполнителя в архив? Данные и история останутся, вернуть можно в любой момент.')) czArchive(id, true);
+    });
+    var rs = el('cz-restore');
+    if (rs) rs.addEventListener('click', function () { czArchive(id, false); });
+  }
+  function czAfter(res, msg) {
+    var c = res && res.contractor;
+    if (!c) return;
+    czPut(c);
+    CZ.dirty = {};
+    renderCzCard();
+    if (msg) showToast(msg);
+    czLoad();
+  }
+  function czSave() {
+    var id = CZ.openId;
+    var save = el('cz-save');
+    if (!id || !Object.keys(CZ.dirty).length) return;
+    var body = {};
+    Object.keys(CZ.dirty).forEach(function (f) {
+      var v = String(CZ.dirty[f]).trim();
+      body[f] = v === '' ? null : v;
+    });
+    if (save) { save.disabled = true; save.classList.add('loading'); }
+    czSend('/admin/api/contractors/' + id, 'PATCH', body)
+      .then(function (r) { czAfter(r, 'Сохранено'); })
+      .catch(function (e) {
+        if (save) { save.disabled = false; save.classList.remove('loading'); }
+        showToast(e.message);
+      });
+  }
+  function czPatch(id, body) {
+    czSend('/admin/api/contractors/' + id, 'PATCH', body)
+      .then(function (r) { czAfter(r, 'Сохранено'); })
+      .catch(function (e) { showToast(e.message); });
+  }
+  function czArchive(id, on) {
+    czSend('/admin/api/contractors/' + id + '/archive', 'POST', { archived: on })
+      .then(function (r) {
+        czPut(r.contractor);
+        closeCz();
+        CZ.list = null;
+        showToast(on ? 'Исполнитель в архиве' : 'Исполнитель вернулся в работу');
+        renderView();
+      })
+      .catch(function (e) { showToast(e.message); });
+  }
+  function czSetDoc(id, kind, st) {
+    czSend('/admin/api/contractors/' + id + '/docs/' + kind, 'PATCH', { status: st })
+      .then(function (r) { czAfter(r); })
+      .catch(function (e) { showToast(e.message); });
+  }
+  function czCheckNow() {
+    var id = CZ.openId;
+    var btn = el('cz-check');
+    if (!id || CZ.busy) return;
+    CZ.busy = true;
+    if (btn) btn.textContent = 'Спрашиваем налоговую…';
+    czSend('/admin/api/contractors/' + id + '/npd-check', 'POST')
+      .then(function (r) {
+        CZ.busy = false;
+        // историю перечитываем целиком: в ней появилась новая строка
+        api('/admin/api/contractors/' + id).then(function (full) {
+          CZ.detail[id] = full;
+          czPut(full.contractor);
+          renderCzCard();
+          czLoad();
+          // при отказе показываем ответ налоговой дословно: «не ответила» и
+          // «ограничила частоту запросов» требуют разных действий от человека
+          showToast(r.check && r.check.status === 'error'
+            ? (r.check.message || 'Налоговая не ответила — попробуйте позже')
+            : (r.contractor.npd_status === 'active' ? 'Статус подтвержден' : 'Статуса самозанятого нет'));
+        });
+      })
+      .catch(function (e) {
+        CZ.busy = false;
+        if (btn) btn.textContent = 'Проверить сейчас';
+        showToast(e.message);
+      });
+  }
+
+  /* ── завести исполнителя ── */
+  function openAddCz() {
+    if (document.querySelector('.al-ov')) return;
+    var ov2 = document.createElement('div');
+    ov2.className = 'al-ov';
+    ov2.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Новый исполнитель</div></div>' +
+          '<button class="al-x" id="cza-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Хватит имени — остальное можно дозаполнить в карточке. Если укажете ИНН, статус самозанятого проверим в налоговой сразу.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">ФИО <i>*</i></span>' +
+            '<input id="cza-name" class="al-in" placeholder="Как в паспорте" autocomplete="off" maxlength="120"></label>' +
+          '<div class="al-row">' +
+            '<label class="al-f"><span class="al-l">Телефон</span>' +
+              '<input id="cza-phone" class="al-in" placeholder="+7 900 000-00-00" autocomplete="off" maxlength="30"></label>' +
+            '<label class="al-f"><span class="al-l">Почта</span>' +
+              '<input id="cza-mail" class="al-in" placeholder="name@mail.ru" autocomplete="off" maxlength="120"></label>' +
+          '</div>' +
+          '<div class="al-row">' +
+            '<label class="al-f"><span class="al-l">ИНН</span>' +
+              '<input id="cza-inn" class="al-in" placeholder="12 цифр" autocomplete="off" maxlength="20"></label>' +
+            '<label class="al-f"><span class="al-l">Гражданство</span>' +
+              '<input id="cza-cit" class="al-in" placeholder="РФ" autocomplete="off" maxlength="40"></label>' +
+          '</div>' +
+          '<label class="al-f"><span class="al-l">Заметка</span>' +
+            '<textarea id="cza-note" class="al-in al-ta" rows="2" maxlength="500" placeholder="Что делает, откуда пришел, договоренности"></textarea></label>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="cza-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="cza-save">' + ic('plus', 14) + 'Добавить исполнителя</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov2);
+    requestAnimationFrame(function () { ov2.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov2.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov2.parentNode) ov2.parentNode.removeChild(ov2); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('cza-x').addEventListener('click', close);
+    el('cza-cancel').addEventListener('click', close);
+    ov2.addEventListener('mousedown', function (e) { if (e.target === ov2) close(); });
+    var nameI = el('cza-name');
+    setTimeout(function () { nameI.focus(); }, 30);
+    var save = el('cza-save');
+    var submit = function () {
+      var name = (nameI.value || '').trim();
+      if (!name) { nameI.classList.add('al-err'); nameI.focus(); return; }
+      save.disabled = true; save.classList.add('loading');
+      czSend('/admin/api/contractors', 'POST', {
+        full_name: name,
+        phone: (el('cza-phone').value || '').trim() || null,
+        email: (el('cza-mail').value || '').trim() || null,
+        inn: (el('cza-inn').value || '').trim() || null,
+        citizenship: (el('cza-cit').value || '').trim() || null,
+        note: (el('cza-note').value || '').trim() || null,
+        source: 'manual',
+      }).then(function (r) {
+        close();
+        CZ.list = null; CZ.detail[r.contractor.id] = { contractor: r.contractor, checks: [] };
+        showToast('Исполнитель добавлен: ' + name);
+        czLoad(function () { openCz(r.contractor.id); });
+      }).catch(function (e) {
+        save.disabled = false; save.classList.remove('loading');
+        showToast(e.message);
+      });
+    };
+    save.addEventListener('click', submit);
+    nameI.addEventListener('input', function () { nameI.classList.remove('al-err'); });
+    ov2.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
+    });
+  }
+
   /* ── Команда и роли (Super Admin) ── */
   function renderTeam(view) {
     if (!state._team) {

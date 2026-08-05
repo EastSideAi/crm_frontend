@@ -984,6 +984,7 @@ a { color: inherit; text-decoration: none; }
 .pay-seg button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
 .pay-seg button[data-v="paid"].on { color: var(--green-ink); }
 .pay-seg button[data-v="refunded"].on { color: var(--red-ink); }
+.pay-seg button[data-v="signed"].on { color: var(--green-ink); }   /* документы исполнителя */
 .pay-grid { display: grid; grid-template-columns: 1fr 150px 150px; gap: 8px; }
 .pay-grid input { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
   background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px; min-width: 0; }
@@ -1570,8 +1571,10 @@ a { color: inherit; text-decoration: none; }
 .al-f { display: flex; flex-direction: column; gap: 6px; }
 .al-l { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em; }
 .al-l i { color: var(--blue); font-style: normal; }
+/* border: 0 — рамку в этом рецепте рисует внутренняя тень; без сброса браузер поверх
+   нее ставит свою серую 2px inset, и поле выглядит как некрашеный системный контрол */
 .al-in { width: 100%; font: 500 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
-  border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
+  border: 0; border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
   transition: box-shadow .15s, background .15s; }
 .al-in::placeholder { color: var(--ink-3); }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
@@ -1579,7 +1582,7 @@ a { color: inherit; text-decoration: none; }
 .al-ta { resize: vertical; min-height: 46px; line-height: 1.5; }
 .al-selwrap { position: relative; display: block; }
 .al-sel { width: 100%; appearance: none; -webkit-appearance: none; font: 500 14px 'Manrope', sans-serif;
-  color: var(--ink); background: var(--fill); border-radius: 11px; padding: 11px 34px 11px 13px;
+  color: var(--ink); background: var(--fill); border: 0; border-radius: 11px; padding: 11px 34px 11px 13px;
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); cursor: pointer; transition: box-shadow .15s, background .15s; }
 .al-sel:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
 .al-selwrap::after { content: ''; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px;
@@ -2873,3 +2876,103 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background-size: 220% 100%; animation: bugShim 1.3s infinite; }
 @keyframes bugShim { to { background-position: -120% 0; } }
 @media (max-width: 620px) { .bug-row2 { flex-direction: column; gap: 17px; } }
+
+/* ════ ИСПОЛНИТЕЛИ-САМОЗАНЯТЫЕ (раздел «Исполнители», модуль самозанятых) ════
+   Список тем же рецептом, что лиды (.listcard + .trow), — раздел рабочий, а не
+   витринный. Смысловая нагрузка одна: видно ли с первого взгляда, кому можно
+   ставить задание и платить. Отсюда семантика статусов по формуле цвет/-ink/-soft
+   и красная полоска строки у тех, кому платить нельзя. */
+.cz-grid { grid-template-columns: 1.5fr 132px 132px 1.6fr 128px 30px; }
+.cz-inn { font-size: 13px; color: var(--ink-2); letter-spacing: -.01em; }
+.cz-cell { min-width: 0; font-size: 12.5px; }
+/* Колонка, ради которой открывают экран, — ей разрешены две строки. Многоточие тут
+   съедало ровно тот кусок, который нужен: «...статус самозанятого пров…». */
+.cz-prob { color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+.cz-prob.on { color: var(--red-ink); font-weight: 600; }
+.cz-more { color: var(--ink-3); font-weight: 500; margin-left: 6px; white-space: nowrap; }
+.cz-fine { color: var(--ink-3); }
+.cz-docs { text-align: right; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+.cz-docs .num { font-size: 14px; font-weight: 600; color: var(--ink-2); letter-spacing: -.02em; }
+.cz-docs.full .num { color: var(--green-ink); }
+.cz-add { margin-left: auto; }
+
+/* статусы готовности: тот же чип .sev, свои значения семантики */
+.sev.cz-ok  { color: var(--green-ink); background: var(--green-soft); }
+.sev.cz-bad { color: var(--red-ink);   background: var(--red-soft); }
+.sev.cz-new { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.cz-off { color: var(--ink-3);     background: var(--fill); }
+
+/* ── карточка исполнителя ── */
+/* Блок-ответ вверху карточки: можно платить или нет и что мешает. */
+.cz-ready { border-radius: var(--r-lg); padding: 16px 18px; background: var(--fill); }
+.cz-ready.cz-ok  { background: var(--green-soft); }
+.cz-ready.cz-bad { background: var(--red-soft); }
+.cz-ready.cz-new { background: var(--amber-soft); }
+.cz-ready-t { font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+/* содержимое цветной плиты держим в своей семье: цвет / -ink текст / -soft фон */
+.cz-ready.cz-ok  .cz-ready-t, .cz-ready.cz-ok  .cz-plist li { color: var(--green-ink); }
+.cz-ready.cz-bad .cz-ready-t, .cz-ready.cz-bad .cz-plist li { color: var(--red-ink); }
+.cz-ready.cz-new .cz-ready-t, .cz-ready.cz-new .cz-plist li { color: var(--amber-ink); }
+.cz-ready-s { font-size: 13px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+.cz-ready.cz-ok .cz-ready-s { color: var(--green-ink); opacity: .8; }
+.cz-plist { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.cz-plist li { font-size: 13px; color: var(--ink); line-height: 1.45; padding-left: 15px; position: relative; }
+.cz-plist li::before { content: ''; position: absolute; left: 2px; top: 8px; width: 5px; height: 5px;
+  border-radius: 50%; background: currentColor; opacity: .45; }
+
+/* история проверок в налоговой: доказательство «на такую-то дату статус был» */
+.cz-hist { display: flex; flex-direction: column; }
+.cz-h { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); }
+.cz-h:first-child { border-top: none; }
+.cz-h-t { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink); }
+.cz-h-d { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.cz-h.ok .cz-h-t   { color: var(--green-ink); }
+.cz-h.bad .cz-h-t  { color: var(--red-ink); font-weight: 600; }
+.cz-h.mute .cz-h-t { color: var(--ink-3); }
+
+.cz-year-v { font-size: 30px; font-weight: 700; letter-spacing: -.035em; }
+.cz-year .strack.wide { max-width: none; width: 100%; height: 8px; margin-top: 10px; display: block; }
+.cz-year .strack.wide i { background: var(--blue); }
+.cz-year-s { font-size: 12.5px; color: var(--ink-3); margin-top: 9px; line-height: 1.5; }
+
+/* Поля карточки — только сетка: сами контролы берем системные (.al-f/.al-l/.al-in),
+   те же, что в форме заведения. Третьего рецепта инпута в системе нет (design.md §7.4). */
+.cz-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+.cz-form .al-f { min-width: 0; }
+
+/* документы: строка + системный сегмент .pay-seg */
+.cz-doc { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }
+.cz-doc:first-of-type { border-top: none; }
+.cz-doc-n { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); }
+.cz-doc .pay-seg { flex: none; }
+
+.cz-foot { display: flex; align-items: center; gap: 8px; }
+.cz-foot .cz-save { margin-left: auto; }
+.cz-foot .cz-save:disabled { opacity: .4; cursor: default; }
+
+.cz-mobprob { display: none; }
+.cz-mobprob.on { color: var(--red-ink); font-weight: 600; }
+
+@media (max-width: 960px) {
+  /* !important здесь не украшательство: общий мобильный сброс строк
+     (.trow, style.css:2146) сам объявлен через !important и иначе перебивает
+     колонки этого раздела. */
+  .trow.cz-grid { grid-template-columns: 1.4fr 122px 1.2fr 30px !important; }
+  .cz-grid > :nth-child(2), .cz-grid > :nth-child(5) { display: none; }
+  .cz-form { grid-template-columns: 1fr; }
+  .cz-doc { flex-direction: column; align-items: flex-start; gap: 9px; }
+}
+@media (max-width: 700px) {
+  /* На телефоне таблицы нет: строка — это карточка. Имя переносится целиком,
+     под ним контакт и причина, справа чип готовности. Обрезанные многоточиями
+     столбцы не читаются и заставляют открывать каждого, чтобы понять, кто есть кто. */
+  .trow.cz-grid { grid-template-columns: 1fr auto !important; gap: 6px 12px; }
+  .cz-grid > :nth-child(4), .cz-grid > :nth-child(6) { display: none; }
+  .cz-grid.thead { display: none; }
+  .trow.cz-grid { height: auto; padding: 14px 16px; align-items: start; }
+  .cz-grid .t-ttl, .cz-grid .t-sub { white-space: normal; overflow: visible; }
+  .cz-mobprob { display: block; margin-top: 4px; }
+  /* ФИО исполнителя должно совпадать с получателем платежа — обрезать его нельзя */
+  .m-name.cz-name { white-space: normal; overflow: visible; line-height: 1.2; }
+}
