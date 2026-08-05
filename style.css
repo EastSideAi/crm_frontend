@@ -492,9 +492,13 @@ a { color: inherit; text-decoration: none; }
   .sec-head { flex-wrap: wrap; }
   .sec-head > div { flex: 1 1 0; min-width: 0; }
   .sec-head > .bp { order: 3; margin-left: 0; width: 100%; }
-  .tm-row { flex-wrap: wrap; row-gap: 11px; }
-  .tm-sel { flex: 1 1 auto; min-width: 0; }
-  .tm-acts { margin-left: auto; }
+  .tm-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
+    grid-template-areas: 'av name name' 'sel sel acts'; column-gap: 12px; row-gap: 11px; }
+  .tm-av { grid-area: av; }
+  .tm-i { grid-area: name; }
+  .tm-sel { grid-area: sel; width: 100%; min-width: 0; }
+  .tm-acts { grid-area: acts; }
+  .tm-l .tm-st { display: block; margin: 3px 0 0; padding-left: 0; border-left: 0; }
 }
 
 /* ════ Сейчас (правая колонка обзора) ════ */
