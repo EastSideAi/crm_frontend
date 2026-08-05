@@ -472,6 +472,25 @@ a { color: inherit; text-decoration: none; }
 .tm-sel { flex: none; font: 600 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
   border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 200px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
+.tm-sel:disabled { opacity: .5; }
+/* уволенного отключаем, а не удаляем: доступ пропадает, история и имя в старых
+   задачах остаются. Строка гасится, но не исчезает */
+.tm-row.off .tm-av, .tm-row.off .tm-n { opacity: .5; }
+.tm-off { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); background: var(--fill); border-radius: var(--r-pill); padding: 2px 8px; margin-left: 8px; }
+.tm-leads { margin-left: 10px; color: var(--ink-2); font-weight: 600; }
+.tm-act { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--ink-3); background: var(--fill); transition: background .12s var(--ease), color .12s var(--ease); }
+.tm-act:hover { background: var(--blue-tint); color: var(--blue); }
+.tm-act.on { color: var(--green-ink); background: var(--green-soft); }
+/* выданный пароль: показывается один раз, в базе только хеш */
+.pw-box { background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px; }
+.pw-row { display: flex; align-items: baseline; gap: 12px; }
+.pw-l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); min-width: 62px; }
+.pw-v { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; word-break: break-all; }
+.al-opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--ink-3); }
 @media (max-width: 760px) { .tm-sel { min-width: 140px; } }
 
 /* ════ Сейчас (правая колонка обзора) ════ */
@@ -716,6 +735,12 @@ a { color: inherit; text-decoration: none; }
 .m-sec-h .hr { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--blue);
   text-transform: none; letter-spacing: 0; cursor: pointer; }
 .m-sec-h .hr:hover { text-decoration: underline; }
+/* ответственный за клиента: один хозяин на клиента. Пока не назначен — амбер-подсказка,
+   потому что без него план не публикуется и просрочку спросить не с кого */
+.own-wrap { display: block; max-width: 340px; }
+.own-hint { font-size: 11.5px; color: var(--ink-3); margin-top: 8px; line-height: 1.5; }
+.own-sec.none .own-hint { color: var(--amber-ink); }
+.own-sec.none .al-sel { box-shadow: inset 0 0 0 1px rgba(154,91,18,.28); }
 
 /* секции «Путь»-AI (dr-sec оставлен для совместимости старых вызовов sec()) */
 .dr-sec { padding: 0 0 22px; }
@@ -1214,6 +1239,10 @@ a { color: inherit; text-decoration: none; }
 .rm-cnt-mini svg { color: var(--ink-3); }
 .rm-cnt-mini.hl { color: var(--blue); font-weight: 600; }
 .rm-cnt-mini.hl svg { color: var(--blue); }
+/* исполнитель нашей задачи прямо в строке. Пусто — это дыра в учёте, а не мелочь:
+   амбером, чтобы её было видно списком, не открывая каждую задачу */
+.rm-exec { font-weight: 600; color: var(--ink-2); }
+.rm-exec.none { color: var(--amber-ink); }
 
 .rm-side { flex: none; display: flex; align-items: center; gap: 8px; padding-top: 1px; }
 .rm-due { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
@@ -1248,6 +1277,16 @@ a { color: inherit; text-decoration: none; }
 .rm-dh-n { font-size: 10px; font-weight: 700; color: var(--blue); background: #fff;
   border-radius: var(--r-pill); padding: 1px 7px; box-shadow: inset 0 0 0 1px rgba(47,107,255,.3); letter-spacing: 0; }
 .rm-need { font-size: 13px; color: var(--ink); line-height: 1.55; }
+/* кто делает и когда: исполнитель + срок. Раньше срок задавался только при создании
+   задачи, а исполнителя не было вовсе — обе дырки закрываются здесь */
+.rm-assign { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rm-assign .al-selwrap { flex: 1; min-width: 200px; }
+.rm-assign .al-sel { font-size: 13px; padding: 9px 34px 9px 12px; }
+.rm-a-due { flex: none; outline: none; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid rgba(17,21,31,.1); border-radius: 10px; padding: 9px 11px;
+  transition: border-color .15s, box-shadow .15s; }
+.rm-a-due:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
+.rm-ahint { font-size: 11.5px; color: var(--ink-3); margin-top: 8px; }
 /* пошаговая инструкция «Как выполнить» — то, что ученик видит шагами в попапе */
 .rm-howto { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .rm-howto li { font-size: 13px; color: var(--ink); line-height: 1.5; }
@@ -2247,6 +2286,17 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-pub.on .rm-pub-dot { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 .rm-pub.off { color: var(--ink-2); }
 .rm-plan-tb-act { display: inline-flex; gap: 8px; align-items: center; }
+/* почему план не ушёл ученику: нет ответственного или у наших задач нет сроков.
+   Амбер, а не красный: это не поломка, а незакрытый чек-лист */
+.rm-pbw { background: var(--amber-soft); border: 1px solid rgba(154,91,18,.16); border-radius: var(--r-lg);
+  padding: 12px 14px; margin: -6px 0 14px; }
+.rm-pbw-h { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--amber-ink); }
+.rm-pbw-h svg { flex: none; }
+.rm-pbw-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rm-pbw-t { font-size: 12px; font-weight: 600; color: var(--amber-ink); background: #fff;
+  border-radius: var(--r-pill); padding: 4px 11px; box-shadow: inset 0 0 0 1px rgba(154,91,18,.18);
+  transition: background .12s var(--ease); }
+.rm-pbw-t:hover { background: #FFFBF4; }
 .rm-rollout-wrap { position: relative; }
 .rm-rollout-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 240px;
   background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);

@@ -36,6 +36,10 @@
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    // кого можно поставить ответственным (GET /admin/api/assignees) — грузится один раз
+    assignees: null,
+    // что бэк ответил на «Опубликовать»: нет ответственного или задачи без срока
+    pubBlock: {},
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -403,7 +407,15 @@
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
       if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) {
+        // тело ошибки нужно наверху: на публикации плана бэк возвращает 409 со списком
+        // задач без срока, и показать «ошибка 409» вместо этого списка — бесполезно
+        return r.json().catch(function () { return null; }).then(function (j) {
+          var err = new Error('HTTP ' + r.status);
+          err.status = r.status; err.data = j && j.detail;
+          throw err;
+        });
+      }
       return r.json();
     });
   }
@@ -433,18 +445,22 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
-  function apiSend(path, method, body, cb) {
+  function apiSend(path, method, body, cb, errCb) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
-      if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
+      // detail от бэка человеку понятнее, чем «не сохранилось»: там написано, что не так
+      // (занятый логин, короткий пароль, неизвестная роль)
+      var msg = (e && typeof e.data === 'string' && e.data) || 'Не сохранилось — проверь сеть';
+      if (e.message !== '403') showToast(msg);
+      if (errCb) errCb(e);
     });
   }
   /* НОН-БЛОКИНГ: меняем локально и рисуем сразу, бэкенд синхроним в фоне.
      При ошибке — откат + тост. Никаких ожиданий ответа ради анимации. */
-  var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides'];
+  var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides', 'curator_id'];
   function patch(id, body, stateEl, cb) {
     var lead = findLead(id), det = state.details[id];
     var prevLead = lead ? lead.crm : null;
@@ -1281,6 +1297,7 @@
           '<div><div class="pm-n">' + esc(state.userName || 'EastSide') + '</div>' +
           '<div class="pm-r">' + esc(roleInfo().label) + ' · ' + esc(roleInfo().short) + '</div></div></div>' +
         '<button data-a="refresh">' + ic('refresh', 16) + 'Обновить данные</button>' +
+        '<button data-a="pwd">' + ic('pin', 16) + 'Сменить пароль</button>' +
         '<button data-a="logout">' + ic('exit', 16) + 'Сменить аккаунт</button>';
       document.body.appendChild(smenu);
       var r = prof.getBoundingClientRect();
@@ -1292,6 +1309,7 @@
         b.addEventListener('click', function (ev) {
           ev.stopPropagation(); var a = b.getAttribute('data-a'); closeSmenu(); prof.classList.remove('open');
           if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
+          else if (a === 'pwd') openChangePassword();
           else logout();
         });
       });
@@ -1334,7 +1352,9 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
-    tutor:         { label: 'Тьютор',                 short: 'обучение',             caps: ['dash', 'students'] },
+    // тьютору нужен cap clients: его задачи живут в карточке клиента, без этого
+    // раздела он заходит в CRM и не видит ни одной своей задачи
+    tutor:         { label: 'Тьютор',                 short: 'обучение',             caps: ['dash', 'clients', 'students'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'students'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
@@ -1348,6 +1368,39 @@
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
   function can(cap) { return roleInfo().caps.indexOf(cap) !== -1; }
+
+  /* ── КТО ОТВЕЧАЕТ: список сотрудников для выпадашек «ответственный»/«исполнитель».
+     Отдельная ручка от /admin/api/team: назначать ответственного должен любой, кто ведёт
+     клиентов, а список аккаунтов с логинами видит только тот, у кого есть cap team. */
+  function loadAssignees(cb) {
+    if (state.assignees) { if (cb) cb(state.assignees); return; }
+    api('/admin/api/assignees').then(function (r) {
+      state.assignees = (r && r.users) || [];
+      if (cb) cb(state.assignees);
+    }).catch(function () { state.assignees = []; if (cb) cb(state.assignees); });
+  }
+  function personName(uid) {
+    if (!uid) return '';
+    var list = state.assignees || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(uid)) return list[i].name || '';
+    return '';
+  }
+  /* <option>-ы сотрудников; empty — подпись пустого значения */
+  function personOptions(sel, empty) {
+    var list = state.assignees || [];
+    var out = '<option value="">' + esc(empty) + '</option>';
+    var known = false;
+    for (var i = 0; i < list.length; i++) {
+      var u = list[i];
+      var on = String(u.id) === String(sel || '');
+      if (on) known = true;
+      out += '<option value="' + u.id + '"' + (on ? ' selected' : '') + '>' + esc(u.name || ('#' + u.id)) + '</option>';
+    }
+    // ответственный мог быть отключён (уволен) — не молчим об этом, иначе поле
+    // выглядит пустым и человек думает, что ответственного не назначали
+    if (sel && !known) out += '<option value="' + esc(sel) + '" selected>сотрудник отключён</option>';
+    return out;
+  }
 
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
@@ -1651,24 +1704,143 @@
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
     var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    var active = state._team.filter(function (u) { return u.active !== false; });
     var rows = state._team.map(function (u) {
+      var off = u.active === false;
       var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
       var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
-      return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
-        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select></div>';
+      return '<div class="tm-row' + (off ? ' off' : '') + '"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
+        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
+          (off ? '<span class="tm-off">отключён</span>' : '') + '</div>' +
+          '<div class="tm-l">@' + esc(u.login) +
+          (u.leads ? '<span class="tm-leads">' + u.leads + ' ' + plural(u.leads, 'клиент', 'клиента', 'клиентов') + '</span>' : '') +
+          '</div></div>' +
+        '<select class="tm-sel" data-uid="' + u.id + '"' + (off ? ' disabled' : '') + '>' + legacy + opts + '</select>' +
+        '<button class="tm-act" data-pwd="' + u.id + '" title="Выпустить новый пароль">' + ic('refresh', 13) + '</button>' +
+        '<button class="tm-act' + (off ? ' on' : '') + '" data-off="' + u.id + '" title="' +
+          (off ? 'Вернуть доступ' : 'Отключить доступ') + '">' + ic(off ? 'check' : 'exit', 13) + '</button>' +
+        '</div>';
     }).join('');
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
-      '<span class="cnt num">' + state._team.length + '</span></div>' +
+      '<button class="bp sm" id="tm-add">' + ic('plus', 14) + 'Сотрудник</button>' +
+      '<span class="cnt num">' + active.length + '</span></div>' +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+    var reload = function () { state._team = null; state.assignees = null; renderView(); };
+    var addBtn = el('tm-add'); if (addBtn) addBtn.addEventListener('click', function () { openAddUser(reload); });
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
         if (u) u.role = sel.value;
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
       });
+    });
+    // новый пароль: старый токен при этом умирает — человек, вошедший под ним, вылетит
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pwd]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-pwd');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0] || {};
+        if (!window.confirm('Выпустить новый пароль для ' + (u.name || u.login) + '? Старый перестанет работать сразу.')) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { reset_password: true }, function (r) {
+          if (r && r.password) showPassword(u.name || u.login, u.login, r.password);
+        });
+      });
+    });
+    // отключение вместо удаления: доступ пропадает, история и имя в задачах остаются
+    Array.prototype.forEach.call(view.querySelectorAll('[data-off]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-off');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0] || {};
+        var off = u.active === false;
+        if (!off && !window.confirm('Отключить доступ ' + (u.name || u.login) + '? Клиенты и задачи за ним останутся.')) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { active: off }, function () {
+          showToast(off ? 'Доступ вернули' : 'Доступ закрыт');
+          reload();
+        });
+      });
+    });
+  }
+
+  /* Пароль показываем один раз: в базе только хеш, второй раз взять его неоткуда. */
+  function showPassword(name, login, pwd) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Доступ в CRM</div>' +
+        '<div class="al-title">' + esc(name) + '</div></div>' +
+        '<button class="al-x" id="pw-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Передайте эти данные человеку. Пароль показывается один раз — потом его можно только выпустить заново.</div>' +
+      '<div class="al-body"><div class="pw-box">' +
+        '<div class="pw-row"><span class="pw-l">Логин</span><b class="pw-v">' + esc(login) + '</b></div>' +
+        '<div class="pw-row"><span class="pw-l">Пароль</span><b class="pw-v">' + esc(pwd) + '</b></div>' +
+      '</div></div>' +
+      '<div class="al-foot"><button class="bp al-save" id="pw-copy">' + ic('copy', 14) + 'Скопировать</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    el('pw-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('pw-copy').addEventListener('click', function () {
+      copyText('CRM истсайд.рф\nЛогин: ' + login + '\nПароль: ' + pwd, el('pw-copy'));
+    });
+  }
+
+  /* ── НОВЫЙ СОТРУДНИК ── */
+  function openAddUser(done) {
+    if (document.querySelector('.al-ov')) return;
+    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    var opts = assignable.map(function (k) {
+      return '<option value="' + k + '"' + (k === 'tutor' ? ' selected' : '') + '>' + ROLES[k].label + ' — ' + ROLES[k].short + '</option>';
+    }).join('');
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Команда</div>' +
+        '<div class="al-title">Новый сотрудник</div></div>' +
+        '<button class="al-x" id="au-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Заведите человеку доступ в CRM. Пароль придумаем сами и покажем один раз — дальше человек сменит его у себя в профиле.</div>' +
+      '<div class="al-body">' +
+        '<label class="al-f"><span class="al-l">Имя и фамилия <i>*</i></span>' +
+          '<input id="au-name" class="al-in" placeholder="Как показывать в задачах" autocomplete="off" maxlength="80"></label>' +
+        '<label class="al-f"><span class="al-l">Должность <i>*</i></span><span class="al-selwrap">' +
+          '<select id="au-role" class="al-sel">' + opts + '</select></span></label>' +
+        '<label class="al-f"><span class="al-l">Логин <span class="al-opt">сделаем из имени</span></span>' +
+          '<input id="au-login" class="al-in" placeholder="латиницей, без пробелов" autocomplete="off" maxlength="40"></label>' +
+      '</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="au-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="au-save">' + ic('plus', 14) + 'Завести</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('au-x').addEventListener('click', close);
+    el('au-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    setTimeout(function () { var n = el('au-name'); if (n) n.focus(); }, 30);
+    var save = el('au-save');
+    save.addEventListener('click', function () {
+      var name = (el('au-name').value || '').trim();
+      if (!name) { el('au-name').classList.add('al-err'); el('au-name').focus(); return; }
+      save.disabled = true; save.classList.add('loading');
+      apiSend('/admin/api/users', 'POST', {
+        name: name, role: el('au-role').value, login: (el('au-login').value || '').trim(),
+      }, function (r) {
+        close();
+        if (done) done();
+        if (r && r.user) showPassword(r.user.name, r.user.login, r.password);
+      }, function () { save.disabled = false; save.classList.remove('loading'); });
     });
   }
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
@@ -2461,7 +2633,24 @@
           '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
       '</div>' +
+      pubBlockBanner(id) +
       aiReasonBlock(id);
+  }
+
+  /* Почему план не ушёл ученику. Не тост: тост исчезает, а тут список конкретных задач,
+     по которым надо пройтись. Клик по задаче раскрывает её прямо в доске. */
+  function pubBlockBanner(id) {
+    var b = state.pubBlock[id];
+    if (!b) return '';
+    var list = (b.tasks || []).map(function (t) {
+      return '<button class="rm-pbw-t" data-pbw="' + esc(t.id || '') + '">' + esc(t.title || 'Без названия') + '</button>';
+    }).join('');
+    return '<div class="rm-pbw">' +
+      '<div class="rm-pbw-h">' + ic('alert', 14) + esc(b.message || 'План не опубликован') + '</div>' +
+      (list ? '<div class="rm-pbw-list">' + list + '</div>' : '') +
+      (b.code === 'curator_required'
+        ? '<div class="rm-pbw-list"><button class="rm-pbw-t" data-goto="now">Назначить ответственного</button></div>' : '') +
+    '</div>';
   }
 
   /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
@@ -2802,6 +2991,16 @@
       var pub = state.planStatus[id] && state.planStatus[id].published;
       doPublish(id, !pub);
     });
+    // задача из списка «почему не опубликовалось» — раскрыть её в доске и подвести глаз
+    Array.prototype.forEach.call(host.querySelectorAll('[data-pbw]'), function (b) {
+      b.addEventListener('click', function () {
+        var tid = b.getAttribute('data-pbw');
+        RM_OPEN[tid] = true;
+        renderDrawer(true);
+        var tEl = document.querySelector('.rm-task[data-tid="' + tid + '"]');
+        if (tEl) tEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    });
     // чат-помощник всегда открыт рядом с доской
     loadPlanChat(id);
     bindPlanChat(id);
@@ -2812,10 +3011,18 @@
       .then(function (r) {
         // Правда — ответ сервера, не локальный флип: кэш не разъезжается с бэком.
         state.planStatus[id] = { published: !!(r && r.published) };
+        delete state.pubBlock[id];
         showToast(state.planStatus[id].published ? 'План опубликован ученику' : 'Публикация снята');
         rerender();
       })
       .catch(function (e) {
+        // 409 — не сбой связи, а отказ по делу: нет ответственного или у наших задач
+        // нет сроков. Показываем это блоком со списком, а не тостом «не сохранилось».
+        if (e && e.status === 409 && e.data) {
+          state.pubBlock[id] = e.data;
+          rerender();
+          return;
+        }
         if (e && e.message !== '403') showToast('Не сохранилось — проверь сеть');
         ensurePlanStatus(id, true); // пересинхронизировать реальный статус с бэка
         rerender();
@@ -4901,6 +5108,12 @@
     if (isClient) {
       var subKind = rmSubmitKind(t);
       if (subKind !== 'none') bits.push('<span class="rm-need-mini">' + RM_SUBMIT_RU[subKind] + '</span>');
+    } else if (!done) {
+      // наша задача без имени и без срока — та самая дыра, из-за которой просрочку
+      // не с кого спросить. Показываем это прямо в строке, а не прячем в детали
+      var an = personName(t.assignee);
+      bits.push('<span class="rm-exec' + (an ? '' : ' none') + '">' + esc(an || 'без исполнителя') + '</span>');
+      if (!t.due) bits.push('<span class="rm-exec none">без срока</span>');
     }
     if (subs.length) bits.push('<span class="rm-cnt-mini hl">' + ic('clip', 11) + subs.length + ' прислал' + (subs.length > 1 ? 'и' : '') + '</span>');
     if (comments.length) bits.push('<span class="rm-cnt-mini">' + ic('chat', 11) + comments.length + '</span>');
@@ -4929,6 +5142,18 @@
     var detail = '';
     if (open) {
       var d = '';
+      /* Кто делает и когда — первым блоком: до этого срок можно было задать только при
+         создании задачи, а исполнителя не было вовсе. Обе дырки закрывает этот блок. */
+      d += '<div class="rm-dsec"><div class="rm-dh">' + (isClient ? 'Срок' : 'Кто делает и когда') + '</div>' +
+        '<div class="rm-assign">' +
+          (isClient ? '' : '<span class="al-selwrap"><select class="al-sel rm-a-who">' +
+            personOptions(t.assignee, 'Отвечает ответственный за клиента') + '</select></span>') +
+          '<input type="date" class="rm-a-due" value="' + esc(t.due || '') + '" aria-label="Срок">' +
+        '</div>' +
+        (isClient ? '' : '<div class="rm-ahint">' + (t.due
+          ? 'По этому сроку и спросим.'
+          : 'Без срока задача не считается просроченной — и план не опубликуется.') + '</div>') +
+      '</div>';
       if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Описание — его видит ученик</div><div class="rm-need">' + esc(t.need) + '</div></div>';
       // пошаговая инструкция и совет — то, что ученик видит в попапе задачи
       var steps = String(t.how_to || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -5081,6 +5306,8 @@
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
+    // список сотрудников нужен и «Сейчас» (ответственный), и доске (исполнитель задачи)
+    if (!state.assignees) loadAssignees(function () { if (state.drawerId === id) renderDrawer(true); });
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
       if (got) renderDrawer(true);
@@ -5676,6 +5903,16 @@
       (isRej ? '<div class="rej-banner">' + ic('x', 13) + 'Сейчас в статусе «отказ» — сделка закрыта</div>' : '<div class="pipe">' + pipe + '</div>') +
     '</div>';
 
+    /* 2.5 ОТВЕТСТВЕННЫЙ — у клиента должен быть один хозяин. Без него план не
+       публикуется, и просроченную задачу спросить не с кого. */
+    var curId = crm.curator_id || '';
+    html += '<div class="m-sec own-sec' + (curId ? '' : ' none') + '"><div class="m-sec-h">Ответственный за клиента</div>' +
+      '<span class="al-selwrap own-wrap"><select class="al-sel" id="m-curator">' +
+        personOptions(curId, 'Не назначен') + '</select></span>' +
+      '<div class="own-hint">' + (curId
+        ? 'С него спрос по задачам этого клиента. Отдельную задачу можно отдать другому — в доске «Поступление».'
+        : 'Пока никого — план такому клиенту не опубликовать.') + '</div></div>';
+
     /* 3. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Кто это</div>' +
@@ -6247,6 +6484,14 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
+    // ответственный за клиента: 0 — снять (пустой строкой бэк не отличит «снять» от «не пришло»)
+    var curSel = el('m-curator');
+    if (curSel) curSel.addEventListener('change', function () {
+      patch(id, { curator_id: curSel.value ? Number(curSel.value) : 0 }, null, function () {
+        if (state.drawerId === id) renderDrawer(true);
+      });
+      showToast(curSel.value ? 'Ответственный: ' + personName(curSel.value) : 'Ответственный снят');
+    });
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);
@@ -6340,6 +6585,20 @@
               });
             });
           }
+        });
+        // исполнитель задачи и срок — сохраняются сразу, задача остаётся раскрытой
+        var aWho = tEl.querySelector('.rm-a-who');
+        if (aWho) aWho.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) {
+            if (aWho.value) t.assignee = Number(aWho.value); else delete t.assignee;
+            return t;
+          });
+        });
+        var aDue = tEl.querySelector('.rm-a-due');
+        if (aDue) aDue.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) { t.due = aDue.value || ''; return t; });
         });
         // тип ответа ученика (file/text/both/none) — сохраняется сразу
         Array.prototype.forEach.call(tEl.querySelectorAll('.rm-submit-seg .rm-sub-t'), function (sb) {
@@ -7553,6 +7812,54 @@
     }, 6000);
   }
   /* выход / смена аккаунта — сразу на логин (без ожидания фонового 403) */
+  /* Смена своего пароля. Первый пароль человеку выдали в переписке — пока он его не
+     сменил, это не секрет. Бэк возвращает НОВЫЙ токен: старый умирает, и без подмены
+     в localStorage следующий же запрос выкинул бы человека на логин. */
+  function openChangePassword() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Профиль</div>' +
+        '<div class="al-title">Смена пароля</div></div>' +
+        '<button class="al-x" id="cp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Придумайте свой пароль — от 8 символов. Другие устройства придётся залогинить заново.</div>' +
+      '<div class="al-body">' +
+        '<label class="al-f"><span class="al-l">Текущий пароль</span>' +
+          '<input id="cp-cur" class="al-in" type="password" autocomplete="current-password"></label>' +
+        '<label class="al-f"><span class="al-l">Новый пароль</span>' +
+          '<input id="cp-new" class="al-in" type="password" autocomplete="new-password"></label>' +
+      '</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="cp-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="cp-save">' + ic('check', 14) + 'Сменить</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('cp-x').addEventListener('click', close);
+    el('cp-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    setTimeout(function () { var c = el('cp-cur'); if (c) c.focus(); }, 30);
+    var save = el('cp-save');
+    save.addEventListener('click', function () {
+      var cur = el('cp-cur').value, nw = el('cp-new').value;
+      if (nw.trim().length < 8) { el('cp-new').classList.add('al-err'); el('cp-new').focus(); return; }
+      save.disabled = true; save.classList.add('loading');
+      apiSend('/admin/api/me/password', 'POST', { current: cur, password: nw }, function (r) {
+        if (r && r.token) localStorage.setItem(KEY_LS, r.token);
+        close();
+        showToast('Пароль сменили');
+      }, function () { save.disabled = false; save.classList.remove('loading'); });
+    });
+  }
+
   function logout() {
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
     if (state.inboxTimer) { clearInterval(state.inboxTimer); state.inboxTimer = null; }
