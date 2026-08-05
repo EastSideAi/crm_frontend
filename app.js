@@ -403,7 +403,7 @@
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
       if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) { var err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
       return r.json();
     });
   }
@@ -433,12 +433,15 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
-  function apiSend(path, method, body, cb) {
+  function apiSend(path, method, body, cb, onErr) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
+      // onErr получает код ответа: вызывающий сам решает, что сказать человеку
+      // («логин занят» вместо общего «не сохранилось»).
+      if (onErr) { onErr(e && e.status); return; }
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
@@ -1226,6 +1229,92 @@
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
   }
 
+  /* ── приглашение сотрудника: #invite/<token> ──────────────────────────────
+     Человека завели в разделе «Команда», ссылку он получил в мессенджере. Здесь
+     он задает себе пароль и вписывает фамилию — мы пароля не знаем и не хранили
+     его нигде по дороге. Ссылка одноразовая, дальше вход обычным логином. */
+  function inviteToken() {
+    var m = /^#invite\/([A-Za-z0-9_\-]+)/.exec(location.hash || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function renderInvite(token) {
+    document.body.classList.remove('dock-open');
+    var shell = function (inner) {
+      root.innerHTML =
+        '<div id="gate"><div class="gate-split">' +
+          '<div class="gate-brand">' +
+            '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+            '<div class="gb-mid">' +
+              '<div class="gb-h">Добро пожаловать<br>в команду</div>' +
+              '<div class="gb-s">Осталось придумать пароль — им вы будете входить в CRM дальше.</div>' +
+            '</div>' +
+            '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
+          '</div>' +
+          '<div class="gate-card">' + inner + '</div>' +
+        '</div></div>';
+    };
+    shell('<div class="inv-load">' + ic('clock', 18) + 'Проверяем ссылку…</div>');
+
+    fetch(API + '/admin/api/invite/' + encodeURIComponent(token)).then(function (r) {
+      if (r.ok) return r.json();
+      return r.json().catch(function () { return {}; }).then(function () {
+        var reason = r.status === 409 ? 'Эта ссылка уже использована — попросите новую у руководителя.'
+          : r.status === 410 ? 'Срок действия ссылки истек — попросите новую у руководителя.'
+          : 'Ссылка не найдена. Попросите новую у руководителя.';
+        throw new Error(reason);
+      });
+    }).then(function (info) {
+      shell(
+        '<h1>Задайте пароль</h1>' +
+        '<p>Вход в CRM под логином <b>' + esc(info.login) + '</b>. Пароль знаете только вы — мы его не храним и не пересылаем.</p>' +
+        '<input id="iv-name" type="text" placeholder="Имя и фамилия" autocomplete="name" value="' + esc(info.name || '') + '">' +
+        '<div class="lg-passwrap">' +
+          '<input id="iv-pass" type="password" placeholder="Пароль — от 8 символов" autocomplete="new-password">' +
+          '<button class="lg-eye" id="iv-eye" type="button" tabindex="-1">показать</button>' +
+        '</div>' +
+        '<button class="bp" id="iv-go">Сохранить и войти</button>' +
+        '<div class="gate-err" id="iv-err"></div>');
+      var name = el('iv-name'), pass = el('iv-pass'), eye = el('iv-eye'), go = el('iv-go');
+      eye.addEventListener('click', function () {
+        var show = pass.type === 'password';
+        pass.type = show ? 'text' : 'password';
+        eye.textContent = show ? 'скрыть' : 'показать';
+        pass.focus();
+      });
+      name.focus();
+      var fail = function (msg) { var e = el('iv-err'); e.textContent = msg; e.style.display = 'block'; go.textContent = 'Сохранить и войти'; go.disabled = false; };
+      var submit = function () {
+        var p = pass.value || '';
+        if (p.length < 8) { fail('Пароль — минимум 8 символов'); return; }
+        go.disabled = true; go.textContent = 'Сохраняем…';
+        fetch(API + '/admin/api/invite/' + encodeURIComponent(token), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: p, name: (name.value || '').trim() }),
+        }).then(function (r) {
+          if (!r.ok) { fail(r.status === 409 ? 'Ссылка уже использована — попросите новую.' : 'Не получилось сохранить, попробуйте еще раз'); return null; }
+          return r.json();
+        }).then(function (j) {
+          if (!j) return;
+          localStorage.setItem(KEY_LS, j.token);
+          state.role = j.role; state.userName = j.name || '';
+          history.replaceState(null, '', location.pathname);
+          boot();
+        }).catch(function () { fail('Сеть недоступна'); });
+      };
+      go.addEventListener('click', submit);
+      pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+      name.addEventListener('keydown', function (e) { if (e.key === 'Enter') pass.focus(); });
+    }).catch(function (e) {
+      shell('<h1>Ссылка не работает</h1><p>' + esc(e.message || 'Попросите новую ссылку у руководителя.') + '</p>' +
+        '<button class="bp ghost" id="iv-tologin">Войти логином и паролем</button>');
+      el('iv-tologin').addEventListener('click', function () {
+        history.replaceState(null, '', location.pathname);
+        renderLogin();
+      });
+    });
+  }
+
   /* ── shell ────────────────────────────────────────────── */
   function greeting() {
     var h = new Date().getHours();
@@ -1334,7 +1423,9 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
-    tutor:         { label: 'Тьютор',                 short: 'обучение',             caps: ['dash', 'students'] },
+    // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
+    // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'inbox', 'clients', 'students'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'students'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
@@ -1642,6 +1733,21 @@
       '<div class="stub-tag">' + ic('spark', 12) + 'В разработке</div></div>';
   }
   /* ── Команда и роли (Super Admin) ── */
+  /* ── КОМАНДА: личные учетки вместо общих ──────────────────────────────────
+     Пароль сотруднику не придумываем и не пересылаем: заводим учетку → выдаем
+     одноразовую ссылку (72 часа) → человек сам задает пароль и вписывает фамилию.
+     Поэтому строка показывает не только роль, а состояние входа: ждет ссылку,
+     ссылка выдана, был в системе. */
+  function inviteUrl(token) { return CRM_HOME + '#invite/' + encodeURIComponent(token); }
+
+  function teamState(u) {
+    if (!u.active) return { cls: 'off', text: 'отключен' };
+    if (u.last_login_at) return { cls: 'on', text: 'заходил ' + fmtWhen(u.last_login_at) };
+    if (u.invite_pending) return { cls: 'wait', text: 'ссылка выдана, еще не входил' };
+    if (u.has_password) return { cls: '', text: 'пароль задан, входа не было' };
+    return { cls: 'wait', text: 'нужна ссылка для входа' };
+  }
+
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();
@@ -1654,15 +1760,23 @@
     var rows = state._team.map(function (u) {
       var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
       var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
-      return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
-        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select></div>';
+      var st = teamState(u);
+      return '<div class="tm-row' + (u.active ? '' : ' tm-off') + '"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
+        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div>' +
+        '<div class="tm-l">@' + esc(u.login) + '<span class="tm-st ' + st.cls + '">' + esc(st.text) + '</span></div></div>' +
+        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select>' +
+        '<div class="tm-acts">' +
+          '<button class="icobtn" data-inv="' + u.id + '" title="Ссылка для входа">' + ic('ext', 15) + '</button>' +
+          '<button class="icobtn' + (u.active ? ' del' : '') + '" data-off="' + u.id + '" title="' +
+            (u.active ? 'Отключить сотрудника' : 'Вернуть доступ') + '">' + ic(u.active ? 'x' : 'check', 15) + '</button>' +
+        '</div></div>';
     }).join('');
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
-      '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
-      '<span class="cnt num">' + state._team.length + '</span></div>' +
-      '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+      '<div class="s">роль решает, что человек видит; вход — по личной ссылке, пароль он задает сам</div></div>' +
+      '<button class="bp sm" id="tm-add">' + ic('plus', 14) + 'Добавить сотрудника</button></div>' +
+      '<div class="tm-list">' + (rows || '<div class="empty">Пока никого нет.</div>') + '</div></div>';
+    el('tm-add').addEventListener('click', openAddStaff);
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
@@ -1670,6 +1784,162 @@
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-inv]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-inv');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0] || {};
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid + '/invite', 'POST', {}, function (r) {
+          b.disabled = false;
+          if (!r || !r.invite) return;
+          if (u) { u.invite_pending = true; }
+          openInviteLink(u.name || u.login, r.invite);
+        }, function () { b.disabled = false; });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-off]'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-off');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var turnOff = !!u.active;
+        if (turnOff && !confirm('Отключить ' + (u.name || u.login) + '? Доступ пропадет сразу, даже если человек уже вошел.')) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { active: !turnOff }, function () {
+          u.active = !turnOff;
+          if (turnOff) u.invite_pending = false;
+          showToast(turnOff ? 'Доступ закрыт' : 'Доступ вернули');
+          if (state.page === 'team') renderView();
+        });
+      });
+    });
+  }
+
+  /* Модалка «Новый сотрудник» и она же — экран выданной ссылки. */
+  function openAddStaff() {
+    if (document.querySelector('.al-ov')) return;
+    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    var opts = assignable.map(function (k) {
+      return '<option value="' + k + '"' + (k === 'tutor' ? ' selected' : '') + '>' + ROLES[k].label + ' — ' + ROLES[k].short + '</option>';
+    }).join('');
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Команда</div><div class="al-title">Новый сотрудник</div></div>' +
+          '<button class="al-x" id="st-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Пароль придумывать не нужно: человек задаст его сам по одноразовой ссылке.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Имя <i>*</i></span>' +
+            '<input id="st-name" class="al-in" placeholder="Как зовут — фамилию впишет сам" autocomplete="off" maxlength="80"></label>' +
+          '<label class="al-f"><span class="al-l">Логин <i>*</i></span>' +
+            '<input id="st-login" class="al-in" placeholder="латиницей, например alexandr" autocomplete="off" maxlength="32"></label>' +
+          '<label class="al-f"><span class="al-l">Роль</span><span class="al-selwrap">' +
+            '<select id="st-role" class="al-sel">' + opts + '</select></span></label>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="st-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="st-save">' + ic('plus', 14) + 'Завести и выдать ссылку</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('st-x').addEventListener('click', close);
+    el('st-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var nameI = el('st-name'), loginI = el('st-login');
+    setTimeout(function () { nameI.focus(); }, 30);
+    // Логин подсказываем из имени, пока человек его не правил руками.
+    var loginTouched = false;
+    loginI.addEventListener('input', function () { loginTouched = true; loginI.classList.remove('al-err'); });
+    nameI.addEventListener('input', function () {
+      nameI.classList.remove('al-err');
+      if (!loginTouched) loginI.value = translit(nameI.value);
+    });
+    var save = el('st-save');
+    var submit = function () {
+      var name = (nameI.value || '').trim(), login = (loginI.value || '').trim().toLowerCase();
+      if (!name) { nameI.classList.add('al-err'); nameI.focus(); return; }
+      if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(login)) {
+        loginI.classList.add('al-err'); loginI.focus();
+        showToast('Логин — латиницей, от 3 символов');
+        return;
+      }
+      save.disabled = true; save.classList.add('loading');
+      apiSend('/admin/api/users', 'POST', { name: name, login: login, role: el('st-role').value }, function (r) {
+        close();
+        state._team = null;
+        if (state.page === 'team') renderView();
+        if (r && r.invite) openInviteLink(name, r.invite);
+      }, function (status) {
+        save.disabled = false; save.classList.remove('loading');
+        showToast(status === 409 ? 'Такой логин уже занят' : 'Не получилось завести сотрудника');
+      });
+    };
+    save.addEventListener('click', submit);
+    ov.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
+    });
+  }
+
+  /* Имя кириллицей → логин латиницей: подсказка, человек может переписать. */
+  var TRANSLIT_MAP = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'i',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h',
+    ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+  function translit(s) {
+    return (s || '').toLowerCase().split('').map(function (ch) {
+      if (TRANSLIT_MAP[ch] != null) return TRANSLIT_MAP[ch];
+      return /[a-z0-9]/.test(ch) ? ch : '';
+    }).join('').slice(0, 32);
+  }
+
+  /* Экран выданной ссылки: показываем один раз, копируем и отдаем человеку. */
+  function openInviteLink(who, invite) {
+    var url = inviteUrl(invite.token);
+    var till = invite.expires_at ? fmtWhen(invite.expires_at) : 'через 72 часа';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Команда</div><div class="al-title">Ссылка для входа</div></div>' +
+          '<button class="al-x" id="iv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Отправьте ее ' + esc(who) + '. По ссылке человек задаст себе пароль и впишет фамилию — ' +
+          'открыть ее можно один раз, действует до ' + esc(till) + '.</div>' +
+        '<div class="al-body">' +
+          '<div class="inv-link"><code>' + esc(url) + '</code></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="iv-close">Готово</button>' +
+          '<button class="bp al-save" id="iv-copy">' + ic('copy', 14) + 'Скопировать ссылку</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('iv-x').addEventListener('click', close);
+    el('iv-close').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('iv-copy').addEventListener('click', function () { copyText(url, el('iv-copy')); });
   }
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
   /* копируемый /go-адрес: на проде — ЛАТИНСКИЙ go.eastside.study. Кириллический домен
@@ -5165,7 +5435,11 @@
 
     var nm = ov(ctx, 'name');
     var openTasks = (crm.tasks || []).filter(function (t) { return !t.done; }).length;
-    var navHtml = MODAL_SECTIONS.map(function (sct) {
+    // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
+    // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
+    var navHtml = MODAL_SECTIONS.filter(function (sct) {
+      return sct.id !== 'pay' || can('finance');
+    }).map(function (sct) {
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
@@ -5245,6 +5519,9 @@
     if (!host || !id) return;
     var ctx = leadCtx(id);
     var s = state.modalSection;
+    // Секцию оплат без финансовой роли не открыть даже прямым переключением
+    // состояния — уводим на «Главное».
+    if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
@@ -7562,6 +7839,10 @@
     renderLogin();
   }
   function boot() {
+    // Ссылка-приглашение старше сохраненной сессии: по ней мог прийти другой
+    // человек на том же компьютере (руководитель открыл ссылку тьютора).
+    var inv = inviteToken();
+    if (inv) { renderInvite(inv); return; }
     if (!getKey()) { renderLogin(); return; }
     // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
     fetch(API + '/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
