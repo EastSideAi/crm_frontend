@@ -1723,7 +1723,7 @@
           ic(off ? 'check' : 'exit', 13) + (off ? 'Вернуть' : 'Отключить') + '</button>' +
         '</div>';
     }).join('');
-    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+    view.innerHTML = '<div class="card tm-card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
       '<button class="bp sm" id="tm-add">' + ic('plus', 14) + 'Сотрудник</button>' +

@@ -484,8 +484,19 @@ a { color: inherit; text-decoration: none; }
   transition: background .12s var(--ease), color .12s var(--ease); }
 .tm-act:hover { background: var(--blue-tint); color: var(--blue); }
 .tm-act.on { color: var(--green-ink); background: var(--green-soft); }
-@media (max-width: 760px) { .tm-act { padding: 0 9px; font-size: 0; gap: 0; width: 32px; justify-content: center; }
-  .tm-act svg { width: 14px; height: 14px; } }
+/* На узком экране строка сотрудника не влезает в один ряд: селект ролей тянется по
+   самому длинному названию и выдавливает имя в столбик по букве. Поэтому имя сверху,
+   роль и действия — отдельной строкой во всю ширину. */
+@media (max-width: 760px) {
+  .tm-row { flex-wrap: wrap; gap: 10px 12px; }
+  .tm-i { flex: 1 1 auto; }
+  .tm-sel { order: 3; flex: 1 1 100%; min-width: 0; max-width: none; }
+  .tm-act { order: 4; }
+  .tm-card .sec-head { flex-wrap: wrap; }
+  .tm-card .sec-head > div { flex: 1 1 100%; order: 2; }
+  .tm-card .sec-head .cnt { order: 3; margin-left: 0; }
+  .tm-card .sec-head .bp { order: 4; margin-left: auto; }
+}
 /* выданный пароль: показывается один раз, в базе только хеш */
 .pw-box { background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px 14px;
   display: flex; flex-direction: column; gap: 8px; }
