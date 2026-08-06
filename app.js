@@ -2072,16 +2072,16 @@
     var payWait = invAlive && inv.kind === 'payment';
     var invSays = payWait
       ? 'Ждем новые реквизиты. Ссылка действует до ' + czDate(inv.expires_at) + '. ' +
-        (inv.opened_at ? 'Человек открывал ее ' + fmtWhen(inv.opened_at) + '.'
-                       : 'Пока ни разу не открывал — возможно, стоит напомнить.') +
+        (inv.opened_at ? 'Ссылку открывали ' + fmtWhen(inv.opened_at) + '.'
+                       : 'Ссылку еще ни разу не открывали — возможно, стоит напомнить.') +
         ' До этого выплаты идут на прежний счет.'
       : c.submitted_at
       ? 'Анкету заполнили ' + fmtWhen(c.submitted_at) + ', ссылка погашена. ' +
         'Нужно исправить данные — выпустите новую: править ИНН и реквизиты за человека мы не можем.'
       : invAlive
         ? 'Ждем анкету. Ссылка действует до ' + czDate(inv.expires_at) + '. ' +
-          (inv.opened_at ? 'Человек открывал ее ' + fmtWhen(inv.opened_at) + '.'
-                         : 'Пока ни разу не открывал — возможно, стоит напомнить.')
+          (inv.opened_at ? 'Ссылку открывали ' + fmtWhen(inv.opened_at) + '.'
+                         : 'Ссылку еще ни разу не открывали — возможно, стоит напомнить.')
         : 'Действующей ссылки нет' +
           (inv && inv.state === 'expired' ? ': истек срок' :
            inv && inv.state === 'revoked' ? ': вы ее отозвали' : '') +
@@ -2233,14 +2233,14 @@
     if (chk) chk.addEventListener('click', czCheckNow);
     el('cz-save').addEventListener('click', czSave);
     el('cz-reinv').addEventListener('click', function (ev) {
-      if (ev.currentTarget.getAttribute('data-kind') === 'pay') return czPayInvite(id, c.full_name);
+      if (ev.currentTarget.getAttribute('data-kind') === 'pay') return czPayInvite(id);
       if (c.submitted_at && !window.confirm(
         'Выпустить новую ссылку? Человек заполнит анкету заново, прежние ИНН и реквизиты ' +
         'останутся до тех пор, пока он не пришлет новые.')) return;
       czReinvite(id);
     });
     var pi = el('cz-payinv');
-    if (pi) pi.addEventListener('click', function () { czPayInvite(id, c.full_name); });
+    if (pi) pi.addEventListener('click', function () { czPayInvite(id); });
     var rv = el('cz-revoke');
     if (rv) rv.addEventListener('click', function () {
       if (window.confirm('Погасить ссылку? Человек больше не сможет открыть анкету, пока вы не выпустите новую.')) czRevoke(id);
@@ -2315,9 +2315,9 @@
   /* Смена счета — короткая ссылка вместо повторной анкеты. Сами реквизиты оператор не
      вводит и здесь: подмена счета — самый частый способ увода выплат, и «мне написали
      новый счет в чате» не должно становиться основанием платить в другое место. */
-  function czPayInvite(id, who) {
-    if (!window.confirm('Выпустить ссылку на смену реквизитов для ' + (who || 'исполнителя') +
-      '? Пока он не пришлет новый счет, выплаты идут на прежний.')) return;
+  function czPayInvite(id) {
+    if (!window.confirm('Выпустить ссылку на смену реквизитов? ' +
+      'Пока новый счет не пришлют, выплаты идут на прежний.')) return;
     czSend('/admin/api/contractors/' + id + '/pay-invite', 'POST')
       .then(function (r) {
         if (r.invite && r.invite.url) CZ_LINKS[id] = r.invite.url;
