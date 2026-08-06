@@ -31,6 +31,8 @@
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
+    drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
+    composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
@@ -297,17 +299,27 @@
   function leadUrl(id) {
     return CRM_HOME + '#lead/' + encodeURIComponent(id);
   }
-  function hashLeadId() {
-    var m = String(location.hash || '').match(/^#lead\/(.+)$/);
+  function hashLeadId() { return hashRouteId('lead'); }
+  /* Тот же приём для переписки: `#dialog/<id>` открывает конкретный диалог инбокса.
+     На эту ссылку ведёт уведомление бота в Telegram («клиенту нужен менеджер») —
+     из пуша попадаешь сразу в разговор, а не в общий список. */
+  function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
+  function hashDialogId() { return hashRouteId('dialog'); }
+  /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
+     хэш-функция строки ниже по файлу, и одноимённое объявление её перетирало. */
+  function hashRouteId(kind) {
+    var m = String(location.hash || '').match(new RegExp('^#' + kind + '\\/(.+)$'));
     if (!m) return '';
     try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
-  /* адрес в строке браузера всегда показывает открытую карточку — ссылку можно
-     скопировать и оттуда; replaceState, чтобы не засорять историю «назад» */
-  function syncHash(id) {
+  /* адрес в строке браузера всегда показывает открытую карточку (или диалог) — ссылку
+     можно скопировать и оттуда; replaceState, чтобы не засорять историю «назад» */
+  function syncHash(id, kind) {
+    kind = kind || 'lead';
     try {
-      if (hashLeadId() === (id || '')) return;
-      history.replaceState(null, '', id ? '#lead/' + encodeURIComponent(id) : location.pathname + location.search);
+      if (hashRouteId(kind) === (id || '')) return;
+      history.replaceState(null, '', id ? '#' + kind + '/' + encodeURIComponent(id)
+                                        : location.pathname + location.search);
     } catch (e) {}
   }
   function isNewLead(l) {
@@ -4506,6 +4518,61 @@
       if (cb) cb();
     });
   }
+  /* ── КОМПОЗЕР ИНБОКСА ─────────────────────────────────────────────────────────
+     Менеджер печатает, а инбокс в это время живёт своей жизнью: каждые 6с приходит
+     поллинг, клиент присылает реплику, тумблер бота перерисовывает шапку. Любая из этих
+     перерисовок пересобирала поле ввода — набранный текст исчезал на полуслове, и
+     сообщения уходили клиенту обрывками («Добрый день» отдельно, остальное заново).
+     Поэтому черновик живёт в state (свой на каждый диалог), а не в DOM: перерисовка
+     восстанавливает и текст, и каретку, и фокус. Переключение диалогов черновики хранит. */
+  function composerSave() {
+    if (state._composerRendering) return;   // идёт перерисовка — читать новое пустое поле нельзя
+    var inp = el('tg-input'); if (!inp) return;
+    // диалог берём с самого поля, а не из state.inboxSel: при переключении чата выбор
+    // меняется РАНЬШЕ перерисовки, и черновик уехал бы в чужую переписку
+    var cid = inp.getAttribute('data-conv'); if (!cid) return;
+    state.drafts[cid] = inp.value;
+    state.composer = { id: cid, focus: document.activeElement === inp, caret: inp.selectionStart };
+  }
+  function composerGrow(inp) {   // высота по содержимому: одна строка → до пяти, дальше скролл
+    if (!inp) return;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 128) + 'px';
+  }
+  function composerRestore(convId) {
+    var inp = el('tg-input'); if (!inp) return;
+    inp.value = state.drafts[convId] || '';
+    composerGrow(inp);
+    var c = state.composer || {};
+    if (c.focus && String(c.id) === String(convId)) {
+      inp.focus();
+      var p = c.caret == null ? inp.value.length : Math.min(c.caret, inp.value.length);
+      try { inp.setSelectionRange(p, p); } catch (e) {}
+    }
+  }
+  /* менеджер сейчас в поле ввода или у него набран текст — полную пересборку инбокса откладываем */
+  function composerBusy() {
+    var inp = el('tg-input');
+    return !!(inp && (inp.value || document.activeElement === inp));
+  }
+  /* Только что отправленные менеджером сообщения бэк ещё не отдаёт (он пишет их в историю
+     после доставки). Переносим их в свежий ответ, пока не увидим там свой же текст, —
+     иначе пузырь мигает: появился, исчез на следующем поллинге, появился снова. */
+  function mergeLocalMsgs(old, fresh) {
+    var msgs = (fresh && fresh.messages) || [];
+    var locals = ((old && old.messages) || []).filter(function (m) { return m._local; });
+    if (!locals.length) return msgs;
+    var used = {};
+    var pending = locals.filter(function (lm) {
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (used[i] || msgs[i].sender !== 'manager' || msgs[i].text !== lm.text) continue;
+        used[i] = 1; return false;   // бэк это сообщение уже знает — локальный дубль убираем
+      }
+      return true;
+    });
+    return msgs.concat(pending);
+  }
+
   /* РЕАЛТАЙМ: тихий фоновый опрос открытого инбокса — список + сообщения текущего чата.
      Перерисовываем только если что-то реально изменилось (без мельканий/скелетона). */
   function pollInboxLive() {
@@ -4537,13 +4604,16 @@
         api('/admin/api/bot/conversations/' + sel + '/messages').then(function (d) {
           var old = state.bot.msgs[sel];
           var oldN = (old && old.messages) ? old.messages.length : -1;
-          var newN = (d && d.messages) ? d.messages.length : 0;
           // сохраняем актуальные флаги (могли поменяться тумблером) + новые сообщения
+          d.messages = mergeLocalMsgs(old, d);
+          var newN = d.messages.length;
           state.bot.msgs[sel] = d;
           if (newN !== oldN) { refreshOpenThread(true); }       // появились новые — дорисуем, докрутим вниз
           else if (changed) { refreshOpenThread(false); }
         }).catch(function () {});
-      } else if (changed) {
+      } else if (changed && !composerBusy()) {
+        // полную пересборку делаем только когда менеджер не в поле ввода — иначе она
+        // вырвала бы поле из-под рук (черновик переживёт, но каретка и скролл дёрнутся)
         renderSide();
         var host = el('tg-rows');
         if (host && state.bot.loaded) { renderInbox(el('view')); }
@@ -4667,15 +4737,21 @@
     else state.dialogSeen[c.id] = 1;
   }
 
-  /* отправить сообщение менеджером (демо — локально; реал — POST) */
+  /* отправить сообщение менеджером (демо — локально; реал — POST).
+     Перерисовываем ТОЛЬКО тред: менеджер часто шлёт очередь коротких сообщений подряд,
+     и полная пересборка вью между ними стирала бы то, что он уже набирает дальше. */
   function inboxSend(c, text) {
     text = (text || '').trim(); if (!text) return;
     var nowISO = new Date().toISOString();
     if (c.api) {
       var d = state.bot.msgs[c.id];
-      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO };
+      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO, _local: true };
       if (d) d.messages = (d.messages || []).concat([tmp]);
-      if (c.ai_on !== false) inboxSetAi(c, false); else renderView();
+      // строка в списке слева тоже должна сразу показать новое последнее сообщение
+      var row = (state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0];
+      if (row) { row.last_text = text; row.last_role = 'assistant'; row.last_at = nowISO; row.unread = false; }
+      if (c.ai_on !== false) inboxSetAi(c, false);   // менеджер перехватил диалог у бота
+      refreshOpenThread(true);
       // реальная доставка. Бэк отвечает {delivered, reason}: не ушло клиенту — помечаем пузырь
       // (не удаляем — менеджер видит свой текст и причину), сетевой сбой — откатываем.
       api('/admin/api/bot/conversations/' + c.id + '/send', {
@@ -4684,13 +4760,13 @@
         if (res && res.delivered === false) {
           tmp.undelivered = true; tmp.reason = res.reason || '';
           showToast(res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту');
-          if (state.page === 'inbox') renderView();
+          refreshOpenThread(false);
         }
       }).catch(function () {
         var dd = state.bot.msgs[c.id];
         if (dd && dd.messages) dd.messages = dd.messages.filter(function (m) { return m !== tmp; });
         showToast('Сообщение не отправлено — проверь связь с ботом');
-        if (state.page === 'inbox') renderView();
+        refreshOpenThread(false);
       });
     } else {
       var dlg = getDialog(c.lead);
@@ -4818,6 +4894,7 @@
       Array.prototype.forEach.call(host.querySelectorAll('.tg-row[data-id]'), function (n) {
         n.addEventListener('click', function () {
           state.inboxSel = n.getAttribute('data-id');
+          syncHash(state.inboxSel, 'dialog');   // адрес показывает открытый диалог — ссылку можно скопировать
           // выделение без пересборки списка (без прыжков)
           Array.prototype.forEach.call(host.querySelectorAll('.tg-row'), function (x) { x.classList.remove('on'); });
           n.classList.add('on'); n.classList.remove('unread');
@@ -4833,6 +4910,7 @@
 
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
+    composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
     var c = (list || []).filter(function (x) { return String(x.id) === String(state.inboxSel); })[0];
     if (!c) {
       host.innerHTML = '<div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div><div>Выбери диалог слева</div></div>';
@@ -4868,6 +4946,7 @@
       : aiOn ? '<span class="tg-st ai">' + ic('bot', 11) + 'AI ведёт</span>'
       : '<span class="tg-st mgr">' + ic('hand', 11) + (c.taken_by ? 'ведёт ' + esc(c.taken_by) : 'ведёт менеджер') + '</span>';
 
+    state._composerRendering = true;
     host.innerHTML =
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
@@ -4881,20 +4960,39 @@
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
-          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы.</span>') +
+          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы; сам он подхватит только после 2 часов тишины.</span>') +
       '</div>' +
       '<div class="tg-compose">' +
-        '<input id="tg-input" placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '" autocomplete="off">' +
-        '<button class="tg-send" id="tg-send" title="Отправить">' + ic('send', 16) + '</button>' +
+        '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
+          'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
+        '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
       '</div>';
+    state._composerRendering = false;
 
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
     var inp = el('tg-input'), snd = el('tg-send');
-    function send() { if (!inp) return; var t = inp.value; inp.value = ''; inboxSend(c, t); }
+    function send() {
+      if (!inp) return;
+      var t = inp.value.trim(); if (!t) return;
+      inp.value = ''; delete state.drafts[c.id]; composerGrow(inp);
+      inp.focus(); composerSave();   // курсор остаётся в поле: следующее сообщение пишется сразу
+      inboxSend(c, t);
+    }
     if (snd) snd.addEventListener('click', send);
-    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    if (inp) {
+      composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
+      inp.addEventListener('input', function () { composerSave(); composerGrow(inp); });
+      ['focus', 'blur', 'keyup', 'click'].forEach(function (ev) { inp.addEventListener(ev, composerSave); });
+      inp.addEventListener('keydown', function (e) {
+        // Enter отправляет, Shift+Enter — перенос строки (привычка из мессенджеров).
+        // e.isComposing — идёт набор через IME, Enter там подтверждает вариант, а не шлёт.
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
+          e.preventDefault(); send();
+        }
+      });
+    }
     // удаление сообщения (модерация) — оптимистично + фоном
     Array.prototype.forEach.call(host.querySelectorAll('.tg-del[data-del]'), function (b) {
       b.addEventListener('click', function (e) {
@@ -8285,10 +8383,21 @@
     if (curSpace() !== 'crm') setPage(firstAllowedPage('crm'));
     openDrawer(id, [id]);
   }
+  /* ссылка на переписку: #dialog/<id> — открываем инбокс сразу на этом диалоге.
+     По такой ссылке приходит уведомление бота «клиенту нужен менеджер». */
+  function openDialogFromHash() {
+    var id = hashDialogId();
+    if (!id) return;
+    if (state.page === 'inbox' && state.inboxMode === 'bot' && String(state.inboxSel) === String(id)) return;
+    if (state.drawerId) closeDrawer();
+    state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
+    saveUi(); renderSide(); renderTopbar(); renderView();
+  }
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();
     if (id) openFromHash();
+    else if (hashDialogId()) openDialogFromHash();
     else if (state.drawerId) closeDrawer();
   });
   function startApp() {
@@ -8299,18 +8408,18 @@
     renderShell();
     // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
     loadLeads(false, openFromHash);
+    openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(function () {
       if (!getKey()) return;
       var a = document.activeElement;
-      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in')) return;
-      // поллим диалоги бота всегда (для живого бейджа хэндоффа); инбокс обновляем, если открыт
-      refreshBot(function () {
-        renderSide();
-        if (state.page === 'inbox' && !state.botConvoId) renderView();
-      });
+      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in' || a.id === 'tg-input')) return;
+      // поллим диалоги бота всегда (для живого бейджа хэндоффа). Инбокс НЕ пересобираем:
+      // у него свой шестисекундный поллинг (pollInboxLive), а полная пересборка раз в минуту
+      // вырывала поле ввода из-под рук менеджера прямо на середине сообщения.
+      refreshBot(function () { renderSide(); });
       if (state.drawerId || state.botConvoId) return; // не дёргаем интерфейс под открытой карточкой/диалогом
       loadLeads(true);
     }, 60000);

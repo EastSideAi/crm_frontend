@@ -2077,11 +2077,14 @@ a { color: inherit; text-decoration: none; }
 .tg-msg.out .tg-del { left: -9px; }
 .tg-msg:hover .tg-del { opacity: 1; }
 .tg-del:hover { color: var(--coral); }
-/* композер: написать сообщение (перехват у бота) */
-.tg-compose { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fff; border-top: 1px solid var(--line); }
-.tg-compose input { flex: 1; min-width: 0; outline: none; font: 500 13.5px 'Manrope', sans-serif; color: var(--ink);
-  background: var(--fill); border: 1px solid transparent; border-radius: var(--r-pill); padding: 11px 16px; transition: .15s; }
-.tg-compose input:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
+/* композер: написать сообщение (перехват у бота).
+   Поле — textarea: Enter отправляет, Shift+Enter переносит строку, высота растёт по тексту
+   (до 128px, дальше свой скролл), поэтому длинный ответ виден целиком, а не одной строкой. */
+.tg-compose { flex: none; display: flex; align-items: flex-end; gap: 10px; padding: 12px 16px; background: #fff; border-top: 1px solid var(--line); }
+.tg-compose textarea { flex: 1; min-width: 0; outline: none; font: 500 13.5px/1.45 'Manrope', sans-serif; color: var(--ink);
+  background: var(--fill); border: 1px solid transparent; border-radius: 21px; padding: 11px 16px; transition: border-color .15s, background .15s, box-shadow .15s;
+  resize: none; max-height: 128px; overflow-y: auto; display: block; }
+.tg-compose textarea:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
 .tg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover { background: var(--blue-d); }
