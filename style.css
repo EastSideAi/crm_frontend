@@ -725,6 +725,11 @@ a { color: inherit; text-decoration: none; }
 .m-sec-h .hr { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--blue);
   text-transform: none; letter-spacing: 0; cursor: pointer; }
 .m-sec-h .hr:hover { text-decoration: underline; }
+/* второе действие в шапке секции встает рядом с первым, а не улетает к другому краю:
+   auto-отступ нужен только первому */
+.m-sec-h .hr ~ .hr { margin-left: 0; }
+/* второстепенное действие (отозвать, отменить) — не такое же синее, как основное */
+.m-sec-h .hr.mute { color: var(--ink-3); }
 
 /* секции «Путь»-AI (dr-sec оставлен для совместимости старых вызовов sec()) */
 .dr-sec { padding: 0 0 22px; }
@@ -2904,6 +2909,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .cz-prob { color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
 .cz-prob.on { color: var(--red-ink); font-weight: 600; }
+/* ожидание анкеты — синий, а не красный: мяч на стороне человека, а не авария у нас */
+.cz-prob.wait, .cz-mobprob.wait { color: var(--blue-d); }
 .cz-more { color: var(--ink-3); font-weight: 500; margin-left: 6px; white-space: nowrap; }
 .cz-fine { color: var(--ink-3); }
 .cz-docs { text-align: right; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
@@ -2915,6 +2922,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .sev.cz-ok  { color: var(--green-ink); background: var(--green-soft); }
 .sev.cz-bad { color: var(--red-ink);   background: var(--red-soft); }
 .sev.cz-new { color: var(--amber-ink); background: var(--amber-soft); }
+/* приглашен — ожидание, а не проблема: синий, а не янтарь. Янтарь тут читался бы
+   «человек виноват», хотя мяч на его стороне и делать нам пока нечего */
+.sev.cz-wait { color: var(--blue-d);   background: var(--blue-tint); }
 .sev.cz-off { color: var(--ink-3);     background: var(--fill); }
 
 /* ── карточка исполнителя ── */
@@ -2923,11 +2933,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .cz-ready.cz-ok  { background: var(--green-soft); }
 .cz-ready.cz-bad { background: var(--red-soft); }
 .cz-ready.cz-new { background: var(--amber-soft); }
+.cz-ready.cz-wait { background: var(--blue-tint); }
 .cz-ready-t { font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
 /* содержимое цветной плиты держим в своей семье: цвет / -ink текст / -soft фон */
 .cz-ready.cz-ok  .cz-ready-t, .cz-ready.cz-ok  .cz-plist li { color: var(--green-ink); }
 .cz-ready.cz-bad .cz-ready-t, .cz-ready.cz-bad .cz-plist li { color: var(--red-ink); }
 .cz-ready.cz-new .cz-ready-t, .cz-ready.cz-new .cz-plist li { color: var(--amber-ink); }
+.cz-ready.cz-wait .cz-ready-t, .cz-ready.cz-wait .cz-plist li { color: var(--blue-d); }
 .cz-ready-s { font-size: 13px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
 .cz-ready.cz-ok .cz-ready-s { color: var(--green-ink); opacity: .8; }
 .cz-plist { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
@@ -2955,11 +2967,27 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .cz-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
 .cz-form .al-f { min-width: 0; }
 
+/* Ссылка на анкету. Адрес длинный и не для чтения глазами — его копируют, поэтому
+   он в моношрифте, одной строкой с обрезкой, а не переносится на три строки. */
+.cz-inv-s { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.cz-inv-l { display: flex; align-items: center; gap: 10px; margin-top: 12px;
+  background: var(--fill); border-radius: var(--r-lg); padding: 10px 10px 10px 13px; }
+.cz-inv-l.big { margin-top: 0; padding: 13px 14px; }
+.cz-inv-u { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--ink-2); }
+.cz-inv-l .hr { flex: none; }
+.cz-inv-h { font-size: 12px; color: var(--ink-3); margin-top: 9px; line-height: 1.5; }
+/* подпись под чужими данными: кто их внес и почему мы их не правим */
+.cz-src { font-size: 12px; color: var(--ink-3); margin-top: 10px; line-height: 1.5; }
+
 /* документы: строка + системный сегмент .pay-seg */
 .cz-doc { display: flex; align-items: center; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line); }
 .cz-doc:first-of-type { border-top: none; }
 .cz-doc-n { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink); }
 .cz-doc .pay-seg { flex: none; }
+/* документ, принятый самим человеком: отметка вместо переключателя — снять его нельзя */
+.cz-doc-fixed { flex: none; display: flex; align-items: center; gap: 10px; }
+.cz-doc-when { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 
 .cz-foot { display: flex; align-items: center; gap: 8px; }
 .cz-foot .cz-save { margin-left: auto; }

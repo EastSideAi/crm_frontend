@@ -1757,6 +1757,7 @@
     ok:      { label: 'Готов работать', cls: 'cz-ok' },
     problem: { label: 'Есть проблемы',  cls: 'cz-bad' },
     new:     { label: 'Не завершил',    cls: 'cz-new' },
+    invited: { label: 'Приглашен',      cls: 'cz-wait' },
     blocked: { label: 'Заблокирован',   cls: 'cz-off' },
   };
   var CZ_DOCS = [
@@ -1766,6 +1767,10 @@
   ];
   var CZ_DOC_ST = [['none', 'Не отправлен'], ['sent', 'Отправлен'], ['signed', 'Подписан']];
   var CZ_SOURCE = { invite: 'Приглашение', import: 'Импорт', migration: 'Миграция', manual: 'Заведен вручную' };
+  /* Свежевыпущенные ссылки на анкету. Полный адрес приходит от сервера РОВНО один раз:
+     в базе от него только хэш, подсмотреть его потом нельзя. Держим до перезагрузки
+     страницы, чтобы оператор мог скопировать ссылку не только в момент выпуска. */
+  var CZ_LINKS = {};
   var CZ = { list: null, stats: null, err: '', q: '', filter: 'all', archived: false,
              openId: null, detail: {}, dirty: {}, busy: false };
 
@@ -1819,6 +1824,7 @@
       if (CZ.filter === 'ready' && c.state !== 'ok') return false;
       if (CZ.filter === 'prob' && c.state !== 'problem' && c.state !== 'blocked') return false;
       if (CZ.filter === 'new' && c.state !== 'new') return false;
+      if (CZ.filter === 'inv' && c.state !== 'invited') return false;
       if (!q) return true;
       // телефон ищем и без разделителей: в CRM он записан с пробелами, в голове — цифрами
       var hay = [c.full_name, c.email, c.inn, c.phone, String(c.phone || '').replace(/[^\d+]/g, '')];
@@ -1835,7 +1841,8 @@
        заголовком и в фильтрах-чипах, а якорь экрана — список имен, ради которого его
        и открывают. Так же сделано на «Людях». */
     var quick =[['all', 'Все', s.total], ['ready', 'Готовы', s.ready],
-                 ['prob', 'Нельзя платить', s.problem], ['new', 'Не завершили', s.new]]
+                 ['prob', 'Нельзя платить', s.problem], ['new', 'Не завершили', s.new],
+                 ['inv', 'Ждем анкету', s.invited || 0]]
       .map(function (f) {
         return '<button class="qchip' + (CZ.filter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' +
           f[1] + ' <span class="qn">' + f[2] + '</span></button>';
@@ -1846,7 +1853,7 @@
       : (!rows.length
         ? '<div class="empty">' + (CZ.q
             ? 'По запросу «' + esc(CZ.q) + '» никого не нашли. Проверьте написание или очистите поиск.'
-            : (CZ.archived ? 'В архиве пусто.' : 'Здесь пока никого. Заведите первого исполнителя — дальше на него можно будет ставить задания.')) + '</div>'
+            : (CZ.archived ? 'В архиве пусто.' : 'Здесь пока никого. Пригласите первого исполнителя — свои данные он заполнит сам, а вы увидите, можно ли ставить ему задания.')) + '</div>'
         : rows.map(czRow).join(''));
 
     view.innerHTML =
@@ -1859,7 +1866,7 @@
           '<button class="cdd' + (CZ.archived ? ' active' : '') + '" id="cz-arch">' +
             (CZ.archived ? 'Архив' : 'В работе') + '</button>' +
           '<span class="list-count"><b>' + rows.length + '</b> из ' + (CZ.list || []).length + '</span>' +
-          '<button class="bp sm cz-add" id="cz-add">' + ic('plus', 14) + 'Добавить исполнителя</button>' +
+          '<button class="bp sm cz-add" id="cz-add">' + ic('send', 14) + 'Пригласить исполнителя</button>' +
         '</div>' +
         '<div class="list-quick">' + quick + '</div>' +
         '<div class="trow cz-grid thead">' +
@@ -1880,7 +1887,7 @@
     if (arch) arch.addEventListener('click', function () {
       CZ.archived = !CZ.archived; CZ.list = null; renderView();
     });
-    el('cz-add').addEventListener('click', openAddCz);
+    el('cz-add').addEventListener('click', openInviteCz);
     Array.prototype.forEach.call(view.querySelectorAll('[data-cf]'), function (b) {
       b.addEventListener('click', function () { CZ.filter = b.getAttribute('data-cf'); renderView(); });
     });
@@ -1919,15 +1926,18 @@
     // впечатление, что до работы человеку остался один шаг, если их три.
     var more = c.problems && c.problems.length > 1
       ? '<span class="cz-more">и еще ' + (c.problems.length - 1) + '</span>' : '';
+    // «Ждем анкету» — не проблема, а ожидание: красным его красить нельзя, иначе
+    // приглашенный человек выглядит как сорванная выплата
+    var pcls = c.state === 'ok' ? '' : c.state === 'invited' ? ' wait' : ' on';
     var problem = c.problems && c.problems.length
-      ? '<span class="cz-prob' + (c.state === 'ok' ? '' : ' on') + '">' + esc(c.problems[0]) + more + '</span>'
+      ? '<span class="cz-prob' + pcls + '">' + esc(c.problems[0]) + more + '</span>'
       : '<span class="cz-fine">ничего, можно ставить задания</span>';
     return '<div class="trow cz-grid' + (c.state === 'problem' || c.state === 'blocked' ? ' r-crit' : '') + '" data-cz="' + esc(c.id) + '">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(c.full_name) + '</div>' +
         '<div class="t-sub">' + esc(c.phone || c.email || 'контакты не указаны') + '</div>' +
         // на узком экране колонка «что мешает» не помещается — та же строка уезжает
         // под имя, иначе на телефоне остаются одни многоточия
-        '<div class="t-sub cz-mobprob' + (c.state === 'ok' ? '' : ' on') + '">' +
+        '<div class="t-sub cz-mobprob' + pcls + '">' +
           (c.problems && c.problems.length ? esc(c.problems[0]) + more : 'можно ставить задания') + '</div></div>' +
       '<div class="cz-inn num">' + esc(c.inn || '—') + '</div>' +
       '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
@@ -2009,7 +2019,38 @@
         : '<div class="cz-ready-s">Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.</div>') +
       '</div>';
 
-    /* 2. Налоговый статус — откуда цифра и когда смотрели */
+    /* 2. Ссылка на анкету. Для приглашенного это единственное действие оператора,
+       поэтому у него блок стоит сразу под вердиктом; у заполнившего — в конце, рядом
+       с данными, которые по этой ссылке и приехали. Полный адрес показывается ровно
+       один раз (в базе только хэш) — об этом честно написано в блоке. */
+    var inv = c.invite;
+    var link = CZ_LINKS[id];
+    var invAlive = inv && inv.state === 'active';
+    var invSays = c.submitted_at
+      ? 'Анкету заполнили ' + fmtWhen(c.submitted_at) + ', ссылка погашена. ' +
+        'Нужно исправить данные — выпустите новую: править ИНН и реквизиты за человека мы не можем.'
+      : invAlive
+        ? 'Ждем анкету. Ссылка действует до ' + czDate(inv.expires_at) + '. ' +
+          (inv.opened_at ? 'Человек открывал ее ' + fmtWhen(inv.opened_at) + '.'
+                         : 'Пока ни разу не открывал — возможно, стоит напомнить.')
+        : 'Действующей ссылки нет' +
+          (inv && inv.state === 'expired' ? ': истек срок' :
+           inv && inv.state === 'revoked' ? ': вы ее отозвали' : '') +
+          '. Выпустите новую — придет на смену старой.';
+    var invite = '<div class="m-sec"><div class="m-sec-h">Ссылка на анкету' +
+        '<button class="hr" id="cz-reinv">' + (invAlive ? 'Выпустить заново' : 'Выпустить ссылку') + '</button>' +
+        (invAlive ? '<button class="hr mute" id="cz-revoke">Отозвать</button>' : '') +
+      '</div>' +
+      '<div class="cz-inv"><div class="cz-inv-s">' + esc(invSays) + '</div>' +
+      (link
+        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(link) + '</span>' +
+            '<button class="hr" id="cz-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+          '<div class="cz-inv-h">Отправьте человеку любым способом — в телеграм, ватсап или смс. ' +
+            'Адрес показывается один раз: закроете карточку — придется выпускать заново.</div>'
+        : '') +
+      '</div></div>';
+
+    /* 3. Налоговый статус — откуда цифра и когда смотрели */
     var checked = c.npd_checked_at ? fmtWhen(c.npd_checked_at) : 'ни разу';
     var npdChip = c.npd_status === 'active' ? '<span class="sev cz-ok">Плательщик НПД</span>'
       : c.npd_status === 'inactive' ? '<span class="sev cz-bad">Статуса нет</span>'
@@ -2021,7 +2062,9 @@
           var cls = ch.status === 'active' ? 'ok' : ch.status === 'inactive' ? 'bad' : 'mute';
           return '<div class="cz-h ' + cls + '"><span class="cz-h-t">' + esc(ch.message || '') + '</span>' +
             '<span class="cz-h-d">' + fmtWhen(ch.created_at) +
-            (ch.source === 'auto' ? ' · автоматически' : ' · вручную') + '</span></div>';
+            // откуда пришла проверка: сам человек в анкете, утренний обход или кнопка
+            (ch.source === 'auto' ? ' · автоматически'
+              : ch.source === 'invite' ? ' · из анкеты' : ' · вручную') + '</span></div>';
         }).join('') + '</div>'
       : '<div class="field-empty">Проверок еще не было.</div>') + '</div>';
 
@@ -2040,14 +2083,23 @@
       : '';
 
     var docRows = CZ_DOCS.map(function (dk) {
-      var cur = (docs[dk[0]] && docs[dk[0]].status) || 'none';
+      var d0 = docs[dk[0]] || {};
+      var cur = d0.status || 'none';
+      /* Согласие, данное в анкете, переключателем не снимается: у записи есть версия
+         текста, время и адрес — это и есть доказательство. Кнопка «не отправлен»
+         стерла бы его молча, поэтому здесь стоит отметка, а не сегмент. */
+      var byPerson = dk[0] === 'pdn' && d0.version;
       return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + '</span>' +
-        /* сегмент — общий системный рецепт .pay-seg: та же логика «три состояния,
-           последнее хорошее», активное красится через data-v */
-        '<span class="pay-seg">' + CZ_DOC_ST.map(function (o) {
-          return '<button class="' + (cur === o[0] ? 'on' : '') + '" data-v="' + o[0] + '"' +
-            ' data-doc="' + dk[0] + '" data-st="' + o[0] + '">' + o[1] + '</button>';
-        }).join('') + '</span></div>';
+        (byPerson
+          ? '<span class="cz-doc-fixed"><span class="sev cz-ok">Принято в анкете</span>' +
+            (d0.signed_at ? '<span class="cz-doc-when">' + fmtWhen(d0.signed_at) + '</span>' : '') +
+            '</span>'
+          /* сегмент — общий системный рецепт .pay-seg: та же логика «три состояния,
+             последнее хорошее», активное красится через data-v */
+          : '<span class="pay-seg">' + CZ_DOC_ST.map(function (o) {
+              return '<button class="' + (cur === o[0] ? 'on' : '') + '" data-v="' + o[0] + '"' +
+                ' data-doc="' + dk[0] + '" data-st="' + o[0] + '">' + o[1] + '</button>';
+            }).join('') + '</span>') + '</div>';
     }).join('');
 
     modal.classList.remove('pchat-open');
@@ -2056,36 +2108,53 @@
         '<div class="m-navfloat"><button class="m-arrow" id="cz-x">' + ic('x', 14) + '</button></div>' +
         '<div class="m-ava">' + esc(initials(c.full_name)) + '</div>' +
         '<div class="m-id"><div class="m-name-row"><div class="m-name cz-name">' + esc(c.full_name) + '</div></div>' +
+          /* Подстрочник шапки говорит то, что уместно сейчас: у приглашенного нет ни
+             ИНН, ни проверок, и строка «ИНН не указан · проверен: ни разу» читалась бы
+             упреком человеку, который еще даже не открывал анкету. */
           '<div class="m-sub"><span class="sev ' + st.cls + '">' + st.label + '</span>' +
-            '<span class="dot-sep"></span><span>ИНН ' + esc(c.inn || 'не указан') + '</span>' +
-            '<span class="dot-sep"></span><span>проверен в налоговой: ' + esc(checked) + '</span>' +
+            (c.inn
+              ? '<span class="dot-sep"></span><span>ИНН ' + esc(c.inn) + '</span>' +
+                '<span class="dot-sep"></span><span>проверен в налоговой: ' + esc(checked) + '</span>'
+              : '<span class="dot-sep"></span><span>' +
+                (c.state === 'invited' ? 'ссылка на анкету отправлена' : 'ИНН не указан') + '</span>') +
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content" id="cz-content">' +
         readiness +
-        '<div class="m-sec"><div class="m-sec-h">Статус в налоговой' +
-          '<button class="hr" id="cz-check">Проверить сейчас</button></div>' +
-          '<div class="ab">' + czRow2('Сейчас', npdChip) +
-            czRow2('Тип занятости', c.employment === 'other' ? 'Другой' : 'Самозанятый') +
-            czRow2('Подключен', c.connected_at ? esc(czDate(c.connected_at)) : '—') +
-            czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
-        '</div>' +
-        history +
+        (c.submitted_at ? '' : invite) +
+        (c.inn
+          ? '<div class="m-sec"><div class="m-sec-h">Статус в налоговой' +
+              '<button class="hr" id="cz-check">Проверить сейчас</button></div>' +
+              '<div class="ab">' + czRow2('Сейчас', npdChip) +
+                czRow2('Тип занятости', c.employment === 'other' ? 'Другой' : 'Самозанятый') +
+                czRow2('Подключен', c.connected_at ? esc(czDate(c.connected_at)) : '—') +
+                czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
+            '</div>' + history
+          : '') +
         money +
-        '<div class="m-sec"><div class="m-sec-h">Контакты и ИНН</div><div class="cz-form">' +
+        /* Контакты ведем мы, ИНН и гражданство — нет: их человек указал в анкете.
+           Поэтому одни поля вводимые, другие показаны строками. Разная форма здесь
+           не украшение, а сообщение «это не твое поле». */
+        '<div class="m-sec"><div class="m-sec-h">Контакты</div><div class="cz-form">' +
           czField('full_name', 'ФИО', c.full_name, 'Как в паспорте') +
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
-          czField('inn', 'ИНН', c.inn, '12 цифр') +
-          czField('citizenship', 'Гражданство', c.citizenship, 'РФ') +
           czField('connected_at', 'Дата подключения', c.connected_at, '', 'date') +
         '</div></div>' +
-        '<div class="m-sec"><div class="m-sec-h">Реквизиты для выплаты</div><div class="cz-form">' +
-          czField('pay_account', 'Счет', c.pay_account, '20 цифр') +
-          czField('pay_bic', 'БИК', c.pay_bic, '9 цифр') +
-          czField('pay_bank', 'Банк', c.pay_bank, 'Т-Банк') +
-          czField('pay_receiver', 'Получатель', c.pay_receiver, 'если отличается от ФИО') +
-        '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Данные исполнителя</div>' +
+          (c.submitted_at
+            ? '<div class="ab">' + czRow2('ИНН', '<span class="num">' + esc(c.inn || '—') + '</span>') +
+                czRow2('Гражданство', esc(c.citizenship || '—')) +
+                czRow2('Счет', '<span class="num">' + esc(c.pay_account || '—') + '</span>') +
+                czRow2('БИК', '<span class="num">' + esc(c.pay_bic || '—') + '</span>') +
+                czRow2('Банк', esc(c.pay_bank || '—')) +
+                czRow2('Получатель', esc(c.pay_receiver || c.full_name)) + '</div>' +
+              '<div class="cz-src">Заполнил сам исполнитель ' + fmtWhen(c.submitted_at) +
+                '. Мы эти поля не правим: ИНН и счет — его данные и его ответственность.</div>'
+            : '<div class="field-empty">Человек еще не заполнил анкету — ИНН и реквизитов у нас нет. ' +
+              'Вписать их за него мы не можем: согласие на обработку данных дает он сам.</div>') +
+        '</div>' +
+        (c.submitted_at ? invite : '') +
         '<div class="m-sec"><div class="m-sec-h">Документы</div>' + docRows + '</div>' +
         '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
           '<textarea class="al-in al-ta" data-f="note" rows="3" placeholder="Что важно помнить об этом человеке">' + esc(c.note || '') + '</textarea>' +
@@ -2102,8 +2171,21 @@
       '</div>';
 
     el('cz-x').addEventListener('click', closeCz);
-    el('cz-check').addEventListener('click', czCheckNow);
+    var chk = el('cz-check');
+    if (chk) chk.addEventListener('click', czCheckNow);
     el('cz-save').addEventListener('click', czSave);
+    el('cz-reinv').addEventListener('click', function () {
+      if (c.submitted_at && !window.confirm(
+        'Выпустить новую ссылку? Человек заполнит анкету заново, прежние ИНН и реквизиты ' +
+        'останутся до тех пор, пока он не пришлет новые.')) return;
+      czReinvite(id);
+    });
+    var rv = el('cz-revoke');
+    if (rv) rv.addEventListener('click', function () {
+      if (window.confirm('Погасить ссылку? Человек больше не сможет открыть анкету, пока вы не выпустите новую.')) czRevoke(id);
+    });
+    var cp = el('cz-copy');
+    if (cp) cp.addEventListener('click', function () { copyText(link, cp); });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-f]'), function (inp) {
       inp.addEventListener('input', function () {
         var f = inp.getAttribute('data-f');
@@ -2158,6 +2240,22 @@
         showToast(e.message);
       });
   }
+  /* Ссылку выпускаем и гасим только через сервер: он же и решает, что теперь считать
+     действующим приглашением. Полный адрес приходит один раз — кладем его в CZ_LINKS,
+     чтобы кнопка «Скопировать» работала, пока оператор не ушел со страницы. */
+  function czReinvite(id) {
+    czSend('/admin/api/contractors/' + id + '/invite', 'POST')
+      .then(function (r) {
+        if (r.invite && r.invite.url) CZ_LINKS[id] = r.invite.url;
+        czAfter(r, 'Новая ссылка готова — скопируйте и отправьте');
+      })
+      .catch(function (e) { showToast(e.message); });
+  }
+  function czRevoke(id) {
+    czSend('/admin/api/contractors/' + id + '/invite/revoke', 'POST')
+      .then(function (r) { delete CZ_LINKS[id]; czAfter(r, 'Ссылка погашена'); })
+      .catch(function (e) { showToast(e.message); });
+  }
   function czPatch(id, body) {
     czSend('/admin/api/contractors/' + id, 'PATCH', body)
       .then(function (r) { czAfter(r, 'Сохранено'); })
@@ -2208,39 +2306,37 @@
       });
   }
 
-  /* ── завести исполнителя ── */
-  function openAddCz() {
+  /* ── пригласить исполнителя ───────────────────────────────────────────────
+     Заведения руками нет: ИНН, реквизиты и согласие на обработку данных за человека
+     не заполняют. Оператор дает то, что знает сам, — имя и контакт, — и получает
+     одноразовую ссылку на анкету. Полный адрес сервер показывает ровно один раз,
+     поэтому вторым шагом диалога стоит не «готово», а сама ссылка с кнопкой копии. */
+  function openInviteCz() {
     if (document.querySelector('.al-ov')) return;
     var ov2 = document.createElement('div');
     ov2.className = 'al-ov';
     ov2.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Новый исполнитель</div></div>' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Пригласить исполнителя</div></div>' +
           '<button class="al-x" id="cza-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">Хватит имени — остальное можно дозаполнить в карточке. Если укажете ИНН, статус самозанятого проверим в налоговой сразу.</div>' +
+        '<div class="al-sub">Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">ФИО <i>*</i></span>' +
-            '<input id="cza-name" class="al-in" placeholder="Как в паспорте" autocomplete="off" maxlength="120"></label>' +
+            '<input id="cza-name" class="al-in" placeholder="Как обращаетесь к человеку" autocomplete="off" maxlength="120"></label>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Телефон</span>' +
               '<input id="cza-phone" class="al-in" placeholder="+7 900 000-00-00" autocomplete="off" maxlength="30"></label>' +
             '<label class="al-f"><span class="al-l">Почта</span>' +
               '<input id="cza-mail" class="al-in" placeholder="name@mail.ru" autocomplete="off" maxlength="120"></label>' +
           '</div>' +
-          '<div class="al-row">' +
-            '<label class="al-f"><span class="al-l">ИНН</span>' +
-              '<input id="cza-inn" class="al-in" placeholder="12 цифр" autocomplete="off" maxlength="20"></label>' +
-            '<label class="al-f"><span class="al-l">Гражданство</span>' +
-              '<input id="cza-cit" class="al-in" placeholder="РФ" autocomplete="off" maxlength="40"></label>' +
-          '</div>' +
           '<label class="al-f"><span class="al-l">Заметка</span>' +
             '<textarea id="cza-note" class="al-in al-ta" rows="2" maxlength="500" placeholder="Что делает, откуда пришел, договоренности"></textarea></label>' +
         '</div>' +
         '<div class="al-foot">' +
           '<button class="al-cancel" id="cza-cancel">Отмена</button>' +
-          '<button class="bp al-save" id="cza-save">' + ic('plus', 14) + 'Добавить исполнителя</button>' +
+          '<button class="bp al-save" id="cza-save">' + ic('send', 14) + 'Выпустить ссылку</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(ov2);
@@ -2264,24 +2360,46 @@
       var name = (nameI.value || '').trim();
       if (!name) { nameI.classList.add('al-err'); nameI.focus(); return; }
       save.disabled = true; save.classList.add('loading');
-      czSend('/admin/api/contractors', 'POST', {
+      czSend('/admin/api/contractors/invite', 'POST', {
         full_name: name,
         phone: (el('cza-phone').value || '').trim() || null,
         email: (el('cza-mail').value || '').trim() || null,
-        inn: (el('cza-inn').value || '').trim() || null,
-        citizenship: (el('cza-cit').value || '').trim() || null,
         note: (el('cza-note').value || '').trim() || null,
-        source: 'manual',
       }).then(function (r) {
-        close();
-        CZ.list = null; CZ.detail[r.contractor.id] = { contractor: r.contractor, checks: [] };
-        showToast('Исполнитель добавлен: ' + name);
-        czLoad(function () { openCz(r.contractor.id); });
+        var cid = r.contractor.id;
+        CZ.list = null;
+        CZ.detail[cid] = { contractor: r.contractor, checks: [] };
+        if (r.invite && r.invite.url) CZ_LINKS[cid] = r.invite.url;
+        showLink(cid, name, (r.invite && r.invite.url) || '');
+        czLoad();
       }).catch(function (e) {
         save.disabled = false; save.classList.remove('loading');
         showToast(e.message);
       });
     };
+    /* Второй шаг того же диалога: ссылка крупно и кнопка копии. Закрывать окно сразу
+       нельзя — адрес больше нигде не появится, и оператор останется без него. */
+    function showLink(cid, who, url) {
+      ov2.querySelector('.al-card').innerHTML =
+        '<div class="al-head">' +
+          /* имя не склоняем — в заголовке «Ссылка для Иванова Мария» звучало бы косо;
+             имя стоит отдельной строкой, где падеж не нужен */
+          '<div><div class="al-eyebrow">Самозанятые · ' + esc(who) + '</div>' +
+            '<div class="al-title">Ссылка готова</div></div>' +
+          '<button class="al-x" id="czl-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Отправьте ее человеку — в телеграм, ватсап или смс. Он заполнит анкету сам, и карточка обновится. Ссылка одноразовая и действует неделю.</div>' +
+        '<div class="al-body"><div class="cz-inv-l big"><span class="cz-inv-u">' + esc(url) + '</span></div>' +
+          '<div class="cz-inv-h">Адрес показывается один раз: мы храним от него только отпечаток, подсмотреть потом нельзя. Потеряли — выпустите новую ссылку в карточке.</div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="czl-open">Открыть карточку</button>' +
+          '<button class="bp al-save" id="czl-copy">' + ic('copy', 14) + 'Скопировать ссылку</button>' +
+        '</div>';
+      el('czl-x').addEventListener('click', close);
+      el('czl-copy').addEventListener('click', function () { copyText(url, el('czl-copy')); });
+      el('czl-open').addEventListener('click', function () { close(); openCz(cid); });
+    }
     save.addEventListener('click', submit);
     nameI.addEventListener('input', function () { nameI.classList.remove('al-err'); });
     ov2.addEventListener('keydown', function (e) {
