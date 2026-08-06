@@ -1927,6 +1927,17 @@
       r.addEventListener('click', function () { openCz(r.getAttribute('data-cz')); });
     });
   }
+  // Телефон в списке приводим к одному виду: часть номеров заведена руками с
+  // пробелами, часть пришла из анкеты сплошными цифрами — вперемешку столбец
+  // выглядит как две разные системы.
+  function czPhone(raw) {
+    var d = String(raw || '').replace(/\D/g, '');
+    if (d.length === 11 && (d[0] === '7' || d[0] === '8')) {
+      return '+7 ' + d.slice(1, 4) + ' ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9);
+    }
+    return raw || '';
+  }
+
   function czRow(c) {
     var st = CZ_STATE[c.state] || CZ_STATE.new;
     // В списке показываем подписанные документы, а не доход: выплаты пойдут через
@@ -1946,7 +1957,7 @@
       : '<span class="cz-fine">ничего, можно ставить задания</span>';
     return '<div class="trow cz-grid' + (c.state === 'problem' || c.state === 'blocked' ? ' r-crit' : '') + '" data-cz="' + esc(c.id) + '">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(c.full_name) + '</div>' +
-        '<div class="t-sub">' + esc(c.phone || c.email || 'контакты не указаны') + '</div>' +
+        '<div class="t-sub">' + esc(czPhone(c.phone) || c.email || 'контакты не указаны') + '</div>' +
         // на узком экране колонка «что мешает» не помещается — та же строка уезжает
         // под имя, иначе на телефоне остаются одни многоточия
         '<div class="t-sub cz-mobprob' + pcls + '">' +
