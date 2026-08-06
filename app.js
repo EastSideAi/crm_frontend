@@ -2202,6 +2202,7 @@
           (c.submitted_at
             ? '<div class="ab">' + czRow2('ИНН', '<span class="num">' + esc(c.inn || '—') + '</span>') +
                 czRow2('Гражданство', esc(c.citizenship || '—')) +
+                czRow2('Адрес регистрации', esc(c.reg_address || '—')) +
                 czRow2('Счет', '<span class="num">' + esc(c.pay_account || '—') + '</span>') +
                 czRow2('БИК', '<span class="num">' + esc(c.pay_bic || '—') + '</span>') +
                 czRow2('Банк', esc(c.pay_bank || '—')) +
