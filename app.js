@@ -2008,6 +2008,13 @@
   function czRow2(k, v) {
     return '<div class="r"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>';
   }
+  /* Паспорт одной строкой: номер моноширинным, дата словами. Отдельными строками
+     «серия», «номер», «дата» карточка превратилась бы в анкету, а читают их вместе. */
+  function czPassport(c) {
+    if (!c.passport_no) return '—';
+    return '<span class="num">' + esc(c.passport_no) + '</span>' +
+      (c.passport_issued_at ? ' · выдан ' + esc(czDate(c.passport_issued_at)) : '');
+  }
   /* Поля карточки — на общем рецепте формы (.al-f/.al-l/.al-in), том же, что в форме
      заведения: третьего рецепта инпута в системе быть не должно. */
   function czField(f, label, val, ph, type) {
@@ -2202,10 +2209,14 @@
           (c.submitted_at
             ? '<div class="ab">' + czRow2('ИНН', '<span class="num">' + esc(c.inn || '—') + '</span>') +
                 czRow2('Гражданство', esc(c.citizenship || '—')) +
+                czRow2('Паспорт', czPassport(c)) +
+                czRow2('Кем выдан', esc(c.passport_issued_by || '—') +
+                  (c.passport_dept ? ' · код ' + esc(c.passport_dept) : '')) +
                 czRow2('Адрес регистрации', esc(c.reg_address || '—')) +
                 czRow2('Счет', '<span class="num">' + esc(c.pay_account || '—') + '</span>') +
                 czRow2('БИК', '<span class="num">' + esc(c.pay_bic || '—') + '</span>') +
                 czRow2('Банк', esc(c.pay_bank || '—')) +
+                (c.pay_corr ? czRow2('Корр. счет', '<span class="num">' + esc(c.pay_corr) + '</span>') : '') +
                 czRow2('Получатель', esc(c.pay_receiver || c.full_name)) + '</div>' +
               '<div class="cz-src">Заполнил сам исполнитель ' + fmtWhen(c.submitted_at) +
                 '. Мы эти поля не правим: ИНН и счет — его данные и его ответственность.</div>' +
