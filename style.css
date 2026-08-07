@@ -1815,7 +1815,9 @@ a { color: inherit; text-decoration: none; }
 #smenu.smenu-status button.cur { background: var(--fill); }
 #smenu.smenu-status button.cur .chk { opacity: 1; }
 
-#toast { position: fixed; left: 50%; transform: translate(-50%, 8px); bottom: 22px; z-index: 80;
+/* Тост всегда поверх всего: он объясняет, почему действие не прошло, и уезжать под
+   карточку ему нельзя — иначе отказ выглядит как «кнопка не работает». */
+#toast { position: fixed; left: 50%; transform: translate(-50%, 8px); bottom: 22px; z-index: 120;
   background: var(--black); color: #fff; border-radius: 13px; padding: 13px 18px;
   font: 600 13.5px 'Manrope', sans-serif; cursor: pointer;
   box-shadow: 0 16px 44px -12px rgba(15,19,32,.5);
