@@ -2720,7 +2720,9 @@
           his.map(btn).join('') + '</div>'
         : '');
 
-    var calc = ctNum(t.qty) + ' ' + esc(t.unit) + ' × ' + ctMoney(t.unit_price) + ' ₽';
+    /* «5 пост» звучит коряво, а склонять произвольную единицу («ролик», «час»,
+       «обращение») нечем — пишем нейтрально: 5 × 900 ₽ за пост. */
+    var calc = ctNum(t.qty) + ' × ' + ctMoney(t.unit_price) + ' ₽ за ' + esc(t.unit);
     var money =
       '<div class="ct-money">' +
         '<div class="ct-amt"><span class="ct-amt-k">К оплате по заданию</span>' +
@@ -2752,7 +2754,7 @@
       ['Период', esc(ctPeriod(t))],
       ['Место выполнения', esc(t.place || 'Удаленно')],
       ['Цена за единицу', ctMoney(t.unit_price) + ' ₽ за ' + esc(t.unit)],
-      ['Объем', ctNum(t.qty_plan) + ' ' + esc(t.unit) + ' по плану' +
+      ['Объем', ctNum(t.qty_plan) + ' по плану' +
         (t.qty_fact !== null && t.qty_fact !== undefined
           ? ' · ' + ctNum(t.qty_fact) + ' фактически' : '')],
     ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
@@ -2949,8 +2951,8 @@
     var total = function () {
       var q = Number(el('ctf-qty').value || 0), pr = Number(el('ctf-sum').value || 0);
       el('ctf-total').innerHTML = 'Итого по заданию: <b>' + ctMoney(q * pr) + ' ₽</b>' +
-        (q && pr ? ' · ' + ctNum(q) + ' ' + esc(el('ctf-unit').value || 'шт') +
-          ' × ' + ctMoney(pr) + ' ₽' : '');
+        (q && pr ? ' · ' + ctNum(q) + ' × ' + ctMoney(pr) + ' ₽ за ' +
+          esc(el('ctf-unit').value || 'шт') : '');
     };
     ['ctf-qty', 'ctf-sum', 'ctf-unit'].forEach(function (id) {
       el(id).addEventListener('input', total);
