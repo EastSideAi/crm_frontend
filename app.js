@@ -31,6 +31,7 @@
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
+    czMode: 'tasks',    // 'tasks' — задания, 'plans' — планы работ (одна страница, тумблер сверху)
     drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
@@ -1386,7 +1387,6 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
-    { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
@@ -1414,6 +1414,12 @@
     return 'crm';
   }
   function curSpace() { return spaceOf(state.page); }
+  /* «Задания» и «Планы работ» — одна страница с тумблером сверху, как «Диалоги» и
+     «Обсуждения». Разделами их разводить не стали (решение владельца от 2026-08-07):
+     смотрят на них по очереди одни и те же люди, а лишний пункт меню плодит беготню.
+     Экраны при этом остаются разными — план и задание не одно и то же (см. §10б). */
+  function czTasksOn() { return state.page === 'cztasks' && state.czMode !== 'plans'; }
+  function czPlansOn() { return state.page === 'cztasks' && state.czMode === 'plans'; }
   function navItems(space) {
     var s = space || curSpace();
     return NAV_ALL.filter(function (it) { return can(it.cap) && navSpace(it) === s; });
@@ -1539,6 +1545,29 @@
     var tb = el('tb-left');
     if (!tb) return;
     var c = counts();
+    /* «Задания» и «Планы работ» — две поверхности одного раздела, поэтому переключаются
+       там же, где сегменты у «Людей»: это контекст страницы, а не фильтр внутри списка.
+       На заданиях показываем счетчик сданного — это то, что ждет человека. */
+    if (state.page === 'cztasks') {
+      var wait = CT.stats && CT.stats.by_status ? (CT.stats.by_status.done || 0) : 0;
+      tb.innerHTML = '<nav class="tabs">' +
+        '<a class="tab' + (czPlansOn() ? '' : ' on') + '" data-cz="tasks">Задания' +
+          (wait ? '<span class="n num">' + wait + '</span>' : '') + '</a>' +
+        '<a class="tab' + (czPlansOn() ? ' on' : '') + '" data-cz="plans">Планы работ</a>' +
+      '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-cz]'), function (t) {
+        t.addEventListener('click', function () {
+          var m = t.getAttribute('data-cz');
+          if (m === state.czMode) return;
+          state.czMode = m;
+          // адрес отражает то, что на экране: скинуть коллеге ссылку именно на планы
+          // должно быть можно, а перезагрузка не должна возвращать не туда
+          syncHash(m === 'plans' ? 'czplans' : 'cztasks', 'page');
+          renderTopbar(); renderHead(); renderView();
+        });
+      });
+      return;
+    }
     if (state.page === 'leads') {
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
@@ -1699,7 +1728,7 @@
       html = '<div><h2>Исполнители</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase3 + '</span></div></div>';
     }
-    if (state.page === 'cztasks') {
+    if (czTasksOn()) {
       var cs = CT.stats;
       var phrase4;
       // Вердикт отвечает на вопрос оператора «за что мне сейчас браться», а не
@@ -1714,7 +1743,7 @@
       html = '<div><h2>Задания</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase4 + '</span></div></div>';
     }
-    if (state.page === 'czplans') {
+    if (czPlansOn()) {
       // Вердикт отвечает на вопрос «где дыра»: пустой период у исполнителя важнее, чем
       // проценты выполнения. И сразу напоминает границу — план это не деньги.
       var ps = PL.data ? plStats() : null;
@@ -1760,6 +1789,9 @@
     var view = el('view');
     if (!view) return;
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
+    // «Планы работ» больше не отдельный раздел — это вкладка внутри «Заданий». Ссылки
+    // вида #page/czplans уже разошлись по переписке, они обязаны открывать планы.
+    if (state.page === 'czplans') { state.page = 'cztasks'; state.czMode = 'plans'; }
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
     if (state.page === 'threads') { state.page = 'inbox'; state.inboxMode = 'threads'; }
@@ -1782,8 +1814,7 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'contractors') renderContractors(view);
-    else if (state.page === 'cztasks') renderCzTasks(view);
-    else if (state.page === 'czplans') renderCzPlans(view);
+    else if (state.page === 'cztasks') { if (czPlansOn()) renderCzPlans(view); else renderCzTasks(view); }
     else if (state.page === 'czservices') renderCzServices(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
@@ -1836,7 +1867,10 @@
      страницы, чтобы оператор мог скопировать ссылку не только в момент выпуска. */
   var CZ_LINKS = {};
   var CZ = { list: null, stats: null, err: '', q: '', filter: 'all', archived: false,
-             openId: null, detail: {}, dirty: {}, busy: false };
+             openId: null, detail: {}, dirty: {}, busy: false,
+             // work[id] — что у человека сейчас: план на текущую неделю и активные
+             // задания. Держим отдельно от карточки: это меняется чаще, чем ИНН
+             work: {} };
 
   /* Запрос с человеческим текстом ошибки. Бэкенд отвечает {"detail": "..."} — там
      фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
@@ -2041,6 +2075,23 @@
         if (CZ.openId === id) { closeCz(); showToast('Не удалось открыть карточку'); }
       });
     }
+    czWorkLoad(id);
+  }
+  /* Что у человека сейчас: план на текущую неделю и задания в работе. Два запроса, а не
+     одно поле в карточке, — потому что это две разные сущности и живут они по своим
+     правилам (план без денег, задание с деньгами). Не загрузилось — блок молчит, а не
+     врет пустотой: карточка нужна и без него. */
+  function czWorkLoad(id) {
+    var w = { plan: null, tasks: null, err: false };
+    CZ.work[id] = CZ.work[id] || w;
+    w = CZ.work[id];
+    var done = function () { if (CZ.openId === id) renderCzCard(); };
+    api('/admin/api/contractor-plans?period=week&contractor_id=' + encodeURIComponent(id))
+      .then(function (r) { w.plan = (r.plans && r.plans[0]) || false; done(); })
+      .catch(function () { w.err = true; done(); });
+    api('/admin/api/contractor-tasks?tab=active&contractor_id=' + encodeURIComponent(id))
+      .then(function (r) { w.tasks = r.tasks || []; done(); })
+      .catch(function () { w.err = true; done(); });
   }
   function closeCz() {
     CZ.openId = null; CZ.dirty = {};
@@ -2192,6 +2243,53 @@
             'Считаем только то, что выплатили через платформу.</div></div></div>'
       : '';
 
+    /* Что у человека сейчас. Обе стороны рядом и по-прежнему раздельно: слева от глаз
+       оператора план (чем занят), справа задания (за что платим). Приглашенному, который
+       еще не заполнил анкету, блок не показываем — работы у него быть не может. */
+    // null — «еще грузим», false/[] — «пусто». Первый рендер идет до запроса, и без
+    // явного null пустой объект читался бы как «данных нет».
+    var work = CZ.work[id] || { plan: null, tasks: null };
+    var wplan = work.plan, wtasks = work.tasks;
+    var planBlock = '';
+    // Работа есть — показываем всегда, даже если карточка не дозаполнена: скрыть
+    // существующие задания и план значит соврать. Прячем блок только у того, кому мы
+    // еще ничего не поручали и кто не заполнял анкету.
+    var hasWork = (wplan && wplan.items && wplan.items.length) || (wtasks && wtasks.length);
+    if (c.submitted_at || hasWork) {
+      var pit = wplan && wplan.items ? wplan.items : [];
+      planBlock =
+        '<div class="m-sec"><div class="m-sec-h">План на эту неделю' +
+          '<button class="hr" id="cz-goplans">Открыть планы</button></div>' +
+          (wplan === null
+            ? '<div class="field-empty">Загружаем…</div>'
+            : !pit.length
+              ? '<div class="field-empty">На эту неделю плана нет. План — это то, чем человек занят; ' +
+                'деньги идут отдельно, за задания.</div>'
+              : '<div class="cz-work">' + pit.map(function (it) {
+                  return '<div class="cz-w' + (it.done ? ' done' : '') + '">' +
+                    '<span class="cz-w-t">' + esc(it.title) + '</span>' +
+                    (it.task_id ? '<span class="cz-w-n">№' + it.task_number + '</span>'
+                                : (it.due ? '<span class="cz-w-d">' + esc(czDate(it.due)) + '</span>' : '')) +
+                  '</div>';
+                }).join('') + '</div>') +
+        '</div>' +
+        '<div class="m-sec"><div class="m-sec-h">Задания в работе</div>' +
+          (wtasks === null
+            ? '<div class="field-empty">Загружаем…</div>'
+            : !wtasks.length
+              ? '<div class="field-empty">Активных заданий нет.</div>'
+              : '<div class="cz-work">' + wtasks.map(function (t) {
+                  return '<div class="cz-w link" data-goct="' + t.id + '">' +
+                    '<span class="cz-w-n">№' + t.number + '</span>' +
+                    '<span class="cz-w-t">' + esc(t.title) + '</span>' +
+                    '<span class="ct-chip ' + (CT_ST[t.status] || 'ct-draft') + '">' +
+                      esc(t.status_title) + '</span>' +
+                    '<span class="cz-w-s num">' + ctMoney(t.amount) + ' ₽</span>' +
+                  '</div>';
+                }).join('') + '</div>') +
+        '</div>';
+    }
+
     var docRows = CZ_DOCS.map(function (dk) {
       var d0 = docs[dk[0]] || {};
       var cur = d0.status || 'none';
@@ -2241,6 +2339,7 @@
                 czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
             '</div>' + history
           : '') +
+        planBlock +
         money +
         /* Контакты ведем мы, ИНН и гражданство — нет: их человек указал в анкете.
            Поэтому одни поля вводимые, другие показаны строками. Разная форма здесь
@@ -2305,6 +2404,17 @@
     });
     var pi = el('cz-payinv');
     if (pi) pi.addEventListener('click', function () { czPayInvite(id); });
+    var gp = el('cz-goplans');
+    if (gp) gp.addEventListener('click', function () {
+      closeCz(); state.czMode = 'plans'; setPage('cztasks');
+    });
+    // из карточки человека — в само задание: модалка та же, меняется содержимое
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-goct]'), function (r) {
+      r.addEventListener('click', function () {
+        var tid = r.getAttribute('data-goct');
+        closeCz(); openCt(tid);
+      });
+    });
     var rv = el('cz-revoke');
     if (rv) rv.addEventListener('click', function () {
       if (window.confirm('Погасить ссылку? Человек больше не сможет открыть анкету, пока вы не выпустите новую.')) czRevoke(id);
@@ -2724,7 +2834,7 @@
         ctPut(t); renderCtCard();
         // карточку задания открывают и из планов — тогда обновлять надо тот список,
         // который человек видит за модалкой
-        if (state.page === 'czplans') plLoad(); else ctLoad();
+        if (czPlansOn()) plLoad(); else ctLoad();
       })
       .catch(function (e) { showToast(e.message); })
       .then(function () { CT.busy = false; });
@@ -2800,7 +2910,13 @@
       ['Объем', ctNum(t.qty_plan) + ' по плану' +
         (t.qty_fact !== null && t.qty_fact !== undefined
           ? ' · ' + ctNum(t.qty_fact) + ' фактически' : '')],
-    ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
+    ];
+    // Откуда задание выросло: работа из плана или разовое поручение. Строка появляется
+    // только у выросших из плана — «нет» тут писать не о чем.
+    if (t.from_plan) {
+      facts.push(['Из плана', esc(plPeriodName(t.from_plan.period, t.from_plan.starts_on))]);
+    }
+    facts = facts.map(function (r) { return czRow2(r[0], r[1]); }).join('');
 
     var text = ['Что нужно сделать', t.description, 'Что считается выполнением', t.result_req,
                 'Информация для исполнителя', t.info];
@@ -2884,7 +3000,7 @@
         qty_fact: qty, price_fact: price, correction: vals.why.trim() || undefined,
       }).then(function (r) {
         ctPut(r); renderCtCard(); close();
-        if (state.page === 'czplans') plLoad(); else ctLoad();
+        if (czPlansOn()) plLoad(); else ctLoad();
       })
         .catch(function (e) { showToast(e.message); });
       return null;
@@ -3234,18 +3350,37 @@
     if (period === 'month') d.setDate(1);
     return plIso(d);
   }
-  function plTitle() {
-    var s = PL.data.starts_on, e = PL.data.ends_on;
-    if (PL.period === 'day') return czDate(s);
-    if (PL.period === 'month') {
-      var m = /^(\d{4})-(\d{2})/.exec(s);
-      return PL_MON[Number(m[2]) - 1] + ' ' + m[1];
-    }
+  // месяц называем один раз, если неделя внутри одного месяца: «4 — 10 августа 2026»
+  function plRange(s, e) {
     var a = /^(\d{4})-(\d{2})-(\d{2})/.exec(s), b = /^(\d{4})-(\d{2})-(\d{2})/.exec(e);
-    // месяц называем один раз, если неделя внутри одного месяца: «4 — 10 августа 2026»
+    if (!a || !b) return czDate(s);
     return a[2] === b[2]
       ? Number(a[3]) + ' — ' + Number(b[3]) + ' ' + CZ_MON[Number(b[2]) - 1] + ' ' + b[1]
       : Number(a[3]) + ' ' + CZ_MON[Number(a[2]) - 1] + ' — ' + czDate(e);
+  }
+  /* Конец периода по его началу. Сервер отдает ends_on для открытого экрана, но карточка
+     задания знает про свой план только период и его начало — считаем на месте. */
+  function plEnds(period, s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (!m) return s;
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12);
+    if (period === 'week') d.setDate(d.getDate() + 6);
+    else if (period === 'month') { d.setMonth(d.getMonth() + 1); d.setDate(0); }
+    return plIso(d);
+  }
+  /* Название периода для чужих экранов: «неделя 3 — 9 августа 2026», «Август 2026». */
+  function plPeriodName(period, s) {
+    if (period === 'day') return czDate(s);
+    if (period === 'month') {
+      var m = /^(\d{4})-(\d{2})/.exec(s);
+      return m ? PL_MON[Number(m[2]) - 1] + ' ' + m[1] : czDate(s);
+    }
+    return 'неделя ' + plRange(s, plEnds('week', s));
+  }
+  function plTitle() {
+    if (PL.period === 'day') return czDate(PL.data.starts_on);
+    if (PL.period === 'month') return plPeriodName('month', PL.data.starts_on);
+    return plRange(PL.data.starts_on, PL.data.ends_on);
   }
   function plArrow(back) {
     return '<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" ' +
@@ -3256,13 +3391,13 @@
     var p = '/admin/api/contractor-plans?period=' + PL.period + (PL.on ? '&on=' + PL.on : '');
     api(p).then(function (r) {
       PL.data = r; PL.err = '';
-      if (state.page === 'czplans') renderAll();
+      if (czPlansOn()) renderAll();
       if (cb) cb(true);
     }).catch(function (e) {
       if (e.message === '403') return;
       PL.data = PL.data || { plans: [], people: [] };
       PL.err = 'Не удалось загрузить планы. Проверьте связь и обновите страницу.';
-      if (state.page === 'czplans') renderAll();
+      if (czPlansOn()) renderAll();
       if (cb) cb(false);
     });
   }
@@ -9540,7 +9675,14 @@
      ссылку могли переслать тому, у кого нет cap. */
   function openPageFromHash() {
     var p = hashRouteId('page');
-    if (!p || p === state.page) return false;
+    if (!p) return false;
+    // старая ссылка на планы: раздела с таким id больше нет, но ссылка должна работать
+    if (p === 'czplans' && can('contractors')) {
+      state.czMode = 'plans';
+      if (state.page === 'cztasks') { renderTopbar(); renderHead(); renderView(); } else setPage('cztasks');
+      return true;
+    }
+    if (p === state.page) return false;
     for (var i = 0; i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === p && can(NAV_ALL[i].cap)) { setPage(p); return true; }
     }
@@ -9571,6 +9713,7 @@
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
     var hp = hashRouteId('page');
+    if (hp === 'czplans') { hp = 'cztasks'; state.czMode = 'plans'; }
     for (var i = 0; hp && i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === hp && can(NAV_ALL[i].cap)) { state.page = hp; break; }
     }
