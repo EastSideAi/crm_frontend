@@ -38,16 +38,19 @@
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
+    tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
+    taskMe: null, tasksLoading: false,
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
     try {
       localStorage.setItem(UI_LS, JSON.stringify({
-        page: state.page, seg: state.seg, viewMode: state.viewMode, filters: state.filters,
+        page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
       }));
     } catch (e) {}
@@ -302,6 +305,10 @@
      из пуша попадаешь сразу в разговор, а не в общий список. */
   function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
   function hashDialogId() { return hashRouteId('dialog'); }
+  /* #task/<id> — прямая ссылка на задачу: по такой ссылке ведет кнопка из бота. */
+  function hashTaskId() { return hashRouteId('task'); }
+  /* #page/<id> — ссылка на раздел целиком (кнопка «Открыть задачи» в сводке бота). */
+  function hashPageId() { return hashRouteId('page'); }
   /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
      хэш-функция строки ниже по файлу, и одноимённое объявление её перетирало. */
   function hashRouteId(kind) {
@@ -1426,28 +1433,31 @@
      Возможности (caps) = что роль видит/делает. Роль = набор caps. Чтобы добавить
      новый блок: (1) заведи cap в CAP_ALL, (2) добавь его нужным ролям ниже,
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
+  // tasks — свои задачи, есть у КАЖДОГО: работа, которой нет в системе, не видна
+  // никому. tasks_all — видеть и вести задачи всей команды, это управленческое
+  // право, а не рабочее. Зеркало ROLE_CAPS на бэкенде (routers/admin.py).
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance'] },
-    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance'] },
+    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'grants', 'products'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students'] },
     // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
     // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'inbox', 'clients', 'students'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'students'] },
-    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
-    partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
-    contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash'] },
-    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'clients', 'analytics'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students'] },
-    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'grants', 'clients'] },
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students'] },
+    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students'] },
+    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing'] },
+    partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
+    contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
+    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students'] },
+    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
-    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
+    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients'] },
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
   function can(cap) { return roleInfo().caps.indexOf(cap) !== -1; }
@@ -1455,6 +1465,7 @@
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
+    { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
@@ -1482,6 +1493,12 @@
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
         else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="ждут ответа">' + ho + '</span>';
+        // Задачи: красный бейдж только на просроченном — иначе цифра горит всегда
+        // и перестает что-либо значить.
+        else if (it.id === 'tasks' && state.taskSum && state.taskSum.overdue)
+          extra = '<span class="bdg num" title="просрочено">' + state.taskSum.overdue + '</span>';
+        else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
+          extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -1529,6 +1546,7 @@
     saveUi();
     renderAll();
     if (p === 'finance') fetchFinance(false, function () { if (state.page === 'finance') { renderHead(); renderView(); } });
+    if (p === 'tasks') { state.tasks = null; loadTaskSummary(); }
     window.scrollTo(0, 0);
     var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
@@ -1553,6 +1571,21 @@
           // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — при входе/выходе перезагружаем список
           if (state.seg === 'archive' || prev === 'archive') loadLeads(false);
           else { renderTopbar(); renderHead(); renderView(); }
+        });
+      });
+    } else if (state.page === 'tasks') {
+      var tsegs = taskSegs();
+      tb.innerHTML = '<nav class="tabs">' + tsegs.map(function (k) {
+        var n = k === 'accept' && state.taskSum ? state.taskSum.to_accept : 0;
+        return '<a class="tab' + (taskSeg() === k ? ' on' : '') + '" data-tseg="' + k + '">' +
+          TASK_SEGS[k].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.taskSeg = t.getAttribute('data-tseg');
+          state.tasks = null;
+          saveUi();
+          renderTopbar(); renderHead(); renderView();
         });
       });
     } else if (state.page === 'path') {
@@ -1666,6 +1699,16 @@
         (w2 ? ' Самый большой провал — <b>«' + esc(w2.step.label) + '»</b>: минус ' + Math.round(w2.pct * 100) + '% дошедших. Кликни по шагу — увидишь, кто ушел.' : '') +
         '</span></div></div>';
     }
+    if (state.page === 'tasks') {
+      var ts = state.taskSum, tphr;
+      if (!ts) tphr = 'Смотрю, что на тебе.';
+      else if (ts.overdue) tphr = '<b>' + ts.overdue + ' ' + plural(ts.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '.</b> Начни с них — они выше в списке.';
+      else if (ts.to_accept) tphr = 'Просрочки нет. Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
+      else if (ts.open) tphr = 'Все в срок: <b>' + ts.open + '</b> ' + plural(ts.open, 'открытая задача', 'открытые задачи', 'открытых задач') + '.';
+      else tphr = 'Открытых задач нет.';
+      html = '<div><h2>Задачи</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>';
+    }
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
     }
@@ -1719,6 +1762,7 @@
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
+    else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -1744,6 +1788,415 @@
       '<div class="stub-s">' + esc(STUB_TEXT[state.page] || 'Раздел в разработке.') + '</div>' +
       '<div class="stub-tag">' + ic('spark', 12) + 'В разработке</div></div>';
   }
+  /* ── ЗАДАЧИ КОМАНДЫ ─────────────────────────────────────────────────────────
+     Рабочий стол сотрудника: что на мне сегодня, что просрочено, что я жду от
+     других. Задача живет по правилу «вести может исполнитель, принять — только
+     постановщик»: пока постановщик не принял, задача не сделана.
+
+     Это НЕ Задания самозанятых (пространство cz): там сумма, акт и налоговая.
+     Денег здесь нет намеренно — см. шапку миграции 065_staff_tasks.sql. */
+  var TASK_ST = {
+    wait:   { label: 'поставлена',   cls: 'st-wait' },
+    doing:  { label: 'в работе',     cls: 'st-doing' },
+    review: { label: 'на приемке',   cls: 'st-review' },
+    done:   { label: 'принята',      cls: 'st-done' },
+    return: { label: 'вернули',      cls: 'st-return' },
+    block:  { label: 'заблокирована', cls: 'st-block' },
+    cancel: { label: 'отменена',     cls: 'st-cancel' },
+  };
+  var TASK_SEGS = {
+    today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
+    week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
+    mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
+    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
+    team:   { label: 'Вся команда', view: 'open',   scope: 'all',    cap: 'tasks_all', hint: 'кто чем занят прямо сейчас' },
+    done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
+  };
+  function taskSegs() {
+    return Object.keys(TASK_SEGS).filter(function (k) {
+      return !TASK_SEGS[k].cap || can(TASK_SEGS[k].cap);
+    });
+  }
+  function taskSeg() {
+    var s = state.taskSeg;
+    return TASK_SEGS[s] && taskSegs().indexOf(s) !== -1 ? s : 'today';
+  }
+
+  /* Дата через N дней в формате поля <input type=date> (местный день, не UTC:
+     иначе вечером 7-го «сегодня» превращается в 8-е). */
+  function isoDay(plus) {
+    var d = new Date();
+    d.setDate(d.getDate() + (plus || 0));
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  /* Срок словами. Просрочку считает сервер (поле overdue) — здесь только подпись. */
+  function dueLabel(t) {
+    if (!t.due_at) return { text: 'без срока', cls: 'due-none' };
+    var d = new Date(t.due_at), now = new Date();
+    var day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diff = Math.round((day - today) / 86400000);
+    if (t.overdue) {
+      var n = -diff;   // просрочка внутри того же дня — просто «просрочена»
+      return { text: n < 1 ? 'просрочена' : 'просрочена на ' + n + ' ' + plural(n, 'день', 'дня', 'дней'),
+               cls: 'due-over' };
+    }
+    if (diff === 0) return { text: 'сегодня', cls: 'due-now' };
+    if (diff === 1) return { text: 'завтра', cls: 'due-soon' };
+    if (diff < 0) return { text: dayLabel(t.due_at), cls: '' };
+    return { text: d.getDate() + ' ' + MONTHS_RU[d.getMonth()], cls: '' };
+  }
+
+  function loadTasks(cb) {
+    var seg = TASK_SEGS[taskSeg()];
+    state.tasksLoading = true;
+    api('/admin/api/tasks?view=' + seg.view + '&scope=' + seg.scope).then(function (r) {
+      state.tasksLoading = false;
+      state.tasks = (r && r.tasks) || [];
+      state.taskMe = r ? r.me : null;
+      if (cb) cb();
+      else if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.tasks = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  /* Счетчики для бейджа в навигации — дешевый запрос, дергаем отдельно от списка. */
+  function loadTaskSummary(cb) {
+    if (!can('tasks')) return;
+    api('/admin/api/tasks/summary').then(function (r) {
+      state.taskSum = r || null;
+      if (cb) cb(); else renderSide();
+    }).catch(function () {});
+  }
+  function loadTaskPeople(cb) {
+    if (state.taskPeople) { cb(state.taskPeople); return; }
+    api('/admin/api/tasks/people').then(function (r) {
+      state.taskPeople = (r && r.people) || [];
+      cb(state.taskPeople);
+    }).catch(function () { cb([]); });
+  }
+
+  function renderTasks(view) {
+    if (state.tasks === null) {
+      view.innerHTML = dashSkeleton();
+      loadTasks();
+      return;
+    }
+    if (state.tasks === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
+      return;
+    }
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = state.tasks.filter(function (t) {
+      if (!q) return true;
+      return (t.title + ' ' + (t.assignee_name || '') + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+    var seg = taskSeg();
+    var showWho = TASK_SEGS[seg].scope !== 'my';
+
+    var rows = list.map(function (t) {
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var due = dueLabel(t);
+      return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+          '<div class="t-sub">' + esc(showWho ? (t.author_name ? 'поставил ' + t.author_name : 'без постановщика')
+            : (t.author_name ? 'поставил ' + t.author_name : '')) +
+            (t.client_name ? (t.author_name ? ' · ' : '') + esc(t.client_name) : '') + '</div></div>' +
+        '<div class="tsk-who">' + (t.assignee_name
+          ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
+          : '<span class="tsk-nobody">не назначена</span>') + '</div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Задача, человек, ученик" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (list.length
+          ? '<div class="trow tsk-grid thead"><span class="th">Задача</span><span class="th">Исполнитель</span>' +
+            '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows
+          : '<div class="empty">' + esc(emptyTasksText(seg)) + '</div>') +
+      '</div></div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+  }
+  function emptyTasksText(seg) {
+    if (seg === 'today') return 'На сегодня задач нет. Это нормально, а не ошибка.';
+    if (seg === 'accept') return 'Никто ничего не сдал на приемку.';
+    if (seg === 'done') return 'Закрытых задач пока нет.';
+    if (seg === 'team') return 'У команды нет открытых задач.';
+    return 'Задач нет.';
+  }
+
+  /* ── Карточка задачи ───────────────────────────────────────────────────────
+     Одна лента: смены статуса, переназначения, сдвиги срока и реплики людей
+     вперемешку по времени. Спор «когда перенесли срок» решается этой лентой. */
+  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads', due: 'cal', remind: 'bell' };
+
+  function openTask(id) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
+      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      if (location.hash.indexOf('#task/') === 0) history.replaceState(null, '', location.pathname + location.search);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
+
+    var draw = function (data) {
+      var t = data.task, events = data.events || [];
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var due = dueLabel(t);
+      var me = state.taskMe;
+      var isAssignee = me != null && me === t.assignee_id;
+      var isAuthor = me != null && me === t.author_id;
+      var boss = isAuthor || can('tasks_all');
+
+      // Кнопки — только те, что человек реально может нажать: серые запрещенные
+      // кнопки учат тыкать наугад и получать отказ.
+      var acts = [];
+      if (isAssignee && (t.status === 'wait' || t.status === 'return')) acts.push(['doing', 'Взять в работу', 'bp']);
+      if (isAssignee && t.status === 'doing') acts.push(['review', 'Сдать на проверку', 'bp']);
+      if (isAssignee && (t.status === 'doing' || t.status === 'wait')) acts.push(['block', 'Жду чужого действия', 'al-cancel']);
+      if (isAssignee && t.status === 'block') acts.push(['doing', 'Разблокировать', 'bp']);
+      // Принять можно ТОЛЬКО сданное. Кнопка «принять» на несданной задаче
+      // отменяет приемку как явление — а ее у команды как раз и не было.
+      if (boss && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
+      if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
+
+      var feed = events.map(function (e) {
+        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
+          '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
+          '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
+          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) + '</div></div></div>';
+      }).join('');
+
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Задача' + (t.client_name ? ' · ' + esc(t.client_name) : '') + '</div>' +
+            '<div class="al-title">' + esc(t.title) + '</div></div>' +
+          '<button class="al-x" id="tk-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="tsk-meta">' +
+          '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
+          '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
+          '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
+          (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
+        '</div>' +
+        '<div class="al-body">' +
+          (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
+          (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
+          '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
+            '<button type="button" id="tk-retx">не возвращать</button></div>' +
+          '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
+            '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+        '</div>' +
+        (acts.length ? '<div class="al-foot tsk-acts">' + acts.map(function (a) {
+          return '<button class="' + a[2] + '" data-act="' + a[0] + '">' + esc(a[1]) + '</button>';
+        }).join('') + '</div>' : '');
+
+      el('tk-x').addEventListener('click', close);
+
+      var say = el('tk-say');
+      var body = ov.querySelector('.al-body');
+      var retBar = el('tk-ret');
+      // Возврат = причина возврата. Она такой же текст обсуждения, как и
+      // комментарий, поэтому пишется в том же поле, а не в системном окне
+      // поверх карточки.
+      var retMode = false;
+      var setRet = function (on) {
+        retMode = on;
+        retBar.hidden = !on;
+        ov.querySelector('.tsk-say').classList.toggle('ret', on);
+        say.placeholder = on ? 'Что доделать?' : 'Написать по задаче';
+        if (on) { say.focus(); body.scrollTop = body.scrollHeight; }
+      };
+      el('tk-retx').addEventListener('click', function () { setRet(false); });
+
+      var setStatus = function (to, why, btn) {
+        if (btn) btn.disabled = true;
+        apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
+          state.tasks = null;
+          loadTaskSummary();
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          if (state.page === 'tasks') renderView();
+          showToast(to === 'done' ? 'Задача принята' : to === 'return' ? 'Вернули исполнителю' : 'Статус обновлен');
+        }, function (code) {
+          if (btn) btn.disabled = false;
+          showToast(code === 403 ? 'Принять или вернуть может только тот, кто поставил задачу' : 'Не получилось');
+        });
+      };
+
+      var send = function () {
+        var text = (say.value || '').trim();
+        if (!text) { if (retMode) say.focus(); return; }
+        say.value = '';
+        if (retMode) { setRet(false); setStatus('return', text); return; }
+        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
+          if (!r || !r.events) return;
+          draw({ task: t, events: r.events });
+          // Свое сообщение человек должен увидеть: карточка перерисовалась и
+          // прокрутка сбросилась наверх.
+          var again = ov.querySelector('.al-body');
+          if (again) again.scrollTop = again.scrollHeight;
+        }, function () { showToast('Сообщение не ушло — проверь интернет'); });
+      };
+      el('tk-send').addEventListener('click', send);
+      say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
+        b.addEventListener('click', function () {
+          var to = b.getAttribute('data-act');
+          if (to === 'return') { setRet(true); return; }
+          if (to === 'cancel' && !confirm('Отменить задачу? Она уйдет из всех списков.')) return;
+          setStatus(to, '', b);
+        });
+      });
+    };
+
+    api('/admin/api/tasks/' + id).then(draw).catch(function () {
+      ov.querySelector('.al-card').innerHTML = '<div class="al-head"><div><div class="al-title">Задача не найдена</div></div>' +
+        '<button class="al-x" id="tk-x">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Возможно, она отменена или закрыта для тебя.</div>';
+      el('tk-x').addEventListener('click', close);
+    });
+  }
+
+  /* Постановка. Три поля обязательны по смыслу: кому, к какому сроку и что
+     считается сделанным. Без последнего задача сдается «как понял» и возвращается
+     по кругу — это ровно та боль, из-за которой модуль и появился. */
+  function openNewTask(preset) {
+    if (document.querySelector('.al-ov')) return;
+    preset = preset || {};
+    loadTaskPeople(function (people) {
+      var opts = '<option value="">— выбери человека —</option>' + people.map(function (p) {
+        return '<option value="' + p.id + '"' + (String(preset.assignee_id) === String(p.id) ? ' selected' : '') + '>' +
+          esc(p.name || p.login) + (p.linked ? '' : ' (не в боте)') + '</option>';
+      }).join('');
+      var ov = document.createElement('div');
+      ov.className = 'al-ov';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head">' +
+            '<div><div class="al-eyebrow">Задачи</div><div class="al-title">Новая задача</div></div>' +
+            '<button class="al-x" id="nt-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+          '</div>' +
+          '<div class="al-sub">Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.</div>' +
+          '<div class="al-body">' +
+            '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
+              '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
+            '<label class="al-f"><span class="al-l">Кому <i>*</i></span><span class="al-selwrap">' +
+              '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
+            '<div class="al-f"><span class="al-l">Срок</span>' +
+              '<span class="due-seg">' + [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']].map(function (o) {
+                return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
+              }).join('') + '</span>' +
+              '<input id="nt-due" class="al-in" type="date" value="' + esc(preset.due || isoDay(1)) + '"></div>' +
+            '<label class="al-f"><span class="al-l">Подробности</span>' +
+              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="Что важно знать, ссылки, контекст"></textarea></label>' +
+            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
+              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="По чему поймем, что задача закрыта"></textarea></label>' +
+          '</div>' +
+          '<div class="al-foot">' +
+            '<button class="al-cancel" id="nt-cancel">Отмена</button>' +
+            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) + 'Поставить задачу</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') close(); };
+      document.addEventListener('keydown', onKey);
+      el('nt-x').addEventListener('click', close);
+      el('nt-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var ti = el('nt-title');
+      setTimeout(function () { ti.focus(); }, 30);
+      ti.addEventListener('input', function () { ti.classList.remove('al-err'); });
+      // Быстрые сроки: руками дату ставят редко, а задача без срока — ровно та
+      // болезнь, ради которой раздел и появился. По умолчанию стоит завтра.
+      var dueI = el('nt-due');
+      var markWhen = function () {
+        Array.prototype.forEach.call(ov.querySelectorAll('[data-day]'), function (c) {
+          c.classList.toggle('on', dueI.value === isoDay(+c.getAttribute('data-day')));
+        });
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-day]'), function (c) {
+        c.addEventListener('click', function () { dueI.value = isoDay(+c.getAttribute('data-day')); markWhen(); });
+      });
+      dueI.addEventListener('change', markWhen);
+      markWhen();
+
+      var save = el('nt-save');
+      save.addEventListener('click', function () {
+        var title = (ti.value || '').trim();
+        if (!title) { ti.classList.add('al-err'); ti.focus(); return; }
+        var who = el('nt-who').value;
+        if (!who) { showToast('Выбери, кому ставим задачу'); return; }
+        var day = el('nt-due').value;
+        // Срок = конец выбранного дня: «до 12 августа» человек понимает как
+        // «весь день 12-го мой», а не «до полуночи с 11-го на 12-е».
+        var due = day ? new Date(day + 'T23:59:59').toISOString() : null;
+        save.disabled = true; save.classList.add('loading');
+        apiSend('/admin/api/tasks', 'POST', {
+          title: title, assignee_id: +who, due_at: due,
+          details: (el('nt-det').value || '').trim(),
+          result_expect: (el('nt-res').value || '').trim(),
+          session_id: preset.session_id || null,
+        }, function () {
+          close();
+          state.tasks = null;
+          loadTaskSummary();
+          if (state.page === 'tasks') renderView();
+          showToast('Задача поставлена');
+        }, function () {
+          save.disabled = false; save.classList.remove('loading');
+          showToast('Не получилось поставить задачу');
+        });
+      });
+    });
+  }
+
   /* ── Команда и роли (Super Admin) ── */
   /* ── КОМАНДА: личные учетки вместо общих ──────────────────────────────────
      Пароль сотруднику не придумываем и не пересылаем: заводим учетку → выдаем
@@ -1786,9 +2239,11 @@
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль решает, что человек видит; вход — по личной ссылке, пароль он задает сам</div></div>' +
+      '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
       '<button class="bp sm" id="tm-add">' + ic('plus', 14) + 'Добавить сотрудника</button></div>' +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока никого нет.</div>') + '</div></div>';
     el('tm-add').addEventListener('click', openAddStaff);
+    el('tm-tg').addEventListener('click', openBotLinks);
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
@@ -1823,6 +2278,85 @@
           if (state.page === 'team') renderView();
         });
       });
+    });
+  }
+
+  /* ── Подключение команды к боту задач ──────────────────────────────────────
+     Telegram не дает боту написать первым: пока человек не нажал «Старт» по
+     СВОЕЙ ссылке, напоминания ему физически некуда слать. Поэтому здесь список
+     «кто подключился, кто нет» и личная ссылка на каждого — их рассылает
+     руководитель. Продавить людей нажать может только он, не бот. */
+  function openBotLinks() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
+      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    api('/admin/api/tasks/tg/links').then(function (r) {
+      var links = (r && r.links) || [];
+      var off = links.filter(function (x) { return !x.linked; });
+      // Бот вообще не настроен — тогда действия на этом экране нет, и повторять
+      // это в каждой строке незачем: говорим один раз наверху.
+      var noBot = links.length > 0 && !links.some(function (x) { return x.link; });
+      // Неподключенные наверх: список открывают ради них, а не ради галочек.
+      links = links.slice().sort(function (a, b) { return (a.linked ? 1 : 0) - (b.linked ? 1 : 0); });
+      var rows = links.map(function (x) {
+        return '<div class="tgl-row' + (x.linked ? ' on' : '') + '">' +
+          '<span class="tsk-av">' + esc(initials(x.name || x.login)) + '</span>' +
+          '<div class="tgl-i"><div class="tgl-n">' + esc(x.name || x.login) + '</div>' +
+            '<div class="tgl-s">' + (x.linked
+              ? 'подключен' + (x.tg_username ? ' · @' + esc(x.tg_username) : '')
+              // Пока бота нет, «не нажал Старт» — не про человека, а про бота:
+              // об этом уже сказано наверху, в строке показываем роль.
+              : noBot ? esc((ROLES[x.role] && ROLES[x.role].label) || x.role || '')
+                : 'не нажал «Старт» — напоминания не идут') + '</div></div>' +
+          (x.link
+            ? '<button class="icobtn" data-cp="' + esc(x.link) + '" title="Скопировать личную ссылку">' + ic('copy', 15) + '</button>'
+            : '') +
+        '</div>';
+      }).join('');
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head"><div><div class="al-eyebrow">Команда</div>' +
+          '<div class="al-title">Бот задач</div></div>' +
+          '<button class="al-x" id="tg-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">' + (noBot
+          ? 'Бот задач еще не подключен — личных ссылок нет, напоминания не уходят никому. Скажи об этом мне, я подключу.'
+          : off.length
+            ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
+              ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
+            : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
+        '<div class="al-body"><div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
+          (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
+        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
+      el('tg-x').addEventListener('click', close);
+      el('tg-close').addEventListener('click', close);
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-cp]'), function (b) {
+        b.addEventListener('click', function () {
+          copyText(b.getAttribute('data-cp'));
+          showToast('Ссылка скопирована — отправь ее лично этому человеку');
+        });
+      });
+    }).catch(function () {
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +
+        '<button class="al-x" id="tg-x">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Список ссылок доступен только тем, кто ведет команду.</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
+      el('tg-x').addEventListener('click', close);
+      el('tg-close').addEventListener('click', close);
     });
   }
 
@@ -7939,11 +8473,26 @@
     state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
     saveUi(); renderSide(); renderTopbar(); renderView();
   }
+  /* ссылка на задачу: #task/<id> — открываем карточку задачи поверх любой страницы.
+     Такую ссылку присылает бот в напоминании: человек жмет и сразу видит дело. */
+  function openTaskFromHash() {
+    var tid = hashTaskId();
+    if (!tid || document.querySelector('.al-ov')) return;
+    if (!can('tasks')) return;
+    openTask(+tid);
+  }
+  function openPageFromHash() {
+    var pg = hashPageId();
+    if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
+    setPage(pg);
+  }
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();
     if (id) openFromHash();
     else if (hashDialogId()) openDialogFromHash();
+    else if (hashTaskId()) openTaskFromHash();
+    else if (hashPageId()) openPageFromHash();
     else if (state.drawerId) closeDrawer();
   });
   function startApp() {
@@ -7955,6 +8504,10 @@
     // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
     loadLeads(false, openFromHash);
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
+    // счетчик задач нужен бейджу в меню сразу, до открытия раздела
+    loadTaskSummary();
+    if (hashTaskId()) openTaskFromHash();
+    else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
