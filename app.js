@@ -1386,6 +1386,7 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
+    { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
@@ -1713,6 +1714,22 @@
       html = '<div><h2>Задания</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase4 + '</span></div></div>';
     }
+    if (state.page === 'czplans') {
+      // Вердикт отвечает на вопрос «где дыра»: пустой период у исполнителя важнее, чем
+      // проценты выполнения. И сразу напоминает границу — план это не деньги.
+      var ps = PL.data ? plStats() : null;
+      var phrase6;
+      if (!ps) phrase6 = 'Загружаю планы…';
+      else if (!ps.people) phrase6 = 'Исполнителей пока нет — планировать некому.';
+      else if (ps.empty) phrase6 = 'У <b>' + ps.empty + ' ' + plural(ps.empty, 'человека', 'человек', 'человек') +
+        '</b> на этот период плана нет. Начните с них.';
+      else if (!ps.items) phrase6 = 'Планы пусты. План — это то, чем человек занят; деньги идут за задания.';
+      else phrase6 = 'Сделано <b>' + ps.done + ' из ' + ps.items + '</b> ' +
+        plural(ps.items, 'пункта', 'пунктов', 'пунктов') +
+        (ps.tasks ? ', в задания превращено <b>' + ps.tasks + '</b>' : '') + '.';
+      html = '<div><h2>Планы работ</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('cal', 13) + '</span><span>' + phrase6 + '</span></div></div>';
+    }
     if (state.page === 'czservices') {
       // Каталог — прайс, а не заказ: вердикт напоминает, что цена задания живет в самом
       // задании, иначе правка каталога кажется правкой уже согласованных сумм.
@@ -1764,6 +1781,7 @@
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
+    else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
@@ -2700,7 +2718,12 @@
     if (CT.busy) return;
     CT.busy = true;
     czSend('/admin/api/contractor-tasks/' + id + '/status', 'POST', { to: to, reason: reason })
-      .then(function (t) { ctPut(t); renderCtCard(); ctLoad(); })
+      .then(function (t) {
+        ctPut(t); renderCtCard();
+        // карточку задания открывают и из планов — тогда обновлять надо тот список,
+        // который человек видит за модалкой
+        if (state.page === 'czplans') plLoad(); else ctLoad();
+      })
       .catch(function (e) { showToast(e.message); })
       .then(function () { CT.busy = false; });
   }
@@ -2857,7 +2880,10 @@
       }
       czSend('/admin/api/contractor-tasks/' + t.id, 'PATCH', {
         qty_fact: qty, price_fact: price, correction: vals.why.trim() || undefined,
-      }).then(function (r) { ctPut(r); renderCtCard(); ctLoad(); close(); })
+      }).then(function (r) {
+        ctPut(r); renderCtCard(); close();
+        if (state.page === 'czplans') plLoad(); else ctLoad();
+      })
         .catch(function (e) { showToast(e.message); });
       return null;
     }, function (vals) {
@@ -3179,9 +3205,254 @@
     setTimeout(function () { el('sv-title').focus(); }, 30);
   }
 
+  /* ── ПЛАНЫ РАБОТ (модуль самозанятых, вторая половина этапа 2) ─────────────
+     План отвечает на вопрос «что человек делает на этой неделе», задание — «за что мы
+     платим». Это разные сущности, и здесь денег нет вообще: ни цены, ни количества, ни
+     суммы. Единственный переход к оплате — превращение пункта в задание, и цена
+     появляется уже у задания.
+
+     Так и в договоре (пп. 1.1.2 и 1.1.3): перечень ежедневных поручений в акте
+     читается как трудовая функция, а это прямой путь к переквалификации отношений.
+     Запрет держится на структуре данных, а не на дисциплине оператора — взять сумму
+     из плана технически неоткуда. */
+  var PL = { period: 'week', on: '', data: null, err: '', busy: false };
+  var PL_TABS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
+  var PL_MON = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+  function plIso(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+  /* Начало текущего периода на стороне экрана — только чтобы понять, листаем мы прошлое
+     или смотрим на сегодня. Нормализацию дат для базы делает сервер. */
+  function plToday(period) {
+    var d = new Date(); d.setHours(12, 0, 0, 0);
+    if (period === 'week') d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    if (period === 'month') d.setDate(1);
+    return plIso(d);
+  }
+  function plTitle() {
+    var s = PL.data.starts_on, e = PL.data.ends_on;
+    if (PL.period === 'day') return czDate(s);
+    if (PL.period === 'month') {
+      var m = /^(\d{4})-(\d{2})/.exec(s);
+      return PL_MON[Number(m[2]) - 1] + ' ' + m[1];
+    }
+    var a = /^(\d{4})-(\d{2})-(\d{2})/.exec(s), b = /^(\d{4})-(\d{2})-(\d{2})/.exec(e);
+    // месяц называем один раз, если неделя внутри одного месяца: «4 — 10 августа 2026»
+    return a[2] === b[2]
+      ? Number(a[3]) + ' — ' + Number(b[3]) + ' ' + CZ_MON[Number(b[2]) - 1] + ' ' + b[1]
+      : Number(a[3]) + ' ' + CZ_MON[Number(a[2]) - 1] + ' — ' + czDate(e);
+  }
+  function plArrow(back) {
+    return '<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M' +
+      (back ? '12 4.5 6.5 10 12 15.5' : '8 4.5 13.5 10 8 15.5') + '"/></svg>';
+  }
+  function plLoad(cb) {
+    var p = '/admin/api/contractor-plans?period=' + PL.period + (PL.on ? '&on=' + PL.on : '');
+    api(p).then(function (r) {
+      PL.data = r; PL.err = '';
+      if (state.page === 'czplans') renderAll();
+      if (cb) cb(true);
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      PL.data = PL.data || { plans: [], people: [] };
+      PL.err = 'Не удалось загрузить планы. Проверьте связь и обновите страницу.';
+      if (state.page === 'czplans') renderAll();
+      if (cb) cb(false);
+    });
+  }
+  /* Сводка для вердикта в шапке: сколько пунктов, сколько сделано, у скольких людей
+     плана на этот период нет. Пустая неделя у исполнителя — это и есть повод спросить. */
+  function plStats() {
+    var d = PL.data || { plans: [], people: [] };
+    var items = 0, done = 0, tasks = 0;
+    (d.plans || []).forEach(function (p) {
+      items += p.stats.count; done += p.stats.done; tasks += p.stats.tasks;
+    });
+    var empty = (d.people || []).filter(function (p) { return !p.has_plan; }).length;
+    return { items: items, done: done, tasks: tasks, empty: empty,
+             people: (d.people || []).length };
+  }
+  function plItemRow(it) {
+    var right = it.task_id
+      ? '<button class="pl-task on" data-pl-open="' + it.task_id + '">' +
+          ic('task', 12) + '№' + it.task_number + '</button>'
+      : '<button class="pl-task" data-pl-task="' + it.id + '">В задание</button>';
+    return '<div class="pl-i' + (it.done ? ' done' : '') + '">' +
+      '<button class="pl-ck" data-pl-done="' + it.id + '" title="' +
+        (it.done ? 'Снять отметку' : 'Отметить выполненным') + '">' + ic('check', 12) + '</button>' +
+      '<span class="pl-t"><b>' + esc(it.title) + '</b>' +
+        (it.note ? '<span class="pl-n">' + esc(it.note) + '</span>' : '') +
+        (it.due ? '<span class="pl-due">' + ic('clock', 11) + esc(czDate(it.due)) + '</span>' : '') +
+      '</span>' +
+      '<span class="pl-a">' + right +
+        (it.task_id ? '' : '<button class="pl-x" data-pl-del="' + it.id + '" title="Убрать пункт">' +
+          ic('x', 12) + '</button>') +
+      '</span>' +
+    '</div>';
+  }
+  function plPersonCard(person, plan) {
+    var items = plan ? plan.items : [];
+    var sub = items.length
+      ? (plan.stats.done + ' из ' + items.length + ' сделано' +
+         (plan.stats.tasks ? ' · ' + plan.stats.tasks + ' ' +
+           plural(plan.stats.tasks, 'в задании', 'в заданиях', 'в заданиях') : ''))
+      : 'Плана нет';
+    return '<div class="card pl-p' + (items.length ? '' : ' quiet') + '">' +
+      '<div class="pl-p-h">' +
+        '<span class="pl-p-n"><b>' + esc(person.full_name) + '</b>' +
+          (person.blocked ? '<span class="ct-chip ct-off">Заблокирован</span>' : '') + '</span>' +
+        '<span class="pl-p-s">' + esc(sub) + '</span>' +
+      '</div>' +
+      (items.length
+        ? '<div class="pl-list">' + items.map(plItemRow).join('') + '</div>'
+        : '<div class="pl-none">Что человек делает в этот период — пока не записано.</div>') +
+      '<button class="pl-add" data-pl-add="' + person.id + '">' + ic('plus', 13) + 'Добавить пункт</button>' +
+    '</div>';
+  }
+  function renderCzPlans(view) {
+    if (!PL.data) { view.innerHTML = dashSkeleton(); plLoad(); return; }
+    var d = PL.data;
+    var byPerson = {};
+    (d.plans || []).forEach(function (p) { byPerson[p.contractor_id] = p; });
+    var tabs = PL_TABS.map(function (t) {
+      return '<button class="qchip' + (PL.period === t[0] ? ' on' : '') + '" data-pltab="' + t[0] + '">' +
+        t[1] + '</button>';
+    }).join('');
+    var cur = d.starts_on === plToday(PL.period);
+    var cards = (d.people || []).map(function (p) { return plPersonCard(p, byPerson[p.id]); }).join('');
+    var body = PL.err
+      ? '<div class="card"><div class="empty">' + esc(PL.err) + '</div></div>'
+      : (!(d.people || []).length
+        ? '<div class="card"><div class="empty">Исполнителей пока нет. Пригласите первого — тогда можно будет планировать его работу.</div></div>'
+        : '<div class="pl-grid">' + cards + '</div>');
+
+    view.innerHTML =
+      '<div class="card listcard pl-bar">' +
+        '<div class="list-tools">' +
+          '<div class="pl-nav">' +
+            '<button class="pl-arr" id="pl-prev" title="Предыдущий период">' + plArrow(true) + '</button>' +
+            '<span class="pl-when">' + esc(plTitle()) + '</span>' +
+            '<button class="pl-arr" id="pl-next" title="Следующий период">' + plArrow(false) + '</button>' +
+            (cur ? '<span class="pl-now">сейчас</span>'
+                 : '<button class="pl-today" id="pl-today">Вернуться к текущему</button>') +
+          '</div>' +
+          '<div class="list-quick pl-per">' + tabs + '</div>' +
+        '</div>' +
+      '</div>' + body;
+
+    el('pl-prev').addEventListener('click', function () { PL.on = d.prev_on; PL.data = null; renderView(); });
+    el('pl-next').addEventListener('click', function () { PL.on = d.next_on; PL.data = null; renderView(); });
+    if (el('pl-today')) el('pl-today').addEventListener('click', function () {
+      PL.on = ''; PL.data = null; renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pltab]'), function (b) {
+      b.addEventListener('click', function () {
+        // период меняем — дату сбрасываем на сегодня: «третья неделя мая» в режиме дня
+        // означала бы случайный день, а не то, что человек хотел увидеть
+        PL.period = b.getAttribute('data-pltab'); PL.on = ''; PL.data = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pl-add]'), function (b) {
+      b.addEventListener('click', function () { plAddItem(b.getAttribute('data-pl-add')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pl-done]'), function (b) {
+      b.addEventListener('click', function () { plToggle(b.getAttribute('data-pl-done')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pl-del]'), function (b) {
+      b.addEventListener('click', function () { plDelItem(b.getAttribute('data-pl-del')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pl-task]'), function (b) {
+      b.addEventListener('click', function () { plToTask(b.getAttribute('data-pl-task')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pl-open]'), function (b) {
+      b.addEventListener('click', function () { openCt(b.getAttribute('data-pl-open')); });
+    });
+    pageAnim(view);
+  }
+  function plAddItem(cid) {
+    openSheet('Пункт плана', 'Что человек делает в этот период. Стоимости у пункта нет: ' +
+      'платим мы за задания, и любой пункт можно превратить в задание отдельно.',
+      [['title', 'text', 'Что сделать', ''], ['due', 'date', 'Срок, если он есть', '']],
+      function (v, close) {
+        var title = (v.title || '').trim();
+        if (title.length < 2) return 'Напишите, что нужно сделать';
+        if (PL.busy) return null;
+        PL.busy = true;
+        // план заводим тем же действием: отдельная кнопка «создать план» ничего не
+        // добавляет — план без единого пункта не значит ничего
+        czSend('/admin/api/contractor-plans', 'POST',
+               { contractor_id: cid, period: PL.period, on: PL.data.starts_on })
+          .then(function (p) {
+            return czSend('/admin/api/contractor-plans/' + p.id + '/items', 'POST',
+                          { title: title, due: v.due || null });
+          })
+          .then(function () { close(); plLoad(); })
+          .catch(function (e) { showToast(e.message); })
+          .then(function () { PL.busy = false; });
+        return null;
+      }, null, 'Планы работ');
+  }
+  function plToggle(iid) {
+    if (PL.busy) return;
+    var it = null;
+    (PL.data.plans || []).forEach(function (p) {
+      p.items.forEach(function (x) { if (x.id === iid) it = x; });
+    });
+    if (!it) return;
+    PL.busy = true;
+    czSend('/admin/api/contractor-plan-items/' + iid, 'PATCH', { done: !it.done })
+      .then(function () { plLoad(); })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { PL.busy = false; });
+  }
+  function plDelItem(iid) {
+    if (!window.confirm('Убрать пункт из плана?')) return;
+    czSend('/admin/api/contractor-plan-items/' + iid, 'DELETE')
+      .then(function () { plLoad(); })
+      .catch(function (e) { showToast(e.message); });
+  }
+  /* Пункт → задание. Здесь и появляются деньги, которых в плане нет: цена за единицу и
+     объем задаются в этот момент и дальше живут у задания. Создаем черновиком и сразу
+     открываем карточку — отправлять человеку задание вслепую, не глянув на условия,
+     не стоит. */
+  function plToTask(iid) {
+    openSheet('Превратить пункт в задание',
+      'У задания есть цена, объем и приемка — из принятых заданий собирается акт, а по акту идет выплата.',
+      [['unit', 'line', 'Единица', 'шт'], ['qty', 'number', 'Объем', '1'],
+       ['price', 'number', 'Цена за единицу, ₽', '']],
+      function (v, close) {
+        var qty = Number(v.qty), price = Number(v.price || 0);
+        if (!(qty > 0)) return 'Объем должен быть больше нуля';
+        if (!(price >= 0)) return 'Цена должна быть числом';
+        if (PL.busy) return null;
+        PL.busy = true;
+        czSend('/admin/api/contractor-plan-items/' + iid + '/to-task', 'POST',
+               { unit: (v.unit || 'шт').trim() || 'шт', qty_plan: qty, price_plan: price })
+          .then(function (r) {
+            close(); plLoad();
+            showToast('Задание №' + r.task.number + ' создано черновиком');
+            openCt(r.task.id);
+          })
+          .catch(function (e) { showToast(e.message); })
+          .then(function () { PL.busy = false; });
+        return null;
+      },
+      function (v) {
+        var qty = Number(v.qty), price = Number(v.price || 0);
+        if (!(qty > 0) || !(price >= 0)) return '';
+        return 'Сумма задания: <b>' + ctMoney(qty * price) + ' ₽</b>' +
+          '<span class="ct-live-x">' + ctNum(qty) + ' × ' + ctMoney(price) + ' ₽ за ' +
+          esc((v.unit || 'шт').trim() || 'шт') + '</span>';
+      }, 'Планы работ');
+  }
+
   /* Маленькая форма-вопрос на той же модалке дизайн-системы: пара полей и проверка.
      Возврат строки из обработчика = текст ошибки под формой, null = все хорошо. */
-  function openSheet(title, sub, fields, onOk, live) {
+  function openSheet(title, sub, fields, onOk, live, eyebrow) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     // форма открывается ПОВЕРХ карточки задания — обычный слой модалки лежит под ней
@@ -3189,7 +3460,8 @@
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Задание</div><div class="al-title">' + esc(title) + '</div></div>' +
+          '<div><div class="al-eyebrow">' + esc(eyebrow || 'Задание') + '</div>' +
+            '<div class="al-title">' + esc(title) + '</div></div>' +
           '<button class="al-x" id="sh-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         (sub ? '<div class="al-sub">' + esc(sub) + '</div>' : '') +
@@ -3198,7 +3470,8 @@
             return '<label class="al-f"><span class="al-l">' + esc(f[2]) + '</span>' +
               (f[1] === 'text'
                 ? '<textarea id="sh-' + f[0] + '" class="al-in al-ta" rows="2" maxlength="1000"></textarea>'
-                : '<input id="sh-' + f[0] + '" class="al-in" type="' + f[1] + '" value="' + esc(f[3]) + '">') +
+                : '<input id="sh-' + f[0] + '" class="al-in" type="' +
+                    (f[1] === 'line' ? 'text' : f[1]) + '" value="' + esc(f[3]) + '">') +
               '</label>';
           }).join('') +
           (live ? '<div class="ct-live" id="sh-live"></div>' : '') +
