@@ -2525,7 +2525,7 @@
              detail: {}, services: null, busy: false };
   var CT_ST = {
     draft: 'ct-draft', offered: 'ct-wait', accepted: 'ct-go', in_progress: 'ct-go',
-    done: 'ct-check', approved: 'ct-ok', act_created: 'ct-ok', act_signed: 'ct-ok',
+    done: 'ct-check', approved: 'ct-ok', act_signed_co: 'ct-ok', act_signed: 'ct-ok',
     paid: 'ct-paid', declined: 'ct-off', cancelled: 'ct-off', archived: 'ct-off',
   };
   var CT_TABS = [['all', 'Все'], ['active', 'В работе'], ['draft', 'Черновики'],
@@ -2534,6 +2534,11 @@
   function ctMoney(v) {
     var n = Math.round(Number(v || 0));
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+  // Количество для человека: 2, а не 2.0; половинки остаются половинками
+  function ctNum(v) {
+    var n = Number(v || 0);
+    return n % 1 === 0 ? String(n) : String(n).replace('.', ',');
   }
   function ctLoad(cb) {
     var p = '/admin/api/contractor-tasks?tab=' + encodeURIComponent(CT.tab) +
@@ -2681,31 +2686,9 @@
       .catch(function (e) { showToast(e.message); })
       .then(function () { CT.busy = false; });
   }
-  var CT_ACT_LABEL = {
-    offered: 'Отправить исполнителю', accepted: 'Исполнитель принял',
-    declined: 'Исполнитель отказался', in_progress: 'Приступил к работе',
-    done: 'Работа выполнена', approved: 'Принять результат',
-    act_created: 'Создать акт', act_signed: 'Акт подписан', paid: 'Оплачено',
-    cancelled: 'Отменить', archived: 'В архив', draft: 'Вернуть в черновик',
-  };
-  /* Один и тот же переход называется по-разному в зависимости от того, откуда идем:
-     из «выполнено» в «в работе» — это не «приступил», это «вернуть на доработку».
-     Кнопка обязана называть действие так, как его понимает оператор. */
-  var CT_ACT_FROM = {
-    'done>in_progress': 'Вернуть на доработку',
-    'approved>in_progress': 'Вернуть на доработку',
-    'act_created>approved': 'Отозвать акт',
-    'declined>draft': 'Вернуть в черновик',
-  };
-  /* Главный шаг вперед у каждого состояния — он и рисуется основной кнопкой,
-     остальные тише. Двух синих кнопок рядом быть не должно: экран перестает
-     подсказывать, что делать. */
-  var CT_MAIN = {
-    draft: 'offered', offered: 'accepted', accepted: 'in_progress',
-    in_progress: 'done', done: 'approved', approved: 'act_created',
-    act_created: 'act_signed', act_signed: 'paid', declined: 'archived',
-    cancelled: 'archived',
-  };
+  /* Названия действий, кто их хозяин и какое главное — приходят с сервера в `actions`:
+     решение «принять задание или отказаться» принадлежит исполнителю, «принять
+     результат», «подписать», «оплатить» — нам. Экран это только рисует. */
   // Действия, которые нельзя делать не подумав: они требуют причины или закрывают путь.
   var CT_ASK = { cancelled: 'Почему отменяем задание?', declined: 'Почему исполнитель отказался?' };
   function renderCtCard() {
@@ -2720,28 +2703,45 @@
       return;
     }
     var p = t.contractor || {};
-    var acts = (t.next || []).map(function (to) {
-      var label = CT_ACT_FROM[t.status + '>' + to] || CT_ACT_LABEL[to] || to;
-      return '<button class="bp sm' + (CT_MAIN[t.status] === to ? '' : ' ghost') + '" data-cta="' + to + '">' +
-        esc(label) + '</button>';
-    }).join('');
+    var all = t.actions || [];
+    var mine = all.filter(function (a) { return a.actor !== 'contractor'; });
+    var his = all.filter(function (a) { return a.actor === 'contractor'; });
+    var btn = function (a) {
+      return '<button class="bp sm' + (a.primary ? '' : ' ghost') + '" data-cta="' + a.to + '">' +
+        esc(a.label) + '</button>';
+    };
+    /* Шаги исполнителя стоят отдельно и подписаны: это ЕГО решения, мы их только
+       отмечаем, пока у человека нет своего кабинета (этап 3). Смешать их с нашими
+       кнопками нельзя — иначе «принял задание» выглядит как наше действие, а под актом
+       должна стоять его подпись, а не наша отметка. */
+    var acts = (mine.length ? '<div class="ct-acts">' + mine.map(btn).join('') + '</div>' : '') +
+      (his.length
+        ? '<div class="ct-acts ct-his"><div class="ct-his-h">Решение исполнителя — отмечаем со слов, пока у него нет кабинета</div>' +
+          his.map(btn).join('') + '</div>'
+        : '');
 
+    var calc = ctNum(t.qty) + ' ' + esc(t.unit) + ' × ' + ctMoney(t.unit_price) + ' ₽';
     var money =
       '<div class="ct-money">' +
         '<div class="ct-amt"><span class="ct-amt-k">К оплате по заданию</span>' +
           '<b>' + ctMoney(t.amount) + ' ₽</b></div>' +
-        '<div class="ct-calc">' + ctMoney(t.price_plan) + ' ₽ по плану · ' +
-          (t.qty_fact !== null && t.qty_fact !== undefined
-            ? esc(String(t.qty_fact)) + ' ' + esc(t.unit) + ' фактически'
-            : esc(String(t.qty_plan)) + ' ' + esc(t.unit) + ' по плану') + '</div>' +
+        '<div class="ct-calc">' + calc +
+          (t.corrected ? ' · по плану было ' + ctMoney(t.amount_plan) + ' ₽' : '') + '</div>' +
         (t.corrected
           ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>'
+          : '') +
+        (t.signed_co_at
+          ? '<div class="ct-sign">Акт подписан компанией ' + esc(czDate(t.signed_co_at)) +
+            (t.signed_co_by ? ' · ' + esc(t.signed_co_by) : '') +
+            (t.signed_ct_at
+              ? '<br>Исполнитель подписал ' + esc(czDate(t.signed_ct_at))
+              : '<br>Ждем подпись исполнителя') + '</div>'
           : '') +
         (t.frozen
           ? '<div class="ct-frozen">Задание оплачено — сумма больше не меняется.</div>'
           : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>' +
-            (t.status === 'act_created' || t.status === 'act_signed'
-              ? '<div class="ct-frozen">Если изменить сумму, акт придется собрать заново — он относится к прежней.</div>'
+            (t.signed_co_at
+              ? '<div class="ct-frozen">Если изменить сумму, подписи снимутся: акт относится к прежней.</div>'
               : '')) +
       '</div>';
 
@@ -2751,7 +2751,10 @@
       ['Проект', t.project ? esc(t.project) : '—'],
       ['Период', esc(ctPeriod(t))],
       ['Место выполнения', esc(t.place || 'Удаленно')],
-      ['Объем', esc(String(t.qty_plan)) + ' ' + esc(t.unit) + ' по плану'],
+      ['Цена за единицу', ctMoney(t.unit_price) + ' ₽ за ' + esc(t.unit)],
+      ['Объем', ctNum(t.qty_plan) + ' ' + esc(t.unit) + ' по плану' +
+        (t.qty_fact !== null && t.qty_fact !== undefined
+          ? ' · ' + ctNum(t.qty_fact) + ' фактически' : '')],
     ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
 
     var text = ['Что нужно сделать', t.description, 'Что считается выполнением', t.result_req,
@@ -2781,8 +2784,7 @@
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content">' +
-        money +
-        (acts ? '<div class="ct-acts">' + acts + '</div>' : '') +
+        money + acts +
         '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
         blocks +
         (t.cancel_reason
@@ -2820,24 +2822,29 @@
      «уточнили объем» и «заплатили меньше, чем договорились» — ровно в этом поле, и
      смотреть на него будут при споре. Правило проверяет и сервер. */
   function openCtFix(t) {
+    var planSum = Math.round(Number(t.amount_plan) * 100) / 100;
     openSheet('Фактический объем и сумма',
-      'Это сумма, на которую будет создан акт и проведена выплата.', [
-      ['qty', 'number', 'Фактический объем, ' + t.unit,
-        String(t.qty_fact !== null && t.qty_fact !== undefined ? t.qty_fact : t.qty_plan)],
-      ['sum', 'number', 'Итоговая сумма, ₽',
-        String(t.price_fact !== null && t.price_fact !== undefined ? t.price_fact : t.price_plan)],
+      'Сумма считается сама: объем × цена за единицу. На нее и будет подписан акт.', [
+      ['qty', 'number', 'Фактический объем, ' + t.unit, ctNum(t.qty)],
+      ['price', 'number', 'Цена за 1 ' + t.unit + ', ₽', String(t.unit_price)],
       ['why', 'text', 'Почему сумма отличается от плановой', t.correction || ''],
     ], function (vals, close) {
-      var sum = Number(vals.sum);
-      if (!(sum >= 0)) return 'Сумма должна быть числом';
-      if (sum !== Number(t.price_plan) && !vals.why.trim()) {
+      var qty = Number(vals.qty), price = Number(vals.price);
+      if (!(qty > 0)) return 'Объем должен быть больше нуля';
+      if (!(price >= 0)) return 'Цена должна быть числом';
+      if (Math.round(qty * price * 100) / 100 !== planSum && !vals.why.trim()) {
         return 'Укажите причину — почему итог отличается от плановой суммы';
       }
       czSend('/admin/api/contractor-tasks/' + t.id, 'PATCH', {
-        qty_fact: Number(vals.qty), price_fact: sum, correction: vals.why.trim() || undefined,
+        qty_fact: qty, price_fact: price, correction: vals.why.trim() || undefined,
       }).then(function (r) { ctPut(r); renderCtCard(); ctLoad(); close(); })
         .catch(function (e) { showToast(e.message); });
       return null;
+    }, function (vals) {
+      // считаем прямо под полями: оператор видит итог до того, как нажал
+      var s = Math.round(Number(vals.qty || 0) * Number(vals.price || 0));
+      return 'К оплате: <b>' + ctMoney(s) + ' ₽</b>' +
+        (s === Math.round(planSum) ? '' : ' · по плану ' + ctMoney(planSum) + ' ₽');
     });
   }
 
@@ -2894,8 +2901,10 @@
               '<div class="al-row">' +
                 f('unit', 'Единица', '<input id="ctf-unit" class="al-in" value="шт" maxlength="40">') +
                 f('qty', 'Объем', '<input id="ctf-qty" class="al-in" type="number" min="0.5" step="0.5" value="1">') +
-                f('sum', 'Сумма, ₽', '<input id="ctf-sum" class="al-in" type="number" min="0" step="100" value="0">') +
+                f('sum', 'Цена за единицу, ₽', '<input id="ctf-sum" class="al-in" type="number" min="0" step="100" value="0">') +
               '</div>' +
+              '<div class="ct-live" id="ctf-total"></div>' +
+              '<div class="ct-warn" id="ctf-warn"></div>' +
             '</div>' +
             '<div class="al-foot">' +
               '<button class="al-cancel" id="ctf-cancel">Отмена</button>' +
@@ -2932,8 +2941,37 @@
       if (!el('ctf-desc').value && s.description) el('ctf-desc').value = s.description;
       if (!el('ctf-res').value && s.result_req) el('ctf-res').value = s.result_req;
       el('ctf-unit').value = s.unit || 'шт';
-      if (s.price) el('ctf-sum').value = String(Math.round(s.price * Number(el('ctf-qty').value || 1)));
+      if (s.price) el('ctf-sum').value = String(s.price);   // цена каталога — за единицу
+      total();
     });
+    /* Итог считаем на глазах: цена в задании — за штуку, и человек должен видеть, что
+       два поста по 900 стоят 1800, до того как отправит. */
+    var total = function () {
+      var q = Number(el('ctf-qty').value || 0), pr = Number(el('ctf-sum').value || 0);
+      el('ctf-total').innerHTML = 'Итого по заданию: <b>' + ctMoney(q * pr) + ' ₽</b>' +
+        (q && pr ? ' · ' + ctNum(q) + ' ' + esc(el('ctf-unit').value || 'шт') +
+          ' × ' + ctMoney(pr) + ' ₽' : '');
+    };
+    ['ctf-qty', 'ctf-sum', 'ctf-unit'].forEach(function (id) {
+      el(id).addEventListener('input', total);
+    });
+    total();
+    /* Отправить задание можно только тому, у кого все в порядке: неготовый человек его
+       не примет, а заплатить потом будет некуда. Это же правило стоит на сервере — здесь
+       мы просто не даем оператору упереться в отказ вслепую. */
+    var whoSel = el('ctf-who');
+    var gate = function () {
+      var c = null;
+      for (var i = 0; i < people.length; i++) if (people[i].id === whoSel.value) c = people[i];
+      var ok = !c || c.state === 'ok';
+      el('ctf-send').disabled = !ok;
+      el('ctf-warn').innerHTML = ok ? '' :
+        esc(c.full_name) + ' пока не готов к работе: ' +
+        esc((c.problems || []).join('; ') || 'не завершен онбординг') +
+        '. Черновик сохранить можно, отправить — нет.';
+    };
+    whoSel.addEventListener('change', gate);
+    gate();
     var submit = function (offer) {
       var titleI = el('ctf-title');
       if (titleI.value.trim().length < 2) {
@@ -2966,7 +3004,7 @@
 
   /* Маленькая форма-вопрос на той же модалке дизайн-системы: пара полей и проверка.
      Возврат строки из обработчика = текст ошибки под формой, null = все хорошо. */
-  function openSheet(title, sub, fields, onOk) {
+  function openSheet(title, sub, fields, onOk, live) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     // форма открывается ПОВЕРХ карточки задания — обычный слой модалки лежит под ней
@@ -2986,6 +3024,7 @@
                 : '<input id="sh-' + f[0] + '" class="al-in" type="' + f[1] + '" value="' + esc(f[3]) + '">') +
               '</label>';
           }).join('') +
+          (live ? '<div class="ct-live" id="sh-live"></div>' : '') +
           '<div class="ct-err" id="sh-err"></div>' +
         '</div>' +
         '<div class="al-foot"><button class="al-cancel" id="sh-cancel">Отмена</button>' +
@@ -2994,6 +3033,16 @@
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
     fields.forEach(function (f) { if (f[1] === 'text') el('sh-' + f[0]).value = f[3] || ''; });
+    var vals = function () {
+      var v = {};
+      fields.forEach(function (f) { v[f[0]] = el('sh-' + f[0]).value; });
+      return v;
+    };
+    if (live) {
+      var upd = function () { el('sh-live').innerHTML = live(vals()); };
+      fields.forEach(function (f) { el('sh-' + f[0]).addEventListener('input', upd); });
+      upd();
+    }
     var closed = false;
     var close = function () {
       if (closed) return; closed = true;
@@ -3007,9 +3056,7 @@
     el('sh-cancel').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
     el('sh-ok').addEventListener('click', function () {
-      var vals = {};
-      fields.forEach(function (f) { vals[f[0]] = el('sh-' + f[0]).value; });
-      var err = onOk(vals, close);
+      var err = onOk(vals(), close);
       if (err) el('sh-err').textContent = err;
     });
     setTimeout(function () { el('sh-' + fields[0][0]).focus(); }, 30);
