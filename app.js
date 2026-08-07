@@ -1455,6 +1455,12 @@
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics'] },
     curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients'] },
+    // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
+    // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients'] },
+    // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
+    // данные несовершеннолетних, для бухгалтерии они не нужны.
+    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
     manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients'] },
