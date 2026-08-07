@@ -3230,9 +3230,33 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Диалог поверх открытой карточки задания: карточка лежит на z-index 81. */
 .al-ov.over { z-index: 92; }
 
+/* ── каталог услуг ──
+   Прайс читают глазами сверху вниз, поэтому услуги сгруппированы по категории
+   (категория здесь = должность), а выключенные не прячутся, а гаснут: на них
+   ссылаются прошлые задания. */
+.sv-grid { grid-template-columns: 1.9fr 132px 150px 132px; }
+.sv-grid.off { opacity: .55; }
+.sv-main { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+.sv-main b { font-weight: 650; letter-spacing: -.01em; }
+.sv-desc { flex-basis: 100%; font-size: 12px; color: var(--ink-3); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-unit { font-size: 12.5px; color: var(--ink-2); }
+.sv-price b { font-size: 14.5px; font-weight: 700; letter-spacing: -.02em;
+  font-feature-settings: 'tnum'; }
+.sv-cat { padding: 16px 16px 7px; font: 700 11px 'Manrope', sans-serif;
+  letter-spacing: .02em; text-transform: uppercase; color: var(--ink-3); }
+.sv-onoff { flex-direction: row; align-items: center; gap: 9px; font-size: 13px;
+  color: var(--ink-2); cursor: pointer; }
+.sv-onoff input { width: 16px; height: 16px; accent-color: var(--blue); }
+/* Пояснение в тулбаре: почему правка каталога не двигает суммы выданных заданий. */
+.list-note { font-size: 12px; color: var(--ink-3); line-height: 1.4; max-width: 460px; }
+
 @media (max-width: 960px) {
   .trow.ct-grid { grid-template-columns: 1.5fr 120px 190px !important; }
   .ct-grid > :nth-child(2), .ct-grid > :nth-child(3) { display: none; }
+  .trow.sv-grid { grid-template-columns: 1.6fr 110px 120px !important; }
+  .sv-grid > :nth-child(2) { display: none; }
+  .list-note { display: none; }
 }
 @media (max-width: 700px) {
   /* На телефоне строка — карточка: слева название и исполнитель, справа деньги и
@@ -3249,4 +3273,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .ct-state { grid-column: 2; grid-row: 2; align-items: flex-end; text-align: right; }
   .ct-ev { flex-wrap: wrap; }
   .ct-ev-d { width: auto; }
+  /* Услуга на телефоне: слева название и единица, справа цена и состояние. */
+  .trow.sv-grid { grid-template-columns: 1fr auto !important; gap: 4px 12px;
+    height: auto; padding: 14px 16px; align-items: start; }
+  .sv-grid.thead { display: none; }
+  .sv-grid > :nth-child(2) { display: block; }
+  .sv-main { grid-column: 1; grid-row: 1; }
+  .sv-unit { grid-column: 1; grid-row: 2; }
+  .sv-price { grid-column: 2; grid-row: 1; text-align: right; }
+  .sv-state { grid-column: 2; grid-row: 2; text-align: right; }
 }

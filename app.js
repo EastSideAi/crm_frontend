@@ -1386,6 +1386,7 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
+    { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
   ];
@@ -1712,6 +1713,19 @@
       html = '<div><h2>Задания</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase4 + '</span></div></div>';
     }
+    if (state.page === 'czservices') {
+      // Каталог — прайс, а не заказ: вердикт напоминает, что цена задания живет в самом
+      // задании, иначе правка каталога кажется правкой уже согласованных сумм.
+      var sv = CT.cat;
+      var on = sv ? sv.filter(function (x) { return x.active; }).length : 0;
+      var phrase5;
+      if (!sv) phrase5 = 'Загружаю каталог…';
+      else if (!sv.length) phrase5 = 'Каталог пуст. Заведите услуги с ценой за единицу — дальше задание собирается в один клик.';
+      else phrase5 = '<b>' + on + ' ' + plural(on, 'услуга', 'услуги', 'услуг') +
+        '</b> в работе. Цена отсюда подставляется в новое задание; у выданных заданий она не меняется.';
+      html = '<div><h2>Каталог услуг</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('box', 13) + '</span><span>' + phrase5 + '</span></div></div>';
+    }
     ch.innerHTML = html;
   }
   function plural(n, one, few, many) {
@@ -1750,6 +1764,7 @@
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
+    else if (state.page === 'czservices') renderCzServices(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -2522,7 +2537,10 @@
      показывает разрешенные действия — те же правила на этапах 5 и 6 будут решать,
      можно ли собрать акт и можно ли платить. */
   var CT = { list: null, stats: null, err: '', q: '', tab: 'all', openId: null,
-             detail: {}, services: null, busy: false };
+             detail: {}, services: null, busy: false,
+             // cat — весь каталог для экрана «Услуги» (вместе с выключенными),
+             // services — только активные, для выбора при создании задания
+             cat: null, catErr: '' };
   var CT_ST = {
     draft: 'ct-draft', offered: 'ct-wait', accepted: 'ct-go', in_progress: 'ct-go',
     done: 'ct-check', approved: 'ct-ok', act_signed_co: 'ct-ok', act_signed: 'ct-ok',
@@ -3002,6 +3020,164 @@
     el('ctf-send').addEventListener('click', function () { submit(true); });
     titleFocus();
     function titleFocus() { setTimeout(function () { el('ctf-title').focus(); }, 30); }
+  }
+
+  /* ── КАТАЛОГ УСЛУГ ────────────────────────────────────────────────────────
+     Это «каталог типовых заданий и их стоимости» из Приложения № 1 к договору: прайс,
+     а не заказ. Цена отсюда подставляется в НОВОЕ задание и дальше живет в нем — правка
+     каталога не меняет суммы уже выданных заданий (Приложение № 1, п. 3). Выключенная
+     услуга просто исчезает из выбора, а не удаляется: на нее могут ссылаться прошлые
+     задания и акты. */
+  function czSvcLoad(cb) {
+    api('/admin/api/contractor-services?include_off=true').then(function (r) {
+      CT.cat = r.services || []; CT.services = null; CT.catErr = '';
+      if (state.page === 'czservices') renderAll();
+      if (cb) cb(true);
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      CT.cat = CT.cat || [];
+      CT.catErr = 'Не удалось загрузить каталог. Проверьте связь и обновите страницу.';
+      if (state.page === 'czservices') renderAll();
+      if (cb) cb(false);
+    });
+  }
+  function czSvcRow(s) {
+    return '<div class="trow sv-grid' + (s.active ? '' : ' off') + '" data-sv="' + s.id + '">' +
+      '<span class="sv-main"><b>' + esc(s.title) + '</b>' +
+        (s.code ? '<span class="ct-proj">' + esc(s.code) + '</span>' : '') +
+        (s.description ? '<span class="sv-desc">' + esc(s.description) + '</span>' : '') + '</span>' +
+      '<span class="sv-unit">' + esc(s.unit || 'шт') + '</span>' +
+      '<span class="sv-price">' + (s.price ? '<b>' + ctMoney(s.price) + ' ₽</b>' : '—') + '</span>' +
+      '<span class="sv-state">' + (s.active
+        ? '<span class="ct-chip ct-ok">В работе</span>'
+        : '<span class="ct-chip ct-off">Выключена</span>') + '</span>' +
+      '</div>';
+  }
+  function renderCzServices(view) {
+    if (!CT.cat) { view.innerHTML = dashSkeleton(); czSvcLoad(); return; }
+    var list = CT.cat;
+    // Группируем по категории: категория — это, по сути, должность (смм, монтаж,
+    // ассистент), и оператор ищет услугу именно так.
+    var cats = [], byCat = {};
+    list.forEach(function (s) {
+      var c = s.category || 'Без категории';
+      if (!byCat[c]) { byCat[c] = []; cats.push(c); }
+      byCat[c].push(s);
+    });
+    var body = CT.catErr
+      ? '<div class="empty">' + esc(CT.catErr) + '</div>'
+      : (!list.length
+        ? '<div class="empty">Каталог пуст. Добавьте услугу — название, единицу и цену за единицу, — и она появится в выборе при создании задания.</div>'
+        : cats.map(function (c) {
+          return '<div class="sv-cat">' + esc(c) + '</div>' + byCat[c].map(czSvcRow).join('');
+        }).join(''));
+
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<span class="list-note">Прайс типовых работ: цена за единицу подставляется в новое задание. У выданных заданий сумма не меняется.</span>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' +
+            plural(list.length, 'услуга', 'услуги', 'услуг') + '</span>' +
+          '<button class="bp sm cz-add" id="sv-add">' + ic('plus', 14) + 'Новая услуга</button>' +
+        '</div>' +
+        '<div class="trow sv-grid thead">' +
+          '<span class="th">Услуга</span><span class="th">Единица</span>' +
+          '<span class="th">Цена за единицу</span><span class="th">Состояние</span>' +
+        '</div>' + body +
+      '</div>';
+
+    el('sv-add').addEventListener('click', function () { openSvcForm(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sv]'), function (r) {
+      r.addEventListener('click', function () {
+        var id = r.getAttribute('data-sv');
+        for (var i = 0; i < list.length; i++) if (list[i].id === id) return openSvcForm(list[i]);
+      });
+    });
+    pageAnim(view);
+  }
+  /* Форма услуги. Одна и та же на создание и правку: полей мало, и разводить два
+     экрана ради одного заголовка незачем. */
+  function openSvcForm(s) {
+    if (document.querySelector('.al-ov')) return;
+    var isNew = !s;
+    s = s || { title: '', code: '', category: '', description: '', result_req: '',
+               unit: 'шт', price: '', active: true };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var f = function (label, inner) {
+      return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+    };
+    var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Каталог услуг</div><div class="al-title">' +
+            (isNew ? 'Новая услуга' : 'Услуга') + '</div></div>' +
+          '<button class="al-x" id="sv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Цена указывается за одну единицу: пост, ролик, час, обращение. Сумма задания считается как объем × эта цена.</div>' +
+        '<div class="al-body">' +
+          f('Название услуги <i>*</i>',
+            '<input id="sv-title" class="al-in" maxlength="200" value="' + v(s.title) + '" placeholder="Например: монтаж короткого ролика">') +
+          '<div class="al-row">' +
+            f('Категория', '<input id="sv-cat" class="al-in" maxlength="120" value="' + v(s.category) + '" placeholder="СММ, Видео, Ассистент">') +
+            f('Код', '<input id="sv-code" class="al-in" maxlength="40" value="' + v(s.code) + '" placeholder="SMM-01">') +
+          '</div>' +
+          '<div class="al-row">' +
+            f('Единица <i>*</i>', '<input id="sv-unit" class="al-in" maxlength="40" value="' + v(s.unit || 'шт') + '">') +
+            f('Цена за единицу, ₽', '<input id="sv-price" class="al-in" type="number" min="0" step="50" value="' + v(s.price) + '">') +
+          '</div>' +
+          f('Что входит в услугу',
+            '<textarea id="sv-desc" class="al-in al-ta" rows="2" placeholder="Состав действий — то же, что видит исполнитель в задании"></textarea>') +
+          f('Что считается выполнением',
+            '<input id="sv-res" class="al-in" maxlength="300" value="' + v(s.result_req) + '" placeholder="Например: ролик сдан в двух форматах">') +
+          '<label class="al-f sv-onoff"><input type="checkbox" id="sv-on"' + (s.active ? ' checked' : '') + '>' +
+            '<span>Услуга в работе — показывать при создании задания</span></label>' +
+          '<div class="ct-err" id="sv-err"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="sv-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="sv-ok">Сохранить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    el('sv-desc').value = s.description || '';
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('sv-x').addEventListener('click', close);
+    el('sv-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sv-ok').addEventListener('click', function () {
+      var title = el('sv-title').value.trim();
+      if (title.length < 2) { el('sv-err').textContent = 'Напишите название услуги'; return; }
+      var unit = el('sv-unit').value.trim() || 'шт';
+      var price = el('sv-price').value === '' ? null : Number(el('sv-price').value);
+      if (price !== null && !(price >= 0)) { el('sv-err').textContent = 'Цена должна быть числом'; return; }
+      var body = {
+        title: title, unit: unit, price: price,
+        code: el('sv-code').value.trim() || null,
+        category: el('sv-cat').value.trim() || null,
+        description: el('sv-desc').value.trim() || null,
+        result_req: el('sv-res').value.trim() || null,
+        active: el('sv-on').checked,
+      };
+      czSend('/admin/api/contractor-services' + (isNew ? '' : '/' + s.id),
+             isNew ? 'POST' : 'PATCH', body)
+        .then(function () {
+          close(); czSvcLoad();
+          showToast(isNew ? 'Услуга добавлена в каталог' : 'Услуга сохранена');
+        })
+        .catch(function (e) { el('sv-err').textContent = e.message; });
+    });
+    setTimeout(function () { el('sv-title').focus(); }, 30);
   }
 
   /* Маленькая форма-вопрос на той же модалке дизайн-системы: пара полей и проверка.
