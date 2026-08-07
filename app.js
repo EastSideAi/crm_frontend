@@ -5411,12 +5411,16 @@
         }
       }
       state.bot.list = fresh;
-      // НЕ затираем свежий тумблер бэкенд-данными первые 5с (иначе реалтайм-полл откатит
-      // оптимистичное включение/выключение, пока POST ещё не дошёл — выглядит как «не работает»)
+      // НЕ затираем свежий тумблер бэкенд-данными, пока бэк не подтвердит наше значение:
+      // иначе реалтайм-полл откатывает переключение, пока POST ещё в пути — выглядит как
+      // «тумблер не работает». Держим до совпадения (а не фиксированные 5с: ответ бывает
+      // и медленнее), но не дольше 30с — чтобы залипшее значение не врало вечно.
       var now = Date.now();
       (fresh || []).forEach(function (c) {
-        var t = (state._aiToggleAt || {})[c.user_id];
-        if (t && now - t < 5000) { c.ai_enabled = (state._aiToggleVal || {})[c.user_id]; c.taken_by = c.ai_enabled ? null : c.taken_by; }
+        var p = (state._aiToggle || {})[c.user_id];
+        if (!p) return;
+        if (c.ai_enabled === p.val || now - p.at > 30000) { delete state._aiToggle[c.user_id]; return; }
+        c.ai_enabled = p.val; c.taken_by = p.val ? null : c.taken_by;
       });
       // сообщения открытого чата — тянем только если чат выбран и уже загружен (без скелетона)
       var sel = state.inboxSel;
@@ -5529,28 +5533,62 @@
       : (c.ai_on === false) ? '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведёт менеджер') + '</span>'
       : '<span class="tg-tag ai">' + ic('bot', 10) + 'AI</span>';
   }
+  /* Когда бот сам подхватит диалог. Правило на стороне бота: AI_RESUME_AFTER_H часов тишины —
+     не писал НИКТО, ни клиент, ни менеджер (app/handoff.py). Показываем точное время, а не
+     «через 20 минут»: подсказка живёт до следующей перерисовки и обратный отсчёт протух бы. */
+  var AI_RESUME_H = 2;
+  function aiResumeAt(c) {
+    var t = c && c.last_at ? Date.parse(c.last_at) : NaN;
+    return t ? new Date(t + AI_RESUME_H * 3600000) : null;
+  }
+  function resumeNote(c) {
+    var at = aiResumeAt(c);
+    if (!at) return '.';
+    return at - Date.now() > 0
+      ? '; сам он подхватит в ' + fmtTime(at.toISOString()) + ', если до тех пор никто не напишет.'
+      : '; тишина уже больше ' + AI_RESUME_H + ' часов — следующее сообщение бот возьмёт на себя.';
+  }
+
+  /* Тумблер обязан показывать РЕАЛЬНОЕ положение дел: по нему менеджер решает, писать ему
+     самому или бот справится. Поэтому переключение оптимистичное, но не «на веру» — если
+     запрос не прошёл, откатываем в исходное состояние и говорим об этом вслух. */
   function inboxSetAi(c, on) {
     if (c.api) {
-      apiSend('/admin/api/bot/conversations/' + c.id + '/ai', 'POST', { enabled: on }, function () {});
-      state._aiToggleAt = state._aiToggleAt || {}; state._aiToggleVal = state._aiToggleVal || {};
-      state._aiToggleAt[c.id] = Date.now(); state._aiToggleVal[c.id] = on;
+      var was = { ai: c.ai_on !== false, ho: c.handoff, by: c.taken_by };
       // вкл → бот снова сам отвечает, снимаем «ведёт менеджер»; выкл → диалог за менеджером
-      function apply(o) { if (!o) return; o.ai_enabled = on; o.handoff_requested = on ? false : o.handoff_requested; o.taken_by = on ? null : state.userName; }
-      apply(state.bot.msgs[c.id]);
-      apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
-      c.ai_on = on; c.handoff = on ? false : c.handoff; c.taken_by = on ? null : state.userName;
-      // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
-      if (state.page === 'inbox') {
-        renderInboxChat([c]);
-        var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
-        if (r3) r3.innerHTML = inboxTag(c);
+      function put(ai, ho, by) {
+        function apply(o) { if (!o) return; o.ai_enabled = ai; o.handoff_requested = ho; o.taken_by = by; }
+        apply(state.bot.msgs[c.id]);
+        apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
+        c.ai_on = ai; c.handoff = ho; c.taken_by = by;
+        // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
+        if (state.page === 'inbox') {
+          renderInboxChat([c]);
+          var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
+          if (r3) r3.innerHTML = inboxTag(c);
+        }
+        renderSide();
       }
-      renderSide();
+      state._aiToggle = state._aiToggle || {};
+      state._aiToggle[c.id] = { val: on, at: Date.now() };
+      put(on, on ? false : was.ho, on ? null : state.userName);
+      api('/admin/api/bot/conversations/' + c.id + '/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }),
+      }).then(function () {
+        showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
+      }).catch(function (e) {
+        delete state._aiToggle[c.id];
+        put(was.ai, was.ho, was.by);
+        // 403 — сессия истекла, api() уже увёл на экран входа: тост поверх него лишний
+        if (!e || e.message !== '403') {
+          showToast('Не переключилось — бот остался ' + (on ? 'выключенным' : 'включенным'));
+        }
+      });
     } else {
       state.dialogAi[c.id] = on; var dl = getDialog(c.lead); if (on) dl.handoff_req = false; else dl.handed = false;
       renderView(); renderSide();
+      showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
     }
-    showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
   }
   function inboxMarkSeen(c) {
     if (c.api) apiSend('/admin/api/bot/conversations/' + c.id + '/seen', 'POST', null, function () {});
@@ -5780,7 +5818,7 @@
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
-          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы; сам он подхватит только после 2 часов тишины.</span>') +
+          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
       '<div class="tg-compose">' +
         '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
