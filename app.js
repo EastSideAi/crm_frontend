@@ -1719,14 +1719,16 @@
       // проценты выполнения. И сразу напоминает границу — план это не деньги.
       var ps = PL.data ? plStats() : null;
       var phrase6;
+      var noplan = ps && ps.empty
+        ? ' У <b>' + ps.empty + ' ' + plural(ps.empty, 'человека', 'человек', 'человек') +
+          '</b> плана на этот период нет.' : '';
       if (!ps) phrase6 = 'Загружаю планы…';
       else if (!ps.people) phrase6 = 'Исполнителей пока нет — планировать некому.';
-      else if (ps.empty) phrase6 = 'У <b>' + ps.empty + ' ' + plural(ps.empty, 'человека', 'человек', 'человек') +
-        '</b> на этот период плана нет. Начните с них.';
-      else if (!ps.items) phrase6 = 'Планы пусты. План — это то, чем человек занят; деньги идут за задания.';
+      else if (!ps.items) phrase6 = 'На этот период ничего не запланировано. План — это то, чем человек занят; ' +
+        'деньги идут отдельно, за задания.';
       else phrase6 = 'Сделано <b>' + ps.done + ' из ' + ps.items + '</b> ' +
         plural(ps.items, 'пункта', 'пунктов', 'пунктов') +
-        (ps.tasks ? ', в задания превращено <b>' + ps.tasks + '</b>' : '') + '.';
+        (ps.tasks ? ', в задания превращено <b>' + ps.tasks + '</b>' : '') + '.' + noplan;
       html = '<div><h2>Планы работ</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('cal', 13) + '</span><span>' + phrase6 + '</span></div></div>';
     }
@@ -3295,27 +3297,32 @@
     '</div>';
   }
   function plPersonCard(person, plan) {
-    var items = plan ? plan.items : [];
+    var items = plan.items;
     var sub = items.length
       ? (plan.stats.done + ' из ' + items.length + ' сделано' +
          (plan.stats.tasks ? ' · ' + plan.stats.tasks + ' ' +
            plural(plan.stats.tasks, 'в задании', 'в заданиях', 'в заданиях') : ''))
-      : 'Плана нет';
-    return '<div class="card pl-p' + (items.length ? '' : ' quiet') + '">' +
+      : 'Пунктов пока нет';
+    return '<div class="card pl-p">' +
       '<div class="pl-p-h">' +
         '<span class="pl-p-n"><b>' + esc(person.full_name) + '</b>' +
           (person.blocked ? '<span class="ct-chip ct-off">Заблокирован</span>' : '') + '</span>' +
         '<span class="pl-p-s">' + esc(sub) + '</span>' +
       '</div>' +
-      (items.length
-        ? '<div class="pl-list">' + items.map(plItemRow).join('') + '</div>'
-        : '<div class="pl-none">Что человек делает в этот период — пока не записано.</div>') +
+      (items.length ? '<div class="pl-list">' + items.map(plItemRow).join('') + '</div>' : '') +
       '<button class="pl-add" data-pl-add="' + person.id + '">' + ic('plus', 13) + 'Добавить пункт</button>' +
     '</div>';
   }
   function renderCzPlans(view) {
     if (!PL.data) { view.innerHTML = dashSkeleton(); plLoad(); return; }
     var d = PL.data;
+    // Связь оборвалась на первой же загрузке — периода мы не знаем, и рисовать шапку
+    // с листалкой не из чего. Показываем причину, а не пустую страницу.
+    if (!d.starts_on) {
+      view.innerHTML = '<div class="card"><div class="empty">' +
+        esc(PL.err || 'Не удалось загрузить планы. Обновите страницу.') + '</div></div>';
+      return;
+    }
     var byPerson = {};
     (d.plans || []).forEach(function (p) { byPerson[p.contractor_id] = p; });
     var tabs = PL_TABS.map(function (t) {
@@ -3323,12 +3330,25 @@
         t[1] + '</button>';
     }).join('');
     var cur = d.starts_on === plToday(PL.period);
-    var cards = (d.people || []).map(function (p) { return plPersonCard(p, byPerson[p.id]); }).join('');
+    // Люди с планом — карточками, остальные одной строкой чипов. Девять одинаковых
+    // карточек «плана нет» съедают экран и уравнивают пустое с работой, а вопрос по
+    // ним один и тот же: записать первый пункт.
+    var withPlan = (d.people || []).filter(function (p) { return byPerson[p.id]; });
+    var without = (d.people || []).filter(function (p) { return !byPerson[p.id]; });
+    var cards = withPlan.map(function (p) { return plPersonCard(p, byPerson[p.id]); }).join('');
+    var rest = !without.length ? '' :
+      '<div class="card pl-rest">' +
+        '<div class="pl-rest-h">Без плана на этот период · ' + without.length + '</div>' +
+        '<div class="pl-rest-l">' + without.map(function (p) {
+          return '<button class="pl-chip" data-pl-add="' + p.id + '">' + esc(p.full_name) +
+            ic('plus', 12) + '</button>';
+        }).join('') + '</div>' +
+      '</div>';
     var body = PL.err
       ? '<div class="card"><div class="empty">' + esc(PL.err) + '</div></div>'
       : (!(d.people || []).length
         ? '<div class="card"><div class="empty">Исполнителей пока нет. Пригласите первого — тогда можно будет планировать его работу.</div></div>'
-        : '<div class="pl-grid">' + cards + '</div>');
+        : (cards ? '<div class="pl-grid">' + cards + '</div>' : '') + rest);
 
     view.innerHTML =
       '<div class="card listcard pl-bar">' +
