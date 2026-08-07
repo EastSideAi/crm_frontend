@@ -2738,8 +2738,11 @@
           ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>'
           : '') +
         (t.frozen
-          ? '<div class="ct-frozen">По заданию уже есть акт или выплата — условия менять нельзя.</div>'
-          : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>') +
+          ? '<div class="ct-frozen">Задание оплачено — сумма больше не меняется.</div>'
+          : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>' +
+            (t.status === 'act_created' || t.status === 'act_signed'
+              ? '<div class="ct-frozen">Если изменить сумму, акт придется собрать заново — он относится к прежней.</div>'
+              : '')) +
       '</div>';
 
     var facts = [
