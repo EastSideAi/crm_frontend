@@ -3075,7 +3075,6 @@
     view.innerHTML =
       '<div class="card listcard">' +
         '<div class="list-tools">' +
-          '<span class="list-note">Прайс типовых работ: цена за единицу подставляется в новое задание. У выданных заданий сумма не меняется.</span>' +
           '<span class="list-count"><b>' + list.length + '</b> ' +
             plural(list.length, 'услуга', 'услуги', 'услуг') + '</span>' +
           '<button class="bp sm cz-add" id="sv-add">' + ic('plus', 14) + 'Новая услуга</button>' +
