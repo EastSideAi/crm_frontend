@@ -31,7 +31,6 @@
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
-    czMode: 'tasks',    // 'tasks' — задания, 'plans' — планы работ (одна страница, тумблер сверху)
     drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
@@ -1387,6 +1386,7 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
+    { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
@@ -1414,12 +1414,11 @@
     return 'crm';
   }
   function curSpace() { return spaceOf(state.page); }
-  /* «Задания» и «Планы работ» — одна страница с тумблером сверху, как «Диалоги» и
-     «Обсуждения». Разделами их разводить не стали (решение владельца от 2026-08-07):
-     смотрят на них по очереди одни и те же люди, а лишний пункт меню плодит беготню.
-     Экраны при этом остаются разными — план и задание не одно и то же (см. §10б). */
-  function czTasksOn() { return state.page === 'cztasks' && state.czMode !== 'plans'; }
-  function czPlansOn() { return state.page === 'cztasks' && state.czMode === 'plans'; }
+  /* «Задания» и «Планы работ» — два раздела (решение владельца от 2026-08-07): план и
+     задание разные сущности, и на экране это должно быть видно так же, как в данных.
+     Связь между ними показана перекрестными ссылками в карточках, а не общим экраном. */
+  function czTasksOn() { return state.page === 'cztasks'; }
+  function czPlansOn() { return state.page === 'czplans'; }
   function navItems(space) {
     var s = space || curSpace();
     return NAV_ALL.filter(function (it) { return can(it.cap) && navSpace(it) === s; });
@@ -1545,29 +1544,6 @@
     var tb = el('tb-left');
     if (!tb) return;
     var c = counts();
-    /* «Задания» и «Планы работ» — две поверхности одного раздела, поэтому переключаются
-       там же, где сегменты у «Людей»: это контекст страницы, а не фильтр внутри списка.
-       На заданиях показываем счетчик сданного — это то, что ждет человека. */
-    if (state.page === 'cztasks') {
-      var wait = CT.stats && CT.stats.by_status ? (CT.stats.by_status.done || 0) : 0;
-      tb.innerHTML = '<nav class="tabs">' +
-        '<a class="tab' + (czPlansOn() ? '' : ' on') + '" data-cz="tasks">Задания' +
-          (wait ? '<span class="n num">' + wait + '</span>' : '') + '</a>' +
-        '<a class="tab' + (czPlansOn() ? ' on' : '') + '" data-cz="plans">Планы работ</a>' +
-      '</nav>';
-      Array.prototype.forEach.call(tb.querySelectorAll('[data-cz]'), function (t) {
-        t.addEventListener('click', function () {
-          var m = t.getAttribute('data-cz');
-          if (m === state.czMode) return;
-          state.czMode = m;
-          // адрес отражает то, что на экране: скинуть коллеге ссылку именно на планы
-          // должно быть можно, а перезагрузка не должна возвращать не туда
-          syncHash(m === 'plans' ? 'czplans' : 'cztasks', 'page');
-          renderTopbar(); renderHead(); renderView();
-        });
-      });
-      return;
-    }
     if (state.page === 'leads') {
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
@@ -1789,9 +1765,6 @@
     var view = el('view');
     if (!view) return;
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
-    // «Планы работ» больше не отдельный раздел — это вкладка внутри «Заданий». Ссылки
-    // вида #page/czplans уже разошлись по переписке, они обязаны открывать планы.
-    if (state.page === 'czplans') { state.page = 'cztasks'; state.czMode = 'plans'; }
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
     if (state.page === 'threads') { state.page = 'inbox'; state.inboxMode = 'threads'; }
@@ -1814,7 +1787,8 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'contractors') renderContractors(view);
-    else if (state.page === 'cztasks') { if (czPlansOn()) renderCzPlans(view); else renderCzTasks(view); }
+    else if (state.page === 'cztasks') renderCzTasks(view);
+    else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
@@ -2406,7 +2380,7 @@
     if (pi) pi.addEventListener('click', function () { czPayInvite(id); });
     var gp = el('cz-goplans');
     if (gp) gp.addEventListener('click', function () {
-      closeCz(); state.czMode = 'plans'; setPage('cztasks');
+      closeCz(); setPage('czplans');
     });
     // из карточки человека — в само задание: модалка та же, меняется содержимое
     Array.prototype.forEach.call(modal.querySelectorAll('[data-goct]'), function (r) {
@@ -9675,14 +9649,7 @@
      ссылку могли переслать тому, у кого нет cap. */
   function openPageFromHash() {
     var p = hashRouteId('page');
-    if (!p) return false;
-    // старая ссылка на планы: раздела с таким id больше нет, но ссылка должна работать
-    if (p === 'czplans' && can('contractors')) {
-      state.czMode = 'plans';
-      if (state.page === 'cztasks') { renderTopbar(); renderHead(); renderView(); } else setPage('cztasks');
-      return true;
-    }
-    if (p === state.page) return false;
+    if (!p || p === state.page) return false;
     for (var i = 0; i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === p && can(NAV_ALL[i].cap)) { setPage(p); return true; }
     }
@@ -9713,7 +9680,6 @@
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
     var hp = hashRouteId('page');
-    if (hp === 'czplans') { hp = 'cztasks'; state.czMode = 'plans'; }
     for (var i = 0; hp && i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === hp && can(NAV_ALL[i].cap)) { state.page = hp; break; }
     }
