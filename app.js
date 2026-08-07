@@ -1385,6 +1385,7 @@
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
+    { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
   ];
@@ -1696,6 +1697,21 @@
       html = '<div><h2>Исполнители</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase3 + '</span></div></div>';
     }
+    if (state.page === 'cztasks') {
+      var cs = CT.stats;
+      var phrase4;
+      // Вердикт отвечает на вопрос оператора «за что мне сейчас браться», а не
+      // пересказывает числа: горячее тут — сданная работа, которую никто не принял.
+      var wait = cs && cs.by_status ? (cs.by_status.done || 0) : 0;
+      var ready = cs && cs.by_status ? (cs.by_status.approved || 0) : 0;
+      if (!cs) phrase4 = 'Загружаю задания…';
+      else if (!cs.count && CT.tab === 'all' && !CT.q) phrase4 = 'Заданий пока нет. Задание — это работа с результатом и суммой: из принятых заданий собирается акт, по акту идет выплата.';
+      else if (wait) phrase4 = '<b>' + wait + ' ' + plural(wait, 'задание ждет', 'задания ждут', 'заданий ждут') + '</b> проверки — примите результат или верните на доработку.';
+      else if (ready) phrase4 = 'Проверять нечего. <b>' + ready + ' ' + plural(ready, 'задание готово', 'задания готовы', 'заданий готовы') + '</b> к акту.';
+      else phrase4 = 'В работе <b>' + cs.count + ' ' + plural(cs.count, 'задание', 'задания', 'заданий') + '</b> на <b>' + ctMoney(cs.amount) + ' ₽</b>.';
+      html = '<div><h2>Задания</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase4 + '</span></div></div>';
+    }
     ch.innerHTML = html;
   }
   function plural(n, one, few, many) {
@@ -1733,6 +1749,7 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'contractors') renderContractors(view);
+    else if (state.page === 'cztasks') renderCzTasks(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -2491,6 +2508,508 @@
     ov2.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
     });
+  }
+
+  /* ── ЗАДАНИЯ ИСПОЛНИТЕЛЯМ (модуль самозанятых, этап 2) ─────────────────────
+     Задание — единица работы, за которую платят: что сделать, какой результат, срок,
+     сумма. Из принятых заданий соберется акт, по акту пойдет выплата. Планы работ
+     (дневные, недельные, месячные) — другая сущность: у их пунктов нет стоимости, в
+     акт они не попадают. Смешать их нельзя не из аккуратности: ежедневные поручения
+     в акте читаются как трудовая функция, и это прямой путь к переквалификации.
+
+     Что здесь НЕ решается на экране: цепочка статусов, право менять сумму и заморозка
+     после акта. Все это считает сервер (routers/contractor_tasks.py), а экран только
+     показывает разрешенные действия — те же правила на этапах 5 и 6 будут решать,
+     можно ли собрать акт и можно ли платить. */
+  var CT = { list: null, stats: null, err: '', q: '', tab: 'all', openId: null,
+             detail: {}, services: null, busy: false };
+  var CT_ST = {
+    draft: 'ct-draft', offered: 'ct-wait', accepted: 'ct-go', in_progress: 'ct-go',
+    done: 'ct-check', approved: 'ct-ok', act_created: 'ct-ok', act_signed: 'ct-ok',
+    paid: 'ct-paid', declined: 'ct-off', cancelled: 'ct-off', archived: 'ct-off',
+  };
+  var CT_TABS = [['all', 'Все'], ['active', 'В работе'], ['draft', 'Черновики'],
+                 ['approved', 'Приняты'], ['paid', 'Оплачены'], ['closed', 'Закрыты']];
+
+  function ctMoney(v) {
+    var n = Math.round(Number(v || 0));
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+  function ctLoad(cb) {
+    var p = '/admin/api/contractor-tasks?tab=' + encodeURIComponent(CT.tab) +
+      (CT.q ? '&q=' + encodeURIComponent(CT.q) : '');
+    api(p).then(function (r) {
+      CT.list = r.tasks || []; CT.stats = r.stats || null; CT.err = '';
+      if (state.page === 'cztasks') renderAll();
+      if (cb) cb(true);
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      CT.list = CT.list || [];
+      CT.err = 'Не удалось загрузить задания. Проверьте связь и обновите страницу.';
+      if (state.page === 'cztasks') renderAll();
+      if (cb) cb(false);
+    });
+  }
+  /* Каталог типовых работ — то, что в договоре названо «каталогом типовых заданий и их
+     стоимости» (Приложение № 1, п. 3). Дает условия по умолчанию при создании; цена
+     после этого живет в самом задании и от правки каталога не меняется. */
+  function ctServices(cb) {
+    if (CT.services) return cb(CT.services);
+    api('/admin/api/contractor-services').then(function (r) {
+      CT.services = r.services || []; cb(CT.services);
+    }).catch(function () { CT.services = []; cb(CT.services); });
+  }
+  function ctFind(id) {
+    var l = CT.list || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+    return null;
+  }
+  function ctPut(t) {
+    if (!t) return;
+    CT.detail[t.id] = t;
+    var l = CT.list || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === t.id) { l[i] = t; return; }
+  }
+  function ctPeriod(t) {
+    if (!t.date_start && !t.date_end) return '—';
+    if (t.date_start && t.date_end) return czDate(t.date_start) + ' — ' + czDate(t.date_end);
+    return t.date_end ? 'до ' + czDate(t.date_end) : 'с ' + czDate(t.date_start);
+  }
+  function ctRow(t) {
+    var p = t.contractor || {};
+    return '<div class="trow ct-grid" data-ct="' + t.id + '">' +
+      '<span class="ct-main"><span class="ct-no">№' + t.number + '</span>' +
+        '<b>' + esc(t.title) + '</b>' +
+        (t.project ? '<span class="ct-proj">' + esc(t.project) + '</span>' : '') + '</span>' +
+      '<span class="ct-who">' + esc(p.full_name || '—') + '</span>' +
+      '<span class="ct-when">' + esc(ctPeriod(t)) + '</span>' +
+      '<span class="ct-sum"><b>' + ctMoney(t.amount) + ' ₽</b>' +
+        (t.corrected ? '<span class="ct-corr">сумма уточнена</span>' : '') + '</span>' +
+      '<span class="ct-state"><span class="ct-chip ' + (CT_ST[t.status] || 'ct-draft') + '">' +
+        esc(t.status_title) + '</span>' +
+        (t.next_hint ? '<span class="ct-next">' + esc(t.next_hint) + '</span>' : '') + '</span>' +
+      '</div>';
+  }
+  function renderCzTasks(view) {
+    if (CT.list === null) { view.innerHTML = dashSkeleton(); ctLoad(); return; }
+    var st = CT.stats || { count: 0, amount: 0, by_tab: {} };
+    var tabs = CT_TABS.map(function (t) {
+      var n = (st.by_tab || {})[t[0]];
+      return '<button class="qchip' + (CT.tab === t[0] ? ' on' : '') + '" data-ctab="' + t[0] + '">' +
+        t[1] + (n === undefined ? '' : ' <span class="qn">' + n + '</span>') + '</button>';
+    }).join('');
+    var rows = CT.list;
+    var body = CT.err
+      ? '<div class="empty">' + esc(CT.err) + '</div>'
+      : (!rows.length
+        ? '<div class="empty">' + (CT.q
+            ? 'По запросу «' + esc(CT.q) + '» заданий не нашли.'
+            : 'Заданий пока нет. Создайте первое — из принятых заданий потом собирается акт, а по акту идет выплата.') + '</div>'
+        : rows.map(ctRow).join(''));
+
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div class="searchwrap' + (CT.q ? ' has-val' : '') + '">' + ic('search', 16) +
+            '<input class="search" id="ct-q" placeholder="Поиск по номеру, названию, исполнителю или ИНН" value="' + esc(CT.q) + '">' +
+            (CT.q ? '<button class="s-clear" id="ct-qx">' + ic('x', 13) + '</button>' : '') +
+          '</div>' +
+          '<span class="list-count"><b>' + st.count + '</b> ' +
+            plural(st.count, 'задание', 'задания', 'заданий') +
+            ' на <b>' + ctMoney(st.amount) + ' ₽</b></span>' +
+          '<button class="bp sm cz-add" id="ct-add">' + ic('plus', 14) + 'Новое задание</button>' +
+        '</div>' +
+        '<div class="list-quick">' + tabs + '</div>' +
+        '<div class="trow ct-grid thead">' +
+          '<span class="th">Задание</span><span class="th">Исполнитель</span>' +
+          '<span class="th">Период</span><span class="th">Сумма</span>' +
+          '<span class="th">Состояние</span>' +
+        '</div>' + body +
+      '</div>';
+
+    var qi = el('ct-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        CT.q = qi.value;
+        clearTimeout(CT._t);
+        CT._t = setTimeout(function () { ctLoad(); }, 250);
+      });
+      qi.addEventListener('keydown', function (e) { if (e.key === 'Escape') { CT.q = ''; ctLoad(); } });
+    }
+    var qx = el('ct-qx');
+    if (qx) qx.addEventListener('click', function () { CT.q = ''; ctLoad(); });
+    el('ct-add').addEventListener('click', openCtNew);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ctab]'), function (b) {
+      b.addEventListener('click', function () {
+        CT.tab = b.getAttribute('data-ctab'); CT.list = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ct]'), function (r) {
+      r.addEventListener('click', function () { openCt(r.getAttribute('data-ct')); });
+    });
+    pageAnim(view);
+  }
+
+  /* ── карточка задания ─────────────────────────────────────────────────────
+     Один экран отвечает на три вопроса: что за работа, на каком она шаге и что
+     оператору делать дальше. Кнопки действий приходят с сервера (`next`) — экран не
+     решает сам, что разрешено, иначе правила разъедутся с теми, что стоят на акте. */
+  function openCt(id) {
+    CT.openId = id;
+    el('mbg').classList.add('open');
+    el('modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderCtCard();
+    api('/admin/api/contractor-tasks/' + id).then(function (r) {
+      ctPut(r);
+      if (CT.openId === id) renderCtCard();
+    }).catch(function () {
+      if (CT.openId === id) { closeCt(); showToast('Не удалось открыть задание'); }
+    });
+  }
+  function closeCt() {
+    CT.openId = null;
+    el('mbg').classList.remove('open');
+    el('modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  function ctAct(id, to, reason) {
+    if (CT.busy) return;
+    CT.busy = true;
+    czSend('/admin/api/contractor-tasks/' + id + '/status', 'POST', { to: to, reason: reason })
+      .then(function (t) { ctPut(t); renderCtCard(); ctLoad(); })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { CT.busy = false; });
+  }
+  var CT_ACT_LABEL = {
+    offered: 'Отправить исполнителю', accepted: 'Исполнитель принял',
+    declined: 'Исполнитель отказался', in_progress: 'Приступил к работе',
+    done: 'Работа выполнена', approved: 'Принять результат',
+    act_created: 'Создать акт', act_signed: 'Акт подписан', paid: 'Оплачено',
+    cancelled: 'Отменить', archived: 'В архив', draft: 'Вернуть в черновик',
+  };
+  /* Один и тот же переход называется по-разному в зависимости от того, откуда идем:
+     из «выполнено» в «в работе» — это не «приступил», это «вернуть на доработку».
+     Кнопка обязана называть действие так, как его понимает оператор. */
+  var CT_ACT_FROM = {
+    'done>in_progress': 'Вернуть на доработку',
+    'approved>in_progress': 'Вернуть на доработку',
+    'act_created>approved': 'Отозвать акт',
+    'declined>draft': 'Вернуть в черновик',
+  };
+  /* Главный шаг вперед у каждого состояния — он и рисуется основной кнопкой,
+     остальные тише. Двух синих кнопок рядом быть не должно: экран перестает
+     подсказывать, что делать. */
+  var CT_MAIN = {
+    draft: 'offered', offered: 'accepted', accepted: 'in_progress',
+    in_progress: 'done', done: 'approved', approved: 'act_created',
+    act_created: 'act_signed', act_signed: 'paid', declined: 'archived',
+    cancelled: 'archived',
+  };
+  // Действия, которые нельзя делать не подумав: они требуют причины или закрывают путь.
+  var CT_ASK = { cancelled: 'Почему отменяем задание?', declined: 'Почему исполнитель отказался?' };
+  function renderCtCard() {
+    var modal = el('modal');
+    var id = CT.openId;
+    if (!modal || !id) return;
+    var t = CT.detail[id] || ctFind(id);
+    if (!t) {
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="ct-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем задание…</div>';
+      el('ct-x').addEventListener('click', closeCt);
+      return;
+    }
+    var p = t.contractor || {};
+    var acts = (t.next || []).map(function (to) {
+      var label = CT_ACT_FROM[t.status + '>' + to] || CT_ACT_LABEL[to] || to;
+      return '<button class="bp sm' + (CT_MAIN[t.status] === to ? '' : ' ghost') + '" data-cta="' + to + '">' +
+        esc(label) + '</button>';
+    }).join('');
+
+    var money =
+      '<div class="ct-money">' +
+        '<div class="ct-amt"><span class="ct-amt-k">К оплате по заданию</span>' +
+          '<b>' + ctMoney(t.amount) + ' ₽</b></div>' +
+        '<div class="ct-calc">' + ctMoney(t.price_plan) + ' ₽ по плану · ' +
+          (t.qty_fact !== null && t.qty_fact !== undefined
+            ? esc(String(t.qty_fact)) + ' ' + esc(t.unit) + ' фактически'
+            : esc(String(t.qty_plan)) + ' ' + esc(t.unit) + ' по плану') + '</div>' +
+        (t.corrected
+          ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>'
+          : '') +
+        (t.frozen
+          ? '<div class="ct-frozen">По заданию уже есть акт или выплата — условия менять нельзя.</div>'
+          : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>') +
+      '</div>';
+
+    var facts = [
+      ['Исполнитель', esc(p.full_name || '—') + (p.phone ? ' · ' + esc(p.phone) : '')],
+      ['Услуга', esc(t.service_title || t.title) + (t.service_code ? ' · ' + esc(t.service_code) : '')],
+      ['Проект', t.project ? esc(t.project) : '—'],
+      ['Период', esc(ctPeriod(t))],
+      ['Место выполнения', esc(t.place || 'Удаленно')],
+      ['Объем', esc(String(t.qty_plan)) + ' ' + esc(t.unit) + ' по плану'],
+    ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
+
+    var text = ['Что нужно сделать', t.description, 'Что считается выполнением', t.result_req,
+                'Информация для исполнителя', t.info];
+    var blocks = '';
+    for (var i = 0; i < text.length; i += 2) {
+      if (!text[i + 1]) continue;
+      blocks += '<div class="m-sec"><div class="m-sec-h">' + esc(text[i]) + '</div>' +
+        '<div class="ct-blk-b">' + esc(text[i + 1]).replace(/\n/g, '<br>') + '</div></div>';
+    }
+
+    var ev = (t.events || []).map(function (e) {
+      return '<div class="ct-ev"><span class="ct-ev-d">' + esc(czDate(e.at)) + '</span>' +
+        '<span class="ct-ev-t">' + esc(e.text) + '</span>' +
+        (e.author ? '<span class="ct-ev-a">' + esc(e.author) + '</span>' : '') + '</div>';
+    }).join('');
+
+    modal.innerHTML =
+      '<div class="m-head">' +
+        '<div class="m-navfloat"><button class="m-arrow" id="ct-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-id"><div class="m-name-row"><div class="m-name">' +
+          '<span class="ct-no">№' + t.number + '</span>' + esc(t.title) + '</div></div>' +
+          '<div class="m-sub"><span class="sev ' + (CT_ST[t.status] || 'ct-draft') + '">' +
+            esc(t.status_title) + '</span>' +
+            (t.next_hint ? '<span class="dot-sep"></span><span>' + esc(t.next_hint) + '</span>' : '') +
+            '<span class="dot-sep"></span><span>' + esc(p.full_name || '—') + '</span>' +
+          '</div></div>' +
+      '</div>' +
+      '<div class="m-body"><div class="m-content">' +
+        money +
+        (acts ? '<div class="ct-acts">' + acts + '</div>' : '') +
+        '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
+        blocks +
+        (t.cancel_reason
+          ? '<div class="m-sec"><div class="m-sec-h">Причина</div>' +
+            '<div class="ct-blk-b">' + esc(t.cancel_reason) + '</div></div>'
+          : '') +
+        '<div class="m-sec"><div class="m-sec-h">История</div>' +
+          '<div class="ct-hist">' + (ev || '<span class="cz-fine">Пока пусто</span>') + '</div></div>' +
+      '</div></div>';
+
+    el('ct-x').addEventListener('click', closeCt);
+    var fix = el('ct-fix');
+    if (fix) fix.addEventListener('click', function () { openCtFix(t); });
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-cta]'), function (b) {
+      b.addEventListener('click', function () {
+        var to = b.getAttribute('data-cta');
+        if (CT_ASK[to]) return openCtReason(t.id, to, CT_ASK[to]);
+        ctAct(t.id, to);
+      });
+    });
+  }
+
+  /* Причина обязательна там, где действие закрывает работу: через полгода «почему
+     отменили» не вспомнит никто, а спрашивают об этом ровно тогда, когда речь о деньгах. */
+  function openCtReason(id, to, question) {
+    openSheet(question, 'Причина останется в истории задания — через полгода на этот вопрос отвечать по переписке никто не будет.', [
+      ['reason', 'text', 'Причина', ''],
+    ], function (vals, close) {
+      if (!vals.reason.trim()) return 'Напишите причину — она останется в истории задания';
+      ctAct(id, to, vals.reason.trim());
+      close();
+    });
+  }
+  /* Уточнение объема и суммы. Причина обязательна не для порядка: разница между
+     «уточнили объем» и «заплатили меньше, чем договорились» — ровно в этом поле, и
+     смотреть на него будут при споре. Правило проверяет и сервер. */
+  function openCtFix(t) {
+    openSheet('Фактический объем и сумма',
+      'Это сумма, на которую будет создан акт и проведена выплата.', [
+      ['qty', 'number', 'Фактический объем, ' + t.unit,
+        String(t.qty_fact !== null && t.qty_fact !== undefined ? t.qty_fact : t.qty_plan)],
+      ['sum', 'number', 'Итоговая сумма, ₽',
+        String(t.price_fact !== null && t.price_fact !== undefined ? t.price_fact : t.price_plan)],
+      ['why', 'text', 'Почему сумма отличается от плановой', t.correction || ''],
+    ], function (vals, close) {
+      var sum = Number(vals.sum);
+      if (!(sum >= 0)) return 'Сумма должна быть числом';
+      if (sum !== Number(t.price_plan) && !vals.why.trim()) {
+        return 'Укажите причину — почему итог отличается от плановой суммы';
+      }
+      czSend('/admin/api/contractor-tasks/' + t.id, 'PATCH', {
+        qty_fact: Number(vals.qty), price_fact: sum, correction: vals.why.trim() || undefined,
+      }).then(function (r) { ctPut(r); renderCtCard(); ctLoad(); close(); })
+        .catch(function (e) { showToast(e.message); });
+      return null;
+    });
+  }
+
+  /* Создание задания. Исполнителей берем из уже загруженного справочника: ставить
+     задание можно только тому, кто прошел онбординг, и это видно прямо в списке. */
+  function openCtNew() {
+    var make = function () {
+      var people = (CZ.list || []).filter(function (c) { return !c.archived && !c.blocked; });
+      ctServices(function (svc) {
+        var opts = people.map(function (c) {
+          return '<option value="' + c.id + '">' + esc(c.full_name) +
+            (c.state === 'ok' ? '' : ' — ' + esc((CZ_STATE[c.state] || {}).label || '')) + '</option>';
+        }).join('');
+        var sopts = '<option value="">— без каталога —</option>' + svc.map(function (s) {
+          return '<option value="' + s.id + '">' + esc(s.title) +
+            (s.price ? ' · ' + ctMoney(s.price) + ' ₽/' + esc(s.unit) : '') + '</option>';
+        }).join('');
+        openCtForm(opts, sopts, svc, people);
+      });
+    };
+    if (CZ.list === null) czLoad(function () { make(); });
+    else make();
+  }
+  function openCtForm(opts, sopts, svc, people) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var f = function (id, label, inner) {
+      return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+    };
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Новое задание</div></div>' +
+          '<button class="al-x" id="ctf-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Задание — это работа с результатом и суммой. Из принятых заданий собирается акт, по акту идет выплата. Текущие поручения и планы заданиями не являются.</div>' +
+        (people.length
+          ? '<div class="al-body">' +
+              f('who', 'Исполнитель <i>*</i>',
+                '<span class="al-selwrap"><select id="ctf-who" class="al-sel">' + opts + '</select></span>') +
+              f('svc', 'Из каталога услуг',
+                '<span class="al-selwrap"><select id="ctf-svc" class="al-sel">' + sopts + '</select></span>') +
+              f('title', 'Название задания <i>*</i>',
+                '<input id="ctf-title" class="al-in" maxlength="200" placeholder="Например: монтаж ролика для рассылки">') +
+              f('desc', 'Что нужно сделать',
+                '<textarea id="ctf-desc" class="al-in al-ta" rows="2" placeholder="Опишите услугу и результат, а не рабочий режим"></textarea>') +
+              f('res', 'Что считается выполнением',
+                '<input id="ctf-res" class="al-in" maxlength="300" placeholder="Например: ролик смонтирован и сдан в двух форматах">') +
+              '<div class="al-row">' +
+                f('d1', 'Начало', '<input id="ctf-d1" class="al-in" type="date">') +
+                f('d2', 'Срок', '<input id="ctf-d2" class="al-in" type="date">') +
+              '</div>' +
+              '<div class="al-row">' +
+                f('unit', 'Единица', '<input id="ctf-unit" class="al-in" value="шт" maxlength="40">') +
+                f('qty', 'Объем', '<input id="ctf-qty" class="al-in" type="number" min="0.5" step="0.5" value="1">') +
+                f('sum', 'Сумма, ₽', '<input id="ctf-sum" class="al-in" type="number" min="0" step="100" value="0">') +
+              '</div>' +
+            '</div>' +
+            '<div class="al-foot">' +
+              '<button class="al-cancel" id="ctf-cancel">Отмена</button>' +
+              '<button class="bp ghost al-save" id="ctf-draft">В черновики</button>' +
+              '<button class="bp al-save" id="ctf-send">' + ic('send', 14) + 'Отправить</button>' +
+            '</div>'
+          : '<div class="al-body"><div class="empty">Сначала пригласите исполнителя — заданий без человека не бывает.</div></div>' +
+            '<div class="al-foot"><button class="al-cancel" id="ctf-cancel">Закрыть</button></div>') +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('ctf-x').addEventListener('click', close);
+    el('ctf-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    if (!people.length) return;
+
+    var svcSel = el('ctf-svc');
+    svcSel.addEventListener('change', function () {
+      var s = null;
+      for (var i = 0; i < svc.length; i++) if (svc[i].id === svcSel.value) s = svc[i];
+      if (!s) return;
+      /* Каталог подставляет условия, дальше они живут в задании: поменяют прайс — сумма
+         уже согласованного задания не поедет (Приложение № 1, п. 3 договора). */
+      if (!el('ctf-title').value) el('ctf-title').value = s.title;
+      if (!el('ctf-desc').value && s.description) el('ctf-desc').value = s.description;
+      if (!el('ctf-res').value && s.result_req) el('ctf-res').value = s.result_req;
+      el('ctf-unit').value = s.unit || 'шт';
+      if (s.price) el('ctf-sum').value = String(Math.round(s.price * Number(el('ctf-qty').value || 1)));
+    });
+    var submit = function (offer) {
+      var titleI = el('ctf-title');
+      if (titleI.value.trim().length < 2) {
+        titleI.classList.add('al-err'); titleI.focus();
+        showToast('Напишите название задания');
+        return;
+      }
+      czSend('/admin/api/contractor-tasks', 'POST', {
+        contractor_id: el('ctf-who').value,
+        title: titleI.value.trim(),
+        description: el('ctf-desc').value.trim() || undefined,
+        result_req: el('ctf-res').value.trim() || undefined,
+        date_start: el('ctf-d1').value || undefined,
+        date_end: el('ctf-d2').value || undefined,
+        unit: el('ctf-unit').value.trim() || 'шт',
+        qty_plan: Number(el('ctf-qty').value || 1),
+        price_plan: Number(el('ctf-sum').value || 0),
+        offer: !!offer,
+      }).then(function (t) {
+        close(); CT.list = null; ctLoad();
+        showToast(offer ? 'Задание отправлено исполнителю' : 'Черновик сохранен');
+        openCt(t.id);
+      }).catch(function (e) { showToast(e.message); });
+    };
+    el('ctf-draft').addEventListener('click', function () { submit(false); });
+    el('ctf-send').addEventListener('click', function () { submit(true); });
+    titleFocus();
+    function titleFocus() { setTimeout(function () { el('ctf-title').focus(); }, 30); }
+  }
+
+  /* Маленькая форма-вопрос на той же модалке дизайн-системы: пара полей и проверка.
+     Возврат строки из обработчика = текст ошибки под формой, null = все хорошо. */
+  function openSheet(title, sub, fields, onOk) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    // форма открывается ПОВЕРХ карточки задания — обычный слой модалки лежит под ней
+    ov.className = 'al-ov over';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Задание</div><div class="al-title">' + esc(title) + '</div></div>' +
+          '<button class="al-x" id="sh-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        (sub ? '<div class="al-sub">' + esc(sub) + '</div>' : '') +
+        '<div class="al-body">' +
+          fields.map(function (f) {
+            return '<label class="al-f"><span class="al-l">' + esc(f[2]) + '</span>' +
+              (f[1] === 'text'
+                ? '<textarea id="sh-' + f[0] + '" class="al-in al-ta" rows="2" maxlength="1000"></textarea>'
+                : '<input id="sh-' + f[0] + '" class="al-in" type="' + f[1] + '" value="' + esc(f[3]) + '">') +
+              '</label>';
+          }).join('') +
+          '<div class="ct-err" id="sh-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="sh-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="sh-ok">Сохранить</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    fields.forEach(function (f) { if (f[1] === 'text') el('sh-' + f[0]).value = f[3] || ''; });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('sh-x').addEventListener('click', close);
+    el('sh-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sh-ok').addEventListener('click', function () {
+      var vals = {};
+      fields.forEach(function (f) { vals[f[0]] = el('sh-' + f[0]).value; });
+      var err = onOk(vals, close);
+      if (err) el('sh-err').textContent = err;
+    });
+    setTimeout(function () { el('sh-' + fields[0][0]).focus(); }, 30);
   }
 
   /* ── Команда и роли (Super Admin) ── */
