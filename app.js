@@ -8979,6 +8979,18 @@
     if (curSpace() !== 'crm') setPage(firstAllowedPage('crm'));
     openDrawer(id, [id]);
   }
+  /* ссылка на раздел: #page/<id> — открываем сразу нужную страницу. Пространство
+     выводится из самой страницы (spaceOf), поэтому ссылка на «Задания» приводит и в
+     окружение самозанятых, а не только на вкладку. Нет доступа — молча остаёмся где были:
+     ссылку могли переслать тому, у кого нет cap. */
+  function openPageFromHash() {
+    var p = hashRouteId('page');
+    if (!p || p === state.page) return false;
+    for (var i = 0; i < NAV_ALL.length; i++) {
+      if (NAV_ALL[i].id === p && can(NAV_ALL[i].cap)) { setPage(p); return true; }
+    }
+    return false;
+  }
   /* ссылка на переписку: #dialog/<id> — открываем инбокс сразу на этом диалоге.
      По такой ссылке приходит уведомление бота «клиенту нужен менеджер». */
   function openDialogFromHash() {
@@ -8994,6 +9006,7 @@
     var id = hashLeadId();
     if (id) openFromHash();
     else if (hashDialogId()) openDialogFromHash();
+    else if (openPageFromHash()) return;
     else if (state.drawerId) closeDrawer();
   });
   function startApp() {
@@ -9001,6 +9014,11 @@
     localStorage.setItem(SEEN_LS, String(Date.now()));
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
+    // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
+    var hp = hashRouteId('page');
+    for (var i = 0; hp && i < NAV_ALL.length; i++) {
+      if (NAV_ALL[i].id === hp && can(NAV_ALL[i].cap)) { state.page = hp; break; }
+    }
     renderShell();
     // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
     loadLeads(false, openFromHash);
