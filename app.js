@@ -149,6 +149,7 @@
       bolt: '<path d="M11 2.5 4 11h4.5L9 17.5 16 9h-4.5L11 2.5z" fill="currentColor" stroke="none"/>',
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
+      max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
@@ -3682,10 +3683,11 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -4419,6 +4421,7 @@
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
+    { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
@@ -5392,6 +5395,7 @@
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
+    else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -5415,6 +5419,7 @@
                  pay: ['Оплаты', 'Считаю платежи'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
+                 course: ['Китайский', 'Смотрю доступ к курсу'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -5696,6 +5701,122 @@
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
         '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
       access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
+     Близнец блока DET: тот же вопрос менеджера — «что у человека открыто» — и та же
+     кнопка на том же месте. Курс живет по личной ссылке, аккаунт платформы для него
+     не нужен, поэтому ссылку показываем прямо здесь: у школьника может не быть почты,
+     и доставить ссылку иногда придется руками. Ссылка одноразово выдается бэком в
+     ответе на открытие доступа и нигде не хранится — новая выпускается кнопкой. */
+  var CRS = {};        // id лида -> состояние с бэка
+  var CRS_BUSY = {};   // id лида -> идет загрузка
+  var CRS_LINK = {};   // id лида -> свежая ссылка на кабинет (живет до перезагрузки)
+
+  function loadCourse(id, force) {
+    if (CRS_BUSY[id]) return;
+    if (force) delete CRS[id];
+    CRS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/course').then(function (r) {
+      CRS_BUSY[id] = false; CRS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      CRS_BUSY[id] = false;
+      if (e.message !== '403') { CRS[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function buildCourseSection(id) {
+    var b = CRS[id];
+    if (!b) { loadCourse(id); return skeletonSection('course'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Китайский</div>' +
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+    }
+
+    var head = '<div class="m-ctitle">Китайский</div>' +
+      '<div class="m-csub">Курс «Живой китайский» в записи. Доступ открывается кнопкой: ' +
+      'ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны.</div>';
+
+    var done = b.done_n || 0;
+    var total = b.total_n || 0;
+    var progress = b.has_access
+      ? (done
+          ? 'пройдено ' + done + ' из ' + total + ' ' + plural(total, 'урок', 'урока', 'уроков') +
+            (b.last_activity ? ' · последний раз ' + esc(ago(b.last_activity)) + ' назад' : '')
+          : 'к урокам еще не приступал')
+      : 'уроки закрыты';
+
+    var link = CRS_LINK[id];
+    var linkRow = '<div class="det-link">' +
+      (link
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+          '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>') +
+      '</div>' +
+      '<div class="det-link-m">ссылка личная: по ней открывается кабинет именно этого ученика</div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
+        '<span class="hr" id="crs-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Курс «Живой китайский»</div>' +
+          '<div class="det-sw-s">' + progress + '</div></div>' +
+        '<button type="button" class="pd-sw' + (b.has_access ? ' on' : '') + '" id="crs-sw">' +
+          '<span class="pd-sw-l">' + (b.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (b.opened_by
+        ? '<div class="det-sw-by">открыл ' + esc(b.opened_by) + ' · ' + esc(fmtWhen(b.opened_at)) + '</div>'
+        : '') +
+      (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
+      '</div>';
+
+    return head + access;
+  }
+
+  function wireCourse(id) {
+    function post(body, okMsg) {
+      return api('/admin/api/leads/' + id + '/course/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        CRS[id] = r;
+        if (r.link) CRS_LINK[id] = r.link;
+        // Доступ открыт всегда, а вот доставка могла не дойти: у ученика, которого
+        // завели руками, чата с ботом нет. Менеджер должен узнать об этом сразу, а
+        // не из того, что ребенок так и не пришел на урок.
+        if (okMsg) {
+          showToast(r.delivered && r.delivered.telegram
+            ? okMsg + ' — ссылка ушла ему в чат'
+            : okMsg + ' — ссылку отправьте сами, она в карточке');
+        }
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
+      });
+    }
+
+    var lead = findLead(id) || {};
+    var payload = { name: lead.name || '', email: lead.email || '' };
+
+    var rf = el('crs-refresh');
+    if (rf) rf.addEventListener('click', function () { loadCourse(id, true); });
+
+    var sw = el('crs-sw');
+    if (sw) sw.addEventListener('click', function () {
+      var on = (CRS[id] || {}).has_access;
+      if (on && !confirm('Закрыть ученику доступ к курсу?')) return;
+      post({ open: !on, name: payload.name, email: payload.email },
+           on ? 'Доступ закрыт' : 'Доступ открыт');
+    });
+
+    var cp = el('crs-copy');
+    if (cp) cp.addEventListener('click', function () { copyText(CRS_LINK[id] || '', cp); });
+
+    var nl = el('crs-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -6386,6 +6507,9 @@
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);
+
+    // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
+    if (state.modalSection === 'course') wireCourse(id);
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
