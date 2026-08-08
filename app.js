@@ -5890,7 +5890,20 @@
   }
 
   function wireCourse(id) {
+    // Пока запрос в пути, кнопки этого блока выключены. Иначе второй клик по
+    // переключателю уходит на сервер раньше, чем вернется ответ на первый, — и
+    // ученик получает ссылку дважды (сервер такой повтор тоже отбивает).
+    var busy = false;
+    function lock(on) {
+      busy = on;
+      ['crs-sw', 'crs-newlink', 'crs-refresh'].forEach(function (bid) {
+        var b = el(bid);
+        if (b) { b.disabled = on; b.style.opacity = on ? '.55' : ''; }
+      });
+    }
     function post(body, okMsg) {
+      if (busy) return;
+      lock(true);
       return api('/admin/api/leads/' + id + '/course/access', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).then(function (r) {
@@ -5900,14 +5913,16 @@
         // завели руками, чата с ботом нет. Менеджер должен узнать об этом сразу, а
         // не из того, что ребенок так и не пришел на урок.
         if (okMsg) {
-          showToast(r.delivered && r.delivered.telegram
-            ? okMsg + ' — ссылка ушла ему в чат'
-            : okMsg + ' — ссылку отправьте сами, она в карточке');
+          showToast(body.open && !r.opened_now
+            ? okMsg + ' — ученику не дублируем, ссылка в карточке'
+            : r.delivered && r.delivered.telegram
+              ? okMsg + ' — ссылка ушла ему в чат'
+              : okMsg + ' — ссылку отправьте сами, она в карточке');
         }
         renderModalContent();
       }).catch(function (e) {
         if (e.message !== '403') showToast('Не получилось: ' + e.message);
-      });
+      }).then(function () { lock(false); });
     }
 
     var lead = findLead(id) || {};
