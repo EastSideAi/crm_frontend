@@ -1196,13 +1196,14 @@
         '<div class="gate-card">' +
           '<h1>Вход в CRM</h1>' +
           '<p>Сессия сохранится на этом устройстве.</p>' +
-          '<input id="lg-login" type="text" placeholder="Логин" autocomplete="username">' +
+          '<input id="lg-login" type="text" placeholder="Логин или почта" autocomplete="username">' +
           '<div class="lg-passwrap">' +
             '<input id="lg-pass" type="password" placeholder="Пароль" autocomplete="current-password">' +
             '<button class="lg-eye" id="lg-eye" type="button" tabindex="-1">показать</button>' +
           '</div>' +
           '<button class="bp" id="lg-go">Войти</button>' +
           '<div class="gate-err" id="lg-err">' + esc(err || '') + '</div>' +
+          '<button class="gate-link" id="lg-forgot" type="button">Забыли пароль?</button>' +
         '</div>' +
       '</div></div>';
     if (err) el('lg-err').style.display = 'block';
@@ -1237,6 +1238,119 @@
     el('lg-go').addEventListener('click', go);
     pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    el('lg-forgot').addEventListener('click', function () { renderReset(); });
+  }
+
+  /* ── восстановление пароля ────────────────────────────── */
+  /* Два шага в одной карточке: почта → код из письма и новый пароль. Отдельного
+     экрана «введите код» не делаем — человек и так держит письмо открытым, лишний
+     переход только добавляет шанс уйти не туда. */
+  function renderReset(ctx) {
+    ctx = ctx || {};
+    document.body.classList.remove('dock-open');
+    var sent = !!ctx.challenge;
+    root.innerHTML =
+      '<div id="gate"><div class="gate-split">' +
+        '<div class="gate-brand">' +
+          '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+          '<div class="gb-mid">' +
+            '<div class="gb-h">Вся воронка EastSide<br>в одном окне</div>' +
+            '<div class="gb-s">Заявки, диалоги с ботом, путь людей по платформе и деньги — на одном экране.</div>' +
+          '</div>' +
+          '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
+        '</div>' +
+        '<div class="gate-card">' +
+          (sent
+            ? '<h1>Новый пароль</h1>' +
+              '<p>Код отправили на ' + esc(ctx.email) + '. Он действует ' + (ctx.ttlMin || 15) + ' минут.</p>' +
+              '<input id="rs-code" type="text" inputmode="numeric" maxlength="6" placeholder="Код из письма" autocomplete="one-time-code">' +
+              '<div class="lg-passwrap">' +
+                '<input id="rs-pass" type="password" placeholder="Новый пароль" autocomplete="new-password">' +
+                '<button class="lg-eye" id="rs-eye" type="button" tabindex="-1">показать</button>' +
+              '</div>' +
+              '<button class="bp" id="rs-go">Сохранить и войти</button>'
+            : '<h1>Восстановление пароля</h1>' +
+              '<p>Пришлем код на почту, привязанную к аккаунту.</p>' +
+              '<input id="rs-email" type="email" placeholder="Почта" autocomplete="email">' +
+              '<button class="bp" id="rs-go">Отправить код</button>') +
+          '<div class="gate-err" id="rs-err"></div>' +
+          '<button class="gate-link" id="rs-back" type="button">Вернуться ко входу</button>' +
+        '</div>' +
+      '</div></div>';
+
+    var btn = el('rs-go');
+    function fail(msg) { var e = el('rs-err'); e.textContent = msg; e.style.display = 'block'; }
+    el('rs-back').addEventListener('click', function () { renderLogin(); });
+
+    if (!sent) {
+      var ei = el('rs-email');
+      ei.focus();
+      ei.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(); });
+      btn.addEventListener('click', ask);
+      return;
+    }
+
+    var ci = el('rs-code'), pi = el('rs-pass'), eye = el('rs-eye');
+    ci.focus();
+    eye.addEventListener('click', function () {
+      var show = pi.type === 'password';
+      pi.type = show ? 'text' : 'password';
+      eye.textContent = show ? 'скрыть' : 'показать';
+      pi.focus();
+    });
+    ci.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+    btn.addEventListener('click', save);
+
+    function ask() {
+      var email = el('rs-email').value.trim();
+      if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
+      btn.textContent = 'Отправляем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+      }).then(function (r) {
+        if (r.status === 429) { fail('Код уже отправляли. Проверь почту или подожди минуту'); return null; }
+        if (r.status === 503) { fail('Письмо сейчас не уходит. Напиши в чат — разберемся'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        if (!j) return;
+        renderReset({ challenge: j.challenge_id, email: email,
+                      ttlMin: Math.max(1, Math.round((j.expires_in || 900) / 60)) });
+      }).catch(function () {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
+
+    function save() {
+      var code = ci.value.trim(), pass = pi.value;
+      if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
+      if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
+      btn.textContent = 'Сохраняем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
+      }).then(function (r) {
+        if (r.status === 400) { fail('Код не подошел. Проверь цифры из письма'); return null; }
+        if (r.status === 410) { fail('Код устарел. Запроси новый'); return null; }
+        if (r.status === 429) { fail('Слишком много попыток. Запроси новый код'); return null; }
+        if (r.status === 422) { fail('Пароль слишком короткий — минимум шесть символов'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        if (!j) return;
+        localStorage.setItem(KEY_LS, j.token);
+        state.role = j.role; state.userName = j.name || '';
+        boot();
+      }).catch(function () {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
   }
 
   /* ── shell ────────────────────────────────────────────── */
