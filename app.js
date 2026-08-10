@@ -216,6 +216,14 @@
     if (diff === 1) return 'Вчера';
     return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
   }
+  /* Полная дата словами: «10 ноября 2026». Для сроков, до которых далеко, где
+     «10.11» без года читается двусмысленно. */
+  function dayFull(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + ' ' + d.getFullYear();
+  }
   function ago(iso) {
     if (!iso) return '';
     var s = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -5849,17 +5857,24 @@
     }
 
     var head = '<div class="m-ctitle">Китайский</div>' +
-      '<div class="m-csub">Курс «Живой китайский» в записи. Доступ открывается кнопкой: ' +
-      'ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны.</div>';
+      '<div class="m-csub">Видеокурс «Живой китайский». Доступ открывается кнопкой на ' +
+      '3 месяца: ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны. ' +
+      'Когда срок выйдет, уроки закроются сами.</div>';
 
     var done = b.done_n || 0;
     var total = b.total_n || 0;
+    // Доступ к курсу срочный (3 месяца с открытия). Менеджеру важно видеть не только
+    // «открыт/закрыт», но и до какого дня, — иначе он узнает о конце срока от ученика.
+    var untilTxt = b.access_until ? dayFull(b.access_until) : '';
+    var expired = !b.has_access && !!b.access_until && new Date(b.access_until) < new Date();
     var progress = b.has_access
       ? (done
           ? 'пройдено ' + done + ' из ' + total + ' ' + plural(total, 'урок', 'урока', 'уроков') +
             (b.last_activity ? ' · последний раз ' + esc(ago(b.last_activity)) + ' назад' : '')
           : 'к урокам еще не приступал')
-      : 'уроки закрыты';
+      : expired
+        ? 'срок вышел ' + esc(untilTxt) + ' — уроки закрылись сами'
+        : 'уроки закрыты';
 
     var link = CRS_LINK[id];
     var linkRow = '<div class="det-link">' +
@@ -5880,6 +5895,9 @@
         '<button type="button" class="pd-sw' + (b.has_access ? ' on' : '') + '" id="crs-sw">' +
           '<span class="pd-sw-l">' + (b.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (b.has_access && untilTxt
+        ? '<div class="det-sw-by">действует до ' + esc(untilTxt) + '</div>'
+        : '') +
       (b.opened_by
         ? '<div class="det-sw-by">открыл ' + esc(b.opened_by) + ' · ' + esc(fmtWhen(b.opened_at)) + '</div>'
         : '') +
