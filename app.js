@@ -86,7 +86,21 @@
     clicked_messenger: 'перешел в мессенджер',
     opened_product: 'открыл продукт',
     tg_nudge_sent: 'бот напомнил о записи',
+    magnet_registered: 'забрал бесплатный мини-курс',
+    magnet_progress: 'мини-курс: прогресс',
   };
+  /* подпись события: словарь + уточнения из payload (одна на все ленты) */
+  function evText(e) {
+    var p = e.payload || {}, label = EVENTS_RU[e.type] || e.type;
+    if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
+    if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
+    if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'magnet_progress') {
+      label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
+        (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
+    }
+    return label;
+  }
   var COMM_KINDS = { call: 'звонок', msg: 'написал', meet: 'встреча' };
   var UNI_TYPE = { dream: 'мечта', solid: 'надежный', safe: 'запасной' };
   var SNAPSHOT = [
@@ -6347,10 +6361,9 @@
       if (e.type === 'anketa_step') {
         var s = (e.payload || {}).step || 0; if (s > maxStep) maxStep = s; return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' || e.type === 'lead_submitted');
+      var label = evText(e);
+      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' ||
+        e.type === 'lead_submitted' || e.type === 'magnet_registered');
       var bucket = (e.type === 'opened_product' || e.type === 'viewed_result') ? 'viewed'
         : (e.type === 'clicked_book_call' || e.type === 'clicked_messenger') ? 'cta'
         : (e.type === 'lead_submitted') ? 'booked'
@@ -7802,11 +7815,9 @@
         if (s > maxStep) { maxStep = s; items.push({ at: e.at, text: 'анкета: дошел до шага ' + s + ' из 7', cls: '', step: true }); }
         return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      items.push({ at: e.at, text: label,
-        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' || e.type === 'viewed_result') ? 'hi' : '' });
+      items.push({ at: e.at, text: evText(e),
+        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' ||
+          e.type === 'viewed_result' || e.type === 'magnet_registered') ? 'hi' : '' });
     });
     var stepItems = items.filter(function (i) { return i.step; });
     if (stepItems.length > 1) {
