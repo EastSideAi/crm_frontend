@@ -5635,6 +5635,41 @@
       : ' · проверил ' + esc(by.replace('teacher:', ''));
   }
 
+  /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
+     один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
+     полоска по дням и распределение по навыкам, без таблиц. */
+  function detPractice(pr) {
+    if (!pr.total) return '';
+    var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    // Фронт может приехать раньше бэка: старый ответ без разбивки — показываем цифры.
+    var days = (pr.by_day || []).map(function (d) {
+      var dt = new Date(d.date + 'T12:00:00');
+      return '<div class="det-day' + (d.n ? ' on' : '') + '" title="' + esc(d.date) + '">' +
+        '<b>' + (d.n || '·') + '</b><i>' + (isNaN(dt) ? '' : DOW[dt.getDay()]) + '</i></div>';
+    }).join('');
+    var top = (pr.by_skill || []).reduce(function (m, s) { return Math.max(m, s.n); }, 0) || 1;
+    var skills = (pr.by_skill || []).map(function (s) {
+      var weak = s.accuracy_pct != null && s.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(s.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(s.n * 100 / top) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + s.n +
+          (s.accuracy_pct != null ? ' · <b>' + s.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    return '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
+      '<div class="pay-board det-board">' +
+        '<div class="pay-cell"><div class="pc-l">Заданий</div><div class="pc-v num">' + pr.total + '</div></div>' +
+        '<div class="pay-cell' + (pr.week ? '' : ' muted') + '"><div class="pc-l">За неделю</div>' +
+          '<div class="pc-v num">' + (pr.week || 0) + '</div></div>' +
+        '<div class="pay-cell' + (pr.accuracy_pct == null ? ' muted' : '') + '"><div class="pc-l">Верно</div>' +
+          '<div class="pc-v num">' + (pr.accuracy_pct == null ? '—' : pr.accuracy_pct + '%') + '</div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Дней</div><div class="pc-v num">' + (pr.days || 0) + '</div></div>' +
+      '</div>' +
+      '<div class="det-lbl det-prl">Две недели по дням</div><div class="det-days">' + days + '</div>' +
+      (skills ? '<div class="det-lbl det-prl">По навыкам</div>' + skills : '') +
+      (pr.last_at ? '<div class="det-pr det-prl">последний раз ' + esc(ago(pr.last_at)) + ' назад</div>' : '') +
+      '</div>';
+  }
+
   function detAttemptRow(a, prev) {
     var d = (a.overall != null && prev != null) ? a.overall - prev : null;
     var when = a.finished_at || a.started_at;
@@ -5809,19 +5844,15 @@
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       '<div class="det-sw-row">' +
         '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажеры</div>' +
-          '<div class="det-sw-s">Тренировки на платформе между тестами. Открывайте после оплаты занятий.</div></div>' +
+          '<div class="det-sw-s">Тренировки на платформе между тестами. Пока закрыты, занятия ученика ' +
+            'в карточку не попадают — откройте после оплаты, и здесь будет видно, как он занимается.</div></div>' +
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
 
-    var pr = b.practice || {};
-    var practice = pr.total
-      ? '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
-        '<div class="det-pr">' + pr.total + ' ' + plural(pr.total, 'подход', 'подхода', 'подходов') +
-        ', за неделю ' + pr.week + (pr.last_at ? ' · последний раз ' + esc(ago(pr.last_at)) + ' назад' : '') + '</div></div>'
-      : '';
+    var practice = detPractice(b.practice || {});
 
     var it = b.intensive;
     var intensive = it
