@@ -217,6 +217,24 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 9px 16px; transition: .15s; }
 .list-empty .le-btn:hover { background: #DBE6FF; }
 
+/* заметка над списком: свернутые пустые заходы — тихая строка, не строка-лид */
+.list-foot { display: flex; align-items: center; gap: 10px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); background: var(--fill); }
+.list-foot .lf-ic { width: 24px; height: 24px; border-radius: 7px; background: var(--card);
+  border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); flex: none; }
+.list-foot .lf-t { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.list-foot .lf-t b { color: var(--ink); font-weight: 700; }
+.list-foot .lf-btn { margin-left: auto; flex: none; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--blue); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); padding: 7px 14px; transition: .15s var(--ease); }
+.list-foot .lf-btn:hover { background: var(--blue-tint); border-color: var(--blue-tint); }
+@media (max-width: 720px) {
+  /* иконка тут декоративная: на узком экране она уезжала на свою строку и рвала блок */
+  .list-foot { flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 16px; }
+  .list-foot .lf-ic { display: none; }
+  .list-foot .lf-btn { margin-left: 0; }
+}
+
 /* скелетон таблицы списка (использует общий .shim от дашборда) */
 .sk-list { padding: 0; }
 .sk-row { display: grid; align-items: center; gap: 16px; padding: 0 24px; height: 58px;
@@ -472,7 +490,57 @@ a { color: inherit; text-decoration: none; }
 .tm-sel { flex: none; font: 600 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
   border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 200px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
-@media (max-width: 760px) { .tm-sel { min-width: 140px; } }
+/* почта сотрудника прямо в строке: без нее не работает восстановление пароля */
+.tm-mail { flex: none; width: 230px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
+  transition: .15s var(--ease); }
+.tm-mail:hover { border-color: #DCE7FF; }
+.tm-mail:focus { background: #fff; border-color: var(--blue); }
+.tm-mail.none { background: var(--fill); border-style: dashed; }
+.tm-mail::placeholder { color: var(--ink-3); }
+/* чужая верхняя учетка: видно, кто это, но править нельзя — тише и без курсора */
+.tm-sel:disabled, .tm-mail:disabled { color: var(--ink-3); background: var(--fill);
+  border-color: transparent; border-style: solid; cursor: default; }
+.sec-head .bp.tm-new { margin-left: auto; }
+.sec-head .cnt + .bp.tm-new { margin-left: 14px; }
+
+/* форма «завести сотрудника» — панель внутри карточки, не модалка */
+.tm-add { margin-top: 16px; padding: 16px 18px; background: var(--fill);
+  border: 1px solid var(--line-2); border-radius: var(--r-lg); }
+.tm-add-g { display: grid; grid-template-columns: 1.2fr 1fr 1.4fr 1fr; gap: 12px; }
+.tm-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tm-f > span { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); }
+.tm-f input, .tm-f select { font: 500 13.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px;
+  width: 100%; transition: .15s var(--ease); }
+.tm-f input:focus, .tm-f select:focus { border-color: var(--blue); }
+.tm-add-a { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.tm-add-s { font-size: 12.5px; color: var(--ink-2); margin-right: auto; }
+
+/* выданный доступ: пароль виден один раз */
+.tm-made { margin-top: 16px; padding: 16px 18px; border-radius: var(--r-lg);
+  background: var(--green-soft); border: 1px solid #C6E9D5; }
+.tm-made-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+  color: var(--green-ink); }
+.tm-made-b { margin-top: 8px; font-size: 14px; color: var(--ink); }
+.tm-made-b b { font-weight: 700; }
+.tm-made-s { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; max-width: 620px; }
+.tm-made-a { display: flex; gap: 10px; margin-top: 12px; }
+@media (max-width: 760px) {
+  /* на телефоне имя, почта и роль идут в столбик: селект с длинной ролью
+     («Руководитель продукта») не сжимается по контенту и наезжал на имя */
+  .tm-sel { min-width: 0; width: 100%; order: 4; }
+  .tm-row { flex-wrap: wrap; }
+  .tm-mail { width: 100%; order: 3; }
+  .tm-add-g { grid-template-columns: 1fr; }
+  .tm-add-a { flex-wrap: wrap; }
+  .tm-add-s { width: 100%; margin-right: 0; }
+  /* на телефоне кнопка и счетчик сжимали заголовок в столбик по слову —
+     прячем счетчик, кнопку оставляем иконкой */
+  .sec-head:has(.tm-new) .cnt { display: none; }
+  .sec-head .bp.tm-new span { display: none; }
+}
 
 /* ════ Сейчас (правая колонка обзора) ════ */
 .now-rows { display: flex; flex-direction: column; }
