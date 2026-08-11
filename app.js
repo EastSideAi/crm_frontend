@@ -1510,22 +1510,24 @@
      Возможности (caps) = что роль видит/делает. Роль = набор caps. Чтобы добавить
      новый блок: (1) заведи cap в CAP_ALL, (2) добавь его нужным ролям ниже,
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
+  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students', 'templates'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
-    tutor:         { label: 'Тьютор',                 short: 'обучение',             caps: ['dash', 'students'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'students'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
+    /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
+       заявок — чужая для них работа. Им нужен один экран: свои ученики. */
+    tutor:         { label: 'Тьютор',                 short: 'свои ученики',         caps: ['students'] },
+    teacher:       { label: 'Преподаватель',          short: 'свои ученики',         caps: ['students'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'clients', 'analytics'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students', 'templates'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'grants', 'clients'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
@@ -1540,7 +1542,7 @@
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
-    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'students' },
+    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
@@ -1572,7 +1574,11 @@
       });
     }
     var ws = el('welc-sub');
-    if (ws) ws.textContent = c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—');
+    // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал «0 лидов
+    // · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
+    if (ws) ws.textContent = can('clients')
+      ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
+      : roleInfo().label;
     var promo = el('promo');
     if (promo) {
       if (!can('path')) { promo.style.display = 'none'; }
@@ -1779,7 +1785,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, grants: 1, partners: 1 };
+  var STUB_PAGES = { grants: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1805,13 +1811,13 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'students') renderStudents(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
   }
   /* ── заглушки будущих разделов (роль их видит, но фич ещё нет) ── */
   var STUB_TEXT = {
-    students:  'Ученики, расписание, прогресс по языку и экзаменам, материалы и домашки. Появится, когда подключим обучение.',
     products:  'Каталог услуг — что продаём, цены, привязка к оплатам клиентов и финансам.',
     grants:    'Гранты CSC и провинциальные: заявки, статусы, дедлайны, пакет документов по каждому ученику.',
     marketing: 'Источники трафика, кампании, стоимость лида и ROI по каналам.',
@@ -1826,6 +1832,103 @@
       '<div class="stub-s">' + esc(STUB_TEXT[state.page] || 'Раздел в разработке.') + '</div>' +
       '<div class="stub-tag">' + ic('spark', 12) + 'В разработке</div></div>';
   }
+  /* ── Обучение: ученики по английскому ──────────────────────
+     Экран преподавателя. У преподавателя нет доступа ни к карточкам лидов, ни к
+     деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
+     учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
+     здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
+  function studentsLoad(force) {
+    if (state._students && !force) return;
+    state._students = null;
+    api('/admin/api/det/students').then(function (r) {
+      state._students = r || { students: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () { state._students = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentOpen(id) {
+    state.studentId = id;
+    state._student = null;
+    renderView();
+    api('/admin/api/det/students/' + id).then(function (r) {
+      state._student = r;
+      if (state.page === 'students' && state.studentId === id) renderView();
+    }).catch(function () { state._student = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentRow(s) {
+    var when = s.last_practice ? 'занимался ' + esc(ago(s.last_practice)) + ' назад' : 'еще не занимался';
+    return '<div class="tm-row st-row" data-sid="' + esc(s.id) + '" tabindex="0">' +
+      '<span class="tm-av">' + esc(initials(s.name)) + '</span>' +
+      '<div class="tm-i"><div class="tm-n">' + esc(s.name) + '</div>' +
+        '<div class="tm-l">' + when + (s.week ? ' · за неделю ' + s.week : '') + '</div></div>' +
+      (s.overall != null ? '<span class="st-score num">' + s.overall + '</span>'
+                         : '<span class="st-score none">теста нет</span>') +
+      '<span class="st-go">' + ic('go', 14) + '</span></div>';
+  }
+  function renderStudents(view) {
+    if (state.studentId) return renderStudentCard(view);
+    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
+    if (state._students === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      return;
+    }
+    var list = state._students.students || [];
+    var mine = state._students.mine_only;
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
+      '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
+      '<div class="s">' + (mine
+        ? 'кого вам передали: как занимаются в тренажерах и что с тестом'
+        : 'у кого назначен преподаватель — назначает менеджер в карточке человека') + '</div></div>' +
+      '<span class="cnt num">' + list.length + '</span></div>' +
+      '<div class="tm-list">' + (list.map(studentRow).join('') ||
+        '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
+        'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
+      var go = function () { studentOpen(row.getAttribute('data-sid')); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function renderStudentCard(view) {
+    if (!state._student) { view.innerHTML = dashSkeleton(); return; }
+    if (state._student === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось открыть ученика.</div></div>';
+      return;
+    }
+    var d = state._student;
+    var pr = d.practice || {};
+    var modes = (d.by_mode || []).map(function (m) {
+      var weak = m.accuracy_pct != null && m.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(m.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(m.n * 100 /
+          ((d.by_mode[0] && d.by_mode[0].n) || 1)) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + m.n +
+          (m.accuracy_pct != null ? ' · <b>' + m.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    var tests = (d.attempts || []).slice().reverse().map(function (a) {
+      return '<div class="tm-row"><div class="tm-i"><div class="tm-n">' +
+        (a.overall != null ? a.overall + ' баллов' : 'без балла') + '</div>' +
+        '<div class="tm-l">' + esc(fmtWhen(a.finished_at || a.started_at)) +
+        (a.reading != null ? ' · чтение ' + a.reading : '') +
+        (a.listening != null ? ' · аудирование ' + a.listening : '') +
+        (a.writing != null ? ' · письмо ' + a.writing : '') +
+        (a.speaking != null ? ' · речь ' + a.speaking : '') + '</div></div></div>';
+    }).join('');
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><button class="bp sm ghost st-back" id="st-back">' + ic('back', 13) + 'Все ученики</button>' +
+      '<div><div class="t">' + esc(d.name) + '</div>' +
+      '<div class="s">занятия в тренажерах и история тестов</div></div></div>' +
+      (pr.total ? detPractice(pr, { noSkills: true }) : '<div class="empty">Пока не занимался. Проверьте, что в карточке ' +
+        'человека включен тумблер «Тренажеры» — пока он выключен, занятия не записываются.</div>') +
+      (modes ? '<div class="m-sec"><div class="m-sec-h">По тренажерам</div>' + modes + '</div>' : '') +
+      '<div class="m-sec"><div class="m-sec-h">Тесты</div><div class="tm-list">' +
+        (tests || '<div class="empty">Тест еще не проходили.</div>') + '</div></div></div>';
+    var back = el('st-back');
+    if (back) back.addEventListener('click', function () {
+      state.studentId = null; state._student = null; renderView();
+    });
+  }
+
   /* ── Команда и роли (Super Admin) ── */
   function renderTeam(view) {
     if (!state._team) {
@@ -5799,11 +5902,29 @@
       : ' · проверил ' + esc(by.replace('teacher:', ''));
   }
 
+  /* Кто ведет ученика по английскому. Преподаватель видит в своем разделе ТОЛЬКО тех,
+     кого ему сюда назначили, — поэтому пустое поле значит «этот ученик не виден никому
+     из преподавателей». Список ролей ограничен: менеджера в преподаватели не поставить. */
+  var DET_TEACHERS = null;
+  function detTeacherRow(t) {
+    return '<div class="det-lbl det-linkh">Преподаватель по английскому</div>' +
+      '<div class="det-teacher"><select class="tm-sel" id="det-teacher">' +
+        '<option value="">не назначен</option>' +
+        ((DET_TEACHERS || (t ? [t] : [])).map(function (x) {
+          return '<option value="' + esc(x.login) + '"' + (t && t.login === x.login ? ' selected' : '') +
+            '>' + esc(x.name) + '</option>';
+        }).join('')) + '</select>' +
+      '<span class="det-teacher-s">' + (t
+        ? 'видит занятия этого ученика в разделе «Обучение»'
+        : 'пока не назначен — занятия ученика не видит ни один преподаватель') + '</span></div>';
+  }
+
   /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
      один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
      полоска по дням и распределение по навыкам, без таблиц. */
-  function detPractice(pr) {
+  function detPractice(pr, opts) {
     if (!pr.total) return '';
+    opts = opts || {};
     var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
     // Фронт может приехать раньше бэка: старый ответ без разбивки — показываем цифры.
     var days = (pr.by_day || []).map(function (d) {
@@ -5829,7 +5950,7 @@
         '<div class="pay-cell"><div class="pc-l">Дней</div><div class="pc-v num">' + (pr.days || 0) + '</div></div>' +
       '</div>' +
       '<div class="det-lbl det-prl">Две недели по дням</div><div class="det-days">' + days + '</div>' +
-      (skills ? '<div class="det-lbl det-prl">По навыкам</div>' + skills : '') +
+      (skills && !opts.noSkills ? '<div class="det-lbl det-prl">По навыкам</div>' + skills : '') +
       (pr.last_at ? '<div class="det-pr det-prl">последний раз ' + esc(ago(pr.last_at)) + ' назад</div>' : '') +
       '</div>';
   }
@@ -6014,6 +6135,7 @@
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
+      detTeacherRow(b.teacher) +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
 
     var practice = detPractice(b.practice || {});
@@ -6827,6 +6949,19 @@
       post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
     });
+
+    var tsel = el('det-teacher');
+    if (tsel) {
+      // Список преподавателей грузим один раз на сессию и перерисовываем поле.
+      if (!DET_TEACHERS) api('/admin/api/det/teachers').then(function (r) {
+        DET_TEACHERS = (r && r.teachers) || [];
+        if (el('det-teacher')) renderDrawer(true);
+      }).catch(function () { DET_TEACHERS = []; });
+      tsel.addEventListener('change', function () {
+        post('/admin/api/leads/' + id + '/det/teacher', { login: tsel.value || null },
+             tsel.value ? 'Преподаватель назначен' : 'Преподаватель снят');
+      });
+    }
 
     var nl = el('det-newlink');
     if (nl) nl.addEventListener('click', function () {
@@ -8152,20 +8287,23 @@
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     renderShell();
-    // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
-    loadLeads(false, openFromHash);
+    /* Список людей и переписку тянем только тем, у кого есть на них права: у
+       преподавателя их нет, а неудачный запрос CRM трактует как «сессия истекла»
+       и выкидывает на вход. */
+    if (can('clients')) loadLeads(false, openFromHash);
+    else { state.loaded = true; renderView(); }
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
-    refreshBot(function () { renderSide(); });
+    if (can('inbox')) refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(function () {
-      if (!getKey()) return;
+      if (!getKey() || !can('clients')) return;
       var a = document.activeElement;
       if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in' || a.id === 'tg-input')) return;
       // поллим диалоги бота всегда (для живого бейджа хэндоффа). Инбокс НЕ пересобираем:
       // у него свой шестисекундный поллинг (pollInboxLive), а полная пересборка раз в минуту
       // вырывала поле ввода из-под рук менеджера прямо на середине сообщения.
-      refreshBot(function () { renderSide(); });
+      if (can('inbox')) refreshBot(function () { renderSide(); });
       if (state.drawerId || state.botConvoId) return; // не дёргаем интерфейс под открытой карточкой/диалогом
       loadLeads(true);
     }, 60000);
