@@ -217,6 +217,24 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 9px 16px; transition: .15s; }
 .list-empty .le-btn:hover { background: #DBE6FF; }
 
+/* заметка над списком: свернутые пустые заходы — тихая строка, не строка-лид */
+.list-foot { display: flex; align-items: center; gap: 10px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); background: var(--fill); }
+.list-foot .lf-ic { width: 24px; height: 24px; border-radius: 7px; background: var(--card);
+  border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); flex: none; }
+.list-foot .lf-t { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.list-foot .lf-t b { color: var(--ink); font-weight: 700; }
+.list-foot .lf-btn { margin-left: auto; flex: none; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--blue); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); padding: 7px 14px; transition: .15s var(--ease); }
+.list-foot .lf-btn:hover { background: var(--blue-tint); border-color: var(--blue-tint); }
+@media (max-width: 720px) {
+  /* иконка тут декоративная: на узком экране она уезжала на свою строку и рвала блок */
+  .list-foot { flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 16px; }
+  .list-foot .lf-ic { display: none; }
+  .list-foot .lf-btn { margin-left: 0; }
+}
+
 /* скелетон таблицы списка (использует общий .shim от дашборда) */
 .sk-list { padding: 0; }
 .sk-row { display: grid; align-items: center; gap: 16px; padding: 0 24px; height: 58px;

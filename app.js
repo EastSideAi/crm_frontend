@@ -38,6 +38,7 @@
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -331,7 +332,21 @@
   function isNewLead(l) {
     return state.seenBefore && l.created_at && new Date(l.created_at).getTime() > state.seenBefore;
   }
-  function leadName(l) { return l.name || 'Без имени'; }
+  /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
+     откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
+     не отличало заявку от случайного посетителя. */
+  function leadName(l) {
+    if (l.name) return l.name;
+    return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
+  }
+  /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
+     Это не лид, а строка статистики — в «Людях» такие свернуты (см. blankFoot),
+     в разделе «Путь» они считаются как раньше, первой ступенью воронки. */
+  function isBlankVisit(l) {
+    return l.status === 'visited' && !l.name && !l.email && !l.paid &&
+      !(l.booking || {}).contact && !(l.events || []).length &&
+      !l.crm.note && !(l.crm.tasks || []).length && l.crm.status === 'new';
+  }
   /* override-поля менеджера поверх данных анкеты/booking */
   function ov(ctx, field) {
     var o = (ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {};
@@ -550,6 +565,7 @@
   function segLeads(seg) {
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
@@ -586,10 +602,14 @@
     return arr;
   }
   function counts() {
-    var c = { queue: 0, all: state.leads.length, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0 };
+    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
+       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+              anketa: 0, booked: 0, blank: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
+      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (!!l.paid) c.clients++;
@@ -767,6 +787,7 @@
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
 
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -851,6 +872,7 @@
     var node = el('list-count');
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -3284,17 +3306,38 @@
     }).join('') + '</div>';
   }
 
+  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
+     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
+     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  function blankNote() {
+    var n = counts().blank;
+    if (!n || state.seg !== 'all') return '';
+    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
+    return '<div class="list-foot">' +
+      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
+      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
+        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
+      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+    '</div>';
+  }
+  function attachBlankNote(host) {
+    var b = host.querySelector('#lf-blank');
+    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = emptyState();
+      host.innerHTML = blankNote() + emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
+      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
       var tone = l.score != null ? scoreTone(l.score) : null;
-      var contact = (l.booking || {}).contact;
+      /* почта аккаунта — тоже способ связаться: без нее у зарегистрировавшихся без
+         записи на разбор колонка стояла пустой, хотя контакт у нас был */
+      var contact = (l.booking || {}).contact || l.email;
       var act = contactAction(contact);
       var profileBits = [l.grade, l.target_year ? 'поступление ' + l.target_year : null, (l.geo || {}).city]
         .filter(Boolean).map(esc);
@@ -3322,7 +3365,8 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = '<div class="trow lr-grid thead">' +
+    host.innerHTML = blankNote() +
+      '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
@@ -3330,6 +3374,7 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
+    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
