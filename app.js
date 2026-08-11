@@ -494,6 +494,28 @@
       cbs.forEach(function (f) { if (f) f([]); });
     });
   }
+  function personName(uid) {
+    if (!uid) return '';
+    var list = state.assignees || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(uid)) return list[i].name || '';
+    return '';
+  }
+  /* <option>-ы сотрудников; empty — подпись пустого значения */
+  function personOptions(sel, empty) {
+    var list = state.assignees || [];
+    var out = '<option value="">' + esc(empty) + '</option>';
+    var known = false;
+    for (var i = 0; i < list.length; i++) {
+      var u = list[i];
+      var on = String(u.id) === String(sel || '');
+      if (on) known = true;
+      out += '<option value="' + u.id + '"' + (on ? ' selected' : '') + '>' + esc(u.name || ('#' + u.id)) + '</option>';
+    }
+    // ответственный мог быть отключен (уволен) — не молчим об этом, иначе поле
+    // выглядит пустым и человек думает, что ответственного не назначали
+    if (sel && !known) out += '<option value="' + esc(sel) + '" selected>сотрудник отключен</option>';
+    return out;
+  }
   function warm(id) {
     if (state.details[id] || state.inflight[id]) return;
     var cached = cacheGet(id);
@@ -5404,6 +5426,19 @@
     var detail = '';
     if (open) {
       var d = '';
+      /* Кто делает и когда. Срок раньше задавался только в момент создания задачи, а
+         исполнителя не было вовсе — поэтому у большинства наших задач срока нет до сих
+         пор. Здесь и то и другое правится в раскрытой задаче. */
+      d += '<div class="rm-dsec"><div class="rm-dh">Кто делает и когда</div>' +
+        '<div class="rm-assign">' +
+          (isClient ? '' : '<span class="al-selwrap"><select class="al-sel rm-a-who">' +
+            personOptions(t.assignee, 'Отвечает ответственный за клиента') + '</select></span>') +
+          '<input type="date" class="rm-a-due" value="' + esc(t.due || '') + '" aria-label="Срок">' +
+        '</div>' +
+        (isClient ? '' : '<div class="rm-ahint">' + (t.due
+          ? 'По этому сроку и спросим.'
+          : 'Без срока задача не считается просроченной — и план не опубликуется.') + '</div>') +
+      '</div>';
       if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Описание — его видит ученик</div><div class="rm-need">' + esc(t.need) + '</div></div>';
       // пошаговая инструкция и совет — то, что ученик видит в попапе задачи
       var steps = String(t.how_to || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -6300,20 +6335,13 @@
     if (!state.assignees) fetchAssignees(function () {
       if (state.drawerId === ctx.base.id && state.modalSection === 'now') renderModalContent();
     });
-    var people = state.assignees || [];
-    var curName = '';
-    people.forEach(function (u) { if (u.id === curId) curName = u.name; });
-    var opts = '<option value="">не назначен</option>' + people.map(function (u) {
-      return '<option value="' + u.id + '"' + (u.id === curId ? ' selected' : '') + '>' +
-        esc(u.name) + '</option>';
-    }).join('');
-    html += '<div class="m-sec"><div class="m-sec-h">Ответственный</div>' +
-      (people.length
-        ? '<select id="m-curator" class="m-sel">' + opts + '</select>'
-        : '<div class="who compact">' + esc(curName || 'не назначен') + '</div>') +
-      (curId ? '' : '<div class="cur-hint">' + ic('clock', 12) +
-        'Пока никто не отвечает за клиента — план семье не опубликуется.</div>') +
-    '</div>';
+    html += '<div class="m-sec"><div class="m-sec-h">Ответственный за клиента</div>' +
+      '<span class="al-selwrap"><select id="m-curator" class="al-sel">' +
+        personOptions(curId, 'Не назначен') + '</select></span>' +
+      '<div class="cur-hint' + (curId ? ' ok' : '') + '">' + (curId
+        ? 'С него спрос по задачам этого клиента. Отдельную задачу можно отдать другому — в доске «Поступление».'
+        : ic('clock', 12) + 'Пока никого — плана семье такому клиенту не опубликовать.') +
+      '</div></div>';
 
     /* 3. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
@@ -6990,6 +7018,20 @@
               });
             });
           }
+        });
+        // кто делает задачу и когда — пустой исполнитель значит «отвечает куратор клиента»
+        var aWho = tEl.querySelector('.rm-a-who');
+        if (aWho) aWho.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) {
+            if (aWho.value) t.assignee = Number(aWho.value); else delete t.assignee;
+            return t;
+          });
+        });
+        var aDue = tEl.querySelector('.rm-a-due');
+        if (aDue) aDue.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) { t.due = aDue.value || ''; return t; });
         });
         // тип ответа ученика (file/text/both/none) — сохраняется сразу
         Array.prototype.forEach.call(tEl.querySelectorAll('.rm-submit-seg .rm-sub-t'), function (sb) {
