@@ -1885,7 +1885,9 @@ a { color: inherit; text-decoration: none; }
   .gate-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .gate-brand { padding: 32px 28px 28px; }
   .gb-h { font-size: 25px; } .gb-s { display: none; } .gb-foot { margin-top: 18px; }
-  .gate-card { padding: 32px 28px; align-items: stretch; }
+  /* На телефоне форма идет сразу под шапкой. По центру колонки она «плавала» бы
+     посреди экрана: над ней и под ней оставалась пустота в треть высоты. */
+  .gate-card { padding: 28px 28px 40px; align-items: stretch; justify-content: flex-start; }
   .gate-card > * { max-width: none; }
 }
 
