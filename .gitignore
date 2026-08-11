@@ -19,3 +19,9 @@ shot.js
 # случайный `git add` не должен уносить сюда ключи из локального стенда
 .tmp/
 .env*
+
+# Материалы ведомости, которым не место в git:
+# finmodel-stage8.html — старое приложение ведомости, внутри живой anon-ключ Supabase;
+# chat/ — сырая переписка, из которой собран _specs/finmodel/README.md.
+_specs/finmodel/finmodel-stage8.html
+_specs/finmodel/chat/
