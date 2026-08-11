@@ -1581,7 +1581,7 @@
       : roleInfo().label;
     var promo = el('promo');
     if (promo) {
-      if (!can('path')) { promo.style.display = 'none'; }
+      if (!can('path') || !can('clients')) { promo.style.display = 'none'; }
       else {
         promo.style.display = '';
         var worst = worstStep(funnelData(''));
@@ -1643,7 +1643,7 @@
           else { renderTopbar(); renderHead(); renderView(); }
         });
       });
-    } else if (state.page === 'path') {
+    } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
       tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
         return '<a class="tab' + (state.pathPeriod === o[0] ? ' on' : '') + '" data-per="' + o[0] + '">' + o[1] + '</a>';
@@ -1672,7 +1672,7 @@
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('chat', 11) + '</span>' + bsrc + '</div>';
     } else if (state.page === 'analytics') {
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('bolt', 11) + '</span>аналитика бота</div>';
-    } else if (state.page === 'dash') {
+    } else if (state.page === 'dash' && can('clients')) {
       var pers = [['', 'Всё время'], ['today', 'Сегодня'], ['week', '7 дней'], ['month', '30 дней']];
       var customLbl = state.dashPeriod === 'custom'
         ? (state.dashFrom || '…') + ' — ' + (state.dashTo || '…')
@@ -1729,7 +1729,10 @@
     if (!ch) return;
     var c = counts();
     var html = '';
-    if (state.page === 'dash') {
+    if (state.page === 'dash' && !can('clients')) {
+      // Роль без клиентов лидов не грузит: любая фраза про заявки была бы враньем.
+      html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2></div>';
+    } else if (state.page === 'dash') {
       var risks = allRisks();
       var worst = worstStep(funnelData(''));
       var phrase;
@@ -1744,7 +1747,9 @@
       html = '<div><h2>Люди</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
     }
-    if (state.page === 'path') {
+    if (state.page === 'path' && !can('clients')) {
+      html = '<div><h2>Путь по платформе</h2></div>';
+    } else if (state.page === 'path') {
       var steps = funnelData(state.pathPeriod);
       var w2 = worstStep(steps);
       var conv = steps[0].n ? Math.round(steps[steps.length - 1].n / steps[0].n * 1000) / 10 : 0;
@@ -1824,6 +1829,17 @@
     partners:  'Кабинет партнёров: их приведённые лиды, статистика и выплаты.',
   };
   function navMeta(id) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === id) return NAV_ALL[i]; return null; }
+  /* Дашборд и «Путь» целиком собраны из карточек клиентов. Роль без доступа к
+     клиентам (маркетолог, партнер, подрядчик) их не загружает — и без этой заглушки
+     видела бы честные нули, будто в компании нет ни одной заявки. Говорим прямо. */
+  function noClientsStub(view, page) {
+    view.innerHTML = '<div class="stub">' +
+      '<div class="stub-ic">' + ic(page === 'path' ? 'path' : 'dash', 30) + '</div>' +
+      '<div class="stub-t">' + (page === 'path' ? 'Путь по платформе' : 'Воронка по клиентам') + '</div>' +
+      '<div class="stub-s">Считается по карточкам клиентов, а твоей роли они закрыты — поэтому цифр тут нет. ' +
+      'Нужен доступ, скажи руководителю.</div></div>';
+  }
+
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };
     view.innerHTML = '<div class="stub">' +
@@ -3291,6 +3307,7 @@
   }
 
   function renderDash(view) {
+    if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
     var c = dashCounts(P);
     var cAll = counts();
@@ -3702,6 +3719,7 @@
 
   /* ── ПУТЬ ─────────────────────────────────────────────── */
   function renderPath(view) {
+    if (!can('clients')) { noClientsStub(view, 'path'); return; }
     var steps = funnelData(state.pathPeriod);
     if (!steps[0].n) {
       view.innerHTML = '<div class="card"><div class="empty">За этот период данных нет.</div></div>';
