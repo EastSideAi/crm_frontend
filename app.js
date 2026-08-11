@@ -4380,7 +4380,8 @@
       '<span class="ct-when">' + esc(mwTerm(t)) + '</span>' +
       '<span class="ct-sum"><b>' + ctMoney(t.amount) + ' ₽</b>' +
         (t.corrected ? '<span class="ct-corr">сумма уточнена</span>' : '') + '</span>' +
-      '<span class="ct-when mw-place">' + esc(t.place || 'Удаленно') + '</span>' +
+      '<span class="ct-when mw-place" title="' + esc(t.place || 'Удаленно') + '">' +
+        esc(t.place || 'Удаленно') + '</span>' +
     '</div>';
   }
   // Срок словами: у задания бывает и начало, и конец, и только конец, и ничего.
