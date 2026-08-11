@@ -3693,6 +3693,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    он у нас один. Своих классов минимум — акт и пункт плана те же самые, что видит
    оператор: спорить о работе стороны должны, глядя на одно и то же. */
 .mw-grid { grid-template-columns: 46px 1.8fr 196px 172px 112px 136px; }
+/* Строка растет под название: у заданий длинные имена, и на узком экране заголовок в
+   три строки не должен обрезаться фиксированной высотой строки таблицы. */
+.trow.mw-grid { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+.trow.mw-grid.thead { min-height: 38px; padding-top: 0; padding-bottom: 0; }
 .mw-num { align-self: center; }
 .mw-place { color: var(--ink-3); }
 /* Второй ряд чипов — разрез внутри вкладки (активные/завершенные, фильтры актов).
