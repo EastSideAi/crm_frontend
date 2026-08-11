@@ -2084,7 +2084,7 @@
      человека с его карточкой, поэтому тоже показывается один раз. */
   var CZ_CAB = {};
   var CZ = { list: null, stats: null, err: '', q: '', filter: 'all', archived: false,
-             openId: null, detail: {}, dirty: {}, busy: false,
+             openId: null, detail: {}, dirty: {}, busy: false, demo: false,
              // work[id] — что у человека сейчас: план на текущую неделю и активные
              // задания. Держим отдельно от карточки: это меняется чаще, чем ИНН
              work: {} };
@@ -2108,6 +2108,7 @@
   function czLoad(cb) {
     api('/admin/api/contractors' + (CZ.archived ? '?archived=1' : '')).then(function (r) {
       CZ.list = r.contractors || []; CZ.stats = r.stats || null; CZ.err = '';
+      CZ.demo = !!r.demo_allowed;
       if (state.page === 'contractors') renderAll();
       if (cb) cb(true);
     }).catch(function (e) {
@@ -2181,6 +2182,10 @@
           '<button class="cdd' + (CZ.archived ? ' active' : '') + '" id="cz-arch">' +
             (CZ.archived ? 'Архив' : 'В работе') + '</button>' +
           '<span class="list-count"><b>' + rows.length + '</b> из ' + (CZ.list || []).length + '</span>' +
+          /* Демо-карточка — способ пройти всю цепочку до выплаты, не трогая живых
+             людей: у выдуманного ИНН налоговая статус не подтвердит. В бою ручки нет,
+             поэтому и кнопки там нет. */
+          (CZ.demo ? '<button class="cdd" id="cz-demo-new">Демо-исполнитель</button>' : '') +
           '<button class="bp sm cz-add" id="cz-add">' + ic('send', 14) + 'Пригласить исполнителя</button>' +
         '</div>' +
         '<div class="list-quick">' + quick + '</div>' +
@@ -2203,6 +2208,15 @@
       CZ.archived = !CZ.archived; CZ.list = null; renderView();
     });
     el('cz-add').addEventListener('click', openInviteCz);
+    var dn = el('cz-demo-new');
+    if (dn) dn.addEventListener('click', function () {
+      czSend('/admin/api/contractors/demo', 'POST')
+        .then(function (r) {
+          czLoad(function () { openCz(r.contractor.id); });
+          showToast('Демо-исполнитель готов — данные выдуманные');
+        })
+        .catch(function (e) { showToast(e.message); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-cf]'), function (b) {
       b.addEventListener('click', function () { CZ.filter = b.getAttribute('data-cf'); renderView(); });
     });
@@ -2436,6 +2450,11 @@
     var cabLink = CZ_CAB[id];
     var cabinet = !c.submitted_at ? '' :
       '<div class="m-sec"><div class="m-sec-h">Кабинет исполнителя' +
+        /* Демо-карточку можно открыть сразу: у выдуманного человека нет ни телеграма,
+           ни почты, письмо с кодом ушло бы в никуда. За живого исполнителя так зайти
+           нельзя — сервер отвечает отказом, он входит сам. */
+        (c.source === 'demo'
+          ? '<button class="hr" id="cz-demo">Открыть кабинет</button>' : '') +
         '<button class="hr" id="cz-cab">' +
           (cab && cab.tg_bound ? 'Ссылка на кабинет заново' : 'Ссылка на кабинет') +
         '</button></div>' +
@@ -2678,6 +2697,8 @@
     if (cp) cp.addEventListener('click', function () { copyText(link, cp); });
     var cb = el('cz-cab');
     if (cb) cb.addEventListener('click', function () { czCabinetLink(id); });
+    var cbd = document.getElementById('cz-demo');
+    if (cbd) cbd.addEventListener('click', function () { czDemoCabinet(id); });
     var cbc = el('cz-cabcopy');
     if (cbc) cbc.addEventListener('click', function () {
       copyText((CZ_CAB[id] && (CZ_CAB[id].tg_url || CZ_CAB[id].url)) || '', cbc);
@@ -2773,6 +2794,15 @@
           if (CZ.openId === id) renderCzCard();
         }).catch(function () { if (CZ.openId === id) renderCzCard(); });
         showToast('Ссылка на кабинет готова — отправьте человеку');
+      })
+      .catch(function (e) { showToast(e.message); });
+  }
+  /* Демо-вход в кабинет: сервер сам проверяет, что карточка демо-шная и что это не
+     прод. Открываем новой вкладкой — оператор остается в CRM. */
+  function czDemoCabinet(id) {
+    czSend('/admin/api/contractors/' + id + '/demo-cabinet', 'POST')
+      .then(function (r) {
+        window.open(API + (r.path || '/cz') + '#t=' + r.token, '_blank', 'noopener');
       })
       .catch(function (e) { showToast(e.message); });
   }
