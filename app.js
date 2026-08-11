@@ -1389,6 +1389,7 @@
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
+    { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
@@ -1767,6 +1768,24 @@
       html = '<div><h2>Планы работ</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('cal', 13) + '</span><span>' + phrase6 + '</span></div></div>';
     }
+    if (state.page === 'czdocs') {
+      /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
+         Неподписанный акт — это незакрытый расход и невозможная выплата. */
+      var dcs = DC.items;
+      var wait = dcs ? dcs.filter(function (d) {
+        return d.kind === 'act' && (d.status === 'wait_both' || d.status === 'wait_co' ||
+                                    d.status === 'wait_ct');
+      }).length : 0;
+      var phrase7;
+      if (!dcs) phrase7 = 'Загружаю документы…';
+      else if (!dcs.length) phrase7 = 'Документов пока нет. Акт появится здесь сам, как только вы сформируете его по принятому заданию.';
+      else if (wait) phrase7 = 'Без подписи: <b>' + wait + ' ' +
+        plural(wait, 'акт', 'акта', 'актов') +
+        '</b>. Пока обе подписи не стоят, выплату провести нельзя.';
+      else phrase7 = 'Все акты подписаны с обеих сторон.';
+      html = '<div><h2>Документы</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('doc', 13) + '</span><span>' + phrase7 + '</span></div></div>';
+    }
     if (state.page === 'czservices') {
       // Каталог — прайс, а не заказ: вердикт напоминает, что цена задания живет в самом
       // задании, иначе правка каталога кажется правкой уже согласованных сумм.
@@ -1846,6 +1865,7 @@
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
+    else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
     else if (state.page === 'finpnl') renderFinPnl(view);
@@ -2771,7 +2791,7 @@
              cat: null, catErr: '' };
   var CT_ST = {
     draft: 'ct-draft', offered: 'ct-wait', accepted: 'ct-go', in_progress: 'ct-go',
-    done: 'ct-check', approved: 'ct-ok', act_signed_co: 'ct-ok', act_signed: 'ct-ok',
+    done: 'ct-check', approved: 'ct-ok', act_made: 'ct-ok', act_signed: 'ct-ok',
     paid: 'ct-paid', declined: 'ct-off', cancelled: 'ct-off', archived: 'ct-off',
   };
   var CT_TABS = [['all', 'Все'], ['active', 'В работе'], ['draft', 'Черновики'],
@@ -2955,19 +2975,25 @@
     }
     var p = t.contractor || {};
     var all = t.actions || [];
-    var mine = all.filter(function (a) { return a.actor !== 'contractor'; });
+    /* Действия про сам документ (аннулировать акт) уходят в блок «Акт»: кнопка должна
+       стоять при том, на что она действует, иначе «Аннулировать акт» висит отдельно от
+       акта и читается как отмена задания. */
+    var actBack = t.act ? all.filter(function (a) { return a.to === 'approved'; })[0] : null;
+    var mine = all.filter(function (a) {
+      return a.actor !== 'contractor' && !(actBack && a.to === 'approved');
+    });
     var his = all.filter(function (a) { return a.actor === 'contractor'; });
     var btn = function (a) {
       return '<button class="bp sm' + (a.primary ? '' : ' ghost') + '" data-cta="' + a.to + '">' +
         esc(a.label) + '</button>';
     };
-    /* Шаги исполнителя стоят отдельно и подписаны: это ЕГО решения, мы их только
-       отмечаем, пока у человека нет своего кабинета (этап 3). Смешать их с нашими
-       кнопками нельзя — иначе «принял задание» выглядит как наше действие, а под актом
-       должна стоять его подпись, а не наша отметка. */
+    /* Шаги исполнителя стоят отдельно и подписаны: это ЕГО решения. Свои шаги он
+       делает в кабинете сам; если нажимаем мы, в историю это идет как отметка со слов.
+       Смешать их с нашими кнопками нельзя — иначе «принял задание» выглядит как наше
+       действие. Подпись под актом отметкой не заменяется вообще (см. блок «Акт»). */
     var acts = (mine.length ? '<div class="ct-acts">' + mine.map(btn).join('') + '</div>' : '') +
       (his.length
-        ? '<div class="ct-acts ct-his"><div class="ct-his-h">Решение исполнителя — отмечаем со слов, пока у него нет кабинета</div>' +
+        ? '<div class="ct-acts ct-his"><div class="ct-his-h">Решение исполнителя. Обычно он нажимает сам в кабинете; наша отметка так и записывается — со слов</div>' +
           his.map(btn).join('') + '</div>'
         : '');
 
@@ -2983,20 +3009,52 @@
         (t.corrected
           ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>'
           : '') +
-        (t.signed_co_at
-          ? '<div class="ct-sign">Акт подписан компанией ' + esc(czDate(t.signed_co_at)) +
-            (t.signed_co_by ? ' · ' + esc(t.signed_co_by) : '') +
-            (t.signed_ct_at
-              ? '<br>Исполнитель подписал ' + esc(czDate(t.signed_ct_at))
-              : '<br>Ждем подпись исполнителя') + '</div>'
-          : '') +
         (t.frozen
           ? '<div class="ct-frozen">Задание оплачено — сумма больше не меняется.</div>'
           : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>' +
-            (t.signed_co_at
-              ? '<div class="ct-frozen">Если изменить сумму, подписи снимутся: акт относится к прежней.</div>'
+            (t.act
+              ? '<div class="ct-frozen">Если изменить сумму, акт аннулируется: он составлен на прежнюю.</div>'
               : '')) +
       '</div>';
+
+    /* Акт. Документ, а не отметка: у него свой номер, дата и снимок условий, и
+       подписей на нем две. Нашу ставит кнопка здесь, подпись исполнителя — только он
+       сам в кабинете кодом на почту (договор, п. 8.5.2), отметить ее за него нельзя. */
+    var A = t.act;
+    var actBlock = '';
+    if (A) {
+      var docUrl = API + '/admin/api/contractor-acts/' + encodeURIComponent(A.id) +
+        '/doc?k=' + encodeURIComponent(getKey());
+      var sg = function (who, when, note, wait) {
+        return '<div class="ct-sg1"><span class="ct-sg-k">' + who + '</span>' +
+          (when ? '<b>Подписан ' + esc(czDate(when)) + '</b>' +
+                  (note ? '<span class="ct-sg-n">' + esc(note) + '</span>' : '')
+                : '<span class="ct-sg-no">' + wait + '</span>') + '</div>';
+      };
+      actBlock =
+        '<div class="m-sec"><div class="m-sec-h">Акт</div>' +
+          '<div class="ct-act">' +
+            '<div class="ct-act-h"><b>Акт № ' + A.number + '</b>' +
+              '<span class="ct-chip ' + (ACT_ST[A.status] || 'ct-wait') + '">' +
+                esc(A.status_title) + '</span></div>' +
+            '<div class="ct-act-m">от ' + esc(czDate(A.act_date)) + ' · <b>' +
+              ctMoney(A.amount) + ' ₽</b></div>' +
+            '<div class="ct-sg">' +
+              sg('Заказчик', A.signed_co_at, A.signed_co_by, 'Не подписан') +
+              sg('Исполнитель', A.signed_ct_at, 'простой электронной подписью',
+                 'Ждем подпись в кабинете') +
+            '</div>' +
+            '<div class="ct-acts">' +
+              '<a class="bp sm ghost" href="' + docUrl + '" target="_blank" rel="noopener">' +
+                'Открыть документ</a>' +
+              (A.signed_co_at ? '' :
+                '<button class="bp sm" id="ct-sign">Подписать со стороны компании</button>') +
+              (actBack ? '<button class="bp sm ghost" data-cta="approved">' +
+                esc(actBack.label) + '</button>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
 
     var facts = [
       ['Исполнитель', esc(p.full_name || '—') + (p.phone ? ' · ' + esc(p.phone) : '')],
@@ -3057,7 +3115,7 @@
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content">' +
-        money + acts +
+        money + acts + actBlock +
         '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
         blocks + files +
         (t.cancel_reason
@@ -3071,13 +3129,52 @@
     el('ct-x').addEventListener('click', closeCt);
     var fix = el('ct-fix');
     if (fix) fix.addEventListener('click', function () { openCtFix(t); });
+    var sign = el('ct-sign');
+    if (sign) sign.addEventListener('click', function () { ctSignAct(t.id, A.id); });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-cta]'), function (b) {
       b.addEventListener('click', function () {
         var to = b.getAttribute('data-cta');
+        // «Сформировать акт» — не смена статуса, а создание документа: он делает снимок
+        // условий, поэтому у него своя ручка. Задание за документом двинет сервер.
+        if (to === 'act_made') return ctMakeAct(t.id);
+        // Возврат из акта — это аннулирование документа, и оно всегда с причиной.
+        if (to === 'approved' && t.act) {
+          return openCtReason(t.id, to, 'Почему аннулируем акт?');
+        }
         if (CT_ASK[to]) return openCtReason(t.id, to, CT_ASK[to]);
         ctAct(t.id, to);
       });
     });
+  }
+
+  /* Состояние акта считает сервер по подписям — здесь только цвет чипа. */
+  var ACT_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
+                 signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off' };
+
+  function ctMakeAct(id) {
+    if (CT.busy) return;
+    CT.busy = true;
+    czSend('/admin/api/contractor-tasks/' + id + '/act', 'POST')
+      .then(function () { return api('/admin/api/contractor-tasks/' + id); })
+      .then(function (t) {
+        ctPut(t); renderCtCard();
+        if (czPlansOn()) plLoad(); else ctLoad();
+        showToast('Акт сформирован. Проверьте документ и подпишите');
+      })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { CT.busy = false; });
+  }
+  function ctSignAct(tid, aid) {
+    if (CT.busy) return;
+    CT.busy = true;
+    czSend('/admin/api/contractor-acts/' + aid + '/sign', 'POST')
+      .then(function () { return api('/admin/api/contractor-tasks/' + tid); })
+      .then(function (t) {
+        ctPut(t); renderCtCard();
+        if (czPlansOn()) plLoad(); else ctLoad();
+      })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { CT.busy = false; });
   }
 
   /* Причина обязательна там, где действие закрывает работу: через полгода «почему
@@ -3309,6 +3406,118 @@
         : '<span class="ct-chip ct-off">Выключена</span>') + '</span>' +
       '</div>';
   }
+  /* ── ДОКУМЕНТЫ (модуль самозанятых, этап 5) ───────────────────────────────
+     Одно место, где лежит бумажная часть работы с человеком: акты и его личные
+     документы — согласие на обработку данных, договор, NDA. До этого раздела они
+     жили в почте и переписке, и на вопрос «а подписан ли договор с Петровым» никто
+     не мог ответить, не подняв чат. Чеки приедут на этапе 7 — пустую строку под них
+     сейчас не рисуем: раздел показывает то, что есть.
+
+     Акт открывается печатной формой в новой вкладке: этот документ печатают и
+     отправляют, а не рассматривают в интерфейсе CRM. */
+  var DC = { items: null, err: '', q: '', kind: 'all', _t: null };
+  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['contract', 'Договоры'],
+                  ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
+  var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
+                signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off',
+                none: 'ct-draft', sent: 'ct-wait' };
+  var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc' };
+
+  function dcLoad(cb) {
+    var p = '/admin/api/contractor-documents?kind=' + encodeURIComponent(DC.kind) +
+      (DC.q ? '&q=' + encodeURIComponent(DC.q) : '');
+    api(p).then(function (r) {
+      DC.items = r.items || []; DC.err = '';
+      if (state.page === 'czdocs') renderAll();
+      if (cb) cb();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      DC.items = DC.items || [];
+      DC.err = 'Не удалось загрузить документы. Проверьте связь и обновите страницу.';
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  function dcRow(d) {
+    var when = d.date ? czDate(d.date) : '—';
+    return '<div class="trow dc-grid" data-dc="' + esc(d.contractor_id) +
+      '" data-dk="' + esc(d.kind) + '" data-dt="' + esc(d.task_id || '') + '">' +
+      '<span class="dc-main"><span class="dc-ic">' + ic(DC_ICON[d.kind] || 'doc', 14) + '</span>' +
+        '<b>' + esc(d.title) + '</b></span>' +
+      '<span class="dc-who">' + esc(d.contractor || '—') +
+        (d.inn ? '<span class="dc-inn">' + esc(d.inn) + '</span>' : '') + '</span>' +
+      '<span class="dc-when">' + esc(when) + '</span>' +
+      '<span class="dc-sum">' + (d.amount ? '<b>' + ctMoney(d.amount) + ' ₽</b>' : '—') + '</span>' +
+      '<span class="dc-state"><span class="ct-chip ' + (DC_ST[d.status] || 'ct-draft') + '">' +
+        esc(d.status_title) + '</span></span>' +
+      '</div>';
+  }
+
+  function renderCzDocs(view) {
+    if (DC.items === null) { view.innerHTML = dashSkeleton(); dcLoad(); return; }
+    var list = DC.items;
+    var chips = DC_KINDS.map(function (k) {
+      return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') + '" data-dkind="' +
+        k[0] + '">' + k[1] + '</button>';
+    }).join('');
+    var body = DC.err
+      ? '<div class="empty">' + esc(DC.err) + '</div>'
+      : (!list.length
+        ? '<div class="empty">' + (DC.q
+            ? 'По запросу «' + esc(DC.q) + '» документов не нашли.'
+            : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
+        : list.map(dcRow).join(''));
+
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div class="searchwrap' + (DC.q ? ' has-val' : '') + '">' + ic('search', 16) +
+            '<input class="search" id="dc-q" placeholder="Поиск по фамилии, ИНН, телефону или названию" value="' + esc(DC.q) + '">' +
+            (DC.q ? '<button class="s-clear" id="dc-qx">' + ic('x', 13) + '</button>' : '') +
+          '</div>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' +
+            plural(list.length, 'документ', 'документа', 'документов') + '</span>' +
+        '</div>' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow dc-grid thead">' +
+          '<span class="th">Документ</span><span class="th">Исполнитель</span>' +
+          '<span class="th">Дата</span><span class="th">Сумма</span>' +
+          '<span class="th">Состояние</span>' +
+        '</div>' + body +
+      '</div>';
+
+    var qi = el('dc-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        DC.q = qi.value;
+        clearTimeout(DC._t);
+        DC._t = setTimeout(function () { dcLoad(); }, 250);
+      });
+      qi.addEventListener('keydown', function (e) { if (e.key === 'Escape') { DC.q = ''; dcLoad(); } });
+    }
+    var qx = el('dc-qx');
+    if (qx) qx.addEventListener('click', function () { DC.q = ''; dcLoad(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dkind]'), function (b) {
+      b.addEventListener('click', function () {
+        DC.kind = b.getAttribute('data-dkind'); DC.items = null; renderView();
+      });
+    });
+    /* Клик по акту открывает задание, а не сам документ: спор идет о работе, а
+       печатная форма — одна кнопка внутри карточки. Личный документ ведется в карточке
+       человека, туда и ведем. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dc]'), function (r) {
+      r.addEventListener('click', function () {
+        var kind = r.getAttribute('data-dk');
+        if (kind === 'act') {
+          var tid = r.getAttribute('data-dt');
+          if (tid) return openCt(tid);
+        }
+        openCz(r.getAttribute('data-dc'));
+      });
+    });
+    pageAnim(view);
+  }
+
   function renderCzServices(view) {
     if (!CT.cat) { view.innerHTML = dashSkeleton(); czSvcLoad(); return; }
     var list = CT.cat;

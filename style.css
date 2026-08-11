@@ -45,12 +45,15 @@ a { color: inherit; text-decoration: none; }
   display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 16px; letter-spacing: -.03em; }
 .logo .nm { font-weight: 600; font-size: 17px; letter-spacing: -.02em; }
 .logo .nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 1px; }
-/* Переключатель рабочих пространств: «Клиенты» / «Самозанятые». Тот же системный
-   рецепт сегмента, что .pay-seg и .due-seg (серая капсула, белая активная плашка),
-   только во всю ширину колонки — это не новый контрол, а его пятый экземпляр. */
-.spaces { display: flex; gap: 3px; padding: 4px; margin: 0 0 16px; border-radius: 11px; background: var(--fill); }
-.spaces button { flex: 1; min-width: 0; padding: 7px 6px; border-radius: 8px; text-align: center;
-  font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); transition: .15s; }
+/* Переключатель рабочих пространств: «Клиенты» / «Самозанятые» / «Ведомость». Тот же
+   системный рецепт сегмента, что .pay-seg и .due-seg (серая капсула, белая активная
+   плашка), только во всю ширину колонки — это не новый контрол, а его пятый экземпляр.
+   С третьим пространством равные доли ломают «Самозанятые» на две строки, поэтому
+   вкладка занимает ровно свое слово: ширина по содержимому, строка одна. */
+.spaces { display: flex; gap: 2px; padding: 4px; margin: 0 0 16px; border-radius: 11px; background: var(--fill); }
+.spaces button { flex: 0 1 auto; min-width: 0; padding: 7px 5px; border-radius: 8px; text-align: center;
+  font: 600 11px 'Manrope', sans-serif; color: var(--ink-3); transition: .15s;
+  letter-spacing: -.01em; line-height: 1.25; white-space: nowrap; }
 .spaces button:hover { color: var(--ink); }
 .spaces button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
 
@@ -3205,8 +3208,26 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ct-money .bp.ghost { margin-top: 4px; }
 /* номер задания в шапке карточки — воздух между ним и названием */
 .m-name .ct-no { margin-right: 9px; }
-/* Подписи под актом: факт, а не украшение — тут видно, чья очередь подписывать. */
-.ct-sign { font-size: 12.5px; color: var(--green-ink); line-height: 1.5; }
+/* ── акт в карточке задания (этап 5) ──
+   Акт — документ, поэтому и выглядит как документ: рамка вместо заливки, номер и
+   сумма табличными цифрами, две подписи рядом. Заливка тут была бы вторым якорем
+   рядом с деньгами; акт важен, но смотрят сначала на сумму. */
+.ct-act { border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ct-act-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ct-act-h b { font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  font-feature-settings: 'tnum'; }
+.ct-act-m { font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
+.ct-act-m b { color: var(--ink); font-weight: 700; }
+/* Две подписи — две колонки: чья очередь, видно без чтения. */
+.ct-sg { display: flex; gap: 28px; flex-wrap: wrap; width: 100%; }
+.ct-sg1 { display: flex; flex-direction: column; gap: 2px; min-width: 156px; }
+.ct-sg-k { font-size: 11px; letter-spacing: .02em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 700; }
+.ct-sg1 b { font-size: 13px; font-weight: 650; color: var(--green-ink); }
+.ct-sg-n { font-size: 11.5px; color: var(--ink-3); }
+.ct-sg-no { font-size: 13px; color: var(--ink-3); }
+.ct-act .bp.ghost { text-decoration: none; }
 .ct-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Шаги исполнителя отделены рамкой и подписаны: это его решения, мы их лишь отмечаем. */
 .ct-his { flex-direction: column; align-items: flex-start; gap: 8px;
@@ -3521,3 +3542,33 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    сплошным рядом чипов они читаются как один список. */
 .qsep { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--line-2); }
+
+
+/* ════ ДОКУМЕНТЫ (модуль самозанятых, этап 5) ════
+   Тот же рабочий список, что у заданий. Якорь строки — название документа и его
+   состояние: сюда заходят с вопросом «подписано или нет», а не «сколько денег».
+   Поэтому сумма здесь тише, чем в заданиях, и у личных документов ее просто нет. */
+.dc-grid { grid-template-columns: 1.9fr 200px 140px 118px 176px; }
+.dc-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.dc-main b { font-weight: 650; letter-spacing: -.01em; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-ic { flex: none; color: var(--ink-3); position: relative; top: 2px; }
+.dc-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 12.5px;
+  color: var(--ink-2); }
+.dc-inn { font-size: 11px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+.dc-when { font-size: 12.5px; color: var(--ink-2); }
+.dc-sum { font-size: 13px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+.dc-sum b { color: var(--ink); font-weight: 700; }
+.dc-state { display: flex; align-items: flex-start; }
+
+@media (max-width: 1180px) {
+  .trow.dc-grid { grid-template-columns: 1.6fr 150px 176px !important; }
+  .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+}
+@media (max-width: 700px) {
+  .trow.dc-grid { grid-template-columns: 1fr auto !important; gap: 4px 12px;
+    align-items: start; }
+  .dc-grid.thead { display: none; }
+  .dc-grid > :nth-child(2) { display: block; }
+  .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+}
