@@ -41,6 +41,8 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false,
+    // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
+    portalProduct: null, portalTab: 'tariffs', portalQ: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -166,6 +168,8 @@
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
+      search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
+      tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -430,7 +434,16 @@
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
-      if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
+      if (r.status === 403) {
+        // 403 у нас двух видов: протух ключ (detail «forbidden») и «роль без доступа»
+        // (detail «no access: <cap>»). Второе — нормальная граница прав, а не конец
+        // сессии: выкидывать человека на вход из-за закрытой вкладки нельзя.
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          var noCap = body && typeof body.detail === 'string' && body.detail.indexOf('no access') === 0;
+          if (!noCap) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); }
+          var e = new Error(noCap ? 'no-cap' : '403'); e.status = 403; e.noCap = noCap; throw e;
+        });
+      }
       if (!r.ok) { var err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
       return r.json();
     });
@@ -1559,34 +1572,34 @@
   // tasks — свои задачи, есть у КАЖДОГО: работа, которой нет в системе, не видна
   // никому. tasks_all — видеть и вести задачи всей команды, это управленческое
   // право, а не рабочее. Зеркало ROLE_CAPS на бэкенде (routers/admin.py).
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'grants', 'marketing', 'partners', 'team'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance'] },
-    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'grants', 'products'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'portal'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'portal'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal'] },
+    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'grants', 'products', 'portal'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'portal'] },
     // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
     // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students'] },
-    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing'] },
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal'] },
+    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
-    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students'] },
-    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients'] },
+    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
     // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients'] },
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
-    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients'] },
+    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
   function can(cap) { return roleInfo().caps.indexOf(cap) !== -1; }
@@ -1602,6 +1615,7 @@
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
+    { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
@@ -1896,6 +1910,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'portal') renderPortal(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -3221,6 +3236,445 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-pdclose]'), function (b) {
       b.addEventListener('click', function () { state._pdEdit = null; renderView(); });
     });
+  }
+
+  /* ── ПРОДУКТОВЫЙ ПОРТАЛ — база знаний команды по продуктам ────────────────
+     Не путать с разделом «Продукты»: там живой каталог платформы (что видит
+     клиент в витрине), здесь — знания команды: чем торгуем, кому, за сколько,
+     сколько на этом зарабатываем.
+     Весь контент лежит структурой в `content/portal.json` — единый источник
+     правды: из него рисуется раздел и его же читают ИИ-агенты. Верстку под
+     новый продукт не пишем, дописываем json.
+     Вкладка «Экономика» открыта только ролям с доступом к деньгам (cap
+     finance): себестоимость и маржа не должны лежать перед всей командой. */
+  var PORTAL_TABS = [
+    { id: 'tariffs', label: 'Тарифы' },
+    { id: 'econ', label: 'Экономика', cap: 'finance' },
+    { id: 'kb', label: 'База знаний' },
+    { id: 'sales', label: 'Продажи' },
+    { id: 'mkt', label: 'Маркетинг' },
+    { id: 'links', label: 'Ссылки' },
+    { id: 'offer', label: 'Оферты' },
+  ];
+
+  function fetchPortal() {
+    /* путь относительный: превью ветки живет по адресу с префиксом /p/<оператор>__crm_frontend/,
+       от корня файл бы не нашелся */
+    fetch('content/portal.json', { cache: 'no-cache' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { state._portal = d; if (state.page === 'portal') renderView(); })
+      .catch(function () { state._portal = 'none'; if (state.page === 'portal') renderView(); });
+  }
+  function portalProduct(id) {
+    var ps = (state._portal && state._portal.products) || [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+    return null;
+  }
+  function portalTabs() { return PORTAL_TABS.filter(function (t) { return !t.cap || can(t.cap); }); }
+  function portalOpen(id) {
+    state.portalProduct = id || null;
+    var tabs = portalTabs();
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    renderView();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderPortal(view) {
+    if (!state._portal) { view.innerHTML = dashSkeleton(); fetchPortal(); return; }
+    if (state._portal === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить портал — обновите страницу.</div></div>';
+      return;
+    }
+    var p = state.portalProduct ? portalProduct(state.portalProduct) : null;
+    if (p) renderPortalProduct(view, p); else renderPortalHome(view);
+  }
+
+  /* ── главная портала: дерево продуктов ── */
+  function renderPortalHome(view) {
+    var d = state._portal, q = (state.portalQ || '').trim().toLowerCase();
+    var tree = d.tree || {}, prods = d.products || [];
+
+    var body = q ? portalSearchHtml(d, q) : portalTreeHtml(d, tree, prods);
+
+    view.innerHTML = '<div class="po-wrap">' +
+      '<div class="po-top">' +
+        '<div class="po-ttl"><h2 class="po-h1">Продуктовый портал</h2>' +
+          '<div class="po-sub">Что продаем, кому, за сколько и на чем зарабатываем. Нажмите на направление, чтобы провалиться внутрь.</div></div>' +
+        '<div class="searchwrap po-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="po-q" class="search" type="search" placeholder="Поиск по порталу" autocomplete="off" value="' + esc(state.portalQ || '') + '">' +
+          '<button class="s-clear" id="po-qclear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+      '</div>' + body + '</div>';
+
+    var qi = el('po-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.portalQ = qi.value;
+        var host = view.querySelector('.po-body');
+        if (host) host.outerHTML = state.portalQ.trim()
+          ? portalSearchHtml(d, state.portalQ.trim().toLowerCase())
+          : portalTreeHtml(d, tree, prods);
+        view.querySelector('.po-search').classList.toggle('has-val', !!state.portalQ);
+        portalWireLinks(view);
+      });
+    }
+    var qc = el('po-qclear');
+    if (qc) qc.addEventListener('click', function () { state.portalQ = ''; renderView(); });
+    portalWireLinks(view);
+  }
+
+  function portalTreeHtml(d, tree, prods) {
+    var intake = (tree.intake || []).map(function (n, i) {
+      return (i ? '<div class="po-drop"></div>' : '') +
+        '<a class="po-node" href="' + esc(n.href) + '" target="_blank" rel="noopener">' +
+          '<span class="po-ni">' + ic(n.id === 'diag' ? 'spark' : 'funnel', 15) + '</span>' +
+          '<span class="po-nt"><b>' + esc(n.title) + '</b><small>' + esc(n.note || '') + '</small></span>' +
+          '<span class="po-nx">' + ic('ext', 14) + '</span></a>';
+    }).join('');
+
+    var cols = prods.map(function (p) {
+      var brs = (p.branches || []).map(function (b) { return '<span class="po-br">' + esc(b) + '</span>'; }).join('');
+      return '<div class="po-col">' +
+        '<span class="po-tick"></span>' +
+        '<button type="button" class="po-flag' + (p.ready ? ' ready' : '') + '" data-po="' + esc(p.id) + '">' +
+          '<span class="po-fh"><b>' + esc(p.short || p.title) + '</b>' + ic('go', 14) + '</span>' +
+          '<span class="po-fb"><small>' + esc(p.note || '') + '</small>' +
+            (p.ready ? '' : '<span class="sev po-soon">наполняем</span>') + '</span>' +
+        '</button>' +
+        (brs ? '<div class="po-brs">' + brs + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    var ex = tree.extras || {};
+    var exItems = (ex.items || []).map(function (i) { return '<span class="po-x">' + esc(i) + '</span>'; }).join('');
+
+    return '<div class="po-body"><div class="po-tree">' +
+      '<div class="po-lbl">Вход</div>' +
+      '<div class="po-lane">' + intake + '</div>' +
+      '<div class="po-stem"><span class="po-lbl">Направления</span></div>' +
+      '<div class="po-cols">' + cols + '</div>' +
+      (ex.title ? '<div class="po-extras"><div class="po-exh"><b>' + esc(ex.title) + '</b>' +
+        '<small>' + esc(ex.note || '') + '</small></div><div class="po-xs">' + exItems + '</div></div>' : '') +
+    '</div></div>';
+  }
+
+  /* поиск по порталу: продукт, его вкладки и внешние системы */
+  function portalIndex(d) {
+    var idx = [];
+    (d.products || []).forEach(function (p) {
+      idx.push({ kw: [p.title, p.note, p.lead].concat(p.branches || []).join(' '), label: p.title, sub: p.note || '', go: { pid: p.id } });
+      if (!p.ready) return;
+      portalTabs().forEach(function (t) {
+        var kw = t.label + ' ' + p.title;
+        if (t.id === 'tariffs') kw += ' ' + (p.tariffs || []).map(function (x) { return x.name + ' ' + x.price; }).join(' ');
+        if (t.id === 'econ') kw += ' маржа вклад расходы себестоимость налоги';
+        if (t.id === 'offer') kw += ' договор оферта';
+        idx.push({ kw: kw, label: t.label, sub: p.title, go: { pid: p.id, tab: t.id } });
+      });
+    });
+    var L = d.links || {};
+    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент', label: 'Платформа студента', sub: 'диагностика и кабинет', go: { href: L.platform } });
+    if (L.crm) idx.push({ kw: 'crm клиенты сделки квалификация', label: 'CRM', sub: 'клиенты и сделки', go: { href: L.crm } });
+    if (L.bot) idx.push({ kw: 'бот телеграм лиды квалификация', label: 'Telegram-бот', sub: 'первичная обработка лидов', go: { href: L.bot } });
+    if (L.site) idx.push({ kw: 'сайт истсайд лендинг', label: 'Сайт ИСТСАЙД.РФ', sub: 'публичный сайт', go: { href: L.site } });
+    return idx;
+  }
+  function portalSearchHtml(d, q) {
+    var hits = portalIndex(d).filter(function (i) {
+      return (i.kw + ' ' + i.label).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 12);
+    if (!hits.length) {
+      return '<div class="po-body"><div class="card"><div class="empty">Ничего не нашли по запросу «' + esc(q) + '».</div></div></div>';
+    }
+    var rows = hits.map(function (h) {
+      var attr = h.go.href ? 'data-pohref="' + esc(h.go.href) + '"'
+        : 'data-po="' + esc(h.go.pid) + '"' + (h.go.tab ? ' data-potab="' + esc(h.go.tab) + '"' : '');
+      return '<button type="button" class="po-hit" ' + attr + '>' +
+        '<span class="po-hl"><b>' + esc(h.label) + '</b><small>' + esc(h.sub) + '</small></span>' +
+        (h.go.href ? ic('ext', 14) : ic('go', 14)) + '</button>';
+    }).join('');
+    return '<div class="po-body"><div class="card po-hits">' +
+      '<div class="po-cap">Найдено ' + hits.length + '</div>' + rows + '</div></div>';
+  }
+
+  /* ── страница продукта ── */
+  function renderPortalProduct(view, p) {
+    var tabs = portalTabs();
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    var head = '<div class="po-wrap">' +
+      '<button type="button" class="po-back" id="po-back">' + ic('go', 13) + 'Дерево продуктов</button>' +
+      '<div class="po-top"><div class="po-ttl"><h2 class="po-h1">' + esc(p.title) + '</h2>' +
+        '<div class="po-sub">' + esc(p.lead || '') + '</div></div></div>';
+
+    if (!p.ready) {
+      var brs = (p.branches || []).map(function (b) { return '<span class="po-x">' + esc(b) + '</span>'; }).join('');
+      view.innerHTML = head +
+        (brs ? '<div class="po-xs po-xs-wide">' + brs + '</div>' : '') +
+        '<div class="card po-card"><div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">Этот блок наполним вместе</div>' +
+          '<div class="s">тарифы · экономика · база знаний · продажи · маркетинг · ссылки · оферты</div></div></div>' +
+          '<div class="po-note">Покажите материалы по направлению — соберем так же, как «Поступление на грант».</div></div></div>';
+      var b0 = el('po-back'); if (b0) b0.addEventListener('click', function () { portalOpen(null); });
+      return;
+    }
+
+    var segs = tabs.map(function (t) {
+      return '<button type="button" data-potab="' + t.id + '" class="' + (state.portalTab === t.id ? 'on' : '') + '">' + esc(t.label) + '</button>';
+    }).join('');
+
+    var bodyHtml = '';
+    if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'econ') bodyHtml = portalEcon(p);
+    else if (state.portalTab === 'kb') bodyHtml = portalKb(p);
+    else if (state.portalTab === 'sales') bodyHtml = portalMaterials(p.sales, 'Продажи', 'chat');
+    else if (state.portalTab === 'mkt') bodyHtml = portalMaterials(p.marketing, 'Маркетинг', 'mega');
+    else if (state.portalTab === 'links') bodyHtml = portalLinksTab(p);
+    else if (state.portalTab === 'offer') bodyHtml = portalMaterials(p.offer, 'Оферты', 'doc');
+
+    view.innerHTML = head + '<div class="po-tabs"><div class="dperiod">' + segs + '</div></div>' + bodyHtml + '</div>';
+
+    var b = el('po-back'); if (b) b.addEventListener('click', function () { portalOpen(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potab]'), function (t) {
+      t.addEventListener('click', function () { state.portalTab = t.getAttribute('data-potab'); renderView(); });
+    });
+    if (state.portalTab === 'econ') portalWireEcon(view, p);
+    portalWireLinks(view);
+  }
+
+  function portalWireLinks(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-po]'), function (b) {
+      b.addEventListener('click', function () {
+        var tab = b.getAttribute('data-potab');
+        if (tab) state.portalTab = tab;
+        portalOpen(b.getAttribute('data-po'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pohref]'), function (b) {
+      b.addEventListener('click', function () { window.open(b.getAttribute('data-pohref'), '_blank', 'noopener'); });
+    });
+  }
+
+  function portalTariffs(p) {
+    var cards = (p.tariffs || []).map(function (t) {
+      var feats = (t.features || []).map(function (f) {
+        return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(f) + '</span></div>';
+      }).join('');
+      var sc = t.scope || {};
+      return '<div class="card po-tcard' + (t.accent ? ' accent' : '') + '">' +
+        (t.accent ? '<span class="uz-tag uz-tag--rev po-tflag">основной</span>' : '') +
+        '<div class="po-tname">' + esc(t.name) + '</div>' +
+        '<div class="po-tpos">' + esc(t.positioning || '') + '</div>' +
+        '<div class="po-tfmt">' + esc(t.formats || '') + '</div>' +
+        '<div class="po-tprice num">' + fmtMoney(t.price) + ' ₽</div>' +
+        (t.price_full ? '<div class="po-told num">' + fmtMoney(t.price_full) + ' ₽ без скидки</div>' : '') +
+        '<div class="po-feats">' + feats + '</div>' +
+        (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
+      '</div>';
+    }).join('');
+
+    var cmp = p.compare || {};
+    var cmpHtml = '';
+    if ((cmp.rows || []).length) {
+      var ths = (p.tariffs || []).map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+      var trs = (cmp.rows || []).map(function (r) {
+        var tds = (p.tariffs || []).map(function (t) {
+          var c = (r.cells || {})[t.id] || {};
+          var plus = (c.plus || []).map(function (x) { return '<span class="po-plus">' + esc(x) + '</span>'; }).join('');
+          return '<td>' + esc(c.text || '—') +
+            (c.hint ? '<span class="po-hint">' + esc(c.hint) + '</span>' : '') +
+            (plus ? '<span class="po-pluses">' + plus + '</span>' : '') + '</td>';
+        }).join('');
+        return '<tr><td class="po-rl">' + esc(r.label) + '</td>' + tds + '</tr>';
+      }).join('');
+      cmpHtml = '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">' + esc(cmp.title || 'Сравнение тарифов') + '</div>' +
+          '<div class="s">чем тарифы отличаются на деле — для разговора с клиентом</div></div></div>' +
+        '<div class="po-tblwrap"><table class="po-tbl cmp"><thead><tr><th class="po-rl"></th>' + ths + '</tr></thead>' +
+        '<tbody>' + trs + '</tbody></table></div></div>';
+    }
+
+    return '<div class="po-tariffs">' + cards + '</div>' +
+      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') + cmpHtml;
+  }
+
+  /* Экономика: структура (какие статьи и тарифы) — из content/portal.json,
+     САМИ ЦИФРЫ — из базы через /admin/api/portal/econ под cap finance.
+     В файле статики их держать нельзя: он раздается по прямой ссылке без входа,
+     а себестоимость и маржа внутренние. Правка сразу общая для команды. */
+  function econLoad() {
+    if (state._poEconLoading) return;
+    state._poEconLoading = true;
+    api('/admin/api/portal/econ').then(function (r) {
+      state._poEconApi = (r && r.items) || {};
+    }).catch(function (e) {
+      state._poEconApi = e && e.status === 403 ? 'denied' : 'none';
+    }).finally(function () {
+      state._poEconLoading = false;
+      if (state.page === 'portal' && state.portalTab === 'econ') renderView();
+    });
+  }
+  /* рабочая копия цифр продукта: то, что человек видит и правит на экране */
+  function econModel(p) {
+    state._poEcon = state._poEcon || {};
+    if (state._poEcon[p.id]) return state._poEcon[p.id];
+    var ec = p.economics || {}, saved = (state._poEconApi || {})[p.id] || {};
+    var d = saved.data || {}, m = { price: {}, rates: {}, costs: {} };
+    (p.tariffs || []).forEach(function (t) {
+      m.price[t.id] = (d.price && d.price[t.id] != null) ? d.price[t.id] : (t.price || 0);
+    });
+    (ec.rates || []).forEach(function (r) { m.rates[r.id] = (d.rates && d.rates[r.id]) || 0; });
+    (ec.costs || []).forEach(function (c) {
+      m.costs[c.id] = {};
+      (p.tariffs || []).forEach(function (t) {
+        m.costs[c.id][t.id] = (d.costs && d.costs[c.id] && d.costs[c.id][t.id]) || 0;
+      });
+    });
+    state._poEcon[p.id] = m;
+    return m;
+  }
+  function econNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  function econCalc(p, m) {
+    var ec = p.economics || {}, out = {};
+    (p.tariffs || []).forEach(function (t) {
+      var price = econNum(m.price[t.id]), sum = 0, rates = {}, costs = {};
+      (ec.rates || []).forEach(function (r) {
+        var v = Math.round(price * econNum(m.rates[r.id]) / 100);
+        rates[r.id] = v; sum += v;
+      });
+      (ec.costs || []).forEach(function (c) {
+        var v = econNum((m.costs[c.id] || {})[t.id]);
+        costs[c.id] = v; sum += v;
+      });
+      out[t.id] = { total: sum, contrib: price - sum, margin: price ? Math.round((price - sum) / price * 100) : 0, rates: rates, costs: costs };
+    });
+    return out;
+  }
+  function econWhoLine(p) {
+    var saved = (state._poEconApi || {})[p.id];
+    if (!saved || !saved.updated_at) return 'Цифры общие для команды: правку видят все, у кого есть доступ к деньгам.';
+    return 'Последняя правка — ' + esc(saved.updated_by || 'кто-то из команды') + ', ' + fmtWhen(saved.updated_at) + '.';
+  }
+  function portalEcon(p) {
+    if (!state._poEconApi) { econLoad(); return dashSkeleton(); }
+    if (state._poEconApi === 'denied') {
+      return '<div class="card"><div class="empty">Экономика открыта только ролям с доступом к деньгам.</div></div>';
+    }
+    if (state._poEconApi === 'none') {
+      return '<div class="card"><div class="empty">Не удалось загрузить экономику — проверьте связь и обновите страницу.</div></div>';
+    }
+    var ec = p.economics || {}, m = econModel(p), ts = p.tariffs || [];
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    /* цена в калькуляторе своя: тут крутят «что если». Если она разошлась с ценой
+       на вкладке «Тарифы» — показываем это прямо, чтобы расхождение не молчало. */
+    var priceRow = '<tr class="po-r-price"><td class="po-rl">Цена, выручка</td>' + ts.map(function (t) {
+      var diff = econNum(m.price[t.id]) !== econNum(t.price);
+      return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-price="' + esc(t.id) + '" value="' + econNum(m.price[t.id]) + '">' +
+        '<span class="po-hint po-diff' + (diff ? ' on' : '') + '" data-diff="' + esc(t.id) + '">в тарифах — ' + fmtMoney(t.price) + ' ₽</span></td>';
+    }).join('') + '</tr>';
+    var rateRows = (ec.rates || []).map(function (r) {
+      return '<tr><td class="po-rl">' + esc(r.label) +
+        '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-rate="' + esc(r.id) + '" value="' + econNum(m.rates[r.id]) + '"><span class="po-pc">%</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="' + esc(r.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+    }).join('');
+    var costRows = (ec.costs || []).map(function (c) {
+      return '<tr><td class="po-rl">' + esc(c.label) + '</td>' + ts.map(function (t) {
+        return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Итого расходы</td>' + ts.map(function (t) { return '<td class="num" data-ec="total:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Вклад с клиента, ₽</td>' + ts.map(function (t) { return '<td class="num" data-ec="contrib:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+      '<tr class="po-r-big"><td class="po-rl">Маржа вклада</td>' + ts.map(function (t) { return '<td class="num" data-ec="margin:' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Юнит-экономика</div><div class="s">сколько остается компании с одного клиента до постоянных расходов</div></div>' +
+        '<span class="po-saved" id="po-saved"></span></div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
+      '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
+      '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
+      '</div>';
+  }
+  function portalWireEcon(view, p) {
+    if (!state._poEconApi || typeof state._poEconApi === 'string') return;
+    var m = econModel(p), saveTimer = null;
+    function recalc() {
+      var r = econCalc(p, m);
+      Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
+        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0], v = r[parts[1]];
+        if (!v) return;
+        if (kind === 'total') c.textContent = fmtMoney(v.total);
+        else if (kind === 'contrib') c.textContent = fmtMoney(v.contrib);
+        else if (kind === 'margin') {
+          c.textContent = v.margin + '%';
+          c.className = 'num' + (v.contrib < 0 ? ' po-neg' : v.margin >= 50 ? ' po-pos' : '');
+        } else if (v.rates[kind] != null) c.textContent = fmtMoney(v.rates[kind]);
+        else if (v.costs[kind] != null) c.textContent = fmtMoney(v.costs[kind]);
+      });
+      (p.tariffs || []).forEach(function (t) {
+        var hint = view.querySelector('[data-diff="' + t.id + '"]');
+        if (hint) hint.classList.toggle('on', econNum(m.price[t.id]) !== econNum(t.price));
+      });
+    }
+    function mark(text, bad) {
+      var s = el('po-saved');
+      if (!s) return;
+      s.textContent = text;
+      s.className = 'po-saved on' + (bad ? ' bad' : '');
+    }
+    /* сохраняем с задержкой: человек печатает число посимвольно, а не разом */
+    function save() {
+      if (saveTimer) clearTimeout(saveTimer);
+      mark('сохраняем…');
+      saveTimer = setTimeout(function () {
+        apiSend('/admin/api/portal/econ/' + encodeURIComponent(p.id), 'PUT',
+          { price: m.price, rates: m.rates, costs: m.costs },
+          function (r) {
+            if (state._poEconApi && typeof state._poEconApi === 'object') state._poEconApi[p.id] = r;
+            mark('сохранено');
+          },
+          function () { mark('не сохранилось — проверьте связь', true); });
+      }, 700);
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
+      i.addEventListener('input', function () {
+        var k;
+        if ((k = i.getAttribute('data-price'))) m.price[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-rate'))) m.rates[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-cost'))) {
+          var pr = k.split(':');
+          (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
+        }
+        recalc(); save();
+      });
+    });
+    recalc();
+  }
+
+  function portalKb(p) {
+    return (p.knowledge || []).map(function (k) {
+      return '<div class="card po-card po-kb">' +
+        '<div class="sec-head"><span class="ic">' + ic('note', 14) + '</span><div><div class="t">' + esc(k.h) + '</div></div></div>' +
+        '<p class="po-txt">' + esc(k.text) + '</p></div>';
+    }).join('') || '<div class="card"><div class="empty">База знаний по продукту пока пустая.</div></div>';
+  }
+  function portalLinkCard(l) {
+    return '<a class="card po-link" href="' + esc(l.href) + '" target="_blank" rel="noopener">' +
+      '<span class="po-lt"><b>' + esc(l.title) + '</b><small>' + esc(l.note || '') + '</small></span>' +
+      '<span class="po-lu">' + esc(l.label || l.href) + ic('ext', 13) + '</span></a>';
+  }
+  function portalMaterials(block, title, icon) {
+    block = block || {};
+    var links = (block.links || []).map(portalLinkCard).join('');
+    return links + (block.soon
+      ? '<div class="card po-card"><div class="sec-head"><span class="ic">' + ic(icon, 14) + '</span>' +
+        '<div><div class="t">' + esc(title) + '</div></div></div>' +
+        '<div class="po-note">' + esc(block.soon) + '</div></div>'
+      : (links ? '' : '<div class="card"><div class="empty">Материалов пока нет.</div></div>'));
+  }
+  function portalLinksTab(p) {
+    var links = (p.links || []).map(portalLinkCard).join('');
+    return links || '<div class="card"><div class="empty">Ссылок пока нет.</div></div>';
   }
 
   function renderTemplates(view) {

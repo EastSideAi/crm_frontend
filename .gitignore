@@ -5,13 +5,23 @@
 .env.*
 *.local
 
+# скриншоты и черновики агента
+.tmp/
+
 # logs & OS
 *.log
 .DS_Store
 Thumbs.db
 
-# dev throwaway scripts
+# dev throwaway scripts и превью-харнессы: в них попадают внутренние цифры,
+# а корень репозитория выкладывается на сайт как есть
 /_*.mjs
 /_*.js
+/_*.html
+/_*.py
 shot.js
+
+# рабочая память команды и служебные папки агента — не для публичной статики
+memory.md
+.agents/
 .env*
