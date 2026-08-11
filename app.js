@@ -1654,6 +1654,9 @@
     { id: 'tt', label: 'TikTok', src: 'tiktok' },
     { id: 'tgch', label: 'Телеграм-канал', src: 'telegram' },
     { id: 'dzen', label: 'Дзен', src: 'dzen' },
+    /* ссылка внутри самого бота (кнопка под приветствием и т.п.): свой источник, иначе
+       переходы из бота слипаются с «Другое место» и канал нечем измерить */
+    { id: 'bot', label: 'Бот EastSide', src: 'telegram_bot' },
     { id: 'site', label: 'Другое место', src: 'other' },
   ];
   var MK_MEDIUMS = [
@@ -1662,6 +1665,7 @@
     { id: 'stories', label: 'Сторис', utm: 'stories' },
     { id: 'ads', label: 'Реклама / таргет', utm: 'ads' },
     { id: 'bio', label: 'Описание профиля', utm: 'bio' },
+    { id: 'welcome', label: 'Приветствие в боте', utm: 'welcome' },
   ];
   /* WhatsApp появится в выборе, когда бот заработает в WA; отображение wa-ссылок
      из БД оставлено в MK_KIND_INFO, чтобы старые данные не показывались как WEB */
@@ -1676,7 +1680,8 @@
   };
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
-    tiktok: 'TikTok', telegram: 'Telegram', whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
+    whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
   };
 
   function mkUrl(code) {
