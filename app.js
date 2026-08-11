@@ -438,7 +438,17 @@
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
-      if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
+      /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
+         на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
+         отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
+         CRM посреди работы. */
+      if (r.status === 403) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (String((j && j.detail) || '').indexOf('no access') === 0) throw new Error('403acl');
+          localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
+          throw new Error('403');
+        });
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     });
@@ -469,12 +479,16 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
-  function apiSend(path, method, body, cb) {
+  /* onErr(code) — когда вызвавшему есть что сказать про конкретный отказ (занятый
+     логин, недостаточно прав). Без него ошибка гасится общим тостом, как раньше. */
+  function apiSend(path, method, body, cb, onErr) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
@@ -1807,24 +1821,129 @@
       return;
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
-    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    /* верхние роли раздает только тот, у кого они уже есть — бэкенд отвечает тем же
+       (иначе руководитель выписывал бы себе доступ к финансам и документам детей) */
+    var iAmTop = state.role === 'super_admin' || state.role === 'owner';
+    var assignable = Object.keys(ROLES).filter(function (k) {
+      if (k === 'owner' || k === 'manager') return false;
+      return k !== 'super_admin' || iAmTop;
+    });
+    function roleOpts(cur) {
+      return assignable.map(function (k) {
+        return '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>';
+      }).join('');
+    }
     var rows = state._team.map(function (u) {
-      var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
-      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
+      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
+      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
+         Показываем ее настоящую роль и запираем поля: пустой селект «Куратор» напротив
+         супер-админа врал бы о том, кто в системе главный. */
+      var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
+      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
+      var sel = lock
+        ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
+        : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select></div>';
+        '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
+        sel + '</div>';
     }).join('');
+
+    /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
+       только его хеш, второй раз взять неоткуда. */
+    var made = state._teamMade;
+    var madeHtml = made ? '<div class="tm-made">' +
+        '<div class="tm-made-h">' + ic('check', 14) + 'Сотрудник заведен: ' + esc(made.user.name) + '</div>' +
+        '<div class="tm-made-b">Логин <b>' + esc(made.user.login) + '</b> · пароль <b>' + esc(made.password) + '</b></div>' +
+        '<div class="tm-made-s">Передайте пароль лично и попросите сменить его после первого входа. ' +
+          'Здесь он больше не появится — мы храним только его отпечаток.</div>' +
+        '<div class="tm-made-a"><button class="bp sm" id="tm-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+        '<button class="bp sm ghost" id="tm-made-x">Понятно</button></div></div>' : '';
+
+    var d = state._teamNew;
+    var formHtml = d ? '<div class="tm-add">' +
+        '<div class="tm-add-g">' +
+          '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
+        '</div>' +
+        '<div class="tm-add-a"><span class="tm-add-s">Пароль придумаем сами и покажем один раз.</span>' +
+        '<button class="bp sm ghost" id="tn-cancel">Отмена</button>' +
+        '<button class="bp sm" id="tn-save">Завести</button></div></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
-      '<span class="cnt num">' + state._team.length + '</span></div>' +
+      '<span class="cnt num">' + state._team.length + '</span>' +
+      (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
+      '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
         if (u) u.role = sel.value;
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
+      });
+    });
+    /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-mail'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (u && (u.email || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { email: val }, function () {
+          if (u) u.email = val;
+          inp.classList.toggle('none', !val);
+          showToast(val ? 'Почта сохранена' : 'Почта убрана');
+        });
+      });
+    });
+
+    var nb = el('tm-new');
+    if (nb) nb.addEventListener('click', function () {
+      state._teamNew = { name: '', login: '', email: '', role: 'curator' };
+      state._teamMade = null;   // прошлый выданный пароль убираем: он уже передан
+      renderView();
+      var f = el('tn-name'); if (f) f.focus();
+    });
+    var cx = el('tn-cancel');
+    if (cx) cx.addEventListener('click', function () { state._teamNew = null; renderView(); });
+    var mx = el('tm-made-x');
+    if (mx) mx.addEventListener('click', function () { state._teamMade = null; renderView(); });
+    var cp = el('tm-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var m = state._teamMade;
+      copyText('Логин: ' + m.user.login + '\nПароль: ' + m.password + '\nАдрес: ' + CRM_HOME);
+    });
+    ['tn-name', 'tn-login', 'tn-email', 'tn-role'].forEach(function (id) {
+      var f = el(id);
+      if (f) f.addEventListener('input', function () {
+        state._teamNew[id.slice(3)] = f.value;
+      });
+    });
+    var sv = el('tn-save');
+    if (sv) sv.addEventListener('click', function () {
+      var body = state._teamNew || {};
+      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      sv.disabled = true;
+      apiSend('/admin/api/users', 'POST', {
+        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        email: body.email.trim(), role: body.role,
+      }, function (r) {
+        state._teamNew = null;
+        state._teamMade = r;
+        state._team = null;   // перечитываем список с сервера, а не дорисовываем локально
+        renderView();
+      }, function (code) {
+        sv.disabled = false;
+        showToast(code === 409 ? 'Такой логин или почта уже заняты'
+          : code === 403 ? 'Эту роль может выдать только владелец'
+          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : 'Не удалось завести — попробуйте еще раз');
       });
     });
   }
