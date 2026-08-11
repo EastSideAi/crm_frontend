@@ -1840,6 +1840,9 @@
      в базе от него только хэш, подсмотреть его потом нельзя. Держим до перезагрузки
      страницы, чтобы оператор мог скопировать ссылку не только в момент выпуска. */
   var CZ_LINKS = {};
+  /* То же самое для ссылок на кабинет (этап 3): она одноразовая и связывает телеграм
+     человека с его карточкой, поэтому тоже показывается один раз. */
+  var CZ_CAB = {};
   var CZ = { list: null, stats: null, err: '', q: '', filter: 'all', archived: false,
              openId: null, detail: {}, dirty: {}, busy: false,
              // work[id] — что у человека сейчас: план на текущую неделю и активные
@@ -2132,6 +2135,7 @@
     var st = CZ_STATE[c.state] || CZ_STATE.new;
     var checks = (d && d.checks) || [];
     var pays = (d && d.pay_changes) || [];
+    var cab = (d && d.cabinet) || null;
     var docs = {};
     (c.docs || []).forEach(function (x) { docs[x.kind] = x; });
 
@@ -2182,6 +2186,42 @@
             '<button class="hr" id="cz-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
           '<div class="cz-inv-h">Отправьте человеку любым способом — в телеграм, ватсап или смс. ' +
             'Адрес показывается один раз: закроете карточку — придется выпускать заново.</div>'
+        : '') +
+      '</div></div>';
+
+    /* 2а. Кабинет исполнителя. Отвечает на один вопрос оператора: ждать действий от
+       человека или по-прежнему отмечать его шаги за него. Пока анкеты нет — блока нет:
+       кабинет открывать некому. Ссылка одноразовая и связывает телеграм с карточкой,
+       поэтому показывается один раз, как и приглашение. */
+    var cabLink = CZ_CAB[id];
+    var cabinet = !c.submitted_at ? '' :
+      '<div class="m-sec"><div class="m-sec-h">Кабинет исполнителя' +
+        '<button class="hr" id="cz-cab">' +
+          (cab && cab.tg_bound ? 'Ссылка на кабинет заново' : 'Ссылка на кабинет') +
+        '</button></div>' +
+      '<div class="cz-inv"><div class="cz-inv-s">' +
+        (!cab
+          ? 'Смотрим…'
+          : cab.tg_bound
+            ? 'Телеграм привязан, человек заходит кнопкой в боте' +
+              (cab.last_seen_at ? '. Был в кабинете ' + fmtWhen(cab.last_seen_at) + '.'
+                                : '. В кабинет пока не заходил.')
+            : cab.last_seen_at
+              ? 'Заходит по коду на почту, телеграм не привязан. Был ' +
+                fmtWhen(cab.last_seen_at) + '.'
+              : 'Кабинетом еще не пользовался — отправьте ссылку, и его шаги будет ' +
+                'ставить он сам, а не мы за него.') +
+        (cab && cab.link_alive_until && !cabLink
+          ? ' Действующая ссылка есть, до ' + czDate(cab.link_alive_until) + '.' : '') +
+      '</div>' +
+      (cabLink
+        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(cabLink.url) + '</span>' +
+            '<button class="hr" id="cz-cabcopy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+          '<div class="cz-inv-h">' +
+            (cabLink.tg_url ? 'Для телеграма: ' + esc(cabLink.tg_url) + '. ' : '') +
+            'Ссылка одноразовая: она не открывает доступ сама по себе, а связывает ' +
+            'телеграм того, кто ее откроет, с этой карточкой. Дальше он заходит без нее.' +
+          '</div>'
         : '') +
       '</div></div>';
 
@@ -2350,6 +2390,7 @@
               'Вписать их за него мы не можем: согласие на обработку данных дает он сам.</div>') +
         '</div>' +
         (c.submitted_at ? invite : '') +
+        cabinet +
         '<div class="m-sec"><div class="m-sec-h">Документы</div>' + docRows + '</div>' +
         '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
           '<textarea class="al-in al-ta" data-f="note" rows="3" placeholder="Что важно помнить об этом человеке">' + esc(c.note || '') + '</textarea>' +
@@ -2395,6 +2436,12 @@
     });
     var cp = el('cz-copy');
     if (cp) cp.addEventListener('click', function () { copyText(link, cp); });
+    var cb = el('cz-cab');
+    if (cb) cb.addEventListener('click', function () { czCabinetLink(id); });
+    var cbc = el('cz-cabcopy');
+    if (cbc) cbc.addEventListener('click', function () {
+      copyText((CZ_CAB[id] && (CZ_CAB[id].tg_url || CZ_CAB[id].url)) || '', cbc);
+    });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-f]'), function (inp) {
       inp.addEventListener('input', function () {
         var f = inp.getAttribute('data-f');
@@ -2470,6 +2517,22 @@
       .then(function (r) {
         if (r.invite && r.invite.url) CZ_LINKS[id] = r.invite.url;
         czAfter(r, 'Ссылка готова — отправьте ее человеку');
+      })
+      .catch(function (e) { showToast(e.message); });
+  }
+  /* Ссылка на кабинет живет по тем же правилам, что и приглашение: сервер выдает полный
+     адрес ровно один раз (в базе только хэш), поэтому держим его в памяти вкладки. */
+  function czCabinetLink(id) {
+    czSend('/admin/api/contractors/' + id + '/cabinet-link', 'POST')
+      .then(function (r) {
+        CZ_CAB[id] = r;
+        // Ответ здесь — сама ссылка, а не карточка: перечитываем карточку сами, чтобы
+        // подпись «действующая ссылка есть» не разъехалась с реальностью.
+        api('/admin/api/contractors/' + id).then(function (full) {
+          CZ.detail[id] = full;
+          if (CZ.openId === id) renderCzCard();
+        }).catch(function () { if (CZ.openId === id) renderCzCard(); });
+        showToast('Ссылка на кабинет готова — отправьте человеку');
       })
       .catch(function (e) { showToast(e.message); });
   }
@@ -2901,6 +2964,20 @@
         '<div class="ct-blk-b">' + esc(text[i + 1]).replace(/\n/g, '<br>') + '</div></div>';
     }
 
+    /* Сдача исполнителя. Приемка идет по файлу, а не по фразе «сделал», поэтому блок
+       стоит до истории — сразу под условиями работы. Скачиваем через тот же ключ, что
+       и остальная CRM: в файлах бывают документы с чужими персональными данными. */
+    var files = (t.files || []).length
+      ? '<div class="m-sec"><div class="m-sec-h">Файлы от исполнителя</div>' +
+        '<div class="ct-files">' + t.files.map(function (f) {
+          return '<a class="ct-file" href="' + API + '/admin/api/contractor-task-files/' +
+            encodeURIComponent(f.id) + '?k=' + encodeURIComponent(getKey()) + '" download>' +
+            ic('doc', 14) + '<span class="ct-file-n">' + esc(f.name) + '</span>' +
+            '<span class="ct-file-s">' + Math.max(1, Math.round((f.size_bytes || 0) / 1024)) +
+            ' КБ · ' + fmtWhen(f.created_at) + '</span></a>';
+        }).join('') + '</div></div>'
+      : '';
+
     var ev = (t.events || []).map(function (e) {
       return '<div class="ct-ev"><span class="ct-ev-d">' + esc(czDate(e.at)) + '</span>' +
         '<span class="ct-ev-t">' + esc(e.text) + '</span>' +
@@ -2921,7 +2998,7 @@
       '<div class="m-body"><div class="m-content">' +
         money + acts +
         '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
-        blocks +
+        blocks + files +
         (t.cancel_reason
           ? '<div class="m-sec"><div class="m-sec-h">Причина</div>' +
             '<div class="ct-blk-b">' + esc(t.cancel_reason) + '</div></div>'

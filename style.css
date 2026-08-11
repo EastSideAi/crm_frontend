@@ -3226,6 +3226,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ct-ev-d { flex: none; width: 108px; color: var(--ink-3); }
 .ct-ev-t { flex: 1; min-width: 0; color: var(--ink-2); line-height: 1.45; }
 .ct-ev-a { flex: none; color: var(--ink-3); }
+/* Сдача исполнителя: файл — это то, по чему принимают работу, поэтому строка кликается
+   целиком, а вес и время стоят подписью, а не колонкой. */
+.ct-files { display: flex; flex-direction: column; gap: 6px; }
+.ct-file { display: flex; align-items: center; gap: 9px; text-decoration: none;
+  background: var(--fill); border-radius: var(--r-lg); padding: 10px 12px; color: var(--ink); }
+.ct-file:hover { background: var(--line); }
+.ct-file svg { flex: none; color: var(--ink-3); }
+.ct-file-n { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-file-s { flex: none; font-size: 12px; color: var(--ink-3); font-feature-settings: 'tnum'; }
 .ct-card { max-width: 520px; }
 /* Диалог поверх открытой карточки задания: карточка лежит на z-index 81. */
 .al-ov.over { z-index: 92; }
