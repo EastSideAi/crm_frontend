@@ -1530,7 +1530,14 @@
     manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
-  function can(cap) { return roleInfo().caps.indexOf(cap) !== -1; }
+  /* Право «mywork» не ролевое, а личное: оно есть у того, чья учетка связана со своей
+     карточкой исполнителя. Роль тут ни при чем — преподаватель и руководитель получают
+     его одинаково, если сами работают у нас как самозанятые. Правду говорит сервер
+     (caps в ответе /admin/api/me), фронт только показывает пункт. */
+  function can(cap) {
+    if (state.caps && state.caps.indexOf(cap) !== -1) return true;
+    return roleInfo().caps.indexOf(cap) !== -1;
+  }
 
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
@@ -1545,6 +1552,7 @@
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
+    { id: 'mywork', label: 'Моя работа', icon: 'task', cap: 'mywork' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
@@ -1894,6 +1902,27 @@
       html = '<div><h2>Исполнители</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase3 + '</span></div></div>';
     }
+    if (state.page === 'mywork') {
+      /* Вердикт отвечает на единственный вопрос человека: что от меня ждут сейчас.
+         Сначала подпись акта — без нее нам нельзя платить, и это его же деньги. */
+      var mc = MW.counts;
+      var toSign = mc ? (mc.acts_to_sign || 0) : 0;
+      var offered = mc ? Math.max(0, (mc.todo || 0) - toSign) : 0;
+      var phrase8;
+      if (MW.err) phrase8 = esc(MW.err);
+      else if (!mc) phrase8 = 'Загружаю ваши задания…';
+      else if (toSign) phrase8 = '<b>' + toSign + ' ' + plural(toSign, 'акт ждет', 'акта ждут', 'актов ждут') +
+        ' вашей подписи.</b> Пока подписи нет, выплату провести нельзя.';
+      else if (offered) phrase8 = '<b>' + offered + ' ' + plural(offered, 'новое задание', 'новых задания', 'новых заданий') +
+        '</b> ждет вашего решения — принять или отказаться.';
+      else if (mc.active) phrase8 = 'В работе <b>' + mc.active + ' ' +
+        plural(mc.active, 'задание', 'задания', 'заданий') + '</b>. Результат прикладывайте файлом в карточке.';
+      else if (mc.review) phrase8 = 'Все сдано: <b>' + mc.review + ' ' +
+        plural(mc.review, 'задание', 'задания', 'заданий') + '</b> у менеджера на проверке.';
+      else phrase8 = 'Новых заданий нет. Здесь ваша работа как самозанятого: задания, план и акты.';
+      html = '<div><h2>Моя работа</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase8 + '</span></div></div>';
+    }
     if (czTasksOn()) {
       var cs = CT.stats;
       var phrase4;
@@ -2021,6 +2050,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'mywork') renderMyWork(view);
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
@@ -2484,6 +2514,33 @@
         : '') +
       '</div></div>';
 
+    /* 2б. Учетка в CRM. Преподаватели и кураторы — наши сотрудники и одновременно
+       самозанятые: связав карточку с их логином, мы открываем им раздел «Моя работа»
+       вместо второго входа. Связь одна к одному — иначе под подписью в акте не понять,
+       кто из двоих нажал. Подрядчику со стороны учетку не заводим вовсе: в CRM лиды,
+       детские анкеты и деньги, ему хватает внешнего кабинета. */
+    var lu = d && d.linked_user;
+    var team = (d && d.team) || [];
+    var teamOpts = '<option value="">— выберите сотрудника —</option>' +
+      team.map(function (u) {
+        return '<option value="' + esc(u.login) + '">' + esc(u.name || u.login) +
+          ' · ' + esc(u.login) + '</option>';
+      }).join('');
+    var linkSec = '<div class="m-sec"><div class="m-sec-h">Учетка в CRM' +
+        (lu ? '<button class="hr mute" id="cz-unlink">Отвязать</button>' : '') +
+      '</div>' +
+      (lu
+        ? '<div class="cz-inv"><div class="cz-inv-s"><b>' + esc(lu.name || lu.login) + '</b> · ' +
+            esc(lu.login) + '</div>' +
+          '<div class="cz-inv-h">У человека в CRM открыт раздел «Моя работа»: свои задания, ' +
+            'план и акты. Отдельный кабинет по ссылке ему не нужен.</div></div>'
+        : '<div class="cz-inv"><div class="cz-inv-s">Не связана. Если это наш сотрудник ' +
+            'с логином в CRM, свяжите — и свои задания он будет вести здесь, без второго входа.</div>' +
+          '<div class="cz-link-row"><span class="al-selwrap"><select id="cz-user" class="al-sel">' +
+            teamOpts + '</select></span>' +
+            '<button class="bp sm ghost" id="cz-link">Связать</button></div></div>') +
+    '</div>';
+
     /* 3. Налоговый статус — откуда цифра и когда смотрели */
     var checked = c.npd_checked_at ? fmtWhen(c.npd_checked_at) : 'ни разу';
     var npdChip = c.npd_status === 'active' ? '<span class="sev cz-ok">Плательщик НПД</span>'
@@ -2649,6 +2706,7 @@
               'Вписать их за него мы не можем: согласие на обработку данных дает он сам.</div>') +
         '</div>' +
         (c.submitted_at ? invite : '') +
+        linkSec +
         cabinet +
         '<div class="m-sec"><div class="m-sec-h">Документы</div>' + docRows + '</div>' +
         '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
@@ -2702,6 +2760,17 @@
     var cbc = el('cz-cabcopy');
     if (cbc) cbc.addEventListener('click', function () {
       copyText((CZ_CAB[id] && (CZ_CAB[id].tg_url || CZ_CAB[id].url)) || '', cbc);
+    });
+    var lk = el('cz-link');
+    if (lk) lk.addEventListener('click', function () {
+      var login = el('cz-user').value;
+      if (!login) return showToast('Выберите сотрудника');
+      czLinkUser(id, login);
+    });
+    var ulk = el('cz-unlink');
+    if (ulk) ulk.addEventListener('click', function () {
+      if (window.confirm('Отвязать учетку? Раздел «Моя работа» у человека пропадет, ' +
+                         'а задания и акты останутся на месте.')) czLinkUser(id, null);
     });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-f]'), function (inp) {
       inp.addEventListener('input', function () {
@@ -2794,6 +2863,23 @@
           if (CZ.openId === id) renderCzCard();
         }).catch(function () { if (CZ.openId === id) renderCzCard(); });
         showToast('Ссылка на кабинет готова — отправьте человеку');
+      })
+      .catch(function (e) { showToast(e.message); });
+  }
+  /* Связать карточку исполнителя с учеткой сотрудника (раздел «Моя работа») или снять
+     связь. Занятую карточку сервер вторым логином не отдаст, а прежнюю связь снимет
+     сам — поэтому карточку после ответа перечитываем целиком, а не правим на экране. */
+  function czLinkUser(id, login) {
+    czSend('/admin/api/contractors/' + id + '/link-user', 'POST', { login: login })
+      .then(function () {
+        return api('/admin/api/contractors/' + id).then(function (full) {
+          CZ.detail[id] = full;
+          if (CZ.openId === id) renderCzCard();
+        });
+      })
+      .then(function () {
+        showToast(login ? 'Связали — у человека появился раздел «Моя работа»'
+                        : 'Связь снята');
       })
       .catch(function (e) { showToast(e.message); });
   }
@@ -4115,9 +4201,523 @@
       }, 'Планы работ');
   }
 
+  /* ── МОЯ РАБОТА (свои задания сотрудника) ─────────────────────────────────
+     Преподаватель и куратор у нас одновременно сотрудники и самозанятые: они ведут
+     клиентов в CRM и получают от нас задания. Второй логин тем же людям не нужен
+     (решение владельца от 2026-08-11), поэтому свои задания, план и акты человек
+     открывает здесь. Внешний кабинет по коду остается для подрядчиков со стороны —
+     монтажера и ассистента в CRM пускать нельзя, там детские анкеты и деньги.
+
+     Раздел появляется только у того, чья учетка связана с карточкой исполнителя:
+     возможность `mywork` выдает сервер по этой связи, а не роль.
+
+     Экран НИЧЕГО не решает сам. Какие шаги человеку сейчас доступны, приходит с
+     сервера в `actions`, и ручки под этим экраном — те же самые, что под кабинетом.
+     Двум дверям в одну комнату нельзя проверять разное: под актом должна стоять его
+     подпись под тем, что он действительно мог сделать. */
+
+  var MW = { tab: 'tasks', tasks: null, counts: null, err: '', openId: null, detail: {},
+             busy: false, period: 'week', plan: null, planErr: '',
+             acts: null, actsErr: '' };
+  var MW_TABS = [['tasks', 'Задания'], ['plan', 'Мой план'], ['acts', 'Акты']];
+
+  /* Сервер отдает формулировки для ИСТОРИИ задания («Исполнитель принял задание») и
+     подсказки для менеджера («Ждем ответа исполнителя»). Человеку про самого себя так
+     писать нельзя: на кнопке это читается как отчет о чужом поступке. Названия те же,
+     что в кабинете, — экраны разные, слова одни. */
+  var MW_DO = { accepted: 'Принять задание', declined: 'Отказаться',
+                in_progress: 'Взять в работу', done: 'Сдать результат' };
+  var MW_HINT = {
+    offered: 'Примите задание или откажитесь',
+    accepted: 'Можно приступать',
+    in_progress: 'Сдайте результат, когда будет готов',
+    done: 'Менеджер проверяет результат',
+    approved: 'Результат принят — ждем акт',
+    act_made: 'Подпишите акт',
+    act_signed: 'Подписан — ждем выплату',
+    paid: 'Оплачено',
+    declined: 'Вы отказались от задания',
+    cancelled: 'Задание отменено',
+  };
+  // Названия состояний тоже с его стороны: «Принято исполнителем» человек читает про
+  // себя в третьем лице, а состояние должно отвечать «где сейчас моя работа».
+  var MW_ST = { offered: 'Предложено вам', accepted: 'Вы приняли', in_progress: 'В работе',
+                done: 'Сдано на проверку', approved: 'Результат принят',
+                act_made: 'Акт сформирован', act_signed: 'Акт подписан', paid: 'Оплачено',
+                declined: 'Вы отказались', cancelled: 'Отменено' };
+  function mwSt(t) { return MW_ST[t.status] || t.status_title; }
+  var MW_ACT_ST = { wait_both: 'Ждет обеих подписей', wait_ct: 'Ждет вашей подписи',
+                    wait_co: 'Ждет подписи заказчика' };
+  function mwActTitle(a) { return MW_ACT_ST[a.status] || a.status_title; }
+  // Файл имеет смысл, только когда работа уже наша: до принятия задания прикладывать
+  // нечего, после выплаты — поздно.
+  var MW_FILES_AT = ['accepted', 'in_progress', 'done', 'approved', 'act_made', 'act_signed'];
+
+  /* Свой запрос вместо общего api(): первый же ответ тут бывает 409 с человеческой
+     фразой («учетка не связана с карточкой»), и показать надо именно ее. */
+  function mwGet(path) {
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return fetch(API + '/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (r.ok) return j;
+          throw new Error((j && typeof j.detail === 'string' && j.detail) ||
+            'Не удалось загрузить. Проверьте связь и обновите страницу');
+        });
+      });
+  }
+  function mwSend(path, method, body) {
+    return czSend('/admin/api/my/cz' + path, method, body);
+  }
+  function mwLoad() {
+    mwGet('/tasks?tab=all').then(function (r) {
+      MW.tasks = r.tasks || []; MW.counts = r.counts || null; MW.err = '';
+      if (state.page === 'mywork') renderAll();
+    }).catch(function (e) {
+      MW.tasks = []; MW.err = e.message;
+      if (state.page === 'mywork') renderAll();
+    });
+  }
+  function mwLoadPlan() {
+    mwGet('/plan?period=' + MW.period).then(function (r) {
+      MW.plan = r; MW.planErr = '';
+      if (state.page === 'mywork') renderAll();
+    }).catch(function (e) {
+      MW.plan = { items: [] }; MW.planErr = e.message;
+      if (state.page === 'mywork') renderAll();
+    });
+  }
+  function mwLoadActs() {
+    mwGet('/acts').then(function (r) {
+      MW.acts = r.acts || []; MW.actsErr = '';
+      if (state.page === 'mywork') renderAll();
+    }).catch(function (e) {
+      MW.acts = []; MW.actsErr = e.message;
+      if (state.page === 'mywork') renderAll();
+    });
+  }
+  function mwPut(t) { MW.detail[t.id] = t; }
+  function mwFind(id) {
+    if (MW.detail[id]) return MW.detail[id];
+    var l = MW.tasks || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+    return null;
+  }
+
+  function mwRow(t) {
+    var wait = t.act && !t.act.signed_ct_at && t.act.status !== 'void';
+    return '<div class="trow mw-grid" data-mw="' + t.id + '">' +
+      '<span class="ct-main"><span class="ct-no">№' + t.number + '</span>' +
+        '<b>' + esc(t.title) + '</b>' +
+        (t.project ? '<span class="ct-proj">' + esc(t.project) + '</span>' : '') + '</span>' +
+      '<span class="ct-when">' + (t.date_end ? 'до ' + esc(czDate(t.date_end)) : '—') + '</span>' +
+      '<span class="ct-sum"><b>' + ctMoney(t.amount) + ' ₽</b>' +
+        (t.corrected ? '<span class="ct-corr">сумма уточнена</span>' : '') + '</span>' +
+      '<span class="ct-state"><span class="sev ' + (CT_ST[t.status] || 'ct-draft') + '">' +
+        esc(mwSt(t)) + '</span>' +
+        (wait ? '<span class="ct-next">акт ждет вашей подписи</span>'
+              : (MW_HINT[t.status] ? '<span class="ct-next">' + esc(MW_HINT[t.status]) + '</span>' : '')) +
+      '</span>' +
+    '</div>';
+  }
+
+  /* Пункт плана глазами исполнителя: галочка — единственное, что он тут меняет.
+     Что делать, ставит менеджер, а денег в плане нет вообще (пп. 1.1.2 и 1.1.3
+     договора) — поэтому ни цены, ни кнопки «в задание» здесь и быть не может. */
+  function mwItemRow(it) {
+    return '<div class="pl-i' + (it.done ? ' done' : '') + '">' +
+      '<button class="pl-ck" data-mwit="' + it.id + '" title="' +
+        (it.done ? 'Снять отметку' : 'Отметить выполненным') + '">' + ic('check', 12) + '</button>' +
+      '<span class="pl-t"><b>' + esc(it.title) + '</b>' +
+        (it.note ? '<span class="pl-n">' + esc(it.note) + '</span>' : '') +
+        (it.due ? '<span class="pl-due">' + ic('clock', 11) + esc(czDate(it.due)) + '</span>' : '') +
+      '</span>' +
+      '<span class="pl-a">' + (it.task_id
+        ? '<button class="pl-task on" data-mw="' + it.task_id + '">' + ic('task', 12) +
+          '№' + it.task_number + '</button>' : '') + '</span>' +
+    '</div>';
+  }
+
+  /* Акт — документ, поэтому и показан документом: тем же блоком .ct-act, что видит
+     оператор. Подписывают обе стороны одну и ту же бумагу, и выглядеть она должна
+     одинаково — иначе спор пойдет о том, кто что видел. */
+  function mwActCard(a) {
+    var docUrl = API + '/admin/api/my/cz/acts/' + encodeURIComponent(a.id) +
+      '/doc?k=' + encodeURIComponent(getKey());
+    var sg = function (who, when, note, wait) {
+      return '<div class="ct-sg1"><span class="ct-sg-k">' + who + '</span>' +
+        (when ? '<b>Подписан ' + esc(czDate(when)) + '</b>' +
+                (note ? '<span class="ct-sg-n">' + esc(note) + '</span>' : '')
+              : '<span class="ct-sg-no">' + wait + '</span>') + '</div>';
+    };
+    return '<div class="card mw-act">' +
+      '<div class="ct-act">' +
+        '<div class="ct-act-h"><b>Акт № ' + a.number + '</b>' +
+          '<span class="ct-chip ' + (ACT_ST[a.status] || 'ct-wait') + '">' +
+            esc(mwActTitle(a)) + '</span></div>' +
+        '<div class="ct-act-m">от ' + esc(czDate(a.act_date)) + ' · ' +
+          esc(a.service_title || '') + ' · <b>' + ctMoney(a.amount) + ' ₽</b></div>' +
+        '<div class="ct-sg">' +
+          sg('Заказчик', a.signed_co_at, a.signed_co_by, 'Не подписан') +
+          sg('Вы', a.signed_ct_at, 'простой электронной подписью', 'Ждем вашу подпись') +
+        '</div>' +
+        (a.voided_at
+          ? '<div class="ct-why">Акт аннулирован: ' + esc(a.void_reason || '') + '</div>' : '') +
+        '<div class="ct-acts">' +
+          '<a class="bp sm ghost" href="' + docUrl + '" target="_blank" rel="noopener">' +
+            'Открыть документ</a>' +
+          (!a.signed_ct_at && !a.voided_at
+            ? '<button class="bp sm" data-mwsign="' + a.id + '">Подписать</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderMyWork(view) {
+    if (MW.tasks === null) { view.innerHTML = dashSkeleton(); mwLoad(); return; }
+    /* Связи учетки с карточкой нет — раздела фактически нет. Показываем причину
+       человеческими словами, а не пустой список. */
+    if (MW.err) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.err) + '</div></div>';
+      return;
+    }
+    var c = MW.counts || {};
+    var tabs = MW_TABS.map(function (t) {
+      var n = t[0] === 'tasks' ? (c.todo || 0) : (t[0] === 'acts' ? (c.acts_to_sign || 0) : 0);
+      return '<button class="qchip' + (MW.tab === t[0] ? ' on' : '') + '" data-mwtab="' + t[0] + '">' +
+        t[1] + (n ? ' <span class="qn">' + n + '</span>' : '') + '</button>';
+    }).join('');
+    var body;
+
+    if (MW.tab === 'tasks') {
+      var rows = MW.tasks || [];
+      body = '<div class="card listcard">' +
+        '<div class="list-quick">' + tabs + '</div>' +
+        (!rows.length
+          ? '<div class="empty">Заданий пока нет. Когда менеджер пришлет задание, оно появится здесь — и до начала работы его надо принять.</div>'
+          : '<div class="trow mw-grid thead">' +
+              '<span class="th">Задание</span><span class="th">Срок</span>' +
+              '<span class="th">Сумма</span><span class="th">Состояние</span>' +
+            '</div>' + rows.map(mwRow).join('')) +
+      '</div>';
+    } else if (MW.tab === 'plan') {
+      if (MW.plan === null) mwLoadPlan();
+      var items = MW.plan ? (MW.plan.items || []) : [];
+      var per = PL_TABS.map(function (t) {
+        return '<button class="qchip' + (MW.period === t[0] ? ' on' : '') +
+          '" data-mwper="' + t[0] + '">' + t[1] + '</button>';
+      }).join('');
+      // «неделя 10 — 16 августа» приходит строчной буквой: внутри фразы это верно, а
+      // заголовком карточки читается как обрывок.
+      var when = MW.plan ? plPeriodName(MW.period, MW.plan.starts_on) : 'Смотрим…';
+      when = when.charAt(0).toUpperCase() + when.slice(1);
+      var done = items.filter(function (i) { return i.done; }).length;
+      body = '<div class="card listcard">' +
+          '<div class="list-quick">' + tabs + '</div>' +
+        '</div>' +
+        '<div class="card pl-p mw-plan">' +
+          '<div class="pl-p-h">' +
+            '<span class="pl-p-n"><b>' + esc(when) + '</b></span>' +
+            '<span class="pl-p-s">' + (items.length
+              ? done + ' из ' + items.length + ' сделано' : 'Пунктов пока нет') + '</span>' +
+          '</div>' +
+          '<div class="list-quick mw-per">' + per + '</div>' +
+          (MW.planErr ? '<div class="empty">' + esc(MW.planErr) + '</div>' : '') +
+          (items.length
+            ? '<div class="pl-list">' + items.map(mwItemRow).join('') + '</div>'
+            : (MW.planErr ? '' : '<div class="empty">На этот период плана нет. План ставит менеджер: это то, чем занята неделя, а не то, за что платят — деньги идут по заданиям.</div>')) +
+        '</div>';
+    } else {
+      if (MW.acts === null) mwLoadActs();
+      var acts = MW.acts || [];
+      body = '<div class="card listcard">' +
+          '<div class="list-quick">' + tabs + '</div>' +
+        '</div>' +
+        (MW.actsErr ? '<div class="card"><div class="empty">' + esc(MW.actsErr) + '</div></div>'
+          : (!acts.length
+            ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
+            : '<div class="pl-grid">' + acts.map(mwActCard).join('') + '</div>'));
+    }
+
+    view.innerHTML = body;
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwtab]'), function (b) {
+      b.addEventListener('click', function () { MW.tab = b.getAttribute('data-mwtab'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwper]'), function (b) {
+      b.addEventListener('click', function () {
+        MW.period = b.getAttribute('data-mwper'); MW.plan = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwit]'), function (b) {
+      b.addEventListener('click', function () { mwTick(b.getAttribute('data-mwit')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mw]'), function (r) {
+      r.addEventListener('click', function (e) {
+        e.stopPropagation(); mwOpen(r.getAttribute('data-mw'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwsign]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); mwSign(b.getAttribute('data-mwsign'));
+      });
+    });
+    pageAnim(view);
+  }
+
+  function mwTick(iid) {
+    var items = (MW.plan && MW.plan.items) || [];
+    var cur = null;
+    for (var i = 0; i < items.length; i++) if (items[i].id === iid) cur = items[i];
+    if (!cur || MW.busy) return;
+    MW.busy = true;
+    mwSend('/plan-items/' + iid, 'PATCH', { done: !cur.done })
+      .then(function (r) { cur.done = r.done; cur.done_at = r.done_at; renderAll(); })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { MW.busy = false; });
+  }
+
+  /* ── своя карточка задания ────────────────────────────────────────────────
+     Та же модалка, что у оператора, но без второй половины: приемка результата,
+     подпись со стороны компании и выплата — решения заказчика, и кнопок на них тут
+     нет. Сервер их и не даст (403), а рисовать кнопку, которая всегда откажет, —
+     обман. */
+  function mwOpen(id) {
+    MW.openId = id;
+    el('mbg').classList.add('open');
+    el('modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    renderMwCard();
+    mwGet('/tasks/' + id).then(function (t) {
+      mwPut(t);
+      if (MW.openId === id) renderMwCard();
+    }).catch(function (e) {
+      if (MW.openId === id) { mwClose(); showToast(e.message); }
+    });
+  }
+  function mwClose() {
+    MW.openId = null;
+    el('mbg').classList.remove('open');
+    el('modal').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  function mwAct(id, to, reason) {
+    if (MW.busy) return;
+    MW.busy = true;
+    mwSend('/tasks/' + id + '/status', 'POST', { to: to, reason: reason })
+      .then(function (t) {
+        mwPut(t); renderMwCard(); mwLoad();
+        if (to === 'done') showToast('Результат отправлен — менеджер его проверит');
+      })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { MW.busy = false; });
+  }
+  // Отказ — единственный шаг исполнителя, который надо объяснить: причина остается в
+  // истории задания, и через полгода отвечать на этот вопрос по переписке некому.
+  function mwDecline(id) {
+    openSheet('Отказаться от задания', 'Причина останется в истории задания — ее увидит менеджер.',
+      [['reason', 'text', 'Почему не беретесь', '']],
+      function (v, close) {
+        if (!v.reason.trim()) return 'Напишите причину — она останется в истории задания';
+        mwAct(id, 'declined', v.reason.trim());
+        close();
+        return null;
+      }, null, 'Мое задание', 'Отказаться');
+  }
+  /* Файл — это и есть сдача работы: приемка идет по нему, а не по фразе «сделал».
+     Читаем файл в браузере и отправляем строкой; потолки (8 МБ на файл и лимит на
+     задание) проверяет сервер, здесь только человеческий отказ до отправки. */
+  function mwUpload(id, file) {
+    if (!file || MW.busy) return;
+    if (file.size > 8 * 1024 * 1024) {
+      return showToast('Файл больше 8 МБ — пришлите ссылку на облако');
+    }
+    MW.busy = true;
+    var fr = new FileReader();
+    fr.onerror = function () { MW.busy = false; showToast('Файл не читается'); };
+    fr.onload = function () {
+      mwSend('/tasks/' + id + '/files', 'POST',
+             { name: file.name, mime: file.type || 'application/octet-stream',
+               data: String(fr.result) })
+        .then(function (r) {
+          var t = MW.detail[id];
+          if (t) { t.files = r.files || []; renderMwCard(); }
+          showToast('Файл приложен');
+        })
+        .catch(function (e) { showToast(e.message); })
+        .then(function () { MW.busy = false; });
+    };
+    fr.readAsDataURL(file);
+  }
+  /* Подпись акта — код на рабочую почту (договор, п. 8.5.2: ключ простой электронной
+     подписи это адрес плюс одноразовый код). Ни оператор, ни этот экран подписать за
+     человека не могут: сервер сверяет код и отпечаток документа. */
+  function mwSign(aid) {
+    if (MW.busy) return;
+    MW.busy = true;
+    mwSend('/acts/' + aid + '/sign/request', 'POST')
+      .then(function (r) {
+        openSheet('Подпись акта',
+          'Код отправлен на ' + (r.email_hint || 'вашу рабочую почту') +
+            '. Он живет ' + (r.ttl_min || 15) + ' минут.',
+          [['code', 'line', 'Код из письма', '']],
+          function (v, close) {
+            var code = (v.code || '').trim();
+            if (code.length < 4) return 'Введите код из письма';
+            if (MW.busy) return null;
+            MW.busy = true;
+            mwSend('/acts/' + aid + '/sign', 'POST', { code: code })
+              .then(function () {
+                close(); MW.acts = null; MW.detail = {}; mwLoad(); mwLoadActs();
+                if (MW.openId) mwOpen(MW.openId);
+                showToast('Акт подписан');
+              })
+              .catch(function (e) { el('sh-err').textContent = e.message; })
+              .then(function () { MW.busy = false; });
+            return null;
+          }, null, 'Акт', 'Подписать');
+      })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { MW.busy = false; });
+  }
+
+  function renderMwCard() {
+    var modal = el('modal');
+    var id = MW.openId;
+    if (!modal || !id) return;
+    var t = MW.detail[id] || mwFind(id);
+    if (!t) {
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="mw-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем задание…</div>';
+      el('mw-x').addEventListener('click', mwClose);
+      return;
+    }
+    // Сервер уже оставил в actions только шаги исполнителя — это его карточка.
+    var acts = (t.actions || []).map(function (a) {
+      return '<button class="bp sm' + (a.primary ? '' : ' ghost') + '" data-mwa="' + a.to + '">' +
+        esc(MW_DO[a.to] || a.label) + '</button>';
+    }).join('');
+
+    var A = t.act;
+    var actBlock = '';
+    if (A) {
+      var docUrl = API + '/admin/api/my/cz/acts/' + encodeURIComponent(A.id) +
+        '/doc?k=' + encodeURIComponent(getKey());
+      actBlock = '<div class="m-sec"><div class="m-sec-h">Акт</div>' +
+        '<div class="ct-act">' +
+          '<div class="ct-act-h"><b>Акт № ' + A.number + '</b>' +
+            '<span class="ct-chip ' + (ACT_ST[A.status] || 'ct-wait') + '">' +
+              esc(mwActTitle(A)) + '</span></div>' +
+          '<div class="ct-act-m">от ' + esc(czDate(A.act_date)) + ' · <b>' +
+            ctMoney(A.amount) + ' ₽</b></div>' +
+          (A.signed_ct_at
+            ? '<div class="ct-act-m">Ваша подпись стоит ' + esc(czDate(A.signed_ct_at)) + '</div>'
+            : '<div class="ct-frozen">Подпись подтверждается кодом с вашей рабочей почты.</div>') +
+          '<div class="ct-acts">' +
+            '<a class="bp sm ghost" href="' + docUrl + '" target="_blank" rel="noopener">' +
+              'Открыть документ</a>' +
+            (A.signed_ct_at ? ''
+              : '<button class="bp sm" data-mwsign="' + A.id + '">Подписать</button>') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    var facts = [
+      ['Услуга', esc(t.service_title || t.title)],
+      ['Период', esc(ctPeriod(t))],
+      ['Место выполнения', esc(t.place || 'Удаленно')],
+      ['Цена за единицу', ctMoney(t.unit_price) + ' ₽ за ' + esc(t.unit)],
+      ['Объем', ctNum(t.qty) + ' ' + esc(t.unit)],
+    ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
+
+    var text = ['Что нужно сделать', t.description, 'Что считается выполнением', t.result_req,
+                'Информация для вас', t.info];
+    var blocks = '';
+    for (var i = 0; i < text.length; i += 2) {
+      if (!text[i + 1]) continue;
+      blocks += '<div class="m-sec"><div class="m-sec-h">' + esc(text[i]) + '</div>' +
+        '<div class="ct-blk-b">' + esc(text[i + 1]).replace(/\n/g, '<br>') + '</div></div>';
+    }
+
+    var canFile = MW_FILES_AT.indexOf(t.status) !== -1;
+    var files = '<div class="m-sec"><div class="m-sec-h">Файлы по заданию</div>' +
+      ((t.files || []).length
+        ? '<div class="ct-files">' + t.files.map(function (f) {
+            return '<a class="ct-file" href="' + API + '/admin/api/my/cz/files/' +
+              encodeURIComponent(f.id) + '?k=' + encodeURIComponent(getKey()) + '" download>' +
+              ic('doc', 14) + '<span class="ct-file-n">' + esc(f.name) + '</span>' +
+              '<span class="ct-file-s">' + Math.max(1, Math.round((f.size_bytes || 0) / 1024)) +
+              ' КБ · ' + fmtWhen(f.created_at) + '</span></a>';
+          }).join('') + '</div>'
+        : '<div class="ct-blk-b">Пока ничего не приложено.</div>') +
+      (!canFile ? '' :
+        '<div class="mw-up"><input type="file" id="mw-file" hidden>' +
+          '<button class="bp sm ghost" id="mw-add">' + ic('plus', 13) + 'Приложить файл</button>' +
+          '<span class="cz-fine">До 8 МБ. Работу принимают по тому, что здесь лежит.</span>' +
+        '</div>') +
+    '</div>';
+
+    var ev = (t.events || []).map(function (e) {
+      return '<div class="ct-ev"><span class="ct-ev-d">' + esc(czDate(e.at)) + '</span>' +
+        '<span class="ct-ev-t">' + esc(e.text) + '</span>' +
+        (e.author ? '<span class="ct-ev-a">' + esc(e.author) + '</span>' : '') + '</div>';
+    }).join('');
+
+    modal.innerHTML =
+      '<div class="m-head">' +
+        '<div class="m-navfloat"><button class="m-arrow" id="mw-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-id"><div class="m-name-row"><div class="m-name">' +
+          '<span class="ct-no">№' + t.number + '</span>' + esc(t.title) + '</div></div>' +
+          '<div class="m-sub"><span class="sev ' + (CT_ST[t.status] || 'ct-draft') + '">' +
+            esc(mwSt(t)) + '</span>' +
+            (MW_HINT[t.status]
+              ? '<span class="dot-sep"></span><span>' + esc(MW_HINT[t.status]) + '</span>' : '') +
+          '</div></div>' +
+      '</div>' +
+      '<div class="m-body"><div class="m-content">' +
+        '<div class="ct-money">' +
+          '<div class="ct-amt"><span class="ct-amt-k">Вам за это задание</span>' +
+            '<b>' + ctMoney(t.amount) + ' ₽</b></div>' +
+          '<div class="ct-calc">' + ctNum(t.qty) + ' × ' + ctMoney(t.unit_price) +
+            ' ₽ за ' + esc(t.unit) +
+            (t.corrected ? ' · по плану было ' + ctMoney(t.amount_plan) + ' ₽' : '') + '</div>' +
+          (t.corrected
+            ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>' : '') +
+        '</div>' +
+        (acts ? '<div class="ct-acts">' + acts + '</div>' : '') +
+        actBlock +
+        '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
+        blocks + files +
+        (t.cancel_reason
+          ? '<div class="m-sec"><div class="m-sec-h">Причина</div>' +
+            '<div class="ct-blk-b">' + esc(t.cancel_reason) + '</div></div>'
+          : '') +
+        '<div class="m-sec"><div class="m-sec-h">История</div>' +
+          '<div class="ct-hist">' + (ev || '<span class="cz-fine">Пока пусто</span>') + '</div></div>' +
+      '</div></div>';
+
+    el('mw-x').addEventListener('click', mwClose);
+    var add = el('mw-add'), inp = el('mw-file');
+    if (add && inp) {
+      add.addEventListener('click', function () { inp.click(); });
+      inp.addEventListener('change', function () { mwUpload(t.id, inp.files[0]); });
+    }
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-mwsign]'), function (b) {
+      b.addEventListener('click', function () { mwSign(b.getAttribute('data-mwsign')); });
+    });
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-mwa]'), function (b) {
+      b.addEventListener('click', function () {
+        var to = b.getAttribute('data-mwa');
+        if (to === 'declined') return mwDecline(t.id);
+        mwAct(t.id, to);
+      });
+    });
+  }
+
   /* Маленькая форма-вопрос на той же модалке дизайн-системы: пара полей и проверка.
      Возврат строки из обработчика = текст ошибки под формой, null = все хорошо. */
-  function openSheet(title, sub, fields, onOk, live, eyebrow) {
+  function openSheet(title, sub, fields, onOk, live, eyebrow, okLabel) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     // форма открывается ПОВЕРХ карточки задания — обычный слой модалки лежит под ней
@@ -4143,7 +4743,7 @@
           '<div class="ct-err" id="sh-err"></div>' +
         '</div>' +
         '<div class="al-foot"><button class="al-cancel" id="sh-cancel">Отмена</button>' +
-          '<button class="bp al-save" id="sh-ok">Сохранить</button></div>' +
+          '<button class="bp al-save" id="sh-ok">' + esc(okLabel || 'Сохранить') + '</button></div>' +
       '</div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -10968,6 +11568,7 @@
       return r.json();
     }).then(function (me) {
       state.role = me.role || 'manager'; state.userName = me.name || '';
+      state.caps = me.caps || [];
       startApp();
     }).catch(function () {
       localStorage.removeItem(KEY_LS);
