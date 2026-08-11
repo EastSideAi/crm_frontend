@@ -5591,6 +5591,9 @@
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
+    // список сотрудников нужен и «Сейчас» (ответственный за клиента), и доске
+    // (исполнитель задачи) — тянем на открытии карточки, а не в каждой секции
+    if (!state.assignees) fetchAssignees(function () { if (state.drawerId === id) renderDrawer(true); });
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
       if (got) renderDrawer(true);
