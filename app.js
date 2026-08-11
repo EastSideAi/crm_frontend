@@ -7,7 +7,14 @@
   // Боевой бэкенд (self-host Selectel). Punycode домена api.истсайд.рф — чтобы работало
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
-  var API = window.EASTSIDE_API_BASE || 'https://api.xn--80aikf2bag.xn--p1ai';
+  // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
+  // из-за рубежа (зона .рф резолвится не везде — публичный DNS Google не разрешает
+  // api.истсайд.рф). С зеркала ходим в api.eastside.study, иначе CRM открывается, но
+  // ни один запрос не проходит.
+  var API = window.EASTSIDE_API_BASE
+    || (/(^|\.)eastside\.study$/.test(location.hostname)
+        ? 'https://api.eastside.study'
+        : 'https://api.xn--80aikf2bag.xn--p1ai');
   var KEY_LS = 'eastside_crm_key';
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
@@ -24,11 +31,14 @@
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
+    drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
+    composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -140,6 +150,7 @@
       bolt: '<path d="M11 2.5 4 11h4.5L9 17.5 16 9h-4.5L11 2.5z" fill="currentColor" stroke="none"/>',
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
+      max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
@@ -151,6 +162,8 @@
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
+      globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
+      play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -179,7 +192,7 @@
   function el(id) { return document.getElementById(id); }
   function getKey() {
     var m = location.search.match(/[?&]k=([^&]+)/);
-    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname); }
+    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname + location.hash); }
     return localStorage.getItem(KEY_LS) || '';
   }
   function pad(n) { return ('0' + n).slice(-2); }
@@ -203,6 +216,14 @@
     if (diff === 0) return 'Сегодня';
     if (diff === 1) return 'Вчера';
     return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  /* Полная дата словами: «10 ноября 2026». Для сроков, до которых далеко, где
+     «10.11» без года читается двусмысленно. */
+  function dayFull(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + ' ' + d.getFullYear();
   }
   function ago(iso) {
     if (!iso) return '';
@@ -257,9 +278,12 @@
   }
   function copyText(text, btn) {
     var done = function () {
-      var t = btn.textContent;
-      btn.textContent = 'Скопировано';
-      setTimeout(function () { btn.textContent = t; }, 1400);
+      if (!btn) return;
+      // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
+      if (btn._cpHtml == null) btn._cpHtml = btn.innerHTML;
+      btn.innerHTML = btn.textContent.trim() ? ic('check', 13) + 'Скопировано' : ic('check', 13);
+      clearTimeout(btn._cpT);
+      btn._cpT = setTimeout(function () { btn.innerHTML = btn._cpHtml; btn._cpHtml = null; }, 1400);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, done);
@@ -273,10 +297,56 @@
   function findLead(id) {
     return state.leads.filter(function (l) { return l.id === id; })[0] || null;
   }
+  /* ── прямая ссылка на карточку клиента ─────────────────────
+     Адрес вида crm.истсайд.рф/#lead/<id>: кто из команды откроет его (уже войдя
+     в CRM), сразу попадёт в карточку этого клиента. Копируем ВСЕГДА боевой адрес,
+     а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
+     оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
+  var CRM_HOME = 'https://crm.истсайд.рф/';
+  function leadUrl(id) {
+    return CRM_HOME + '#lead/' + encodeURIComponent(id);
+  }
+  function hashLeadId() { return hashRouteId('lead'); }
+  /* Тот же приём для переписки: `#dialog/<id>` открывает конкретный диалог инбокса.
+     На эту ссылку ведёт уведомление бота в Telegram («клиенту нужен менеджер») —
+     из пуша попадаешь сразу в разговор, а не в общий список. */
+  function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
+  function hashDialogId() { return hashRouteId('dialog'); }
+  /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
+     хэш-функция строки ниже по файлу, и одноимённое объявление её перетирало. */
+  function hashRouteId(kind) {
+    var m = String(location.hash || '').match(new RegExp('^#' + kind + '\\/(.+)$'));
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  /* адрес в строке браузера всегда показывает открытую карточку (или диалог) — ссылку
+     можно скопировать и оттуда; replaceState, чтобы не засорять историю «назад» */
+  function syncHash(id, kind) {
+    kind = kind || 'lead';
+    try {
+      if (hashRouteId(kind) === (id || '')) return;
+      history.replaceState(null, '', id ? '#' + kind + '/' + encodeURIComponent(id)
+                                        : location.pathname + location.search);
+    } catch (e) {}
+  }
   function isNewLead(l) {
     return state.seenBefore && l.created_at && new Date(l.created_at).getTime() > state.seenBefore;
   }
-  function leadName(l) { return l.name || 'Без имени'; }
+  /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
+     откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
+     не отличало заявку от случайного посетителя. */
+  function leadName(l) {
+    if (l.name) return l.name;
+    return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
+  }
+  /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
+     Это не лид, а строка статистики — в «Людях» такие свернуты (см. blankFoot),
+     в разделе «Путь» они считаются как раньше, первой ступенью воронки. */
+  function isBlankVisit(l) {
+    return l.status === 'visited' && !l.name && !l.email && !l.paid &&
+      !(l.booking || {}).contact && !(l.events || []).length &&
+      !l.crm.note && !(l.crm.tasks || []).length && l.crm.status === 'new';
+  }
   /* override-поля менеджера поверх данных анкеты/booking */
   function ov(ctx, field) {
     var o = (ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {};
@@ -368,7 +438,17 @@
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
-      if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
+      /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
+         на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
+         отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
+         CRM посреди работы. */
+      if (r.status === 403) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (String((j && j.detail) || '').indexOf('no access') === 0) throw new Error('403acl');
+          localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
+          throw new Error('403');
+        });
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     });
@@ -399,12 +479,16 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
-  function apiSend(path, method, body, cb) {
+  /* onErr(code) — когда вызвавшему есть что сказать про конкретный отказ (занятый
+     логин, недостаточно прав). Без него ошибка гасится общим тостом, как раньше. */
+  function apiSend(path, method, body, cb, onErr) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
@@ -495,6 +579,7 @@
   function segLeads(seg) {
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
@@ -531,10 +616,14 @@
     return arr;
   }
   function counts() {
-    var c = { queue: 0, all: state.leads.length, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0 };
+    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
+       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+              anketa: 0, booked: 0, blank: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
+      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (!!l.paid) c.clients++;
@@ -712,6 +801,7 @@
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
 
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -796,6 +886,7 @@
     var node = el('list-count');
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -1149,13 +1240,14 @@
         '<div class="gate-card">' +
           '<h1>Вход в CRM</h1>' +
           '<p>Сессия сохранится на этом устройстве.</p>' +
-          '<input id="lg-login" type="text" placeholder="Логин" autocomplete="username">' +
+          '<input id="lg-login" type="text" placeholder="Логин или почта" autocomplete="username">' +
           '<div class="lg-passwrap">' +
             '<input id="lg-pass" type="password" placeholder="Пароль" autocomplete="current-password">' +
             '<button class="lg-eye" id="lg-eye" type="button" tabindex="-1">показать</button>' +
           '</div>' +
           '<button class="bp" id="lg-go">Войти</button>' +
           '<div class="gate-err" id="lg-err">' + esc(err || '') + '</div>' +
+          '<button class="gate-link" id="lg-forgot" type="button">Забыли пароль?</button>' +
         '</div>' +
       '</div></div>';
     if (err) el('lg-err').style.display = 'block';
@@ -1190,6 +1282,119 @@
     el('lg-go').addEventListener('click', go);
     pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    el('lg-forgot').addEventListener('click', function () { renderReset(); });
+  }
+
+  /* ── восстановление пароля ────────────────────────────── */
+  /* Два шага в одной карточке: почта → код из письма и новый пароль. Отдельного
+     экрана «введите код» не делаем — человек и так держит письмо открытым, лишний
+     переход только добавляет шанс уйти не туда. */
+  function renderReset(ctx) {
+    ctx = ctx || {};
+    document.body.classList.remove('dock-open');
+    var sent = !!ctx.challenge;
+    root.innerHTML =
+      '<div id="gate"><div class="gate-split">' +
+        '<div class="gate-brand">' +
+          '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+          '<div class="gb-mid">' +
+            '<div class="gb-h">Вся воронка EastSide<br>в одном окне</div>' +
+            '<div class="gb-s">Заявки, диалоги с ботом, путь людей по платформе и деньги — на одном экране.</div>' +
+          '</div>' +
+          '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
+        '</div>' +
+        '<div class="gate-card">' +
+          (sent
+            ? '<h1>Новый пароль</h1>' +
+              '<p>Код отправили на ' + esc(ctx.email) + '. Он действует ' + (ctx.ttlMin || 15) + ' минут.</p>' +
+              '<input id="rs-code" type="text" inputmode="numeric" maxlength="6" placeholder="Код из письма" autocomplete="one-time-code">' +
+              '<div class="lg-passwrap">' +
+                '<input id="rs-pass" type="password" placeholder="Новый пароль" autocomplete="new-password">' +
+                '<button class="lg-eye" id="rs-eye" type="button" tabindex="-1">показать</button>' +
+              '</div>' +
+              '<button class="bp" id="rs-go">Сохранить и войти</button>'
+            : '<h1>Восстановление пароля</h1>' +
+              '<p>Пришлем код на почту, привязанную к аккаунту.</p>' +
+              '<input id="rs-email" type="email" placeholder="Почта" autocomplete="email">' +
+              '<button class="bp" id="rs-go">Отправить код</button>') +
+          '<div class="gate-err" id="rs-err"></div>' +
+          '<button class="gate-link" id="rs-back" type="button">Вернуться ко входу</button>' +
+        '</div>' +
+      '</div></div>';
+
+    var btn = el('rs-go');
+    function fail(msg) { var e = el('rs-err'); e.textContent = msg; e.style.display = 'block'; }
+    el('rs-back').addEventListener('click', function () { renderLogin(); });
+
+    if (!sent) {
+      var ei = el('rs-email');
+      ei.focus();
+      ei.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(); });
+      btn.addEventListener('click', ask);
+      return;
+    }
+
+    var ci = el('rs-code'), pi = el('rs-pass'), eye = el('rs-eye');
+    ci.focus();
+    eye.addEventListener('click', function () {
+      var show = pi.type === 'password';
+      pi.type = show ? 'text' : 'password';
+      eye.textContent = show ? 'скрыть' : 'показать';
+      pi.focus();
+    });
+    ci.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+    btn.addEventListener('click', save);
+
+    function ask() {
+      var email = el('rs-email').value.trim();
+      if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
+      btn.textContent = 'Отправляем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+      }).then(function (r) {
+        if (r.status === 429) { fail('Код уже отправляли. Проверь почту или подожди минуту'); return null; }
+        if (r.status === 503) { fail('Письмо сейчас не уходит. Напиши в чат — разберемся'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        if (!j) return;
+        renderReset({ challenge: j.challenge_id, email: email,
+                      ttlMin: Math.max(1, Math.round((j.expires_in || 900) / 60)) });
+      }).catch(function () {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
+
+    function save() {
+      var code = ci.value.trim(), pass = pi.value;
+      if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
+      if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
+      btn.textContent = 'Сохраняем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
+      }).then(function (r) {
+        if (r.status === 400) { fail('Код не подошел. Проверь цифры из письма'); return null; }
+        if (r.status === 410) { fail('Код устарел. Запроси новый'); return null; }
+        if (r.status === 429) { fail('Слишком много попыток. Запроси новый код'); return null; }
+        if (r.status === 422) { fail('Пароль слишком короткий — минимум шесть символов'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        if (!j) return;
+        localStorage.setItem(KEY_LS, j.token);
+        state.role = j.role; state.userName = j.name || '';
+        boot();
+      }).catch(function () {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
   }
 
   /* ── shell ────────────────────────────────────────────── */
@@ -1616,19 +1821,66 @@
       return;
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
-    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    /* верхние роли раздает только тот, у кого они уже есть — бэкенд отвечает тем же
+       (иначе руководитель выписывал бы себе доступ к финансам и документам детей) */
+    var iAmTop = state.role === 'super_admin' || state.role === 'owner';
+    var assignable = Object.keys(ROLES).filter(function (k) {
+      if (k === 'owner' || k === 'manager') return false;
+      return k !== 'super_admin' || iAmTop;
+    });
+    function roleOpts(cur) {
+      return assignable.map(function (k) {
+        return '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>';
+      }).join('');
+    }
     var rows = state._team.map(function (u) {
-      var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
-      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
+      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
+      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
+         Показываем ее настоящую роль и запираем поля: пустой селект «Куратор» напротив
+         супер-админа врал бы о том, кто в системе главный. */
+      var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
+      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
+      var sel = lock
+        ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
+        : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select></div>';
+        '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
+        sel + '</div>';
     }).join('');
+
+    /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
+       только его хеш, второй раз взять неоткуда. */
+    var made = state._teamMade;
+    var madeHtml = made ? '<div class="tm-made">' +
+        '<div class="tm-made-h">' + ic('check', 14) + 'Сотрудник заведен: ' + esc(made.user.name) + '</div>' +
+        '<div class="tm-made-b">Логин <b>' + esc(made.user.login) + '</b> · пароль <b>' + esc(made.password) + '</b></div>' +
+        '<div class="tm-made-s">Передайте пароль лично и попросите сменить его после первого входа. ' +
+          'Здесь он больше не появится — мы храним только его отпечаток.</div>' +
+        '<div class="tm-made-a"><button class="bp sm" id="tm-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+        '<button class="bp sm ghost" id="tm-made-x">Понятно</button></div></div>' : '';
+
+    var d = state._teamNew;
+    var formHtml = d ? '<div class="tm-add">' +
+        '<div class="tm-add-g">' +
+          '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
+        '</div>' +
+        '<div class="tm-add-a"><span class="tm-add-s">Пароль придумаем сами и покажем один раз.</span>' +
+        '<button class="bp sm ghost" id="tn-cancel">Отмена</button>' +
+        '<button class="bp sm" id="tn-save">Завести</button></div></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
-      '<span class="cnt num">' + state._team.length + '</span></div>' +
+      '<span class="cnt num">' + state._team.length + '</span>' +
+      (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
+      '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
@@ -1636,14 +1888,76 @@
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
       });
     });
+    /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-mail'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (u && (u.email || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { email: val }, function () {
+          if (u) u.email = val;
+          inp.classList.toggle('none', !val);
+          showToast(val ? 'Почта сохранена' : 'Почта убрана');
+        });
+      });
+    });
+
+    var nb = el('tm-new');
+    if (nb) nb.addEventListener('click', function () {
+      state._teamNew = { name: '', login: '', email: '', role: 'curator' };
+      state._teamMade = null;   // прошлый выданный пароль убираем: он уже передан
+      renderView();
+      var f = el('tn-name'); if (f) f.focus();
+    });
+    var cx = el('tn-cancel');
+    if (cx) cx.addEventListener('click', function () { state._teamNew = null; renderView(); });
+    var mx = el('tm-made-x');
+    if (mx) mx.addEventListener('click', function () { state._teamMade = null; renderView(); });
+    var cp = el('tm-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var m = state._teamMade;
+      copyText('Логин: ' + m.user.login + '\nПароль: ' + m.password + '\nАдрес: ' + CRM_HOME);
+    });
+    ['tn-name', 'tn-login', 'tn-email', 'tn-role'].forEach(function (id) {
+      var f = el(id);
+      if (f) f.addEventListener('input', function () {
+        state._teamNew[id.slice(3)] = f.value;
+      });
+    });
+    var sv = el('tn-save');
+    if (sv) sv.addEventListener('click', function () {
+      var body = state._teamNew || {};
+      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      sv.disabled = true;
+      apiSend('/admin/api/users', 'POST', {
+        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        email: body.email.trim(), role: body.role,
+      }, function (r) {
+        state._teamNew = null;
+        state._teamMade = r;
+        state._team = null;   // перечитываем список с сервера, а не дорисовываем локально
+        renderView();
+      }, function (code) {
+        sv.disabled = false;
+        showToast(code === 409 ? 'Такой логин или почта уже заняты'
+          : code === 403 ? 'Эту роль может выдать только владелец'
+          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : 'Не удалось завести — попробуйте еще раз');
+      });
+    });
   }
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
-  /* копируемый /go-адрес: прод-бэкенд → красивый go.истсайд.рф; локаль/staging
-     (EASTSIDE_API_BASE на другой хост) — рабочий /go ЭТОГО окружения, иначе
-     скопированная ссылка вела бы на прод, где превью-данных нет */
+  /* копируемый /go-адрес: на проде — ЛАТИНСКИЙ go.eastside.study. Кириллический домен
+     Instagram не принимает: в шапке профиля вместо ссылки висит `go.%D0%B8%D1%81...`, и она
+     не кликается (скрин маркетолога 30.07.2026); плюс зону .рф резолвят не все зарубежные
+     DNS, а часть аудитории — Китай. Уже разошедшиеся по постам .рф-ссылки продолжают
+     работать, меняется только то, что копируется впредь.
+     Локаль/staging (EASTSIDE_API_BASE на другой хост) — рабочий /go ЭТОГО окружения, иначе
+     скопированная ссылка вела бы на прод, где превью-данных нет. */
   var MK_GO = (function () {
     var base = window.EASTSIDE_API_BASE || '';
-    if (!base || /истсайд\.рф|xn--80aikf2bag/.test(base)) return 'https://go.истсайд.рф/';
+    if (!base || /истсайд\.рф|xn--80aikf2bag|eastside\.study/.test(base)) return 'https://go.eastside.study/';
     return base + '/go/';
   })();
   var MK_CODE_RE = /^[a-z0-9_-]{1,64}$/;
@@ -3116,17 +3430,38 @@
     }).join('') + '</div>';
   }
 
+  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
+     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
+     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  function blankNote() {
+    var n = counts().blank;
+    if (!n || state.seg !== 'all') return '';
+    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
+    return '<div class="list-foot">' +
+      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
+      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
+        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
+      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+    '</div>';
+  }
+  function attachBlankNote(host) {
+    var b = host.querySelector('#lf-blank');
+    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = emptyState();
+      host.innerHTML = blankNote() + emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
+      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
       var tone = l.score != null ? scoreTone(l.score) : null;
-      var contact = (l.booking || {}).contact;
+      /* почта аккаунта — тоже способ связаться: без нее у зарегистрировавшихся без
+         записи на разбор колонка стояла пустой, хотя контакт у нас был */
+      var contact = (l.booking || {}).contact || l.email;
       var act = contactAction(contact);
       var profileBits = [l.grade, l.target_year ? 'поступление ' + l.target_year : null, (l.geo || {}).city]
         .filter(Boolean).map(esc);
@@ -3154,7 +3489,8 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = '<div class="trow lr-grid thead">' +
+    host.innerHTML = blankNote() +
+      '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
@@ -3162,6 +3498,7 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
+    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
@@ -3637,10 +3974,11 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -3707,6 +4045,61 @@
       if (cb) cb();
     });
   }
+  /* ── КОМПОЗЕР ИНБОКСА ─────────────────────────────────────────────────────────
+     Менеджер печатает, а инбокс в это время живёт своей жизнью: каждые 6с приходит
+     поллинг, клиент присылает реплику, тумблер бота перерисовывает шапку. Любая из этих
+     перерисовок пересобирала поле ввода — набранный текст исчезал на полуслове, и
+     сообщения уходили клиенту обрывками («Добрый день» отдельно, остальное заново).
+     Поэтому черновик живёт в state (свой на каждый диалог), а не в DOM: перерисовка
+     восстанавливает и текст, и каретку, и фокус. Переключение диалогов черновики хранит. */
+  function composerSave() {
+    if (state._composerRendering) return;   // идёт перерисовка — читать новое пустое поле нельзя
+    var inp = el('tg-input'); if (!inp) return;
+    // диалог берём с самого поля, а не из state.inboxSel: при переключении чата выбор
+    // меняется РАНЬШЕ перерисовки, и черновик уехал бы в чужую переписку
+    var cid = inp.getAttribute('data-conv'); if (!cid) return;
+    state.drafts[cid] = inp.value;
+    state.composer = { id: cid, focus: document.activeElement === inp, caret: inp.selectionStart };
+  }
+  function composerGrow(inp) {   // высота по содержимому: одна строка → до пяти, дальше скролл
+    if (!inp) return;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 128) + 'px';
+  }
+  function composerRestore(convId) {
+    var inp = el('tg-input'); if (!inp) return;
+    inp.value = state.drafts[convId] || '';
+    composerGrow(inp);
+    var c = state.composer || {};
+    if (c.focus && String(c.id) === String(convId)) {
+      inp.focus();
+      var p = c.caret == null ? inp.value.length : Math.min(c.caret, inp.value.length);
+      try { inp.setSelectionRange(p, p); } catch (e) {}
+    }
+  }
+  /* менеджер сейчас в поле ввода или у него набран текст — полную пересборку инбокса откладываем */
+  function composerBusy() {
+    var inp = el('tg-input');
+    return !!(inp && (inp.value || document.activeElement === inp));
+  }
+  /* Только что отправленные менеджером сообщения бэк ещё не отдаёт (он пишет их в историю
+     после доставки). Переносим их в свежий ответ, пока не увидим там свой же текст, —
+     иначе пузырь мигает: появился, исчез на следующем поллинге, появился снова. */
+  function mergeLocalMsgs(old, fresh) {
+    var msgs = (fresh && fresh.messages) || [];
+    var locals = ((old && old.messages) || []).filter(function (m) { return m._local; });
+    if (!locals.length) return msgs;
+    var used = {};
+    var pending = locals.filter(function (lm) {
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (used[i] || msgs[i].sender !== 'manager' || msgs[i].text !== lm.text) continue;
+        used[i] = 1; return false;   // бэк это сообщение уже знает — локальный дубль убираем
+      }
+      return true;
+    });
+    return msgs.concat(pending);
+  }
+
   /* РЕАЛТАЙМ: тихий фоновый опрос открытого инбокса — список + сообщения текущего чата.
      Перерисовываем только если что-то реально изменилось (без мельканий/скелетона). */
   function pollInboxLive() {
@@ -3725,12 +4118,16 @@
         }
       }
       state.bot.list = fresh;
-      // НЕ затираем свежий тумблер бэкенд-данными первые 5с (иначе реалтайм-полл откатит
-      // оптимистичное включение/выключение, пока POST ещё не дошёл — выглядит как «не работает»)
+      // НЕ затираем свежий тумблер бэкенд-данными, пока бэк не подтвердит наше значение:
+      // иначе реалтайм-полл откатывает переключение, пока POST ещё в пути — выглядит как
+      // «тумблер не работает». Держим до совпадения (а не фиксированные 5с: ответ бывает
+      // и медленнее), но не дольше 30с — чтобы залипшее значение не врало вечно.
       var now = Date.now();
       (fresh || []).forEach(function (c) {
-        var t = (state._aiToggleAt || {})[c.user_id];
-        if (t && now - t < 5000) { c.ai_enabled = (state._aiToggleVal || {})[c.user_id]; c.taken_by = c.ai_enabled ? null : c.taken_by; }
+        var p = (state._aiToggle || {})[c.user_id];
+        if (!p) return;
+        if (c.ai_enabled === p.val || now - p.at > 30000) { delete state._aiToggle[c.user_id]; return; }
+        c.ai_enabled = p.val; c.taken_by = p.val ? null : c.taken_by;
       });
       // сообщения открытого чата — тянем только если чат выбран и уже загружен (без скелетона)
       var sel = state.inboxSel;
@@ -3738,13 +4135,16 @@
         api('/admin/api/bot/conversations/' + sel + '/messages').then(function (d) {
           var old = state.bot.msgs[sel];
           var oldN = (old && old.messages) ? old.messages.length : -1;
-          var newN = (d && d.messages) ? d.messages.length : 0;
           // сохраняем актуальные флаги (могли поменяться тумблером) + новые сообщения
+          d.messages = mergeLocalMsgs(old, d);
+          var newN = d.messages.length;
           state.bot.msgs[sel] = d;
           if (newN !== oldN) { refreshOpenThread(true); }       // появились новые — дорисуем, докрутим вниз
           else if (changed) { refreshOpenThread(false); }
         }).catch(function () {});
-      } else if (changed) {
+      } else if (changed && !composerBusy()) {
+        // полную пересборку делаем только когда менеджер не в поле ввода — иначе она
+        // вырвала бы поле из-под рук (черновик переживёт, но каретка и скролл дёрнутся)
         renderSide();
         var host = el('tg-rows');
         if (host && state.bot.loaded) { renderInbox(el('view')); }
@@ -3840,43 +4240,83 @@
       : (c.ai_on === false) ? '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведёт менеджер') + '</span>'
       : '<span class="tg-tag ai">' + ic('bot', 10) + 'AI</span>';
   }
+  /* Когда бот сам подхватит диалог. Правило на стороне бота: AI_RESUME_AFTER_H часов тишины —
+     не писал НИКТО, ни клиент, ни менеджер (app/handoff.py). Показываем точное время, а не
+     «через 20 минут»: подсказка живёт до следующей перерисовки и обратный отсчёт протух бы. */
+  var AI_RESUME_H = 2;
+  function aiResumeAt(c) {
+    var t = c && c.last_at ? Date.parse(c.last_at) : NaN;
+    return t ? new Date(t + AI_RESUME_H * 3600000) : null;
+  }
+  function resumeNote(c) {
+    var at = aiResumeAt(c);
+    if (!at) return '.';
+    return at - Date.now() > 0
+      ? '; сам он подхватит в ' + fmtTime(at.toISOString()) + ', если до тех пор никто не напишет.'
+      : '; тишина уже больше ' + AI_RESUME_H + ' часов — следующее сообщение бот возьмёт на себя.';
+  }
+
+  /* Тумблер обязан показывать РЕАЛЬНОЕ положение дел: по нему менеджер решает, писать ему
+     самому или бот справится. Поэтому переключение оптимистичное, но не «на веру» — если
+     запрос не прошёл, откатываем в исходное состояние и говорим об этом вслух. */
   function inboxSetAi(c, on) {
     if (c.api) {
-      apiSend('/admin/api/bot/conversations/' + c.id + '/ai', 'POST', { enabled: on }, function () {});
-      state._aiToggleAt = state._aiToggleAt || {}; state._aiToggleVal = state._aiToggleVal || {};
-      state._aiToggleAt[c.id] = Date.now(); state._aiToggleVal[c.id] = on;
+      var was = { ai: c.ai_on !== false, ho: c.handoff, by: c.taken_by };
       // вкл → бот снова сам отвечает, снимаем «ведёт менеджер»; выкл → диалог за менеджером
-      function apply(o) { if (!o) return; o.ai_enabled = on; o.handoff_requested = on ? false : o.handoff_requested; o.taken_by = on ? null : state.userName; }
-      apply(state.bot.msgs[c.id]);
-      apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
-      c.ai_on = on; c.handoff = on ? false : c.handoff; c.taken_by = on ? null : state.userName;
-      // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
-      if (state.page === 'inbox') {
-        renderInboxChat([c]);
-        var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
-        if (r3) r3.innerHTML = inboxTag(c);
+      function put(ai, ho, by) {
+        function apply(o) { if (!o) return; o.ai_enabled = ai; o.handoff_requested = ho; o.taken_by = by; }
+        apply(state.bot.msgs[c.id]);
+        apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
+        c.ai_on = ai; c.handoff = ho; c.taken_by = by;
+        // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
+        if (state.page === 'inbox') {
+          renderInboxChat([c]);
+          var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
+          if (r3) r3.innerHTML = inboxTag(c);
+        }
+        renderSide();
       }
-      renderSide();
+      state._aiToggle = state._aiToggle || {};
+      state._aiToggle[c.id] = { val: on, at: Date.now() };
+      put(on, on ? false : was.ho, on ? null : state.userName);
+      api('/admin/api/bot/conversations/' + c.id + '/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }),
+      }).then(function () {
+        showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
+      }).catch(function (e) {
+        delete state._aiToggle[c.id];
+        put(was.ai, was.ho, was.by);
+        // 403 — сессия истекла, api() уже увёл на экран входа: тост поверх него лишний
+        if (!e || e.message !== '403') {
+          showToast('Не переключилось — бот остался ' + (on ? 'выключенным' : 'включенным'));
+        }
+      });
     } else {
       state.dialogAi[c.id] = on; var dl = getDialog(c.lead); if (on) dl.handoff_req = false; else dl.handed = false;
       renderView(); renderSide();
+      showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
     }
-    showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
   }
   function inboxMarkSeen(c) {
     if (c.api) apiSend('/admin/api/bot/conversations/' + c.id + '/seen', 'POST', null, function () {});
     else state.dialogSeen[c.id] = 1;
   }
 
-  /* отправить сообщение менеджером (демо — локально; реал — POST) */
+  /* отправить сообщение менеджером (демо — локально; реал — POST).
+     Перерисовываем ТОЛЬКО тред: менеджер часто шлёт очередь коротких сообщений подряд,
+     и полная пересборка вью между ними стирала бы то, что он уже набирает дальше. */
   function inboxSend(c, text) {
     text = (text || '').trim(); if (!text) return;
     var nowISO = new Date().toISOString();
     if (c.api) {
       var d = state.bot.msgs[c.id];
-      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO };
+      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO, _local: true };
       if (d) d.messages = (d.messages || []).concat([tmp]);
-      if (c.ai_on !== false) inboxSetAi(c, false); else renderView();
+      // строка в списке слева тоже должна сразу показать новое последнее сообщение
+      var row = (state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0];
+      if (row) { row.last_text = text; row.last_role = 'assistant'; row.last_at = nowISO; row.unread = false; }
+      if (c.ai_on !== false) inboxSetAi(c, false);   // менеджер перехватил диалог у бота
+      refreshOpenThread(true);
       // реальная доставка. Бэк отвечает {delivered, reason}: не ушло клиенту — помечаем пузырь
       // (не удаляем — менеджер видит свой текст и причину), сетевой сбой — откатываем.
       api('/admin/api/bot/conversations/' + c.id + '/send', {
@@ -3885,13 +4325,13 @@
         if (res && res.delivered === false) {
           tmp.undelivered = true; tmp.reason = res.reason || '';
           showToast(res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту');
-          if (state.page === 'inbox') renderView();
+          refreshOpenThread(false);
         }
       }).catch(function () {
         var dd = state.bot.msgs[c.id];
         if (dd && dd.messages) dd.messages = dd.messages.filter(function (m) { return m !== tmp; });
         showToast('Сообщение не отправлено — проверь связь с ботом');
-        if (state.page === 'inbox') renderView();
+        refreshOpenThread(false);
       });
     } else {
       var dlg = getDialog(c.lead);
@@ -4019,6 +4459,7 @@
       Array.prototype.forEach.call(host.querySelectorAll('.tg-row[data-id]'), function (n) {
         n.addEventListener('click', function () {
           state.inboxSel = n.getAttribute('data-id');
+          syncHash(state.inboxSel, 'dialog');   // адрес показывает открытый диалог — ссылку можно скопировать
           // выделение без пересборки списка (без прыжков)
           Array.prototype.forEach.call(host.querySelectorAll('.tg-row'), function (x) { x.classList.remove('on'); });
           n.classList.add('on'); n.classList.remove('unread');
@@ -4034,6 +4475,7 @@
 
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
+    composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
     var c = (list || []).filter(function (x) { return String(x.id) === String(state.inboxSel); })[0];
     if (!c) {
       host.innerHTML = '<div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div><div>Выбери диалог слева</div></div>';
@@ -4069,6 +4511,7 @@
       : aiOn ? '<span class="tg-st ai">' + ic('bot', 11) + 'AI ведёт</span>'
       : '<span class="tg-st mgr">' + ic('hand', 11) + (c.taken_by ? 'ведёт ' + esc(c.taken_by) : 'ведёт менеджер') + '</span>';
 
+    state._composerRendering = true;
     host.innerHTML =
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
@@ -4082,20 +4525,39 @@
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
-          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы.</span>') +
+          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
       '<div class="tg-compose">' +
-        '<input id="tg-input" placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '" autocomplete="off">' +
-        '<button class="tg-send" id="tg-send" title="Отправить">' + ic('send', 16) + '</button>' +
+        '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
+          'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
+        '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
       '</div>';
+    state._composerRendering = false;
 
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
     var inp = el('tg-input'), snd = el('tg-send');
-    function send() { if (!inp) return; var t = inp.value; inp.value = ''; inboxSend(c, t); }
+    function send() {
+      if (!inp) return;
+      var t = inp.value.trim(); if (!t) return;
+      inp.value = ''; delete state.drafts[c.id]; composerGrow(inp);
+      inp.focus(); composerSave();   // курсор остаётся в поле: следующее сообщение пишется сразу
+      inboxSend(c, t);
+    }
     if (snd) snd.addEventListener('click', send);
-    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    if (inp) {
+      composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
+      inp.addEventListener('input', function () { composerSave(); composerGrow(inp); });
+      ['focus', 'blur', 'keyup', 'click'].forEach(function (ev) { inp.addEventListener(ev, composerSave); });
+      inp.addEventListener('keydown', function (e) {
+        // Enter отправляет, Shift+Enter — перенос строки (привычка из мессенджеров).
+        // e.isComposing — идёт набор через IME, Enter там подтверждает вариант, а не шлёт.
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
+          e.preventDefault(); send();
+        }
+      });
+    }
     // удаление сообщения (модерация) — оптимистично + фоном
     Array.prototype.forEach.call(host.querySelectorAll('.tg-del[data-del]'), function (b) {
       b.addEventListener('click', function (e) {
@@ -4249,6 +4711,8 @@
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'det',       label: 'Английский',  icon: 'globe' },
+    { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
@@ -5041,16 +5505,21 @@
     if (listIds && listIds.length) state.drawerList = listIds;
     state.modalSection = 'main';
     RM_CHAT = null;
+    syncHash(id);
     renderDrawer(false);
     el('mbg').classList.add('open');
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
     if (!state.details[id]) fetchDetail(id, function (got) {
-      if (state.drawerId === id && got) renderDrawer(true);
+      if (state.drawerId !== id) return;
+      if (got) renderDrawer(true);
+      // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
+      else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
     });
   }
   function closeDrawer() {
+    syncHash('');
     state.drawerId = null;
     state.botConvoId = null;
     RM_CHAT = null;
@@ -5067,6 +5536,7 @@
       state.drawerId = next;
       state.modalSection = 'main';
       RM_CHAT = null;
+      syncHash(next);
       renderDrawer(false);
       warm(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
@@ -5104,7 +5574,14 @@
 
     var ctx = leadCtx(id);
     var lead = ctx.lead, d = ctx.d, base = ctx.base, crm = ctx.crm;
-    if (!base) { modal.innerHTML = ''; return; }
+    if (!base) {
+      // карточку открыли по прямой ссылке — данных ещё нет, ждём ответ бэка
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="m-close">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем карточку…</div>';
+      var mcl = el('m-close');
+      if (mcl) mcl.addEventListener('click', closeDrawer);
+      return;
+    }
     var diag = (d && d.diagnostics) || {};
     var score = lead && lead.score != null ? lead.score : diag.score;
     var tone = score != null ? scoreTone(score) : null;
@@ -5122,6 +5599,7 @@
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
+      else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -5134,7 +5612,9 @@
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
-    ].filter(Boolean).join('<span class="dot-sep"></span>');
+    ].filter(Boolean).join('<span class="dot-sep"></span>') +
+      '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
+      ic('copy', 12) + 'Ссылка на клиента</button>';
 
     // с открытым чатом правок окно шире: доска слева должна остаться читаемой
     modal.classList.toggle('pchat-open', hasSidePanel());
@@ -5174,6 +5654,8 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var lnk = el('m-link');
+    if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -5203,6 +5685,8 @@
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
+    else if (s === 'det') host.innerHTML = buildDetSection(id);
+    else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -5225,6 +5709,8 @@
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
+                 det: ['Английский', 'Поднимаю тест DET'],
+                 course: ['Китайский', 'Смотрю доступ к курсу'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -5238,6 +5724,415 @@
     }
     return '<div class="m-ctitle">' + head[0] + '</div>' +
       (head[1] ? '<div class="m-csub">' + head[1] + '</div>' : '') + body;
+  }
+
+  /* ── РАЗДЕЛ «Английский»: входной тест DET, пересдачи, доступ ──
+     Балл считает бэкенд (шкала 10-160), тут только показываем и открываем доступ.
+     Тест бесплатный и один раз: повтор и тренажеры включает сотрудник тумблером. */
+  var DET = {};          // id лида -> блок с бэка
+  var DET_BUSY = {};     // id лида -> идет загрузка
+  var DET_ITEM = {};     // id попытки -> разбор заданий
+  var DET_SHOW = null;   // какая попытка раскрыта
+
+  var DET_KIND = { entry: 'входной', progress: 'пересдача', final: 'итоговый' };
+  var DET_SKILLS = [['reading', 'Чтение'], ['listening', 'Аудирование'],
+                    ['writing', 'Письмо'], ['speaking', 'Речь']];
+
+  /* Что балл значит для продажи. Пороги — наша внутренняя шкала, не правило вуза:
+     менеджеру нужен ответ «что предлагать», а не голое число. */
+  function detVerdict(v) {
+    if (v == null) return { cls: '', t: 'Балл еще не посчитан' };
+    if (v <= 55) return { cls: 'bad', t: 'Начальный уровень — до подачи нужен курс с преподавателем' };
+    if (v < 95) return { cls: 'warn', t: 'Ниже порога большинства программ — предлагай подготовку' };
+    if (v < 115) return { cls: 'warn', t: 'Почти порог — небольшая подготовка закроет разрыв' };
+    return { cls: 'good', t: 'Уверенный уровень — подготовка нужна только под конкретный вуз' };
+  }
+
+  function loadDet(id, force) {
+    if (DET_BUSY[id]) return;
+    if (force) delete DET[id];
+    DET_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/det').then(function (r) {
+      DET_BUSY[id] = false; DET[id] = r;
+      if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+    }).catch(function (e) {
+      DET_BUSY[id] = false;
+      if (e.message !== '403') { DET[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function detDelta(v) {
+    if (v == null || !v) return '';
+    var up = v > 0;
+    return '<span class="det-delta' + (up ? ' up' : ' down') + '">' + (up ? '+' : '') + v + '</span>';
+  }
+
+  /* Чего в балле еще не хватает. Письмо и речь сначала проверяет модель, и менеджер
+     должен видеть разницу: балл от модели можно оспорить, балл преподавателя — нет. */
+  var DET_SKILL_RU = { writing: 'сочинение', speaking: 'устный ответ' };
+
+  function detPartial(a) {
+    var g = a.graded_by || {};
+    var wait = [], byAi = [];
+    ['writing', 'speaking'].forEach(function (s) {
+      if (!g[s]) wait.push(DET_SKILL_RU[s]);
+      else if (g[s] === 'ai') byAi.push(DET_SKILL_RU[s]);
+    });
+    if (wait.length) return 'Балл неполный — ' + wait.join(' и ') + ' еще не проверены';
+    if (byAi.length) return 'Проверила модель: ' + byAi.join(' и ') + ' — можете поправить балл';
+    return '';
+  }
+
+  function detWho(a) {
+    var by = String(a.scored_by || '');
+    if (!by) return '';
+    return by.indexOf('ai:') === 0 ? ' · первым проверила модель'
+      : ' · проверил ' + esc(by.replace('teacher:', ''));
+  }
+
+  function detAttemptRow(a, prev) {
+    var d = (a.overall != null && prev != null) ? a.overall - prev : null;
+    var when = a.finished_at || a.started_at;
+    var st = a.status === 'scored' ? '<span class="sev s-client">проверен</span>'
+      : a.status === 'submitted' ? '<span class="sev s-wait">ждет проверки</span>'
+      : a.status === 'in_progress' ? '<span class="sev s-new">проходит сейчас</span>'
+      : '<span class="sev s-rejected">брошен</span>';
+    return '<div class="det-row' + (DET_SHOW === a.id ? ' open' : '') + '" role="button" tabindex="0" data-det="' + esc(a.id) + '">' +
+      '<span class="det-row-v num">' + (a.overall != null ? a.overall : '—') + '</span>' +
+      '<div class="det-row-b"><div class="det-row-t">' + (DET_KIND[a.kind] || a.kind) + ' тест ' + st + '</div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(when)) + detWho(a) + '</div></div>' +
+      detDelta(d) + '<span class="det-row-go">' + ic('go', 13) + '</span></div>' +
+      (DET_SHOW === a.id ? '<div class="det-detail" id="det-detail">' + detDetailHtml(a) + '</div>' : '');
+  }
+
+  function detDetailHtml(a) {
+    var det = DET_ITEM[a.id];
+    if (!det) return '<div class="field-empty">Открываю разбор…</div>';
+    var open = det.items.filter(function (i) { return i.type_code === 'writing_prompt' || i.type_code === 'speaking_prompt'; });
+    var auto = det.items.filter(function (i) { return open.indexOf(i) === -1; });
+    var right = auto.filter(function (i) { return i.score >= 0.999; }).length;
+
+    var marks = auto.map(function (i) {
+      var cls = i.score == null ? 'skip' : (i.score >= 0.999 ? 'ok' : (i.score > 0 ? 'part' : 'bad'));
+      return '<span class="det-mark ' + cls + '" title="' + esc(i.skill_tag) + ', сложность ' + i.band + '">' + (i.idx + 1) + '</span>';
+    }).join('');
+
+    var openHtml = open.map(function (i) {
+      var text = (i.response && i.response.text) || '';
+      var audio = i.doc_id
+        ? '<a class="bp ghost sm" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + i.doc_id +
+          '/download?k=' + encodeURIComponent(getKey()) + '">' + ic('play', 13) + 'Послушать ответ</a>'
+        : '';
+      var task = (i.payload && (i.payload.prompt || i.payload.question || i.payload.text)) || '';
+      return '<div class="det-open">' +
+        '<div class="det-open-h">' + (i.type_code === 'writing_prompt' ? 'Письмо' : 'Речь') +
+          '<i>сложность ' + i.band + '</i></div>' +
+        (task ? '<div class="det-open-q">' + esc(task) + '</div>' : '') +
+        (text ? '<div class="det-open-a">' + esc(text) + '</div>' : (audio ? '' : '<div class="det-open-a muted">Ответа нет</div>')) +
+        audio + '</div>';
+    }).join('');
+
+    // Разбор модели: по нему преподаватель либо соглашается, либо ставит свой балл.
+    var aiHtml = [['writing', det.ai, 'Сочинение проверила модель'],
+                  ['speaking', det.ai_speaking, 'Устный ответ проверила модель']]
+      .map(function (b) {
+        var ai = b[1];
+        if (!ai || !ai.criteria) return '';
+        var teacherSet = (a.graded_by || {})[b[0]] === 'teacher';
+        return '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
+          '<div class="det-ai-h">' + ic('spark', 13) +
+            (teacherSet ? 'Что говорила модель про ' + DET_SKILL_RU[b[0]] + ' (балл уже ваш)' : b[2]) +
+            (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
+          '<div class="det-ai-c">' + ai.criteria.map(function (c) {
+            return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
+              '<span class="det-ai-v num">' + c.score + '</span>' +
+              (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
+          }).join('') + '</div>' +
+          (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
+          (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
+          // Расшифровка речи — чтобы не переслушивать запись ради одной фразы. Ученику
+          // ее не показываем: спорить с тем, как машина расслышала, тут не о чем.
+          (ai.transcript ? '<div class="det-ai-tr">' + esc(ai.transcript) + '</div>' : '') +
+          (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
+          '</div>';
+      }).join('');
+
+    var form = '';
+    if (can('students') && a.status !== 'in_progress') {
+      var m = det.attempt;
+      // Перепроверяем только то, что человек еще не оценил сам: свой балл модель не трогает.
+      var g = a.graded_by || {};
+      var canRegrade = ['writing', 'speaking'].filter(function (s) { return g[s] !== 'teacher'; });
+      var regrade = !canRegrade.length ? ''
+        : '<button class="bp ghost sm" id="det-regrade" data-aid="' + esc(a.id) + '">' + ic('spark', 13) +
+          (canRegrade.some(function (s) { return g[s] === 'ai'; }) ? 'Перепроверить моделью' : 'Проверить моделью') +
+          '</button>';
+      form = '<div class="det-grade">' +
+        '<div class="det-lbl">Балл за письмо и речь</div>' +
+        '<div class="det-grade-r">' +
+          '<label>Письмо<input class="al-in det-gi" id="det-gw" inputmode="numeric" placeholder="10-160" value="' +
+            (m.writing != null ? m.writing : '') + '"></label>' +
+          '<label>Речь<input class="al-in det-gi" id="det-gs" inputmode="numeric" placeholder="10-160" value="' +
+            (m.speaking != null ? m.speaking : '') + '"></label>' +
+          '<button class="bp sm" id="det-gsave" data-aid="' + esc(a.id) + '">' + ic('check', 13) + 'Сохранить</button>' +
+          regrade +
+        '</div>' +
+        '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы. ' +
+          (['writing', 'speaking'].some(function (s) { return g[s] === 'ai'; })
+            ? 'Где балл поставила модель, он уже стоит в поле — сохраните, если согласны, или впишите свой.'
+            : '') + '</div></div>';
+    }
+
+    return '<div class="det-lbl">Задания с автопроверкой · ' + right + ' из ' + auto.length + ' верно</div>' +
+      '<div class="det-marks">' + marks + '</div>' + openHtml + aiHtml + form;
+  }
+
+  function buildDetSection(id) {
+    var b = DET[id];
+    if (!b) { loadDet(id); return skeletonSection('det'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Английский</div>' +
+        '<div class="m-csub">Не удалось загрузить тест. Обновите страницу.</div>';
+    }
+    var head = '<div class="m-ctitle">Английский</div>' +
+      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение и устный ответ сначала проверяет модель, а вы можете поправить ее балл. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
+
+    var latest = b.latest;
+    // Пока оценены не все навыки, балл неполный. Вердикт цветом тут не даем: менеджер
+    // прочитает «начальный уровень» как приговор, а это еще не весь тест.
+    var partialText = latest ? detPartial(latest) : '';
+    var partial = !!partialText;
+    var hero;
+    if (!latest) {
+      hero = '<div class="det-hero empty">' +
+        '<div class="det-hero-ic">' + ic('globe', 20) + '</div>' +
+        '<div><div class="det-empty-t">Тест еще не проходили</div>' +
+        '<div class="det-empty-s">Выдайте ссылку — результат придет сюда сам, и будет видно, что предлагать.</div></div></div>';
+    } else {
+      var vd = detVerdict(latest.overall);
+      hero = '<div class="det-hero">' +
+        '<div class="det-score"><span class="det-num num">' + (latest.overall != null ? latest.overall : '—') + '</span>' +
+          '<span class="det-scale">из 160</span></div>' +
+        '<div class="det-hero-b">' +
+          (partial
+            ? '<div class="det-partial">' + ic('clock', 13) + esc(partialText) + '</div>' +
+              '<div class="det-verdict muted">' + vd.t + '</div>'
+            : '<div class="det-verdict ' + vd.cls + '">' + vd.t + '</div>') +
+          '<div class="det-hero-m">' + esc(fmtWhen(latest.finished_at || latest.started_at)) +
+            (b.delta ? ' · к прошлому ' + detDelta(b.delta) : '') + '</div>' +
+          (b.note ? '<div class="det-note">' + esc(b.note) + '</div>' : '') +
+        '</div></div>' +
+        '<div class="pay-board det-board">' + DET_SKILLS.map(function (s) {
+          var v = latest[s[0]];
+          return '<div class="pay-cell' + (v == null ? ' muted' : '') + '">' +
+            '<div class="pc-l">' + s[1] + '</div>' +
+            '<div class="pc-v num">' + (v == null ? '—' : v) + '</div></div>';
+        }).join('') + '</div>';
+    }
+
+    var attempts = (b.attempts || []).slice().reverse();
+    var prevOf = {};
+    var scored = (b.attempts || []).filter(function (a) { return a.overall != null; });
+    scored.forEach(function (a, i) { if (i) prevOf[a.id] = scored[i - 1].overall; });
+    var rows = attempts.length
+      ? attempts.map(function (a) { return detAttemptRow(a, prevOf[a.id]); }).join('')
+      : '<div class="field-empty">Попыток пока нет</div>';
+
+    var acc = b.access || {};
+    var inv = b.invite;
+    // Синим — то, что делают каждый раз. «Новая ссылка» обесценивает уже выданную,
+    // поэтому primary она получает только когда ссылки еще нет.
+    var link = '<div class="det-link">' +
+      (inv
+        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(inv.url) + '">' +
+          '<button class="bp sm" id="det-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="det-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылки нет — создайте, и отправьте ее человеку</span>' +
+          '<button class="bp sm" id="det-newlink">' + ic('plus', 13) + 'Создать ссылку</button>') +
+      '</div>' +
+      (inv ? '<div class="det-link-m">' + (inv.used_count >= inv.max_uses ? 'по ссылке уже прошли' : 'ссылка активна') +
+        ' · до ' + esc(fmtWhen(inv.expires_at)) + '</div>' : '');
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Разрешить повторный тест</div>' +
+          '<div class="det-sw-s">' + (acc.attempts_used
+            ? 'Попыток пройдено: ' + acc.attempts_used + '. Разрешение одноразовое — уйдет на следующий тест.'
+            : 'Первый тест человек проходит сам, разрешение не нужно.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.retakes > 0 ? ' on' : '') + '" id="det-sw-retake">' +
+          '<span class="pd-sw-l">' + (acc.retakes > 0 ? 'Разрешен' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажеры</div>' +
+          '<div class="det-sw-s">Тренировки на платформе между тестами. Открывайте после оплаты занятий.</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
+          '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
+      '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
+
+    var pr = b.practice || {};
+    var practice = pr.total
+      ? '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
+        '<div class="det-pr">' + pr.total + ' ' + plural(pr.total, 'подход', 'подхода', 'подходов') +
+        ', за неделю ' + pr.week + (pr.last_at ? ' · последний раз ' + esc(ago(pr.last_at)) + ' назад' : '') + '</div></div>'
+      : '';
+
+    var it = b.intensive;
+    var intensive = it
+      ? '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>' +
+        '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
+        ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
+        (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
+        (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
+        '<div class="det-sw-by">свели по телефону — интенсив живет отдельным приложением</div></div>'
+      : '';
+
+    return head + hero +
+      '<div class="m-sec"><div class="m-sec-h">Попытки' +
+        '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
+      access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
+     Близнец блока DET: тот же вопрос менеджера — «что у человека открыто» — и та же
+     кнопка на том же месте. Курс живет по личной ссылке, аккаунт платформы для него
+     не нужен, поэтому ссылку показываем прямо здесь: у школьника может не быть почты,
+     и доставить ссылку иногда придется руками. Ссылка одноразово выдается бэком в
+     ответе на открытие доступа и нигде не хранится — новая выпускается кнопкой. */
+  var CRS = {};        // id лида -> состояние с бэка
+  var CRS_BUSY = {};   // id лида -> идет загрузка
+  var CRS_LINK = {};   // id лида -> свежая ссылка на кабинет (живет до перезагрузки)
+
+  function loadCourse(id, force) {
+    if (CRS_BUSY[id]) return;
+    if (force) delete CRS[id];
+    CRS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/course').then(function (r) {
+      CRS_BUSY[id] = false; CRS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      CRS_BUSY[id] = false;
+      if (e.message !== '403') { CRS[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function buildCourseSection(id) {
+    var b = CRS[id];
+    if (!b) { loadCourse(id); return skeletonSection('course'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Китайский</div>' +
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+    }
+
+    var head = '<div class="m-ctitle">Китайский</div>' +
+      '<div class="m-csub">Видеокурс «Живой китайский». Доступ открывается кнопкой на ' +
+      '3 месяца: ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны. ' +
+      'Когда срок выйдет, уроки закроются сами.</div>';
+
+    var done = b.done_n || 0;
+    var total = b.total_n || 0;
+    // Доступ к курсу срочный (3 месяца с открытия). Менеджеру важно видеть не только
+    // «открыт/закрыт», но и до какого дня, — иначе он узнает о конце срока от ученика.
+    var untilTxt = b.access_until ? dayFull(b.access_until) : '';
+    var expired = !b.has_access && !!b.access_until && new Date(b.access_until) < new Date();
+    var progress = b.has_access
+      ? (done
+          ? 'пройдено ' + done + ' из ' + total + ' ' + plural(total, 'урок', 'урока', 'уроков') +
+            (b.last_activity ? ' · последний раз ' + esc(ago(b.last_activity)) + ' назад' : '')
+          : 'к урокам еще не приступал')
+      : expired
+        ? 'срок вышел ' + esc(untilTxt) + ' — уроки закрылись сами'
+        : 'уроки закрыты';
+
+    var link = CRS_LINK[id];
+    var linkRow = '<div class="det-link">' +
+      (link
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+          '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>') +
+      '</div>' +
+      '<div class="det-link-m">ссылка личная: по ней открывается кабинет именно этого ученика</div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
+        '<span class="hr" id="crs-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Курс «Живой китайский»</div>' +
+          '<div class="det-sw-s">' + progress + '</div></div>' +
+        '<button type="button" class="pd-sw' + (b.has_access ? ' on' : '') + '" id="crs-sw">' +
+          '<span class="pd-sw-l">' + (b.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (b.has_access && untilTxt
+        ? '<div class="det-sw-by">действует до ' + esc(untilTxt) + '</div>'
+        : '') +
+      (b.opened_by
+        ? '<div class="det-sw-by">открыл ' + esc(b.opened_by) + ' · ' + esc(fmtWhen(b.opened_at)) + '</div>'
+        : '') +
+      (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
+      '</div>';
+
+    return head + access;
+  }
+
+  function wireCourse(id) {
+    // Пока запрос в пути, кнопки этого блока выключены. Иначе второй клик по
+    // переключателю уходит на сервер раньше, чем вернется ответ на первый, — и
+    // ученик получает ссылку дважды (сервер такой повтор тоже отбивает).
+    var busy = false;
+    function lock(on) {
+      busy = on;
+      ['crs-sw', 'crs-newlink', 'crs-refresh'].forEach(function (bid) {
+        var b = el(bid);
+        if (b) { b.disabled = on; b.style.opacity = on ? '.55' : ''; }
+      });
+    }
+    function post(body, okMsg) {
+      if (busy) return;
+      lock(true);
+      return api('/admin/api/leads/' + id + '/course/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        CRS[id] = r;
+        if (r.link) CRS_LINK[id] = r.link;
+        // Доступ открыт всегда, а вот доставка могла не дойти: у ученика, которого
+        // завели руками, чата с ботом нет. Менеджер должен узнать об этом сразу, а
+        // не из того, что ребенок так и не пришел на урок.
+        if (okMsg) {
+          showToast(body.open && !r.opened_now
+            ? okMsg + ' — ученику не дублируем, ссылка в карточке'
+            : r.delivered && r.delivered.telegram
+              ? okMsg + ' — ссылка ушла ему в чат'
+              : okMsg + ' — ссылку отправьте сами, она в карточке');
+        }
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
+      }).then(function () { lock(false); });
+    }
+
+    var lead = findLead(id) || {};
+    var payload = { name: lead.name || '', email: lead.email || '' };
+
+    var rf = el('crs-refresh');
+    if (rf) rf.addEventListener('click', function () { loadCourse(id, true); });
+
+    var sw = el('crs-sw');
+    if (sw) sw.addEventListener('click', function () {
+      var on = (CRS[id] || {}).has_access;
+      if (on && !confirm('Закрыть ученику доступ к курсу?')) return;
+      post({ open: !on, name: payload.name, email: payload.email },
+           on ? 'Доступ закрыт' : 'Доступ открыт');
+    });
+
+    var cp = el('crs-copy');
+    if (cp) cp.addEventListener('click', function () { copyText(CRS_LINK[id] || '', cp); });
+
+    var nl = el('crs-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -5823,6 +6718,87 @@
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 
   /* ── обработчики активного раздела ── */
+  /* Обработчики раздела «Английский». Все действия — отдельные ручки бэка; после каждой
+     перечитываем блок целиком, чтобы на экране был ответ сервера, а не наша догадка. */
+  function wireDet(id, host) {
+    function reload() { loadDet(id, true); }
+    function post(path, body, okMsg) {
+      return api(path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) { if (okMsg) showToast(okMsg); reload(); return r; })
+        .catch(function (e) { if (e.message !== '403') showToast('Не получилось: ' + e.message); });
+    }
+
+    var rf = el('det-refresh');
+    if (rf) rf.addEventListener('click', reload);
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-det]'), function (row) {
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); row.click(); }
+      });
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.det-detail')) return;
+        var aid = row.getAttribute('data-det');
+        DET_SHOW = DET_SHOW === aid ? null : aid;
+        renderModalContent();
+        if (DET_SHOW && !DET_ITEM[DET_SHOW]) {
+          api('/admin/api/det/attempts/' + DET_SHOW).then(function (r) {
+            DET_ITEM[aid] = r;
+            if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+          }).catch(function (err) { if (err.message !== '403') showToast('Разбор не открылся'); });
+        }
+      });
+    });
+
+    var gs = el('det-gsave');
+    if (gs) gs.addEventListener('click', function () {
+      var w = (el('det-gw').value || '').trim(), s = (el('det-gs').value || '').trim();
+      var body = {};
+      if (w) body.writing = parseInt(w, 10);
+      if (s) body.speaking = parseInt(s, 10);
+      var bad = Object.keys(body).some(function (kk) { return !(body[kk] >= 10 && body[kk] <= 160); });
+      if (!Object.keys(body).length || bad) { showToast('Балл — число от 10 до 160'); return; }
+      var aid = gs.getAttribute('data-aid');
+      delete DET_ITEM[aid];
+      post('/admin/api/det/attempts/' + aid + '/score', body, 'Балл сохранен');
+    });
+
+    var rg = el('det-regrade');
+    if (rg) rg.addEventListener('click', function () {
+      var aid = rg.getAttribute('data-aid');
+      rg.disabled = true; rg.textContent = 'Проверяю…';
+      delete DET_ITEM[aid];
+      api('/admin/api/det/attempts/' + aid + '/regrade', { method: 'POST' })
+        .then(function (r) {
+          showToast(r.ok ? 'Сочинение проверено' : 'Модель не ответила — попробуйте еще раз');
+          return api('/admin/api/det/attempts/' + aid).then(function (d) { DET_ITEM[aid] = d; });
+        })
+        .catch(function (e) { if (e.message !== '403') showToast('Не получилось: ' + e.message); })
+        .then(reload);
+    });
+
+    var b = DET[id] || {}, acc = b.access || {};
+    var sr = el('det-sw-retake');
+    if (sr) sr.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/access', { retake: !(acc.retakes > 0) },
+           acc.retakes > 0 ? 'Повторный тест закрыт' : 'Повторный тест разрешен');
+    });
+    var sp = el('det-sw-practice');
+    if (sp) sp.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
+           acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
+    });
+
+    var nl = el('det-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/det/invite', {}, 'Ссылка на тест готова');
+    });
+    var cp = el('det-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var f = el('det-url'); if (f) copyText(f.value, cp);
+    });
+  }
+
   function attachContentHandlers(id, ctx) {
     var host = el('m-content');
     if (!host) return;
@@ -5844,6 +6820,12 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
+
+    // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
+    if (state.modalSection === 'det') wireDet(id, host);
+
+    // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
+    if (state.modalSection === 'course') wireCourse(id);
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
@@ -7104,25 +8086,49 @@
   }
 
   /* ── boot ─────────────────────────────────────────────── */
+  /* ссылка на карточку: #lead/<id> в адресе — открываем этого клиента */
+  function openFromHash() {
+    var id = hashLeadId();
+    if (!id || id === state.drawerId) return;
+    openDrawer(id, [id]);
+  }
+  /* ссылка на переписку: #dialog/<id> — открываем инбокс сразу на этом диалоге.
+     По такой ссылке приходит уведомление бота «клиенту нужен менеджер». */
+  function openDialogFromHash() {
+    var id = hashDialogId();
+    if (!id) return;
+    if (state.page === 'inbox' && state.inboxMode === 'bot' && String(state.inboxSel) === String(id)) return;
+    if (state.drawerId) closeDrawer();
+    state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
+    saveUi(); renderSide(); renderTopbar(); renderView();
+  }
+  window.addEventListener('hashchange', function () {
+    if (!state.loaded) return;
+    var id = hashLeadId();
+    if (id) openFromHash();
+    else if (hashDialogId()) openDialogFromHash();
+    else if (state.drawerId) closeDrawer();
+  });
   function startApp() {
     state.seenBefore = parseInt(localStorage.getItem(SEEN_LS) || '0', 10);
     localStorage.setItem(SEEN_LS, String(Date.now()));
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     renderShell();
-    loadLeads(false);
+    // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
+    loadLeads(false, openFromHash);
+    openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(function () {
       if (!getKey()) return;
       var a = document.activeElement;
-      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in')) return;
-      // поллим диалоги бота всегда (для живого бейджа хэндоффа); инбокс обновляем, если открыт
-      refreshBot(function () {
-        renderSide();
-        if (state.page === 'inbox' && !state.botConvoId) renderView();
-      });
+      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in' || a.id === 'tg-input')) return;
+      // поллим диалоги бота всегда (для живого бейджа хэндоффа). Инбокс НЕ пересобираем:
+      // у него свой шестисекундный поллинг (pollInboxLive), а полная пересборка раз в минуту
+      // вырывала поле ввода из-под рук менеджера прямо на середине сообщения.
+      refreshBot(function () { renderSide(); });
       if (state.drawerId || state.botConvoId) return; // не дёргаем интерфейс под открытой карточкой/диалогом
       loadLeads(true);
     }, 60000);

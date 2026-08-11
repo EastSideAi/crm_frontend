@@ -217,6 +217,24 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 9px 16px; transition: .15s; }
 .list-empty .le-btn:hover { background: #DBE6FF; }
 
+/* заметка над списком: свернутые пустые заходы — тихая строка, не строка-лид */
+.list-foot { display: flex; align-items: center; gap: 10px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); background: var(--fill); }
+.list-foot .lf-ic { width: 24px; height: 24px; border-radius: 7px; background: var(--card);
+  border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); flex: none; }
+.list-foot .lf-t { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.list-foot .lf-t b { color: var(--ink); font-weight: 700; }
+.list-foot .lf-btn { margin-left: auto; flex: none; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--blue); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); padding: 7px 14px; transition: .15s var(--ease); }
+.list-foot .lf-btn:hover { background: var(--blue-tint); border-color: var(--blue-tint); }
+@media (max-width: 720px) {
+  /* иконка тут декоративная: на узком экране она уезжала на свою строку и рвала блок */
+  .list-foot { flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 16px; }
+  .list-foot .lf-ic { display: none; }
+  .list-foot .lf-btn { margin-left: 0; }
+}
+
 /* скелетон таблицы списка (использует общий .shim от дашборда) */
 .sk-list { padding: 0; }
 .sk-row { display: grid; align-items: center; gap: 16px; padding: 0 24px; height: 58px;
@@ -415,6 +433,7 @@ a { color: inherit; text-decoration: none; }
 .sev.s-offer_sent    { color: var(--amber-ink); background: var(--amber-soft); }
 .sev.s-client        { color: var(--green-ink); background: var(--green-soft); }
 .sev.s-rejected      { color: var(--ink-3);     background: var(--fill); }
+.sev.s-wait          { color: var(--amber-ink); background: var(--amber-soft); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -471,7 +490,57 @@ a { color: inherit; text-decoration: none; }
 .tm-sel { flex: none; font: 600 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
   border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 200px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
-@media (max-width: 760px) { .tm-sel { min-width: 140px; } }
+/* почта сотрудника прямо в строке: без нее не работает восстановление пароля */
+.tm-mail { flex: none; width: 230px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
+  transition: .15s var(--ease); }
+.tm-mail:hover { border-color: #DCE7FF; }
+.tm-mail:focus { background: #fff; border-color: var(--blue); }
+.tm-mail.none { background: var(--fill); border-style: dashed; }
+.tm-mail::placeholder { color: var(--ink-3); }
+/* чужая верхняя учетка: видно, кто это, но править нельзя — тише и без курсора */
+.tm-sel:disabled, .tm-mail:disabled { color: var(--ink-3); background: var(--fill);
+  border-color: transparent; border-style: solid; cursor: default; }
+.sec-head .bp.tm-new { margin-left: auto; }
+.sec-head .cnt + .bp.tm-new { margin-left: 14px; }
+
+/* форма «завести сотрудника» — панель внутри карточки, не модалка */
+.tm-add { margin-top: 16px; padding: 16px 18px; background: var(--fill);
+  border: 1px solid var(--line-2); border-radius: var(--r-lg); }
+.tm-add-g { display: grid; grid-template-columns: 1.2fr 1fr 1.4fr 1fr; gap: 12px; }
+.tm-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tm-f > span { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); }
+.tm-f input, .tm-f select { font: 500 13.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px;
+  width: 100%; transition: .15s var(--ease); }
+.tm-f input:focus, .tm-f select:focus { border-color: var(--blue); }
+.tm-add-a { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.tm-add-s { font-size: 12.5px; color: var(--ink-2); margin-right: auto; }
+
+/* выданный доступ: пароль виден один раз */
+.tm-made { margin-top: 16px; padding: 16px 18px; border-radius: var(--r-lg);
+  background: var(--green-soft); border: 1px solid #C6E9D5; }
+.tm-made-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+  color: var(--green-ink); }
+.tm-made-b { margin-top: 8px; font-size: 14px; color: var(--ink); }
+.tm-made-b b { font-weight: 700; }
+.tm-made-s { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; max-width: 620px; }
+.tm-made-a { display: flex; gap: 10px; margin-top: 12px; }
+@media (max-width: 760px) {
+  /* на телефоне имя, почта и роль идут в столбик: селект с длинной ролью
+     («Руководитель продукта») не сжимается по контенту и наезжал на имя */
+  .tm-sel { min-width: 0; width: 100%; order: 4; }
+  .tm-row { flex-wrap: wrap; }
+  .tm-mail { width: 100%; order: 3; }
+  .tm-add-g { grid-template-columns: 1fr; }
+  .tm-add-a { flex-wrap: wrap; }
+  .tm-add-s { width: 100%; margin-right: 0; }
+  /* на телефоне кнопка и счетчик сжимали заголовок в столбик по слову —
+     прячем счетчик, кнопку оставляем иконкой */
+  .sec-head:has(.tm-new) .cnt { display: none; }
+  .sec-head .bp.tm-new span { display: none; }
+}
 
 /* ════ Сейчас (правая колонка обзора) ════ */
 .now-rows { display: flex; flex-direction: column; }
@@ -651,6 +720,16 @@ a { color: inherit; text-decoration: none; }
   font-size: 12.5px; color: var(--ink-3); }
 .m-sub .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); opacity: .55; }
 .m-sub .sess { font-feature-settings: 'tnum'; letter-spacing: -.01em; }
+/* «Ссылка на клиента» — копирует адрес карточки, чтобы кинуть команде */
+.m-copylink { display: inline-flex; align-items: center; gap: 6px; height: 25px; padding: 0 10px;
+  border-radius: 8px; font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); margin-left: 2px;
+  transition: color .15s, background .15s, box-shadow .15s; }
+.m-copylink svg { width: 12px; height: 12px; color: var(--ink-3); transition: color .15s; }
+.m-copylink:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
+.m-copylink:hover svg { color: var(--blue); }
+
+.m-load { padding: 64px 26px; text-align: center; font-size: 13.5px; color: var(--ink-3); }
 
 .m-pulse { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 7px;
   margin-right: 116px; }
@@ -1560,8 +1639,10 @@ a { color: inherit; text-decoration: none; }
 .al-f { display: flex; flex-direction: column; gap: 6px; }
 .al-l { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em; }
 .al-l i { color: var(--blue); font-style: normal; }
+/* border: 0 — иначе браузер рисует свою серую рамку поверх нашей inset-обводки,
+   и поле выбивается из системы (видно было на баллах DET и ссылке на тест) */
 .al-in { width: 100%; font: 500 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
-  border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
+  border: 0; border-radius: 11px; padding: 11px 13px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07);
   transition: box-shadow .15s, background .15s; }
 .al-in::placeholder { color: var(--ink-3); }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
@@ -1851,6 +1932,12 @@ a { color: inherit; text-decoration: none; }
 .lg-eye:hover { color: var(--blue); background: var(--blue-tint); }
 .gate-card .bp { margin-top: 14px; }
 .gate-err { color: var(--coral); font-size: 13px; margin-top: 12px; display: none; }
+/* Второстепенное действие карточки входа — текстом, не второй кнопкой:
+   на экране должно быть ровно одно очевидное действие. */
+.gate-link { width: auto; margin-top: 16px; align-self: center; background: none;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); padding: 6px 8px;
+  border-radius: 8px; transition: color .14s, background .14s; }
+.gate-link:hover { color: var(--blue); background: var(--blue-tint); }
 @media (max-width: 760px) {
   .gate-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .gate-brand { padding: 32px 28px 28px; }
@@ -2049,11 +2136,14 @@ a { color: inherit; text-decoration: none; }
 .tg-msg.out .tg-del { left: -9px; }
 .tg-msg:hover .tg-del { opacity: 1; }
 .tg-del:hover { color: var(--coral); }
-/* композер: написать сообщение (перехват у бота) */
-.tg-compose { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #fff; border-top: 1px solid var(--line); }
-.tg-compose input { flex: 1; min-width: 0; outline: none; font: 500 13.5px 'Manrope', sans-serif; color: var(--ink);
-  background: var(--fill); border: 1px solid transparent; border-radius: var(--r-pill); padding: 11px 16px; transition: .15s; }
-.tg-compose input:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
+/* композер: написать сообщение (перехват у бота).
+   Поле — textarea: Enter отправляет, Shift+Enter переносит строку, высота растёт по тексту
+   (до 128px, дальше свой скролл), поэтому длинный ответ виден целиком, а не одной строкой. */
+.tg-compose { flex: none; display: flex; align-items: flex-end; gap: 10px; padding: 12px 16px; background: #fff; border-top: 1px solid var(--line); }
+.tg-compose textarea { flex: 1; min-width: 0; outline: none; font: 500 13.5px/1.45 'Manrope', sans-serif; color: var(--ink);
+  background: var(--fill); border: 1px solid transparent; border-radius: 21px; padding: 11px 16px; transition: border-color .15s, background .15s, box-shadow .15s;
+  resize: none; max-height: 128px; overflow-y: auto; display: block; }
+.tg-compose textarea:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
 .tg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover { background: var(--blue-d); }
@@ -2143,6 +2233,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .modal.open { transform: none; }
   .m-head { flex-wrap: wrap; gap: 12px; padding: 16px 16px 14px; }
   .m-id { padding-right: 110px; }
+  /* узкий экран: подстрочник и так переносится — техническую «сессию» и точки-
+     разделители убираем, чтобы «Ссылка на клиента» встала в одну строку */
+  .m-sub { gap: 8px 10px; }
+  .m-sub .sess, .m-sub .dot-sep { display: none; }
   .m-pulse { margin-right: 0; flex-direction: row; align-items: center; gap: 10px; width: 100%; }
   .m-pulse .ptrack { flex: 1; width: auto; }
   .m-name { font-size: 20px; }
@@ -2150,7 +2244,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .m-nav { width: auto; flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 12px 14px;
     border-right: 0; border-bottom: 1px solid var(--line); }
   .m-ni { flex-direction: column; gap: 5px; padding: 8px 12px; white-space: nowrap; font-size: 11px; min-width: 64px; position: relative; }
-  .m-ni .cnt, .m-ni .dotw { position: absolute; top: 4px; right: 6px; margin: 0; }
+  .m-ni .cnt, .m-ni .dotw { position: absolute; top: 3px; right: 4px; margin: 0;
+    font-size: 10px; padding: 1px 5px; }
   .m-content { padding: 20px 18px 28px; }
   .pipe { flex-wrap: wrap; }
   .pstep { flex: 1 1 28%; }
@@ -2859,3 +2954,116 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background-size: 220% 100%; animation: bugShim 1.3s infinite; }
 @keyframes bugShim { to { background-position: -120% 0; } }
 @media (max-width: 620px) { .bug-row2 { flex-direction: column; gap: 17px; } }
+
+/* ════ РАЗДЕЛ «Английский» — входной тест DET ════
+   Рецепты берем готовые: плашка-метрика = .pay-cell, тумблер = .pd-sw, чип = .sev.
+   Свое тут только герой с баллом и сетка автопроверки. */
+/* Плита нейтральная: цвет на ней несет вердикт и дельта, а не фон (§3.2 — семантика
+   ходит парой цвет/-soft, две семьи на одной поверхности гасят друг друга). */
+.det-hero { display: flex; align-items: center; gap: 22px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.det-hero.empty { gap: 16px; }
+.det-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.det-score { flex: none; display: flex; align-items: baseline; gap: 7px; }
+.det-num { font-size: 46px; font-weight: 800; letter-spacing: -.045em; line-height: .9; color: var(--ink); }
+.det-scale { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.det-hero-b { min-width: 0; }
+.det-verdict { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--navy); line-height: 1.35; }
+.det-verdict.good { color: var(--green-ink); }
+.det-verdict.warn { color: var(--amber-ink); }
+.det-verdict.bad { color: var(--red-ink); }
+.det-verdict.muted { color: var(--ink-2); font-weight: 600; }
+.det-partial { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 7px;
+  font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: var(--r-pill);
+  color: var(--amber-ink); background: var(--amber-soft); }
+.det-partial svg { color: var(--amber-ink); }
+.det-hero-m { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); }
+.det-note { margin-top: 8px; font-size: 12px; color: var(--ink-3); }
+.det-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.det-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.det-board { grid-template-columns: repeat(4, 1fr); margin-bottom: 0; }
+.det-board .pc-v { font-size: 20px; }
+
+.det-delta { flex: none; font-size: 12.5px; font-weight: 700; padding: 4px 8px; border-radius: 8px; }
+.det-delta.up { color: var(--green-ink); background: var(--green-soft); }
+.det-delta.down { color: var(--red-ink); background: var(--red-soft); }
+
+.det-row { display: flex; align-items: center; gap: 14px; padding: 13px 14px; border-radius: var(--r-lg);
+  cursor: pointer; position: relative; transition: background .13s; }
+.det-row:hover { background: #FBFBFC; }
+.det-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.det-row:hover::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+  border-radius: 3px; background: var(--blue); }
+.det-row.open { background: var(--fill); }
+.det-row-v { flex: none; min-width: 46px; font-size: 21px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+.det-row-b { flex: 1; min-width: 0; }
+.det-row-t { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.det-row-m { margin-top: 4px; font-size: 12px; color: var(--ink-3); }
+.det-row-go { flex: none; color: var(--ink-3); transition: transform .15s var(--ease); }
+.det-row.open .det-row-go { transform: rotate(90deg); color: var(--blue); }
+
+.det-detail { padding: 4px 14px 18px; }
+.det-lbl { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 10px; }
+.det-marks { display: flex; flex-wrap: wrap; gap: 5px; }
+.det-mark { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700; color: var(--ink-2); background: var(--fill); }
+.det-mark.ok { color: var(--green-ink); background: var(--green-soft); }
+.det-mark.part { color: var(--amber-ink); background: var(--amber-soft); }
+.det-mark.bad { color: var(--red-ink); background: var(--red-soft); }
+
+.det-open { margin-top: 16px; padding: 14px 15px; background: #fff; border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--line-2); }
+.det-open-h { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.det-open-h i { font-style: normal; font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.det-open-q { margin-top: 7px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.det-open-a { margin: 10px 0; padding: 11px 13px; background: var(--fill); border-radius: 11px;
+  font-size: 13px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+.det-open-a.muted { color: var(--ink-3); }
+
+/* разбор сочинения моделью. Плашка тише формы преподавателя: это мнение, а не решение */
+.det-ai { margin-top: 14px; padding: 14px 15px; background: #fff; border-radius: var(--r-lg);
+  box-shadow: inset 0 0 0 1px var(--line-2); }
+.det-ai.old { opacity: .62; }
+.det-ai-h { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.det-ai-h i { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.det-ai-c { margin-top: 11px; display: grid; gap: 7px; }
+.det-ai-r { display: grid; grid-template-columns: 108px 34px 1fr; align-items: baseline; gap: 8px; }
+.det-ai-t { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.det-ai-v { font-size: 13px; font-weight: 700; color: var(--ink); text-align: right; }
+.det-ai-n { font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+.det-ai-s { margin-top: 11px; font-size: 12.5px; color: var(--ink); line-height: 1.5; }
+.det-ai-s.muted { margin-top: 5px; color: var(--ink-3); }
+/* расшифровка записи: рабочий материал, читается тише разбора и явно как чужая речь */
+.det-ai-tr {
+  margin-top: 11px; padding: 9px 11px; border-radius: 9px;
+  font-size: 12px; line-height: 1.55; color: var(--ink-2); font-style: italic;
+  background: rgba(17, 24, 39, .03); box-shadow: inset 0 0 0 1px rgba(17, 24, 39, .05);
+}
+.det-ai-f { margin-top: 9px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink); }
+
+.det-grade { margin-top: 18px; padding: 15px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.det-grade-r { display: flex; align-items: flex-end; gap: 12px; margin-top: 4px; }
+.det-grade-r label { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.det-gi { width: 104px; }
+.det-grade-hint { margin-top: 10px; font-size: 11.5px; color: var(--ink-3); }
+
+.det-sw-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.det-sw-row:first-of-type { border-top: 0; }
+.det-sw-b { flex: 1; min-width: 0; }
+.det-sw-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.det-sw-s { margin-top: 4px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.det-sw-by { font-size: 11.5px; color: var(--ink-3); padding-bottom: 4px; }
+.det-linkh { margin-top: 20px; }
+.det-link { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.det-url { flex: 1; font-size: 12.5px; color: var(--ink-2); }
+.det-link-none { flex: 1; font-size: 12.5px; color: var(--ink-3); }
+.det-link-m { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
+.det-pr { font-size: 13px; color: var(--ink-2); }
+
+@media (max-width: 620px) {
+  .det-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .det-board { grid-template-columns: repeat(2, 1fr); }
+  .det-sw-row { flex-wrap: wrap; }
+  .det-link { flex-wrap: wrap; }
+}
