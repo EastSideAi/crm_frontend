@@ -152,6 +152,7 @@
       bolt: '<path d="M11 2.5 4 11h4.5L9 17.5 16 9h-4.5L11 2.5z" fill="currentColor" stroke="none"/>',
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
+      max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
@@ -217,6 +218,14 @@
     if (diff === 0) return 'Сегодня';
     if (diff === 1) return 'Вчера';
     return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  /* Полная дата словами: «10 ноября 2026». Для сроков, до которых далеко, где
+     «10.11» без года читается двусмысленно. */
+  function dayFull(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + ' ' + d.getFullYear();
   }
   function ago(iso) {
     if (!iso) return '';
@@ -1205,13 +1214,14 @@
         '<div class="gate-card">' +
           '<h1>Вход в CRM</h1>' +
           '<p>Сессия сохранится на этом устройстве.</p>' +
-          '<input id="lg-login" type="text" placeholder="Логин" autocomplete="username">' +
+          '<input id="lg-login" type="text" placeholder="Логин или почта" autocomplete="username">' +
           '<div class="lg-passwrap">' +
             '<input id="lg-pass" type="password" placeholder="Пароль" autocomplete="current-password">' +
             '<button class="lg-eye" id="lg-eye" type="button" tabindex="-1">показать</button>' +
           '</div>' +
           '<button class="bp" id="lg-go">Войти</button>' +
           '<div class="gate-err" id="lg-err">' + esc(err || '') + '</div>' +
+          '<button class="gate-link" id="lg-forgot" type="button">Забыли пароль?</button>' +
         '</div>' +
       '</div></div>';
     if (err) el('lg-err').style.display = 'block';
@@ -1246,6 +1256,119 @@
     el('lg-go').addEventListener('click', go);
     pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    el('lg-forgot').addEventListener('click', function () { renderReset(); });
+  }
+
+  /* ── восстановление пароля ────────────────────────────── */
+  /* Два шага в одной карточке: почта → код из письма и новый пароль. Отдельного
+     экрана «введите код» не делаем — человек и так держит письмо открытым, лишний
+     переход только добавляет шанс уйти не туда. */
+  function renderReset(ctx) {
+    ctx = ctx || {};
+    document.body.classList.remove('dock-open');
+    var sent = !!ctx.challenge;
+    root.innerHTML =
+      '<div id="gate"><div class="gate-split">' +
+        '<div class="gate-brand">' +
+          '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+          '<div class="gb-mid">' +
+            '<div class="gb-h">Вся воронка EastSide<br>в одном окне</div>' +
+            '<div class="gb-s">Заявки, диалоги с ботом, путь людей по платформе и деньги — на одном экране.</div>' +
+          '</div>' +
+          '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
+        '</div>' +
+        '<div class="gate-card">' +
+          (sent
+            ? '<h1>Новый пароль</h1>' +
+              '<p>Код отправили на ' + esc(ctx.email) + '. Он действует ' + (ctx.ttlMin || 15) + ' минут.</p>' +
+              '<input id="rs-code" type="text" inputmode="numeric" maxlength="6" placeholder="Код из письма" autocomplete="one-time-code">' +
+              '<div class="lg-passwrap">' +
+                '<input id="rs-pass" type="password" placeholder="Новый пароль" autocomplete="new-password">' +
+                '<button class="lg-eye" id="rs-eye" type="button" tabindex="-1">показать</button>' +
+              '</div>' +
+              '<button class="bp" id="rs-go">Сохранить и войти</button>'
+            : '<h1>Восстановление пароля</h1>' +
+              '<p>Пришлем код на почту, привязанную к аккаунту.</p>' +
+              '<input id="rs-email" type="email" placeholder="Почта" autocomplete="email">' +
+              '<button class="bp" id="rs-go">Отправить код</button>') +
+          '<div class="gate-err" id="rs-err"></div>' +
+          '<button class="gate-link" id="rs-back" type="button">Вернуться ко входу</button>' +
+        '</div>' +
+      '</div></div>';
+
+    var btn = el('rs-go');
+    function fail(msg) { var e = el('rs-err'); e.textContent = msg; e.style.display = 'block'; }
+    el('rs-back').addEventListener('click', function () { renderLogin(); });
+
+    if (!sent) {
+      var ei = el('rs-email');
+      ei.focus();
+      ei.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(); });
+      btn.addEventListener('click', ask);
+      return;
+    }
+
+    var ci = el('rs-code'), pi = el('rs-pass'), eye = el('rs-eye');
+    ci.focus();
+    eye.addEventListener('click', function () {
+      var show = pi.type === 'password';
+      pi.type = show ? 'text' : 'password';
+      eye.textContent = show ? 'скрыть' : 'показать';
+      pi.focus();
+    });
+    ci.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+    btn.addEventListener('click', save);
+
+    function ask() {
+      var email = el('rs-email').value.trim();
+      if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
+      btn.textContent = 'Отправляем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+      }).then(function (r) {
+        if (r.status === 429) { fail('Код уже отправляли. Проверь почту или подожди минуту'); return null; }
+        if (r.status === 503) { fail('Письмо сейчас не уходит. Напиши в чат — разберемся'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        if (!j) return;
+        renderReset({ challenge: j.challenge_id, email: email,
+                      ttlMin: Math.max(1, Math.round((j.expires_in || 900) / 60)) });
+      }).catch(function () {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
+
+    function save() {
+      var code = ci.value.trim(), pass = pi.value;
+      if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
+      if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
+      btn.textContent = 'Сохраняем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
+      }).then(function (r) {
+        if (r.status === 400) { fail('Код не подошел. Проверь цифры из письма'); return null; }
+        if (r.status === 410) { fail('Код устарел. Запроси новый'); return null; }
+        if (r.status === 429) { fail('Слишком много попыток. Запроси новый код'); return null; }
+        if (r.status === 422) { fail('Пароль слишком короткий — минимум шесть символов'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        if (!j) return;
+        localStorage.setItem(KEY_LS, j.token);
+        state.role = j.role; state.userName = j.name || '';
+        boot();
+      }).catch(function () {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
   }
 
   /* ── приглашение сотрудника: #invite/<token> ──────────────────────────────
@@ -4492,10 +4615,11 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -5229,6 +5353,7 @@
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
+    { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
@@ -6209,6 +6334,7 @@
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
+    else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -6232,6 +6358,7 @@
                  pay: ['Оплаты', 'Считаю платежи'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
+                 course: ['Китайский', 'Смотрю доступ к курсу'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -6513,6 +6640,147 @@
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
         '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
       access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
+     Близнец блока DET: тот же вопрос менеджера — «что у человека открыто» — и та же
+     кнопка на том же месте. Курс живет по личной ссылке, аккаунт платформы для него
+     не нужен, поэтому ссылку показываем прямо здесь: у школьника может не быть почты,
+     и доставить ссылку иногда придется руками. Ссылка одноразово выдается бэком в
+     ответе на открытие доступа и нигде не хранится — новая выпускается кнопкой. */
+  var CRS = {};        // id лида -> состояние с бэка
+  var CRS_BUSY = {};   // id лида -> идет загрузка
+  var CRS_LINK = {};   // id лида -> свежая ссылка на кабинет (живет до перезагрузки)
+
+  function loadCourse(id, force) {
+    if (CRS_BUSY[id]) return;
+    if (force) delete CRS[id];
+    CRS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/course').then(function (r) {
+      CRS_BUSY[id] = false; CRS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      CRS_BUSY[id] = false;
+      if (e.message !== '403') { CRS[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function buildCourseSection(id) {
+    var b = CRS[id];
+    if (!b) { loadCourse(id); return skeletonSection('course'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Китайский</div>' +
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+    }
+
+    var head = '<div class="m-ctitle">Китайский</div>' +
+      '<div class="m-csub">Видеокурс «Живой китайский». Доступ открывается кнопкой на ' +
+      '3 месяца: ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны. ' +
+      'Когда срок выйдет, уроки закроются сами.</div>';
+
+    var done = b.done_n || 0;
+    var total = b.total_n || 0;
+    // Доступ к курсу срочный (3 месяца с открытия). Менеджеру важно видеть не только
+    // «открыт/закрыт», но и до какого дня, — иначе он узнает о конце срока от ученика.
+    var untilTxt = b.access_until ? dayFull(b.access_until) : '';
+    var expired = !b.has_access && !!b.access_until && new Date(b.access_until) < new Date();
+    var progress = b.has_access
+      ? (done
+          ? 'пройдено ' + done + ' из ' + total + ' ' + plural(total, 'урок', 'урока', 'уроков') +
+            (b.last_activity ? ' · последний раз ' + esc(ago(b.last_activity)) + ' назад' : '')
+          : 'к урокам еще не приступал')
+      : expired
+        ? 'срок вышел ' + esc(untilTxt) + ' — уроки закрылись сами'
+        : 'уроки закрыты';
+
+    var link = CRS_LINK[id];
+    var linkRow = '<div class="det-link">' +
+      (link
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+          '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>') +
+      '</div>' +
+      '<div class="det-link-m">ссылка личная: по ней открывается кабинет именно этого ученика</div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
+        '<span class="hr" id="crs-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Курс «Живой китайский»</div>' +
+          '<div class="det-sw-s">' + progress + '</div></div>' +
+        '<button type="button" class="pd-sw' + (b.has_access ? ' on' : '') + '" id="crs-sw">' +
+          '<span class="pd-sw-l">' + (b.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (b.has_access && untilTxt
+        ? '<div class="det-sw-by">действует до ' + esc(untilTxt) + '</div>'
+        : '') +
+      (b.opened_by
+        ? '<div class="det-sw-by">открыл ' + esc(b.opened_by) + ' · ' + esc(fmtWhen(b.opened_at)) + '</div>'
+        : '') +
+      (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
+      '</div>';
+
+    return head + access;
+  }
+
+  function wireCourse(id) {
+    // Пока запрос в пути, кнопки этого блока выключены. Иначе второй клик по
+    // переключателю уходит на сервер раньше, чем вернется ответ на первый, — и
+    // ученик получает ссылку дважды (сервер такой повтор тоже отбивает).
+    var busy = false;
+    function lock(on) {
+      busy = on;
+      ['crs-sw', 'crs-newlink', 'crs-refresh'].forEach(function (bid) {
+        var b = el(bid);
+        if (b) { b.disabled = on; b.style.opacity = on ? '.55' : ''; }
+      });
+    }
+    function post(body, okMsg) {
+      if (busy) return;
+      lock(true);
+      return api('/admin/api/leads/' + id + '/course/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        CRS[id] = r;
+        if (r.link) CRS_LINK[id] = r.link;
+        // Доступ открыт всегда, а вот доставка могла не дойти: у ученика, которого
+        // завели руками, чата с ботом нет. Менеджер должен узнать об этом сразу, а
+        // не из того, что ребенок так и не пришел на урок.
+        if (okMsg) {
+          showToast(body.open && !r.opened_now
+            ? okMsg + ' — ученику не дублируем, ссылка в карточке'
+            : r.delivered && r.delivered.telegram
+              ? okMsg + ' — ссылка ушла ему в чат'
+              : okMsg + ' — ссылку отправьте сами, она в карточке');
+        }
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
+      }).then(function () { lock(false); });
+    }
+
+    var lead = findLead(id) || {};
+    var payload = { name: lead.name || '', email: lead.email || '' };
+
+    var rf = el('crs-refresh');
+    if (rf) rf.addEventListener('click', function () { loadCourse(id, true); });
+
+    var sw = el('crs-sw');
+    if (sw) sw.addEventListener('click', function () {
+      var on = (CRS[id] || {}).has_access;
+      if (on && !confirm('Закрыть ученику доступ к курсу?')) return;
+      post({ open: !on, name: payload.name, email: payload.email },
+           on ? 'Доступ закрыт' : 'Доступ открыт');
+    });
+
+    var cp = el('crs-copy');
+    if (cp) cp.addEventListener('click', function () { copyText(CRS_LINK[id] || '', cp); });
+
+    var nl = el('crs-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -7203,6 +7471,9 @@
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);
+
+    // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
+    if (state.modalSection === 'course') wireCourse(id);
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');

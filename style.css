@@ -2008,6 +2008,12 @@ a { color: inherit; text-decoration: none; }
 .lg-eye:hover { color: var(--blue); background: var(--blue-tint); }
 .gate-card .bp { margin-top: 14px; }
 .gate-err { color: var(--coral); font-size: 13px; margin-top: 12px; display: none; }
+/* Второстепенное действие карточки входа — текстом, не второй кнопкой:
+   на экране должно быть ровно одно очевидное действие. */
+.gate-link { width: auto; margin-top: 16px; align-self: center; background: none;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); padding: 6px 8px;
+  border-radius: 8px; transition: color .14s, background .14s; }
+.gate-link:hover { color: var(--blue); background: var(--blue-tint); }
 @media (max-width: 760px) {
   .gate-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .gate-brand { padding: 32px 28px 28px; }
