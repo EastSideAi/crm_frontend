@@ -36,7 +36,8 @@
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
-    planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
+    planStatus: {}, planBlock: {}, assignees: null,
+    _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
@@ -449,7 +450,17 @@
           throw new Error('403');
         });
       }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      /* Тело ошибки отдаем вызывающему: на 409 сервер объясняет, ЧТО именно мешает
+         (нет ответственного, у задач нет сроков) — без этого человек видит только
+         «не сохранилось» и не знает, что чинить. */
+      if (!r.ok) {
+        return r.json().catch(function () { return null; }).then(function (j) {
+          var err = new Error('HTTP ' + r.status);
+          err.status = r.status;
+          err.body = j;
+          throw err;
+        });
+      }
       return r.json();
     });
   }
@@ -465,6 +476,22 @@
     }).catch(function (e) {
       var cbs = state.inflight[id] || []; delete state.inflight[id];
       if (e.message !== '403') cbs.forEach(function (f) { f(null); });
+    });
+  }
+  /* Кого можно поставить ответственным. Список короткий и меняется редко — тянем один
+     раз за сессию, иначе каждая карточка дергала бы сервер ради одной выпадашки. */
+  function fetchAssignees(cb) {
+    if (state.assignees) { if (cb) cb(state.assignees); return; }
+    if (state._assigneesInflight) { state._assigneesInflight.push(cb); return; }
+    state._assigneesInflight = [cb];
+    api('/admin/api/assignees').then(function (r) {
+      state.assignees = (r && r.users) || [];
+      var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
+      cbs.forEach(function (f) { if (f) f(state.assignees); });
+    }).catch(function () {
+      state.assignees = [];
+      var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
+      cbs.forEach(function (f) { if (f) f([]); });
     });
   }
   function warm(id) {
@@ -494,7 +521,7 @@
   }
   /* НОН-БЛОКИНГ: меняем локально и рисуем сразу, бэкенд синхроним в фоне.
      При ошибке — откат + тост. Никаких ожиданий ответа ради анимации. */
-  var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides'];
+  var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides', 'curator_id'];
   function patch(id, body, stateEl, cb) {
     var lead = findLead(id), det = state.details[id];
     var prevLead = lead ? lead.crm : null;
@@ -2737,7 +2764,23 @@
           '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
       '</div>' +
+      planBlockBanner(id) +
       aiReasonBlock(id);
+  }
+
+  /* Почему план не ушел семье. Показываем не «ошибку», а список того, что чинить:
+     нет ответственного — одна строка, нет сроков — перечень конкретных задач. */
+  function planBlockBanner(id) {
+    var b = state.planBlock[id];
+    if (!b) return '';
+    var list = (b.tasks || []).slice(0, 8).map(function (t) {
+      return '<li>' + esc(t.title || 'задача без названия') + '</li>';
+    }).join('');
+    var more = (b.tasks || []).length > 8 ? '<li>+ еще ' + ((b.tasks || []).length - 8) + '</li>' : '';
+    return '<div class="rm-block">' +
+      '<div class="rm-block-h">' + ic('clock', 13) + esc(b.message || 'План публиковать рано.') + '</div>' +
+      (list ? '<ul class="rm-block-l">' + list + more + '</ul>' : '') +
+    '</div>';
   }
 
   /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
@@ -3088,10 +3131,17 @@
       .then(function (r) {
         // Правда — ответ сервера, не локальный флип: кэш не разъезжается с бэком.
         state.planStatus[id] = { published: !!(r && r.published) };
+        state.planBlock[id] = null;
         showToast(state.planStatus[id].published ? 'План опубликован ученику' : 'Публикация снята');
         rerender();
       })
       .catch(function (e) {
+        // 409 — не сбой сети, а осмысленный отказ: показываем причину и не трогаем статус
+        if (e && e.status === 409) {
+          state.planBlock[id] = (e.body && e.body.detail) || { message: 'План пока публиковать нельзя.' };
+          rerender();
+          return;
+        }
         if (e && e.message !== '403') showToast('Не сохранилось — проверь сеть');
         ensurePlanStatus(id, true); // пересинхронизировать реальный статус с бэка
         rerender();
@@ -6244,6 +6294,27 @@
       (isRej ? '<div class="rej-banner">' + ic('x', 13) + 'Сейчас в статусе «отказ» — сделка закрыта</div>' : '<div class="pipe">' + pipe + '</div>') +
     '</div>';
 
+    /* 2.5 ОТВЕТСТВЕННЫЙ — без имени задачу нельзя спросить, а план нельзя опубликовать.
+       Список тянем лениво: пока не приехал, показываем текущего или прочерк. */
+    var curId = ctx.crm ? ctx.crm.curator_id : null;
+    if (!state.assignees) fetchAssignees(function () {
+      if (state.drawerId === ctx.base.id && state.modalSection === 'now') renderModalContent();
+    });
+    var people = state.assignees || [];
+    var curName = '';
+    people.forEach(function (u) { if (u.id === curId) curName = u.name; });
+    var opts = '<option value="">не назначен</option>' + people.map(function (u) {
+      return '<option value="' + u.id + '"' + (u.id === curId ? ' selected' : '') + '>' +
+        esc(u.name) + '</option>';
+    }).join('');
+    html += '<div class="m-sec"><div class="m-sec-h">Ответственный</div>' +
+      (people.length
+        ? '<select id="m-curator" class="m-sel">' + opts + '</select>'
+        : '<div class="who compact">' + esc(curName || 'не назначен') + '</div>') +
+      (curId ? '' : '<div class="cur-hint">' + ic('clock', 12) +
+        'Пока никто не отвечает за клиента — план семье не опубликуется.</div>') +
+    '</div>';
+
     /* 3. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Кто это</div>' +
@@ -6814,6 +6885,14 @@
     var stHost = el('m-st');
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
+    });
+    // Ответственный за клиента. 0 вместо пустоты: бэкенд отличает «снять» от «не трогать».
+    var curSel = el('m-curator');
+    if (curSel) curSel.addEventListener('change', function () {
+      patch(id, { curator_id: parseInt(curSel.value, 10) || 0 }, null, function () {
+        showToast(curSel.value ? 'Ответственный назначен' : 'Ответственный снят');
+        if (state.drawerId === id) renderDrawer(true);
+      });
     });
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──

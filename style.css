@@ -888,6 +888,16 @@ a { color: inherit; text-decoration: none; }
   background: var(--fill); border-radius: 13px; padding: 14px 16px; }
 .rej-banner svg { color: var(--ink-3); }
 
+/* Ответственный за клиента */
+.m-sel { width: 100%; appearance: none; font: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--ink); background: var(--fill); border: 0; border-radius: 11px; padding: 11px 13px;
+  cursor: pointer; transition: background .14s ease; }
+.m-sel:hover { background: var(--line); }
+.m-sel:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.cur-hint { display: flex; align-items: center; gap: 7px; margin-top: 8px;
+  font-size: 12.5px; font-weight: 550; color: var(--amber-ink); }
+.cur-hint svg { color: var(--amber); flex: none; }
+
 /* ════ ПУТЬ И ИСПОЛЬЗОВАНИЕ ════ */
 .uz { display: flex; flex-direction: column; gap: 15px; margin-top: 2px; }
 
@@ -2324,6 +2334,13 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .rm-pub.on .rm-pub-dot { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 .rm-pub.off { color: var(--ink-2); }
 .rm-plan-tb-act { display: inline-flex; gap: 8px; align-items: center; }
+/* Почему план не ушел семье — не «ошибка», а список того, что чинить */
+.rm-block { background: var(--amber-soft); border-radius: var(--r-lg); padding: 13px 15px; margin: -6px 0 14px; }
+.rm-block-h { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650;
+  color: var(--amber-ink); letter-spacing: -.005em; }
+.rm-block-h svg { color: var(--amber); flex: none; }
+.rm-block-l { margin: 8px 0 0; padding-left: 26px; display: flex; flex-direction: column; gap: 3px; }
+.rm-block-l li { font-size: 12.5px; font-weight: 550; color: var(--ink-2); }
 .rm-rollout-wrap { position: relative; }
 .rm-rollout-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 240px;
   background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);
