@@ -3390,3 +3390,134 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .sv-price { grid-column: 2; grid-row: 1; text-align: right; }
   .sv-state { grid-column: 2; grid-row: 2; text-align: right; }
 }
+
+/* ── ВЕДОМОСТЬ (финансовая модель) ────────────────────────────────────────────
+   Экран про деньги: главный тут не набор плиток, а КАСКАД — доход, из которого
+   шаг за шагом вычитается все, пока не останутся дивиденды. Поэтому один сильный
+   якорь (итоговая строка) и максимально тихое все остальное: цифры выровнены по
+   правому краю, подписи правил серые, разделители полупрозрачные. */
+.fin-casc { padding: 20px 24px 10px; }
+.fc-rows { margin-top: 12px; }
+.fc-row { display: flex; align-items: baseline; justify-content: space-between; gap: 20px;
+  padding: 13px 0; border-bottom: 1px solid var(--line); }
+.fc-row:last-child { border-bottom: 0; }
+.fc-l { min-width: 0; }
+.fc-name { font-size: 14px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+.fc-why { display: block; margin-top: 3px; font-size: 12px; line-height: 1.45;
+  color: var(--ink-3); max-width: 46ch; }
+.fc-v { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  letter-spacing: -.02em; }
+/* Вычитания тише прибавлений: глаз должен цепляться за итоги, а не за каждую строку. */
+.fc-row.out .fc-v { color: var(--ink-2); font-weight: 600; }
+/* Промежуточный итог — заливкой во всю ширину карточки, без рамки. */
+.fc-row.sum { margin: 0 -24px; padding: 14px 24px; background: var(--fill);
+  border-bottom-color: var(--line-2); }
+.fc-row.sum .fc-name { font-weight: 700; }
+.fc-row.sum .fc-v { font-size: 17px; }
+.fc-row.total { margin: 0 -24px; padding: 22px 24px 24px; background: var(--fill);
+  border-bottom: 0; border-top: 1px solid var(--line-2); align-items: center; }
+.fc-row.total .fc-name { font-size: 15px; font-weight: 700; }
+.fc-row.total .fc-v { font-size: 32px; font-weight: 800; letter-spacing: -.04em; }
+.fc-v.neg { color: var(--red-ink); }
+
+.fin-block { padding: 20px 24px 22px; }
+.fin-block + .fin-block, .fin-casc + .fin-block { margin-top: 16px; }
+.fin-list { margin-top: 12px; }
+.fl-row { display: grid; grid-template-columns: 1fr 84px auto; align-items: center;
+  gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fl-row:last-child { border-bottom: 0; }
+.fl-row.warn .fl-name { color: var(--amber-ink); }
+.fl-row.muted { opacity: .55; }
+.fl-main { min-width: 0; }
+.fl-name { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+/* Полоска доли — единственный «график» на экране: она отвечает на вопрос «а сколько
+   это от общего», который иначе считают в уме. */
+.fl-bar { height: 4px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.fl-bar i { display: block; height: 100%; background: var(--navy); border-radius: inherit;
+  transition: width .9s var(--ease); }
+.fl-v { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  letter-spacing: -.02em; text-align: right; }
+.fl-row.fl-2 { grid-template-columns: 1fr auto; }
+
+.fin-funds { margin-top: 12px; }
+.ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
+.ff-row:last-child { border-bottom: 0; }
+.ff-top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
+.ff-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ff-v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.ff-sub { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px;
+  font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+.ff-warn { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink);
+  background: var(--amber-soft); padding: 6px 10px; border-radius: 9px; }
+
+.fin-kv { margin-top: 12px; }
+.fkv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+.fkv:last-child { border-bottom: 0; }
+.fkv b { font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.fkv.total { margin: 0 -24px; padding: 14px 24px; background: var(--fill); border-bottom: 0; }
+.fkv.total b { font-size: 17px; }
+
+.fin-note { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 11px 14px;
+  border-radius: 11px; background: var(--amber-soft); color: var(--amber-ink);
+  font-size: 12.5px; font-weight: 600; }
+.fin-note svg { flex: none; }
+
+.fin-groups { margin-top: 12px; }
+.fg + .fg { margin-top: 16px; }
+.fg-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--line-2);
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.fg-head b { font-size: 13px; letter-spacing: -.02em; text-transform: none; color: var(--ink); }
+.fg-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 12px;
+  padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.fg-row:last-child { border-bottom: 0; }
+.fg-n { color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.fg-c { margin-left: 7px; font-size: 11px; font-style: normal; color: var(--ink-3); }
+.fg-v { font-weight: 700; letter-spacing: -.02em; text-align: right; white-space: nowrap; }
+
+/* Карта операций — плотная таблица: тут читают глазами вниз по колонке сумм. */
+.fin-grid { grid-template-columns: 92px 1.6fr 150px 190px 132px 88px; }
+.fo-date { font-size: 12.5px; color: var(--ink-2); }
+.fo-what { min-width: 0; }
+.fo-what b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-what i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal;
+  color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-src, .fo-acc { font-size: 12.5px; color: var(--ink-2); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
+.fo-sum.neg { color: var(--ink-2); }
+.fin-grid.muted { opacity: .5; }
+.fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
+  padding: 4px 9px; border-radius: var(--r-pill); }
+.fst.ok { color: var(--green-ink); background: var(--green-soft); }
+.fst.wait { color: var(--amber-ink); background: var(--amber-soft); }
+
+@media (max-width: 1100px) {
+  .trow.fin-grid { grid-template-columns: 84px 1.4fr 140px 122px 84px !important; }
+  .fin-grid > :nth-child(4) { display: none; }
+}
+@media (max-width: 760px) {
+  /* На телефоне строка операции — карточка: слева что и откуда, справа сумма. */
+  .trow.fin-grid { grid-template-columns: 1fr auto !important; gap: 3px 12px;
+    height: auto; padding: 13px 16px; align-items: start; }
+  .fin-grid.thead { display: none; }
+  .fo-date { grid-column: 1; grid-row: 1; }
+  .fo-what { grid-column: 1; grid-row: 2; }
+  .fo-src { grid-column: 1; grid-row: 3; }
+  .fo-sum { grid-column: 2; grid-row: 1 / span 2; text-align: right; font-size: 15px; }
+  .fo-st { grid-column: 2; grid-row: 3; text-align: right; }
+  .fc-row.total .fc-v { font-size: 26px; }
+  .fin-casc, .fin-block { padding-left: 16px; padding-right: 16px; }
+  .fc-row.sum, .fc-row.total, .fkv.total { margin-left: -16px; margin-right: -16px;
+    padding-left: 16px; padding-right: 16px; }
+}
+/* Разделитель в ряду фильтров: тип операции и раздел — разные вопросы, и одним
+   сплошным рядом чипов они читаются как один список. */
+.qsep { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--line-2); }

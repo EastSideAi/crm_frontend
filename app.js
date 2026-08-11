@@ -1347,10 +1347,12 @@
   // 'contractors' — раздел «Исполнители» (самозанятые): ИНН, реквизиты, суммы выплат.
   // Отдельный cap намеренно: это не те же данные, что клиентские, и видеть их должна
   // не вся команда. Зеркало на бэке — routers/admin.py ROLE_CAPS.
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors'];
+  // 'finmodel' — ведомость: зарплаты, дивиденды, остатки фондов. Это не тот же уровень
+  // секретности, что клиентские платежи (cap 'finance'), поэтому cap свой.
+  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
@@ -1388,6 +1390,10 @@
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
+    { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
+    { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
+    { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team' },
   ];
@@ -1407,6 +1413,7 @@
   var SPACES = [
     { id: 'crm', label: 'Клиенты' },
     { id: 'cz', label: 'Самозанятые' },
+    { id: 'fin', label: 'Ведомость' },
   ];
   function navSpace(it) { return it.space || 'crm'; }
   function spaceOf(page) {
@@ -1584,6 +1591,29 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
+    } else if (state.page === 'finpnl') {
+      // У P&L свой переключатель: он смотрится не за ведомость, а нарастающим итогом.
+      tb.innerHTML = '<nav class="tabs">' + FIN_SCOPES.map(function (o) {
+        return '<a class="tab' + (FIN.scope === o[0] ? ' on' : '') + '" data-fsc="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          FIN.scope = t.getAttribute('data-fsc'); FIN.pnl = null;
+          renderTopbar(); renderView();
+        });
+      });
+    } else if (state.page === 'finsheet' || state.page === 'finops') {
+      // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
+      var pers2 = (FIN.periods || []).slice(0, 8);
+      tb.innerHTML = pers2.length
+        ? '<nav class="tabs">' + pers2.map(function (p) {
+            return '<a class="tab' + (FIN.id === p.id ? ' on' : '') + '" data-fper="' + p.id + '">' +
+              esc(p.name) + (p.open ? '<span class="n num">открыт</span>' : '') + '</a>';
+          }).join('') + '</nav>'
+        : '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>ведомость</div>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () { finSetPeriod(t.getAttribute('data-fper')); });
+      });
     } else if (state.page === 'inbox') {
       var bsrc = state.inboxMode === 'threads' ? 'обсуждения по задачам'
         : (state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс');
@@ -1750,6 +1780,33 @@
       html = '<div><h2>Каталог услуг</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('box', 13) + '</span><span>' + phrase5 + '</span></div></div>';
     }
+    if (curSpace() === 'fin') {
+      // Вердикт ведомости отвечает на один вопрос: хватает ли денег, чтобы закрыть
+      // период. Именно от него зависит, тянуть период дальше или платить.
+      var per = finPeriod();
+      var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
+      var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
+                     finops: 'Карта операций', finref: 'Сервисы и долги' };
+      var ph;
+      if (FIN.err) ph = esc(FIN.err);
+      // «Сервисы и долги» живут вне периода — им ждать список ведомостей незачем.
+      else if (state.page === 'finref') ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
+      else if (!per) ph = 'Загружаю ведомость…';
+      else if (state.page === 'finsheet' && sh) {
+        ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
+          '. К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
+          finRub(sh.metrics ? sh.metrics.on_vtb : 0) + '</b>.' +
+          ((sh.warnings || []).length ? ' Перед закрытием проверьте остатки — список справа.' : '');
+      } else if (state.page === 'finpnl') {
+        ph = 'Только факт, нарастающим итогом. План в этот отчет не попадает никогда.';
+      } else if (state.page === 'finops') {
+        ph = 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.';
+      } else {
+        ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
+      }
+      html = '<div><h2>' + (titles[state.page] || 'Ведомость') + '</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + ph + '</span></div></div>';
+    }
     ch.innerHTML = html;
   }
   function plural(n, one, few, many) {
@@ -1790,6 +1847,10 @@
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czservices') renderCzServices(view);
+    else if (state.page === 'finsheet') renderFinSheet(view);
+    else if (state.page === 'finpnl') renderFinPnl(view);
+    else if (state.page === 'finops') renderFinOps(view);
+    else if (state.page === 'finref') renderFinRefs(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -3716,6 +3777,437 @@
       if (err) el('sh-err').textContent = err;
     });
     setTimeout(function () { el('sh-' + fields[0][0]).focus(); }, 30);
+  }
+
+  /* ── ВЕДОМОСТЬ (финансовая модель) — этап 1: смотреть ──────────────────────
+     Ведомость — не отчет, а рабочий цикл выплат: сколько пришло, сколько отложили в
+     фонды, сколько потратили и хватает ли денег, чтобы период закрыть. До сих пор она
+     жила отдельным приложением со своим логином; решение владельца от 2026-08-11 —
+     перенести ее в CRM, потому что доходы приходят из ЮKassa и карточек клиентов, а
+     расходы на подрядчиков придут из модуля самозанятых.
+
+     Этап 1 — только чтение (план: `_specs/finmodel/plan.md`). Правка остается в старом
+     приложении, пока экраны не приняты: показать неверную цифру плохо, а дать по ней
+     нажать — хуже.
+
+     Главный экран построен вокруг КАСКАДА: доход → краткосрочка → база → фонды →
+     прямые расходы → чистая → флекс → дивиденды. Порядок жесткий, каждый шаг считается
+     от предыдущего, и спор в команде идет именно о нем — поэтому он и есть якорь
+     экрана, а не набор одинаковых плиток. Считает все бэкенд (routers/fin.py), который
+     зовет функции схемы finmodel: две копии формул разъедутся, и никто не докажет, чья
+     цифра верная. */
+  var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
+              scope: 'all', src: '', kind: '', q: '', err: '', _t: null };
+
+  /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
+     «для красоты» превращается в расхождение, которое потом ищут руками. */
+  function finNum(v, dec) {
+    var d = dec === undefined ? 2 : dec;
+    var x = Number(v) || 0;
+    var neg = x < 0;
+    var s = Math.abs(x).toFixed(d).split('.');
+    s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return (neg ? '−' : '') + s.join(',');
+  }
+  function finRub(v, dec) { return finNum(v, dec) + ' ₽'; }
+  function finPct(v) { return finNum(v, 1) + '%'; }
+  function finDate(s) {
+    if (!s) return '—';
+    var p = String(s).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : s;
+  }
+  function finErrText(e) {
+    var m = String((e && e.message) || '');
+    if (m.indexOf('503') !== -1) return 'Ведомость на этом сервере пока не подключена: раздел работает только там, где выложены новые ручки бэкенда.';
+    if (m.indexOf('404') !== -1) return 'Ведомостей пока нет — ни одного периода не заведено.';
+    return 'Не удалось загрузить ведомость. Проверьте связь и обновите страницу.';
+  }
+  function finErrView(view) {
+    view.innerHTML = '<div class="card"><div class="empty">' + esc(FIN.err) + '</div></div>';
+    pageAnim(view);
+  }
+  /* Хвост запроса с выбранным периодом. Период не хранится на сервере: какой открыт на
+     экране, за тот и спрашиваем — иначе две вкладки покажут разные цифры под одним
+     заголовком. */
+  function finQ(extra) {
+    var q = FIN.id ? 'id=' + encodeURIComponent(FIN.id) : '';
+    if (extra) q += (q ? '&' : '') + extra;
+    return q ? '?' + q : '';
+  }
+  function finFail(e, key) {
+    if (e && e.message === '403') return;
+    FIN.err = finErrText(e);
+    FIN[key] = FIN[key] || 'none';
+    renderAll();
+  }
+  function finLoadPeriods(cb) {
+    api('/admin/api/fin/periods').then(function (r) {
+      FIN.periods = r.periods || [];
+      FIN.err = '';
+      if (!FIN.id) FIN.id = r.open_id || (FIN.periods[0] && FIN.periods[0].id) || null;
+      if (cb) cb();
+      renderAll();
+    }).catch(function (e) { FIN.periods = []; finFail(e, 'periods'); });
+  }
+  function finLoadSheet() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadSheet(); });
+    api('/admin/api/fin/period' + finQ()).then(function (r) {
+      FIN.sheet = r; FIN.err = '';
+      if (state.page === 'finsheet') renderAll();
+    }).catch(function (e) { finFail(e, 'sheet'); });
+  }
+  function finLoadOps() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadOps(); });
+    var ex = [];
+    if (FIN.src) ex.push('source=' + encodeURIComponent(FIN.src));
+    if (FIN.kind) ex.push('kind=' + encodeURIComponent(FIN.kind));
+    if (FIN.q) ex.push('q=' + encodeURIComponent(FIN.q));
+    api('/admin/api/fin/operations' + finQ(ex.join('&'))).then(function (r) {
+      FIN.ops = r; FIN.err = '';
+      if (state.page === 'finops') renderAll();
+    }).catch(function (e) { finFail(e, 'ops'); });
+  }
+  function finLoadPnl() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadPnl(); });
+    api('/admin/api/fin/pnl' + finQ('scope=' + FIN.scope)).then(function (r) {
+      FIN.pnl = r; FIN.err = '';
+      if (state.page === 'finpnl') renderAll();
+    }).catch(function (e) { finFail(e, 'pnl'); });
+  }
+  function finLoadRefs() {
+    api('/admin/api/fin/refs').then(function (r) {
+      FIN.refs = r; FIN.err = '';
+      if (state.page === 'finref') renderAll();
+    }).catch(function (e) { finFail(e, 'refs'); });
+  }
+  /* Смена периода сбрасывает ВСЕ куски экрана разом: каскад одного периода рядом с
+     операциями другого — это не «частично устарело», это неправильные данные. */
+  function finSetPeriod(id) {
+    if (FIN.id === id) return;
+    FIN.id = id; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+    renderAll();
+  }
+  function finPeriod() {
+    var l = FIN.periods || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === FIN.id) return l[i];
+    return l[0] || null;
+  }
+
+  var FIN_SCOPES = [['period', 'Ведомость'], ['month', 'Месяц'], ['quarter', 'Квартал'],
+                    ['year', 'Год'], ['all', 'Все время']];
+  var FIN_KINDS = [['', 'Все'], ['доход', 'Доходы'], ['расход', 'Расходы'], ['перевод', 'Переводы']];
+
+  /* Главный экран: каскад + фонды + счета + касса. */
+  function renderFinSheet(view) {
+    if (!FIN.sheet) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSheet(); return;
+    }
+    if (FIN.sheet === 'none') return finErrView(view);
+    var s = FIN.sheet, c = s.cascade, m = s.metrics || {}, cash = s.cash || {};
+    var funds = (s.rules || []).filter(function (r) {
+      return r.account_id !== 'shortterm' && r.account_id !== 'flex';
+    });
+    var stRule = null, flexRule = null;
+    (s.rules || []).forEach(function (r) {
+      if (r.account_id === 'shortterm') stRule = r;
+      if (r.account_id === 'flex') flexRule = r;
+    });
+
+    var bar = statBar([
+      { label: 'Доход к зачислению', value: finRub(c.income, 0), sub: 'уже за вычетом комиссии' },
+      { label: 'Дивиденды', value: finRub(c.dividends, 0), sub: 'после всех отчислений' },
+      { label: 'Денег в фондах', value: finRub(m.in_funds, 0), sub: 'по всем фондам сразу' },
+      { label: 'Остаток на р/с', value: finRub(m.on_vtb, 0), sub: 'сколько реально на ВТБ' },
+    ]);
+
+    var rows = [{ cls: 'in', name: 'Доход к зачислению',
+                  why: 'все, что пришло за период, за вычетом комиссии эквайринга',
+                  v: c.income }];
+    rows.push({ cls: 'out', name: 'Фонд краткосрочки',
+                why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
+                v: -c.shortterm });
+    rows.push({ cls: 'sum', name: 'База для отчислений',
+                why: 'от нее считаются проценты фондов', v: c.base });
+    funds.forEach(function (r) {
+      rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount });
+    });
+    rows.push({ cls: 'out', name: 'Прямые расходы',
+                why: 'факт из расчетных листов: зарплаты, сервисы, реклама',
+                v: -c.direct });
+    rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: c.profit });
+    rows.push({ cls: 'out', name: 'Флекс-проджекта',
+                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -c.flex });
+    rows.push({ cls: 'total', name: 'Дивиденды', why: 'то, что остается к распределению',
+                v: c.dividends });
+
+    var casc = '<div class="card fin-casc">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Каскад ведомости</div>' +
+        '<div class="s">каждый шаг считается от предыдущего — сверху вниз</div></div></div>' +
+      '<div class="fc-rows">' + rows.map(function (r) {
+        return '<div class="fc-row ' + r.cls + '">' +
+          '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
+            (r.why ? '<span class="fc-why">' + esc(r.why) + '</span>' : '') + '</div>' +
+          '<div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
+      }).join('') + '</div></div>';
+
+    var direct = (s.direct || []).length
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">Прямые расходы по разделам</div>' +
+          '<div class="s">из чего сложились ' + finRub(c.direct) + '</div></div></div>' +
+        '<div class="fin-list">' + s.direct.map(function (d) {
+          var w = c.direct ? Math.max(2, Math.round(d.amount / c.direct * 100)) : 0;
+          return '<div class="fl-row"><div class="fl-main"><span class="fl-name">' + esc(d.source) + '</span>' +
+            '<span class="fl-sub">' + d.count + ' ' + plural(d.count, 'операция', 'операции', 'операций') + '</span></div>' +
+            '<div class="fl-bar"><i style="width:' + w + '%"></i></div>' +
+            '<div class="fl-v num">' + finRub(d.amount) + '</div></div>';
+        }).join('') + '</div></div>'
+      : '';
+
+    var fundsCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+        '<div><div class="t">Фонды</div>' +
+        '<div class="s">остаток с прошлого периода, движение и что уедет в следующий</div></div></div>' +
+      '<div class="fin-funds">' + (s.funds || []).filter(function (f) {
+        return f.kind === 'фонд';
+      }).map(function (f) {
+        return '<div class="ff-row' + (f.alert ? ' warn' : '') + '">' +
+          '<div class="ff-top"><span class="ff-name">' + esc(f.name) + '</span>' +
+            '<span class="ff-v num">' + finRub(f.next) + '</span></div>' +
+          '<div class="ff-sub"><span>было ' + finNum(f.opening) + '</span>' +
+            '<span>отложили ' + finNum(f.added) + '</span>' +
+            '<span>потратили ' + finNum(f.spent) + '</span></div>' +
+          /* Сервер говорит «фонд ушел в минус», сравнивая с остатком ДО отложений
+             этого периода. Рядом с положительным итогом такая фраза читается как
+             ошибка, поэтому показываем ту самую цифру, о которой речь. */
+          (f.alert ? '<div class="ff-warn">Тратили больше, чем на фонде оставалось: до отложений ' +
+            finRub(f.balance) + '</div>' : '') +
+        '</div>';
+      }).join('') + '</div></div>';
+
+    var cashCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+        '<div><div class="t">Движение денег</div>' +
+        '<div class="s">это не прибыль, а сколько осталось на расчетном счете</div></div></div>' +
+      '<div class="fin-kv">' +
+        '<div class="fkv"><span>Пришло на р/с</span><b class="num">' + finRub(cash.in) + '</b></div>' +
+        '<div class="fkv"><span>Ушло наружу</span><b class="num">' + finRub(-cash.out) + '</b></div>' +
+        '<div class="fkv"><span>Ушло в фонды</span><b class="num">' + finRub(-cash.to_funds) + '</b></div>' +
+        '<div class="fkv total"><span>Остаток на р/с</span><b class="num">' + finRub(cash.flow) + '</b></div>' +
+      '</div></div>';
+
+    var warn = (s.warnings || []).length
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Перед закрытием периода</div>' +
+          '<div class="s">что стоит проверить, прежде чем платить</div></div></div>' +
+        '<div class="fin-list">' + s.warnings.map(function (w) {
+          return '<div class="fl-row fl-2 warn"><div class="fl-main">' +
+            '<span class="fl-name">' + esc(w.account) + '</span>' +
+            '<span class="fl-sub">' + esc(w.problem) + '</span></div>' +
+            '<div class="fl-v num">' + finRub(w.amount) + '</div></div>';
+        }).join('') + '</div></div>'
+      : '';
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp7">' + casc + direct + '</div>' +
+      '<div class="sp5">' + fundsCard + cashCard + warn + '</div></div>';
+    pageAnim(view);
+  }
+
+  /* P&L: только факт, нарастающим итогом. План сюда не попадает никогда — это отчет о
+     том, что случилось, а не о том, что собирались сделать. */
+  function renderFinPnl(view) {
+    if (!FIN.pnl) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPnl(); return;
+    }
+    if (FIN.pnl === 'none') return finErrView(view);
+    var p = FIN.pnl, t = p.totals || {};
+    var ladder = [
+      { name: 'Выручка', v: t.revenue, cls: 'in' },
+      { name: 'Переменные расходы', v: -t.variable, cls: 'out' },
+      { name: 'Валовая прибыль', v: t.gross, cls: 'sum', pct: t.gross_pct, pctName: 'валовая рентабельность' },
+      { name: 'Постоянные расходы', v: -t.fixed, cls: 'out' },
+      { name: 'Операционная прибыль', v: t.operating, cls: 'sum', pct: t.margin_pct, pctName: 'маржинальность' },
+      { name: 'Налоги', v: -t.taxes, cls: 'out' },
+      { name: 'Чистая прибыль', v: t.net, cls: 'total', pct: t.net_pct, pctName: 'чистая рентабельность' },
+    ];
+    if (t.other_income) ladder.splice(5, 0, { name: 'Прочие доходы', v: t.other_income, cls: 'in' });
+    if (t.other_expense) ladder.splice(5, 0, { name: 'Прочие расходы', v: -t.other_expense, cls: 'out' });
+    if (t.interest) ladder.splice(ladder.length - 1, 0, { name: 'Проценты по кредитам', v: -t.interest, cls: 'out' });
+
+    var lad = '<div class="card fin-casc">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">Отчет о прибылях и убытках</div>' +
+        '<div class="s">' + (p.from ? finDate(p.from) + ' — ' + finDate(p.to) : 'за все время') +
+        ', только факт</div></div></div>' +
+      '<div class="fc-rows">' + ladder.map(function (r) {
+        return '<div class="fc-row ' + r.cls + '">' +
+          '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
+            (r.pct !== undefined ? '<span class="fc-why">' + esc(r.pctName) + ' ' + finPct(r.pct) + '</span>' : '') +
+          '</div><div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
+      }).join('') + '</div>' +
+      (t.unsorted ? '<div class="fin-note">' + ic('alert', 13) +
+        'Без статьи осталось ' + finRub(t.unsorted) + ' — эти операции в отчет не попали и их надо разнести.</div>' : '') +
+    '</div>';
+
+    var groups = (p.groups || []).map(function (g) {
+      return '<div class="fg">' +
+        '<div class="fg-head"><span>' + esc(g.name) + '</span><b class="num">' + finRub(g.total) + '</b></div>' +
+        g.items.map(function (i) {
+          // Число операций держим у названия, а не у суммы: рядом с деньгами оно
+          // читается как часть цифры.
+          return '<div class="fg-row"><span class="fg-n">' + esc(i.name) +
+            '<i class="fg-c num">' + i.count + '</i></span>' +
+            '<span class="fg-v num">' + finRub(i.amount) + '</span></div>';
+        }).join('') + '</div>';
+    }).join('');
+
+    var offers = (p.offerings || []).length
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">По услугам</div><div class="s">где сколько заработали</div></div></div>' +
+        '<div class="fin-list">' + p.offerings.map(function (o) {
+          return '<div class="fl-row fl-2"><div class="fl-main">' +
+            '<span class="fl-name">' + esc(o.name) + '</span>' +
+            '<span class="fl-sub">валовая ' + finRub(o.gross) + ' · маржа ' + finPct(o.margin_pct) + '</span></div>' +
+            '<div class="fl-v num">' + finRub(o.revenue) + '</div></div>';
+        }).join('') + '</div></div>'
+      : '';
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="sp7">' + lad + '</div>' +
+      '<div class="sp5">' +
+        '<div class="card fin-block"><div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">Статьи</div><div class="s">из чего сложились цифры слева</div></div></div>' +
+          '<div class="fin-groups">' + (groups || '<div class="empty">Операций за этот отрезок нет.</div>') + '</div></div>' +
+        offers +
+      '</div></div>';
+    pageAnim(view);
+  }
+
+  /* Карта операций: все, что внесено, одной лентой. Новое сверху. */
+  function renderFinOps(view) {
+    if (!FIN.ops) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadOps(); return;
+    }
+    if (FIN.ops === 'none') return finErrView(view);
+    var o = FIN.ops;
+    var chips = FIN_KINDS.map(function (kk) {
+      return '<button class="qchip' + (FIN.kind === kk[0] ? ' on' : '') + '" data-fkind="' + kk[0] + '">' + kk[1] + '</button>';
+    }).join('') + ((o.sources || []).length ? '<span class="qsep">раздел</span>' : '') +
+      (o.sources || []).map(function (src) {
+      return '<button class="qchip' + (FIN.src === src ? ' on' : '') + '" data-fsrc="' + esc(src) + '">' + esc(src) + '</button>';
+    }).join('');
+
+    var rows = (o.items || []).map(function (it) {
+      var neg = it.kind === 'расход';
+      return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+          '<i>' + esc(it.item || it.category || '') + (it.comment ? ' · ' + esc(it.comment) : '') + '</i></span>' +
+        '<span class="fo-src">' + esc(it.source || '—') + '</span>' +
+        '<span class="fo-acc">' + esc(it.account || '—') +
+          (it.account_to ? ' → ' + esc(it.account_to) : '') + '</span>' +
+        '<span class="num fo-sum' + (neg ? ' neg' : '') + '">' + finRub(neg ? -it.amount : it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' + esc(it.status) + '</span></span>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (FIN.q ? ' has-val' : '') + '">' + ic('search', 16) +
+          '<input class="search" id="fo-q" placeholder="Поиск по контрагенту, статье или комментарию" value="' + esc(FIN.q) + '">' +
+          (FIN.q ? '<button class="s-clear" id="fo-qx">' + ic('x', 13) + '</button>' : '') +
+        '</div>' +
+        '<span class="list-count"><b>' + o.total + '</b> ' +
+          plural(o.total, 'операция', 'операции', 'операций') +
+          ' · доход <b>' + finRub(o.income) + '</b> · расход <b>' + finRub(o.expense) + '</b></span>' +
+      '</div>' +
+      '<div class="list-quick">' + chips + '</div>' +
+      '<div class="trow fin-grid thead">' +
+        '<span class="th">Дата</span><span class="th">Что</span><span class="th">Раздел</span>' +
+        '<span class="th">Счет</span><span class="th">Сумма</span><span class="th">Статус</span>' +
+      '</div>' +
+      (rows || '<div class="empty">Под эти условия операций не нашлось.</div>') +
+      ((o.items || []).length >= o.limit
+        ? '<div class="fin-note">Показаны первые ' + o.limit + ' операций из ' + o.total + '. Сузьте фильтр, чтобы увидеть остальные.</div>'
+        : '') +
+    '</div>';
+
+    var qi = el('fo-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        FIN.q = qi.value;
+        clearTimeout(FIN._t);
+        FIN._t = setTimeout(function () { finLoadOps(); }, 250);
+      });
+      qi.addEventListener('keydown', function (e) { if (e.key === 'Escape') { FIN.q = ''; finLoadOps(); } });
+    }
+    var qx = el('fo-qx');
+    if (qx) qx.addEventListener('click', function () { FIN.q = ''; finLoadOps(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fkind]'), function (b) {
+      b.addEventListener('click', function () { FIN.kind = b.getAttribute('data-fkind'); finLoadOps(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fsrc]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-fsrc');
+        FIN.src = FIN.src === v ? '' : v;
+        finLoadOps();
+      });
+    });
+    pageAnim(view);
+  }
+
+  /* Сервисы и обязательства: то, что спишется само, и то, что мы должны. */
+  function renderFinRefs(view) {
+    if (!FIN.refs) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadRefs(); return;
+    }
+    if (FIN.refs === 'none') return finErrView(view);
+    var r = FIN.refs;
+    var today = new Date().toISOString().slice(0, 10);
+    var services = (r.services || []).map(function (s) {
+      var soon = s.next_on && s.next_on <= today;
+      return '<div class="fl-row fl-2' + (soon ? ' warn' : '') + (s.active ? '' : ' muted') + '">' +
+        '<div class="fl-main"><span class="fl-name">' + esc(s.name) + '</span>' +
+          // Прошедшая дата — это не «следующее списание», а «пора платить»: подпись
+          // должна говорить, что делать, а не когда собирались.
+          '<span class="fl-sub">' + (s.next_on
+            ? (soon ? 'пора платить — срок был ' + finDate(s.next_on)
+                    : 'следующее списание ' + finDate(s.next_on))
+            : 'дата списания не задана') +
+          (s.counterparty ? ' · ' + esc(s.counterparty) : '') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(s.amount) + '</div></div>';
+    }).join('');
+    var obl = (r.obligations || []).map(function (o) {
+      var done = o.status === 'погашен' || o.remaining <= 0;
+      return '<div class="fl-row fl-2' + (done ? ' muted' : '') + '">' +
+        '<div class="fl-main"><span class="fl-name">' + esc(o.title || o.kind) + '</span>' +
+          '<span class="fl-sub">' + esc(o.counterparty || '') +
+          ' · всего ' + finRub(o.principal) + ' · погашено ' + finRub(o.paid) + '</span></div>' +
+        '<div class="fl-v num">' + finRub(o.remaining) + '</div></div>';
+    }).join('');
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="sp7"><div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
+          '<div><div class="t">Сервисы</div>' +
+          '<div class="s">регулярные списания: подписки, связь, банк</div></div></div>' +
+        '<div class="fin-list">' + (services || '<div class="empty">Сервисов пока нет.</div>') + '</div>' +
+      '</div></div>' +
+      '<div class="sp5"><div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('shield', 14) + '</span>' +
+          '<div><div class="t">Долги и кредиты</div>' +
+          '<div class="s">остаток едет в следующий период, пока не погашен</div></div></div>' +
+        '<div class="fin-list">' + (obl || '<div class="empty">Обязательств нет.</div>') + '</div>' +
+      '</div></div></div>';
+    pageAnim(view);
   }
 
   /* ── Команда и роли (Super Admin) ── */
