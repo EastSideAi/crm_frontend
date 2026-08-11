@@ -3688,12 +3688,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 
 
 /* ════ МОЯ РАБОТА (свои задания сотрудника) ════
-   Тот же рабочий список, что у заданий, но без колонки «Исполнитель»: исполнитель
-   здесь один — сам человек. Освободившееся место уходит названию работы и состоянию,
-   потому что вопрос у него другой: что от меня ждут прямо сейчас. Своих классов
-   минимум — карточка задания, акт и пункт плана те же самые, что видит оператор:
-   спорить о работе стороны должны, глядя на одно и то же. */
-.mw-grid { grid-template-columns: 2.2fr 168px 132px 232px; }
+   Стол исполнителя собран по образцу Консоль.Про (ориентир владельца): колонки
+   списка — номер, название, статус, срок, цена, место; заказчика колонкой не выносим,
+   он у нас один. Своих классов минимум — акт и пункт плана те же самые, что видит
+   оператор: спорить о работе стороны должны, глядя на одно и то же. */
+.mw-grid { grid-template-columns: 46px 1.8fr 196px 172px 112px 136px; }
+.mw-num { align-self: center; }
+.mw-place { color: var(--ink-3); }
+/* Второй ряд чипов — разрез внутри вкладки (активные/завершенные, фильтры актов).
+   Он тише первого: это уточнение, а не смена раздела. */
+.mw-sub { margin-top: -2px; padding-top: 0; }
 /* Период плана внутри карточки, а не в шапке страницы: у человека один план, и
    переключатель принадлежит ему, а не всему экрану. */
 .mw-per { margin: 0 0 4px; }
@@ -3705,9 +3709,33 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mw-act { padding: 16px 18px; }
 .mw-act .ct-act { border: 0; border-radius: 0; padding: 0; }
 
+/* Шапка карточки задания — два ответа, за которыми человек ее открыл: сколько и до
+   когда. Дальше уже читают условия. */
+.mw-top { display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+  background: var(--fill); border-radius: var(--r-md); overflow: hidden; }
+.mw-t1 { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px;
+  background: #fff; }
+.mw-t-k { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mw-t1 b { font-size: 19px; font-weight: 700; letter-spacing: -.025em;
+  font-feature-settings: 'tnum'; }
+.mw-t1:last-child b { font-size: 15px; letter-spacing: -.015em; }
+/* Расчет на глазах: услуга слева, объем на цену и итог справа — та же строка, что
+   в акте, чтобы спорить было не о чем. */
+.mw-svc { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 11px 14px; background: var(--fill);
+  border-radius: var(--r-md); }
+.mw-svc-n { font-weight: 650; letter-spacing: -.01em; }
+.mw-svc-c { font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
+.mw-svc-c b { color: var(--ink); font-weight: 700; }
+.mw-h2 { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin: 14px 0 6px; }
+/* Решение — внизу, под всем, что человек должен прочитать до него. */
+.mw-do { margin-top: 4px; }
+
 @media (max-width: 1180px) {
-  .trow.mw-grid { grid-template-columns: 1.7fr 130px 200px !important; }
-  .mw-grid > :nth-child(2) { display: none; }
+  .trow.mw-grid { grid-template-columns: 42px 1.6fr 180px 150px 108px !important; }
+  .mw-grid > :nth-child(6) { display: none; }
 }
 /* На телефоне строка — карточка: слева работа и срок, справа деньги и состояние.
    Шапку таблицы прячем, высоту отпускаем — название в одну строку не помещается. */
@@ -3715,12 +3743,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .trow.mw-grid { grid-template-columns: 1fr auto !important; gap: 4px 12px;
     height: auto; padding: 14px 16px; align-items: start; }
   .mw-grid.thead { display: none; }
-  .mw-grid > :nth-child(2) { display: block; }
+  .mw-grid > :nth-child(1), .mw-grid > :nth-child(6) { display: none; }
   .mw-grid .ct-main { grid-column: 1; grid-row: 1; }
-  .mw-grid .ct-when { grid-column: 1; grid-row: 2; }
+  .mw-grid .ct-when { grid-column: 1; grid-row: 2; white-space: normal; }
   .mw-grid .ct-sum { grid-column: 2; grid-row: 1; align-items: flex-end; text-align: right; }
   .mw-grid .ct-state { grid-column: 2; grid-row: 2; align-items: flex-end; text-align: right; }
   /* Подсказку «что делать дальше» на телефоне убираем: она длиннее чипа и сжимает
      название работы в столбик по одному слову. В карточке задания она осталась. */
   .mw-grid .ct-next { display: none; }
+  .mw-top { grid-template-columns: 1fr; }
 }

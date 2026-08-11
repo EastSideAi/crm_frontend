@@ -3584,6 +3584,11 @@
                 f('d1', 'Начало', '<input id="ctf-d1" class="al-in" type="date">') +
                 f('d2', 'Срок', '<input id="ctf-d2" class="al-in" type="date">') +
               '</div>' +
+              /* Место выполнения — часть условий: «удаленно» и «в офисе на дне
+                 открытых дверей» это разная работа, и в акте оно стоит рядом с
+                 объемом. Пустое поле сервер понимает как «Удаленно». */
+              f('place', 'Место выполнения',
+                '<input id="ctf-place" class="al-in" maxlength="200" placeholder="Удаленно">') +
               '<div class="al-row">' +
                 f('unit', 'Единица', '<input id="ctf-unit" class="al-in" value="шт" maxlength="40">') +
                 f('qty', 'Объем', '<input id="ctf-qty" class="al-in" type="number" min="0.5" step="0.5" value="1">') +
@@ -3672,6 +3677,7 @@
         result_req: el('ctf-res').value.trim() || undefined,
         date_start: el('ctf-d1').value || undefined,
         date_end: el('ctf-d2').value || undefined,
+        place: el('ctf-place').value.trim() || undefined,
         unit: el('ctf-unit').value.trim() || 'шт',
         qty_plan: Number(el('ctf-qty').value || 1),
         price_plan: Number(el('ctf-sum').value || 0),
@@ -4254,10 +4260,25 @@
      Двум дверям в одну комнату нельзя проверять разное: под актом должна стоять его
      подпись под тем, что он действительно мог сделать. */
 
-  var MW = { tab: 'tasks', tasks: null, counts: null, err: '', openId: null, detail: {},
-             busy: false, period: 'week', plan: null, planErr: '',
-             acts: null, actsErr: '' };
+  var MW = { tab: 'tasks', sub: 'active', tasks: null, counts: null, err: '',
+             openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
+             acts: null, actsErr: '', actFilter: 'all' };
   var MW_TABS = [['tasks', 'Задания'], ['plan', 'Мой план'], ['acts', 'Акты']];
+  // Активные и завершенные — так разложены задания у Консоли, на которую мы равняемся
+  // (ориентир владельца от 2026-08-06). Группы считает сервер: «активное» это то, что
+  // еще движется, «завершенное» — оплаченное, отмененное и то, от чего отказались.
+  var MW_SUB = [['active', 'Активные'], ['closed', 'Завершенные']];
+  /* Фильтры актов — их же: вопрос у человека всегда один и тот же, «что от меня ждут
+     и когда деньги». «На подпись» — где не хватает ЕГО подписи, «ждут оплату» — где
+     подписи стоят, а выплаты еще нет. */
+  var MW_ACT_TABS = [['all', 'Все'], ['sign', 'На подпись'],
+                     ['wait_pay', 'Ждут оплату'], ['paid', 'Оплачены']];
+  function mwActIn(a, f) {
+    if (f === 'sign') return !a.signed_ct_at && !a.voided_at;
+    if (f === 'wait_pay') return a.status === 'signed';
+    if (f === 'paid') return a.status === 'paid';
+    return true;
+  }
 
   /* Сервер отдает формулировки для ИСТОРИИ задания («Исполнитель принял задание») и
      подсказки для менеджера («Ждем ответа исполнителя»). Человеку про самого себя так
@@ -4308,7 +4329,7 @@
     return czSend('/admin/api/my/cz' + path, method, body);
   }
   function mwLoad() {
-    mwGet('/tasks?tab=all').then(function (r) {
+    mwGet('/tasks?tab=' + MW.sub).then(function (r) {
       MW.tasks = r.tasks || []; MW.counts = r.counts || null; MW.err = '';
       if (state.page === 'mywork') renderAll();
     }).catch(function (e) {
@@ -4342,21 +4363,36 @@
     return null;
   }
 
+  /* Строка задания теми же колонками, что у Консоли: номер, название, статус, срок,
+     цена, место. Заказчика колонкой не выносим — он у нас один, и повторять его в
+     каждой строке значит тратить место на то, что человек и так знает. */
   function mwRow(t) {
     var wait = t.act && !t.act.signed_ct_at && t.act.status !== 'void';
     return '<div class="trow mw-grid" data-mw="' + t.id + '">' +
-      '<span class="ct-main"><span class="ct-no">№' + t.number + '</span>' +
-        '<b>' + esc(t.title) + '</b>' +
+      '<span class="ct-no mw-num">№' + t.number + '</span>' +
+      '<span class="ct-main"><b>' + esc(t.title) + '</b>' +
         (t.project ? '<span class="ct-proj">' + esc(t.project) + '</span>' : '') + '</span>' +
-      '<span class="ct-when">' + (t.date_end ? 'до ' + esc(czDate(t.date_end)) : '—') + '</span>' +
-      '<span class="ct-sum"><b>' + ctMoney(t.amount) + ' ₽</b>' +
-        (t.corrected ? '<span class="ct-corr">сумма уточнена</span>' : '') + '</span>' +
       '<span class="ct-state"><span class="sev ' + (CT_ST[t.status] || 'ct-draft') + '">' +
         esc(mwSt(t)) + '</span>' +
         (wait ? '<span class="ct-next">акт ждет вашей подписи</span>'
               : (MW_HINT[t.status] ? '<span class="ct-next">' + esc(MW_HINT[t.status]) + '</span>' : '')) +
       '</span>' +
+      '<span class="ct-when">' + esc(mwTerm(t)) + '</span>' +
+      '<span class="ct-sum"><b>' + ctMoney(t.amount) + ' ₽</b>' +
+        (t.corrected ? '<span class="ct-corr">сумма уточнена</span>' : '') + '</span>' +
+      '<span class="ct-when mw-place">' + esc(t.place || 'Удаленно') + '</span>' +
     '</div>';
+  }
+  // Срок словами: у задания бывает и начало, и конец, и только конец, и ничего.
+  function mwTerm(t) {
+    if (t.date_start && t.date_end) {
+      // Работа на один день — одна дата, а не «15 августа — 15 августа».
+      if (t.date_start === t.date_end) return czDate(t.date_end);
+      return czDate(t.date_start) + ' — ' + czDate(t.date_end);
+    }
+    if (t.date_end) return 'до ' + czDate(t.date_end);
+    if (t.date_start) return 'с ' + czDate(t.date_start);
+    return 'без срока';
   }
 
   /* Пункт плана глазами исполнителя: галочка — единственное, что он тут меняет.
@@ -4429,13 +4465,22 @@
 
     if (MW.tab === 'tasks') {
       var rows = MW.tasks || [];
+      var sub = MW_SUB.map(function (s) {
+        return '<button class="qchip' + (MW.sub === s[0] ? ' on' : '') +
+          '" data-mwsub="' + s[0] + '">' + s[1] + '</button>';
+      }).join('');
       body = '<div class="card listcard">' +
         '<div class="list-quick">' + tabs + '</div>' +
+        '<div class="list-quick mw-sub">' + sub + '</div>' +
         (!rows.length
-          ? '<div class="empty">Заданий пока нет. Когда менеджер пришлет задание, оно появится здесь — и до начала работы его надо принять.</div>'
+          ? '<div class="empty">' + (MW.sub === 'closed'
+              ? 'Завершенных заданий пока нет.'
+              : 'Заданий пока нет. Когда менеджер пришлет задание, оно появится здесь — и до начала работы его надо принять.') +
+            '</div>'
           : '<div class="trow mw-grid thead">' +
-              '<span class="th">Задание</span><span class="th">Срок</span>' +
-              '<span class="th">Сумма</span><span class="th">Состояние</span>' +
+              '<span class="th">№</span><span class="th">Название</span>' +
+              '<span class="th">Статус</span><span class="th">Срок</span>' +
+              '<span class="th">Цена</span><span class="th">Место</span>' +
             '</div>' + rows.map(mwRow).join('')) +
       '</div>';
     } else if (MW.tab === 'plan') {
@@ -4468,19 +4513,42 @@
     } else {
       if (MW.acts === null) mwLoadActs();
       var acts = MW.acts || [];
+      // Счетчик в заголовке и фильтры — как у Консоли: сначала «сколько их всего»,
+      // потом «что от меня ждут». Счет считаем по каждому фильтру, чтобы пустая
+      // вкладка была видна до нажатия.
+      var af = MW_ACT_TABS.map(function (f) {
+        var n = acts.filter(function (a) { return mwActIn(a, f[0]); }).length;
+        return '<button class="qchip' + (MW.actFilter === f[0] ? ' on' : '') +
+          '" data-mwaf="' + f[0] + '">' + f[1] +
+          (n ? ' <span class="qn">' + n + '</span>' : '') + '</button>';
+      }).join('');
+      var shown = acts.filter(function (a) { return mwActIn(a, MW.actFilter); });
       body = '<div class="card listcard">' +
           '<div class="list-quick">' + tabs + '</div>' +
+          (acts.length ? '<div class="list-quick mw-sub">' + af + '</div>' : '') +
         '</div>' +
         (MW.actsErr ? '<div class="card"><div class="empty">' + esc(MW.actsErr) + '</div></div>'
           : (!acts.length
             ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
-            : '<div class="pl-grid">' + acts.map(mwActCard).join('') + '</div>'));
+            : (!shown.length
+              ? '<div class="card"><div class="empty">В этом списке пусто.</div></div>'
+              : '<div class="pl-grid">' + shown.map(mwActCard).join('') + '</div>')));
     }
 
     view.innerHTML = body;
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-mwtab]'), function (b) {
       b.addEventListener('click', function () { MW.tab = b.getAttribute('data-mwtab'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwsub]'), function (b) {
+      b.addEventListener('click', function () {
+        MW.sub = b.getAttribute('data-mwsub'); MW.tasks = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwaf]'), function (b) {
+      b.addEventListener('click', function () {
+        MW.actFilter = b.getAttribute('data-mwaf'); renderView();
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mwper]'), function (b) {
       b.addEventListener('click', function () {
@@ -4661,25 +4729,50 @@
       '</div>';
     }
 
-    var facts = [
-      ['Услуга', esc(t.service_title || t.title)],
-      ['Период', esc(ctPeriod(t))],
-      ['Место выполнения', esc(t.place || 'Удаленно')],
-      ['Цена за единицу', ctMoney(t.unit_price) + ' ₽ за ' + esc(t.unit)],
-      ['Объем', ctNum(t.qty) + ' ' + esc(t.unit)],
-    ].map(function (r) { return czRow2(r[0], r[1]); }).join('');
+    /* Порядок блоков — как в карточке задания у Консоли (ориентир владельца): сверху
+       сумма и срок, потом «что будете делать» с расчетом объем × цена, потом где и на
+       каких условиях, а кнопки «принять/отказаться» — внизу, под всем, что человек
+       должен был прочитать до решения. */
+    var mtext = function (s) { return esc(s).replace(/\n/g, '<br>'); };
+    var doing =
+      '<div class="m-sec"><div class="m-sec-h">Что будете делать</div>' +
+        '<div class="mw-svc">' +
+          // Название услуги повторяет заголовок карточки в большинстве заданий —
+          // второй раз его не пишем, остается расчет.
+          '<span class="mw-svc-n">' +
+            esc((t.service_title && t.service_title !== t.title) ? t.service_title : 'Объем и цена') +
+          '</span>' +
+          '<span class="mw-svc-c">' + ctNum(t.qty) + ' ' + esc(t.unit) + ' × ' +
+            ctMoney(t.unit_price) + ' ₽ = <b>' + ctMoney(t.amount) + ' ₽</b></span>' +
+        '</div>' +
+        (t.corrected
+          ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') +
+            ' · по плану было ' + ctMoney(t.amount_plan) + ' ₽</div>' : '') +
+        (t.description ? '<div class="ct-blk-b">' + mtext(t.description) + '</div>' : '') +
+        (t.result_req
+          ? '<div class="mw-h2">Что считается выполнением</div>' +
+            '<div class="ct-blk-b">' + mtext(t.result_req) + '</div>' : '') +
+      '</div>';
 
-    var text = ['Что нужно сделать', t.description, 'Что считается выполнением', t.result_req,
-                'Информация для вас', t.info];
-    var blocks = '';
-    for (var i = 0; i < text.length; i += 2) {
-      if (!text[i + 1]) continue;
-      blocks += '<div class="m-sec"><div class="m-sec-h">' + esc(text[i]) + '</div>' +
-        '<div class="ct-blk-b">' + esc(text[i + 1]).replace(/\n/g, '<br>') + '</div></div>';
-    }
+    var where =
+      '<div class="m-sec"><div class="m-sec-h">Где выполнять</div>' +
+        '<div class="ct-blk-b">' + esc(t.place || 'Удаленно') + '</div>' +
+      '</div>';
+
+    var extra = (t.info || t.cancel_reason)
+      ? '<div class="m-sec"><div class="m-sec-h">Дополнительно</div>' +
+          (t.info ? '<div class="ct-blk-b">' + mtext(t.info) + '</div>' : '') +
+          (t.cancel_reason
+            ? '<div class="mw-h2">Причина отмены</div>' +
+              '<div class="ct-blk-b">' + mtext(t.cancel_reason) + '</div>' : '') +
+        '</div>'
+      : '';
 
     var canFile = MW_FILES_AT.indexOf(t.status) !== -1;
-    var files = '<div class="m-sec"><div class="m-sec-h">Файлы по заданию</div>' +
+    /* Пока задание не принято, файлов не бывает и приложить их нельзя — пустой блок
+       на экране решения только мешает читать условия. */
+    var files = (!canFile && !(t.files || []).length) ? '' :
+      '<div class="m-sec"><div class="m-sec-h">Файлы по заданию</div>' +
       ((t.files || []).length
         ? '<div class="ct-files">' + t.files.map(function (f) {
             return '<a class="ct-file" href="' + API + '/admin/api/my/cz/files/' +
@@ -4714,25 +4807,16 @@
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content">' +
-        '<div class="ct-money">' +
-          '<div class="ct-amt"><span class="ct-amt-k">Вам за это задание</span>' +
+        '<div class="mw-top">' +
+          '<div class="mw-t1"><span class="mw-t-k">Сумма</span>' +
             '<b>' + ctMoney(t.amount) + ' ₽</b></div>' +
-          '<div class="ct-calc">' + ctNum(t.qty) + ' × ' + ctMoney(t.unit_price) +
-            ' ₽ за ' + esc(t.unit) +
-            (t.corrected ? ' · по плану было ' + ctMoney(t.amount_plan) + ' ₽' : '') + '</div>' +
-          (t.corrected
-            ? '<div class="ct-why">Сумма уточнена: ' + esc(t.correction || '') + '</div>' : '') +
+          '<div class="mw-t1"><span class="mw-t-k">Срок</span>' +
+            '<b>' + esc(mwTerm(t)) + '</b></div>' +
         '</div>' +
-        (acts ? '<div class="ct-acts">' + acts + '</div>' : '') +
-        actBlock +
-        '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
-        blocks + files +
-        (t.cancel_reason
-          ? '<div class="m-sec"><div class="m-sec-h">Причина</div>' +
-            '<div class="ct-blk-b">' + esc(t.cancel_reason) + '</div></div>'
-          : '') +
+        doing + where + extra + actBlock + files +
         '<div class="m-sec"><div class="m-sec-h">История</div>' +
           '<div class="ct-hist">' + (ev || '<span class="cz-fine">Пока пусто</span>') + '</div></div>' +
+        (acts ? '<div class="ct-acts mw-do">' + acts + '</div>' : '') +
       '</div></div>';
 
     el('mw-x').addEventListener('click', mwClose);
