@@ -3713,6 +3713,45 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mw-act { padding: 16px 18px; }
 .mw-act .ct-act { border: 0; border-radius: 0; padding: 0; }
 
+/* ── Главная кабинета ──
+   Четыре плитки «что от меня ждут» и три денежные. Плитка с нулем тихая: это не
+   достижение, а отсутствие работы, и подсвечивать ее нечем. */
+.mw-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-bottom: 12px; }
+.mw-tiles:nth-of-type(2) { grid-template-columns: repeat(3, 1fr); }
+.mw-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px;
+  text-align: left; font: inherit; }
+button.mw-tile { cursor: pointer; transition: .14s; }
+button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
+.mw-tile-k { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mw-tile-n { font-size: 26px; font-weight: 700; letter-spacing: -.03em;
+  font-feature-settings: 'tnum'; color: var(--ink-3); line-height: 1.1; }
+.mw-tile.hot .mw-tile-n { color: var(--blue); }
+.mw-tile-h { font-size: 12px; color: var(--ink-3); }
+.lc-h { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 20px 12px; }
+.lc-h b { font-size: 14.5px; letter-spacing: -.015em; }
+
+/* ── Уведомления ──
+   Лента, а не таблица: у события есть только время, суть и задание, к которому оно
+   относится. Непрочитанное помечено слева полосой — не цветом всей строки. */
+.mw-nf { display: grid; grid-template-columns: 132px 1fr auto; gap: 16px;
+  align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line);
+  cursor: pointer; position: relative; transition: .12s; }
+.mw-nf:last-child { border-bottom: 0; }
+.mw-nf:hover { background: #FBFBFC; }
+.mw-nf.new::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--blue); }
+.mw-nf-d { font-size: 12.5px; color: var(--ink-3); }
+.mw-nf-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mw-nf-t b { font-weight: 650; letter-spacing: -.01em; }
+.mw-nf-s { font-size: 12px; color: var(--ink-3); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.mw-nf-new { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--blue-d); background: var(--blue-tint);
+  padding: 3px 8px; border-radius: var(--r-pill); }
+
 /* Шапка карточки задания — два ответа, за которыми человек ее открыл: сколько и до
    когда. Дальше уже читают условия. */
 .mw-top { display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
@@ -3756,4 +3795,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
      название работы в столбик по одному слову. В карточке задания она осталась. */
   .mw-grid .ct-next { display: none; }
   .mw-top { grid-template-columns: 1fr; }
+  .mw-nf { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .mw-nf-d { grid-column: 1; grid-row: 2; }
+  .mw-nf-t { grid-column: 1; grid-row: 1; }
+  .mw-nf-new { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 1180px) {
+  .mw-tiles { grid-template-columns: repeat(2, 1fr); }
+  .mw-tiles:nth-of-type(2) { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  .mw-tiles, .mw-tiles:nth-of-type(2) { grid-template-columns: 1fr 1fr; }
+  .mw-tile-n { font-size: 22px; }
 }

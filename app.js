@@ -1570,7 +1570,15 @@
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
-    { id: 'mywork', label: 'Моя работа', icon: 'task', cap: 'mywork' },
+    /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
+       тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
+       мешать нельзя (решение владельца от 2026-08-11). Отдельного пространства не
+       делаем: клиентскую CRM видят все, а этих пунктов всего пять. */
+    { id: 'mywork', label: 'Главная', icon: 'dash', cap: 'mywork' },
+    { id: 'mwnotif', label: 'Уведомления', icon: 'bell', cap: 'mywork' },
+    { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork' },
+    { id: 'mwplan', label: 'Мой план', icon: 'cal', cap: 'mywork' },
+    { id: 'mwacts', label: 'Акты', icon: 'doc', cap: 'mywork' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
@@ -1655,6 +1663,7 @@
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
         else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="ждут ответа">' + ho + '</span>';
+        else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -1702,7 +1711,8 @@
             ic(s.id === 'cz' ? 'badge' : 'leads') + '<span>' + esc(s.label) + '</span></button>';
         }).join('');
       mt.innerHTML = jump + NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+        var bd = (it.id === 'leads' && c.hot) ? c.hot
+          : (it.id === 'inbox' && hoM) ? hoM : mwBadge(it.id);
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
@@ -1929,15 +1939,17 @@
       html = '<div><h2>Исполнители</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase3 + '</span></div></div>';
     }
-    if (state.page === 'mywork') {
+    if (mwOn()) {
       /* Вердикт отвечает на единственный вопрос человека: что от меня ждут сейчас.
-         Сначала подпись акта — без нее нам нельзя платить, и это его же деньги. */
+         Сначала подпись акта — без нее нам нельзя платить, и это его же деньги.
+         Заголовок свой у каждого раздела, вердикт общий: он про всю его работу,
+         а не про открытый экран. */
       var mc = MW.counts;
       var toSign = mc ? (mc.acts_to_sign || 0) : 0;
       var offered = mc ? Math.max(0, (mc.todo || 0) - toSign) : 0;
       var phrase8;
       if (MW.err) phrase8 = esc(MW.err);
-      else if (!mc) phrase8 = 'Загружаю ваши задания…';
+      else if (!mc) phrase8 = 'Загружаю вашу работу…';
       else if (toSign) phrase8 = '<b>' + toSign + ' ' + plural(toSign, 'акт ждет', 'акта ждут', 'актов ждут') +
         ' вашей подписи.</b> Пока подписи нет, выплату провести нельзя.';
       else if (offered) phrase8 = '<b>' + offered + ' ' + plural(offered, 'новое задание', 'новых задания', 'новых заданий') +
@@ -1947,7 +1959,7 @@
       else if (mc.review) phrase8 = 'Все сдано: <b>' + mc.review + ' ' +
         plural(mc.review, 'задание', 'задания', 'заданий') + '</b> у менеджера на проверке.';
       else phrase8 = 'Новых заданий нет. Здесь ваша работа как самозанятого: задания, план и акты.';
-      html = '<div><h2>Моя работа</h2>' +
+      html = '<div><h2>' + esc(MW_TITLES[state.page] || 'Моя работа') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('task', 13) + '</span><span>' + phrase8 + '</span></div></div>';
     }
     if (czTasksOn()) {
@@ -2077,7 +2089,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
-    else if (state.page === 'mywork') renderMyWork(view);
+    else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
@@ -4245,14 +4257,18 @@
       }, 'Планы работ');
   }
 
-  /* ── МОЯ РАБОТА (свои задания сотрудника) ─────────────────────────────────
+  /* ── КАБИНЕТ ИСПОЛНИТЕЛЯ В CRM («Моя работа») ─────────────────────────────
      Преподаватель и куратор у нас одновременно сотрудники и самозанятые: они ведут
      клиентов в CRM и получают от нас задания. Второй логин тем же людям не нужен
      (решение владельца от 2026-08-11), поэтому свои задания, план и акты человек
      открывает здесь. Внешний кабинет по коду остается для подрядчиков со стороны —
      монтажера и ассистента в CRM пускать нельзя, там детские анкеты и деньги.
 
-     Раздел появляется только у того, чья учетка связана с карточкой исполнителя:
+     Разделов пять, отдельными пунктами меню: Главная, Уведомления, Задания, Мой план,
+     Акты (решение владельца от 2026-08-11, образец — Консоль.Про). Вкладками их не
+     мешаем: задание и акт — разные сущности с разной логикой, и делятся они по-разному.
+
+     Пункты появляются только у того, чья учетка связана с карточкой исполнителя:
      возможность `mywork` выдает сервер по этой связи, а не роль.
 
      Экран НИЧЕГО не решает сам. Какие шаги человеку сейчас доступны, приходит с
@@ -4260,24 +4276,33 @@
      Двум дверям в одну комнату нельзя проверять разное: под актом должна стоять его
      подпись под тем, что он действительно мог сделать. */
 
-  var MW = { tab: 'tasks', sub: 'active', tasks: null, counts: null, err: '',
+  var MW = { sub: 'active', tasks: null, counts: null, err: '',
              openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
-             acts: null, actsErr: '', actFilter: 'all' };
-  var MW_TABS = [['tasks', 'Задания'], ['plan', 'Мой план'], ['acts', 'Акты']];
+             acts: null, actsErr: '', actFilter: 'sign',
+             home: null, homeErr: '', feed: null, feedErr: '' };
+  var MW_PAGES = ['mywork', 'mwnotif', 'mwtasks', 'mwplan', 'mwacts'];
+  var MW_TITLES = { mywork: 'Моя работа', mwnotif: 'Уведомления', mwtasks: 'Задания',
+                    mwplan: 'Мой план', mwacts: 'Акты' };
+  function mwOn() { return MW_PAGES.indexOf(state.page) !== -1; }
   // Активные и завершенные — так разложены задания у Консоли, на которую мы равняемся
   // (ориентир владельца от 2026-08-06). Группы считает сервер: «активное» это то, что
   // еще движется, «завершенное» — оплаченное, отмененное и то, от чего отказались.
   var MW_SUB = [['active', 'Активные'], ['closed', 'Завершенные']];
-  /* Фильтры актов — их же: вопрос у человека всегда один и тот же, «что от меня ждут
-     и когда деньги». «На подпись» — где не хватает ЕГО подписи, «ждут оплату» — где
-     подписи стоят, а выплаты еще нет. */
-  var MW_ACT_TABS = [['all', 'Все'], ['sign', 'На подпись'],
-                     ['wait_pay', 'Ждут оплату'], ['paid', 'Оплачены']];
+  /* Акты делятся по подписи: «на подписание» — где не хватает ЕГО подписи, дальше
+     подписанные (решение владельца от 2026-08-11). Оплату показываем внутри строки:
+     это состояние денег, а не документа. */
+  var MW_ACT_TABS = [['sign', 'На подписание'], ['signed', 'Подписанные']];
   function mwActIn(a, f) {
     if (f === 'sign') return !a.signed_ct_at && !a.voided_at;
-    if (f === 'wait_pay') return a.status === 'signed';
-    if (f === 'paid') return a.status === 'paid';
-    return true;
+    return !!a.signed_ct_at || !!a.voided_at;
+  }
+  // Бейдж у пункта меню: что горит прямо сейчас. Считает сервер, экран только рисует.
+  function mwBadge(page) {
+    var c = MW.counts || {};
+    if (page === 'mwnotif') return c.unread || 0;
+    if (page === 'mwtasks') return (c.todo || 0) - (c.acts_to_sign || 0);
+    if (page === 'mwacts') return c.acts_to_sign || 0;
+    return 0;
   }
 
   /* Сервер отдает формулировки для ИСТОРИИ задания («Исполнитель принял задание») и
@@ -4328,37 +4353,71 @@
   function mwSend(path, method, body) {
     return czSend('/admin/api/my/cz' + path, method, body);
   }
+  // Перерисовка после ответа сервера: разделов кабинета пять, и любой из них могли
+  // успеть закрыть, пока шел запрос.
+  function mwDone() { if (mwOn()) renderAll(); }
   function mwLoad() {
     mwGet('/tasks?tab=' + MW.sub).then(function (r) {
       MW.tasks = r.tasks || []; MW.counts = r.counts || null; MW.err = '';
-      if (state.page === 'mywork') renderAll();
+      mwDone();
     }).catch(function (e) {
-      MW.tasks = []; MW.err = e.message;
-      if (state.page === 'mywork') renderAll();
+      MW.tasks = []; MW.err = e.message; mwDone();
+    });
+  }
+  /* Счетчики нужны на любом из пяти экранов — бейджи в меню и вердикт в шапке живут
+     не только на главной. Ручка та же, что у кабинета: «кто я и что меня ждет». */
+  function mwLoadCounts() {
+    if (MW.counts || MW.err) return;
+    MW.counts = {};   // чтобы не запросить дважды, пока идет ответ
+    mwGet('').then(function (r) {
+      MW.counts = r.counts || {}; mwDone();
+    }).catch(function (e) {
+      MW.counts = null; MW.err = e.message; mwDone();
+    });
+  }
+  function mwLoadHome() {
+    mwGet('/home').then(function (r) {
+      MW.home = r; MW.counts = r.counts || MW.counts; MW.homeErr = ''; mwDone();
+    }).catch(function (e) {
+      MW.home = { soon: [] }; MW.homeErr = e.message; mwDone();
+    });
+  }
+  /* Открыл уведомления — значит прочитал: отметку ставим сразу после загрузки, но
+     «непрочитано» в самом списке оставляем от ответа сервера, чтобы новое было видно
+     глазами, а не только цифрой в меню. */
+  function mwLoadFeed() {
+    mwGet('/feed').then(function (r) {
+      MW.feed = r.items || []; MW.feedErr = ''; mwDone();
+      if (r.unread) {
+        mwSend('/feed/read', 'POST').then(function () {
+          if (MW.counts) MW.counts.unread = 0;
+          if (MW.home) MW.home.unread = 0;
+          mwDone();
+        }).catch(function () {});
+      }
+    }).catch(function (e) {
+      MW.feed = []; MW.feedErr = e.message; mwDone();
     });
   }
   function mwLoadPlan() {
     mwGet('/plan?period=' + MW.period).then(function (r) {
-      MW.plan = r; MW.planErr = '';
-      if (state.page === 'mywork') renderAll();
+      MW.plan = r; MW.planErr = ''; mwDone();
     }).catch(function (e) {
-      MW.plan = { items: [] }; MW.planErr = e.message;
-      if (state.page === 'mywork') renderAll();
+      MW.plan = { items: [] }; MW.planErr = e.message; mwDone();
     });
   }
   function mwLoadActs() {
     mwGet('/acts').then(function (r) {
-      MW.acts = r.acts || []; MW.actsErr = '';
-      if (state.page === 'mywork') renderAll();
+      MW.acts = r.acts || []; MW.actsErr = ''; mwDone();
     }).catch(function (e) {
-      MW.acts = []; MW.actsErr = e.message;
-      if (state.page === 'mywork') renderAll();
+      MW.acts = []; MW.actsErr = e.message; mwDone();
     });
   }
   function mwPut(t) { MW.detail[t.id] = t; }
   function mwFind(id) {
     if (MW.detail[id]) return MW.detail[id];
-    var l = MW.tasks || [];
+    // Карточку открывают и со списка заданий, и с главной — ищем в обоих.
+    var l = (MW.tasks || []).concat((MW.home && MW.home.soon) || []);
     for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
     return null;
   }
@@ -4448,7 +4507,81 @@
     '</div>';
   }
 
-  function renderMyWork(view) {
+  /* Главная кабинета: три вопроса, с которыми человек сюда заходит, — что от меня
+     ждут, что горит по срокам и сколько денег. Цифры считает сервер: те же самые
+     видит внешний кабинет по коду, расходиться им нельзя. */
+  function renderMwHome(view) {
+    if (MW.home === null) { view.innerHTML = dashSkeleton(); mwLoadHome(); return; }
+    if (MW.homeErr) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.homeErr) + '</div></div>';
+      return;
+    }
+    var h = MW.home, c = h.counts || {}, m = h.money || {};
+    var tile = function (page, k, n, hint) {
+      return '<button class="card mw-tile' + (n ? ' hot' : '') + '" data-mwgo="' + page + '">' +
+        '<span class="mw-tile-k">' + k + '</span>' +
+        '<b class="mw-tile-n">' + n + '</b>' +
+        '<span class="mw-tile-h">' + hint + '</span></button>';
+    };
+    var money = function (k, v, hint) {
+      return '<div class="card mw-tile"><span class="mw-tile-k">' + k + '</span>' +
+        '<b class="mw-tile-n">' + ctMoney(v) + ' ₽</b>' +
+        '<span class="mw-tile-h">' + hint + '</span></div>';
+    };
+    var soon = (h.soon || []);
+    view.innerHTML =
+      '<div class="mw-tiles">' +
+        tile('mwtasks', 'Ждут вашего ответа', (c.todo || 0) - (c.acts_to_sign || 0),
+             'новые задания') +
+        tile('mwtasks', 'В работе', c.active || 0, 'приняли и делаете') +
+        tile('mwacts', 'Акты на подпись', c.acts_to_sign || 0, 'без подписи выплаты нет') +
+        tile('mwnotif', 'Новые уведомления', h.unread || 0, 'что произошло без вас') +
+      '</div>' +
+      '<div class="mw-tiles">' +
+        money('Заработано в этом месяце', m.paid_month || 0, 'по оплаченным заданиям') +
+        money('Ждет выплаты', m.awaiting || 0, 'акты подписаны, деньги в пути') +
+        money('Всего заработано', m.paid_total || 0, 'за все время') +
+      '</div>' +
+      '<div class="card listcard">' +
+        '<div class="lc-h"><b>Ближайшие сроки</b>' +
+          '<button class="bp sm ghost" data-mwgo="mwtasks">Все задания</button></div>' +
+        (!soon.length
+          ? '<div class="empty">Активных заданий нет. Когда менеджер пришлет задание, оно появится здесь.</div>'
+          : '<div class="trow mw-grid thead">' +
+              '<span class="th">№</span><span class="th">Название</span>' +
+              '<span class="th">Статус</span><span class="th">Срок</span>' +
+              '<span class="th">Цена</span><span class="th">Место</span>' +
+            '</div>' + soon.map(mwRow).join('')) +
+      '</div>';
+    mwWire(view);
+  }
+
+  /* Уведомления — что произошло с моей работой без меня. Свои же действия сюда не
+     попадают: человек не уведомляет себя о том, что сам нажал. */
+  function renderMwNotif(view) {
+    if (MW.feed === null) { view.innerHTML = dashSkeleton(); mwLoadFeed(); return; }
+    if (MW.feedErr) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.feedErr) + '</div></div>';
+      return;
+    }
+    var items = MW.feed || [];
+    view.innerHTML = '<div class="card listcard">' +
+      (!items.length
+        ? '<div class="empty">Пока ничего не происходило. Здесь появятся новые задания, приемка результата, готовые акты и выплаты.</div>'
+        : items.map(function (i) {
+            return '<div class="mw-nf' + (i.unread ? ' new' : '') + '" data-mw="' + i.task_id + '">' +
+              '<span class="mw-nf-d">' + esc(fmtWhen(i.at)) + '</span>' +
+              '<span class="mw-nf-t"><b>' + esc(i.title) + '</b>' +
+                '<span class="mw-nf-s">№' + i.task_number + ' · ' + esc(i.task_title) + '</span>' +
+              '</span>' +
+              (i.unread ? '<span class="mw-nf-new">новое</span>' : '') +
+            '</div>';
+          }).join('')) +
+    '</div>';
+    mwWire(view);
+  }
+
+  function renderMwTasks(view) {
     if (MW.tasks === null) { view.innerHTML = dashSkeleton(); mwLoad(); return; }
     /* Связи учетки с карточкой нет — раздела фактически нет. Показываем причину
        человеческими словами, а не пустой список. */
@@ -4456,90 +4589,94 @@
       view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.err) + '</div></div>';
       return;
     }
-    var c = MW.counts || {};
-    var tabs = MW_TABS.map(function (t) {
-      var n = t[0] === 'tasks' ? (c.todo || 0) : (t[0] === 'acts' ? (c.acts_to_sign || 0) : 0);
-      return '<button class="qchip' + (MW.tab === t[0] ? ' on' : '') + '" data-mwtab="' + t[0] + '">' +
-        t[1] + (n ? ' <span class="qn">' + n + '</span>' : '') + '</button>';
+    var rows = MW.tasks || [];
+    var sub = MW_SUB.map(function (s) {
+      return '<button class="qchip' + (MW.sub === s[0] ? ' on' : '') +
+        '" data-mwsub="' + s[0] + '">' + s[1] + '</button>';
     }).join('');
-    var body;
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-quick">' + sub + '</div>' +
+      (!rows.length
+        ? '<div class="empty">' + (MW.sub === 'closed'
+            ? 'Завершенных заданий пока нет.'
+            : 'Заданий пока нет. Когда менеджер пришлет задание, оно появится здесь — и до начала работы его надо принять.') +
+          '</div>'
+        : '<div class="trow mw-grid thead">' +
+            '<span class="th">№</span><span class="th">Название</span>' +
+            '<span class="th">Статус</span><span class="th">Срок</span>' +
+            '<span class="th">Цена</span><span class="th">Место</span>' +
+          '</div>' + rows.map(mwRow).join('')) +
+    '</div>';
+    mwWire(view);
+  }
 
-    if (MW.tab === 'tasks') {
-      var rows = MW.tasks || [];
-      var sub = MW_SUB.map(function (s) {
-        return '<button class="qchip' + (MW.sub === s[0] ? ' on' : '') +
-          '" data-mwsub="' + s[0] + '">' + s[1] + '</button>';
-      }).join('');
-      body = '<div class="card listcard">' +
-        '<div class="list-quick">' + tabs + '</div>' +
-        '<div class="list-quick mw-sub">' + sub + '</div>' +
-        (!rows.length
-          ? '<div class="empty">' + (MW.sub === 'closed'
-              ? 'Завершенных заданий пока нет.'
-              : 'Заданий пока нет. Когда менеджер пришлет задание, оно появится здесь — и до начала работы его надо принять.') +
-            '</div>'
-          : '<div class="trow mw-grid thead">' +
-              '<span class="th">№</span><span class="th">Название</span>' +
-              '<span class="th">Статус</span><span class="th">Срок</span>' +
-              '<span class="th">Цена</span><span class="th">Место</span>' +
-            '</div>' + rows.map(mwRow).join('')) +
+  function renderMwPlan(view) {
+    if (MW.plan === null) { view.innerHTML = dashSkeleton(); mwLoadPlan(); return; }
+    var items = MW.plan.items || [];
+    var per = PL_TABS.map(function (t) {
+      return '<button class="qchip' + (MW.period === t[0] ? ' on' : '') +
+        '" data-mwper="' + t[0] + '">' + t[1] + '</button>';
+    }).join('');
+    // «неделя 10 — 16 августа» приходит строчной буквой: внутри фразы это верно, а
+    // заголовком карточки читается как обрывок.
+    var when = plPeriodName(MW.period, MW.plan.starts_on);
+    when = when.charAt(0).toUpperCase() + when.slice(1);
+    var done = items.filter(function (i) { return i.done; }).length;
+    view.innerHTML =
+      '<div class="card pl-p mw-plan">' +
+        '<div class="pl-p-h">' +
+          '<span class="pl-p-n"><b>' + esc(when) + '</b></span>' +
+          '<span class="pl-p-s">' + (items.length
+            ? done + ' из ' + items.length + ' сделано' : 'Пунктов пока нет') + '</span>' +
+        '</div>' +
+        '<div class="list-quick mw-per">' + per + '</div>' +
+        (MW.planErr ? '<div class="empty">' + esc(MW.planErr) + '</div>' : '') +
+        (items.length
+          ? '<div class="pl-list">' + items.map(mwItemRow).join('') + '</div>'
+          : (MW.planErr ? '' : '<div class="empty">На этот период плана нет. План ставит менеджер: это то, чем занята неделя, а не то, за что платят — деньги идут по заданиям.</div>')) +
       '</div>';
-    } else if (MW.tab === 'plan') {
-      if (MW.plan === null) mwLoadPlan();
-      var items = MW.plan ? (MW.plan.items || []) : [];
-      var per = PL_TABS.map(function (t) {
-        return '<button class="qchip' + (MW.period === t[0] ? ' on' : '') +
-          '" data-mwper="' + t[0] + '">' + t[1] + '</button>';
-      }).join('');
-      // «неделя 10 — 16 августа» приходит строчной буквой: внутри фразы это верно, а
-      // заголовком карточки читается как обрывок.
-      var when = MW.plan ? plPeriodName(MW.period, MW.plan.starts_on) : 'Смотрим…';
-      when = when.charAt(0).toUpperCase() + when.slice(1);
-      var done = items.filter(function (i) { return i.done; }).length;
-      body = '<div class="card listcard">' +
-          '<div class="list-quick">' + tabs + '</div>' +
-        '</div>' +
-        '<div class="card pl-p mw-plan">' +
-          '<div class="pl-p-h">' +
-            '<span class="pl-p-n"><b>' + esc(when) + '</b></span>' +
-            '<span class="pl-p-s">' + (items.length
-              ? done + ' из ' + items.length + ' сделано' : 'Пунктов пока нет') + '</span>' +
-          '</div>' +
-          '<div class="list-quick mw-per">' + per + '</div>' +
-          (MW.planErr ? '<div class="empty">' + esc(MW.planErr) + '</div>' : '') +
-          (items.length
-            ? '<div class="pl-list">' + items.map(mwItemRow).join('') + '</div>'
-            : (MW.planErr ? '' : '<div class="empty">На этот период плана нет. План ставит менеджер: это то, чем занята неделя, а не то, за что платят — деньги идут по заданиям.</div>')) +
-        '</div>';
-    } else {
-      if (MW.acts === null) mwLoadActs();
-      var acts = MW.acts || [];
-      // Счетчик в заголовке и фильтры — как у Консоли: сначала «сколько их всего»,
-      // потом «что от меня ждут». Счет считаем по каждому фильтру, чтобы пустая
-      // вкладка была видна до нажатия.
-      var af = MW_ACT_TABS.map(function (f) {
-        var n = acts.filter(function (a) { return mwActIn(a, f[0]); }).length;
-        return '<button class="qchip' + (MW.actFilter === f[0] ? ' on' : '') +
-          '" data-mwaf="' + f[0] + '">' + f[1] +
-          (n ? ' <span class="qn">' + n + '</span>' : '') + '</button>';
-      }).join('');
-      var shown = acts.filter(function (a) { return mwActIn(a, MW.actFilter); });
-      body = '<div class="card listcard">' +
-          '<div class="list-quick">' + tabs + '</div>' +
-          (acts.length ? '<div class="list-quick mw-sub">' + af + '</div>' : '') +
-        '</div>' +
-        (MW.actsErr ? '<div class="card"><div class="empty">' + esc(MW.actsErr) + '</div></div>'
-          : (!acts.length
-            ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
-            : (!shown.length
-              ? '<div class="card"><div class="empty">В этом списке пусто.</div></div>'
-              : '<div class="pl-grid">' + shown.map(mwActCard).join('') + '</div>')));
+    mwWire(view);
+  }
+
+  function renderMwActs(view) {
+    if (MW.acts === null) { view.innerHTML = dashSkeleton(); mwLoadActs(); return; }
+    if (MW.actsErr) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.actsErr) + '</div></div>';
+      return;
     }
+    var acts = MW.acts || [];
+    // Счетчик у каждого разреза: пустая вкладка должна быть видна до нажатия.
+    var af = MW_ACT_TABS.map(function (f) {
+      var n = acts.filter(function (a) { return mwActIn(a, f[0]); }).length;
+      return '<button class="qchip' + (MW.actFilter === f[0] ? ' on' : '') +
+        '" data-mwaf="' + f[0] + '">' + f[1] +
+        (n ? ' <span class="qn">' + n + '</span>' : '') + '</button>';
+    }).join('');
+    var shown = acts.filter(function (a) { return mwActIn(a, MW.actFilter); });
+    view.innerHTML =
+      (acts.length ? '<div class="card listcard"><div class="list-quick">' + af + '</div></div>' : '') +
+      (!acts.length
+        ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
+        : (!shown.length
+          ? '<div class="card"><div class="empty">' + (MW.actFilter === 'sign'
+              ? 'Все акты подписаны — от вас сейчас ничего не ждут.'
+              : 'Подписанных актов пока нет.') + '</div></div>'
+          : '<div class="pl-grid">' + shown.map(mwActCard).join('') + '</div>'));
+    mwWire(view);
+  }
 
-    view.innerHTML = body;
+  function mwView(view) {
+    if (state.page === 'mwnotif') return renderMwNotif(view);
+    if (state.page === 'mwtasks') return renderMwTasks(view);
+    if (state.page === 'mwplan') return renderMwPlan(view);
+    if (state.page === 'mwacts') return renderMwActs(view);
+    return renderMwHome(view);
+  }
 
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mwtab]'), function (b) {
-      b.addEventListener('click', function () { MW.tab = b.getAttribute('data-mwtab'); renderView(); });
+  // Обработчики у всех пяти разделов одни и те же — вешаем одной функцией.
+  function mwWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwgo]'), function (b) {
+      b.addEventListener('click', function () { setPage(b.getAttribute('data-mwgo')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mwsub]'), function (b) {
       b.addEventListener('click', function () {
@@ -4608,12 +4745,15 @@
     el('modal').classList.remove('open');
     document.body.style.overflow = '';
   }
+  /* Шаг по заданию меняет и списки, и цифры на главной, и бейджи в меню — сбрасываем
+     все, что могло устареть, а грузит заново только открытый раздел. */
+  function mwStale() { MW.tasks = null; MW.home = null; MW.acts = null; MW.counts = null; }
   function mwAct(id, to, reason) {
     if (MW.busy) return;
     MW.busy = true;
     mwSend('/tasks/' + id + '/status', 'POST', { to: to, reason: reason })
       .then(function (t) {
-        mwPut(t); renderMwCard(); mwLoad();
+        mwPut(t); renderMwCard(); mwStale(); mwDone();
         if (to === 'done') showToast('Результат отправлен — менеджер его проверит');
       })
       .catch(function (e) { showToast(e.message); })
@@ -4675,7 +4815,7 @@
             MW.busy = true;
             mwSend('/acts/' + aid + '/sign', 'POST', { code: code })
               .then(function () {
-                close(); MW.acts = null; MW.detail = {}; mwLoad(); mwLoadActs();
+                close(); MW.detail = {}; mwStale(); mwDone();
                 if (MW.openId) mwOpen(MW.openId);
                 showToast('Акт подписан');
               })
