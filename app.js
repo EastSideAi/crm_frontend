@@ -1509,6 +1509,10 @@
       ? mqMobile.addEventListener('change', function () { renderAll(); })
       : mqMobile.addListener(function () { renderAll(); });
     renderAll();
+    /* Свои задания теперь в отдельном пространстве, и человек, работающий с клиентами,
+       их меню не видит. Значит счетчик надо знать СРАЗУ, а не при заходе в кабинет:
+       иначе новое задание и акт на подпись ждали бы, пока он туда случайно заглянет. */
+    if (can('mywork')) mwLoadCounts();
   }
 
   function renderAll() { renderSide(); renderTopbar(); renderHead(); renderView(); }
@@ -1571,13 +1575,16 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
-       мешать нельзя (решение владельца от 2026-08-11). Отдельного пространства не
-       делаем: клиентскую CRM видят все, а этих пунктов всего пять. */
-    { id: 'mywork', label: 'Главная', icon: 'dash', cap: 'mywork' },
-    { id: 'mwnotif', label: 'Уведомления', icon: 'bell', cap: 'mywork' },
-    { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork' },
-    { id: 'mwplan', label: 'Мой план', icon: 'cal', cap: 'mywork' },
-    { id: 'mwacts', label: 'Акты', icon: 'doc', cap: 'mywork' },
+       мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
+       (решение владельца от 2026-08-12): у того, кто ведет и клиентов, и свои задания,
+       чужая работа и своя собственная лежали в одном меню вперемешку, и кабинет там
+       терялся. У кого есть только кабинет, переключателя не видно вовсе — для него
+       это по-прежнему единственное меню. */
+    { id: 'mywork', label: 'Главная', icon: 'dash', cap: 'mywork', space: 'mw' },
+    { id: 'mwnotif', label: 'Уведомления', icon: 'bell', cap: 'mywork', space: 'mw' },
+    { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork', space: 'mw' },
+    { id: 'mwplan', label: 'Мой план', icon: 'cal', cap: 'mywork', space: 'mw' },
+    { id: 'mwacts', label: 'Акты', icon: 'doc', cap: 'mywork', space: 'mw' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
@@ -1607,8 +1614,14 @@
     { id: 'crm', label: 'Клиенты' },
     { id: 'cz', label: 'Самозанятые' },
     { id: 'fin', label: 'Ведомость' },
+    // Своя работа — последней: сначала то, что человек делает для компании, потом то,
+    // что компания должна ему.
+    { id: 'mw', label: 'Моя работа' },
   ];
   function navSpace(it) { return it.space || 'crm'; }
+  // Иконка пространства на телефоне: вкладка перехода подписана словом, но узнают ее
+  // по значку — одинаковые значки у разных пространств сводят его на нет.
+  var SPACE_ICON = { crm: 'leads', cz: 'badge', fin: 'coins', mw: 'task' };
   function spaceOf(page) {
     for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) return navSpace(NAV_ALL[i]);
     return 'crm';
@@ -1623,6 +1636,9 @@
     var s = space || curSpace();
     return NAV_ALL.filter(function (it) { return can(it.cap) && navSpace(it) === s; });
   }
+  /* Ждут ли человека его собственные задания и акты. Считает сервер (те же счетчики,
+     что и внутри кабинета), экран только показывает точку на кнопке пространства. */
+  function spaceAttention() { return mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwnotif') > 0; }
   /* Переключатель показываем, только если человеку доступно больше одного
      пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
   function openSpaces() {
@@ -1650,8 +1666,12 @@
       else {
         sw.style.display = '';
         sw.innerHTML = open.map(function (s) {
+          // Точка на кнопке чужого пространства: пока человек ведет клиентов, ему
+          // прилетело задание или акт на подпись — узнать об этом он должен отсюда,
+          // не заходя внутрь. Своя работа единственная, где ждут ЛИЧНО его.
+          var dot = (s.id === 'mw' && s.id !== space && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
           return '<button class="' + (s.id === space ? 'on' : '') + '" data-sp="' + s.id + '">' +
-            esc(s.label) + '</button>';
+            esc(s.label) + dot + '</button>';
         }).join('');
         Array.prototype.forEach.call(sw.children, function (b) {
           b.addEventListener('click', function () { setSpace(b.getAttribute('data-sp')); });
@@ -1678,7 +1698,13 @@
     if (ws) {
       // подпись под логотипом — про то пространство, в котором сейчас работают
       var czn = (CZ.list || []).length;
-      ws.textContent = space === 'cz'
+      var mwn = mwBadge('mwtasks') + mwBadge('mwacts');
+      ws.textContent = space === 'mw'
+        // В своем кабинете счетчик лидов не при чем: тут человека касается только то,
+        // что ждет лично его.
+        ? (mwn ? mwn + ' ' + plural(mwn, 'дело', 'дела', 'дел') + ' для вас'
+               : 'ваши задания и акты')
+        : space === 'cz'
         ? (CZ.list === null ? 'исполнители' : czn + ' ' + plural(czn, 'исполнитель', 'исполнителя', 'исполнителей'))
         // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал
         // «0 лидов · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
@@ -1689,8 +1715,9 @@
     }
     var promo = el('promo');
     if (promo) {
-      // промо про воронку платформы к работе с исполнителями отношения не имеет
-      if (space === 'cz' || !can('path') || !can('clients')) { promo.style.display = 'none'; }
+      // промо про воронку платформы живет только в клиентском пространстве: к работе с
+      // исполнителями, к ведомости и к своим заданиям оно отношения не имеет
+      if (space !== 'crm' || !can('path') || !can('clients')) { promo.style.display = 'none'; }
       else {
         promo.style.display = '';
         var worst = worstStep(funnelData(''));
@@ -1710,8 +1737,9 @@
       // отдельной вкладкой в конце ленты — иначе с телефона в раздел не попасть.
       var jump = openSpaces().filter(function (s) { return s.id !== space; })
         .map(function (s) {
+          var d = (s.id === 'mw' && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
           return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +
-            ic(s.id === 'cz' ? 'badge' : 'leads') + '<span>' + esc(s.label) + '</span></button>';
+            ic(SPACE_ICON[s.id] || 'leads') + '<span>' + esc(s.label) + '</span>' + d + '</button>';
         }).join('');
       mt.innerHTML = jump + NAV.map(function (it) {
         var bd = (it.id === 'leads' && c.hot) ? c.hot
@@ -4368,7 +4396,10 @@
   }
   // Перерисовка после ответа сервера: разделов кабинета пять, и любой из них могли
   // успеть закрыть, пока шел запрос.
-  function mwDone() { if (mwOn()) renderAll(); }
+  /* Перерисовка после ответа сервера. Внутри кабинета — целиком (любой из пяти
+     разделов могли успеть закрыть), снаружи — только сайдбар: там висит счетчик на
+     кнопке «Моя работа», и он обязан обновиться, даже пока человек ведет клиентов. */
+  function mwDone() { if (mwOn()) renderAll(); else renderSide(); }
   function mwLoad() {
     mwGet('/tasks?tab=' + MW.sub).then(function (r) {
       MW.tasks = r.tasks || []; MW.counts = r.counts || null; MW.err = '';
