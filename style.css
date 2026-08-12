@@ -3240,19 +3240,6 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-skl-v b { font-weight: 700; color: var(--ink-2); }
 .det-skl-v.warn b { color: var(--amber-ink); }
 
-/* «Обучение»: список учеников преподавателя. Строка — как в «Команде», плюс балл
-   теста справа; вся строка кликабельна, поэтому ховер-язык строки, а не кнопки. */
-.st-row { cursor: pointer; border-radius: 12px; padding-left: 10px; padding-right: 10px;
-  margin: 0 -10px; transition: background .13s; }
-.st-row:hover { background: #FBFBFC; }
-.st-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
-.st-score { flex: none; font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
-.st-score.none { font-size: 12px; font-weight: 600; color: var(--ink-3); }
-.st-go { flex: none; color: var(--ink-3); display: inline-flex; }
-.st-row:hover .st-go { color: var(--blue); }
-.st-back { margin-right: 12px; }
-.st-back svg { transform: rotate(180deg); }
-
 .det-teacher { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .det-teacher .tm-sel { min-width: 210px; }
 .det-teacher-s { font-size: 11.5px; color: var(--ink-3); }

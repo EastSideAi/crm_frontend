@@ -1562,7 +1562,6 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
-    { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
@@ -2067,6 +2066,14 @@
   function renderView() {
     var view = el('view');
     if (!view) return;
+    /* Роли без единого раздела (преподаватель, у которого нет ни клиентов, ни связи с
+       карточкой исполнителя) не должны падать на дашборд компании: ручки все равно
+       ответят 403, а человек увидит экран с ошибками вместо объяснения. */
+    if (!NAV_ALL.some(function (it) { return can(it.cap); })) {
+      view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
+        'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
+      return;
+    }
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
@@ -2099,7 +2106,6 @@
     else if (state.page === 'finpnl') renderFinPnl(view);
     else if (state.page === 'finops') renderFinOps(view);
     else if (state.page === 'finref') renderFinRefs(view);
-    else if (state.page === 'students') renderStudents(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -5469,103 +5475,6 @@
         '<div class="fin-list">' + (obl || '<div class="empty">Обязательств нет.</div>') + '</div>' +
       '</div></div></div>';
     pageAnim(view);
-  }
-
-  /* ── Обучение: ученики по английскому ──────────────────────
-     Экран преподавателя. У преподавателя нет доступа ни к карточкам лидов, ни к
-     деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
-     учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
-     здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
-  function studentsLoad(force) {
-    if (state._students && !force) return;
-    state._students = null;
-    api('/admin/api/det/students').then(function (r) {
-      state._students = r || { students: [] };
-      if (state.page === 'students') renderView();
-    }).catch(function () { state._students = 'none'; if (state.page === 'students') renderView(); });
-  }
-  function studentOpen(id) {
-    state.studentId = id;
-    state._student = null;
-    renderView();
-    api('/admin/api/det/students/' + id).then(function (r) {
-      state._student = r;
-      if (state.page === 'students' && state.studentId === id) renderView();
-    }).catch(function () { state._student = 'none'; if (state.page === 'students') renderView(); });
-  }
-  function studentRow(s) {
-    var when = s.last_practice ? 'занимался ' + esc(ago(s.last_practice)) + ' назад' : 'еще не занимался';
-    return '<div class="tm-row st-row" data-sid="' + esc(s.id) + '" tabindex="0">' +
-      '<span class="tm-av">' + esc(initials(s.name)) + '</span>' +
-      '<div class="tm-i"><div class="tm-n">' + esc(s.name) + '</div>' +
-        '<div class="tm-l">' + when + (s.week ? ' · за неделю ' + s.week : '') + '</div></div>' +
-      (s.overall != null ? '<span class="st-score num">' + s.overall + '</span>'
-                         : '<span class="st-score none">теста нет</span>') +
-      '<span class="st-go">' + ic('go', 14) + '</span></div>';
-  }
-  function renderStudents(view) {
-    if (state.studentId) return renderStudentCard(view);
-    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
-    if (state._students === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
-      return;
-    }
-    var list = state._students.students || [];
-    var mine = state._students.mine_only;
-    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
-      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
-      '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
-      '<div class="s">' + (mine
-        ? 'кого вам передали: как занимаются в тренажерах и что с тестом'
-        : 'у кого назначен преподаватель — назначает менеджер в карточке человека') + '</div></div>' +
-      '<span class="cnt num">' + list.length + '</span></div>' +
-      '<div class="tm-list">' + (list.map(studentRow).join('') ||
-        '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
-        'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
-    Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
-      var go = function () { studentOpen(row.getAttribute('data-sid')); };
-      row.addEventListener('click', go);
-      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
-    });
-  }
-  function renderStudentCard(view) {
-    if (!state._student) { view.innerHTML = dashSkeleton(); return; }
-    if (state._student === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось открыть ученика.</div></div>';
-      return;
-    }
-    var d = state._student;
-    var pr = d.practice || {};
-    var modes = (d.by_mode || []).map(function (m) {
-      var weak = m.accuracy_pct != null && m.accuracy_pct < 60;
-      return '<div class="det-skl"><div class="det-skl-t">' + esc(m.label) + '</div>' +
-        '<div class="det-skl-b"><i style="width:' + Math.round(m.n * 100 /
-          ((d.by_mode[0] && d.by_mode[0].n) || 1)) + '%"></i></div>' +
-        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + m.n +
-          (m.accuracy_pct != null ? ' · <b>' + m.accuracy_pct + '%</b>' : '') + '</div></div>';
-    }).join('');
-    var tests = (d.attempts || []).slice().reverse().map(function (a) {
-      return '<div class="tm-row"><div class="tm-i"><div class="tm-n">' +
-        (a.overall != null ? a.overall + ' баллов' : 'без балла') + '</div>' +
-        '<div class="tm-l">' + esc(fmtWhen(a.finished_at || a.started_at)) +
-        (a.reading != null ? ' · чтение ' + a.reading : '') +
-        (a.listening != null ? ' · аудирование ' + a.listening : '') +
-        (a.writing != null ? ' · письмо ' + a.writing : '') +
-        (a.speaking != null ? ' · речь ' + a.speaking : '') + '</div></div></div>';
-    }).join('');
-    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
-      '<div class="sec-head"><button class="bp sm ghost st-back" id="st-back">' + ic('back', 13) + 'Все ученики</button>' +
-      '<div><div class="t">' + esc(d.name) + '</div>' +
-      '<div class="s">занятия в тренажерах и история тестов</div></div></div>' +
-      (pr.total ? detPractice(pr, { noSkills: true }) : '<div class="empty">Пока не занимался. Проверьте, что в карточке ' +
-        'человека включен тумблер «Тренажеры» — пока он выключен, занятия не записываются.</div>') +
-      (modes ? '<div class="m-sec"><div class="m-sec-h">По тренажерам</div>' + modes + '</div>' : '') +
-      '<div class="m-sec"><div class="m-sec-h">Тесты</div><div class="tm-list">' +
-        (tests || '<div class="empty">Тест еще не проходили.</div>') + '</div></div></div>';
-    var back = el('st-back');
-    if (back) back.addEventListener('click', function () {
-      state.studentId = null; state._student = null; renderView();
-    });
   }
 
   /* ── Команда и роли (Super Admin) ── */
@@ -9556,7 +9465,7 @@
             '>' + esc(x.name) + '</option>';
         }).join('')) + '</select>' +
       '<span class="det-teacher-s">' + (t
-        ? 'видит занятия этого ученика в разделе «Обучение»'
+        ? 'закреплен за учеником: разбирает его занятия и проверяет тесты'
         : 'пока не назначен — занятия ученика не видит ни один преподаватель') + '</span></div>';
   }
 
