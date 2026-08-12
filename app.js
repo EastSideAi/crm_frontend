@@ -1538,6 +1538,9 @@
     /* Координатор самозанятых раздает задания и принимает работу. Клиентские лиды и
        деньги компании ему не нужны, поэтому доступ ровно один — исполнители. */
     cz_lead:       { label: 'Координатор самозанятых', short: 'исполнители',        caps: ['contractors'] },
+    /* Руководитель, который сам работает по заданиям: вся CRM и свой кабинет, но без
+       раздела самозанятых — чужие ИНН и выплаты видит тот, кто задания раздает. */
+    head_worker:   { label: 'Руководитель-работник',  short: 'вся компания и свои задания', caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'finmodel'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
     /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
