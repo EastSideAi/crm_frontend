@@ -1754,6 +1754,10 @@
           if (sp) setSpace(sp); else setPage(b.getAttribute('data-p'));
         });
       });
+      // Лента длиннее экрана — подводим открытый раздел в центр сами. scrollIntoView
+      // тут нельзя: лента прибита к низу, и браузер заодно дергает всю страницу.
+      var onTab = mt.querySelector('.mtab.on');
+      if (onTab) mt.scrollLeft = Math.max(0, onTab.offsetLeft - (mt.clientWidth - onTab.offsetWidth) / 2);
     }
     document.title = (c.hot ? '(' + c.hot + ') ' : '') + 'ИстСайд · CRM';
   }
