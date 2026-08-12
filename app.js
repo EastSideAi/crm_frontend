@@ -1535,6 +1535,9 @@
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students', 'templates'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
+    /* Координатор самозанятых раздает задания и принимает работу. Клиентские лиды и
+       деньги компании ему не нужны, поэтому доступ ровно один — исполнители. */
+    cz_lead:       { label: 'Координатор самозанятых', short: 'исполнители',        caps: ['contractors'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
     /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
@@ -1557,7 +1560,11 @@
      его одинаково, если сами работают у нас как самозанятые. Правду говорит сервер
      (caps в ответе /admin/api/me), фронт только показывает пункт. */
   function can(cap) {
-    if (state.caps && state.caps.indexOf(cap) !== -1) return true;
+    // Ответил сервер — доступ считаем ТОЛЬКО по нему. Ролевая карта ниже нужна лишь
+    // как запасной вариант: сложить два набора нельзя, иначе новая роль на бэкенде
+    // молча получает разделы соседней роли, ручки отвечают 403, и человек упирается
+    // в экран с ошибкой вместо своей работы.
+    if (state.caps && state.caps.length) return state.caps.indexOf(cap) !== -1;
     return roleInfo().caps.indexOf(cap) !== -1;
   }
 
