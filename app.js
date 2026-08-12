@@ -1628,6 +1628,10 @@
   function openSpaces() {
     return SPACES.filter(function (s) { return navItems(s.id).length; });
   }
+  /* Роль без единого доступного раздела (преподаватель, у которого нет ни клиентов, ни
+     связи с карточкой исполнителя) не должна падать на дашборд компании: ручки все равно
+     ответят 403, а человек увидит экран с ошибками вместо объяснения. */
+  function noSections() { return !NAV_ALL.some(function (it) { return can(it.cap); }); }
   function pageCap(page) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) return NAV_ALL[i].cap; return 'dash'; }
   function firstAllowedPage(space) {
     var n = navItems(space);
@@ -1750,6 +1754,7 @@
     var tb = el('tb-left');
     if (!tb) return;
     var c = counts();
+    if (noSections()) { tb.innerHTML = ''; return; }
     if (state.page === 'leads') {
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
@@ -1876,6 +1881,11 @@
     if (!ch) return;
     var c = counts();
     var html = '';
+    if (noSections()) {
+      // Разделов нет — шапка дашборда была бы подписью к пустому месту.
+      ch.innerHTML = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2></div>';
+      return;
+    }
     if (state.page === 'dash' && !can('clients')) {
       // Роль без клиентов лидов не грузит: любая фраза про заявки была бы враньем.
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2></div>';
@@ -2066,10 +2076,7 @@
   function renderView() {
     var view = el('view');
     if (!view) return;
-    /* Роли без единого раздела (преподаватель, у которого нет ни клиентов, ни связи с
-       карточкой исполнителя) не должны падать на дашборд компании: ручки все равно
-       ответят 403, а человек увидит экран с ошибками вместо объяснения. */
-    if (!NAV_ALL.some(function (it) { return can(it.cap); })) {
+    if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
       return;
