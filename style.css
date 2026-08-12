@@ -425,6 +425,11 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 11px; border-radius: 8px; white-space: nowrap;
   color: var(--ink-2); background: var(--fill); }
 .sev .d { display: none; }
+/* Состояния, не привязанные к воронке продаж (подключение мессенджера и т.п.).
+   Формула та же: -ink текстом, -soft заливкой. */
+.sev.n-ok   { color: var(--green-ink); background: var(--green-soft); gap: 5px; }
+.sev.n-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.n-off  { color: var(--ink-3);     background: var(--fill); }
 .sev.s-hot           { color: var(--red-ink);   background: var(--red-soft); }
 .sev.s-new           { color: var(--ink-2);     background: var(--fill); }
 .sev.s-contacted     { color: var(--amber-ink); background: var(--amber-soft); }
@@ -1657,6 +1662,20 @@ a { color: inherit; text-decoration: none; }
   border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3);
   transform: translateY(-65%) rotate(45deg); pointer-events: none; }
 .al-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 18px 24px 22px; }
+
+/* Личные уведомления сотрудника (меню профиля → «Уведомления»). Живет внутри
+   модалки-формы: свой рецепт не заводим, берем .al-* и сегмент .dperiod. */
+.np-seg { display: flex; }
+.np-seg button { flex: 1; gap: 6px; display: inline-flex; align-items: center; justify-content: center; }
+.np-seg button svg { width: 13px; height: 13px; }
+.np-state { display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+  padding: 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
+.np-hint { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.np-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.np-act .bp { padding: 10px 15px; font-size: 13px; text-decoration: none; }
+.np-act .al-cancel { padding: 10px 14px; display: inline-flex; align-items: center; gap: 7px; }
+.np-skel { height: 46px; }
+.np-wait { opacity: .55; pointer-events: none; transition: opacity .15s var(--ease); }
 .al-cancel { height: 42px; padding: 0 16px; border-radius: 11px; font: 600 13.5px 'Manrope', sans-serif;
   color: var(--ink-2); background: var(--fill); transition: color .15s, background .15s; }
 .al-cancel:hover { color: var(--ink); background: #ECEEF1; }

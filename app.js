@@ -972,6 +972,119 @@
     });
   }
 
+  /* ── КУДА МНЕ ПИСАТЬ (личные уведомления сотрудника) ──
+     Раньше уведомления команды уходили в один чат владельца, и выбора у человека не
+     было вовсе. Теперь мессенджер выбирает он сам, а бэкенд раскладывает по людям.
+     Двухшаговость тут не лишняя, а честная: выбрать канал мало — мессенджер не даст
+     боту написать первым, пока человек не нажал «Начать» у себя. Поэтому статус
+     подключения виден всегда, и пока его нет, мы прямо говорим, что тишина. */
+  var NOTIFY_CH = [
+    { id: 'tg', label: 'Telegram', icon: 'send', bot: 'бот EastSide' },
+    { id: 'max', label: 'Макс', icon: 'max', bot: 'бот «Истсайд команда»' },
+    { id: 'off', label: 'Не беспокоить', icon: 'bell', bot: '' },
+  ];
+
+  function openNotifyPrefs() {
+    if (typeof closeSmenu === 'function') closeSmenu();
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Уведомления</div><div class="al-title">Куда вам писать</div></div>' +
+          '<button class="al-x" id="al-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заявки на разбор, отмены записи, передача клиента живому ' +
+          'человеку и напоминания приходят в один мессенджер — выберите свой.</div>' +
+        '<div class="al-body" id="np-body">' +
+          '<div class="np-skel shim"></div><div class="np-skel shim"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="al-cancel">Закрыть</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('al-x').addEventListener('click', close);
+    el('al-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var body = el('np-body');
+    var render = function (st) {
+      var ch = (st && st.channel) || 'off';
+      var linked = (st && st.linked) || {};
+      var links = (st && st.links) || {};
+      var cur = NOTIFY_CH.filter(function (c) { return c.id === ch; })[0] || NOTIFY_CH[2];
+      var isOn = ch !== 'off';
+      var ready = isOn && !!linked[ch];
+      var link = isOn ? links[ch] : null;
+
+      var state1 = !isOn
+        ? '<div class="np-state"><span class="sev n-off">Выключено</span>' +
+            '<div class="np-hint">Уведомления команды вам не приходят. Выберите мессенджер, ' +
+            'чтобы получать заявки и передачи клиентов.</div></div>'
+        : ready
+          ? '<div class="np-state"><span class="sev n-ok">' + ic('check', 12) + 'Подключено</span>' +
+              '<div class="np-hint">Всё готово — уведомления идут в ' + esc(cur.label) + '.</div></div>'
+          : '<div class="np-state"><span class="sev n-wait">Нужен один шаг</span>' +
+              '<div class="np-hint">Откройте ' + esc(cur.bot) + ' и нажмите «Начать». ' +
+              'Пока вы этого не сделали, мессенджер не пропустит сообщение — ' +
+              'так устроены и Telegram, и Макс.</div>' +
+              (link
+                ? '<div class="np-act"><a class="bp np-open" href="' + esc(link) + '" target="_blank" rel="noopener">' +
+                    ic('ext', 14) + 'Открыть ' + esc(cur.label) + '</a>' +
+                    '<button class="al-cancel np-copy" data-l="' + esc(link) + '">' + ic('copy', 13) + 'Скопировать ссылку</button></div>'
+                : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(cur.label) + '.</div>') +
+            '</div>';
+
+      body.innerHTML =
+        '<div class="al-f"><span class="al-l">Мессенджер</span>' +
+          '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (c) {
+            return '<button data-ch="' + c.id + '"' + (c.id === ch ? ' class="on"' : '') + '>' +
+              ic(c.icon, 13) + esc(c.label) + '</button>';
+          }).join('') + '</div></div>' + state1;
+
+      Array.prototype.forEach.call(body.querySelectorAll('[data-ch]'), function (b) {
+        b.addEventListener('click', function () {
+          var next = b.getAttribute('data-ch');
+          if (next === ch) return;
+          body.classList.add('np-wait');
+          api('/admin/api/me/notify', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: next }),
+          }).then(function (r) {
+            body.classList.remove('np-wait');
+            render(r);
+            var nx = NOTIFY_CH.filter(function (c) { return c.id === next; })[0];
+            showToast(next === 'off' ? 'Уведомления выключены' : 'Мессенджер: ' + nx.label);
+          }).catch(function () {
+            body.classList.remove('np-wait');
+            showToast('Не удалось сохранить — попробуйте ещё раз');
+          });
+        });
+      });
+      var cp = body.querySelector('.np-copy');
+      if (cp) cp.addEventListener('click', function () {
+        var v = cp.getAttribute('data-l');
+        if (navigator.clipboard) navigator.clipboard.writeText(v);
+        showToast('Ссылка скопирована');
+      });
+    };
+
+    api('/admin/api/me/notify').then(render).catch(function () {
+      body.innerHTML = '<div class="np-hint">Не удалось открыть настройки. ' +
+        'Если вы вошли по общей ссылке, зайдите под своим логином — уведомления личные.</div>';
+    });
+  }
+
   function createLead(payload, cb) {
     api('/admin/api/leads', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1451,6 +1564,7 @@
         '<div class="pm-head"><div class="av">' + esc(initials(state.userName)) + '</div>' +
           '<div><div class="pm-n">' + esc(state.userName || 'EastSide') + '</div>' +
           '<div class="pm-r">' + esc(roleInfo().label) + ' · ' + esc(roleInfo().short) + '</div></div></div>' +
+        '<button data-a="notify">' + ic('bell', 16) + 'Уведомления</button>' +
         '<button data-a="refresh">' + ic('refresh', 16) + 'Обновить данные</button>' +
         '<button data-a="logout">' + ic('exit', 16) + 'Сменить аккаунт</button>';
       document.body.appendChild(smenu);
@@ -1462,7 +1576,8 @@
       Array.prototype.forEach.call(smenu.querySelectorAll('button'), function (b) {
         b.addEventListener('click', function (ev) {
           ev.stopPropagation(); var a = b.getAttribute('data-a'); closeSmenu(); prof.classList.remove('open');
-          if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
+          if (a === 'notify') openNotifyPrefs();
+          else if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
           else logout();
         });
       });
