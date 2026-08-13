@@ -9220,6 +9220,12 @@
     setPage(pg);
   }
   window.addEventListener('hashchange', function () {
+    // Ссылку-приглашение часто открывают в уже открытой вкладке CRM: браузер тогда
+    // меняет только хеш, boot() второй раз не случается — и человек видит форму
+    // входа вместо экрана «задайте пароль». Приглашение важнее текущей сессии
+    // (по ссылке мог прийти другой человек), поэтому проверяем его до всего.
+    var inv = inviteToken();
+    if (inv) { stopPolling(); renderInvite(inv); return; }
     if (!state.loaded) return;
     var id = hashLeadId();
     if (id) openFromHash();
@@ -9262,10 +9268,14 @@
       pollInboxLive();
     }, 6000);
   }
-  /* выход / смена аккаунта — сразу на логин (без ожидания фонового 403) */
-  function logout() {
+  /* фоновые опросы сервера — гасим, когда уходим из рабочего экрана */
+  function stopPolling() {
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
     if (state.inboxTimer) { clearInterval(state.inboxTimer); state.inboxTimer = null; }
+  }
+  /* выход / смена аккаунта — сразу на логин (без ожидания фонового 403) */
+  function logout() {
+    stopPolling();
     closeSmenu();
     state.drawerId = null; state.botConvoId = null;
     localStorage.removeItem(KEY_LS);
