@@ -1743,7 +1743,7 @@
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
-    { id: 'czpay', label: 'Выплаты', icon: 'coins', cap: 'contractors', space: 'cz' },
+    { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
@@ -2227,7 +2227,7 @@
         ctMoney(pr.ready_amount) + ' ₽</b>.' +
         (stuck ? ' Еще <b>' + stuck + '</b> ждут документов.' : '');
       html = '<div><h2>Выплаты</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + phrase8 + '</span></div></div>';
+        '<div class="verdict"><span class="vspark">' + ic('wallet', 13) + '</span><span>' + phrase8 + '</span></div></div>';
     }
     if (state.page === 'czdocs') {
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
@@ -4251,11 +4251,8 @@
     view.innerHTML =
       '<div class="card listcard">' +
         '<div class="list-tools">' +
-          '<span class="list-count"><b>' + reg.ready_count + '</b> ' +
-            plural(reg.ready_count, 'выплата', 'выплаты', 'выплат') +
-            ' готово на <b>' + ctMoney(reg.ready_amount) + ' ₽</b></span>' +
-          '<span class="py-hint">Деньги отправляете из банка сами. Здесь — проверка и отметка, ' +
-            'что платеж прошел.</span>' +
+          '<span class="py-hint">Деньги отправляете из банка сами. Здесь — проверка и ' +
+            'отметка, что платеж прошел.</span>' +
         '</div>' +
         '<div class="list-quick">' + tabs + '</div>' +
         '<div class="trow py-grid thead">' + head + '</div>' + body +

@@ -3773,14 +3773,15 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    Строка отвечает на один вопрос: можно ли платить и сколько. Поэтому якорь тут —
    сумма, а проверки набраны тихо: семь зеленых галочек в каждой строке превратились бы
    в шум, из которого не видно единственную красную. */
-.py-grid { grid-template-columns: 1fr 1.7fr 132px 1.2fr 168px; }
+.py-grid { grid-template-columns: 1.15fr 1.55fr 132px 1.15fr 168px; }
 /* Причин блокировки бывает несколько — строка растет под них, а не режет текст. */
 .trow.py-grid { height: auto; min-height: 60px; padding-top: 10px; padding-bottom: 10px;
   align-items: center; }
 .trow.py-grid.thead { min-height: 38px; padding-top: 0; padding-bottom: 0; }
 .py-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.py-who b { font-weight: 650; letter-spacing: -.01em; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
+/* Имя переносится, а не обрезается: «Тестовый Исполн…» в реестре выплат читается
+   как ошибка, а строка тут и так растет под причины блокировки. */
+.py-who b { font-weight: 650; letter-spacing: -.01em; line-height: 1.3; }
 .py-job { font-size: 11px; color: var(--ink-3); }
 .py-task { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px;
   color: var(--ink-2); }
@@ -3795,7 +3796,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .py-do { display: flex; justify-content: flex-end; }
 /* Подпись у счетчика: экран не отправляет деньги, и сказать это надо один раз сверху,
    а не приписывать к каждой кнопке. */
-.py-hint { margin-left: auto; font-size: 12px; color: var(--ink-3); max-width: 380px;
+.py-hint { margin-left: auto; margin-right: 0; font-size: 12px; color: var(--ink-3); max-width: 380px;
   text-align: right; }
 /* Отмененная выплата остается в истории, но гаснет: это уже не движение денег. */
 .py-off { opacity: .62; }
