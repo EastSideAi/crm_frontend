@@ -1770,8 +1770,12 @@ a { color: inherit; text-decoration: none; }
 /* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
    остального. Полностью она читается в карточке ученика. */
 .stu-note { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
-  background: var(--fill); border-radius: 10px; padding: 8px 11px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  background: var(--fill); border-radius: 10px; padding: 8px 11px; }
+/* Обрезка живет на внутреннем span, а не на самой плашке: overflow:hidden режет
+   по padding-box, и третья строка проглядывала бы в нижнем отступе — блок
+   выглядел бы сломанным, а не сокращенным. */
+.stu-note span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
 .stu-g { margin-top: 12px; }
 .stu-gl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); margin-bottom: 4px; }
@@ -2435,11 +2439,14 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .topbar { padding: 12px 16px; border-radius: var(--r-xl) var(--r-xl) 0 0; position: static; flex-wrap: wrap; }
   /* Вкладки раздела шире экрана телефона. Без этого они молча обрезались
      справа: «На приемку», «Готово» и «По ученикам» не существовало, пока
-     телефон не повернешь горизонтально. Скролл — по самой капсуле, поэтому
-     живет и внутри переносящегося топбара. */
-  .tabs { flex-wrap: nowrap; min-width: 0; max-width: 100%; overflow-x: auto;
-    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .tabs::-webkit-scrollbar { display: none; }
+     телефон не повернешь горизонтально.
+     Скроллится ОБЕРТКА (#tb-left), а не сама капсула: браузер, показывая
+     активную вкладку, прокручивает ближайшего прокручиваемого предка. Если им
+     оказывается страница, весь экран уезжает влево и содержимое раздела просто
+     пропадает — так и было, пока капсула скроллилась «сама в себе». */
+  #tb-left { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  #tb-left::-webkit-scrollbar { display: none; }
+  .tabs { flex-wrap: nowrap; width: max-content; }
   .tab { flex: none; }
   .tbr .profile { display: none; }
   .content { padding: 16px 16px 36px; }
@@ -2497,7 +2504,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      по-прежнему растягиваются на всю ширину. */
   .mtabs { display: flex; position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 50;
     background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 6px; gap: 4px;
-    overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    overflow-x: auto; scrollbar-width: none;
     box-shadow: 0 14px 36px -10px rgba(15,19,32,.28); }
   .mtabs::-webkit-scrollbar { display: none; }
   .mtab { flex: 1 0 auto; min-width: 62px; display: flex; flex-direction: column; align-items: center; gap: 3px;

@@ -1783,6 +1783,13 @@
       var meta = navMeta(state.page);
       tb.innerHTML = meta ? '<div class="freshchip"><span class="fok">' + ic(meta.icon, 11) + '</span>' + esc(meta.label) + '</div>' : '';
     }
+    // На телефоне полоса вкладок шире экрана и скроллится вбок. Открывается она
+    // на первой вкладке, поэтому активная может оказаться за краем — человек не
+    // видит, где он находится. Подкручиваем к ней.
+    var onTab = tb.querySelector('.tab.on');
+    if (onTab && tb.scrollWidth > tb.clientWidth) {
+      tb.scrollLeft = Math.max(0, onTab.offsetLeft - 12);
+    }
   }
 
   /* кастомный диапазон дат на дашборде */
@@ -2242,7 +2249,7 @@
             (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
           '<span class="stu-cs">' + counters + '</span>' +
         '</div>' +
-        (s.note ? '<div class="stu-note">' + esc(s.note) + '</div>' : '') +
+        (s.note ? '<div class="stu-note"><span>' + esc(s.note) + '</span></div>' : '') +
         groups +
         (s.plan_tasks && s.plan_tasks.length
           ? '<div class="stu-plan"><span class="stu-pl">по плану на этом этапе</span>' +
