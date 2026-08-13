@@ -44,7 +44,7 @@
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
-    portalProduct: null, portalTab: 'tariffs', portalQ: '',
+    portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
@@ -4024,14 +4024,19 @@
      новый продукт не пишем, дописываем json.
      Вкладка «Экономика» открыта только ролям с доступом к деньгам (cap
      finance): себестоимость и маржа не должны лежать перед всей командой. */
+  /* has(p) — вкладка появляется только там, где под нее есть контент: у языкового
+     направления нет тарифов, у флагмана нет списка продуктов, и пустая вкладка
+     врет человеку, что материал есть, а он его не нашел. */
   var PORTAL_TABS = [
-    { id: 'tariffs', label: 'Тарифы' },
-    { id: 'econ', label: 'Экономика', cap: 'finance' },
-    { id: 'kb', label: 'База знаний' },
-    { id: 'sales', label: 'Продажи' },
-    { id: 'mkt', label: 'Маркетинг' },
-    { id: 'links', label: 'Ссылки' },
-    { id: 'offer', label: 'Оферты' },
+    { id: 'tariffs', label: 'Тарифы', has: function (p) { return (p.tariffs || []).length; } },
+    { id: 'items', label: 'Продукты', has: function (p) { return (p.items || []).length; } },
+    { id: 'flow', label: 'Путь клиента', has: function (p) { return (p.flow || []).length; } },
+    { id: 'econ', label: 'Экономика', cap: 'finance', has: function (p) { return !!p.economics; } },
+    { id: 'kb', label: 'База знаний', has: function (p) { return (p.knowledge || []).length; } },
+    { id: 'sales', label: 'Продажи', has: function (p) { return !!p.sales; } },
+    { id: 'mkt', label: 'Маркетинг', has: function (p) { return !!p.marketing; } },
+    { id: 'links', label: 'Ссылки', has: function (p) { return (p.links || []).length; } },
+    { id: 'offer', label: 'Оферты', has: function (p) { return !!p.offer; } },
   ];
 
   function fetchPortal() {
@@ -4047,10 +4052,15 @@
     for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
     return null;
   }
-  function portalTabs() { return PORTAL_TABS.filter(function (t) { return !t.cap || can(t.cap); }); }
+  function portalTabs(p) {
+    return PORTAL_TABS.filter(function (t) {
+      if (t.cap && !can(t.cap)) return false;
+      return !p || !t.has || t.has(p);
+    });
+  }
   function portalOpen(id) {
     state.portalProduct = id || null;
-    var tabs = portalTabs();
+    var tabs = portalTabs(id ? portalProduct(id) : null);
     if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
     renderView();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -4140,7 +4150,7 @@
     (d.products || []).forEach(function (p) {
       idx.push({ kw: [p.title, p.note, p.lead].concat(p.branches || []).join(' '), label: p.title, sub: p.note || '', go: { pid: p.id } });
       if (!p.ready) return;
-      portalTabs().forEach(function (t) {
+      portalTabs(p).forEach(function (t) {
         var kw = t.label + ' ' + p.title;
         if (t.id === 'tariffs') kw += ' ' + (p.tariffs || []).map(function (x) { return x.name + ' ' + x.price; }).join(' ');
         if (t.id === 'econ') kw += ' маржа вклад расходы себестоимость налоги';
@@ -4175,7 +4185,7 @@
 
   /* ── страница продукта ── */
   function renderPortalProduct(view, p) {
-    var tabs = portalTabs();
+    var tabs = portalTabs(p);
     if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
     var head = '<div class="po-wrap">' +
       '<button type="button" class="po-back" id="po-back">' + ic('go', 13) + 'Дерево продуктов</button>' +
@@ -4200,6 +4210,8 @@
 
     var bodyHtml = '';
     if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'items') bodyHtml = portalItems(p);
+    else if (state.portalTab === 'flow') bodyHtml = portalFlow(p);
     else if (state.portalTab === 'econ') bodyHtml = portalEcon(p);
     else if (state.portalTab === 'kb') bodyHtml = portalKb(p);
     else if (state.portalTab === 'sales') bodyHtml = portalMaterials(p.sales, 'Продажи', 'chat');
@@ -4212,6 +4224,13 @@
     var b = el('po-back'); if (b) b.addEventListener('click', function () { portalOpen(null); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-potab]'), function (t) {
       t.addEventListener('click', function () { state.portalTab = t.getAttribute('data-potab'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-poitem]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-poitem');
+        state.portalItem = state.portalItem === id ? null : id;
+        renderView();
+      });
     });
     if (state.portalTab === 'econ') portalWireEcon(view, p);
     portalWireLinks(view);
@@ -4426,6 +4445,73 @@
       });
     });
     recalc();
+  }
+
+  /* ── «Продукты направления» и «Путь клиента» ───────────────────────────────
+     Один формат на оба экрана: кому и зачем · как проходит у человека · что с
+     этим делает команда в CRM. Так продукт описан у Веры на внутренней странице
+     истсайд.рф/team-products, и так его пересказывает менеджер клиенту — значит
+     и в портале он должен лежать так же, а не тремя разными способами. */
+  function portalSteps(steps, kind) {
+    return (steps || []).map(function (s, i) {
+      return '<div class="po-step">' +
+        '<span class="po-stn num">' + (i + 1) + '</span>' +
+        '<span class="po-stt">' + esc(typeof s === 'string' ? s : (s.text || '')) +
+          (s && s.when ? '<em class="po-stw">' + esc(s.when) + '</em>' : '') + '</span>' +
+      '</div>';
+    }).join('') + (kind === 'crm' ? '' : '');
+  }
+  function portalNotes(list, icon) {
+    return (list || []).map(function (t) {
+      return '<div class="po-feat">' + ic(icon || 'check', 13) + '<span>' + esc(t) + '</span></div>';
+    }).join('');
+  }
+  /* Блок продукта: кому · шаги · что в CRM · ссылки. Используется и как карточка
+     под-продукта направления, и как тело вкладки «Путь клиента». */
+  function portalFlowBody(f) {
+    var out = '';
+    if (f.who) out += '<div class="po-fsec"><div class="po-flbl">Кому и зачем</div>' +
+      '<p class="po-txt">' + esc(f.who) + '</p></div>';
+    if ((f.steps || []).length) out += '<div class="po-fsec"><div class="po-flbl">' +
+      esc(f.steps_title || 'Как проходит у человека') + '</div>' +
+      '<div class="po-steps">' + portalSteps(f.steps) + '</div></div>';
+    if ((f.crm || []).length) out += '<div class="po-fsec"><div class="po-flbl">Что с этим делает команда</div>' +
+      '<div class="po-feats">' + portalNotes(f.crm, 'check') + '</div></div>';
+    if ((f.links || []).length) out += '<div class="po-flinks">' + (f.links || []).map(function (l) {
+      return '<a class="po-x po-xl" href="' + esc(l.href) + '" target="_blank" rel="noopener">' +
+        esc(l.label || l.href) + ic('ext', 12) + '</a>';
+    }).join('') + '</div>';
+    return out;
+  }
+  function portalFlow(p) {
+    return (p.flow || []).map(function (f) {
+      return '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic(f.icon || 'path', 14) + '</span>' +
+          '<div><div class="t">' + esc(f.title) + '</div>' +
+          (f.note ? '<div class="s">' + esc(f.note) + '</div>' : '') + '</div>' +
+          (f.when ? '<span class="po-when">' + esc(f.when) + '</span>' : '') + '</div>' +
+        portalFlowBody(f) + '</div>';
+    }).join('');
+  }
+  /* Карточки продуктов направления. Раскрываются по клику: шесть продуктов,
+     развернутых разом, — это стена текста, в которой не найти нужный. */
+  function portalItems(p) {
+    var cards = (p.items || []).map(function (it) {
+      var open = state.portalItem === it.id;
+      var tags = (it.tags || []).map(function (t) { return '<span class="po-x">' + esc(t) + '</span>'; }).join('');
+      return '<div class="card po-card po-item' + (open ? ' open' : '') + '">' +
+        '<button type="button" class="po-ih" data-poitem="' + esc(it.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<span class="po-ic">' + ic(it.icon || 'box', 15) + '</span>' +
+          '<span class="po-it"><b>' + esc(it.title) + '</b>' +
+            (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</span>' +
+          '<span class="po-ip num">' + esc(it.price_label || (it.price ? fmtMoney(it.price) + ' ₽' : 'Бесплатно')) + '</span>' +
+          '<span class="po-iv">' + ic('go', 14) + '</span>' +
+        '</button>' +
+        (tags ? '<div class="po-itags">' + tags + '</div>' : '') +
+        (open ? '<div class="po-ibody">' + portalFlowBody(it) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    return cards + (p.items_note ? '<div class="po-note wide">' + esc(p.items_note) + '</div>' : '');
   }
 
   function portalKb(p) {
