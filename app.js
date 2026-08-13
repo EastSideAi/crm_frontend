@@ -2125,15 +2125,20 @@
           esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
   }
-  /* Подстрочник сотрудника. Тема, отмеченная у человека без подключенного мессенджера, —
-     это тишина, а не доставка: говорим об этом прямо в строке, а не прячем в настройках. */
+  /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
+     отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
+     до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
   function tmSub(u) {
     var mine = u.notify_topics || [];
-    if (mine.length && !u.notify_linked) {
-      return '<span class="tm-warn">' + ic('alert', 11) + 'не получит: мессенджер не подключен</span>';
+    if (!mine.length) return '';
+    if (!u.notify_linked) {
+      return '<span class="tm-warn">' + ic('alert', 11) + 'мессенджер не подключен</span>';
     }
-    if (!mine.length) return 'уведомления не приходят';
     return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс' : 'Телеграм');
+  }
+  function tmLine(u) {
+    var sub = tmSub(u);
+    return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
   }
   function renderTeam(view) {
     if (!state._team) {
@@ -2171,7 +2176,7 @@
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div>' +
-          '<div class="tm-l">@' + esc(u.login) + ' · ' + tmSub(u) + '</div></div>' +
+          '<div class="tm-l">' + tmLine(u) + '</div></div>' +
         tmTopicChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
@@ -2250,7 +2255,7 @@
         apiSend('/admin/api/users/' + uid, 'PATCH', { notify_topics: next }, function () {
           b.disabled = false;
           var sub = b.parentNode.parentNode.querySelector('.tm-l');
-          if (sub) sub.innerHTML = '@' + esc(u.login) + ' · ' + tmSub(u);
+          if (sub) sub.innerHTML = tmLine(u);
           showToast(next.length > was.length
             ? (u.name || u.login) + ' получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase()
             : (u.name || u.login) + ' больше не получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase());
