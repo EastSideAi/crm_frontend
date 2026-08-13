@@ -6465,7 +6465,8 @@
     if (!b) { loadCourse(id); return skeletonSection('course'); }
     if (b === 'none') {
       return '<div class="m-ctitle">Китайский</div>' +
-        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>' +
+        buildHskBlock(id);
     }
 
     var head = '<div class="m-ctitle">Китайский</div>' +
@@ -6516,7 +6517,38 @@
       (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
       '</div>';
 
-    return head + access;
+    return head + access + buildHskBlock(id);
+  }
+
+  /* ── HSK-тренажёр в той же вкладке «Китайский» ──
+     Тренажёр китайского открыт по прямой ссылке всем (localStorage, без входа),
+     поэтому «доступ» тут — не гейт, а отметка менеджера «я дал этому ученику» плюс
+     ссылка под рукой. Флаг живёт в overrides.hsk лида (частичный мердж на бэке),
+     отдельная ручка и таблица не нужны. Персонального входа, как у курса и DET,
+     пока нет — это отдельная работа. */
+  var HSK_LINK = 'https://истсайд.рф/hsk_cabinet.html';
+  function buildHskBlock(id) {
+    var det = state.details[id];
+    var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
+    var on = !!h.open;
+    return '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
+      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Открыт по прямой ссылке ' +
+      'всем; тумблер отмечает, что вы дали доступ этому ученику, и держит ссылку под рукой.</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Тренажёр HSK</div>' +
+          '<div class="det-sw-s">' + (on ? 'вы отметили доступ' : 'доступ не отмечен') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
+          '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
+        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '') +
+      '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+      '<div class="det-link">' +
+        '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(HSK_LINK) + '">' +
+        '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+      '<div class="det-link-m">ссылка общая: тренажёр без входа, прогресс хранится ' +
+      'у ученика в браузере</div>' +
+      '</div>';
   }
 
   function wireCourse(id) {
@@ -6576,6 +6608,27 @@
     if (nl) nl.addEventListener('click', function () {
       post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
     });
+
+    // HSK-тренажёр: тумблер-отметка доступа (флаг в overrides.hsk) + копирование ссылки.
+    // Полный overrides шлём целиком, чтобы оптимистичный рендер не потерял имя/контакт.
+    var hsw = el('hsk-sw');
+    if (hsw) hsw.addEventListener('click', function () {
+      var det = state.details[id];
+      var ov = Object.assign({}, (det && det.crm && det.crm.overrides) || {});
+      var cur = ov.hsk || {};
+      var next = !cur.open;
+      ov.hsk = next
+        ? { open: true, by: state.userName || '', at: new Date().toISOString() }
+        : { open: false, by: cur.by || '', at: cur.at || '' };
+      patch(id, { overrides: ov }, null, function () {
+        if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      });
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
+    });
+
+    var hcp = el('hsk-copy');
+    if (hcp) hcp.addEventListener('click', function () { copyText(HSK_LINK, hcp); });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
