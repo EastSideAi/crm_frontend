@@ -1084,12 +1084,20 @@
                 : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(cur.label) + '.</div>') +
             '</div>';
 
+      /* За какие темы вам приходят уведомления — только на просмотр: закрепляет их
+         руководитель в разделе «Команда». Иначе тему можно было бы снять с себя молча. */
+      var tps = (st && st.topics) || [];
+      var topics = '<div class="np-topics">' + (tps.length
+        ? 'Вам приходят клиенты по темам: <b>' + tps.map(function (t) { return esc(t.label); }).join(', ') + '</b>.'
+        : 'За вами не закреплена ни одна тема — уведомления о клиентах идут другим.') +
+        ' Меняет руководитель в разделе «Команда».</div>';
+
       body.innerHTML =
         '<div class="al-f"><span class="al-l">Мессенджер</span>' +
           '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (c) {
             return '<button data-ch="' + c.id + '"' + (c.id === ch ? ' class="on"' : '') + '>' +
               ic(c.icon, 13) + esc(c.label) + '</button>';
-          }).join('') + '</div></div>' + state1;
+          }).join('') + '</div></div>' + state1 + topics;
 
       Array.prototype.forEach.call(body.querySelectorAll('[data-ch]'), function (b) {
         b.addEventListener('click', function () {
@@ -2104,11 +2112,44 @@
   }
 
   /* ── Команда и роли (Super Admin) ── */
+  /* Короткая подпись темы для чипа в строке: полную («документы и гранты») отдает сервер,
+     она уходит в title. В строке нужна одна ширина на всех, иначе колонка едет. */
+  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи' };
+  function tmTopicChips(u) {
+    var mine = u.notify_topics || [];
+    return '<span class="tm-tp" data-uid="' + u.id + '">' +
+      (state._teamTopics || []).map(function (t) {
+        var on = mine.indexOf(t.id) >= 0;
+        return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'title="' + esc(on ? 'Приходят уведомления: ' + t.label : 'Не приходят: ' + t.label) + '">' +
+          esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
+      }).join('') + '</span>';
+  }
+  /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
+     отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
+     до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
+  function tmSub(u) {
+    var mine = u.notify_topics || [];
+    if (!mine.length) return '';
+    if (!u.notify_linked) {
+      return '<span class="tm-warn" title="Тема отмечена, но человек не нажал «Начать» ' +
+        'у бота уведомлений — сообщение ему не дойдет">' + ic('alert', 11) + 'нет мессенджера</span>';
+    }
+    return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс' : 'Телеграм');
+  }
+  function tmLine(u) {
+    var sub = tmSub(u);
+    return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
+  }
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();
-      api('/admin/api/team').then(function (r) { state._team = (r && r.users) || []; if (state.page === 'team') renderView(); })
-        .catch(function () { state._team = 'none'; if (state.page === 'team') renderView(); });
+      api('/admin/api/team').then(function (r) {
+        state._team = (r && r.users) || [];
+        state._teamTopics = (r && r.topics) || [];
+        state._teamShared = !r || r.shared_chat !== false;
+        if (state.page === 'team') renderView();
+      }).catch(function () { state._team = 'none'; if (state.page === 'team') renderView(); });
       return;
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
@@ -2135,9 +2176,11 @@
         ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
-        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
+        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div>' +
+          '<div class="tm-l">' + tmLine(u) + '</div></div>' +
+        tmTopicChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
-          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
     }).join('');
 
@@ -2164,19 +2207,76 @@
         '<button class="bp sm ghost" id="tn-cancel">Отмена</button>' +
         '<button class="bp sm" id="tn-save">Завести</button></div></div>' : '';
 
+    /* Общий чат — исторический адрес, куда падало все и сразу. Выключать его можно, но
+       осознанно: пока команда подключается лично, это единственный работающий канал. */
+    var sharedOn = state._teamShared !== false;
+    var sharedHtml = '<div class="det-sw-row tm-shared">' +
+      '<div class="det-sw-b"><div class="det-sw-t">Копия в общий чат</div>' +
+        '<div class="det-sw-s">' + (sharedOn
+          ? 'Каждое уведомление дублируется в общий чат — там его видят все, кому он открыт.'
+          : 'Уведомления идут только тем, за кем закреплена тема. Если по теме никого нет, ' +
+            'копия все равно уйдет в общий чат — иначе клиент потеряется.') + '</div></div>' +
+      '<button type="button" class="pd-sw' + (sharedOn ? ' on' : '') + '" id="tm-shared">' +
+        '<span class="pd-sw-l">' + (sharedOn ? 'Включена' : 'Выключена') + '</span>' +
+        '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
-      '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
+      '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
-      '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+      '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
+      '<div class="m-sec tm-nsec"><div class="m-sec-h">Уведомления команды</div>' +
+        '<div class="tm-hint">Клиент пишет боту и просит человека — уведомление уходит тем, ' +
+          'за кем закреплена тема разговора. Мессенджер каждый выбирает сам: профиль → «Уведомления».</div>' +
+        sharedHtml + '</div></div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
         if (u) u.role = sel.value;
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
+      });
+    });
+    /* Тема закрепляется одним нажатием. Локально красим сразу, но правдой считаем ответ
+       сервера: не сохранилось — возвращаем чип как был, чтобы галочка не врала. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-tp-b'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.parentNode.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var t = b.getAttribute('data-t'), was = (u.notify_topics || []).slice();
+        var next = was.indexOf(t) >= 0
+          ? was.filter(function (x) { return x !== t; })
+          : was.concat([t]);
+        u.notify_topics = next;
+        b.classList.toggle('on');
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { notify_topics: next }, function () {
+          b.disabled = false;
+          var sub = b.parentNode.parentNode.querySelector('.tm-l');
+          if (sub) sub.innerHTML = tmLine(u);
+          showToast(next.length > was.length
+            ? (u.name || u.login) + ' получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase()
+            : (u.name || u.login) + ' больше не получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase());
+        }, function () {
+          b.disabled = false; u.notify_topics = was; b.classList.toggle('on');
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
+      });
+    });
+    var shb = el('tm-shared');
+    if (shb) shb.addEventListener('click', function () {
+      var next = !(state._teamShared !== false);
+      shb.disabled = true;
+      apiSend('/admin/api/team/shared-chat', 'PUT', { on: next }, function () {
+        state._teamShared = next;
+        renderView();
+        showToast(next ? 'Копии уходят в общий чат' : 'Общий чат отключен');
+      }, function () {
+        shb.disabled = false;
+        showToast('Не удалось сохранить — попробуйте еще раз');
       });
     });
     /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
