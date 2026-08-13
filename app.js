@@ -3001,6 +3001,7 @@
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
+      '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
@@ -3043,6 +3044,8 @@
         });
       });
     });
+    var tgb = el('tm-tg');
+    if (tgb) tgb.addEventListener('click', openBotLinks);
     var shb = el('tm-shared');
     if (shb) shb.addEventListener('click', function () {
       var next = !(state._teamShared !== false);
