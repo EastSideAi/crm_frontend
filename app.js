@@ -40,7 +40,7 @@
     planChat: null,   // id лида, у которого открыт чат правок плана
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
-    taskMe: null, tasksLoading: false,
+    taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '',
   };
@@ -1954,10 +1954,24 @@
     today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
     week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
     mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
+    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'большие задачи и прогресс по шагам' },
     accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
     team:   { label: 'Вся команда', view: 'open',   scope: 'all',    cap: 'tasks_all', hint: 'кто чем занят прямо сейчас' },
     done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
   };
+  /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
+     staff_tasks.py — как и роли, справочник продублирован на двух концах: он
+     короткий и меняется раз в полгода, лишний запрос ради шести строк дороже.
+     Цветом направления НЕ кодируются: акцент в CRM один (design.md §3). */
+  var DEPTS = {
+    product:   'Продукт',
+    marketing: 'Маркетинг',
+    sales:     'Продажи',
+    edu:       'Обучение',
+    hr:        'HR и команда',
+    ops:       'Операционка',
+  };
+  function deptLabel(d) { return DEPTS[d] || ''; }
   function taskSegs() {
     return Object.keys(TASK_SEGS).filter(function (k) {
       return !TASK_SEGS[k].cap || can(TASK_SEGS[k].cap);
@@ -1997,7 +2011,8 @@
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
     state.tasksLoading = true;
-    api('/admin/api/tasks?view=' + seg.view + '&scope=' + seg.scope).then(function (r) {
+    api('/admin/api/tasks?view=' + seg.view + '&scope=' + seg.scope +
+        (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '')).then(function (r) {
       state.tasksLoading = false;
       state.tasks = (r && r.tasks) || [];
       state.taskMe = r ? r.me : null;
@@ -2024,6 +2039,16 @@
       cb(state.taskPeople);
     }).catch(function () { cb([]); });
   }
+  /* Куда можно положить шаг. Кэш сбрасывается после постановки задачи: свежая
+     задача обязана появиться в списке целей, иначе разбить ее на шаги можно
+     будет только после перезагрузки страницы. */
+  function loadTaskGoals(cb) {
+    if (state.taskGoals) { cb(state.taskGoals); return; }
+    api('/admin/api/tasks/goals').then(function (r) {
+      state.taskGoals = (r && r.goals) || [];
+      cb(state.taskGoals);
+    }).catch(function () { cb([]); });
+  }
 
   function renderTasks(view) {
     if (state.tasks === null) {
@@ -2046,11 +2071,22 @@
     var rows = list.map(function (t) {
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
-      return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+      // Подпись под названием отвечает на «откуда эта задача»: цель важнее
+      // постановщика — шаг «собрать документы» без цели читается как обрывок.
+      var sub = [];
+      if (t.parent_title) sub.push('в цели: ' + t.parent_title);
+      if (t.author_name) sub.push('поставил ' + t.author_name);
+      else if (showWho) sub.push('без постановщика');
+      if (t.client_name) sub.push(t.client_name);
+      var steps = t.steps_total
+        ? '<div class="tsk-prog" title="' + t.steps_done + ' из ' + t.steps_total + '">' +
+            '<span class="tsk-prog-b"><i style="width:' + Math.round(t.steps_done / t.steps_total * 100) + '%"></i></span>' +
+            '<span class="tsk-prog-n num">' + t.steps_done + '/' + t.steps_total + '</span></div>'
+        : '';
+      return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
+        (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
         '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
-          '<div class="t-sub">' + esc(showWho ? (t.author_name ? 'поставил ' + t.author_name : 'без постановщика')
-            : (t.author_name ? 'поставил ' + t.author_name : '')) +
-            (t.client_name ? (t.author_name ? ' · ' : '') + esc(t.client_name) : '') + '</div></div>' +
+          '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' + steps + '</div>' +
         '<div class="tsk-who">' + (t.assignee_name
           ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
           : '<span class="tsk-nobody">не назначена</span>') + '</div>' +
@@ -2059,6 +2095,16 @@
       '</div>';
     }).join('');
 
+    // Направления показываем тем, кто видит чужие задачи: у тьютора все задачи в
+    // одном направлении, и шесть чипов над коротким списком — чистый шум.
+    var depts = can('tasks_all')
+      ? '<div class="list-quick">' + [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
+          return [d, DEPTS[d]];
+        })).map(function (o) {
+          return '<button class="qchip' + (state.taskDept === o[0] ? ' on' : '') + '" data-dept="' + o[0] + '">' + esc(o[1]) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
     view.innerHTML = '<div class="card listcard">' +
       '<div class="list-tools">' +
         '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
@@ -2066,7 +2112,7 @@
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
         '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
-      '</div>' +
+      '</div>' + depts +
       '<div class="list-body">' +
         (list.length
           ? '<div class="trow tsk-grid thead"><span class="th">Задача</span><span class="th">Исполнитель</span>' +
@@ -2084,15 +2130,24 @@
       if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
     el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (c) {
+      c.addEventListener('click', function () {
+        state.taskDept = c.getAttribute('data-dept');
+        state.tasks = null;          // фильтр серверный: выборку надо перезапросить
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
   }
   function emptyTasksText(seg) {
+    if (state.taskDept) return 'В направлении «' + deptLabel(state.taskDept) + '» задач нет.';
     if (seg === 'today') return 'На сегодня задач нет. Это нормально, а не ошибка.';
     if (seg === 'accept') return 'Никто ничего не сдал на приемку.';
     if (seg === 'done') return 'Закрытых задач пока нет.';
     if (seg === 'team') return 'У команды нет открытых задач.';
+    if (seg === 'goals') return 'Больших задач с шагами пока нет. Открой задачу и добавь к ней шаги — она станет целью.';
     return 'Задач нет.';
   }
 
@@ -2123,7 +2178,7 @@
     try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
 
     var draw = function (data) {
-      var t = data.task, events = data.events || [];
+      var t = data.task, events = data.events || [], steps = data.steps || [];
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
       var me = state.taskMe;
@@ -2161,10 +2216,31 @@
           '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
+          (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
+          // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
+          // (design.md §7.6), поэтому текущая карточка закрывается и открывается
+          // карточка цели.
+          (t.parent_id ? '<button class="tsk-mwho tsk-up" id="tk-up">' + ic('target', 12) + esc(t.parent_title || 'к цели') + '</button>' : '') +
         '</div>' +
         '<div class="al-body">' +
           (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
           (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          (t.parent_id ? '' :
+            '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
+              (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + '/' + t.steps_total + '</span>' : '') +
+              '<button class="tsk-addstep" id="tk-add">' + ic('plus', 12) + 'Добавить шаг</button></div>' +
+              (steps.length
+                ? '<div class="tsk-steps">' + steps.map(function (s) {
+                    var sst = TASK_ST[s.status] || TASK_ST.wait;
+                    var sdue = dueLabel(s);
+                    return '<button class="tsk-step" data-step="' + s.id + '">' +
+                      '<span class="tsk-step-t">' + esc(s.title) + '</span>' +
+                      '<span class="tsk-step-m">' + esc(s.assignee_name || 'не назначена') +
+                        ' · <i class="' + sdue.cls + '">' + esc(sdue.text) + '</i></span>' +
+                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
+                  }).join('') + '</div>'
+                : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
+            '</div>') +
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
           '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
             '<button type="button" id="tk-retx">не возвращать</button></div>' +
@@ -2176,6 +2252,22 @@
         }).join('') + '</div>' : '');
 
       el('tk-x').addEventListener('click', close);
+
+      // Переход между целью и шагом — не вложенная модалка, а замена: сначала
+      // закрываем текущую (анимация ухода 180мс), потом открываем следующую.
+      var swap = function (fn) { close(); setTimeout(fn, 200); };
+      var up = el('tk-up');
+      if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var add = el('tk-add');
+      if (add) add.addEventListener('click', function () {
+        swap(function () { openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept }); });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
+        b.addEventListener('click', function () {
+          var sid = +b.getAttribute('data-step');
+          swap(function () { openTask(sid); });
+        });
+      });
 
       var say = el('tk-say');
       var body = ov.querySelector('.al-body');
@@ -2249,24 +2341,53 @@
     if (document.querySelector('.al-ov')) return;
     preset = preset || {};
     loadTaskPeople(function (people) {
+     loadTaskGoals(function (goals) {
       var opts = '<option value="">— выбери человека —</option>' + people.map(function (p) {
         return '<option value="' + p.id + '"' + (String(preset.assignee_id) === String(p.id) ? ' selected' : '') + '>' +
           esc(p.name || p.login) + (p.linked ? '' : ' (не в боте)') + '</option>';
+      }).join('');
+      // Направление по умолчанию — то, что открыто фильтром: ставят задачу обычно
+      // там же, где на нее смотрели.
+      var dept0 = preset.dept || state.taskDept || '';
+      var dopts = '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
+        return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+      }).join('');
+      // Цель, из карточки которой пришли, могла появиться после того, как список
+      // закэшировался: без этой строки шаг молча стал бы самостоятельной задачей.
+      var known = preset.parent_id && goals.some(function (g) { return String(g.id) === String(preset.parent_id); });
+      var gopts = '<option value="">— самостоятельная задача —</option>' +
+        (preset.parent_id && !known
+          ? '<option value="' + preset.parent_id + '" selected>' + esc(preset.parent_title || 'выбранная цель') + '</option>'
+          : '') +
+        goals.map(function (g) {
+        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
+          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
+        '</option>';
       }).join('');
       var ov = document.createElement('div');
       ov.className = 'al-ov';
       ov.innerHTML =
         '<div class="al-card" role="dialog" aria-modal="true">' +
           '<div class="al-head">' +
-            '<div><div class="al-eyebrow">Задачи</div><div class="al-title">Новая задача</div></div>' +
+            '<div><div class="al-eyebrow">Задачи</div><div class="al-title">' +
+              (preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
             '<button class="al-x" id="nt-x" title="Закрыть">' + ic('x', 16) + '</button>' +
           '</div>' +
-          '<div class="al-sub">Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.</div>' +
+          '<div class="al-sub">' + (preset.parent_title
+            ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
+            : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
           '<div class="al-body">' +
             '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
               '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
             '<label class="al-f"><span class="al-l">Кому <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
+            // Направление и цель рядом: обычно выбирают одно из двух — либо задача
+            // самостоятельная и у нее свое направление, либо это шаг, и направление
+            // приезжает от цели (поле тогда прячется, чтобы не спорить с ней).
+            '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+              '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
+            '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
+              '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>' +
             '<div class="al-f"><span class="al-l">Срок</span>' +
               '<span class="due-seg">' + [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']].map(function (o) {
                 return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
@@ -2313,6 +2434,13 @@
       dueI.addEventListener('change', markWhen);
       markWhen();
 
+      // Выбрали цель — направление больше не спрашиваем: шаг наследует его от цели
+      // (это же правило держит сервер, см. _resolve_parent).
+      var goalS = el('nt-goal'), deptF = el('nt-df');
+      goalS.addEventListener('change', function () {
+        deptF.classList.toggle('hid', !!goalS.value);
+      });
+
       var save = el('nt-save');
       save.addEventListener('click', function () {
         var title = (ti.value || '').trim();
@@ -2324,22 +2452,27 @@
         // «весь день 12-го мой», а не «до полуночи с 11-го на 12-е».
         var due = day ? new Date(day + 'T23:59:59').toISOString() : null;
         save.disabled = true; save.classList.add('loading');
+        var goal = goalS.value;
         apiSend('/admin/api/tasks', 'POST', {
           title: title, assignee_id: +who, due_at: due,
           details: (el('nt-det').value || '').trim(),
           result_expect: (el('nt-res').value || '').trim(),
           session_id: preset.session_id || null,
+          dept: goal ? null : (el('nt-dept').value || ''),
+          parent_id: goal ? +goal : null,
         }, function () {
           close();
           state.tasks = null;
+          state.taskGoals = null;   // новая задача может стать целью для следующей
           loadTaskSummary();
           if (state.page === 'tasks') renderView();
-          showToast('Задача поставлена');
+          showToast(goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
         }, function () {
           save.disabled = false; save.classList.remove('loading');
           showToast('Не получилось поставить задачу');
         });
       });
+     });
     });
   }
 
