@@ -2008,6 +2008,12 @@ a { color: inherit; text-decoration: none; }
 .lg-eye:hover { color: var(--blue); background: var(--blue-tint); }
 .gate-card .bp { margin-top: 14px; }
 .gate-err { color: var(--coral); font-size: 13px; margin-top: 12px; display: none; }
+/* Второстепенное действие карточки входа — текстом, не второй кнопкой:
+   на экране должно быть ровно одно очевидное действие. */
+.gate-link { width: auto; margin-top: 16px; align-self: center; background: none;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); padding: 6px 8px;
+  border-radius: 8px; transition: color .14s, background .14s; }
+.gate-link:hover { color: var(--blue); background: var(--blue-tint); }
 @media (max-width: 760px) {
   .gate-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .gate-brand { padding: 32px 28px 28px; }
@@ -3136,4 +3142,190 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .det-board { grid-template-columns: repeat(2, 1fr); }
   .det-sw-row { flex-wrap: wrap; }
   .det-link { flex-wrap: wrap; }
+}
+
+/* ════ ПРОДУКТОВЫЙ ПОРТАЛ (раздел «Портал») ════
+   База знаний команды по продуктам: дерево → карточка продукта → вкладки.
+   Контент приходит из content/portal.json, разметка — в renderPortal*.
+   Дерево — единственный визуальный якорь раздела; все остальное тихое и
+   собрано из готовых рецептов (карточка, сегмент .dperiod, .sec-head). */
+.po-wrap { max-width: 1120px; }
+.po-top { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+.po-ttl { flex: 1; min-width: 240px; }
+.po-h1 { font-size: 27px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.po-sub { margin-top: 9px; font-size: 14px; line-height: 1.55; color: var(--ink-2); max-width: 92ch; }
+.po-search { flex: 0 1 340px; margin-top: 3px; }
+/* заголовок карточки портала тянется сам, отметка «сохранено» прижата вправо */
+.po-card .sec-head > div { flex: 1; min-width: 0; }
+
+/* дерево: два входных узла → четыре направления → допуслуги.
+   Подписи полос живут ВНУТРИ ствола: линия идет по центру, подпись прижата влево,
+   поэтому вертикаль не рвется — и переживает мобильную ширину, где линий нет. */
+.po-lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.po-tree > .po-lbl { margin-bottom: 11px; }
+.po-lane { margin-bottom: 0; }
+/* вход — служебная полоса, а не второй якорь: тихий фон, серая иконка.
+   Синим в дереве светятся только флагманские направления. */
+.po-node { display: flex; align-items: center; gap: 11px; background: var(--fill);
+  border: 1px solid transparent; border-radius: var(--r-lg); padding: 11px 14px; transition: .14s var(--ease); }
+.po-node:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-ni { width: 28px; height: 28px; border-radius: 9px; flex: none;
+  background: var(--card); color: var(--ink-3); display: grid; place-items: center; }
+.po-node:hover .po-ni { color: var(--blue); }
+.po-nt { flex: 1; min-width: 0; }
+.po-nt b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink-2); }
+.po-nt small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.po-nx { color: var(--ink-3); transition: .14s var(--ease); }
+.po-node:hover .po-nx { color: var(--blue); }
+.po-drop, .po-stem { position: relative; height: 20px; }
+.po-stem { height: 34px; display: flex; align-items: center; }
+.po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--line-2); }
+
+.po-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+.po-tick { display: block; height: 22px; position: relative; }
+.po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line-2); }
+.po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--line-2); }
+.po-col:first-child .po-tick::after { left: 50%; }
+.po-col:last-child .po-tick::after { right: 50%; }
+
+.po-flag { display: block; width: 100%; min-height: 90px; text-align: left; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-lg); padding: 15px 16px; transition: .14s var(--ease); }
+.po-flag:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-fh { display: flex; align-items: center; gap: 8px; }
+.po-fh b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.po-fh b { flex: 1; min-width: 0; }
+.po-fh svg { flex: none; color: var(--ink-3); transition: .14s var(--ease); }
+.po-flag:hover .po-fh svg { color: var(--blue); transform: translateX(2px); }
+.po-fb { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.po-flag small { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-3); }
+.po-flag.ready { border-color: #CFE0FF; }
+.po-flag:not(.ready) .po-fh b { color: var(--ink-2); }
+/* .sev и .uz-tag — готовые пилюли системы; тут только место в потоке */
+.po-soon { flex: none; padding: 4px 10px; font-size: 11.5px; font-weight: 500; }
+.po-brs { margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--line-2);
+  display: flex; flex-direction: column; gap: 8px; }
+.po-br { position: relative; font-size: 12.5px; color: var(--ink-2); }
+.po-br::before { content: ''; position: absolute; left: -12px; top: 9px; width: 8px; height: 1px; background: var(--line-2); }
+
+.po-extras { margin-top: 28px; background: var(--fill); border-radius: var(--r-lg); padding: 17px 19px; }
+.po-exh b { font-size: 13.5px; font-weight: 700; }
+.po-exh small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.po-xs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.po-xs-wide { margin: -12px 0 22px; }
+/* та же пилюля, что .uz-tag, но лежит на заливке — поэтому фон карточный, не --fill */
+.po-x { background: var(--card); border-radius: var(--r-pill);
+  padding: 5px 11px; font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
+
+/* поиск по порталу */
+.po-hits { padding: 8px; }
+.po-cap { padding: 9px 12px 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.po-hit { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 11px 12px; border-radius: 11px; transition: .12s; }
+.po-hit:hover { background: var(--fill); }
+.po-hl { flex: 1; min-width: 0; }
+.po-hl b { display: block; font-size: 13.5px; font-weight: 600; }
+.po-hl small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.po-hit svg { color: var(--ink-3); }
+.po-hit:hover svg { color: var(--blue); }
+
+/* страница продукта */
+.po-back { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 18px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); transition: .12s; }
+.po-back svg { transform: rotate(180deg); color: var(--ink-3); }
+.po-back:hover { color: var(--blue); }
+.po-back:hover svg { color: var(--blue); }
+.po-tabs { margin-bottom: 22px; overflow-x: auto; padding-bottom: 2px; }
+.po-tabs::-webkit-scrollbar { height: 0; }
+.po-card { padding: 20px 22px; margin-bottom: 16px; }
+.po-txt { margin-top: 13px; font-size: 13.5px; color: var(--ink-2); line-height: 1.62; }
+.po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+.po-note.wide { margin: 16px 0 26px; }
+
+/* тарифы */
+.po-tariffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.po-tcard { padding: 21px; position: relative; }
+.po-tcard.accent { border-color: #CFE0FF; }
+.po-tflag { position: absolute; top: 17px; right: 17px; }
+.po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
+.po-tpos { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-tfmt { margin-top: 9px; min-height: 35px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.po-tprice { margin-top: 15px; font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
+.po-told { margin-top: 3px; font-size: 12px; color: var(--ink-3); text-decoration: line-through; }
+.po-feats { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px; }
+.po-feat { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.42; }
+/* галочка тут — маркер списка, а не «хорошо»: зеленый в разделе значит только маржу */
+.po-feat svg { margin-top: 2px; color: var(--ink-3); }
+.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 12px 14px; }
+.po-scope b { display: block; font-size: 13.5px; font-weight: 700; letter-spacing: -.015em; }
+.po-scope small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+
+/* таблицы портала: сравнение тарифов и экономика */
+.po-tblwrap { margin-top: 17px; overflow-x: auto; }
+.po-tblwrap::-webkit-scrollbar { height: 6px; }
+.po-tblwrap::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+.po-tbl { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
+.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.po-tbl td { padding: 13px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
+  color: var(--ink-2); line-height: 1.5; vertical-align: top; }
+.po-tbl tbody tr:last-child td { border-bottom: 0; }
+.po-rl { width: 178px; font-weight: 600; color: var(--ink); }
+.po-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+.po-pluses { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.po-plus { position: relative; padding-left: 14px; font-size: 12.5px; }
+.po-plus::before { content: '+'; position: absolute; left: 0; top: -1px; color: var(--blue); font-weight: 700; }
+
+.po-tbl.econ td { padding: 8px 12px; vertical-align: middle; }
+.po-tbl.econ .po-rl { width: 250px; }
+/* поля экономики — системный .al-in, компактный размер (прецедент — .ed-input.big).
+   Своего рецепта инпута в разделе нет: фокус, фон и обводка приходят из системы. */
+.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px; }
+.po-in { max-width: 152px; }
+.po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
+  display: inline-block; vertical-align: middle; }
+.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
+.po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
+.po-r-sum .po-rl { background: var(--fill); }
+.po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
+  letter-spacing: -.03em; color: var(--ink); }
+.po-tbl .po-pos { color: var(--green-ink); }
+.po-tbl .po-neg { color: var(--red-ink); }
+/* «сохранено» рядом с заголовком: цифры общие, человек должен видеть, что
+   его правка доехала до базы, а не осталась на экране */
+.po-saved { opacity: 0; font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+  transition: opacity .2s var(--ease); }
+.po-saved.on { opacity: 1; }
+.po-saved.bad { color: var(--red-ink); }
+.po-diff { display: none; margin-top: 5px; color: var(--amber-ink); }
+.po-diff.on { display: block; }
+
+/* ссылки на внешние системы */
+.po-link { display: flex; align-items: center; gap: 16px; padding: 17px 19px;
+  margin-bottom: 12px; transition: .14s var(--ease); }
+.po-link:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-lt { flex: 1; min-width: 0; }
+.po-lt b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.po-lt small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.po-lu { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 600; color: var(--blue); white-space: nowrap; }
+
+@media (max-width: 960px) {
+  .po-cols { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .po-tick { display: none; }
+  .po-stem { height: 26px; }
+  .po-stem::before { display: none; }
+  .po-lane { margin-bottom: 18px; }
+  .po-tariffs { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .po-h1 { font-size: 23px; }
+  .po-cols { grid-template-columns: 1fr; gap: 24px; }
+  .po-search { flex-basis: 100%; max-width: none; }
+  .po-card { padding: 17px 16px; }
+  .po-rl { width: 140px; }
 }
