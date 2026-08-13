@@ -174,6 +174,7 @@
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
+      more: '<circle cx="4.5" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
@@ -776,6 +777,30 @@
         var s = b.getAttribute('data-s');
         closeSmenu();
         if (s !== lead.crm.status) patch(lead.id, { status: s });
+      });
+    });
+  }
+
+  /* ── «Еще» в мобильном таббаре: разделы, которые не влезли ── */
+  function openMoreMenu(anchor, items, badgeOf) {
+    closeSmenu();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu mtmore';
+    smenu.innerHTML = items.map(function (it) {
+      var bd = badgeOf(it);
+      return '<button data-p="' + it.id + '"' + (it.id === state.page ? ' class="cur"' : '') + '>' +
+        ic(it.icon, 16) + '<span>' + esc(it.label) + '</span>' +
+        (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
+    }).join('');
+    document.body.appendChild(smenu);
+    var r = anchor.getBoundingClientRect();
+    // меню встает НАД таббаром: он прижат к низу экрана, снизу места нет
+    smenu.style.top = Math.max(8, r.top - smenu.offsetHeight - 8) + 'px';
+    smenu.style.right = '10px'; smenu.style.left = 'auto';
+    smenu.style.minWidth = '210px';
+    Array.prototype.forEach.call(smenu.children, function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); var p = b.getAttribute('data-p'); closeSmenu(); setPage(p);
       });
     });
   }
@@ -1712,14 +1737,32 @@
     var mt = el('mtabs');
     if (mt) {
       var hoM = inboxAttention();
-      mt.innerHTML = NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+      var mBadge = function (it) {
+        return (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+      };
+      // На телефон помещаются четыре подписи. Остальные разделы (у super_admin их
+      // тринадцать) уходят под «Еще»: горизонтальная прокрутка таббара прячет пункты
+      // без единого намека, что они есть.
+      var fits = 4, mHead = NAV, mTail = [];
+      if (NAV.length > fits + 1) { mHead = NAV.slice(0, fits); mTail = NAV.slice(fits); }
+      var tailOn = mTail.some(function (it) { return it.id === state.page; });
+      var tailBadge = mTail.reduce(function (s, it) { return s + mBadge(it); }, 0);
+      mt.innerHTML = mHead.map(function (it) {
+        var bd = mBadge(it);
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
-      }).join('');
+      }).join('') + (mTail.length
+        ? '<button class="mtab' + (tailOn ? ' on' : '') + '" data-more="1">' +
+            ic('more') + '<span>' + (tailOn ? esc(pageLabel()) : 'Еще') + '</span>' +
+            (tailBadge ? '<span class="bdg num">' + tailBadge + '</span>' : '') + '</button>'
+        : '');
       Array.prototype.forEach.call(mt.children, function (b) {
-        b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (b.getAttribute('data-more')) openMoreMenu(b, mTail, mBadge);
+          else setPage(b.getAttribute('data-p'));
+        });
       });
     }
     document.title = (c.hot ? '(' + c.hot + ') ' : '') + 'ИстСайд · CRM';
