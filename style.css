@@ -489,9 +489,9 @@ a { color: inherit; text-decoration: none; }
 .tm-row:first-child { border-top: none; }
 .tm-av { width: 38px; height: 38px; border-radius: 11px; flex: none; display: grid; place-items: center;
   background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; }
-/* 176px — минимум, на котором помещается «мессенджер не подключен»: строка про тишину
-   не должна обрезаться в многоточие, ради нее подстрочник и существует */
-.tm-i { flex: 1; min-width: 190px; }
+/* 212px — минимум, на котором рядом с длинным логином помещается «нет мессенджера»:
+   строка про тишину не должна обрезаться в многоточие, ради нее подстрочник и существует */
+.tm-i { flex: 1; min-width: 212px; }
 .tm-n { font-size: 14px; font-weight: 600; }
 /* подстрочник в одну строку: с переносом строки сотрудников разъезжались по высоте
    и список переставал читаться как список */
@@ -501,7 +501,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 168px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
 /* почта сотрудника прямо в строке: без нее не работает восстановление пароля */
-.tm-mail { flex: none; width: 170px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+.tm-mail { flex: none; width: 150px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
   background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
   transition: .15s var(--ease); }
 .tm-mail:hover { border-color: #DCE7FF; }
