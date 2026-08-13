@@ -43,6 +43,7 @@
     taskMe: null, tasksLoading: false,
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '',
+    showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -91,7 +92,21 @@
     clicked_messenger: 'перешел в мессенджер',
     opened_product: 'открыл продукт',
     tg_nudge_sent: 'бот напомнил о записи',
+    magnet_registered: 'забрал бесплатный мини-курс',
+    magnet_progress: 'мини-курс: прогресс',
   };
+  /* подпись события: словарь + уточнения из payload (одна на все ленты) */
+  function evText(e) {
+    var p = e.payload || {}, label = EVENTS_RU[e.type] || e.type;
+    if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
+    if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
+    if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'magnet_progress') {
+      label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
+        (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
+    }
+    return label;
+  }
   var COMM_KINDS = { call: 'звонок', msg: 'написал', meet: 'встреча' };
   var UNI_TYPE = { dream: 'мечта', solid: 'надежный', safe: 'запасной' };
   var SNAPSHOT = [
@@ -164,6 +179,7 @@
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
+      more: '<circle cx="4.5" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
@@ -342,7 +358,21 @@
   function isNewLead(l) {
     return state.seenBefore && l.created_at && new Date(l.created_at).getTime() > state.seenBefore;
   }
-  function leadName(l) { return l.name || 'Без имени'; }
+  /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
+     откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
+     не отличало заявку от случайного посетителя. */
+  function leadName(l) {
+    if (l.name) return l.name;
+    return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
+  }
+  /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
+     Это не лид, а строка статистики — в «Людях» такие свернуты (см. blankFoot),
+     в разделе «Путь» они считаются как раньше, первой ступенью воронки. */
+  function isBlankVisit(l) {
+    return l.status === 'visited' && !l.name && !l.email && !l.paid &&
+      !(l.booking || {}).contact && !(l.events || []).length &&
+      !l.crm.note && !(l.crm.tasks || []).length && l.crm.status === 'new';
+  }
   /* override-поля менеджера поверх данных анкеты/booking */
   function ov(ctx, field) {
     var o = (ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {};
@@ -434,17 +464,18 @@
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
+      /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
+         на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
+         отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
+         CRM посреди работы. */
       if (r.status === 403) {
-        // 403 у нас двух видов: протух ключ (detail «forbidden») и «роль без доступа»
-        // (detail «no access: <cap>»). Второе — нормальная граница прав, а не конец
-        // сессии: выкидывать человека на вход из-за закрытой вкладки нельзя.
-        return r.json().catch(function () { return {}; }).then(function (body) {
-          var noCap = body && typeof body.detail === 'string' && body.detail.indexOf('no access') === 0;
-          if (!noCap) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); }
-          var e = new Error(noCap ? 'no-cap' : '403'); e.status = 403; e.noCap = noCap; throw e;
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (String((j && j.detail) || '').indexOf('no access') === 0) throw new Error('403acl');
+          localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
+          throw new Error('403');
         });
       }
-      if (!r.ok) { var err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
+      if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     });
   }
@@ -474,15 +505,16 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
+  /* onErr(code) — когда вызвавшему есть что сказать про конкретный отказ (занятый
+     логин, недостаточно прав). Без него ошибка гасится общим тостом, как раньше. */
   function apiSend(path, method, body, cb, onErr) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
-      // onErr получает код ответа: вызывающий сам решает, что сказать человеку
-      // («логин занят» вместо общего «не сохранилось»).
-      if (onErr) { onErr(e && e.status); return; }
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
@@ -573,6 +605,7 @@
   function segLeads(seg) {
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
@@ -609,10 +642,14 @@
     return arr;
   }
   function counts() {
-    var c = { queue: 0, all: state.leads.length, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0 };
+    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
+       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+              anketa: 0, booked: 0, blank: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
+      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (!!l.paid) c.clients++;
@@ -755,6 +792,30 @@
     });
   }
 
+  /* ── «Еще» в мобильном таббаре: разделы, которые не влезли ── */
+  function openMoreMenu(anchor, items, badgeOf) {
+    closeSmenu();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu mtmore';
+    smenu.innerHTML = items.map(function (it) {
+      var bd = badgeOf(it);
+      return '<button data-p="' + it.id + '"' + (it.id === state.page ? ' class="cur"' : '') + '>' +
+        ic(it.icon, 16) + '<span>' + esc(it.label) + '</span>' +
+        (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
+    }).join('');
+    document.body.appendChild(smenu);
+    var r = anchor.getBoundingClientRect();
+    // меню встает НАД таббаром: он прижат к низу экрана, снизу места нет
+    smenu.style.top = Math.max(8, r.top - smenu.offsetHeight - 8) + 'px';
+    smenu.style.right = '10px'; smenu.style.left = 'auto';
+    smenu.style.minWidth = '210px';
+    Array.prototype.forEach.call(smenu.children, function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); var p = b.getAttribute('data-p'); closeSmenu(); setPage(p);
+      });
+    });
+  }
+
   /* ── кастомный дропдаун (вместо нативного select) ─────── */
   function chev() {
     return '<svg class="cdd-ch" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg>';
@@ -790,6 +851,7 @@
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
 
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -874,6 +936,7 @@
     var node = el('list-count');
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -956,6 +1019,127 @@
     if (nameI) nameI.addEventListener('input', function () { nameI.classList.remove('al-err'); });
     ov.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
+    });
+  }
+
+  /* ── КУДА МНЕ ПИСАТЬ (личные уведомления сотрудника) ──
+     Раньше уведомления команды уходили в один чат владельца, и выбора у человека не
+     было вовсе. Теперь мессенджер выбирает он сам, а бэкенд раскладывает по людям.
+     Двухшаговость тут не лишняя, а честная: выбрать канал мало — мессенджер не даст
+     боту написать первым, пока человек не нажал «Начать» у себя. Поэтому статус
+     подключения виден всегда, и пока его нет, мы прямо говорим, что тишина. */
+  var NOTIFY_CH = [
+    { id: 'tg', label: 'Telegram', icon: 'send', bot: 'бот EastSide' },
+    { id: 'max', label: 'Макс', icon: 'max', bot: 'бот «Истсайд команда»' },
+    { id: 'off', label: 'Не беспокоить', icon: 'bell', bot: '' },
+  ];
+
+  function openNotifyPrefs() {
+    if (typeof closeSmenu === 'function') closeSmenu();
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Уведомления</div><div class="al-title">Куда вам писать</div></div>' +
+          '<button class="al-x" id="al-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заявки на разбор, отмены записи, передача клиента живому ' +
+          'человеку и напоминания приходят в один мессенджер — выберите свой.</div>' +
+        '<div class="al-body" id="np-body">' +
+          '<div class="np-skel shim"></div><div class="np-skel shim"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="al-cancel">Закрыть</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('al-x').addEventListener('click', close);
+    el('al-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var body = el('np-body');
+    var render = function (st) {
+      var ch = (st && st.channel) || 'off';
+      var linked = (st && st.linked) || {};
+      var links = (st && st.links) || {};
+      var cur = NOTIFY_CH.filter(function (c) { return c.id === ch; })[0] || NOTIFY_CH[2];
+      var isOn = ch !== 'off';
+      var ready = isOn && !!linked[ch];
+      var link = isOn ? links[ch] : null;
+
+      var state1 = !isOn
+        ? '<div class="np-state"><span class="sev n-off">Выключено</span>' +
+            '<div class="np-hint">Уведомления команды вам не приходят. Выберите мессенджер, ' +
+            'чтобы получать заявки и передачи клиентов.</div></div>'
+        : ready
+          ? '<div class="np-state"><span class="sev n-ok">' + ic('check', 12) + 'Подключено</span>' +
+              '<div class="np-hint">Всё готово — уведомления идут в ' + esc(cur.label) + '.</div></div>'
+          : '<div class="np-state"><span class="sev n-wait">Нужен один шаг</span>' +
+              '<div class="np-hint">Откройте ' + esc(cur.bot) + ' и нажмите «Начать». ' +
+              'Пока вы этого не сделали, мессенджер не пропустит сообщение — ' +
+              'так устроены и Telegram, и Макс.</div>' +
+              (link
+                ? '<div class="np-act"><a class="bp np-open" href="' + esc(link) + '" target="_blank" rel="noopener">' +
+                    ic('ext', 14) + 'Открыть ' + esc(cur.label) + '</a>' +
+                    '<button class="al-cancel np-copy" data-l="' + esc(link) + '">' + ic('copy', 13) + 'Скопировать ссылку</button></div>'
+                : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(cur.label) + '.</div>') +
+            '</div>';
+
+      /* За какие темы вам приходят уведомления — только на просмотр: закрепляет их
+         руководитель в разделе «Команда». Иначе тему можно было бы снять с себя молча. */
+      var tps = (st && st.topics) || [];
+      var topics = '<div class="np-topics">' + (tps.length
+        ? 'Вам приходят клиенты по темам: <b>' + tps.map(function (t) { return esc(t.label); }).join(', ') + '</b>.'
+        : 'За вами не закреплена ни одна тема — уведомления о клиентах идут другим.') +
+        ' Меняет руководитель в разделе «Команда».</div>';
+
+      body.innerHTML =
+        '<div class="al-f"><span class="al-l">Мессенджер</span>' +
+          '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (c) {
+            return '<button data-ch="' + c.id + '"' + (c.id === ch ? ' class="on"' : '') + '>' +
+              ic(c.icon, 13) + esc(c.label) + '</button>';
+          }).join('') + '</div></div>' + state1 + topics;
+
+      Array.prototype.forEach.call(body.querySelectorAll('[data-ch]'), function (b) {
+        b.addEventListener('click', function () {
+          var next = b.getAttribute('data-ch');
+          if (next === ch) return;
+          body.classList.add('np-wait');
+          api('/admin/api/me/notify', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: next }),
+          }).then(function (r) {
+            body.classList.remove('np-wait');
+            render(r);
+            var nx = NOTIFY_CH.filter(function (c) { return c.id === next; })[0];
+            showToast(next === 'off' ? 'Уведомления выключены' : 'Мессенджер: ' + nx.label);
+          }).catch(function () {
+            body.classList.remove('np-wait');
+            showToast('Не удалось сохранить — попробуйте ещё раз');
+          });
+        });
+      });
+      var cp = body.querySelector('.np-copy');
+      if (cp) cp.addEventListener('click', function () {
+        var v = cp.getAttribute('data-l');
+        if (navigator.clipboard) navigator.clipboard.writeText(v);
+        showToast('Ссылка скопирована');
+      });
+    };
+
+    api('/admin/api/me/notify').then(render).catch(function () {
+      body.innerHTML = '<div class="np-hint">Не удалось открыть настройки. ' +
+        'Если вы вошли по общей ссылке, зайдите под своим логином — уведомления личные.</div>';
     });
   }
 
@@ -1384,92 +1568,6 @@
     }
   }
 
-  /* ── приглашение сотрудника: #invite/<token> ──────────────────────────────
-     Человека завели в разделе «Команда», ссылку он получил в мессенджере. Здесь
-     он задает себе пароль и вписывает фамилию — мы пароля не знаем и не хранили
-     его нигде по дороге. Ссылка одноразовая, дальше вход обычным логином. */
-  function inviteToken() {
-    var m = /^#invite\/([A-Za-z0-9_\-]+)/.exec(location.hash || '');
-    return m ? decodeURIComponent(m[1]) : '';
-  }
-
-  function renderInvite(token) {
-    document.body.classList.remove('dock-open');
-    var shell = function (inner) {
-      root.innerHTML =
-        '<div id="gate"><div class="gate-split">' +
-          '<div class="gate-brand">' +
-            '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
-            '<div class="gb-mid">' +
-              '<div class="gb-h">Добро пожаловать<br>в команду</div>' +
-              '<div class="gb-s">Осталось придумать пароль — им вы будете входить в CRM дальше.</div>' +
-            '</div>' +
-            '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
-          '</div>' +
-          '<div class="gate-card">' + inner + '</div>' +
-        '</div></div>';
-    };
-    shell('<div class="inv-load">' + ic('clock', 18) + 'Проверяем ссылку…</div>');
-
-    fetch(API + '/admin/api/invite/' + encodeURIComponent(token)).then(function (r) {
-      if (r.ok) return r.json();
-      return r.json().catch(function () { return {}; }).then(function () {
-        var reason = r.status === 409 ? 'Эта ссылка уже использована — попросите новую у руководителя.'
-          : r.status === 410 ? 'Срок действия ссылки истек — попросите новую у руководителя.'
-          : 'Ссылка не найдена. Попросите новую у руководителя.';
-        throw new Error(reason);
-      });
-    }).then(function (info) {
-      shell(
-        '<h1>Задайте пароль</h1>' +
-        '<p>Вход в CRM под логином <b>' + esc(info.login) + '</b>. Пароль знаете только вы — мы его не храним и не пересылаем.</p>' +
-        '<input id="iv-name" type="text" placeholder="Имя и фамилия" autocomplete="name" value="' + esc(info.name || '') + '">' +
-        '<div class="lg-passwrap">' +
-          '<input id="iv-pass" type="password" placeholder="Пароль — от 8 символов" autocomplete="new-password">' +
-          '<button class="lg-eye" id="iv-eye" type="button" tabindex="-1">показать</button>' +
-        '</div>' +
-        '<button class="bp" id="iv-go">Сохранить и войти</button>' +
-        '<div class="gate-err" id="iv-err"></div>');
-      var name = el('iv-name'), pass = el('iv-pass'), eye = el('iv-eye'), go = el('iv-go');
-      eye.addEventListener('click', function () {
-        var show = pass.type === 'password';
-        pass.type = show ? 'text' : 'password';
-        eye.textContent = show ? 'скрыть' : 'показать';
-        pass.focus();
-      });
-      name.focus();
-      var fail = function (msg) { var e = el('iv-err'); e.textContent = msg; e.style.display = 'block'; go.textContent = 'Сохранить и войти'; go.disabled = false; };
-      var submit = function () {
-        var p = pass.value || '';
-        if (p.length < 8) { fail('Пароль — минимум 8 символов'); return; }
-        go.disabled = true; go.textContent = 'Сохраняем…';
-        fetch(API + '/admin/api/invite/' + encodeURIComponent(token), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: p, name: (name.value || '').trim() }),
-        }).then(function (r) {
-          if (!r.ok) { fail(r.status === 409 ? 'Ссылка уже использована — попросите новую.' : 'Не получилось сохранить, попробуйте еще раз'); return null; }
-          return r.json();
-        }).then(function (j) {
-          if (!j) return;
-          localStorage.setItem(KEY_LS, j.token);
-          state.role = j.role; state.userName = j.name || '';
-          history.replaceState(null, '', location.pathname);
-          boot();
-        }).catch(function () { fail('Сеть недоступна'); });
-      };
-      go.addEventListener('click', submit);
-      pass.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
-      name.addEventListener('keydown', function (e) { if (e.key === 'Enter') pass.focus(); });
-    }).catch(function (e) {
-      shell('<h1>Ссылка не работает</h1><p>' + esc(e.message || 'Попросите новую ссылку у руководителя.') + '</p>' +
-        '<button class="bp ghost" id="iv-tologin">Войти логином и паролем</button>');
-      el('iv-tologin').addEventListener('click', function () {
-        history.replaceState(null, '', location.pathname);
-        renderLogin();
-      });
-    });
-  }
-
   /* ── shell ────────────────────────────────────────────── */
   function greeting() {
     var h = new Date().getHours();
@@ -1524,6 +1622,7 @@
         '<div class="pm-head"><div class="av">' + esc(initials(state.userName)) + '</div>' +
           '<div><div class="pm-n">' + esc(state.userName || 'EastSide') + '</div>' +
           '<div class="pm-r">' + esc(roleInfo().label) + ' · ' + esc(roleInfo().short) + '</div></div></div>' +
+        '<button data-a="notify">' + ic('bell', 16) + 'Уведомления</button>' +
         '<button data-a="refresh">' + ic('refresh', 16) + 'Обновить данные</button>' +
         '<button data-a="logout">' + ic('exit', 16) + 'Сменить аккаунт</button>';
       document.body.appendChild(smenu);
@@ -1535,7 +1634,8 @@
       Array.prototype.forEach.call(smenu.querySelectorAll('button'), function (b) {
         b.addEventListener('click', function (ev) {
           ev.stopPropagation(); var a = b.getAttribute('data-a'); closeSmenu(); prof.classList.remove('open');
-          if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
+          if (a === 'notify') openNotifyPrefs();
+          else if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
           else logout();
         });
       });
@@ -1571,16 +1671,18 @@
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
   // tasks — свои задачи, есть у КАЖДОГО: работа, которой нет в системе, не видна
   // никому. tasks_all — видеть и вести задачи всей команды, это управленческое
-  // право, а не рабочее. Зеркало ROLE_CAPS на бэкенде (routers/admin.py).
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'grants', 'marketing', 'partners', 'team'];
+  // право, а не рабочее. templates — редактор мастер-планов поступления, отделен
+  // от students: преподаватель со своими учениками чужую работу не получает.
+  // Зеркало ROLE_CAPS на бэкенде (routers/admin.py).
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team', 'portal'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'portal'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'grants', 'products', 'portal'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'portal'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
     // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
     // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
     tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
@@ -1589,7 +1691,7 @@
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
     // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
@@ -1611,7 +1713,7 @@
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
-    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'students' },
+    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
@@ -1650,10 +1752,14 @@
       });
     }
     var ws = el('welc-sub');
-    if (ws) ws.textContent = c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—');
+    // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал «0 лидов
+    // · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
+    if (ws) ws.textContent = can('clients')
+      ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
+      : roleInfo().label;
     var promo = el('promo');
     if (promo) {
-      if (!can('path')) { promo.style.display = 'none'; }
+      if (!can('path') || !can('clients')) { promo.style.display = 'none'; }
       else {
         promo.style.display = '';
         var worst = worstStep(funnelData(''));
@@ -1669,14 +1775,32 @@
     var mt = el('mtabs');
     if (mt) {
       var hoM = inboxAttention();
-      mt.innerHTML = NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+      var mBadge = function (it) {
+        return (it.id === 'leads' && c.hot) ? c.hot : (it.id === 'inbox' && hoM) ? hoM : 0;
+      };
+      // На телефон помещаются четыре подписи. Остальные разделы (у super_admin их
+      // тринадцать) уходят под «Еще»: горизонтальная прокрутка таббара прячет пункты
+      // без единого намека, что они есть.
+      var fits = 4, mHead = NAV, mTail = [];
+      if (NAV.length > fits + 1) { mHead = NAV.slice(0, fits); mTail = NAV.slice(fits); }
+      var tailOn = mTail.some(function (it) { return it.id === state.page; });
+      var tailBadge = mTail.reduce(function (s, it) { return s + mBadge(it); }, 0);
+      mt.innerHTML = mHead.map(function (it) {
+        var bd = mBadge(it);
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
-      }).join('');
+      }).join('') + (mTail.length
+        ? '<button class="mtab' + (tailOn ? ' on' : '') + '" data-more="1">' +
+            ic('more') + '<span>' + (tailOn ? esc(pageLabel()) : 'Еще') + '</span>' +
+            (tailBadge ? '<span class="bdg num">' + tailBadge + '</span>' : '') + '</button>'
+        : '');
       Array.prototype.forEach.call(mt.children, function (b) {
-        b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (b.getAttribute('data-more')) openMoreMenu(b, mTail, mBadge);
+          else setPage(b.getAttribute('data-p'));
+        });
       });
     }
     document.title = (c.hot ? '(' + c.hot + ') ' : '') + 'ИстСайд · CRM';
@@ -1732,6 +1856,7 @@
         });
       });
     } else if (state.page === 'path') {
+    } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
       tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
         return '<a class="tab' + (state.pathPeriod === o[0] ? ' on' : '') + '" data-per="' + o[0] + '">' + o[1] + '</a>';
@@ -1760,7 +1885,7 @@
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('chat', 11) + '</span>' + bsrc + '</div>';
     } else if (state.page === 'analytics') {
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('bolt', 11) + '</span>аналитика бота</div>';
-    } else if (state.page === 'dash') {
+    } else if (state.page === 'dash' && can('clients')) {
       var pers = [['', 'Всё время'], ['today', 'Сегодня'], ['week', '7 дней'], ['month', '30 дней']];
       var customLbl = state.dashPeriod === 'custom'
         ? (state.dashFrom || '…') + ' — ' + (state.dashTo || '…')
@@ -1817,7 +1942,10 @@
     if (!ch) return;
     var c = counts();
     var html = '';
-    if (state.page === 'dash') {
+    if (state.page === 'dash' && !can('clients')) {
+      // Роль без клиентов лидов не грузит: любая фраза про заявки была бы враньем.
+      html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2></div>';
+    } else if (state.page === 'dash') {
       var risks = allRisks();
       var worst = worstStep(funnelData(''));
       var phrase;
@@ -1832,7 +1960,9 @@
       html = '<div><h2>Люди</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
     }
-    if (state.page === 'path') {
+    if (state.page === 'path' && !can('clients')) {
+      html = '<div><h2>Путь по платформе</h2></div>';
+    } else if (state.page === 'path') {
       var steps = funnelData(state.pathPeriod);
       var w2 = worstStep(steps);
       var conv = steps[0].n ? Math.round(steps[steps.length - 1].n / steps[0].n * 1000) / 10 : 0;
@@ -1883,7 +2013,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, grants: 1, partners: 1 };
+  var STUB_PAGES = { grants: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1911,19 +2041,30 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'students') renderStudents(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
   }
   /* ── заглушки будущих разделов (роль их видит, но фич ещё нет) ── */
   var STUB_TEXT = {
-    students:  'Ученики, расписание, прогресс по языку и экзаменам, материалы и домашки. Появится, когда подключим обучение.',
     products:  'Каталог услуг — что продаём, цены, привязка к оплатам клиентов и финансам.',
     grants:    'Гранты CSC и провинциальные: заявки, статусы, дедлайны, пакет документов по каждому ученику.',
     marketing: 'Источники трафика, кампании, стоимость лида и ROI по каналам.',
     partners:  'Кабинет партнёров: их приведённые лиды, статистика и выплаты.',
   };
   function navMeta(id) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === id) return NAV_ALL[i]; return null; }
+  /* Дашборд и «Путь» целиком собраны из карточек клиентов. Роль без доступа к
+     клиентам (маркетолог, партнер, подрядчик) их не загружает — и без этой заглушки
+     видела бы честные нули, будто в компании нет ни одной заявки. Говорим прямо. */
+  function noClientsStub(view, page) {
+    view.innerHTML = '<div class="stub">' +
+      '<div class="stub-ic">' + ic(page === 'path' ? 'path' : 'dash', 30) + '</div>' +
+      '<div class="stub-t">' + (page === 'path' ? 'Путь по платформе' : 'Воронка по клиентам') + '</div>' +
+      '<div class="stub-s">Считается по карточкам клиентов, а твоей роли они закрыты — поэтому цифр тут нет. ' +
+      'Нужен доступ, скажи руководителю.</div></div>';
+  }
+
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };
     view.innerHTML = '<div class="stub">' +
@@ -2341,53 +2482,224 @@
     });
   }
 
-  /* ── Команда и роли (Super Admin) ── */
-  /* ── КОМАНДА: личные учетки вместо общих ──────────────────────────────────
-     Пароль сотруднику не придумываем и не пересылаем: заводим учетку → выдаем
-     одноразовую ссылку (72 часа) → человек сам задает пароль и вписывает фамилию.
-     Поэтому строка показывает не только роль, а состояние входа: ждет ссылку,
-     ссылка выдана, был в системе. */
-  function inviteUrl(token) { return CRM_HOME + '#invite/' + encodeURIComponent(token); }
-
-  function teamState(u) {
-    if (!u.active) return { cls: 'off', text: 'отключен' };
-    if (u.last_login_at) return { cls: 'on', text: 'заходил ' + fmtWhen(u.last_login_at) };
-    if (u.invite_pending) return { cls: 'wait', text: 'ссылка выдана, еще не входил' };
-    if (u.has_password) return { cls: '', text: 'пароль задан, входа не было' };
-    return { cls: 'wait', text: 'нужна ссылка для входа' };
+  /* ── Обучение: ученики по английскому ──────────────────────
+     Экран преподавателя. У преподавателя нет доступа ни к карточкам лидов, ни к
+     деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
+     учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
+     здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
+  function studentsLoad(force) {
+    if (state._students && !force) return;
+    state._students = null;
+    api('/admin/api/det/students').then(function (r) {
+      state._students = r || { students: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () { state._students = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentOpen(id) {
+    state.studentId = id;
+    state._student = null;
+    renderView();
+    api('/admin/api/det/students/' + id).then(function (r) {
+      state._student = r;
+      if (state.page === 'students' && state.studentId === id) renderView();
+    }).catch(function () { state._student = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentRow(s) {
+    var when = s.last_practice ? 'занимался ' + esc(ago(s.last_practice)) + ' назад' : 'еще не занимался';
+    return '<div class="tm-row st-row" data-sid="' + esc(s.id) + '" tabindex="0">' +
+      '<span class="tm-av">' + esc(initials(s.name)) + '</span>' +
+      '<div class="tm-i"><div class="tm-n">' + esc(s.name) + '</div>' +
+        '<div class="tm-l">' + when + (s.week ? ' · за неделю ' + s.week : '') + '</div></div>' +
+      (s.overall != null ? '<span class="st-score num">' + s.overall + '</span>'
+                         : '<span class="st-score none">теста нет</span>') +
+      '<span class="st-go">' + ic('go', 14) + '</span></div>';
+  }
+  function renderStudents(view) {
+    if (state.studentId) return renderStudentCard(view);
+    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
+    if (state._students === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      return;
+    }
+    var list = state._students.students || [];
+    var mine = state._students.mine_only;
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
+      '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
+      '<div class="s">' + (mine
+        ? 'кого вам передали: как занимаются в тренажерах и что с тестом'
+        : 'у кого назначен преподаватель — назначает менеджер в карточке человека') + '</div></div>' +
+      '<span class="cnt num">' + list.length + '</span></div>' +
+      '<div class="tm-list">' + (list.map(studentRow).join('') ||
+        '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
+        'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
+      var go = function () { studentOpen(row.getAttribute('data-sid')); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function renderStudentCard(view) {
+    if (!state._student) { view.innerHTML = dashSkeleton(); return; }
+    if (state._student === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось открыть ученика.</div></div>';
+      return;
+    }
+    var d = state._student;
+    var pr = d.practice || {};
+    var modes = (d.by_mode || []).map(function (m) {
+      var weak = m.accuracy_pct != null && m.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(m.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(m.n * 100 /
+          ((d.by_mode[0] && d.by_mode[0].n) || 1)) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + m.n +
+          (m.accuracy_pct != null ? ' · <b>' + m.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    var tests = (d.attempts || []).slice().reverse().map(function (a) {
+      return '<div class="tm-row"><div class="tm-i"><div class="tm-n">' +
+        (a.overall != null ? a.overall + ' баллов' : 'без балла') + '</div>' +
+        '<div class="tm-l">' + esc(fmtWhen(a.finished_at || a.started_at)) +
+        (a.reading != null ? ' · чтение ' + a.reading : '') +
+        (a.listening != null ? ' · аудирование ' + a.listening : '') +
+        (a.writing != null ? ' · письмо ' + a.writing : '') +
+        (a.speaking != null ? ' · речь ' + a.speaking : '') + '</div></div></div>';
+    }).join('');
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><button class="bp sm ghost st-back" id="st-back">' + ic('back', 13) + 'Все ученики</button>' +
+      '<div><div class="t">' + esc(d.name) + '</div>' +
+      '<div class="s">занятия в тренажерах и история тестов</div></div></div>' +
+      (pr.total ? detPractice(pr, { noSkills: true }) : '<div class="empty">Пока не занимался. Проверьте, что в карточке ' +
+        'человека включен тумблер «Тренажеры» — пока он выключен, занятия не записываются.</div>') +
+      (modes ? '<div class="m-sec"><div class="m-sec-h">По тренажерам</div>' + modes + '</div>' : '') +
+      '<div class="m-sec"><div class="m-sec-h">Тесты</div><div class="tm-list">' +
+        (tests || '<div class="empty">Тест еще не проходили.</div>') + '</div></div></div>';
+    var back = el('st-back');
+    if (back) back.addEventListener('click', function () {
+      state.studentId = null; state._student = null; renderView();
+    });
   }
 
+  /* ── Команда и роли (Super Admin) ── */
+  /* Короткая подпись темы для чипа в строке: полную («документы и гранты») отдает сервер,
+     она уходит в title. В строке нужна одна ширина на всех, иначе колонка едет. */
+  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи' };
+  function tmTopicChips(u) {
+    var mine = u.notify_topics || [];
+    return '<span class="tm-tp" data-uid="' + u.id + '">' +
+      (state._teamTopics || []).map(function (t) {
+        var on = mine.indexOf(t.id) >= 0;
+        return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'title="' + esc(on ? 'Приходят уведомления: ' + t.label : 'Не приходят: ' + t.label) + '">' +
+          esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
+      }).join('') + '</span>';
+  }
+  /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
+     отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
+     до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
+  function tmSub(u) {
+    var mine = u.notify_topics || [];
+    if (!mine.length) return '';
+    if (!u.notify_linked) {
+      return '<span class="tm-warn" title="Тема отмечена, но человек не нажал «Начать» ' +
+        'у бота уведомлений — сообщение ему не дойдет">' + ic('alert', 11) + 'нет мессенджера</span>';
+    }
+    return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс' : 'Телеграм');
+  }
+  function tmLine(u) {
+    var sub = tmSub(u);
+    return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
+  }
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();
-      api('/admin/api/team').then(function (r) { state._team = (r && r.users) || []; if (state.page === 'team') renderView(); })
-        .catch(function () { state._team = 'none'; if (state.page === 'team') renderView(); });
+      api('/admin/api/team').then(function (r) {
+        state._team = (r && r.users) || [];
+        state._teamTopics = (r && r.topics) || [];
+        state._teamShared = !r || r.shared_chat !== false;
+        if (state.page === 'team') renderView();
+      }).catch(function () { state._team = 'none'; if (state.page === 'team') renderView(); });
       return;
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
-    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    /* верхние роли раздает только тот, у кого они уже есть — бэкенд отвечает тем же
+       (иначе руководитель выписывал бы себе доступ к финансам и документам детей) */
+    var iAmTop = state.role === 'super_admin' || state.role === 'owner';
+    var assignable = Object.keys(ROLES).filter(function (k) {
+      if (k === 'owner' || k === 'manager') return false;
+      return k !== 'super_admin' || iAmTop;
+    });
+    function roleOpts(cur) {
+      return assignable.map(function (k) {
+        return '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>';
+      }).join('');
+    }
     var rows = state._team.map(function (u) {
-      var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
-      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
-      var st = teamState(u);
-      return '<div class="tm-row' + (u.active ? '' : ' tm-off') + '"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
+      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
+      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
+         Показываем ее настоящую роль и запираем поля: пустой селект «Куратор» напротив
+         супер-админа врал бы о том, кто в системе главный. */
+      var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
+      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
+      var sel = lock
+        ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
+        : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
+      return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div>' +
-        '<div class="tm-l">@' + esc(u.login) + '<span class="tm-st ' + st.cls + '">' + esc(st.text) + '</span></div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select>' +
-        '<div class="tm-acts">' +
-          '<button class="icobtn" data-inv="' + u.id + '" title="Ссылка для входа">' + ic('ext', 15) + '</button>' +
-          '<button class="icobtn' + (u.active ? ' del' : '') + '" data-off="' + u.id + '" title="' +
-            (u.active ? 'Отключить сотрудника' : 'Вернуть доступ') + '">' + ic(u.active ? 'x' : 'check', 15) + '</button>' +
-        '</div></div>';
+          '<div class="tm-l">' + tmLine(u) + '</div></div>' +
+        tmTopicChips(u) +
+        '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
+        sel + '</div>';
     }).join('');
+
+    /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
+       только его хеш, второй раз взять неоткуда. */
+    var made = state._teamMade;
+    var madeHtml = made ? '<div class="tm-made">' +
+        '<div class="tm-made-h">' + ic('check', 14) + 'Сотрудник заведен: ' + esc(made.user.name) + '</div>' +
+        '<div class="tm-made-b">Логин <b>' + esc(made.user.login) + '</b> · пароль <b>' + esc(made.password) + '</b></div>' +
+        '<div class="tm-made-s">Передайте пароль лично и попросите сменить его после первого входа. ' +
+          'Здесь он больше не появится — мы храним только его отпечаток.</div>' +
+        '<div class="tm-made-a"><button class="bp sm" id="tm-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+        '<button class="bp sm ghost" id="tm-made-x">Понятно</button></div></div>' : '';
+
+    var d = state._teamNew;
+    var formHtml = d ? '<div class="tm-add">' +
+        '<div class="tm-add-g">' +
+          '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
+        '</div>' +
+        '<div class="tm-add-a"><span class="tm-add-s">Пароль придумаем сами и покажем один раз.</span>' +
+        '<button class="bp sm ghost" id="tn-cancel">Отмена</button>' +
+        '<button class="bp sm" id="tn-save">Завести</button></div></div>' : '';
+
+    /* Общий чат — исторический адрес, куда падало все и сразу. Выключать его можно, но
+       осознанно: пока команда подключается лично, это единственный работающий канал. */
+    var sharedOn = state._teamShared !== false;
+    var sharedHtml = '<div class="det-sw-row tm-shared">' +
+      '<div class="det-sw-b"><div class="det-sw-t">Копия в общий чат</div>' +
+        '<div class="det-sw-s">' + (sharedOn
+          ? 'Каждое уведомление дублируется в общий чат — там его видят все, кому он открыт.'
+          : 'Уведомления идут только тем, за кем закреплена тема. Если по теме никого нет, ' +
+            'копия все равно уйдет в общий чат — иначе клиент потеряется.') + '</div></div>' +
+      '<button type="button" class="pd-sw' + (sharedOn ? ' on' : '') + '" id="tm-shared">' +
+        '<span class="pd-sw-l">' + (sharedOn ? 'Включена' : 'Выключена') + '</span>' +
+        '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
-      '<div class="s">роль решает, что человек видит; вход — по личной ссылке, пароль он задает сам</div></div>' +
-      '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
-      '<button class="bp sm" id="tm-add">' + ic('plus', 14) + 'Добавить сотрудника</button></div>' +
-      '<div class="tm-list">' + (rows || '<div class="empty">Пока никого нет.</div>') + '</div></div>';
-    el('tm-add').addEventListener('click', openAddStaff);
-    el('tm-tg').addEventListener('click', openBotLinks);
+      '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
+      '<span class="cnt num">' + state._team.length + '</span>' +
+      (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
+      '</div>' + madeHtml + formHtml +
+      '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
+      '<div class="m-sec tm-nsec"><div class="m-sec-h">Уведомления команды</div>' +
+        '<div class="tm-hint">Клиент пишет боту и просит человека — уведомление уходит тем, ' +
+          'за кем закреплена тема разговора. Мессенджер каждый выбирает сам: профиль → «Уведомления».</div>' +
+        sharedHtml + '</div></div>';
+
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
@@ -2395,241 +2707,104 @@
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-inv]'), function (b) {
+    /* Тема закрепляется одним нажатием. Локально красим сразу, но правдой считаем ответ
+       сервера: не сохранилось — возвращаем чип как был, чтобы галочка не врала. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-tp-b'), function (b) {
       b.addEventListener('click', function () {
-        var uid = b.getAttribute('data-inv');
-        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0] || {};
-        b.disabled = true;
-        apiSend('/admin/api/users/' + uid + '/invite', 'POST', {}, function (r) {
-          b.disabled = false;
-          if (!r || !r.invite) return;
-          if (u) { u.invite_pending = true; }
-          openInviteLink(u.name || u.login, r.invite);
-        }, function () { b.disabled = false; });
-      });
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-off]'), function (b) {
-      b.addEventListener('click', function () {
-        var uid = b.getAttribute('data-off');
+        var uid = b.parentNode.getAttribute('data-uid');
         var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
         if (!u) return;
-        var turnOff = !!u.active;
-        if (turnOff && !confirm('Отключить ' + (u.name || u.login) + '? Доступ пропадет сразу, даже если человек уже вошел.')) return;
-        apiSend('/admin/api/users/' + uid, 'PATCH', { active: !turnOff }, function () {
-          u.active = !turnOff;
-          if (turnOff) u.invite_pending = false;
-          showToast(turnOff ? 'Доступ закрыт' : 'Доступ вернули');
-          if (state.page === 'team') renderView();
+        var t = b.getAttribute('data-t'), was = (u.notify_topics || []).slice();
+        var next = was.indexOf(t) >= 0
+          ? was.filter(function (x) { return x !== t; })
+          : was.concat([t]);
+        u.notify_topics = next;
+        b.classList.toggle('on');
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { notify_topics: next }, function () {
+          b.disabled = false;
+          var sub = b.parentNode.parentNode.querySelector('.tm-l');
+          if (sub) sub.innerHTML = tmLine(u);
+          showToast(next.length > was.length
+            ? (u.name || u.login) + ' получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase()
+            : (u.name || u.login) + ' больше не получает: ' + (TM_TOPIC_SHORT[t] || t).toLowerCase());
+        }, function () {
+          b.disabled = false; u.notify_topics = was; b.classList.toggle('on');
+          showToast('Не удалось сохранить — попробуйте еще раз');
         });
       });
     });
-  }
-
-  /* ── Подключение команды к боту задач ──────────────────────────────────────
-     Telegram не дает боту написать первым: пока человек не нажал «Старт» по
-     СВОЕЙ ссылке, напоминания ему физически некуда слать. Поэтому здесь список
-     «кто подключился, кто нет» и личная ссылка на каждого — их рассылает
-     руководитель. Продавить людей нажать может только он, не бот. */
-  function openBotLinks() {
-    if (document.querySelector('.al-ov')) return;
-    var ov = document.createElement('div');
-    ov.className = 'al-ov';
-    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
-      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
-    document.body.appendChild(ov);
-    requestAnimationFrame(function () { ov.classList.add('show'); });
-    var closed = false;
-    var close = function () {
-      if (closed) return; closed = true;
-      ov.classList.remove('show');
-      document.removeEventListener('keydown', onKey);
-      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
-    };
-    var onKey = function (e) { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', onKey);
-    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-
-    api('/admin/api/tasks/tg/links').then(function (r) {
-      var links = (r && r.links) || [];
-      var off = links.filter(function (x) { return !x.linked; });
-      // Бот вообще не настроен — тогда действия на этом экране нет, и повторять
-      // это в каждой строке незачем: говорим один раз наверху.
-      var noBot = links.length > 0 && !links.some(function (x) { return x.link; });
-      // Неподключенные наверх: список открывают ради них, а не ради галочек.
-      links = links.slice().sort(function (a, b) { return (a.linked ? 1 : 0) - (b.linked ? 1 : 0); });
-      var rows = links.map(function (x) {
-        return '<div class="tgl-row' + (x.linked ? ' on' : '') + '">' +
-          '<span class="tsk-av">' + esc(initials(x.name || x.login)) + '</span>' +
-          '<div class="tgl-i"><div class="tgl-n">' + esc(x.name || x.login) + '</div>' +
-            '<div class="tgl-s">' + (x.linked
-              ? 'подключен' + (x.tg_username ? ' · @' + esc(x.tg_username) : '')
-              // Пока бота нет, «не нажал Старт» — не про человека, а про бота:
-              // об этом уже сказано наверху, в строке показываем роль.
-              : noBot ? esc((ROLES[x.role] && ROLES[x.role].label) || x.role || '')
-                : 'не нажал «Старт» — напоминания не идут') + '</div></div>' +
-          (x.link
-            ? '<button class="icobtn" data-cp="' + esc(x.link) + '" title="Скопировать личную ссылку">' + ic('copy', 15) + '</button>'
-            : '') +
-        '</div>';
-      }).join('');
-      ov.querySelector('.al-card').innerHTML =
-        '<div class="al-head"><div><div class="al-eyebrow">Команда</div>' +
-          '<div class="al-title">Бот задач</div></div>' +
-          '<button class="al-x" id="tg-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">' + (noBot
-          ? 'Бот задач еще не подключен — личных ссылок нет, напоминания не уходят никому. Скажи об этом мне, я подключу.'
-          : off.length
-            ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
-              ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
-            : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body"><div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
-          (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
-        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
-      el('tg-x').addEventListener('click', close);
-      el('tg-close').addEventListener('click', close);
-      Array.prototype.forEach.call(ov.querySelectorAll('[data-cp]'), function (b) {
-        b.addEventListener('click', function () {
-          copyText(b.getAttribute('data-cp'));
-          showToast('Ссылка скопирована — отправь ее лично этому человеку');
+    var shb = el('tm-shared');
+    if (shb) shb.addEventListener('click', function () {
+      var next = !(state._teamShared !== false);
+      shb.disabled = true;
+      apiSend('/admin/api/team/shared-chat', 'PUT', { on: next }, function () {
+        state._teamShared = next;
+        renderView();
+        showToast(next ? 'Копии уходят в общий чат' : 'Общий чат отключен');
+      }, function () {
+        shb.disabled = false;
+        showToast('Не удалось сохранить — попробуйте еще раз');
+      });
+    });
+    /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-mail'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (u && (u.email || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { email: val }, function () {
+          if (u) u.email = val;
+          inp.classList.toggle('none', !val);
+          showToast(val ? 'Почта сохранена' : 'Почта убрана');
         });
       });
-    }).catch(function () {
-      ov.querySelector('.al-card').innerHTML =
-        '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +
-        '<button class="al-x" id="tg-x">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">Список ссылок доступен только тем, кто ведет команду.</div>' +
-        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
-      el('tg-x').addEventListener('click', close);
-      el('tg-close').addEventListener('click', close);
     });
-  }
 
-  /* Модалка «Новый сотрудник» и она же — экран выданной ссылки. */
-  function openAddStaff() {
-    if (document.querySelector('.al-ov')) return;
-    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
-    var opts = assignable.map(function (k) {
-      return '<option value="' + k + '"' + (k === 'tutor' ? ' selected' : '') + '>' + ROLES[k].label + ' — ' + ROLES[k].short + '</option>';
-    }).join('');
-    var ov = document.createElement('div');
-    ov.className = 'al-ov';
-    ov.innerHTML =
-      '<div class="al-card" role="dialog" aria-modal="true">' +
-        '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Команда</div><div class="al-title">Новый сотрудник</div></div>' +
-          '<button class="al-x" id="st-x" title="Закрыть">' + ic('x', 16) + '</button>' +
-        '</div>' +
-        '<div class="al-sub">Пароль придумывать не нужно: человек задаст его сам по одноразовой ссылке.</div>' +
-        '<div class="al-body">' +
-          '<label class="al-f"><span class="al-l">Имя <i>*</i></span>' +
-            '<input id="st-name" class="al-in" placeholder="Как зовут — фамилию впишет сам" autocomplete="off" maxlength="80"></label>' +
-          '<label class="al-f"><span class="al-l">Логин <i>*</i></span>' +
-            '<input id="st-login" class="al-in" placeholder="латиницей, например alexandr" autocomplete="off" maxlength="32"></label>' +
-          '<label class="al-f"><span class="al-l">Роль</span><span class="al-selwrap">' +
-            '<select id="st-role" class="al-sel">' + opts + '</select></span></label>' +
-        '</div>' +
-        '<div class="al-foot">' +
-          '<button class="al-cancel" id="st-cancel">Отмена</button>' +
-          '<button class="bp al-save" id="st-save">' + ic('plus', 14) + 'Завести и выдать ссылку</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(ov);
-    requestAnimationFrame(function () { ov.classList.add('show'); });
-    var closed = false;
-    var close = function () {
-      if (closed) return; closed = true;
-      ov.classList.remove('show');
-      document.removeEventListener('keydown', onKey);
-      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
-    };
-    var onKey = function (e) { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', onKey);
-    el('st-x').addEventListener('click', close);
-    el('st-cancel').addEventListener('click', close);
-    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    var nameI = el('st-name'), loginI = el('st-login');
-    setTimeout(function () { nameI.focus(); }, 30);
-    // Логин подсказываем из имени, пока человек его не правил руками.
-    var loginTouched = false;
-    loginI.addEventListener('input', function () { loginTouched = true; loginI.classList.remove('al-err'); });
-    nameI.addEventListener('input', function () {
-      nameI.classList.remove('al-err');
-      if (!loginTouched) loginI.value = translit(nameI.value);
+    var nb = el('tm-new');
+    if (nb) nb.addEventListener('click', function () {
+      state._teamNew = { name: '', login: '', email: '', role: 'curator' };
+      state._teamMade = null;   // прошлый выданный пароль убираем: он уже передан
+      renderView();
+      var f = el('tn-name'); if (f) f.focus();
     });
-    var save = el('st-save');
-    var submit = function () {
-      var name = (nameI.value || '').trim(), login = (loginI.value || '').trim().toLowerCase();
-      if (!name) { nameI.classList.add('al-err'); nameI.focus(); return; }
-      if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(login)) {
-        loginI.classList.add('al-err'); loginI.focus();
-        showToast('Логин — латиницей, от 3 символов');
-        return;
-      }
-      save.disabled = true; save.classList.add('loading');
-      apiSend('/admin/api/users', 'POST', { name: name, login: login, role: el('st-role').value }, function (r) {
-        close();
-        state._team = null;
-        if (state.page === 'team') renderView();
-        if (r && r.invite) openInviteLink(name, r.invite);
-      }, function (status) {
-        save.disabled = false; save.classList.remove('loading');
-        showToast(status === 409 ? 'Такой логин уже занят' : 'Не получилось завести сотрудника');
+    var cx = el('tn-cancel');
+    if (cx) cx.addEventListener('click', function () { state._teamNew = null; renderView(); });
+    var mx = el('tm-made-x');
+    if (mx) mx.addEventListener('click', function () { state._teamMade = null; renderView(); });
+    var cp = el('tm-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var m = state._teamMade;
+      copyText('Логин: ' + m.user.login + '\nПароль: ' + m.password + '\nАдрес: ' + CRM_HOME);
+    });
+    ['tn-name', 'tn-login', 'tn-email', 'tn-role'].forEach(function (id) {
+      var f = el(id);
+      if (f) f.addEventListener('input', function () {
+        state._teamNew[id.slice(3)] = f.value;
       });
-    };
-    save.addEventListener('click', submit);
-    ov.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
     });
-  }
-
-  /* Имя кириллицей → логин латиницей: подсказка, человек может переписать. */
-  var TRANSLIT_MAP = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', й: 'i',
-    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h',
-    ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
-  function translit(s) {
-    return (s || '').toLowerCase().split('').map(function (ch) {
-      if (TRANSLIT_MAP[ch] != null) return TRANSLIT_MAP[ch];
-      return /[a-z0-9]/.test(ch) ? ch : '';
-    }).join('').slice(0, 32);
-  }
-
-  /* Экран выданной ссылки: показываем один раз, копируем и отдаем человеку. */
-  function openInviteLink(who, invite) {
-    var url = inviteUrl(invite.token);
-    var till = invite.expires_at ? fmtWhen(invite.expires_at) : 'через 72 часа';
-    var ov = document.createElement('div');
-    ov.className = 'al-ov';
-    ov.innerHTML =
-      '<div class="al-card" role="dialog" aria-modal="true">' +
-        '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Команда</div><div class="al-title">Ссылка для входа</div></div>' +
-          '<button class="al-x" id="iv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
-        '</div>' +
-        '<div class="al-sub">Отправьте ее ' + esc(who) + '. По ссылке человек задаст себе пароль и впишет фамилию — ' +
-          'открыть ее можно один раз, действует до ' + esc(till) + '.</div>' +
-        '<div class="al-body">' +
-          '<div class="inv-link"><code>' + esc(url) + '</code></div>' +
-        '</div>' +
-        '<div class="al-foot">' +
-          '<button class="al-cancel" id="iv-close">Готово</button>' +
-          '<button class="bp al-save" id="iv-copy">' + ic('copy', 14) + 'Скопировать ссылку</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(ov);
-    requestAnimationFrame(function () { ov.classList.add('show'); });
-    var closed = false;
-    var close = function () {
-      if (closed) return; closed = true;
-      ov.classList.remove('show');
-      document.removeEventListener('keydown', onKey);
-      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
-    };
-    var onKey = function (e) { if (e.key === 'Escape') close(); };
-    document.addEventListener('keydown', onKey);
-    el('iv-x').addEventListener('click', close);
-    el('iv-close').addEventListener('click', close);
-    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    el('iv-copy').addEventListener('click', function () { copyText(url, el('iv-copy')); });
+    var sv = el('tn-save');
+    if (sv) sv.addEventListener('click', function () {
+      var body = state._teamNew || {};
+      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      sv.disabled = true;
+      apiSend('/admin/api/users', 'POST', {
+        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        email: body.email.trim(), role: body.role,
+      }, function (r) {
+        state._teamNew = null;
+        state._teamMade = r;
+        state._team = null;   // перечитываем список с сервера, а не дорисовываем локально
+        renderView();
+      }, function (code) {
+        sv.disabled = false;
+        showToast(code === 409 ? 'Такой логин или почта уже заняты'
+          : code === 403 ? 'Эту роль может выдать только владелец'
+          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : 'Не удалось завести — попробуйте еще раз');
+      });
+    });
   }
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
   /* копируемый /go-адрес: на проде — ЛАТИНСКИЙ go.eastside.study. Кириллический домен
@@ -2652,6 +2827,9 @@
     { id: 'tt', label: 'TikTok', src: 'tiktok' },
     { id: 'tgch', label: 'Телеграм-канал', src: 'telegram' },
     { id: 'dzen', label: 'Дзен', src: 'dzen' },
+    /* ссылка внутри самого бота (кнопка под приветствием и т.п.): свой источник, иначе
+       переходы из бота слипаются с «Другое место» и канал нечем измерить */
+    { id: 'bot', label: 'Бот EastSide', src: 'telegram_bot' },
     { id: 'site', label: 'Другое место', src: 'other' },
   ];
   var MK_MEDIUMS = [
@@ -2660,6 +2838,7 @@
     { id: 'stories', label: 'Сторис', utm: 'stories' },
     { id: 'ads', label: 'Реклама / таргет', utm: 'ads' },
     { id: 'bio', label: 'Описание профиля', utm: 'bio' },
+    { id: 'welcome', label: 'Приветствие в боте', utm: 'welcome' },
   ];
   /* WhatsApp появится в выборе, когда бот заработает в WA; отображение wa-ссылок
      из БД оставлено в MK_KIND_INFO, чтобы старые данные не показывались как WEB */
@@ -2674,7 +2853,8 @@
   };
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
-    tiktok: 'TikTok', telegram: 'Telegram', whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
+    whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
   };
 
   function mkUrl(code) {
@@ -4297,6 +4477,7 @@
   }
 
   function renderDash(view) {
+    if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
     var c = dashCounts(P);
     var cAll = counts();
@@ -4548,17 +4729,38 @@
     }).join('') + '</div>';
   }
 
+  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
+     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
+     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  function blankNote() {
+    var n = counts().blank;
+    if (!n || state.seg !== 'all') return '';
+    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
+    return '<div class="list-foot">' +
+      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
+      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
+        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
+      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+    '</div>';
+  }
+  function attachBlankNote(host) {
+    var b = host.querySelector('#lf-blank');
+    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = emptyState();
+      host.innerHTML = blankNote() + emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
+      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
       var tone = l.score != null ? scoreTone(l.score) : null;
-      var contact = (l.booking || {}).contact;
+      /* почта аккаунта — тоже способ связаться: без нее у зарегистрировавшихся без
+         записи на разбор колонка стояла пустой, хотя контакт у нас был */
+      var contact = (l.booking || {}).contact || l.email;
       var act = contactAction(contact);
       var profileBits = [l.grade, l.target_year ? 'поступление ' + l.target_year : null, (l.geo || {}).city]
         .filter(Boolean).map(esc);
@@ -4586,7 +4788,8 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = '<div class="trow lr-grid thead">' +
+    host.innerHTML = blankNote() +
+      '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
@@ -4594,6 +4797,7 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
+    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
@@ -4685,6 +4889,7 @@
 
   /* ── ПУТЬ ─────────────────────────────────────────────── */
   function renderPath(view) {
+    if (!can('clients')) { noClientsStub(view, 'path'); return; }
     var steps = funnelData(state.pathPeriod);
     if (!steps[0].n) {
       view.innerHTML = '<div class="card"><div class="empty">За этот период данных нет.</div></div>';
@@ -6892,6 +7097,59 @@
       : ' · проверил ' + esc(by.replace('teacher:', ''));
   }
 
+  /* Кто ведет ученика по английскому. Преподаватель видит в своем разделе ТОЛЬКО тех,
+     кого ему сюда назначили, — поэтому пустое поле значит «этот ученик не виден никому
+     из преподавателей». Список ролей ограничен: менеджера в преподаватели не поставить. */
+  var DET_TEACHERS = null;
+  function detTeacherRow(t) {
+    return '<div class="det-lbl det-linkh">Преподаватель по английскому</div>' +
+      '<div class="det-teacher"><select class="tm-sel" id="det-teacher">' +
+        '<option value="">не назначен</option>' +
+        ((DET_TEACHERS || (t ? [t] : [])).map(function (x) {
+          return '<option value="' + esc(x.login) + '"' + (t && t.login === x.login ? ' selected' : '') +
+            '>' + esc(x.name) + '</option>';
+        }).join('')) + '</select>' +
+      '<span class="det-teacher-s">' + (t
+        ? 'видит занятия этого ученика в разделе «Обучение»'
+        : 'пока не назначен — занятия ученика не видит ни один преподаватель') + '</span></div>';
+  }
+
+  /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
+     один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
+     полоска по дням и распределение по навыкам, без таблиц. */
+  function detPractice(pr, opts) {
+    if (!pr.total) return '';
+    opts = opts || {};
+    var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    // Фронт может приехать раньше бэка: старый ответ без разбивки — показываем цифры.
+    var days = (pr.by_day || []).map(function (d) {
+      var dt = new Date(d.date + 'T12:00:00');
+      return '<div class="det-day' + (d.n ? ' on' : '') + '" title="' + esc(d.date) + '">' +
+        '<b>' + (d.n || '·') + '</b><i>' + (isNaN(dt) ? '' : DOW[dt.getDay()]) + '</i></div>';
+    }).join('');
+    var top = (pr.by_skill || []).reduce(function (m, s) { return Math.max(m, s.n); }, 0) || 1;
+    var skills = (pr.by_skill || []).map(function (s) {
+      var weak = s.accuracy_pct != null && s.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(s.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(s.n * 100 / top) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + s.n +
+          (s.accuracy_pct != null ? ' · <b>' + s.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    return '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
+      '<div class="pay-board det-board">' +
+        '<div class="pay-cell"><div class="pc-l">Заданий</div><div class="pc-v num">' + pr.total + '</div></div>' +
+        '<div class="pay-cell' + (pr.week ? '' : ' muted') + '"><div class="pc-l">За неделю</div>' +
+          '<div class="pc-v num">' + (pr.week || 0) + '</div></div>' +
+        '<div class="pay-cell' + (pr.accuracy_pct == null ? ' muted' : '') + '"><div class="pc-l">Верно</div>' +
+          '<div class="pc-v num">' + (pr.accuracy_pct == null ? '—' : pr.accuracy_pct + '%') + '</div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Дней</div><div class="pc-v num">' + (pr.days || 0) + '</div></div>' +
+      '</div>' +
+      '<div class="det-lbl det-prl">Две недели по дням</div><div class="det-days">' + days + '</div>' +
+      (skills && !opts.noSkills ? '<div class="det-lbl det-prl">По навыкам</div>' + skills : '') +
+      (pr.last_at ? '<div class="det-pr det-prl">последний раз ' + esc(ago(pr.last_at)) + ' назад</div>' : '') +
+      '</div>';
+  }
+
   function detAttemptRow(a, prev) {
     var d = (a.overall != null && prev != null) ? a.overall - prev : null;
     var when = a.finished_at || a.started_at;
@@ -7066,19 +7324,16 @@
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       '<div class="det-sw-row">' +
         '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажеры</div>' +
-          '<div class="det-sw-s">Тренировки на платформе между тестами. Открывайте после оплаты занятий.</div></div>' +
+          '<div class="det-sw-s">Тренировки на платформе между тестами. Пока закрыты, занятия ученика ' +
+            'в карточку не попадают — откройте после оплаты, и здесь будет видно, как он занимается.</div></div>' +
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
+      detTeacherRow(b.teacher) +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
 
-    var pr = b.practice || {};
-    var practice = pr.total
-      ? '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
-        '<div class="det-pr">' + pr.total + ' ' + plural(pr.total, 'подход', 'подхода', 'подходов') +
-        ', за неделю ' + pr.week + (pr.last_at ? ' · последний раз ' + esc(ago(pr.last_at)) + ' назад' : '') + '</div></div>'
-      : '';
+    var practice = detPractice(b.practice || {});
 
     var it = b.intensive;
     var intensive = it
@@ -7124,7 +7379,8 @@
     if (!b) { loadCourse(id); return skeletonSection('course'); }
     if (b === 'none') {
       return '<div class="m-ctitle">Китайский</div>' +
-        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>' +
+        buildHskBlock(id);
     }
 
     var head = '<div class="m-ctitle">Китайский</div>' +
@@ -7175,7 +7431,38 @@
       (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
       '</div>';
 
-    return head + access;
+    return head + access + buildHskBlock(id);
+  }
+
+  /* ── HSK-тренажёр в той же вкладке «Китайский» ──
+     Тренажёр китайского открыт по прямой ссылке всем (localStorage, без входа),
+     поэтому «доступ» тут — не гейт, а отметка менеджера «я дал этому ученику» плюс
+     ссылка под рукой. Флаг живёт в overrides.hsk лида (частичный мердж на бэке),
+     отдельная ручка и таблица не нужны. Персонального входа, как у курса и DET,
+     пока нет — это отдельная работа. */
+  var HSK_LINK = 'https://истсайд.рф/hsk_cabinet.html';
+  function buildHskBlock(id) {
+    var det = state.details[id];
+    var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
+    var on = !!h.open;
+    return '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
+      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Открыт по прямой ссылке ' +
+      'всем; тумблер отмечает, что вы дали доступ этому ученику, и держит ссылку под рукой.</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Тренажёр HSK</div>' +
+          '<div class="det-sw-s">' + (on ? 'вы отметили доступ' : 'доступ не отмечен') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
+          '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
+        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '') +
+      '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+      '<div class="det-link">' +
+        '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(HSK_LINK) + '">' +
+        '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+      '<div class="det-link-m">ссылка общая: тренажёр без входа, прогресс хранится ' +
+      'у ученика в браузере</div>' +
+      '</div>';
   }
 
   function wireCourse(id) {
@@ -7235,6 +7522,27 @@
     if (nl) nl.addEventListener('click', function () {
       post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
     });
+
+    // HSK-тренажёр: тумблер-отметка доступа (флаг в overrides.hsk) + копирование ссылки.
+    // Полный overrides шлём целиком, чтобы оптимистичный рендер не потерял имя/контакт.
+    var hsw = el('hsk-sw');
+    if (hsw) hsw.addEventListener('click', function () {
+      var det = state.details[id];
+      var ov = Object.assign({}, (det && det.crm && det.crm.overrides) || {});
+      var cur = ov.hsk || {};
+      var next = !cur.open;
+      ov.hsk = next
+        ? { open: true, by: state.userName || '', at: new Date().toISOString() }
+        : { open: false, by: cur.by || '', at: cur.at || '' };
+      patch(id, { overrides: ov }, null, function () {
+        if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      });
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
+    });
+
+    var hcp = el('hsk-copy');
+    if (hcp) hcp.addEventListener('click', function () { copyText(HSK_LINK, hcp); });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -7618,10 +7926,9 @@
       if (e.type === 'anketa_step') {
         var s = (e.payload || {}).step || 0; if (s > maxStep) maxStep = s; return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' || e.type === 'lead_submitted');
+      var label = evText(e);
+      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' ||
+        e.type === 'lead_submitted' || e.type === 'magnet_registered');
       var bucket = (e.type === 'opened_product' || e.type === 'viewed_result') ? 'viewed'
         : (e.type === 'clicked_book_call' || e.type === 'clicked_messenger') ? 'cta'
         : (e.type === 'lead_submitted') ? 'booked'
@@ -7890,6 +8197,19 @@
       post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
     });
+
+    var tsel = el('det-teacher');
+    if (tsel) {
+      // Список преподавателей грузим один раз на сессию и перерисовываем поле.
+      if (!DET_TEACHERS) api('/admin/api/det/teachers').then(function (r) {
+        DET_TEACHERS = (r && r.teachers) || [];
+        if (el('det-teacher')) renderDrawer(true);
+      }).catch(function () { DET_TEACHERS = []; });
+      tsel.addEventListener('change', function () {
+        post('/admin/api/leads/' + id + '/det/teacher', { login: tsel.value || null },
+             tsel.value ? 'Преподаватель назначен' : 'Преподаватель снят');
+      });
+    }
 
     var nl = el('det-newlink');
     if (nl) nl.addEventListener('click', function () {
@@ -9073,11 +9393,9 @@
         if (s > maxStep) { maxStep = s; items.push({ at: e.at, text: 'анкета: дошел до шага ' + s + ' из 7', cls: '', step: true }); }
         return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      items.push({ at: e.at, text: label,
-        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' || e.type === 'viewed_result') ? 'hi' : '' });
+      items.push({ at: e.at, text: evText(e),
+        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' ||
+          e.type === 'viewed_result' || e.type === 'magnet_registered') ? 'hi' : '' });
     });
     var stepItems = items.filter(function (i) { return i.step; });
     if (stepItems.length > 1) {
@@ -9232,24 +9550,27 @@
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     renderShell();
-    // пришли по ссылке вида #lead/<id> — открываем карточку, как только есть список
-    loadLeads(false, openFromHash);
+    /* Список людей и переписку тянем только тем, у кого есть на них права: у
+       преподавателя их нет, а неудачный запрос CRM трактует как «сессия истекла»
+       и выкидывает на вход. */
+    if (can('clients')) loadLeads(false, openFromHash);
+    else { state.loaded = true; renderView(); }
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // счетчик задач нужен бейджу в меню сразу, до открытия раздела
     loadTaskSummary();
     if (hashTaskId()) openTaskFromHash();
     else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
-    refreshBot(function () { renderSide(); });
+    if (can('inbox')) refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(function () {
-      if (!getKey()) return;
+      if (!getKey() || !can('clients')) return;
       var a = document.activeElement;
       if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in' || a.id === 'tg-input')) return;
       // поллим диалоги бота всегда (для живого бейджа хэндоффа). Инбокс НЕ пересобираем:
       // у него свой шестисекундный поллинг (pollInboxLive), а полная пересборка раз в минуту
       // вырывала поле ввода из-под рук менеджера прямо на середине сообщения.
-      refreshBot(function () { renderSide(); });
+      if (can('inbox')) refreshBot(function () { renderSide(); });
       if (state.drawerId || state.botConvoId) return; // не дёргаем интерфейс под открытой карточкой/диалогом
       loadLeads(true);
     }, 60000);
@@ -9270,10 +9591,6 @@
     renderLogin();
   }
   function boot() {
-    // Ссылка-приглашение старше сохраненной сессии: по ней мог прийти другой
-    // человек на том же компьютере (руководитель открыл ссылку тьютора).
-    var inv = inviteToken();
-    if (inv) { renderInvite(inv); return; }
     if (!getKey()) { renderLogin(); return; }
     // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
     fetch(API + '/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {

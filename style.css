@@ -217,6 +217,24 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 9px 16px; transition: .15s; }
 .list-empty .le-btn:hover { background: #DBE6FF; }
 
+/* заметка над списком: свернутые пустые заходы — тихая строка, не строка-лид */
+.list-foot { display: flex; align-items: center; gap: 10px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); background: var(--fill); }
+.list-foot .lf-ic { width: 24px; height: 24px; border-radius: 7px; background: var(--card);
+  border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-3); flex: none; }
+.list-foot .lf-t { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.list-foot .lf-t b { color: var(--ink); font-weight: 700; }
+.list-foot .lf-btn { margin-left: auto; flex: none; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--blue); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: var(--r-pill); padding: 7px 14px; transition: .15s var(--ease); }
+.list-foot .lf-btn:hover { background: var(--blue-tint); border-color: var(--blue-tint); }
+@media (max-width: 720px) {
+  /* иконка тут декоративная: на узком экране она уезжала на свою строку и рвала блок */
+  .list-foot { flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 16px; }
+  .list-foot .lf-ic { display: none; }
+  .list-foot .lf-btn { margin-left: 0; }
+}
+
 /* скелетон таблицы списка (использует общий .shim от дашборда) */
 .sk-list { padding: 0; }
 .sk-row { display: grid; align-items: center; gap: 16px; padding: 0 24px; height: 58px;
@@ -411,6 +429,11 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 11px; border-radius: 8px; white-space: nowrap;
   color: var(--ink-2); background: var(--fill); }
 .sev .d { display: none; }
+/* Состояния, не привязанные к воронке продаж (подключение мессенджера и т.п.).
+   Формула та же: -ink текстом, -soft заливкой. */
+.sev.n-ok   { color: var(--green-ink); background: var(--green-soft); gap: 5px; }
+.sev.n-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.n-off  { color: var(--ink-3);     background: var(--fill); }
 .sev.s-hot           { color: var(--red-ink);   background: var(--red-soft); }
 .sev.s-new           { color: var(--ink-2);     background: var(--fill); }
 .sev.s-contacted     { color: var(--amber-ink); background: var(--amber-soft); }
@@ -484,38 +507,95 @@ a { color: inherit; text-decoration: none; }
 .tm-row:first-child { border-top: none; }
 .tm-av { width: 38px; height: 38px; border-radius: 11px; flex: none; display: grid; place-items: center;
   background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; }
-.tm-i { flex: 1; min-width: 0; }
+/* 212px — минимум, на котором рядом с длинным логином помещается «нет мессенджера»:
+   строка про тишину не должна обрезаться в многоточие, ради нее подстрочник и существует */
+.tm-i { flex: 1; min-width: 212px; }
 .tm-n { font-size: 14px; font-weight: 600; }
-.tm-l { font-size: 12px; color: var(--ink-3); margin-top: 1px; }
+/* подстрочник в одну строку: с переносом строки сотрудников разъезжались по высоте
+   и список переставал читаться как список */
+.tm-l { font-size: 12px; color: var(--ink-3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tm-sel { flex: none; font: 600 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
-  border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 200px; }
+  border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 168px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
-/* состояние входа сотрудника: заходил / ждет ссылку / отключен */
-.tm-l .tm-st { margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line-2); font-weight: 600; }
-.tm-st.on { color: var(--green-ink); }
-.tm-st.wait { color: var(--amber-ink); }
-.tm-st.off { color: var(--red-ink); }
-.tm-acts { flex: none; display: flex; gap: 6px; }
-.tm-row.tm-off .tm-av { background: var(--ink-3); }
-.tm-row.tm-off .tm-n, .tm-row.tm-off .tm-l { color: var(--ink-3); }
-/* одноразовая ссылка входа: показываем целиком, чтобы было видно, что копируешь */
-.inv-link { background: var(--fill); border-radius: 12px; padding: 13px 14px; }
-.inv-link code { font: 500 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink);
-  word-break: break-all; }
-.inv-load { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 14px; }
-/* узкий экран: заголовок и кнопка по строкам, у сотрудника — имя рядом с
-   аватаром, роль и действия под ним (иначе аватар отрывается от имени) */
+/* почта сотрудника прямо в строке: без нее не работает восстановление пароля */
+.tm-mail { flex: none; width: 150px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
+  transition: .15s var(--ease); }
+.tm-mail:hover { border-color: #DCE7FF; }
+.tm-mail:focus { background: #fff; border-color: var(--blue); }
+.tm-mail.none { background: var(--fill); border-style: dashed; }
+.tm-mail::placeholder { color: var(--ink-3); }
+/* чужая верхняя учетка: видно, кто это, но править нельзя — тише и без курсора */
+.tm-sel:disabled, .tm-mail:disabled { color: var(--ink-3); background: var(--fill);
+  border-color: transparent; border-style: solid; cursor: default; }
+.sec-head .bp.tm-new { margin-left: auto; }
+.sec-head .cnt + .bp.tm-new { margin-left: 14px; }
+
+/* темы уведомлений: за что этот человек отвечает. Чипы, а не селект с галочками —
+   раскладка команды должна читаться одним взглядом по всему списку, без раскрытия */
+.tm-tp { flex: none; display: inline-flex; gap: 4px; padding: 3px; background: var(--fill);
+  border-radius: var(--r-pill); }
+.tm-tp-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: transparent;
+  border: 0; border-radius: var(--r-pill); padding: 6px 10px; cursor: pointer;
+  transition: .15s var(--ease); white-space: nowrap; }
+.tm-tp-b:hover { color: var(--ink); }
+.tm-tp-b.on { background: var(--blue); color: #fff; }
+.tm-tp-b:disabled { opacity: .55; cursor: default; }
+/* тема отмечена, а мессенджер не подключен — доставки нет; предупреждение в самой строке */
+.tm-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--amber-ink); font-weight: 600; }
+.tm-warn svg { flex: none; }
+.tm-nsec { margin-top: 22px; }
+.tm-hint { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; max-width: 640px; margin-bottom: 6px; }
+.tm-shared { border-top: 1px solid var(--line-2); }
+
+/* форма «завести сотрудника» — панель внутри карточки, не модалка */
+.tm-add { margin-top: 16px; padding: 16px 18px; background: var(--fill);
+  border: 1px solid var(--line-2); border-radius: var(--r-lg); }
+.tm-add-g { display: grid; grid-template-columns: 1.2fr 1fr 1.4fr 1fr; gap: 12px; }
+.tm-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tm-f > span { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); }
+.tm-f input, .tm-f select { font: 500 13.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px;
+  width: 100%; transition: .15s var(--ease); }
+.tm-f input:focus, .tm-f select:focus { border-color: var(--blue); }
+.tm-add-a { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.tm-add-s { font-size: 12.5px; color: var(--ink-2); margin-right: auto; }
+
+/* выданный доступ: пароль виден один раз */
+.tm-made { margin-top: 16px; padding: 16px 18px; border-radius: var(--r-lg);
+  background: var(--green-soft); border: 1px solid #C6E9D5; }
+.tm-made-h { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700;
+  color: var(--green-ink); }
+.tm-made-b { margin-top: 8px; font-size: 14px; color: var(--ink); }
+.tm-made-b b { font-weight: 700; }
+.tm-made-s { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; max-width: 620px; }
+.tm-made-a { display: flex; gap: 10px; margin-top: 12px; }
+/* узкий десктоп и планшет: пять колонок в строку уже не влезают — темы уходят на свою
+   строку под именем, а не сжимают подстрочник до многоточия */
+@media (max-width: 1180px) {
+  .tm-row { flex-wrap: wrap; }
+  .tm-tp { order: 5; margin-left: 52px; }
+}
 @media (max-width: 760px) {
-  .sec-head { flex-wrap: wrap; }
-  .sec-head > div { flex: 1 1 0; min-width: 0; }
-  .sec-head > .bp { order: 3; margin-left: 0; width: 100%; }
-  .tm-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-    grid-template-areas: 'av name name' 'sel sel acts'; column-gap: 12px; row-gap: 11px; }
-  .tm-av { grid-area: av; }
-  .tm-i { grid-area: name; }
-  .tm-sel { grid-area: sel; width: 100%; min-width: 0; }
-  .tm-acts { grid-area: acts; }
-  .tm-l .tm-st { display: block; margin: 3px 0 0; padding-left: 0; border-left: 0; }
+  /* на телефоне имя, почта и роль идут в столбик: селект с длинной ролью
+     («Руководитель продукта») не сжимается по контенту и наезжал на имя */
+  .tm-sel { min-width: 0; width: 100%; order: 4; }
+  .tm-row { flex-wrap: wrap; }
+  .tm-mail { width: 100%; order: 3; }
+  /* темы идут первой строкой под именем: это то, ради чего сюда заходят с телефона.
+     margin-left обнуляем: он от блока 1180px, а тут ширина уже полная — иначе «Продажи»
+     уезжают за край карточки */
+  .tm-tp { order: 2; width: 100%; margin-left: 0; justify-content: space-between; }
+  .tm-tp-b { flex: 1; }
+  .tm-add-g { grid-template-columns: 1fr; }
+  .tm-add-a { flex-wrap: wrap; }
+  .tm-add-s { width: 100%; margin-right: 0; }
+  /* на телефоне кнопка и счетчик сжимали заголовок в столбик по слову —
+     прячем счетчик, кнопку оставляем иконкой */
+  .sec-head:has(.tm-new) .cnt { display: none; }
+  .sec-head .bp.tm-new span { display: none; }
 }
 
 /* ════ Сейчас (правая колонка обзора) ════ */
@@ -1633,6 +1713,29 @@ a { color: inherit; text-decoration: none; }
   border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3);
   transform: translateY(-65%) rotate(45deg); pointer-events: none; }
 .al-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 18px 24px 22px; }
+
+/* Личные уведомления сотрудника (меню профиля → «Уведомления»). Живет внутри
+   модалки-формы: свой рецепт не заводим, берем .al-* и сегмент .dperiod. */
+/* сегмент тянется на всю карточку, кнопки делят ширину поровну: на 390px «Не беспокоить»
+   иначе вылезает за край (padding из .dperiod рассчитан на широкий топбар) */
+.np-seg { display: flex; width: 100%; }
+.np-seg button { flex: 1; min-width: 0; padding: 8px 9px; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center; }
+.np-seg button svg { width: 13px; height: 13px; }
+/* на телефоне иконки в сегменте уступают место подписи: «Не беспокоить» иначе обрезается
+   внутри своей кнопки (треть от 294px не вмещает иконку и текст) */
+@media (max-width: 480px) { .np-seg button svg { display: none; } .np-seg button { gap: 0; } }
+.np-state { display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
+  padding: 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
+.np-hint { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.np-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+.np-act .bp { padding: 10px 15px; font-size: 13px; text-decoration: none; }
+.np-act .al-cancel { padding: 10px 14px; display: inline-flex; align-items: center; gap: 7px; }
+/* за какие темы клиенты приходят вам — справка, не настройка: тише основного блока */
+.np-topics { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.np-topics b { color: var(--ink); font-weight: 700; }
+.np-skel { height: 46px; }
+.np-wait { opacity: .55; pointer-events: none; transition: opacity .15s var(--ease); }
 .al-cancel { height: 42px; padding: 0 16px; border-radius: 11px; font: 600 13.5px 'Manrope', sans-serif;
   color: var(--ink-2); background: var(--fill); transition: color .15s, background .15s; }
 .al-cancel:hover { color: var(--ink); background: #ECEEF1; }
@@ -2289,7 +2392,11 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .side { display: none; }
   .main { overflow: visible; }
   .topbar { padding: 12px 16px; border-radius: var(--r-xl) var(--r-xl) 0 0; position: static; flex-wrap: wrap; }
-  .tbr .profile { display: none; }
+  /* на узком экране от профиля остается только аватар: имя и роль и так видно негде,
+     а кнопка нужна — за ней «Уведомления» и смена аккаунта, и это единственный вход
+     в них на телефоне (сайдбар с «Выйти» здесь скрыт) */
+  .tbr .profile { padding: 4px; gap: 0; border-radius: var(--r-pill); }
+  .tbr .profile .pinfo, .tbr .profile .pchev { display: none; }
   .content { padding: 16px 16px 36px; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -2348,6 +2455,20 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .mtab.on { color: #fff; background: var(--blue); }
   .mtab .bdg { position: absolute; top: 4px; left: calc(50% + 8px); font-size: 9.5px; font-weight: 800;
     color: #fff; background: var(--coral); border-radius: var(--r-pill); padding: 1px 5.5px; }
+  .mtab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* список «Еще»: тот же рецепт меню профиля, только всплывает над таббаром */
+  #smenu.mtmore { max-height: calc(100vh - 140px); overflow-y: auto; }
+  #smenu.mtmore button.cur { background: var(--blue-tint); color: var(--blue); }
+  #smenu.mtmore button.cur svg { color: var(--blue); }
+  #smenu.mtmore .bdg { margin-left: auto; font-size: 10px; font-weight: 800; color: #fff;
+    background: var(--coral); border-radius: var(--r-pill); padding: 1px 6px; }
+}
+
+/* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
+   ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
+@media (max-width: 480px) {
+  .statbar { grid-template-columns: 1fr; }
+  .stat + .stat::before { display: none; }
 }
 
 /* ════ ШАБЛОНЫ пути поступления ════ */
@@ -3137,11 +3258,47 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-link-m { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
 .det-pr { font-size: 13px; color: var(--ink-2); }
 
+/* занятия в тренажерах: не разбор заданий, а ответ на «живой ученик или бросил» */
+.det-prl { margin-top: 20px; }
+.det-days { display: flex; flex-wrap: wrap; gap: 5px; }
+.det-day { width: 30px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  align-content: center; gap: 1px; background: var(--fill); }
+.det-day.on { background: var(--blue-tint); }
+.det-day b { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.det-day.on b { color: var(--blue-d); }
+.det-day i { font-style: normal; font-size: 9px; font-weight: 600; color: var(--ink-3); }
+.det-skl { display: grid; grid-template-columns: 112px 1fr 76px; align-items: center; gap: 11px; padding: 6px 0; }
+.det-skl-t { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.det-skl-b { height: 6px; border-radius: 5px; background: var(--fill); overflow: hidden; }
+.det-skl-b i { display: block; height: 100%; border-radius: 5px; min-width: 5px; background: var(--blue);
+  transition: width .9s var(--ease); }
+.det-skl-v { font-size: 12px; color: var(--ink-3); text-align: right; }
+.det-skl-v b { font-weight: 700; color: var(--ink-2); }
+.det-skl-v.warn b { color: var(--amber-ink); }
+
+/* «Обучение»: список учеников преподавателя. Строка — как в «Команде», плюс балл
+   теста справа; вся строка кликабельна, поэтому ховер-язык строки, а не кнопки. */
+.st-row { cursor: pointer; border-radius: 12px; padding-left: 10px; padding-right: 10px;
+  margin: 0 -10px; transition: background .13s; }
+.st-row:hover { background: #FBFBFC; }
+.st-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.st-score { flex: none; font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.st-score.none { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.st-go { flex: none; color: var(--ink-3); display: inline-flex; }
+.st-row:hover .st-go { color: var(--blue); }
+.st-back { margin-right: 12px; }
+.st-back svg { transform: rotate(180deg); }
+
+.det-teacher { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.det-teacher .tm-sel { min-width: 210px; }
+.det-teacher-s { font-size: 11.5px; color: var(--ink-3); }
+
 @media (max-width: 620px) {
   .det-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
   .det-board { grid-template-columns: repeat(2, 1fr); }
   .det-sw-row { flex-wrap: wrap; }
   .det-link { flex-wrap: wrap; }
+  .det-skl { grid-template-columns: 84px 1fr 68px; gap: 9px; }
 }
 
 /* ════ ПРОДУКТОВЫЙ ПОРТАЛ (раздел «Портал») ════
