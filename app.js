@@ -2758,7 +2758,39 @@
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
-    api('/admin/api/tasks/tg/links').then(function (r) {
+    /* Общий чат — второе окно уведомлений: те же события команды падают в группу.
+       Личка дергает исполнителя, общий чат делает работу видимой руководителю:
+       чужую переписку с ботом не посмотришь, а группу — да. */
+    function groupBlock(g) {
+      if (!g) return '';
+      var on = !!g.chat_id;
+      var opts = (g.groups || []).filter(function (x) { return x.chat_id !== g.chat_id; });
+      return '<div class="tgg">' +
+        '<div class="tgg-h">Общий чат</div>' +
+        (on
+          ? '<div class="tgg-on">' + ic('check', 13) + '<b>' + esc(g.title || 'группа подключена') + '</b>' +
+              '<span class="tgg-acts">' +
+                '<button class="tgg-b" id="tgg-test">Проверить</button>' +
+                '<button class="tgg-b off" id="tgg-off">Отключить</button></span></div>' +
+            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка по команде. Личные напоминания идут как шли.</div>'
+          : '<div class="tgg-s">Второе окно: те же события в общую группу, чтобы работа была видна всем, а не только исполнителю. ' +
+              (g.bot ? 'Создай группу, добавь в нее <b>@' + esc(g.bot) + '</b> и напиши там «/start» — группа появится в списке ниже.'
+                     : 'Бот пока не подключен, поэтому сообщения не уйдут даже в выбранную группу.') + '</div>' +
+            (opts.length
+              ? '<div class="tgg-list">' + opts.map(function (x) {
+                  return '<button class="tgg-row" data-grp="' + esc(x.chat_id) + '">' +
+                    '<span>' + esc(x.title || x.chat_id) + '</span><i>подключить</i></button>';
+                }).join('') + '</div>'
+              : '') +
+            '<button class="tgg-b" id="tgg-refresh">Обновить список групп</button>') +
+      '</div>';
+    }
+
+    Promise.all([
+      api('/admin/api/tasks/tg/links'),
+      api('/admin/api/tasks/tg/group').catch(function () { return null; }),
+    ]).then(function (res) {
+      var r = res[0], grp = res[1];
       var links = (r && r.links) || [];
       var off = links.filter(function (x) { return !x.linked; });
       // Бот вообще не настроен — тогда действия на этом экране нет, и повторять
@@ -2791,7 +2823,8 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body"><div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
+        '<div class="al-body">' + groupBlock(grp) +
+          '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
       el('tg-x').addEventListener('click', close);
@@ -2802,6 +2835,31 @@
           showToast('Ссылка скопирована — отправь ее лично этому человеку');
         });
       });
+      // общий чат: выбрать группу, проверить связь, отключить
+      var reopen = function () { close(); setTimeout(openBotLinks, 200); };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-grp]'), function (b) {
+        b.addEventListener('click', function () {
+          apiSend('/admin/api/tasks/tg/group', 'POST', { chat_id: b.getAttribute('data-grp') },
+            function () { showToast('Группа подключена — проверь связь кнопкой'); reopen(); },
+            function () { showToast('Не получилось подключить группу'); });
+        });
+      });
+      var gt = el('tgg-test');
+      if (gt) gt.addEventListener('click', function () {
+        gt.disabled = true;
+        apiSend('/admin/api/tasks/tg/group/test', 'POST', {}, function (resp) {
+          gt.disabled = false;
+          showToast(resp && resp.ok ? 'Написал в группу — посмотри в телеграме'
+                                    : 'Бот не смог написать: проверь, что он в группе');
+        }, function () { gt.disabled = false; showToast('Бот не смог написать в группу'); });
+      });
+      var go = el('tgg-off');
+      if (go) go.addEventListener('click', function () {
+        apiSend('/admin/api/tasks/tg/group', 'POST', { chat_id: '' },
+          function () { showToast('Общий чат отключен'); reopen(); });
+      });
+      var gr = el('tgg-refresh');
+      if (gr) gr.addEventListener('click', reopen);
     }).catch(function () {
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +

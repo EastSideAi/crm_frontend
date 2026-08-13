@@ -1737,6 +1737,32 @@ a { color: inherit; text-decoration: none; }
 .tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word; }
 .tsk-ev-m { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 
+/* ── Общий чат задач (в окне «Бот задач») ────────────────────────────────────
+   Блок про канал, а не про людей, поэтому стоит отдельной плашкой над списком
+   команды: сначала «куда идут уведомления», потом «кто их получает». */
+.tgg { background: var(--fill); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.tgg-h { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 7px; }
+.tgg-on { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); }
+.tgg-on svg { color: var(--green-ink); }
+.tgg-acts { margin-left: auto; display: flex; gap: 8px; }
+.tgg-s { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin-top: 6px; }
+.tgg-s b { font-weight: 700; color: var(--ink); }
+.tgg-b { margin-top: 10px; font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--blue); transition: .15s; }
+.tgg-b:hover { color: var(--blue-d); }
+.tgg-b[disabled] { color: var(--ink-3); }
+.tgg-acts .tgg-b { margin-top: 0; }
+.tgg-b.off { color: var(--ink-3); }
+.tgg-b.off:hover { color: var(--red-ink); }
+.tgg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tgg-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+  font-size: 13px; font-weight: 600; color: var(--ink); transition: .12s; }
+.tgg-row:hover { border-color: var(--blue); }
+.tgg-row i { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
+
 /* список подключений к боту задач (раздел «Команда») */
 .tgl-list { display: flex; flex-direction: column; }
 .tgl-row { display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center;
