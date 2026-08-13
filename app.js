@@ -2132,7 +2132,8 @@
     var mine = u.notify_topics || [];
     if (!mine.length) return '';
     if (!u.notify_linked) {
-      return '<span class="tm-warn">' + ic('alert', 11) + 'мессенджер не подключен</span>';
+      return '<span class="tm-warn" title="Тема отмечена, но человек не нажал «Начать» ' +
+        'у бота уведомлений — сообщение ему не дойдет">' + ic('alert', 11) + 'нет мессенджера</span>';
     }
     return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс' : 'Телеграм');
   }
@@ -2179,7 +2180,7 @@
           '<div class="tm-l">' + tmLine(u) + '</div></div>' +
         tmTopicChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
-          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
     }).join('');
 
