@@ -41,6 +41,8 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
+    // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
+    cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '',
   };
@@ -1955,6 +1957,10 @@
     week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
     mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
     goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'большие задачи и прогресс по шагам' },
+    // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
+    // учеником»: работа по одной семье разложена по разным исполнителям и в
+    // обычном списке между ее строками стоят чужие задачи.
+    stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
     accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
     team:   { label: 'Вся команда', view: 'open',   scope: 'all',    cap: 'tasks_all', hint: 'кто чем занят прямо сейчас' },
     done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
@@ -2010,6 +2016,24 @@
 
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
+    if (seg.view === 'students') {
+      // Руководителю нужны все ученики компании, рядовому — те, по которым
+      // работа есть на нем; внутри ученика в обоих случаях видна работа всей
+      // команды, иначе экран не отвечает на свой же вопрос.
+      state.tasksLoading = true;
+      api('/admin/api/tasks/students?scope=' + (can('tasks_all') ? 'all' : 'my')).then(function (r) {
+        state.tasksLoading = false;
+        state.tasks = (r && r.students) || [];
+        state.taskMe = r ? r.me : null;
+        if (cb) cb();
+        else if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.tasksLoading = false;
+        state.tasks = 'none';
+        if (state.page === 'tasks') renderView();
+      });
+      return;
+    }
     // «Цели» для руководителя — обзор всех проектов компании, а не своих четырех:
     // ради этого срез и заводился. У кого прав на чужие задачи нет, видит цели,
     // в которых участвует сам.
@@ -2035,6 +2059,18 @@
       state.taskSum = r || null;
       if (cb) cb(); else renderSide();
     }).catch(function () {});
+  }
+  /* Задачи одного ученика для его карточки. Отдельным запросом, а не полем в
+     карточке: список задач меняется чаще самой карточки, и тянуть его вместе с
+     диагностикой и документами значит обновлять все ради одной строки. */
+  function loadCardTasks(id, cb) {
+    api('/admin/api/tasks?view=all&limit=100&session=' + encodeURIComponent(id)).then(function (r) {
+      state.cardTasks[id] = (r && r.tasks) || [];
+      if (cb) cb();
+    }).catch(function () {
+      state.cardTasks[id] = 'none';
+      if (cb) cb();
+    });
   }
   function loadTaskPeople(cb) {
     if (state.taskPeople) { cb(state.taskPeople); return; }
@@ -2064,12 +2100,13 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
       return;
     }
+    var seg = taskSeg();
+    if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
       if (!q) return true;
       return (t.title + ' ' + (t.assignee_name || '') + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
     });
-    var seg = taskSeg();
     var showWho = TASK_SEGS[seg].scope !== 'my';
 
     var rows = list.map(function (t) {
@@ -2147,6 +2184,115 @@
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
   }
+  /* ── Срез «По ученикам» ────────────────────────────────────────────────────
+     Группа = ученик: имя, этап пути, заметка куратора и вся работа команды по
+     нему. Внутри задачи разложены по роли исполнителя, потому что вопрос звучит
+     именно так: что здесь на тьюторе, а что на администраторе. «Без
+     исполнителя» идет первым блоком — это не мелочь оформления, а работа,
+     которую никто не взял, и увидеть ее надо раньше остального. */
+  function studentGroups(s) {
+    var by = {};
+    (s.tasks || []).forEach(function (t) {
+      var key = t.assignee_id ? (t.assignee_role || 'other') : '';
+      if (!by[key]) {
+        by[key] = { key: key, tasks: [],
+                    label: t.assignee_id ? (t.assignee_role_label || 'Роль не указана') : 'Без исполнителя' };
+      }
+      by[key].tasks.push(t);
+    });
+    return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) {
+      if (!a.key !== !b.key) return a.key ? 1 : -1;      // без исполнителя — вверх
+      return a.label < b.label ? -1 : 1;
+    });
+  }
+
+  function renderStudentTasks(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (s) {
+      if (!q) return true;
+      var hay = s.client_name + ' ' + (s.stage || '') + ' ' + (s.tasks || []).map(function (t) {
+        return t.title + ' ' + (t.assignee_name || '');
+      }).join(' ');
+      return hay.toLowerCase().indexOf(q) !== -1;
+    });
+
+    var cards = list.map(function (s) {
+      var groups = studentGroups(s).map(function (g) {
+        var rows = g.tasks.map(function (t) {
+          var st = TASK_ST[t.status] || TASK_ST.wait;
+          var due = dueLabel(t);
+          return '<div class="stu-t' + (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+            '<div class="stu-tt">' + esc(t.title) + '</div>' +
+            '<div class="stu-tw">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
+            '<div class="stu-td ' + due.cls + '">' + esc(due.text) + '</div>' +
+            '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+          '</div>';
+        }).join('');
+        return '<div class="stu-g' + (g.key ? '' : ' nobody') + '">' +
+          '<div class="stu-gl">' + esc(g.label) + '</div>' + rows + '</div>';
+      }).join('');
+
+      var counters = (s.overdue ? '<span class="stu-c over num">' + s.overdue + ' ' + plural(s.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+        '<span class="stu-c num">' + s.open + ' ' + plural(s.open, 'задача', 'задачи', 'задач') + '</span>';
+
+      return '<div class="stu">' +
+        '<div class="stu-h">' +
+          '<button class="stu-n" data-sid="' + esc(s.session_id) + '">' + esc(s.client_name) + '</button>' +
+          (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
+            (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
+          '<span class="stu-cs">' + counters + '</span>' +
+        '</div>' +
+        (s.note ? '<div class="stu-note">' + esc(s.note) + '</div>' : '') +
+        groups +
+        (s.plan_tasks && s.plan_tasks.length
+          ? '<div class="stu-plan"><span class="stu-pl">по плану на этом этапе</span>' +
+            s.plan_tasks.map(function (p) { return '<span class="stu-pt">' + esc(p.title) + '</span>'; }).join('') +
+            '</div>'
+          : '') +
+        '<button class="stu-add" data-add="' + esc(s.session_id) + '">' + ic('plus', 13) + 'Поставить задачу по ученику</button>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Ученик, задача, человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'ученик', 'ученика', 'учеников') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      '<div class="list-body stu-body">' +
+        (list.length ? cards
+          : '<div class="empty">' + (q ? 'Никого не нашлось по этому запросу.'
+              : 'Задач по ученикам нет. Поставь задачу и укажи в ней ученика — она появится здесь.') + '</div>') +
+      '</div></div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sid]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-sid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-add]'), function (b) {
+      b.addEventListener('click', function () {
+        var sid = b.getAttribute('data-add');
+        var who = (state.tasks || []).filter(function (s) { return s.session_id === sid; })[0];
+        openNewTask({ session_id: sid, client_name: who && who.client_name,
+                      after: function () { state.tasks = null; renderView(); } });
+      });
+    });
+  }
+
   function emptyTasksText(seg) {
     if (state.taskDept) return 'В направлении «' + deptLabel(state.taskDept) + '» задач нет.';
     if (seg === 'today') return 'На сегодня задач нет. Это нормально, а не ошибка.';
@@ -2213,7 +2359,14 @@
 
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Задача' + (t.client_name ? ' · ' + esc(t.client_name) : '') + '</div>' +
+          // Ученик в шапке — не подпись, а переход в его карточку: задача по
+          // человеку почти всегда требует посмотреть, что у него вообще
+          // происходит. Обратный путь — раздел «Заметки и задачи» карточки.
+          '<div><div class="al-eyebrow">Задача' +
+            (t.client_name
+              ? ' · <button class="al-eyelink" id="tk-lead"' + (t.session_id ? '' : ' disabled') + '>' +
+                esc(t.client_name) + '</button>'
+              : '') + '</div>' +
             '<div class="al-title">' + esc(t.title) + '</div></div>' +
           '<button class="al-x" id="tk-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
@@ -2264,6 +2417,10 @@
       var swap = function (fn) { close(); setTimeout(fn, 200); };
       var up = el('tk-up');
       if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var lead = el('tk-lead');
+      if (lead && t.session_id) lead.addEventListener('click', function () {
+        swap(function () { openDrawer(t.session_id); setModalSection('notes'); });
+      });
       var add = el('tk-add');
       if (add) add.addEventListener('click', function () {
         swap(function () { openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept }); });
@@ -2381,7 +2538,9 @@
           '</div>' +
           '<div class="al-sub">' + (preset.parent_title
             ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
-            : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
+            : preset.client_name
+              ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
+              : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
           '<div class="al-body">' +
             '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
               '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
@@ -2472,7 +2631,8 @@
           state.tasks = null;
           state.taskGoals = null;   // новая задача может стать целью для следующей
           loadTaskSummary();
-          if (state.page === 'tasks') renderView();
+          if (preset.after) preset.after();
+          else if (state.page === 'tasks') renderView();
           showToast(goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
         }, function () {
           save.disabled = false; save.classList.remove('loading');
@@ -6799,7 +6959,7 @@
     if (d) state.details[id] = d;
     var base = d || lead;
     var crm = (lead && lead.crm) || (d && d.crm) || { status: 'new', note: '', tasks: [], comms: [] };
-    return { lead: lead, d: d, base: base, crm: crm };
+    return { id: id, lead: lead, d: d, base: base, crm: crm };
   }
 
   function renderDrawer(keepScroll) {
@@ -7801,13 +7961,43 @@
     return '<div class="path-tl">' + rows + '</div>';
   }
 
-  /* ── РАЗДЕЛ «Заметки» — заметка + задачи + лог ── */
+  /* ── РАЗДЕЛ «Заметки» — заметка + задачи по ученику + лог ──────────────────
+     Задачи здесь — обычные задачи команды с проставленным учеником (staff_tasks,
+     см. шапку миграции 071), а не свой список галочек. Поэтому у каждой есть
+     исполнитель с ролью, приемка, лента и напоминание в боте, а руководитель
+     видит ту же работу в срезе «По ученикам». Ведется задача в своей карточке —
+     здесь только показ и постановка. */
+  function cardTaskRow(t) {
+    var st = TASK_ST[t.status] || TASK_ST.wait;
+    var due = dueLabel(t);
+    var who = t.assignee_name
+      ? t.assignee_name + (t.assignee_role_label ? ' · ' + t.assignee_role_label : '')
+      : 'без исполнителя';
+    var closed = t.status === 'done' || t.status === 'cancel';
+    return '<div class="ct-row' + (t.overdue ? ' over' : '') + (closed ? ' off' : '') +
+      '" data-ctid="' + t.id + '">' +
+      '<div class="ct-b"><div class="ct-t">' + esc(t.title) + '</div>' +
+        '<div class="ct-m">' + esc(who) + ' · <i class="' + due.cls + '">' + esc(due.text) + '</i></div></div>' +
+      '<span class="sev ' + st.cls + '">' + st.label + '</span></div>';
+  }
+
   function buildNotesSection(ctx) {
     var crm = ctx.crm;
-    var tasks = (crm.tasks || []).slice().sort(function (a, b) {
-      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
-      return (a.due || '9999') < (b.due || '9999') ? -1 : 1;
-    });
+    var loaded = state.cardTasks[ctx.id];
+    var body;
+    if (loaded === undefined) {
+      body = '<div class="ct-skel shim"></div><div class="ct-skel shim"></div>';
+    } else if (loaded === 'none') {
+      body = '<div class="field-empty">Не удалось загрузить задачи. Открой раздел заново.</div>';
+    } else {
+      var open = loaded.filter(function (t) { return t.status !== 'done' && t.status !== 'cancel'; });
+      // Закрытых со временем набирается много, и они топят живые. Показываем
+      // последние пять — этого хватает, чтобы вспомнить, что уже сделано.
+      var closed = loaded.filter(function (t) { return t.status === 'done' || t.status === 'cancel'; }).slice(0, 5);
+      body = (open.length ? open.map(cardTaskRow).join('')
+                : '<div class="field-empty">Открытых задач по ученику нет.</div>') +
+        (closed.length ? '<div class="ct-off-l">закрытые</div>' + closed.map(cardTaskRow).join('') : '');
+    }
     var comms = (crm.comms || []).slice(-8).reverse();
     var commIc = { call: 'phone', msg: 'send', meet: 'cal' };
     return '<div class="m-ctitle">Заметки и задачи</div>' +
@@ -7815,16 +8005,11 @@
       '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
         '<textarea class="note-ta" id="m-note" placeholder="О чем договорились, что обещали, нюансы">' + esc(crm.note || '') + '</textarea>' +
         '<div class="note-state" id="m-notestate"></div></div>' +
-      '<div class="m-sec"><div class="m-sec-h">Задачи</div><div id="m-tasks">' + tasks.map(function (t) {
-        var over = !t.done && t.due && t.due < todayISO(0);
-        return '<div class="task' + (t.done ? ' done' : '') + (over ? ' overdue' : '') + '" data-tid="' + esc(t.id) + '">' +
-          '<button class="task-chk">' + ic('check', 11) + '</button>' +
-          '<div class="task-body"><div class="task-text">' + esc(t.text) + '</div>' +
-          (t.due ? '<div class="task-due">' + (over ? ic('clock', 11) : '') + fmtDue(t.due) + '</div>' : '') + '</div>' +
-          '<button class="task-del">' + ic('x', 12) + '</button></div>';
-      }).join('') + (tasks.length ? '' : '<div class="field-empty">Задач нет. Поставь следующий шаг ниже.</div>') + '</div>' +
-        '<div class="task-add"><input id="m-task-in" placeholder="Новая задача — Enter" autocomplete="off">' +
-        '<span class="due-seg" id="m-due"><button data-d="0" class="on">сегодня</button><button data-d="1">завтра</button><button data-d="">без срока</button></span></div></div>';
+      '<div class="m-sec"><div class="m-sec-h">Задачи по ученику</div>' +
+        '<div id="m-tasks">' + body + '</div>' +
+        '<button class="bp sm ct-add" id="m-task-add">' + ic('plus', 13) + 'Поставить задачу</button>' +
+        '<div class="ct-hint">Задача уйдет исполнителю в бота и появится в общем списке команды — в срезе «По ученикам».</div>' +
+      '</div>';
   }
 
   /* ── РАЗДЕЛ «Документы» — ручная загрузка ── */
@@ -8234,37 +8419,34 @@
       clearTimeout(noteTimer);
       noteTimer = setTimeout(function () { patch(id, { note: note.value }, noteState); }, 900);
     });
-    // задачи
-    function curTasks() { var lc = findLead(id); return ((lc && lc.crm.tasks) || crm.tasks || []).slice(); }
-    Array.prototype.forEach.call(host.querySelectorAll('.task'), function (tEl) {
-      var tid = tEl.getAttribute('data-tid');
-      tEl.querySelector('.task-chk').addEventListener('click', function () {
-        patch(id, { tasks: curTasks().map(function (t) { return String(t.id) === tid ? Object.assign({}, t, { done: !t.done }) : t; }) });
+    // задачи по ученику: список приезжает из общего контура задач команды
+    var taskHost = el('m-tasks');
+    if (taskHost && state.cardTasks[id] === undefined) {
+      loadCardTasks(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
       });
-      tEl.querySelector('.task-del').addEventListener('click', function () {
-        patch(id, { tasks: curTasks().filter(function (t) { return String(t.id) !== tid; }) });
+    }
+    // Вложенных модалок в системе нет (design.md §7.6): карточка ученика
+    // закрывается, открывается карточка задачи, а из нее по имени ученика можно
+    // вернуться обратно.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ctid]'), function (r) {
+      r.addEventListener('click', function () {
+        var tid = +r.getAttribute('data-ctid');
+        closeDrawer();
+        openTask(tid);
       });
     });
-    var dueSeg = el('m-due'), dueVal = '0';
-    if (dueSeg) Array.prototype.forEach.call(dueSeg.children, function (b) {
-      b.addEventListener('click', function () { dueVal = b.getAttribute('data-d'); Array.prototype.forEach.call(dueSeg.children, function (x) { x.classList.toggle('on', x === b); }); });
-    });
-    var taskIn = el('m-task-in');
-    if (taskIn) taskIn.addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter') return;
-      var text = taskIn.value.trim(); if (!text) return;
-      var t = { id: String(Date.now()), text: text, done: false, created_at: new Date().toISOString() };
-      if (dueVal !== '') t.due = todayISO(parseInt(dueVal, 10));
-      taskIn.value = '';
-      patch(id, { tasks: curTasks().concat([t]) });
-    });
-    // лог
-    var commHost = el('m-comms');
-    if (commHost) Array.prototype.forEach.call(commHost.children, function (b) {
-      b.addEventListener('click', function () {
-        var lc = findLead(id); var cur = ((lc && lc.crm.comms) || crm.comms || []).slice();
-        cur.push({ kind: b.getAttribute('data-k'), text: '', at: new Date().toISOString() });
-        patch(id, { comms: cur });
+    var addBtn = el('m-task-add');
+    if (addBtn) addBtn.addEventListener('click', function () {
+      var lead = findLead(id);
+      openNewTask({
+        session_id: id, client_name: (lead && lead.name) || ctx.d.name,
+        after: function () {
+          loadCardTasks(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+          refreshDetail(id);   // бейджи и риски списка считаются по этим же задачам
+        },
       });
     });
 

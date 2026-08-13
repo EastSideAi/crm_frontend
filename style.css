@@ -1750,6 +1750,82 @@ a { color: inherit; text-decoration: none; }
    идентичность, навешивать на нее статус значит читать строку дважды. */
 .tgl-row.on .tgl-s { color: var(--green-ink); }
 
+/* ── Срез «По ученикам» ──────────────────────────────────────────────────────
+   Группа = ученик, внутри группы — подгруппы по роли исполнителя. Своих карточек
+   с бордером внутри списка не заводим: это тот же список, только с заголовками,
+   поэтому разделитель — линия, а иерархия — весом и кеглем (design.md §3). */
+.stu-body { padding: 0; }
+.stu { padding: 16px 18px 14px; border-top: 1px solid var(--line); }
+.stu:first-child { border-top: none; }
+.stu-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+/* Имя ученика — переход в его карточку, поэтому кнопка, а не текст. */
+.stu-n { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
+  transition: .12s; }
+.stu-n:hover { color: var(--blue); }
+.stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.stu-cs { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.stu-c { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.stu-c.over { color: var(--red-ink); }
+/* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
+   остального. Полностью она читается в карточке ученика. */
+.stu-note { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
+  background: var(--fill); border-radius: 10px; padding: 8px 11px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.stu-g { margin-top: 12px; }
+.stu-gl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 4px; }
+/* Работа, которую никто не взял, — состояние «внимание», а не поломка: красный
+   в этом экране занят просрочкой. */
+.stu-g.nobody .stu-gl { color: var(--amber-ink); }
+.stu-t { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap: 10px;
+  align-items: center; padding: 8px 10px; margin: 0 -10px; border-radius: 10px;
+  cursor: pointer; transition: .12s; }
+.stu-t:hover { background: #FBFBFC; }
+.stu-tt { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stu-tw { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.stu-td { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.stu-td.due-none { color: var(--ink-3); font-weight: 500; }
+.stu-td.due-now { color: var(--amber-ink); }
+.stu-td.due-over { color: var(--red-ink); }
+/* Подсказки плана — не задачи: они не кликаются и написаны тише, иначе экран
+   работы команды превращается в пересказ плана ученика. */
+.stu-plan { margin-top: 11px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.stu-pl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.stu-pt { font-size: 12px; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 4px 10px; }
+.stu-add { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--blue); transition: .15s; }
+.stu-add:hover { color: var(--blue-d); }
+
+/* ── Задачи в карточке ученика ───────────────────────────────────────────────
+   Тот же контур задач, вид покороче: в карточке важнее «кто и когда», а вести
+   задачу человек уходит в ее собственную карточку. */
+.ct-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px;
+  align-items: center; padding: 10px 0; border-top: 1px solid var(--line);
+  cursor: pointer; transition: .12s; }
+.ct-row:first-child { border-top: none; }
+.ct-row:hover { background: #FBFBFC; }
+.ct-t { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+.ct-m { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.ct-m i { font-style: normal; }
+.ct-m i.due-over { color: var(--red-ink); font-weight: 600; }
+.ct-m i.due-now { color: var(--amber-ink); font-weight: 600; }
+/* Закрытые лежат ниже и тише: они здесь как память, а не как работа. */
+.ct-row.off .ct-t { color: var(--ink-2); font-weight: 500; }
+.ct-off-l { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding: 14px 0 2px; }
+.ct-skel { height: 44px; border-radius: 10px; background: var(--fill); margin-bottom: 6px; }
+.ct-add { margin-top: 12px; }
+.ct-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+/* Ученик в шапке карточки задачи — ссылка в его карточку. */
+.al-eyelink { font: inherit; color: var(--blue); transition: .12s; }
+.al-eyelink:hover { color: var(--blue-d); }
+.al-eyelink[disabled] { color: inherit; cursor: default; }
+
 /* быстрые сроки в форме постановки — тот же сегмент, что в карточке лида */
 .al-f > .due-seg { align-self: flex-start; flex-wrap: wrap; }
 
@@ -1790,6 +1866,17 @@ a { color: inherit; text-decoration: none; }
   .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .list-quick.depts::-webkit-scrollbar { display: none; }
   .list-quick.depts .qchip { flex: none; }
+  /* «По ученикам» на телефоне: название задачи во всю ширину, под ним человек и
+     срок, статус справа. В четыре колонки на 390px имя схлопывается в «Ть…». */
+  .stu { padding: 14px 16px 12px; }
+  .stu-t { grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px; align-items: start;
+    padding: 10px; }
+  .stu-tt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+  .stu-t .stu-tw { grid-column: 1; grid-row: 2; font-size: 12px; }
+  .stu-t .stu-td { grid-column: 2; grid-row: 2; justify-self: end; font-size: 12px; }
+  .stu-t > div:last-child { grid-column: 2; grid-row: 1; justify-self: end; }
+  .stu-cs { margin-left: 0; width: 100%; }
   /* Обрезанное название шага на телефоне не читается — переносим в две строки,
      как и название задачи в строке списка. */
   .tsk-step-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
