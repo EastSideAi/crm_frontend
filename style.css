@@ -491,7 +491,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; }
 /* 176px — минимум, на котором помещается «мессенджер не подключен»: строка про тишину
    не должна обрезаться в многоточие, ради нее подстрочник и существует */
-.tm-i { flex: 1; min-width: 176px; }
+.tm-i { flex: 1; min-width: 190px; }
 .tm-n { font-size: 14px; font-weight: 600; }
 /* подстрочник в одну строку: с переносом строки сотрудников разъезжались по высоте
    и список переставал читаться как список */
@@ -501,7 +501,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid transparent; border-radius: 10px; padding: 9px 12px; outline: none; cursor: pointer; min-width: 168px; }
 .tm-sel:focus { background: #fff; border-color: #DCE7FF; }
 /* почта сотрудника прямо в строке: без нее не работает восстановление пароля */
-.tm-mail { flex: none; width: 190px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+.tm-mail { flex: none; width: 170px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
   background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
   transition: .15s var(--ease); }
 .tm-mail:hover { border-color: #DCE7FF; }
@@ -554,6 +554,12 @@ a { color: inherit; text-decoration: none; }
 .tm-made-b b { font-weight: 700; }
 .tm-made-s { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; max-width: 620px; }
 .tm-made-a { display: flex; gap: 10px; margin-top: 12px; }
+/* узкий десктоп и планшет: пять колонок в строку уже не влезают — темы уходят на свою
+   строку под именем, а не сжимают подстрочник до многоточия */
+@media (max-width: 1180px) {
+  .tm-row { flex-wrap: wrap; }
+  .tm-tp { order: 5; margin-left: 52px; }
+}
 @media (max-width: 760px) {
   /* на телефоне имя, почта и роль идут в столбик: селект с длинной ролью
      («Руководитель продукта») не сжимается по контенту и наезжал на имя */
