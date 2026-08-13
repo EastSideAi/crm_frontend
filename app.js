@@ -4170,9 +4170,14 @@
     if (r.ok) {
       return '<span class="py-ok">' + ic('check', 12) + 'Проверки пройдены</span>';
     }
-    return '<span class="py-bad">' + r.blockers.map(function (b) {
+    /* Показываем две причины, остальные считаем: столбец из шести красных строк
+       читается как стена, а действие оператору подсказывает первая. */
+    var top = r.blockers.slice(0, 2), rest = r.blockers.length - top.length;
+    return '<span class="py-bad">' + top.map(function (b) {
       return '<span class="py-b1">' + esc(b) + '</span>';
-    }).join('') + '</span>';
+    }).join('') +
+      (rest ? '<span class="py-more">и еще ' + rest + ' ' +
+        plural(rest, 'причина', 'причины', 'причин') + '</span>' : '') + '</span>';
   }
   function pyRegRow(r) {
     var c = r.contractor || {};
@@ -4250,7 +4255,7 @@
 
     view.innerHTML =
       '<div class="card listcard">' +
-        '<div class="list-tools">' +
+        '<div class="list-tools py-tools">' +
           '<span class="py-hint">Деньги отправляете из банка сами. Здесь — проверка и ' +
             'отметка, что платеж прошел.</span>' +
         '</div>' +

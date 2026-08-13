@@ -3793,6 +3793,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .py-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--green-ink); }
 .py-bad { display: flex; flex-direction: column; gap: 3px; }
 .py-b1 { color: var(--red-ink); line-height: 1.35; }
+.py-more { color: var(--ink-3); }
 .py-do { display: flex; justify-content: flex-end; }
 /* Подпись у счетчика: экран не отправляет деньги, и сказать это надо один раз сверху,
    а не приписывать к каждой кнопке. */
@@ -3812,7 +3813,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .py-grid.thead { display: none; }
   .py-grid > :nth-child(4) { display: block; grid-column: 1 / -1; }
   .py-do { grid-column: 1 / -1; justify-content: flex-start; }
-  .py-hint { display: none; }
+  /* Подсказка про банк на телефоне не помещается, а пустая полоса тулбара над
+     вкладками выглядит как недогруженный блок — прячем целиком. */
+  .list-tools.py-tools { display: none; }
 }
 
 /* ════ МОЯ РАБОТА (свои задания сотрудника) ════
