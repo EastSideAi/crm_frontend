@@ -2010,8 +2010,12 @@
 
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
+    // «Цели» для руководителя — обзор всех проектов компании, а не своих четырех:
+    // ради этого срез и заводился. У кого прав на чужие задачи нет, видит цели,
+    // в которых участвует сам.
+    var scope = seg.view === 'goals' && can('tasks_all') ? 'all' : seg.scope;
     state.tasksLoading = true;
-    api('/admin/api/tasks?view=' + seg.view + '&scope=' + seg.scope +
+    api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope +
         (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '')).then(function (r) {
       state.tasksLoading = false;
       state.tasks = (r && r.tasks) || [];
@@ -2079,9 +2083,9 @@
       else if (showWho) sub.push('без постановщика');
       if (t.client_name) sub.push(t.client_name);
       var steps = t.steps_total
-        ? '<div class="tsk-prog" title="' + t.steps_done + ' из ' + t.steps_total + '">' +
+        ? '<div class="tsk-prog">' +
             '<span class="tsk-prog-b"><i style="width:' + Math.round(t.steps_done / t.steps_total * 100) + '%"></i></span>' +
-            '<span class="tsk-prog-n num">' + t.steps_done + '/' + t.steps_total + '</span></div>'
+            '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span></div>'
         : '';
       return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
         (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
@@ -2098,7 +2102,7 @@
     // Направления показываем тем, кто видит чужие задачи: у тьютора все задачи в
     // одном направлении, и шесть чипов над коротким списком — чистый шум.
     var depts = can('tasks_all')
-      ? '<div class="list-quick">' + [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
+      ? '<div class="list-quick depts">' + [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
           return [d, DEPTS[d]];
         })).map(function (o) {
           return '<button class="qchip' + (state.taskDept === o[0] ? ' on' : '') + '" data-dept="' + o[0] + '">' + esc(o[1]) + '</button>';
@@ -2110,7 +2114,9 @@
         '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Задача, человек, ученик" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + (seg === 'goals'
+          ? plural(list.length, 'цель', 'цели', 'целей')
+          : plural(list.length, 'задача', 'задачи', 'задач')) + '</span>' +
         '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
       '</div>' + depts +
       '<div class="list-body">' +
@@ -2227,7 +2233,7 @@
           (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
-              (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + '/' + t.steps_total + '</span>' : '') +
+              (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
               '<button class="tsk-addstep" id="tk-add">' + ic('plus', 12) + 'Добавить шаг</button></div>' +
               (steps.length
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
@@ -2381,18 +2387,19 @@
               '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
             '<label class="al-f"><span class="al-l">Кому <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
-            // Направление и цель рядом: обычно выбирают одно из двух — либо задача
-            // самостоятельная и у нее свое направление, либо это шаг, и направление
-            // приезжает от цели (поле тогда прячется, чтобы не спорить с ней).
-            '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
-              '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
-            '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
-              '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>' +
             '<div class="al-f"><span class="al-l">Срок</span>' +
               '<span class="due-seg">' + [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']].map(function (o) {
                 return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
               }).join('') + '</span>' +
               '<input id="nt-due" class="al-in" type="date" value="' + esc(preset.due || isoDay(1)) + '"></div>' +
+            // Направление и цель идут после «что-кому-когда»: это уточнения, а
+            // разрывать ими обязательную связку значит замедлять постановку.
+            // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
+            // свое направление, либо это шаг, и направление приезжает от цели.
+            '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+              '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
+            '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
+              '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>' +
             '<label class="al-f"><span class="al-l">Подробности</span>' +
               '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="Что важно знать, ссылки, контекст"></textarea></label>' +
             '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +

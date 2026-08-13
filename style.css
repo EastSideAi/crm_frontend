@@ -1672,8 +1672,8 @@ a { color: inherit; text-decoration: none; }
    шагами живет только в срезе «Цели», а туда попадают одни цели — ряд остается
    ровным. */
 .trow.tsk-grid.has-prog { height: auto; min-height: 74px; padding-top: 12px; padding-bottom: 12px; }
-.tsk-prog { display: flex; align-items: center; gap: 8px; margin-top: 6px; max-width: 260px; }
-.tsk-prog-b { flex: 1; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.tsk-prog { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
+.tsk-prog-b { width: 132px; flex: none; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
 .tsk-prog-b i { display: block; height: 100%; border-radius: 999px; background: var(--blue);
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
@@ -1698,10 +1698,12 @@ a { color: inherit; text-decoration: none; }
    Глубина одна: цель и ее шаги (см. шапку миграции 068). Шаг — не вложенная
    карточка, а строка-кнопка: клик закрывает текущую карточку и открывает
    карточку шага, вложенных модалок в системе нет. */
-.tsk-up { color: var(--navy); transition: .15s; }
-.tsk-up svg { color: var(--navy); }
-.tsk-up:hover { color: var(--blue); }
-.tsk-up:hover svg { color: var(--blue); }
+/* Синий, а не чернильный: это единственное действие в шапке карточки, и оно
+   должно читаться как действие, а не как еще одна подпись. */
+.tsk-up { color: var(--blue); transition: .15s; }
+.tsk-up svg { color: var(--blue); }
+.tsk-up:hover { color: var(--blue-d); }
+.tsk-up:hover svg { color: var(--blue-d); }
 .tsk-l.tsk-lrow { display: flex; align-items: center; gap: 10px; }
 .tsk-addstep { margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
   font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
@@ -1783,6 +1785,15 @@ a { color: inherit; text-decoration: none; }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
+     ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
+  .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .list-quick.depts::-webkit-scrollbar { display: none; }
+  .list-quick.depts .qchip { flex: none; }
+  /* Обрезанное название шага на телефоне не читается — переносим в две строки,
+     как и название задачи в строке списка. */
+  .tsk-step-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .tsk-card { max-height: calc(100vh - 24px); }
   .sec-head > .qchip { order: 2; margin-left: 0; }
 }
