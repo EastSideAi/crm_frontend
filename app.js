@@ -1528,6 +1528,9 @@
   // секретности, что клиентские платежи (cap 'finance'), поэтому cap свой.
   // 'mywork' — «Моя работа»: свои задания сотрудника-самозанятого. Роли его не дают
   // вовсе, он приходит с сервера по факту связи учетки с карточкой исполнителя.
+  // В модуле самозанятых две стороны, и они взаимоисключающие: связанному человеку
+  // сервер выдает 'mywork' и снимает 'contractors' — задания раздает один, выполняет
+  // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
@@ -1535,12 +1538,6 @@
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students', 'templates'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
-    /* Координатор самозанятых раздает задания и принимает работу. Клиентские лиды и
-       деньги компании ему не нужны, поэтому доступ ровно один — исполнители. */
-    cz_lead:       { label: 'Координатор самозанятых', short: 'исполнители',        caps: ['contractors'] },
-    /* Руководитель, который сам работает по заданиям: вся CRM и свой кабинет, но без
-       раздела самозанятых — чужие ИНН и выплаты видит тот, кто задания раздает. */
-    head_worker:   { label: 'Руководитель-работник',  short: 'вся компания и свои задания', caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'finmodel'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
     /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
