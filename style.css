@@ -3733,6 +3733,51 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 }
 
 
+/* ════ ВЫПЛАТЫ (реестр к оплате, этап 6) ════
+   Строка отвечает на один вопрос: можно ли платить и сколько. Поэтому якорь тут —
+   сумма, а проверки набраны тихо: семь зеленых галочек в каждой строке превратились бы
+   в шум, из которого не видно единственную красную. */
+.py-grid { grid-template-columns: 1fr 1.7fr 132px 1.2fr 168px; }
+/* Причин блокировки бывает несколько — строка растет под них, а не режет текст. */
+.trow.py-grid { height: auto; min-height: 60px; padding-top: 10px; padding-bottom: 10px;
+  align-items: center; }
+.trow.py-grid.thead { min-height: 38px; padding-top: 0; padding-bottom: 0; }
+.py-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.py-who b { font-weight: 650; letter-spacing: -.01em; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.py-job { font-size: 11px; color: var(--ink-3); }
+.py-task { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px;
+  color: var(--ink-2); }
+.py-act { font-size: 11px; color: var(--ink-3); }
+.py-sum { display: flex; flex-direction: column; gap: 2px; font-feature-settings: 'tnum'; }
+.py-sum b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.py-acc { font-size: 11px; color: var(--ink-3); }
+.py-check { min-width: 0; font-size: 12px; }
+.py-ok { display: inline-flex; align-items: center; gap: 6px; color: var(--green-ink); }
+.py-bad { display: flex; flex-direction: column; gap: 3px; }
+.py-b1 { color: var(--red-ink); line-height: 1.35; }
+.py-do { display: flex; justify-content: flex-end; }
+/* Подпись у счетчика: экран не отправляет деньги, и сказать это надо один раз сверху,
+   а не приписывать к каждой кнопке. */
+.py-hint { margin-left: auto; font-size: 12px; color: var(--ink-3); max-width: 380px;
+  text-align: right; }
+/* Отмененная выплата остается в истории, но гаснет: это уже не движение денег. */
+.py-off { opacity: .62; }
+.py-off .py-sum b { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+@media (max-width: 1180px) {
+  .trow.py-grid { grid-template-columns: 1fr 1.3fr 124px 160px !important; }
+  .py-grid > :nth-child(4) { display: none; }
+}
+@media (max-width: 700px) {
+  .trow.py-grid { grid-template-columns: 1fr auto !important; gap: 6px 12px;
+    align-items: start; }
+  .py-grid.thead { display: none; }
+  .py-grid > :nth-child(4) { display: block; grid-column: 1 / -1; }
+  .py-do { grid-column: 1 / -1; justify-content: flex-start; }
+  .py-hint { display: none; }
+}
+
 /* ════ МОЯ РАБОТА (свои задания сотрудника) ════
    Стол исполнителя собран по образцу Консоль.Про (ориентир владельца): колонки
    списка — номер, название, статус, срок, цена, место; заказчика колонкой не выносим,

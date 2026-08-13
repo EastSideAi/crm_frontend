@@ -1735,6 +1735,7 @@
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
+    { id: 'czpay', label: 'Выплаты', icon: 'coins', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
@@ -2201,6 +2202,25 @@
       html = '<div><h2>Планы работ</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('cal', 13) + '</span><span>' + phrase6 + '</span></div></div>';
     }
+    if (state.page === 'czpay') {
+      /* Вердикт отвечает на вопрос, с которым сюда заходят: сколько денег готово уйти
+         сегодня. Застрявшее называем отдельно — это не «к оплате», это работа для
+         оператора, а не для банка. */
+      var pr = PY.reg;
+      var stuck = pr ? pyRows('waiting').length : 0;
+      var phrase8;
+      if (!pr) phrase8 = 'Считаю реестр…';
+      else if (PY.err) phrase8 = esc(PY.err);
+      else if (!pr.ready_count) phrase8 = 'К выплате сейчас ничего нет. Задание попадает в реестр, ' +
+        'когда работа принята и акт подписан обеими сторонами.' +
+        (stuck ? ' Ждут документов: <b>' + stuck + '</b>.' : '');
+      else phrase8 = 'Готово к выплате <b>' + pr.ready_count + ' ' +
+        plural(pr.ready_count, 'задание', 'задания', 'заданий') + '</b> на <b>' +
+        ctMoney(pr.ready_amount) + ' ₽</b>.' +
+        (stuck ? ' Еще <b>' + stuck + '</b> ждут документов.' : '');
+      html = '<div><h2>Выплаты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + phrase8 + '</span></div></div>';
+    }
     if (state.page === 'czdocs') {
       /* Вердикт отвечает на вопрос, ради которого сюда заходят: что висит без подписи.
          Неподписанный акт — это незакрытый расход и невозможная выплата. */
@@ -2304,6 +2324,7 @@
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
     else if (state.page === 'czplans') renderCzPlans(view);
+    else if (state.page === 'czpay') renderCzPay(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
@@ -3606,6 +3627,22 @@
         '</div>';
     }
 
+    /* Выплата. «Оплачено» без ответа на вопрос «когда и по какой платежке» — половина
+       сведений: спрашивают об этом ровно тогда, когда деньги ищут в банковской выписке. */
+    var P = t.payout;
+    var payBlock = P
+      ? '<div class="m-sec"><div class="m-sec-h">Выплата</div>' +
+          '<div class="ct-act">' +
+            '<div class="ct-act-h"><b>Выплата № ' + P.number + '</b>' +
+              '<span class="ct-chip ct-paid">Проведена</span></div>' +
+            '<div class="ct-act-m">' + esc(czDate(P.paid_at)) + ' · <b>' +
+              ctMoney(P.amount) + ' ₽</b>' +
+              (P.reference ? ' · платежка ' + esc(P.reference) : '') +
+              (P.created_by ? ' · ' + esc(P.created_by) : '') + '</div>' +
+          '</div>' +
+        '</div>'
+      : '';
+
     var facts = [
       ['Исполнитель', esc(p.full_name || '—') + (p.phone ? ' · ' + esc(p.phone) : '')],
       ['Услуга', esc(t.service_title || t.title) + (t.service_code ? ' · ' + esc(t.service_code) : '')],
@@ -3665,7 +3702,7 @@
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content">' +
-        money + acts + actBlock +
+        money + acts + payBlock + actBlock +
         '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
         blocks + files +
         (t.cancel_reason
@@ -3687,6 +3724,15 @@
         // «Сформировать акт» — не смена статуса, а создание документа: он делает снимок
         // условий, поэтому у него своя ручка. Задание за документом двинет сервер.
         if (to === 'act_made') return ctMakeAct(t.id);
+        /* Деньги — не смена статуса. Выплата это отдельная запись со снимком проверок
+           и реквизитов, поэтому «Оплатить» открывает форму платежа, а «Отменить
+           выплату» — отмену с причиной. Сервер отметку статусом и не примет. */
+        if (to === 'paid') {
+          return openPayout({ task_id: t.id, task_number: t.number, title: t.title,
+                              amount: t.act ? t.act.amount : t.amount, act: t.act,
+                              contractor: p });
+        }
+        if (to === 'act_signed' && t.payout) return openPayCancel(t.payout.id);
         // Возврат из акта — это аннулирование документа, и оно всегда с причиной.
         if (to === 'approved' && t.act) {
           return openCtReason(t.id, to, 'Почему аннулируем акт?');
@@ -4072,6 +4118,221 @@
       });
     });
     pageAnim(view);
+  }
+
+  /* ── ВЫПЛАТЫ (этап 6 модуля самозанятых) ───────────────────────────────────
+     Деньги уходят из банка руками, поэтому экран отвечает на два вопроса: кому сегодня
+     платить и что мешает заплатить остальным. Обе цифры и все проверки считает сервер
+     (шесть условий ТЗ 12 плюс блокировка человека) — экран их только показывает.
+     Считать проверки здесь нельзя: посчитанное дважды правило разъезжается, и всегда в
+     сторону «на экране зеленое». */
+  var PY = { reg: null, hist: null, err: '', tab: 'ready', busy: false };
+  var PY_TABS = [['ready', 'К оплате'], ['waiting', 'Ждут документов'], ['hist', 'История']];
+
+  function pyLoad(cb) {
+    /* Реестр берем сразу с застрявшими (waiting=1): «к оплате» и «ждут документов» —
+       две вкладки одного списка, и второй запрос ради переключения вкладки не нужен. */
+    api('/admin/api/contractor-payouts/registry?waiting=1').then(function (r) {
+      PY.reg = r; PY.err = '';
+      if (state.page === 'czpay') renderAll();
+      if (cb) cb();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      PY.reg = PY.reg || { rows: [], ready_count: 0, ready_amount: 0 };
+      PY.err = 'Не удалось загрузить реестр. Проверьте связь и обновите страницу.';
+      if (state.page === 'czpay') renderAll();
+    });
+  }
+  function pyHist(cb) {
+    api('/admin/api/contractor-payouts').then(function (r) {
+      PY.hist = r.rows || [];
+      if (state.page === 'czpay') renderAll();
+      if (cb) cb();
+    }).catch(function () { PY.hist = PY.hist || []; if (state.page === 'czpay') renderAll(); });
+  }
+  function pyRows(tab) {
+    var rows = (PY.reg && PY.reg.rows) || [];
+    return rows.filter(function (r) {
+      return tab === 'ready' ? r.status === 'act_signed' : r.status !== 'act_signed';
+    });
+  }
+  /* Проверки в строке: пройденные молчат, непройденные объясняют себя. Семь зеленых
+     галочек в каждой строке — это шум, из которого не видно единственную красную. */
+  function pyChecks(r) {
+    if (r.ok) {
+      return '<span class="py-ok">' + ic('check', 12) + 'Проверки пройдены</span>';
+    }
+    return '<span class="py-bad">' + r.blockers.map(function (b) {
+      return '<span class="py-b1">' + esc(b) + '</span>';
+    }).join('') + '</span>';
+  }
+  function pyRegRow(r) {
+    var c = r.contractor || {};
+    return '<div class="trow py-grid" data-pyt="' + esc(r.task_id) + '">' +
+      '<span class="py-who"><b>' + esc(c.full_name || '—') + '</b>' +
+        (c.job ? '<span class="py-job">' + esc(c.job) + '</span>' : '') + '</span>' +
+      '<span class="py-task"><span class="ct-no">№' + r.task_number + '</span>' +
+        esc(r.title) +
+        (r.act ? '<span class="py-act">Акт № ' + r.act.number + ' от ' +
+          esc(czDate(r.act.act_date)) + '</span>' : '') + '</span>' +
+      '<span class="py-sum"><b>' + ctMoney(r.amount) + ' ₽</b>' +
+        (c.pay_account ? '<span class="py-acc num">' + esc(c.pay_account) + '</span>' : '') +
+        '</span>' +
+      '<span class="py-check">' + pyChecks(r) + '</span>' +
+      '<span class="py-do">' + (r.ok
+        ? '<button class="bp sm" data-pypay="' + esc(r.task_id) + '">Провести выплату</button>'
+        : '<span class="cz-fine">' + esc(r.status_title) + '</span>') + '</span>' +
+      '</div>';
+  }
+  function pyHistRow(p) {
+    var t = p.task || {};
+    var off = p.status === 'cancelled';
+    return '<div class="trow py-grid py-hist' + (off ? ' py-off' : '') + '">' +
+      '<span class="py-who"><b>' + esc(p.ct_name || '—') + '</b>' +
+        '<span class="py-job">Выплата № ' + p.number + '</span></span>' +
+      '<span class="py-task"><span class="ct-no">№' + (t.number || '—') + '</span>' +
+        esc(t.title || '—') +
+        (p.reference ? '<span class="py-act">Платежка ' + esc(p.reference) + '</span>' : '') +
+        '</span>' +
+      '<span class="py-sum"><b>' + ctMoney(p.amount) + ' ₽</b>' +
+        '<span class="py-acc">' + esc(czDate(p.paid_at)) + '</span></span>' +
+      '<span class="py-check">' + (off
+        ? '<span class="py-bad"><span class="py-b1">' + esc(p.cancel_reason || 'Отменена') +
+          '</span></span>'
+        : '<span class="py-ok">' + ic('check', 12) + 'Проведена' +
+          (p.created_by ? ' · ' + esc(p.created_by) : '') + '</span>') + '</span>' +
+      '<span class="py-do">' + (off ? '' :
+        '<button class="bp sm ghost" data-pycancel="' + esc(p.id) + '">Отменить</button>') +
+        '</span>' +
+      '</div>';
+  }
+  function renderCzPay(view) {
+    if (PY.reg === null) { view.innerHTML = dashSkeleton(); pyLoad(); return; }
+    if (PY.tab === 'hist' && PY.hist === null) { pyHist(); }
+    var reg = PY.reg;
+    var counts = { ready: pyRows('ready').length, waiting: pyRows('waiting').length,
+                   hist: PY.hist ? PY.hist.length : undefined };
+    var tabs = PY_TABS.map(function (t) {
+      var n = counts[t[0]];
+      return '<button class="qchip' + (PY.tab === t[0] ? ' on' : '') + '" data-pytab="' +
+        t[0] + '">' + t[1] + (n === undefined ? '' : ' <span class="qn">' + n + '</span>') +
+        '</button>';
+    }).join('');
+
+    var body, head;
+    if (PY.tab === 'hist') {
+      var h = PY.hist || [];
+      head = '<span class="th">Кому</span><span class="th">Задание</span>' +
+        '<span class="th">Сумма и дата</span><span class="th">Состояние</span><span class="th"></span>';
+      body = !h.length
+        ? '<div class="empty">Выплат пока не было. Первая появится здесь сразу после того, как проведете ее по подписанному акту.</div>'
+        : h.map(pyHistRow).join('');
+    } else {
+      var rows = pyRows(PY.tab);
+      head = '<span class="th">Исполнитель</span><span class="th">За что</span>' +
+        '<span class="th">Сумма</span><span class="th">Проверки</span><span class="th"></span>';
+      body = PY.err
+        ? '<div class="empty">' + esc(PY.err) + '</div>'
+        : (!rows.length
+          ? '<div class="empty">' + (PY.tab === 'ready'
+              ? 'Платить пока нечего. Задание попадает сюда, когда работа принята и акт подписан обеими сторонами.'
+              : 'Все принятые работы дошли до акта — ничего не застряло.') + '</div>'
+          : rows.map(pyRegRow).join(''));
+    }
+
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<span class="list-count"><b>' + reg.ready_count + '</b> ' +
+            plural(reg.ready_count, 'выплата', 'выплаты', 'выплат') +
+            ' готово на <b>' + ctMoney(reg.ready_amount) + ' ₽</b></span>' +
+          '<span class="py-hint">Деньги отправляете из банка сами. Здесь — проверка и отметка, ' +
+            'что платеж прошел.</span>' +
+        '</div>' +
+        '<div class="list-quick">' + tabs + '</div>' +
+        '<div class="trow py-grid thead">' + head + '</div>' + body +
+      '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pytab]'), function (b) {
+      b.addEventListener('click', function () {
+        PY.tab = b.getAttribute('data-pytab');
+        if (PY.tab === 'hist' && PY.hist === null) pyHist();
+        renderAll();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pyt]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('button')) return;
+        openCt(r.getAttribute('data-pyt'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pypay]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var tid = b.getAttribute('data-pypay');
+        var row = pyRows('ready').filter(function (x) { return x.task_id === tid; })[0];
+        openPayout(row);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pycancel]'), function (b) {
+      b.addEventListener('click', function () { openPayCancel(b.getAttribute('data-pycancel')); });
+    });
+    pageAnim(view);
+  }
+  /* Отметка о платеже. Сумму человек не вводит: платят ровно то, что подписано в акте,
+     и поле для суммы означало бы, что ее можно набрать другой. Номер платежки не
+     обязателен в момент отметки — его вписывают из выписки, но без него сверка с
+     банком идет по суммам и датам. */
+  function openPayout(row) {
+    if (!row) return;
+    var c = row.contractor || {};
+    openSheet('Провести выплату',
+      esc(c.full_name) + ' · ' + ctMoney(row.amount) + ' ₽ по акту № ' +
+        (row.act ? row.act.number : '—') + '. Полные реквизиты — в карточке исполнителя.', [
+      ['date', 'date', 'Дата платежа', new Date().toISOString().slice(0, 10)],
+      ['ref', 'line', 'Номер платежного поручения', ''],
+      ['note', 'text', 'Заметка (необязательно)', ''],
+    ], function (vals, close) {
+      if (PY.busy) return;
+      PY.busy = true;
+      czSend('/admin/api/contractor-payouts', 'POST', {
+        task_id: row.task_id, paid_at: vals.date || undefined,
+        reference: vals.ref.trim() || undefined, note: vals.note.trim() || undefined,
+      }).then(function () {
+        close(); pyAfter();
+        showToast('Выплата отмечена. Задание закрыто');
+      }).catch(function (e) { el('sh-err').textContent = e.message; })
+        .then(function () { PY.busy = false; });
+      return '';
+    }, null, 'Выплата', 'Провести');
+  }
+  function openPayCancel(pid) {
+    openSheet('Отменить выплату',
+      'Задание вернется в «акт подписан» и снова появится в реестре. Причина останется в истории: без нее исчезнувшая сумма выглядит как потеря денег.', [
+      ['reason', 'text', 'Что случилось', ''],
+    ], function (vals, close) {
+      if (!vals.reason.trim()) return 'Напишите причину — она останется в истории';
+      czSend('/admin/api/contractor-payouts/' + pid + '/cancel', 'POST',
+             { reason: vals.reason.trim() })
+        .then(function () { close(); pyAfter(); })
+        .catch(function (e) { el('sh-err').textContent = e.message; });
+      return '';
+    }, null, 'Выплата', 'Отменить выплату');
+  }
+  /* Выплату проводят из двух мест — из реестра и из карточки задания. Обновлять после
+     нее надо то, что человек видит: реестр, историю и открытую карточку. */
+  function pyAfter() {
+    PY.hist = null;
+    pyLoad();
+    if (PY.tab === 'hist') pyHist();
+    if (CT.openId) {
+      api('/admin/api/contractor-tasks/' + CT.openId).then(function (t) {
+        ctPut(t);
+        if (CT.openId === t.id) renderCtCard();
+      }).catch(function () {});
+    }
+    if (state.page === 'cztasks') ctLoad();
+    else if (czPlansOn()) plLoad();
   }
 
   function renderCzServices(view) {
