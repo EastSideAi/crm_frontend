@@ -174,6 +174,7 @@
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
       team: '<circle cx="7" cy="7.5" r="2.5"/><path d="M2.5 16c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4"/><path d="M13 5.5a2.3 2.3 0 0 1 0 4.4M14.5 15.5c0-1.6-.6-2.9-1.6-3.6"/>',
+      more: '<circle cx="4.5" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r="1.5" fill="currentColor" stroke="none"/>',
       image: '<rect x="3" y="4" width="14" height="12" rx="2.5"/><circle cx="7.3" cy="8.3" r="1.4"/><path d="M3.5 13.5l3.5-3 2.5 2.2 3-2.7 4 3.5"/>',
       clip: '<path d="M14.5 7.5l-5.8 5.8a2.4 2.4 0 0 1-3.4-3.4l6.3-6.3a3.6 3.6 0 0 1 5.1 5.1l-6.3 6.3a4.8 4.8 0 0 1-6.8-6.8"/>',
       badge: '<rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/>',
@@ -783,6 +784,30 @@
     });
   }
 
+  /* ── «Еще» в мобильном таббаре: разделы, которые не влезли ── */
+  function openMoreMenu(anchor, items, badgeOf) {
+    closeSmenu();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu mtmore';
+    smenu.innerHTML = items.map(function (it) {
+      var bd = badgeOf(it);
+      return '<button data-p="' + it.id + '"' + (it.id === state.page ? ' class="cur"' : '') + '>' +
+        ic(it.icon, 16) + '<span>' + esc(it.label) + '</span>' +
+        (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
+    }).join('');
+    document.body.appendChild(smenu);
+    var r = anchor.getBoundingClientRect();
+    // меню встает НАД таббаром: он прижат к низу экрана, снизу места нет
+    smenu.style.top = Math.max(8, r.top - smenu.offsetHeight - 8) + 'px';
+    smenu.style.right = '10px'; smenu.style.left = 'auto';
+    smenu.style.minWidth = '210px';
+    Array.prototype.forEach.call(smenu.children, function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); var p = b.getAttribute('data-p'); closeSmenu(); setPage(p);
+      });
+    });
+  }
+
   /* ── кастомный дропдаун (вместо нативного select) ─────── */
   function chev() {
     return '<svg class="cdd-ch" width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg>';
@@ -986,6 +1011,119 @@
     if (nameI) nameI.addEventListener('input', function () { nameI.classList.remove('al-err'); });
     ov.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
+    });
+  }
+
+  /* ── КУДА МНЕ ПИСАТЬ (личные уведомления сотрудника) ──
+     Раньше уведомления команды уходили в один чат владельца, и выбора у человека не
+     было вовсе. Теперь мессенджер выбирает он сам, а бэкенд раскладывает по людям.
+     Двухшаговость тут не лишняя, а честная: выбрать канал мало — мессенджер не даст
+     боту написать первым, пока человек не нажал «Начать» у себя. Поэтому статус
+     подключения виден всегда, и пока его нет, мы прямо говорим, что тишина. */
+  var NOTIFY_CH = [
+    { id: 'tg', label: 'Telegram', icon: 'send', bot: 'бот EastSide' },
+    { id: 'max', label: 'Макс', icon: 'max', bot: 'бот «Истсайд команда»' },
+    { id: 'off', label: 'Не беспокоить', icon: 'bell', bot: '' },
+  ];
+
+  function openNotifyPrefs() {
+    if (typeof closeSmenu === 'function') closeSmenu();
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Уведомления</div><div class="al-title">Куда вам писать</div></div>' +
+          '<button class="al-x" id="al-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заявки на разбор, отмены записи, передача клиента живому ' +
+          'человеку и напоминания приходят в один мессенджер — выберите свой.</div>' +
+        '<div class="al-body" id="np-body">' +
+          '<div class="np-skel shim"></div><div class="np-skel shim"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="al-cancel">Закрыть</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('al-x').addEventListener('click', close);
+    el('al-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var body = el('np-body');
+    var render = function (st) {
+      var ch = (st && st.channel) || 'off';
+      var linked = (st && st.linked) || {};
+      var links = (st && st.links) || {};
+      var cur = NOTIFY_CH.filter(function (c) { return c.id === ch; })[0] || NOTIFY_CH[2];
+      var isOn = ch !== 'off';
+      var ready = isOn && !!linked[ch];
+      var link = isOn ? links[ch] : null;
+
+      var state1 = !isOn
+        ? '<div class="np-state"><span class="sev n-off">Выключено</span>' +
+            '<div class="np-hint">Уведомления команды вам не приходят. Выберите мессенджер, ' +
+            'чтобы получать заявки и передачи клиентов.</div></div>'
+        : ready
+          ? '<div class="np-state"><span class="sev n-ok">' + ic('check', 12) + 'Подключено</span>' +
+              '<div class="np-hint">Всё готово — уведомления идут в ' + esc(cur.label) + '.</div></div>'
+          : '<div class="np-state"><span class="sev n-wait">Нужен один шаг</span>' +
+              '<div class="np-hint">Откройте ' + esc(cur.bot) + ' и нажмите «Начать». ' +
+              'Пока вы этого не сделали, мессенджер не пропустит сообщение — ' +
+              'так устроены и Telegram, и Макс.</div>' +
+              (link
+                ? '<div class="np-act"><a class="bp np-open" href="' + esc(link) + '" target="_blank" rel="noopener">' +
+                    ic('ext', 14) + 'Открыть ' + esc(cur.label) + '</a>' +
+                    '<button class="al-cancel np-copy" data-l="' + esc(link) + '">' + ic('copy', 13) + 'Скопировать ссылку</button></div>'
+                : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(cur.label) + '.</div>') +
+            '</div>';
+
+      body.innerHTML =
+        '<div class="al-f"><span class="al-l">Мессенджер</span>' +
+          '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (c) {
+            return '<button data-ch="' + c.id + '"' + (c.id === ch ? ' class="on"' : '') + '>' +
+              ic(c.icon, 13) + esc(c.label) + '</button>';
+          }).join('') + '</div></div>' + state1;
+
+      Array.prototype.forEach.call(body.querySelectorAll('[data-ch]'), function (b) {
+        b.addEventListener('click', function () {
+          var next = b.getAttribute('data-ch');
+          if (next === ch) return;
+          body.classList.add('np-wait');
+          api('/admin/api/me/notify', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: next }),
+          }).then(function (r) {
+            body.classList.remove('np-wait');
+            render(r);
+            var nx = NOTIFY_CH.filter(function (c) { return c.id === next; })[0];
+            showToast(next === 'off' ? 'Уведомления выключены' : 'Мессенджер: ' + nx.label);
+          }).catch(function () {
+            body.classList.remove('np-wait');
+            showToast('Не удалось сохранить — попробуйте ещё раз');
+          });
+        });
+      });
+      var cp = body.querySelector('.np-copy');
+      if (cp) cp.addEventListener('click', function () {
+        var v = cp.getAttribute('data-l');
+        if (navigator.clipboard) navigator.clipboard.writeText(v);
+        showToast('Ссылка скопирована');
+      });
+    };
+
+    api('/admin/api/me/notify').then(render).catch(function () {
+      body.innerHTML = '<div class="np-hint">Не удалось открыть настройки. ' +
+        'Если вы вошли по общей ссылке, зайдите под своим логином — уведомления личные.</div>';
     });
   }
 
@@ -1469,6 +1607,7 @@
         '<div class="pm-head"><div class="av">' + esc(initials(state.userName)) + '</div>' +
           '<div><div class="pm-n">' + esc(state.userName || 'EastSide') + '</div>' +
           '<div class="pm-r">' + esc(roleInfo().label) + ' · ' + esc(roleInfo().short) + '</div></div></div>' +
+        '<button data-a="notify">' + ic('bell', 16) + 'Уведомления</button>' +
         '<button data-a="refresh">' + ic('refresh', 16) + 'Обновить данные</button>' +
         '<button data-a="logout">' + ic('exit', 16) + 'Сменить аккаунт</button>';
       document.body.appendChild(smenu);
@@ -1480,7 +1619,8 @@
       Array.prototype.forEach.call(smenu.querySelectorAll('button'), function (b) {
         b.addEventListener('click', function (ev) {
           ev.stopPropagation(); var a = b.getAttribute('data-a'); closeSmenu(); prof.classList.remove('open');
-          if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
+          if (a === 'notify') openNotifyPrefs();
+          else if (a === 'refresh') { loadLeads(false); showToast('Данные обновлены'); }
           else logout();
         });
       });
@@ -1740,25 +1880,43 @@
     var mt = el('mtabs');
     if (mt) {
       var hoM = inboxAttention();
-      // На телефоне левой колонки нет, поэтому переключатель пространств живет
-      // отдельной вкладкой в конце ленты — иначе с телефона в раздел не попасть.
-      var jump = openSpaces().filter(function (s) { return s.id !== space; })
-        .map(function (s) {
-          var d = (s.id === 'mw' && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
-          return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +
-            ic(SPACE_ICON[s.id] || 'leads') + '<span>' + esc(s.label) + '</span>' + d + '</button>';
-        }).join('');
-      mt.innerHTML = jump + NAV.map(function (it) {
-        var bd = (it.id === 'leads' && c.hot) ? c.hot
+      var mBadge = function (it) {
+        return (it.id === 'leads' && c.hot) ? c.hot
           : (it.id === 'inbox' && hoM) ? hoM : mwBadge(it.id);
+      };
+      // На телефоне левой колонки нет, поэтому переход в другое пространство живет
+      // отдельной вкладкой в начале ленты — иначе с телефона туда не попасть.
+      var jumps = openSpaces().filter(function (s) { return s.id !== space; });
+      var jump = jumps.map(function (s) {
+        var d = (s.id === 'mw' && spaceAttention()) ? '<i class="sp-dot"></i>' : '';
+        return '<button class="mtab mtab-sp" data-sp="' + s.id + '">' +
+          ic(SPACE_ICON[s.id] || 'leads') + '<span>' + esc(s.label) + '</span>' + d + '</button>';
+      }).join('');
+      // На телефон помещаются четыре подписи. Остальные разделы (у super_admin их
+      // тринадцать) уходят под «Еще»: горизонтальная прокрутка таббара прячет пункты
+      // без единого намека, что они есть. Вкладки пространств занимают то же место,
+      // поэтому считаем их вместе — иначе у владельца лента снова уезжает за край.
+      var fits = Math.max(2, 4 - jumps.length), mHead = NAV, mTail = [];
+      if (NAV.length > fits + 1) { mHead = NAV.slice(0, fits); mTail = NAV.slice(fits); }
+      var tailOn = mTail.some(function (it) { return it.id === state.page; });
+      var tailBadge = mTail.reduce(function (s, it) { return s + mBadge(it); }, 0);
+      mt.innerHTML = jump + mHead.map(function (it) {
+        var bd = mBadge(it);
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + '<span>' + it.label + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
-      }).join('');
+      }).join('') + (mTail.length
+        ? '<button class="mtab' + (tailOn ? ' on' : '') + '" data-more="1">' +
+            ic('more') + '<span>' + (tailOn ? esc(pageLabel()) : 'Еще') + '</span>' +
+            (tailBadge ? '<span class="bdg num">' + tailBadge + '</span>' : '') + '</button>'
+        : '');
       Array.prototype.forEach.call(mt.children, function (b) {
-        b.addEventListener('click', function () {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
           var sp = b.getAttribute('data-sp');
-          if (sp) setSpace(sp); else setPage(b.getAttribute('data-p'));
+          if (sp) setSpace(sp);
+          else if (b.getAttribute('data-more')) openMoreMenu(b, mTail, mBadge);
+          else setPage(b.getAttribute('data-p'));
         });
       });
       // Лента длиннее экрана — подводим открытый раздел в центр сами. scrollIntoView
@@ -5682,6 +5840,9 @@
     { id: 'tt', label: 'TikTok', src: 'tiktok' },
     { id: 'tgch', label: 'Телеграм-канал', src: 'telegram' },
     { id: 'dzen', label: 'Дзен', src: 'dzen' },
+    /* ссылка внутри самого бота (кнопка под приветствием и т.п.): свой источник, иначе
+       переходы из бота слипаются с «Другое место» и канал нечем измерить */
+    { id: 'bot', label: 'Бот EastSide', src: 'telegram_bot' },
     { id: 'site', label: 'Другое место', src: 'other' },
   ];
   var MK_MEDIUMS = [
@@ -5690,6 +5851,7 @@
     { id: 'stories', label: 'Сторис', utm: 'stories' },
     { id: 'ads', label: 'Реклама / таргет', utm: 'ads' },
     { id: 'bio', label: 'Описание профиля', utm: 'bio' },
+    { id: 'welcome', label: 'Приветствие в боте', utm: 'welcome' },
   ];
   /* WhatsApp появится в выборе, когда бот заработает в WA; отображение wa-ссылок
      из БД оставлено в MK_KIND_INFO, чтобы старые данные не показывались как WEB */
@@ -5704,7 +5866,8 @@
   };
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
-    tiktok: 'TikTok', telegram: 'Telegram', whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
+    whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
   };
 
   function mkUrl(code) {
