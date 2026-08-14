@@ -2443,6 +2443,14 @@
       ? '<div class="brd-idle"><span class="brd-il">Без задач</span>' + esc(b.idle.join(', ')) + '</div>'
       : '';
 
+    // Три последние колонки отвечают на «что горит сейчас» и от периода не
+    // зависят. Пока смотришь текущий месяц, это незаметно; стоит уйти в июль —
+    // и семь просрочек читаются как «столько было в июле». Говорим прямо.
+    var nowNote = state.boardShift
+      ? '<div class="brd-note">Просрочено, на приемке и в работе — это состояние на сегодня. ' +
+        'От выбранного периода зависят только план и сделано.</div>'
+      : '';
+
     view.innerHTML = '<div class="card listcard">' +
       '<div class="list-tools brd-tools">' +
         '<div class="dperiod" id="brd-per">' + BOARD_PERIODS.map(function (o) {
@@ -2458,7 +2466,7 @@
       '<div class="list-body">' +
         (rows ? head + rows + totalRow
               : '<div class="empty">За этот период задач ни у кого нет.</div>') +
-      '</div>' + idle +
+      '</div>' + nowNote + idle +
     '</div>';
 
     function reload(fn) { fn(); state.board = null; saveUi(); renderView(); }
