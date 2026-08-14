@@ -2164,9 +2164,12 @@
   };
   var TASK_SEGS = {
     today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
+    // Цели идут сразу за «Сегодня» намеренно: сегодняшняя задача без цели —
+    // просто дело, а с целью — шаг к результату. Порядок вкладок и есть ответ
+    // на вопрос «зачем я это делаю» (решение Павла от 14.08.2026).
+    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'куда мы идем, по направлениям' },
     week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
     mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
-    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'большие задачи и прогресс по шагам' },
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям и в
     // обычном списке между ее строками стоят чужие задачи.
@@ -2391,6 +2394,7 @@
     if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
     if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
     if (TASK_SEGS[seg].view === 'tree') { renderTree(view); return; }
+    if (TASK_SEGS[seg].view === 'goals') { renderGoals(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
       if (!q) return true;
@@ -2404,7 +2408,6 @@
       // Подпись под названием отвечает на «откуда эта задача»: цель важнее
       // постановщика — шаг «собрать документы» без цели читается как обрывок.
       var sub = [];
-      if (t.parent_title) sub.push('в цели: ' + t.parent_title);
       if (t.author_name) sub.push('поставил ' + t.author_name);
       else if (showWho) sub.push('без постановщика');
       if (t.client_name) sub.push(t.client_name);
@@ -2416,6 +2419,13 @@
       return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
         (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
         '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+          // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
+          // постановщиком: задача без цели просто дело, с целью — шаг к
+          // результату, и это первое, что должно читаться в списке.
+          (t.parent_title
+            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' +
+              ic('target', 11) + esc(t.parent_title) + '</button>'
+            : '') +
           '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' + steps + '</div>' +
         '<div class="tsk-who">' + (t.assignee_name
           ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
@@ -2482,7 +2492,98 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
+    // Пометка цели открывает саму цель, а не задачу, в строке которой стоит.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openTask(+b.getAttribute('data-goalid'));
+      });
+    });
   }
+  /* ── Срез «Цели» ───────────────────────────────────────────────────────────
+     Не плоский список, а разбивка по направлениям: вопрос к этому экрану —
+     «куда мы идем и где стоим», а он задается по отделам, а не по алфавиту.
+     Цели без направления идут последними: это чаще всего забытая графа при
+     заведении, а не отдельный смысл. */
+  function renderGoals(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (g) {
+      if (!q) return true;
+      return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+
+    var order = Object.keys(DEPTS).concat(['']);
+    var groups = order.map(function (d) {
+      return { dept: d, label: d ? DEPTS[d] : 'Без направления',
+               goals: list.filter(function (g) { return (g.dept || '') === d; }) };
+    }).filter(function (g) { return g.goals.length; });
+
+    var body = groups.map(function (grp) {
+      var rows = grp.goals.map(function (g) {
+        var due = dueLabel(g);
+        var pct = g.steps_total ? Math.round(g.steps_done / g.steps_total * 100) : 0;
+        return '<div class="trow gl-row' + (g.overdue ? ' r-crit' : '') + '" data-goalopen="' + g.id + '">' +
+          '<div class="tr-name">' + esc(g.title) +
+            '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
+          '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
+          '<span class="gl-pct num' + (pct === 100 ? ' full' : '') + '">' + pct + '%</span>' +
+          '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+          '<span class="tr-go">' + ic('go', 14) + '</span>' +
+        '</div>';
+      }).join('');
+      var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+      var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+      return '<div class="gl-sec"><span class="gl-sl">' + esc(grp.label) + '</span>' +
+        '<span class="gl-sn num">' + grp.goals.length + ' ' +
+          plural(grp.goals.length, 'цель', 'цели', 'целей') +
+        (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') + '</span></div>' + rows;
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' +
+          plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (list.length ? body
+          : '<div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.'
+              : 'Целей пока нет. Цель появляется, когда у задачи есть шаги: открой задачу и добавь первый.') + '</div>') +
+      '</div></div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    // Клик по цели ведет в ее шаги — тем же экраном, что и в дереве, чтобы у
+    // одной сущности не было двух разных представлений.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalopen]'), function (r) {
+      var id = +r.getAttribute('data-goalopen');
+      r.addEventListener('click', function () {
+        var g = (state.tasks || []).filter(function (x) { return x.id === id; })[0];
+        if (!g) return;
+        // Дерево живет под cap tasks_all. У кого его нет, тому шаги чужой цели
+        // все равно не отдадут — открываем карточку цели, она доступна всем
+        // участникам и показывает то же самое по сути.
+        if (!can('tasks_all')) { openTask(id); return; }
+        state.taskSeg = 'team';
+        state.taskWho = null;
+        saveUi();
+        treeGo(g.dept || '', g);
+        renderTopbar();
+      });
+    });
+  }
+
   /* ── Дерево «Вся команда» ──────────────────────────────────────────────────
      Работа компании читается сверху вниз: направление, цель, шаги. На каждом
      уровне ровно один тип объектов — поэтому каши не бывает по устройству

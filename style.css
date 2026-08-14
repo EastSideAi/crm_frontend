@@ -1783,6 +1783,29 @@ a { color: inherit; text-decoration: none; }
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
 
+/* Пометка цели в строке задачи. Не чип-статус и не тег: это ссылка на смысл
+   задачи, поэтому тихая, но кликабельная — синеет только на наведении. */
+.tsk-goal { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  max-width: 100%; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
+  transition: .14s var(--ease); overflow: hidden; }
+.tsk-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-goal svg { flex: none; color: var(--ink-3); }
+.tsk-goal:hover { background: var(--blue-tint); color: var(--blue); }
+.tsk-goal:hover svg { color: var(--blue); }
+
+/* ── Срез «Цели» ─────────────────────────────────────────────────────────────
+   Цели по направлениям: заголовок отдела, под ним его цели с процентом. */
+.gl-sec { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 16px 24px 8px; }
+.gl-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.gl-sn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.gl-row { grid-template-columns: minmax(180px,1fr) 180px 54px 130px 30px; }
+.gl-pct { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em;
+  text-align: right; }
+.gl-pct.full { color: var(--green-ink); }
+
 /* ── Дерево «Вся команда» ────────────────────────────────────────────────────
    Три уровня: направления, цели направления, шаги цели. Разворачивающихся
    веток нет намеренно — на экране всегда один тип объектов, а где ты сейчас,
@@ -2145,6 +2168,12 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tr-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.tr-grid .tr-go { display: none; }
+  /* Цели на телефоне: процент и срок под названием, шкала во всю ширину. */
+  .trow.gl-row { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 6px 10px; height: auto; padding: 13px 16px; align-items: center; }
+  .trow.gl-row .tr-name, .trow.gl-row .tr-prog { grid-column: 1 / -1; }
+  .trow.gl-row .gl-pct { text-align: left; }
+  .trow.gl-row .tr-go { display: none; }
   .trow.tr-goal, .trow.tr-task { grid-template-columns: minmax(0,1fr) auto !important;
     gap: 6px 10px; height: auto; padding: 13px 16px; align-items: start; }
   .trow.tr-goal .tr-name, .trow.tr-task .tr-name { grid-column: 1 / -1; }
