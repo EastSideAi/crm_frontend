@@ -2428,10 +2428,16 @@
       '</div>';
 
     var rows = (b.people || []).map(function (p) {
-      return '<div class="trow brd-grid' + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
+      // Отчет за день — единственная строка на экране, написанная человеком, а
+      // не посчитанная системой. Она стоит под числами, потому что объясняет их.
+      var note = p.note
+        ? '<div class="brd-note-row">' + ic('chat', 13) + '<span>' + esc(p.note) + '</span></div>'
+        : '';
+      return '<div class="trow brd-grid' + (p.overdue ? ' r-crit' : '') + (note ? ' has-note' : '') +
+        '" data-uid="' + p.id + '">' +
         '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
           '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
-        BOARD_COLS.map(function (c) { return boardCell(p, c[0]); }).join('') +
+        BOARD_COLS.map(function (c) { return boardCell(p, c[0]); }).join('') + note +
       '</div>';
     }).join('');
 
