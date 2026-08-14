@@ -2439,8 +2439,16 @@
 
     // Кто без задач — именами под таблицей, а не строками нулей в ней: это ответ
     // на вопрос «а кому я ничего не поставил», и он стоит одной строки, не пяти.
-    var idle = (b.idle || []).length
-      ? '<div class="brd-idle"><span class="brd-il">Без задач</span>' + esc(b.idle.join(', ')) + '</div>'
+    // Имен без задач бывает больше, чем строк в самом табло, и тогда подпись
+    // весит больше таблицы. Показываем восемь, остальных считаем числом.
+    var IDLE_SHOWN = 8;
+    var idleAll = b.idle || [];
+    var idle = idleAll.length
+      ? '<div class="brd-idle"><span class="brd-il">Без задач</span>' +
+        esc(idleAll.slice(0, IDLE_SHOWN).join(', ')) +
+        (idleAll.length > IDLE_SHOWN
+          ? ' <span class="brd-more num">и еще ' + (idleAll.length - IDLE_SHOWN) + '</span>' : '') +
+        '</div>'
       : '';
 
     // Три последние колонки отвечают на «что горит сейчас» и от периода не

@@ -1788,7 +1788,9 @@ a { color: inherit; text-decoration: none; }
    чисел, поэтому все украшение здесь — типографика. Нули приглушены (глаз
    ищет, где работа есть, а не пересчитывает пустые клетки), красное одно —
    просрочка, зеленое одно — принятое. Никакой зебры и вертикальных линеек. */
-.brd-grid { grid-template-columns: minmax(0,1.6fr) repeat(5, 94px); }
+/* Имя тянется, но не бесконечно: на широком мониторе колонка в 1.6fr отрывает
+   человека от его же чисел на пол-экрана. */
+.brd-grid { grid-template-columns: minmax(200px, 460px) repeat(5, minmax(94px, 1fr)); }
 .brd-grid .th:not(:first-child), .brd-n { text-align: right; }
 .brd-who { display: flex; align-items: center; gap: 10px; min-width: 0;
   font-size: 13.5px; font-weight: 600; color: var(--ink); }
@@ -1816,6 +1818,7 @@ a { color: inherit; text-decoration: none; }
   font-size: 12.5px; color: var(--ink-3); }
 .brd-il { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); flex: none; }
+.brd-more { font-weight: 700; color: var(--ink-2); }
 
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
