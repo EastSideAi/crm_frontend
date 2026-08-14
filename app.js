@@ -3001,6 +3001,7 @@
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
+      '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
@@ -3043,6 +3044,8 @@
         });
       });
     });
+    var tgb = el('tm-tg');
+    if (tgb) tgb.addEventListener('click', openBotLinks);
     var shb = el('tm-shared');
     if (shb) shb.addEventListener('click', function () {
       var next = !(state._teamShared !== false);
@@ -3181,15 +3184,28 @@
       // Неподключенные наверх: список открывают ради них, а не ради галочек.
       links = links.slice().sort(function (a, b) { return (a.linked ? 1 : 0) - (b.linked ? 1 : 0); });
       var rows = links.map(function (x) {
+        var accs = x.accounts || [];
+        // Аккаунтов у человека может быть несколько: личный и рабочий. Список
+        // показываем только когда их больше одного — там появляется вопрос
+        // «куда придет», на который строка обязана ответить.
+        var many = accs.length > 1
+          ? '<div class="tgl-accs">' + accs.map(function (a) {
+              return '<span class="tgl-ac">' + esc(a.username ? '@' + a.username : 'аккаунт без ника') +
+                '<button class="tgl-un" data-unlink="' + esc(a.chat_id) + '" title="Отвязать этот аккаунт">' +
+                ic('x', 11) + '</button></span>';
+            }).join('') + '</div>'
+          : '';
         return '<div class="tgl-row' + (x.linked ? ' on' : '') + '">' +
           '<span class="tsk-av">' + esc(initials(x.name || x.login)) + '</span>' +
           '<div class="tgl-i"><div class="tgl-n">' + esc(x.name || x.login) + '</div>' +
             '<div class="tgl-s">' + (x.linked
-              ? 'подключен' + (x.tg_username ? ' · @' + esc(x.tg_username) : '')
+              ? (accs.length > 1
+                  ? 'подключен · ' + accs.length + ' ' + plural(accs.length, 'аккаунт', 'аккаунта', 'аккаунтов') + ', пишем на все'
+                  : 'подключен' + (x.tg_username ? ' · @' + esc(x.tg_username) : ''))
               // Пока бота нет, «не нажал Старт» — не про человека, а про бота:
               // об этом уже сказано наверху, в строке показываем роль.
               : noBot ? esc((ROLES[x.role] && ROLES[x.role].label) || x.role || '')
-                : 'не нажал «Старт» — напоминания не идут') + '</div></div>' +
+                : 'не нажал «Старт» — напоминания не идут') + '</div>' + many + '</div>' +
           (x.link
             ? '<button class="icobtn" data-cp="' + esc(x.link) + '" title="Скопировать личную ссылку">' + ic('copy', 15) + '</button>'
             : '') +
@@ -3219,6 +3235,13 @@
       });
       // общий чат: выбрать группу, проверить связь, отключить
       var reopen = function () { close(); setTimeout(openBotLinks, 200); };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-unlink]'), function (b) {
+        b.addEventListener('click', function () {
+          apiSend('/admin/api/tasks/tg/unlink', 'POST', { chat_id: b.getAttribute('data-unlink') },
+            function () { showToast('Аккаунт отвязан — на него больше не пишем'); reopen(); },
+            function () { showToast('Не получилось отвязать аккаунт'); });
+        });
+      });
       Array.prototype.forEach.call(ov.querySelectorAll('[data-grp]'), function (b) {
         b.addEventListener('click', function () {
           apiSend('/admin/api/tasks/tg/group', 'POST', { chat_id: b.getAttribute('data-grp') },

@@ -1878,6 +1878,15 @@ a { color: inherit; text-decoration: none; }
 /* Подключен человек или нет — говорит подпись, а не аватар: инициалы это
    идентичность, навешивать на нее статус значит читать строку дважды. */
 .tgl-row.on .tgl-s { color: var(--green-ink); }
+/* Аккаунты человека — служебная строка под подписью: показывается только когда
+   их больше одного, то есть когда есть что решать (какой из них лишний). */
+.tgl-accs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tgl-ac { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px;
+  font-size: 11px; color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); }
+.tgl-un { display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%;
+  background: none; color: var(--ink-3); cursor: pointer; transition: color .12s, background .12s; }
+.tgl-un:hover { color: var(--red-ink); background: var(--red-soft); }
 
 /* ── Срез «По ученикам» ──────────────────────────────────────────────────────
    Группа = ученик, внутри группы — подгруппы по роли исполнителя. Своих карточек
