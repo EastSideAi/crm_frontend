@@ -2013,6 +2013,29 @@
           plural(bt.done, 'задача', 'задачи', 'задач') + '.';
         else tphr = 'За этот период команда еще ничего не закрыла.';
       }
+      // В дереве сводка отвечает за тот уровень, на котором человек стоит.
+      if (TASK_SEGS[taskSeg()].view === 'tree') {
+        if (state.treeGoal) {
+          var stp = Array.isArray(state.treeSteps) ? state.treeSteps : [];
+          var dn2 = stp.filter(function (s) { return s.status === 'done'; }).length;
+          var ov2 = stp.filter(function (s) { return s.overdue; }).length;
+          tphr = 'Цель <b>' + esc(state.treeGoal.title) + '</b>: сделано ' + dn2 + ' из ' + stp.length +
+            (ov2 ? ', <b>' + ov2 + '</b> ' + plural(ov2, 'шаг просрочен', 'шага просрочено', 'шагов просрочено') : '') + '.';
+        } else if (state.treeDept !== null) {
+          var gl = Array.isArray(state.treeGoals) ? state.treeGoals.length : 0;
+          var ls = Array.isArray(state.treeLoose) ? state.treeLoose.length : 0;
+          tphr = esc(deptLabel(state.treeDept) || 'Без направления') + ': <b>' + gl + '</b> ' +
+            plural(gl, 'цель', 'цели', 'целей') + ' в работе' +
+            (ls ? ' и <b>' + ls + '</b> ' + plural(ls, 'задача', 'задачи', 'задач') + ' вне целей' : '') + '.';
+        } else {
+          var tr = Array.isArray(state.tree) ? state.tree : [];
+          var ovAll = tr.reduce(function (a, d) { return a + (d.overdue || 0); }, 0);
+          tphr = ovAll
+            ? 'Вся работа компании по направлениям. Горит <b>' + ovAll + '</b> ' +
+              plural(ovAll, 'задача', 'задачи', 'задач') + ' — они помечены красным.'
+            : 'Вся работа компании по направлениям. Просрочек нет.';
+        }
+      }
       // «Готово» — про отрезок времени, а не про то, что на мне сейчас.
       if (TASK_SEGS[taskSeg()].view === 'done') {
         var dn = Array.isArray(state.tasks) ? state.tasks : [];
