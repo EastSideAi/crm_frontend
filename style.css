@@ -1817,7 +1817,10 @@ button.tr-crumb:hover { color: var(--blue); }
 .tr-gh-r { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 .tr-gh-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .tr-goalhead .tsk-prog { margin-top: 0; }
-.tr-goalhead .tsk-prog-b { width: 100%; max-width: 320px; }
+.tr-goalhead .tsk-prog-b { flex: 1 1 160px; width: auto; max-width: 320px; }
+/* Подпись «1 из 4» не сжимаем: на узком экране она иначе переносится по слову
+   и встает в три строки столбиком. */
+.tr-goalhead .tsk-prog-n { flex: none; white-space: nowrap; }
 .tr-open { margin: 14px 24px 18px; align-self: flex-start; }
 
 /* ── Срез «Готово» ───────────────────────────────────────────────────────────
