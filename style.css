@@ -3635,13 +3635,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-node:hover .po-nx { color: var(--blue); }
 .po-drop, .po-stem { position: relative; height: 20px; }
 .po-stem { height: 34px; display: flex; align-items: center; }
+/* Линии дерева темнее общих разделителей: на 1px светло-серая ветка читается как
+   случайный штрих рядом с карточкой, а не как связь между узлами. */
+.po-tree { --po-wire: #C9CEDA; }
 .po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
-  width: 1px; background: var(--line-2); }
+  width: 1px; background: var(--po-wire); }
 
 .po-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
 .po-tick { display: block; height: 22px; position: relative; }
-.po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line-2); }
-.po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--line-2); }
+.po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--po-wire); }
+.po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--po-wire); }
 .po-col:first-child .po-tick::after { left: 50%; }
 .po-col:last-child .po-tick::after { right: 50%; }
 
@@ -3659,10 +3662,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-flag:not(.ready) .po-fh b { color: var(--ink-2); }
 /* .sev и .uz-tag — готовые пилюли системы; тут только место в потоке */
 .po-soon { flex: none; padding: 4px 10px; font-size: 11.5px; font-weight: 500; }
-.po-brs { margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--line-2);
+.po-brs { margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--po-wire);
   display: flex; flex-direction: column; gap: 8px; }
 .po-br { position: relative; font-size: 12.5px; color: var(--ink-2); }
-.po-br::before { content: ''; position: absolute; left: -12px; top: 9px; width: 8px; height: 1px; background: var(--line-2); }
+.po-br::before { content: ''; position: absolute; left: -12px; top: 9px; width: 8px; height: 1px; background: var(--po-wire); }
 
 .po-extras { margin-top: 28px; background: var(--fill); border-radius: var(--r-lg); padding: 17px 19px; }
 .po-exh b { font-size: 13.5px; font-weight: 700; }

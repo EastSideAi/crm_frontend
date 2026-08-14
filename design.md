@@ -31,6 +31,7 @@ CRM — рабочий инструмент команды. Ценности п�
 --app:#FFFFFF; --main:#F6F7F9; --card:#FFFFFF;      /* панели */
 --ink:#11151F; --ink-2:#697086; --ink-3:#A6ABB8;    /* чернила 3 уровня */
 --line:#EDEEF2; --line-2:#E3E5EB; --fill:#F5F6F9;   /* бордеры, серая заливка */
+--po-wire:#C9CEDA;  /* локальный, только .po-tree: линии-связи дерева портала */
 --blue:#2F6BFF; --blue-d:#1E50E6; --navy:#1C2B4A; --blue-tint:#EAF0FF;
 --black:#15161C;
 --green:#18A957; --green-ink:#0E7C3F; --green-soft:#E4F6EC;
