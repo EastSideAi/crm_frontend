@@ -6521,34 +6521,80 @@
   }
 
   /* ── HSK-тренажёр в той же вкладке «Китайский» ──
-     Тренажёр китайского открыт по прямой ссылке всем (localStorage, без входа),
-     поэтому «доступ» тут — не гейт, а отметка менеджера «я дал этому ученику» плюс
-     ссылка под рукой. Флаг живёт в overrides.hsk лида (частичный мердж на бэке),
-     отдельная ручка и таблица не нужны. Персонального входа, как у курса и DET,
-     пока нет — это отдельная работа. */
-  var HSK_LINK = 'https://истсайд.рф/hsk_cabinet.html';
+     Теперь у тренажёра есть личный вход, как у DET: менеджер выдаёт персональную
+     ссылку, и результаты пробного теста + занятия ученика приходят сюда в карточку.
+     Тумблер overrides.hsk остаётся лёгкой отметкой «этот ученик занимается по HSK»
+     (для обзора), а реальный доступ даёт именно личная ссылка ниже. Данные (попытки,
+     занятия, ссылка) грузим отдельным запросом — как блок DET. */
+  var HSK = {}, HSK_BUSY = {};
+  function loadHsk(id, force) {
+    if (HSK_BUSY[id]) return;
+    if (force) delete HSK[id];
+    HSK_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/hsk').then(function (r) {
+      HSK_BUSY[id] = false; HSK[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      HSK_BUSY[id] = false;
+      if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function hskAttemptRow(a) {
+    var col = a.pct >= 85 ? 's-client' : a.pct >= 65 ? 's-new' : a.pct >= 45 ? 's-wait' : 's-rejected';
+    return '<div class="det-row" style="cursor:default">' +
+      '<span class="det-row-v num">' + a.pct + '<small style="font-size:.55em;opacity:.6">%</small></span>' +
+      '<div class="det-row-b"><div class="det-row-t">' + esc(a.level) +
+        ' <span class="sev ' + col + '">' + a.correct + ' из ' + a.total + '</span></div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(a.at)) +
+          (a.weak_label ? ' · слабое место: ' + esc(a.weak_label) : '') + '</div></div></div>';
+  }
+
   function buildHskBlock(id) {
     var det = state.details[id];
     var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
     var on = !!h.open;
-    return '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
-      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Открыт по прямой ссылке ' +
-      'всем; тумблер отмечает, что вы дали доступ этому ученику, и держит ссылку под рукой.</div>' +
+    var head = '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
+      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Выдайте личную ссылку — ' +
+      'и результаты теста с занятиями ученика придут сюда. Тумблер отмечает, что ученик ' +
+      'занимается по HSK.</div>' +
       '<div class="det-sw-row">' +
-        '<div class="det-sw-b"><div class="det-sw-t">Тренажёр HSK</div>' +
-          '<div class="det-sw-s">' + (on ? 'вы отметили доступ' : 'доступ не отмечен') + '</div></div>' +
+        '<div class="det-sw-b"><div class="det-sw-t">Занимается по HSK</div>' +
+          '<div class="det-sw-s">' + (on ? 'вы отметили' : 'не отмечено') + '</div></div>' +
         '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
-          '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-l">' + (on ? 'Да' : 'Нет') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
-        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '') +
-      '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '');
+
+    var b = HSK[id];
+    if (!b) { loadHsk(id); return head + '<div class="field-empty" style="margin-top:10px">Загружаю тесты и ссылку…</div></div>'; }
+    if (b === 'none') { return head + '<div class="field-empty" style="margin-top:10px">Не удалось загрузить. Обновите страницу.</div></div>'; }
+
+    var inv = b.invite;
+    var link = '<div class="det-lbl det-linkh">Личная ссылка ученика</div>' +
       '<div class="det-link">' +
-        '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(HSK_LINK) + '">' +
-        '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
-      '<div class="det-link-m">ссылка общая: тренажёр без входа, прогресс хранится ' +
-      'у ученика в браузере</div>' +
+      (inv
+        ? '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(inv.url) + '">' +
+          '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылки нет — создайте и отправьте ученику</span>' +
+          '<button class="bp sm" id="hsk-newlink">' + ic('plus', 13) + 'Создать ссылку</button>') +
+      '</div>' +
+      (inv ? '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
+        (inv.expires_at ? ' · до ' + esc(fmtWhen(inv.expires_at)) : '') + '</div>' : '');
+
+    var attempts = (b.attempts || []).slice().reverse();
+    var tests = '<div class="m-sec"><div class="m-sec-h">Пробные тесты</div>' +
+      (attempts.length
+        ? attempts.map(hskAttemptRow).join('')
+        : '<div class="field-empty">Тест ещё не проходили — результат придёт сюда сам.</div>') +
       '</div>';
+
+    var pr = b.practice || {};
+    var practice = detPractice(Object.assign({}, pr, { by_skill: pr.by_type || [] }));
+
+    return head + link + '</div>' + tests + practice;
   }
 
   function wireCourse(id) {
@@ -6627,8 +6673,25 @@
       showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
     });
 
+    // Личная ссылка HSK: копирование и создание. Данные лежат в HSK[id].invite.
     var hcp = el('hsk-copy');
-    if (hcp) hcp.addEventListener('click', function () { copyText(HSK_LINK, hcp); });
+    if (hcp) hcp.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.url) || '', hcp);
+    });
+    var hnl = el('hsk-newlink');
+    if (hnl) hnl.addEventListener('click', function () {
+      if (hnl.disabled) return;
+      hnl.disabled = true; hnl.style.opacity = '.55';
+      api('/admin/api/leads/' + id + '/hsk/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      }).then(function () {
+        loadHsk(id, true);   // перечитать блок — покажет свежую ссылку
+        showToast('Личная ссылка HSK готова');
+      }).catch(function () {
+        hnl.disabled = false; hnl.style.opacity = '';
+        showToast('Не удалось создать ссылку');
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
