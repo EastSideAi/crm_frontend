@@ -2015,7 +2015,7 @@
         var dnTasks = dn.length - dnGoals;
         tphr = dn.length
           ? 'Принято <b>' + dnTasks + '</b> ' + plural(dnTasks, 'задача', 'задачи', 'задач') +
-            (dnGoals ? ' и закрыто <b>' + dnGoals + '</b> ' +
+            (dnGoals ? ' и <b>' + dnGoals + '</b> ' +
               plural(dnGoals, 'цель', 'цели', 'целей') : '') +
             (state.donePeriodLabel ? ' за ' + esc(state.donePeriodLabel.toLowerCase()) : '') + '.'
           : 'За этот период принятых задач нет.';
