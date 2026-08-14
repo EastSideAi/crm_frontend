@@ -7252,6 +7252,17 @@
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
         '</div></div>' +
+      /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
+         здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
+         спрашивать не надо — его впишет сама семья на странице оплаты. */
+      '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
+        '<div class="pay-grid sch">' +
+          '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+          '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
+          '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
+        '</div>' +
+        '<div id="sch-out"></div></div>' +
       '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
         '<summary><span class="pm-t">Записать оплату вручную</span>' +
           '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
@@ -7274,6 +7285,15 @@
       '<input type="file" id="pay-rcpt-file" style="display:none">';
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+  /* «21 урок», а не «21 уроков»: строку читает менеджер, а следом за ним семья */
+  function lessonWord(n) {
+    var h = n % 100, t = n % 10;
+    if (h >= 11 && h <= 14) return 'уроков';
+    if (t === 1) return 'урок';
+    if (t >= 2 && t <= 4) return 'урока';
+    return 'уроков';
+  }
 
   /* ── обработчики активного раздела ── */
   /* Обработчики раздела «Английский». Все действия — отдельные ручки бэка; после каждой
@@ -7802,6 +7822,42 @@
         });
       });
     }
+
+    /* Счет за уроки школы. Ответ читаем сырым fetch, а не через api(): у отказа тут
+       есть человеческий текст («карточка не связана с учеником»), и потерять его —
+       значит показать менеджеру бессмысленное «HTTP 404». */
+    var schBtn = el('sch-btn');
+    if (schBtn) schBtn.addEventListener('click', function () {
+      var out = el('sch-out');
+      var amt = parseInt((el('sch-amt').value || '').replace(/\D/g, ''), 10) || 0;
+      var les = parseInt((el('sch-les').value || '').replace(/\D/g, ''), 10) || 0;
+      if (!amt) { el('sch-amt').focus(); return; }
+      var body = { session_id: id, amount: amt };
+      if (les) body.lessons = les;
+      schBtn.disabled = true;
+      out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
+      fetch(API + '/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
+      }).then(function (x) {
+        schBtn.disabled = false;
+        if (!x.ok) {
+          out.innerHTML = '<div class="field-empty">' + esc(x.d.detail || 'Счет не выставился — проверьте сеть') + '</div>';
+          return;
+        }
+        el('sch-amt').value = ''; el('sch-les').value = '';
+        out.innerHTML = '<div class="pay-row">' +
+          '<div class="doc-b"><div class="doc-n">' + fmtMoney(x.d.amount) + ' ₽ · ' + x.d.lessons + ' ' + lessonWord(x.d.lessons) + '</div>' +
+            '<div class="doc-m">' + esc(x.d.url) + '</div></div>' +
+          '<button class="pay-rcpt" id="sch-copy">' + ic('copy', 13) + 'Копировать</button></div>';
+        var cp = el('sch-copy');
+        if (cp) cp.addEventListener('click', function () { copyText(x.d.url, cp); });
+      }).catch(function () {
+        schBtn.disabled = false;
+        out.innerHTML = '<div class="field-empty">Счет не выставился — проверьте сеть</div>';
+      });
+    });
 
     var payBtn = el('pay-add-btn');
     if (payBtn) {
