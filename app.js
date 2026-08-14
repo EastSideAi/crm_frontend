@@ -2008,6 +2008,18 @@
           plural(bt.done, 'задача', 'задачи', 'задач') + '.';
         else tphr = 'За этот период команда еще ничего не закрыла.';
       }
+      // «Готово» — про отрезок времени, а не про то, что на мне сейчас.
+      if (TASK_SEGS[taskSeg()].view === 'done') {
+        var dn = Array.isArray(state.tasks) ? state.tasks : [];
+        var dnGoals = dn.filter(function (t) { return t.steps_total; }).length;
+        var dnTasks = dn.length - dnGoals;
+        tphr = dn.length
+          ? 'Принято <b>' + dnTasks + '</b> ' + plural(dnTasks, 'задача', 'задачи', 'задач') +
+            (dnGoals ? ' и закрыто <b>' + dnGoals + '</b> ' +
+              plural(dnGoals, 'цель', 'цели', 'целей') : '') +
+            (state.donePeriodLabel ? ' за ' + esc(state.donePeriodLabel.toLowerCase()) : '') + '.'
+          : 'За этот период принятых задач нет.';
+      }
       // Пришли из табло по человеку: «на тебе задач нет» рядом с чужим списком
       // читается как ошибка системы.
       if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
