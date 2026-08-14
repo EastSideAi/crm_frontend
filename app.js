@@ -2011,7 +2011,7 @@
       // «Готово» — про отрезок времени, а не про то, что на мне сейчас.
       if (TASK_SEGS[taskSeg()].view === 'done') {
         var dn = Array.isArray(state.tasks) ? state.tasks : [];
-        var dnGoals = dn.filter(function (t) { return t.steps_total; }).length;
+        var dnGoals = dn.filter(function (t) { return t.steps_total && t.status === 'done'; }).length;
         var dnTasks = dn.length - dnGoals;
         tphr = dn.length
           ? 'Принято <b>' + dnTasks + '</b> ' + plural(dnTasks, 'задача', 'задачи', 'задач') +
@@ -2462,7 +2462,7 @@
               ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
     });
     var groups = doneGroups(list);
-    var goalsClosed = groups.filter(function (g) { return g.goal; }).length;
+    var goalsClosed = groups.filter(function (g) { return g.goal && g.goal.status === 'done'; }).length;
     var tasksDone = list.filter(function (t) { return !t.steps_total; }).length;
 
     var cards = groups.map(function (g) {
@@ -2479,15 +2479,18 @@
       // Прогресс показываем и у незакрытой цели: без него видно, что «что-то по
       // ней сделали», но не видно, идет она к концу или третий месяц стоит.
       var goal = g.goal || goalById(g.key);
+      // «Цель закрыта» — только по статусу самой цели. Считать закрытой ту, у
+      // которой за период приняли шаг, значит объявлять победу на первом шаге.
+      var closed = !!goal && goal.status === 'done';
       var prog = goal && goal.steps_total
         ? '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
             Math.round(goal.steps_done / goal.steps_total * 100) + '%"></i></span>' +
           '<span class="tsk-prog-n num">' + goal.steps_done + ' из ' + goal.steps_total + '</span></div>'
         : '';
 
-      return '<div class="dn-g' + (goal ? ' closed' : '') + (g.key ? '' : ' nogoal') + '">' +
+      return '<div class="dn-g' + (closed ? ' closed' : '') + (g.key ? '' : ' nogoal') + '">' +
         '<div class="dn-gh"' + (goal ? ' data-tid="' + goal.id + '"' : '') + '>' +
-          (goal ? '<span class="dn-flag">' + ic('award', 13) + 'Цель закрыта</span>' : '') +
+          (closed ? '<span class="dn-flag">' + ic('award', 13) + 'Цель закрыта</span>' : '') +
           '<span class="dn-gt">' + esc(g.title) + '</span>' + prog +
           (g.tasks.length ? '<span class="dn-gn num">' + g.tasks.length + ' ' +
             plural(g.tasks.length, 'задача', 'задачи', 'задач') + '</span>' : '') +
