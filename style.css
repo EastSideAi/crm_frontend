@@ -1783,6 +1783,49 @@ a { color: inherit; text-decoration: none; }
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
 
+/* ── Табло «По людям» ────────────────────────────────────────────────────────
+   Свод по сотрудникам за период: строка на человека, пять чисел. Это таблица
+   чисел, поэтому все украшение здесь — типографика. Нули приглушены (глаз
+   ищет, где работа есть, а не пересчитывает пустые клетки), красное одно —
+   просрочка, зеленое одно — принятое. Никакой зебры и вертикальных линеек. */
+/* Имя тянется, но не бесконечно: на широком мониторе колонка в 1.6fr отрывает
+   человека от его же чисел на пол-экрана. */
+.brd-grid { grid-template-columns: minmax(200px, 460px) repeat(5, minmax(94px, 1fr)); }
+.brd-grid .th:not(:first-child), .brd-n { text-align: right; }
+.brd-who { display: flex; align-items: center; gap: 10px; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.brd-nm { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; }
+.brd-nm .t-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.brd-n { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.brd-n.zero { color: var(--ink-3); font-weight: 500; }
+.brd-n.bad  { color: var(--red-ink); }
+.brd-n.ok   { color: var(--green-ink); }
+/* Итог отделен линией, а не заливкой: заливка здесь читалась бы как еще один
+   человек, только выделенный. Ховера у него нет — кликать не по чему. */
+.brd-total { border-top: 1px solid var(--line-2); }
+.brd-total:hover { background: none; }
+.brd-total .brd-who { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.brd-nav { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.brd-label { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
+  min-width: 138px; text-align: center; }
+.brd-arrow { width: 28px; height: 28px; border-radius: 9px; }
+.brd-arrow.prev svg { transform: rotate(180deg); }
+.brd-note { padding: 12px 24px; border-top: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+/* Отчет за день внутри строки: занимает всю ширину под числами, поэтому строка
+   становится выше — как строка цели с прогрессом (.tsk-grid.has-prog). */
+.trow.brd-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.brd-note-row { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.brd-note-row svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.brd-idle { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 13px 24px; border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink-3); }
+.brd-il { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); flex: none; }
+.brd-more { font-weight: 700; color: var(--ink-2); }
+
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
@@ -2005,6 +2048,18 @@ a { color: inherit; text-decoration: none; }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
+     строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
+     число обязано назвать себя само — подпись берется из data-l. */
+  .trow.brd-grid { grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    gap: 10px 12px; height: auto; padding: 14px 16px; align-items: start; }
+  .trow.brd-grid.thead { display: none; }
+  .trow.brd-grid .brd-who { grid-column: 1 / -1; }
+  .trow.brd-grid .brd-n { text-align: left; display: flex; flex-direction: column-reverse; gap: 2px; }
+  .trow.brd-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .brd-nav { margin-left: 0; }
+  .brd-label { min-width: 0; flex: 1; }
   /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
      ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
   .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
