@@ -44,7 +44,7 @@
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
     // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
-    donePeriod: 'week', doneShift: 0, donePeriodLabel: '',
+    donePeriod: 'week', doneShift: 0, donePeriodLabel: '', doneGoals: [],
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
@@ -2240,6 +2240,7 @@
       state.tasks = (r && r.tasks) || [];
       state.taskMe = r ? r.me : null;
       state.donePeriodLabel = r ? (r.period_label || '') : '';
+      state.doneGoals = r ? (r.goals || []) : [];
       if (cb) cb();
       else if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () {
@@ -2445,6 +2446,14 @@
     });
   }
 
+  /* Цель по ключу группы («g<id>») — из справочника, который отдает сервер
+     вместе со списком принятого. */
+  function goalById(key) {
+    if (!key) return null;
+    var id = +key.slice(1);
+    return (state.doneGoals || []).filter(function (g) { return g.id === id; })[0] || null;
+  }
+
   function renderDone(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = (state.tasks || []).filter(function (t) {
@@ -2467,7 +2476,9 @@
         '</div>';
       }).join('');
 
-      var goal = g.goal;
+      // Прогресс показываем и у незакрытой цели: без него видно, что «что-то по
+      // ней сделали», но не видно, идет она к концу или третий месяц стоит.
+      var goal = g.goal || goalById(g.key);
       var prog = goal && goal.steps_total
         ? '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
             Math.round(goal.steps_done / goal.steps_total * 100) + '%"></i></span>' +
