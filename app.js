@@ -8118,34 +8118,95 @@
   }
 
   /* ── HSK-тренажёр в той же вкладке «Китайский» ──
-     Тренажёр китайского открыт по прямой ссылке всем (localStorage, без входа),
-     поэтому «доступ» тут — не гейт, а отметка менеджера «я дал этому ученику» плюс
-     ссылка под рукой. Флаг живёт в overrides.hsk лида (частичный мердж на бэке),
-     отдельная ручка и таблица не нужны. Персонального входа, как у курса и DET,
-     пока нет — это отдельная работа. */
-  var HSK_LINK = 'https://истсайд.рф/hsk_cabinet.html';
+     Личный вход и доступ как у DET. Две ссылки из одного кода: на тест и на тренажёр.
+     Первый пробный тест бесплатный всем; повторный и тренажёр открываются галочками
+     (повтор разовый, тренажёр снимает и лимит на тесты — так у оплативших). Данные
+     (попытки, занятия, доступ, ссылки) грузим отдельным запросом — как блок DET. */
+  var HSK = {}, HSK_BUSY = {};
+  function loadHsk(id, force) {
+    if (HSK_BUSY[id]) return;
+    if (force) delete HSK[id];
+    HSK_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/hsk').then(function (r) {
+      HSK_BUSY[id] = false; HSK[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      HSK_BUSY[id] = false;
+      if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function hskAttemptRow(a) {
+    var col = a.pct >= 85 ? 's-client' : a.pct >= 65 ? 's-new' : a.pct >= 45 ? 's-wait' : 's-rejected';
+    return '<div class="det-row" style="cursor:default">' +
+      '<span class="det-row-v num">' + a.pct + '<small style="font-size:.55em;opacity:.6">%</small></span>' +
+      '<div class="det-row-b"><div class="det-row-t">' + esc(a.level) +
+        ' <span class="sev ' + col + '">' + a.correct + ' из ' + a.total + '</span></div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(a.at)) +
+          (a.weak_label ? ' · слабое место: ' + esc(a.weak_label) : '') + '</div></div></div>';
+  }
+
   function buildHskBlock(id) {
-    var det = state.details[id];
-    var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
-    var on = !!h.open;
-    return '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
-      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Открыт по прямой ссылке ' +
-      'всем; тумблер отмечает, что вы дали доступ этому ученику, и держит ссылку под рукой.</div>' +
+    var head = '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
+      '<div class="m-csub">Пробный тест и тренажёр (слова, иероглифы, аудио). Первый тест ' +
+      'бесплатный всем; повторный тест и тренажёр открываются галочками ниже — оплатившим ' +
+      'обучение или точечно. Выдайте ссылки, и результаты придут сюда.</div></div>';
+
+    var b = HSK[id];
+    if (!b) { loadHsk(id); return head + '<div class="field-empty" style="margin-top:10px">Загружаю…</div>'; }
+    if (b === 'none') { return head + '<div class="field-empty" style="margin-top:10px">Не удалось загрузить. Обновите страницу.</div>'; }
+
+    var acc = b.access || {};
+    var accessRows =
       '<div class="det-sw-row">' +
-        '<div class="det-sw-b"><div class="det-sw-t">Тренажёр HSK</div>' +
-          '<div class="det-sw-s">' + (on ? 'вы отметили доступ' : 'доступ не отмечен') + '</div></div>' +
-        '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
-          '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+        '<div class="det-sw-b"><div class="det-sw-t">Разрешить повторный тест</div>' +
+          '<div class="det-sw-s">' + (acc.attempts_used
+            ? 'Пройдено тестов: ' + acc.attempts_used + '. Разрешение одноразовое — уйдёт на следующий тест.'
+            : 'Первый тест человек проходит сам, разрешение не нужно.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.retakes > 0 ? ' on' : '') + '" id="hsk-sw-retake">' +
+          '<span class="pd-sw-l">' + (acc.retakes > 0 ? 'Разрешён' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
-      (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
-        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '') +
-      '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
-      '<div class="det-link">' +
-        '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(HSK_LINK) + '">' +
-        '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
-      '<div class="det-link-m">ссылка общая: тренажёр без входа, прогресс хранится ' +
-      'у ученика в браузере</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажёр</div>' +
+          '<div class="det-sw-s">Словарь, прописи, аудио. Открытый тренажёр снимает и лимит ' +
+            'на тесты (так у оплативших). Пока закрыт — по ссылке на тренажёр человек видит ' +
+            '«пока закрыто».</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="hsk-sw-practice">' +
+          '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) +
+        (acc.updated_at ? ' · ' + esc(fmtWhen(acc.updated_at)) : '') + '</div>' : '');
+
+    var inv = b.invite;
+    var links = inv
+      ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+        '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+            '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
+        '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
+          (inv.expires_at ? ' · до ' + esc(fmtWhen(inv.expires_at)) : '') + ' · код у ссылок один</div>'
+      : '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылки ученика</div>' +
+          '<div class="det-link"><span class="det-link-none">Ссылок нет — создайте, будет две: на тест и на тренажёр</span>' +
+            '<button class="bp sm" id="hsk-newlink">' + ic('plus', 13) + 'Создать ссылки</button></div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ</div>' + accessRows + links + '</div>';
+
+    var attempts = (b.attempts || []).slice().reverse();
+    var tests = '<div class="m-sec"><div class="m-sec-h">Пробные тесты</div>' +
+      (attempts.length
+        ? attempts.map(hskAttemptRow).join('')
+        : '<div class="field-empty">Тест ещё не проходили — результат придёт сюда сам.</div>') +
       '</div>';
+
+    var pr = b.practice || {};
+    var practice = detPractice(Object.assign({}, pr, { by_skill: pr.by_type || [] }));
+
+    return head + access + tests + practice;
   }
 
   function wireCourse(id) {
@@ -8206,26 +8267,53 @@
       post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
     });
 
-    // HSK-тренажёр: тумблер-отметка доступа (флаг в overrides.hsk) + копирование ссылки.
-    // Полный overrides шлём целиком, чтобы оптимистичный рендер не потерял имя/контакт.
-    var hsw = el('hsk-sw');
-    if (hsw) hsw.addEventListener('click', function () {
-      var det = state.details[id];
-      var ov = Object.assign({}, (det && det.crm && det.crm.overrides) || {});
-      var cur = ov.hsk || {};
-      var next = !cur.open;
-      ov.hsk = next
-        ? { open: true, by: state.userName || '', at: new Date().toISOString() }
-        : { open: false, by: cur.by || '', at: cur.at || '' };
-      patch(id, { overrides: ov }, null, function () {
+    // HSK: галочки доступа (повтор теста / тренажёр) как у DET и две личные ссылки.
+    // Ответ бэка авторитетный — берём access из него и перерисовываем блок.
+    function hskAccess(body, okMsg) {
+      api('/admin/api/leads/' + id + '/hsk/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        if (HSK[id] && r.access) HSK[id].access = r.access;
         if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+        if (okMsg) showToast(okMsg);
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не удалось сохранить');
       });
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
-      showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
+    }
+    var hre = el('hsk-sw-retake');
+    if (hre) hre.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).retakes > 0;
+      hskAccess({ retake: !on }, on ? 'Повторный тест закрыт' : 'Повторный тест разрешён');
+    });
+    var hpr = el('hsk-sw-practice');
+    if (hpr) hpr.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).practice_open;
+      hskAccess({ practice_open: !on }, on ? 'Тренажёр закрыт' : 'Тренажёр открыт');
     });
 
-    var hcp = el('hsk-copy');
-    if (hcp) hcp.addEventListener('click', function () { copyText(HSK_LINK, hcp); });
+    // Копирование ссылок — данные в HSK[id].invite (test_url / trainer_url).
+    var htc = el('hsk-test-copy');
+    if (htc) htc.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.test_url) || '', htc);
+    });
+    var htr = el('hsk-tr-copy');
+    if (htr) htr.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.trainer_url) || '', htr);
+    });
+    var hnl = el('hsk-newlink');
+    if (hnl) hnl.addEventListener('click', function () {
+      if (hnl.disabled) return;
+      hnl.disabled = true; hnl.style.opacity = '.55';
+      api('/admin/api/leads/' + id + '/hsk/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      }).then(function () {
+        loadHsk(id, true);   // перечитать блок — покажет свежие ссылки
+        showToast('Личные ссылки HSK готовы');
+      }).catch(function () {
+        hnl.disabled = false; hnl.style.opacity = '';
+        showToast('Не удалось создать ссылки');
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -8811,6 +8899,17 @@
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
         '</div></div>' +
+      /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
+         здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
+         спрашивать не надо — его впишет сама семья на странице оплаты. */
+      '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
+        '<div class="pay-grid sch">' +
+          '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+          '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
+          '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
+        '</div>' +
+        '<div id="sch-out"></div></div>' +
       '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
         '<summary><span class="pm-t">Записать оплату вручную</span>' +
           '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
@@ -8833,6 +8932,15 @@
       '<input type="file" id="pay-rcpt-file" style="display:none">';
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+  /* «21 урок», а не «21 уроков»: строку читает менеджер, а следом за ним семья */
+  function lessonWord(n) {
+    var h = n % 100, t = n % 10;
+    if (h >= 11 && h <= 14) return 'уроков';
+    if (t === 1) return 'урок';
+    if (t >= 2 && t <= 4) return 'урока';
+    return 'уроков';
+  }
 
   /* ── обработчики активного раздела ── */
   /* Обработчики раздела «Английский». Все действия — отдельные ручки бэка; после каждой
@@ -9358,6 +9466,42 @@
         });
       });
     }
+
+    /* Счет за уроки школы. Ответ читаем сырым fetch, а не через api(): у отказа тут
+       есть человеческий текст («карточка не связана с учеником»), и потерять его —
+       значит показать менеджеру бессмысленное «HTTP 404». */
+    var schBtn = el('sch-btn');
+    if (schBtn) schBtn.addEventListener('click', function () {
+      var out = el('sch-out');
+      var amt = parseInt((el('sch-amt').value || '').replace(/\D/g, ''), 10) || 0;
+      var les = parseInt((el('sch-les').value || '').replace(/\D/g, ''), 10) || 0;
+      if (!amt) { el('sch-amt').focus(); return; }
+      var body = { session_id: id, amount: amt };
+      if (les) body.lessons = les;
+      schBtn.disabled = true;
+      out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
+      fetch(API + '/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
+      }).then(function (x) {
+        schBtn.disabled = false;
+        if (!x.ok) {
+          out.innerHTML = '<div class="field-empty">' + esc(x.d.detail || 'Счет не выставился — проверьте сеть') + '</div>';
+          return;
+        }
+        el('sch-amt').value = ''; el('sch-les').value = '';
+        out.innerHTML = '<div class="pay-row">' +
+          '<div class="doc-b"><div class="doc-n">' + fmtMoney(x.d.amount) + ' ₽ · ' + x.d.lessons + ' ' + lessonWord(x.d.lessons) + '</div>' +
+            '<div class="doc-m">' + esc(x.d.url) + '</div></div>' +
+          '<button class="pay-rcpt" id="sch-copy">' + ic('copy', 13) + 'Копировать</button></div>';
+        var cp = el('sch-copy');
+        if (cp) cp.addEventListener('click', function () { copyText(x.d.url, cp); });
+      }).catch(function () {
+        schBtn.disabled = false;
+        out.innerHTML = '<div class="field-empty">Счет не выставился — проверьте сеть</div>';
+      });
+    });
 
     var payBtn = el('pay-add-btn');
     if (payBtn) {
