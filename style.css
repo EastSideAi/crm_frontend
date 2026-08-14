@@ -1783,6 +1783,40 @@ a { color: inherit; text-decoration: none; }
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
 
+/* ── Срез «Готово» ───────────────────────────────────────────────────────────
+   Сделанное за период, сгруппированное по целям. Зеленый здесь один и только
+   на галочке принятой задачи: если красить зеленым все, экран превращается в
+   поздравительную открытку и перестает читаться. */
+.dn-sum { padding: 13px 24px; border-bottom: 1px solid var(--line);
+  font-size: 13px; color: var(--ink-2); }
+.dn-sum b { color: var(--ink); font-weight: 700; letter-spacing: -.02em; }
+.dn-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.dn-g { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.dn-g.closed { border-color: #CFE7D9; }
+.dn-gh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; background: var(--fill); }
+.dn-g.closed .dn-gh { background: var(--green-soft); }
+.dn-g.nogoal .dn-gt { color: var(--ink-2); }
+.dn-gt { font-size: 13.5px; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-gn { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-3); flex: none; }
+.dn-flag { display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--green-ink); }
+.dn-gh .tsk-prog { margin-top: 0; }
+.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px; align-items: center;
+  gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); cursor: pointer;
+  transition: background .14s var(--ease); }
+.dn-t:hover { background: #FBFBFC; }
+.dn-tick { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--green-soft); color: var(--green-ink); }
+.dn-tt { font-size: 13.5px; color: var(--ink); display: flex; align-items: baseline; gap: 8px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-cl { font-size: 12px; color: var(--ink-3); flex: none; }
+.dn-who { font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-when { font-size: 12.5px; color: var(--ink-3); text-align: right; }
+
 /* ── Табло «По людям» ────────────────────────────────────────────────────────
    Свод по сотрудникам за период: строка на человека, пять чисел. Это таблица
    чисел, поэтому все украшение здесь — типографика. Нули приглушены (глаз
@@ -2060,6 +2094,12 @@ a { color: inherit; text-decoration: none; }
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
+  /* «Готово» на телефоне: исполнитель и дата уходят под название задачи —
+     в четыре колонки на 390px название схлопывается до трех слов. */
+  .dn-t { grid-template-columns: 22px minmax(0,1fr); gap: 4px 10px; padding: 12px 14px; }
+  .dn-tt { grid-column: 2; white-space: normal; }
+  .dn-who, .dn-when { grid-column: 2; text-align: left; font-size: 12px; }
+  .dn-when { color: var(--ink-3); }
   /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
      ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
   .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }

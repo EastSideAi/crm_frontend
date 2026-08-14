@@ -43,6 +43,8 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
+    // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
+    donePeriod: 'week', doneShift: 0, donePeriodLabel: '',
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
@@ -51,7 +53,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -59,7 +61,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        boardPeriod: state.boardPeriod,
+        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
       }));
     } catch (e) {}
   }
@@ -2210,13 +2212,18 @@
     // ради этого срез и заводился. У кого прав на чужие задачи нет, видит цели,
     // в которых участвует сам.
     var scope = seg.view === 'goals' && can('tasks_all') ? 'all' : seg.scope;
+    // «Готово» смотрят за отрезок времени: без периода это стопка, по которой
+    // не видно ни движения, ни того, что успели за неделю.
+    var per = seg.view === 'done'
+      ? '&period=' + state.donePeriod + '&shift=' + state.doneShift : '';
     state.tasksLoading = true;
-    api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope +
+    api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope + per +
         (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '') +
         (state.taskWho && scope === 'all' ? '&assignee=' + state.taskWho.id : '')).then(function (r) {
       state.tasksLoading = false;
       state.tasks = (r && r.tasks) || [];
       state.taskMe = r ? r.me : null;
+      state.donePeriodLabel = r ? (r.period_label || '') : '';
       if (cb) cb();
       else if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () {
@@ -2295,6 +2302,7 @@
     }
     var seg = taskSeg();
     if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
+    if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
       if (!q) return true;
@@ -2387,6 +2395,119 @@
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
   }
+  /* ── Срез «Готово» ─────────────────────────────────────────────────────────
+     Плоская стопка закрытых задач не отвечает ни на один вопрос: по ней не
+     видно ни движения, ни того, ради чего работа делалась. Поэтому здесь два
+     разреза сразу — период (что успели за неделю) и цель (к чему это вело).
+
+     Группа = цель. Закрытая за период цель идет первой и помечается: это
+     результат, ради которого делались шаги, и он должен читаться раньше самих
+     шагов. Задачи без цели собираются в конце одной группой, а не мешаются
+     между шагами чужих целей. */
+  function doneGroups(list) {
+    var by = {}, order = [];
+    list.forEach(function (t) {
+      // Цель в этой же выдаче — значит она закрылась за период. Ее шаги идут
+      // внутрь нее, а сама она становится заголовком группы.
+      if (t.steps_total) {
+        if (!by['g' + t.id]) { by['g' + t.id] = { key: 'g' + t.id, tasks: [] }; order.push('g' + t.id); }
+        by['g' + t.id].goal = t;
+        by['g' + t.id].title = t.title;
+        return;
+      }
+      var key = t.parent_id ? 'g' + t.parent_id : '';
+      if (!by[key]) {
+        by[key] = { key: key, tasks: [], title: t.parent_title || 'Без цели' };
+        order.push(key);
+      }
+      by[key].tasks.push(t);
+    });
+    return order.map(function (k) { return by[k]; }).sort(function (a, b) {
+      if (!a.key !== !b.key) return a.key ? -1 : 1;              // «без цели» — вниз
+      if (!!a.goal !== !!b.goal) return a.goal ? -1 : 1;         // закрытые цели — вверх
+      return b.tasks.length - a.tasks.length;
+    });
+  }
+
+  function renderDone(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (t) {
+      if (!q) return true;
+      return (t.title + ' ' + (t.assignee_name || '') + ' ' + (t.parent_title || '') +
+              ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+    var groups = doneGroups(list);
+    var goalsClosed = groups.filter(function (g) { return g.goal; }).length;
+    var tasksDone = list.filter(function (t) { return !t.steps_total; }).length;
+
+    var cards = groups.map(function (g) {
+      var rows = g.tasks.map(function (t) {
+        return '<div class="dn-t" data-tid="' + t.id + '">' +
+          '<span class="dn-tick">' + ic('check', 12) + '</span>' +
+          '<div class="dn-tt">' + esc(t.title) +
+            (t.client_name ? '<span class="dn-cl">' + esc(t.client_name) + '</span>' : '') + '</div>' +
+          '<div class="dn-who">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
+          '<div class="dn-when">' + esc(dayLabel(t.closed_at)) + '</div>' +
+        '</div>';
+      }).join('');
+
+      var goal = g.goal;
+      var prog = goal && goal.steps_total
+        ? '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
+            Math.round(goal.steps_done / goal.steps_total * 100) + '%"></i></span>' +
+          '<span class="tsk-prog-n num">' + goal.steps_done + ' из ' + goal.steps_total + '</span></div>'
+        : '';
+
+      return '<div class="dn-g' + (goal ? ' closed' : '') + (g.key ? '' : ' nogoal') + '">' +
+        '<div class="dn-gh"' + (goal ? ' data-tid="' + goal.id + '"' : '') + '>' +
+          (goal ? '<span class="dn-flag">' + ic('award', 13) + 'Цель закрыта</span>' : '') +
+          '<span class="dn-gt">' + esc(g.title) + '</span>' + prog +
+          (g.tasks.length ? '<span class="dn-gn num">' + g.tasks.length + ' ' +
+            plural(g.tasks.length, 'задача', 'задачи', 'задач') + '</span>' : '') +
+        '</div>' + rows +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="dperiod" id="dn-per">' + BOARD_PERIODS.map(function (o) {
+          return '<button class="' + (state.donePeriod === o[0] ? 'on' : '') + '" data-dp="' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="brd-nav">' +
+          '<button class="icobtn sm brd-arrow prev" id="dn-prev" title="Предыдущий период">' + ic('go', 15) + '</button>' +
+          '<span class="brd-label">' + esc(state.donePeriodLabel || '') + '</span>' +
+          '<button class="icobtn sm brd-arrow" id="dn-next" title="Следующий период">' + ic('go', 15) + '</button>' +
+          (state.doneShift ? '<button class="qchip" id="dn-now">Сейчас</button>' : '') +
+        '</div>' +
+      '</div>' +
+      (list.length
+        ? '<div class="dn-sum"><b class="num">' + tasksDone + '</b> ' +
+          plural(tasksDone, 'задача принята', 'задачи приняты', 'задач принято') +
+          (goalsClosed ? ' · <b class="num">' + goalsClosed + '</b> ' +
+            plural(goalsClosed, 'цель закрыта', 'цели закрыты', 'целей закрыто') : '') +
+          '</div>'
+        : '') +
+      '<div class="list-body dn-body">' +
+        (list.length ? cards
+          : '<div class="empty">За этот период не принято ни одной задачи. Посмотри соседний период стрелками.</div>') +
+      '</div></div>';
+
+    function reload(fn) {
+      fn(); state.tasks = null; saveUi(); renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dp]'), function (btn) {
+      btn.addEventListener('click', function () {
+        reload(function () { state.donePeriod = btn.getAttribute('data-dp'); state.doneShift = 0; });
+      });
+    });
+    el('dn-prev').addEventListener('click', function () { reload(function () { state.doneShift -= 1; }); });
+    el('dn-next').addEventListener('click', function () { reload(function () { state.doneShift += 1; }); });
+    if (el('dn-now')) el('dn-now').addEventListener('click', function () { reload(function () { state.doneShift = 0; }); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+  }
+
   /* ── Табло «По людям» ──────────────────────────────────────────────────────
      Экран руководителя: строка на человека, числа за выбранный период. Пять
      колонок, а не пятнадцать: план, факт, и три вещи, которые горят сейчас.
