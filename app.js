@@ -6521,11 +6521,10 @@
   }
 
   /* ── HSK-тренажёр в той же вкладке «Китайский» ──
-     Теперь у тренажёра есть личный вход, как у DET: менеджер выдаёт персональную
-     ссылку, и результаты пробного теста + занятия ученика приходят сюда в карточку.
-     Тумблер overrides.hsk остаётся лёгкой отметкой «этот ученик занимается по HSK»
-     (для обзора), а реальный доступ даёт именно личная ссылка ниже. Данные (попытки,
-     занятия, ссылка) грузим отдельным запросом — как блок DET. */
+     Личный вход и доступ как у DET. Две ссылки из одного кода: на тест и на тренажёр.
+     Первый пробный тест бесплатный всем; повторный и тренажёр открываются галочками
+     (повтор разовый, тренажёр снимает и лимит на тесты — так у оплативших). Данные
+     (попытки, занятия, доступ, ссылки) грузим отдельным запросом — как блок DET. */
   var HSK = {}, HSK_BUSY = {};
   function loadHsk(id, force) {
     if (HSK_BUSY[id]) return;
@@ -6551,38 +6550,54 @@
   }
 
   function buildHskBlock(id) {
-    var det = state.details[id];
-    var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
-    var on = !!h.open;
     var head = '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
-      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Выдайте личную ссылку — ' +
-      'и результаты теста с занятиями ученика придут сюда. Тумблер отмечает, что ученик ' +
-      'занимается по HSK.</div>' +
-      '<div class="det-sw-row">' +
-        '<div class="det-sw-b"><div class="det-sw-t">Занимается по HSK</div>' +
-          '<div class="det-sw-s">' + (on ? 'вы отметили' : 'не отмечено') + '</div></div>' +
-        '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
-          '<span class="pd-sw-l">' + (on ? 'Да' : 'Нет') + '</span>' +
-          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
-      (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
-        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '');
+      '<div class="m-csub">Пробный тест и тренажёр (слова, иероглифы, аудио). Первый тест ' +
+      'бесплатный всем; повторный тест и тренажёр открываются галочками ниже — оплатившим ' +
+      'обучение или точечно. Выдайте ссылки, и результаты придут сюда.</div></div>';
 
     var b = HSK[id];
-    if (!b) { loadHsk(id); return head + '<div class="field-empty" style="margin-top:10px">Загружаю тесты и ссылку…</div></div>'; }
-    if (b === 'none') { return head + '<div class="field-empty" style="margin-top:10px">Не удалось загрузить. Обновите страницу.</div></div>'; }
+    if (!b) { loadHsk(id); return head + '<div class="field-empty" style="margin-top:10px">Загружаю…</div>'; }
+    if (b === 'none') { return head + '<div class="field-empty" style="margin-top:10px">Не удалось загрузить. Обновите страницу.</div>'; }
+
+    var acc = b.access || {};
+    var accessRows =
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Разрешить повторный тест</div>' +
+          '<div class="det-sw-s">' + (acc.attempts_used
+            ? 'Пройдено тестов: ' + acc.attempts_used + '. Разрешение одноразовое — уйдёт на следующий тест.'
+            : 'Первый тест человек проходит сам, разрешение не нужно.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.retakes > 0 ? ' on' : '') + '" id="hsk-sw-retake">' +
+          '<span class="pd-sw-l">' + (acc.retakes > 0 ? 'Разрешён' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажёр</div>' +
+          '<div class="det-sw-s">Словарь, прописи, аудио. Открытый тренажёр снимает и лимит ' +
+            'на тесты (так у оплативших). Пока закрыт — по ссылке на тренажёр человек видит ' +
+            '«пока закрыто».</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="hsk-sw-practice">' +
+          '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) +
+        (acc.updated_at ? ' · ' + esc(fmtWhen(acc.updated_at)) : '') + '</div>' : '');
 
     var inv = b.invite;
-    var link = '<div class="det-lbl det-linkh">Личная ссылка ученика</div>' +
-      '<div class="det-link">' +
-      (inv
-        ? '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(inv.url) + '">' +
-          '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button>' +
-          '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
-        : '<span class="det-link-none">Ссылки нет — создайте и отправьте ученику</span>' +
-          '<button class="bp sm" id="hsk-newlink">' + ic('plus', 13) + 'Создать ссылку</button>') +
-      '</div>' +
-      (inv ? '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
-        (inv.expires_at ? ' · до ' + esc(fmtWhen(inv.expires_at)) : '') + '</div>' : '');
+    var links = inv
+      ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+        '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+            '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
+        '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
+          (inv.expires_at ? ' · до ' + esc(fmtWhen(inv.expires_at)) : '') + ' · код у ссылок один</div>'
+      : '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылки ученика</div>' +
+          '<div class="det-link"><span class="det-link-none">Ссылок нет — создайте, будет две: на тест и на тренажёр</span>' +
+            '<button class="bp sm" id="hsk-newlink">' + ic('plus', 13) + 'Создать ссылки</button></div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ</div>' + accessRows + links + '</div>';
 
     var attempts = (b.attempts || []).slice().reverse();
     var tests = '<div class="m-sec"><div class="m-sec-h">Пробные тесты</div>' +
@@ -6594,7 +6609,7 @@
     var pr = b.practice || {};
     var practice = detPractice(Object.assign({}, pr, { by_skill: pr.by_type || [] }));
 
-    return head + link + '</div>' + tests + practice;
+    return head + access + tests + practice;
   }
 
   function wireCourse(id) {
@@ -6655,28 +6670,38 @@
       post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
     });
 
-    // HSK-тренажёр: тумблер-отметка доступа (флаг в overrides.hsk) + копирование ссылки.
-    // Полный overrides шлём целиком, чтобы оптимистичный рендер не потерял имя/контакт.
-    var hsw = el('hsk-sw');
-    if (hsw) hsw.addEventListener('click', function () {
-      var det = state.details[id];
-      var ov = Object.assign({}, (det && det.crm && det.crm.overrides) || {});
-      var cur = ov.hsk || {};
-      var next = !cur.open;
-      ov.hsk = next
-        ? { open: true, by: state.userName || '', at: new Date().toISOString() }
-        : { open: false, by: cur.by || '', at: cur.at || '' };
-      patch(id, { overrides: ov }, null, function () {
+    // HSK: галочки доступа (повтор теста / тренажёр) как у DET и две личные ссылки.
+    // Ответ бэка авторитетный — берём access из него и перерисовываем блок.
+    function hskAccess(body, okMsg) {
+      api('/admin/api/leads/' + id + '/hsk/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        if (HSK[id] && r.access) HSK[id].access = r.access;
         if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+        if (okMsg) showToast(okMsg);
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не удалось сохранить');
       });
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
-      showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
+    }
+    var hre = el('hsk-sw-retake');
+    if (hre) hre.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).retakes > 0;
+      hskAccess({ retake: !on }, on ? 'Повторный тест закрыт' : 'Повторный тест разрешён');
+    });
+    var hpr = el('hsk-sw-practice');
+    if (hpr) hpr.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).practice_open;
+      hskAccess({ practice_open: !on }, on ? 'Тренажёр закрыт' : 'Тренажёр открыт');
     });
 
-    // Личная ссылка HSK: копирование и создание. Данные лежат в HSK[id].invite.
-    var hcp = el('hsk-copy');
-    if (hcp) hcp.addEventListener('click', function () {
-      var b = HSK[id]; copyText((b && b.invite && b.invite.url) || '', hcp);
+    // Копирование ссылок — данные в HSK[id].invite (test_url / trainer_url).
+    var htc = el('hsk-test-copy');
+    if (htc) htc.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.test_url) || '', htc);
+    });
+    var htr = el('hsk-tr-copy');
+    if (htr) htr.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.trainer_url) || '', htr);
     });
     var hnl = el('hsk-newlink');
     if (hnl) hnl.addEventListener('click', function () {
@@ -6685,11 +6710,11 @@
       api('/admin/api/leads/' + id + '/hsk/invite', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       }).then(function () {
-        loadHsk(id, true);   // перечитать блок — покажет свежую ссылку
-        showToast('Личная ссылка HSK готова');
+        loadHsk(id, true);   // перечитать блок — покажет свежие ссылки
+        showToast('Личные ссылки HSK готовы');
       }).catch(function () {
         hnl.disabled = false; hnl.style.opacity = '';
-        showToast('Не удалось создать ссылку');
+        showToast('Не удалось создать ссылки');
       });
     });
   }
