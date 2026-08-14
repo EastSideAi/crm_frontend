@@ -2430,7 +2430,7 @@
             '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span></div>'
         : '';
       return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
-        (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        (t.parent_title ? ' has-goal' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
         '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
           // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
           // постановщиком: задача без цели просто дело, с целью — шаг к

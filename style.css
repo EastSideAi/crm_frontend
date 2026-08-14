@@ -1784,7 +1784,10 @@ a { color: inherit; text-decoration: none; }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
 
 /* Пометка цели в строке задачи. Не чип-статус и не тег: это ссылка на смысл
-   задачи, поэтому тихая, но кликабельная — синеет только на наведении. */
+   задачи, поэтому тихая, но кликабельная — синеет только на наведении.
+   Строка с пометкой выше фиксированных 58px: та же логика, что у строки цели
+   с прогрессом (.tsk-grid.has-prog). */
+.trow.tsk-grid.has-goal { height: auto; min-height: 78px; padding-top: 12px; padding-bottom: 12px; }
 .tsk-goal { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
   max-width: 100%; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
   background: var(--fill); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
