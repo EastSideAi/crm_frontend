@@ -1803,7 +1803,6 @@ button.tr-crumb:hover { color: var(--blue); }
 .tr-name .t-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
 .tr-prog { min-width: 0; }
 .tr-prog .tsk-prog { margin-top: 0; }
-.tr-noprog { font-size: 11.5px; color: var(--ink-3); }
 .tr-go { width: 30px; height: 30px; border-radius: 9px; background: var(--fill);
   display: grid; place-items: center; color: var(--ink-3); transition: .15s var(--ease); }
 .trow:hover .tr-go { background: var(--blue); color: #fff; }

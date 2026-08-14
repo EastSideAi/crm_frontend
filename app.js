@@ -2032,7 +2032,7 @@
           var ovAll = tr.reduce(function (a, d) { return a + (d.overdue || 0); }, 0);
           tphr = ovAll
             ? 'Вся работа компании по направлениям. Горит <b>' + ovAll + '</b> ' +
-              plural(ovAll, 'задача', 'задачи', 'задач') + ' — они помечены красным.'
+              plural(ovAll, 'задача', 'задачи', 'задач') + ', они помечены красным.'
             : 'Вся работа компании по направлениям. Просрочек нет.';
         }
       }
@@ -2514,7 +2514,9 @@
   }
 
   function progBar(done, total) {
-    if (!total) return '<span class="tr-noprog">шагов нет</span>';
+    // Пустая шкала ничего не сообщает: у направления без целей строка «шагов
+    // нет» просто занимает место, которое должно оставаться тихим.
+    if (!total) return '';
     return '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
       Math.round(done / total * 100) + '%"></i></span>' +
       '<span class="tsk-prog-n num">' + done + ' из ' + total + '</span></div>';
