@@ -2013,6 +2013,19 @@
           plural(bt.done, 'задача', 'задачи', 'задач') + '.';
         else tphr = 'За этот период команда еще ничего не закрыла.';
       }
+      // На «Целях» сводка про движение, а не про мои открытые задачи.
+      if (TASK_SEGS[taskSeg()].view === 'goals') {
+        var gls = Array.isArray(state.tasks) ? state.tasks : [];
+        var gTotal = gls.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+        var gDone = gls.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+        var gOver = gls.filter(function (g) { return g.overdue; }).length;
+        tphr = gls.length
+          ? '<b>' + gls.length + '</b> ' + plural(gls.length, 'цель', 'цели', 'целей') +
+            ' в работе, сделано <b>' + gDone + '</b> из ' + gTotal + ' шагов' +
+            (gOver ? '. Просрочены сроки у <b>' + gOver + '</b> ' +
+              plural(gOver, 'цели', 'целей', 'целей') : '') + '.'
+          : 'Целей в работе нет. Цель появляется, когда у задачи есть шаги.';
+      }
       // В дереве сводка отвечает за тот уровень, на котором человек стоит.
       if (TASK_SEGS[taskSeg()].view === 'tree') {
         if (state.treeGoal) {
