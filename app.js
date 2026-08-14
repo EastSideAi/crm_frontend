@@ -2286,7 +2286,8 @@
         ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
       }
       html = '<div><h2>' + (titles[state.page] || 'Ведомость') + '</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + ph + '</span></div></div>';
+        (ph ? '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + ph + '</span></div>' : '') +
+        '</div>';
     }
     ch.innerHTML = html;
   }
