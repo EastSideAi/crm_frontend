@@ -41,6 +41,8 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
+    // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
+    board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
@@ -49,7 +51,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -57,6 +59,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
+        boardPeriod: state.boardPeriod,
       }));
     } catch (e) {}
   }
@@ -1853,6 +1856,7 @@
         t.addEventListener('click', function () {
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
+          state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
           saveUi();
           renderTopbar(); renderHead(); renderView();
         });
@@ -1990,6 +1994,18 @@
       // Сводка всегда про МОИ задачи (summary считает по assignee_id), а список
       // рядом может показывать всю команду — без «на тебе» фраза противоречит списку.
       else tphr = 'Открытых задач на тебе нет.';
+      // На табло сводка «про меня» противоречит экрану: там вся команда.
+      if (TASK_SEGS[taskSeg()].view === 'board') {
+        var bd = state.board && state.board !== 'none' ? state.board : null;
+        var bt = bd ? (bd.total || {}) : null;
+        if (!bt) tphr = 'Собираю табло по людям.';
+        else if (bt.overdue) tphr = 'У команды <b>' + bt.overdue + ' ' +
+          plural(bt.overdue, 'просроченная задача', 'просроченные задачи', 'просроченных задач') +
+          '.</b> Сверху те, у кого горит.';
+        else if (bt.done) tphr = 'Просрочки нет. За период принято <b>' + bt.done + '</b> ' +
+          plural(bt.done, 'задача', 'задачи', 'задач') + '.';
+        else tphr = 'За этот период команда еще ничего не закрыла.';
+      }
       html = '<div><h2>Задачи</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>';
     }
@@ -2111,6 +2127,9 @@
     stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
     accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
     team:   { label: 'Вся команда', view: 'open',   scope: 'all',    cap: 'tasks_all', hint: 'кто чем занят прямо сейчас' },
+    // Третий вопрос руководителя — не «что сейчас», а «как идет у каждого».
+    // Тот же список задач, свернутый по людям и по периоду.
+    board:  { label: 'По людям',    view: 'board',  scope: 'all',    cap: 'tasks_all', hint: 'сколько закрыл каждый и что у него горит' },
     done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
@@ -2164,6 +2183,7 @@
 
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
+    if (seg.view === 'board') { loadBoard(cb); return; }
     if (seg.view === 'students') {
       // Руководителю нужны все ученики компании, рядовому — те, по которым
       // работа есть на нем; внутри ученика в обоих случаях видна работа всей
@@ -2188,7 +2208,8 @@
     var scope = seg.view === 'goals' && can('tasks_all') ? 'all' : seg.scope;
     state.tasksLoading = true;
     api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope +
-        (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '')).then(function (r) {
+        (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '') +
+        (state.taskWho && scope === 'all' ? '&assignee=' + state.taskWho.id : '')).then(function (r) {
       state.tasksLoading = false;
       state.tasks = (r && r.tasks) || [];
       state.taskMe = r ? r.me : null;
@@ -2199,6 +2220,25 @@
       state.tasks = 'none';
       if (state.page === 'tasks') renderView();
     });
+  }
+  /* Свод по людям за период. Отдельный запрос, а не подсчет на клиенте: считать
+     закрытые за месяц по списку из трехсот строк значит сначала выкачать месяц
+     задач, и «отчет за месяц открывается мгновенно» перестанет быть правдой. */
+  function loadBoard(cb) {
+    state.tasksLoading = true;
+    api('/admin/api/tasks/board?period=' + state.boardPeriod + '&shift=' + state.boardShift)
+      .then(function (r) {
+        state.tasksLoading = false;
+        state.board = r || null;
+        state.tasks = [];        // общий рендер задач ждет непустое состояние
+        if (cb) cb();
+        else if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.tasksLoading = false;
+        state.board = 'none';
+        state.tasks = [];
+        if (state.page === 'tasks') renderView();
+      });
   }
   /* Счетчики для бейджа в навигации — дешевый запрос, дергаем отдельно от списка. */
   function loadTaskSummary(cb) {
@@ -2239,6 +2279,7 @@
   }
 
   function renderTasks(view) {
+    if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
     if (state.tasks === null) {
       view.innerHTML = dashSkeleton();
       loadTasks();
@@ -2287,7 +2328,12 @@
     // Направления показываем тем, кто видит чужие задачи: у тьютора все задачи в
     // одном направлении, и шесть чипов над коротким списком — чистый шум.
     var depts = can('tasks_all')
-      ? '<div class="list-quick depts">' + [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
+      ? '<div class="list-quick depts">' +
+        // Пришли из табло по человеку — показываем, чьи это задачи, и даем выйти:
+        // иначе список выглядит как «у команды всего четыре задачи».
+        (state.taskWho ? '<button class="qchip on brd-who-chip" id="tsk-who">' +
+          esc(state.taskWho.name) + ic('x', 11) + '</button>' : '') +
+        [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
           return [d, DEPTS[d]];
         })).map(function (o) {
           return '<button class="qchip' + (state.taskDept === o[0] ? ' on' : '') + '" data-dept="' + o[0] + '">' + esc(o[1]) + '</button>';
@@ -2321,6 +2367,11 @@
       if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
     el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    if (el('tsk-who')) el('tsk-who').addEventListener('click', function () {
+      state.taskWho = null;
+      state.tasks = null;        // фильтр серверный — выборку надо перезапросить
+      renderView();
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (c) {
       c.addEventListener('click', function () {
         state.taskDept = c.getAttribute('data-dept');
@@ -2332,6 +2383,112 @@
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
   }
+  /* ── Табло «По людям» ──────────────────────────────────────────────────────
+     Экран руководителя: строка на человека, числа за выбранный период. Пять
+     колонок, а не пятнадцать: план, факт, и три вещи, которые горят сейчас.
+     Колонка «в срок ли закрыто» намеренно не заведена — она превращает табло в
+     оценку человека, а на этом этапе нужен разговор про работу, а не рейтинг. */
+  var BOARD_PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
+  var BOARD_COLS = [
+    ['plan',    'План',       'намечено на период'],
+    ['done',    'Сделано',    'принято за период'],
+    ['overdue', 'Просрочено', 'горит прямо сейчас'],
+    ['review',  'На приемке', 'сдано, ждет постановщика'],
+    ['open',    'В работе',   'всего незакрытых'],
+  ];
+
+  function boardColLabel(key) {
+    var c = BOARD_COLS.filter(function (x) { return x[0] === key; })[0];
+    return c ? c[1] : key;
+  }
+
+  function boardCell(p, key) {
+    var v = p[key] || 0;
+    // Ноль — бледный: в таблице из тридцати чисел глаз должен цепляться за то,
+    // где работа есть, а не пересчитывать нули.
+    var cls = !v ? ' zero' : (key === 'overdue' ? ' bad' : (key === 'done' ? ' ok' : ''));
+    // data-l — подпись для телефона: там шапки таблицы нет, и голое число
+    // «3» ничего не значит (см. .brd-n::before в style.css).
+    return '<span class="brd-n num' + cls + '" data-l="' + boardColLabel(key) + '">' + v + '</span>';
+  }
+
+  function renderBoard(view) {
+    if (state.board === null) { view.innerHTML = dashSkeleton(); loadBoard(); return; }
+    if (state.board === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать табло. Обнови страницу.</div></div>';
+      return;
+    }
+    var b = state.board;
+    var head = '<div class="trow brd-grid thead"><span class="th">Сотрудник</span>' +
+      BOARD_COLS.map(function (c) { return '<span class="th" title="' + c[2] + '">' + c[1] + '</span>'; }).join('') +
+      '</div>';
+
+    var rows = (b.people || []).map(function (p) {
+      return '<div class="trow brd-grid' + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
+        BOARD_COLS.map(function (c) { return boardCell(p, c[0]); }).join('') +
+      '</div>';
+    }).join('');
+
+    var total = b.total || {};
+    var totalRow = (b.people || []).length > 1
+      ? '<div class="trow brd-grid brd-total"><div class="brd-who">Вся команда</div>' +
+        BOARD_COLS.map(function (c) { return boardCell(total, c[0]); }).join('') + '</div>'
+      : '';
+
+    // Кто без задач — именами под таблицей, а не строками нулей в ней: это ответ
+    // на вопрос «а кому я ничего не поставил», и он стоит одной строки, не пяти.
+    var idle = (b.idle || []).length
+      ? '<div class="brd-idle"><span class="brd-il">Без задач</span>' + esc(b.idle.join(', ')) + '</div>'
+      : '';
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="dperiod" id="brd-per">' + BOARD_PERIODS.map(function (o) {
+          return '<button class="' + (state.boardPeriod === o[0] ? 'on' : '') + '" data-bp="' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="brd-nav">' +
+          '<button class="icobtn sm brd-arrow prev" id="brd-prev" title="Предыдущий период">' + ic('go', 15) + '</button>' +
+          '<span class="brd-label">' + esc(b.label || '') + '</span>' +
+          '<button class="icobtn sm brd-arrow" id="brd-next" title="Следующий период">' + ic('go', 15) + '</button>' +
+          (state.boardShift ? '<button class="qchip" id="brd-now">Сейчас</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (rows ? head + rows + totalRow
+              : '<div class="empty">За этот период задач ни у кого нет.</div>') +
+      '</div>' + idle +
+    '</div>';
+
+    function reload(fn) { fn(); state.board = null; saveUi(); renderView(); }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bp]'), function (btn) {
+      btn.addEventListener('click', function () {
+        reload(function () {
+          state.boardPeriod = btn.getAttribute('data-bp');
+          state.boardShift = 0;   // при смене длины периода сдвиг теряет смысл
+        });
+      });
+    });
+    el('brd-prev').addEventListener('click', function () { reload(function () { state.boardShift -= 1; }); });
+    el('brd-next').addEventListener('click', function () { reload(function () { state.boardShift += 1; }); });
+    if (el('brd-now')) el('brd-now').addEventListener('click', function () { reload(function () { state.boardShift = 0; }); });
+
+    // Клик по человеку — его задачи. Табло без этого перехода тупик: увидел
+    // «четыре просрочено» и не можешь спросить какие.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (r) {
+      r.addEventListener('click', function () {
+        var id = +r.getAttribute('data-uid');
+        var p = (state.board.people || []).filter(function (x) { return x.id === id; })[0];
+        state.taskWho = { id: id, name: p ? p.name : '' };
+        state.taskSeg = 'team';
+        state.tasks = null;
+        saveUi();
+        renderTopbar(); renderHead(); renderView();
+      });
+    });
+  }
+
   /* ── Срез «По ученикам» ────────────────────────────────────────────────────
      Группа = ученик: имя, этап пути, заметка куратора и вся работа команды по
      нему. Внутри задачи разложены по роли исполнителя, потому что вопрос звучит
