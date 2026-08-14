@@ -45,6 +45,8 @@
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
     // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
     donePeriod: 'week', doneShift: 0, donePeriodLabel: '', doneGoals: [],
+    // дерево «Вся команда»: где мы сейчас (null = уровень направлений)
+    tree: null, treeDept: null, treeGoal: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
@@ -1859,6 +1861,9 @@
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
           state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
+          // Ушел из дерева — вернулся к его корню: иначе через час забываешь,
+          // что «Вся команда» показывает не всю команду, а один шаг одной цели.
+          state.treeDept = null; state.treeGoal = null; state.tree = null;
           saveUi();
           renderTopbar(); renderHead(); renderView();
         });
@@ -2144,7 +2149,10 @@
     // обычном списке между ее строками стоят чужие задачи.
     stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
     accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
-    team:   { label: 'Вся команда', view: 'open',   scope: 'all',    cap: 'tasks_all', hint: 'кто чем занят прямо сейчас' },
+    // «Вся команда» — не список, а дерево: направление, цель, шаги. Плоская
+    // выдача всех задач компании нечитаема в принципе: в ней рядом лежат
+    // «позвонить семье Ким» и «перевести школу на новый формат».
+    team:   { label: 'Вся команда', view: 'tree',   scope: 'all',    cap: 'tasks_all', hint: 'вся работа компании сверху вниз' },
     // Третий вопрос руководителя — не «что сейчас», а «как идет у каждого».
     // Тот же список задач, свернутый по людям и по периоду.
     board:  { label: 'По людям',    view: 'board',  scope: 'all',    cap: 'tasks_all', hint: 'сколько закрыл каждый и что у него горит' },
@@ -2202,6 +2210,7 @@
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
     if (seg.view === 'board') { loadBoard(cb); return; }
+    if (seg.view === 'tree') { loadTree(cb); return; }
     if (seg.view === 'students') {
       // Руководителю нужны все ученики компании, рядовому — те, по которым
       // работа есть на нем; внутри ученика в обоих случаях видна работа всей
@@ -2268,6 +2277,44 @@
         if (state.page === 'tasks') renderView();
       });
   }
+  /* Дерево «Вся команда». Три уровня — три разных запроса, и это осознанно:
+     тянуть всю структуру компании одним куском ради экрана из шести строк
+     значит ждать секунду там, где нужно мгновенно. */
+  function loadTree(cb) {
+    state.tasksLoading = true;
+    var done = function (r, key) {
+      state.tasksLoading = false;
+      state[key] = r;
+      state.tasks = [];             // общий рендер ждет непустое состояние
+      if (cb) cb();
+      else if (state.page === 'tasks') { renderHead(); renderView(); }
+    };
+    var fail = function () {
+      state.tasksLoading = false;
+      state.tree = 'none';
+      state.tasks = [];
+      if (state.page === 'tasks') renderView();
+    };
+    if (state.treeGoal) {
+      api('/admin/api/tasks?view=all&scope=all&limit=200&parent=' + state.treeGoal.id)
+        .then(function (r) { done((r && r.tasks) || [], 'treeSteps'); }).catch(fail);
+      return;
+    }
+    if (state.treeDept !== null) {
+      // Внутри направления два списка: его цели и его же задачи без цели.
+      Promise.all([
+        api('/admin/api/tasks?view=goals&scope=all&dept=' + encodeURIComponent(state.treeDept)),
+        api('/admin/api/tasks?view=open&scope=all&dept=' + encodeURIComponent(state.treeDept)),
+      ]).then(function (rs) {
+        state.treeLoose = ((rs[1] && rs[1].tasks) || []).filter(function (t) { return !t.parent_id; });
+        done(((rs[0] && rs[0].tasks) || []), 'treeGoals');
+      }).catch(fail);
+      return;
+    }
+    api('/admin/api/tasks/structure').then(function (r) {
+      done((r && r.depts) || [], 'tree');
+    }).catch(fail);
+  }
   /* Счетчики для бейджа в навигации — дешевый запрос, дергаем отдельно от списка. */
   function loadTaskSummary(cb) {
     if (!can('tasks')) return;
@@ -2320,6 +2367,7 @@
     var seg = taskSeg();
     if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
     if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
+    if (TASK_SEGS[seg].view === 'tree') { renderTree(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
       if (!q) return true;
@@ -2412,6 +2460,184 @@
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
   }
+  /* ── Дерево «Вся команда» ──────────────────────────────────────────────────
+     Работа компании читается сверху вниз: направление, цель, шаги. На каждом
+     уровне ровно один тип объектов — поэтому каши не бывает по устройству
+     экрана, а не по дисциплине того, кто заводит задачи. Возврат — по пути
+     сверху, разворачивающихся деревьев здесь нет намеренно: раскрытые три
+     уровня превращаются в ту же простыню, из которой мы уходили. */
+  function treeGo(dept, goal) {
+    state.treeDept = dept;
+    state.treeGoal = goal || null;
+    state.tree = dept === null ? null : state.tree;
+    state.treeGoals = null; state.treeSteps = null; state.treeLoose = null;
+    state.tasks = null;
+    renderHead(); renderView();
+  }
+
+  function treeCrumbs() {
+    var parts = ['<button class="tr-crumb" data-tr="root">Вся команда</button>'];
+    if (state.treeDept !== null) {
+      parts.push('<span class="tr-sep">' + ic('go', 11) + '</span>');
+      parts.push(state.treeGoal
+        ? '<button class="tr-crumb" data-tr="dept">' + esc(deptLabel(state.treeDept) || 'Без направления') + '</button>'
+        : '<span class="tr-crumb on">' + esc(deptLabel(state.treeDept) || 'Без направления') + '</span>');
+    }
+    if (state.treeGoal) {
+      parts.push('<span class="tr-sep">' + ic('go', 11) + '</span>');
+      parts.push('<span class="tr-crumb on">' + esc(state.treeGoal.title) + '</span>');
+    }
+    return '<div class="tr-path">' + parts.join('') + '</div>';
+  }
+
+  function progBar(done, total) {
+    if (!total) return '<span class="tr-noprog">шагов нет</span>';
+    return '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
+      Math.round(done / total * 100) + '%"></i></span>' +
+      '<span class="tsk-prog-n num">' + done + ' из ' + total + '</span></div>';
+  }
+
+  function renderTree(view) {
+    if (state.tree === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить работу команды. Обнови страницу.</div></div>';
+      return;
+    }
+    if (state.treeGoal) { renderTreeGoal(view); return; }
+    if (state.treeDept !== null) { renderTreeDept(view); return; }
+    if (state.tree === null) { view.innerHTML = dashSkeleton(); loadTree(); return; }
+
+    var rows = (state.tree || []).map(function (d) {
+      return '<div class="trow tr-grid' + (d.overdue ? ' r-crit' : '') + '" data-dept="' + esc(d.dept) + '">' +
+        '<div class="tr-name">' + esc(d.label) +
+          '<span class="t-sub">' + (d.goals ? d.goals + ' ' + plural(d.goals, 'цель', 'цели', 'целей') : 'целей нет') +
+            (d.loose ? ' · ' + d.loose + ' вне целей' : '') + '</span></div>' +
+        '<div class="tr-prog">' + progBar(d.steps_done, d.steps_total) + '</div>' +
+        '<span class="brd-n num' + (d.open ? '' : ' zero') + '" data-l="В работе">' + d.open + '</span>' +
+        '<span class="brd-n num' + (d.overdue ? ' bad' : ' zero') + '" data-l="Просрочено">' + d.overdue + '</span>' +
+        '<span class="tr-go">' + ic('go', 14) + '</span>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="list-body">' +
+        '<div class="trow tr-grid thead"><span class="th">Направление</span>' +
+          '<span class="th">Движение по целям</span><span class="th">В работе</span>' +
+          '<span class="th">Просрочено</span><span class="th"></span></div>' + rows +
+      '</div></div>';
+    bindTree(view);
+  }
+
+  function renderTreeDept(view) {
+    if (state.treeGoals === null || state.treeGoals === undefined) {
+      view.innerHTML = treeCrumbsCard(dashSkeleton()); loadTree();
+      bindTree(view); return;
+    }
+    var goals = state.treeGoals || [], loose = state.treeLoose || [];
+
+    var goalRows = goals.map(function (g) {
+      var due = dueLabel(g);
+      return '<div class="trow tr-goal' + (g.overdue ? ' r-crit' : '') + '" data-goal="' + g.id + '">' +
+        '<div class="tr-name">' + esc(g.title) +
+          '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
+        '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<span class="tr-go">' + ic('go', 14) + '</span>' +
+      '</div>';
+    }).join('');
+
+    // Задачи вне целей — не мусор, а обычная текучка. Держим их отдельным
+    // блоком под целями: в общем списке они прячут структуру, а без них экран
+    // врет, что в направлении работы нет.
+    var looseRows = loose.map(function (t) {
+      var due = dueLabel(t);
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      return '<div class="trow tr-task' + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="tr-name">' + esc(t.title) +
+          '<span class="t-sub">' + (t.assignee_name ? esc(t.assignee_name) : 'не назначена') + '</span></div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="list-body">' +
+        (goals.length
+          ? '<div class="tr-sec">' + goals.length + ' ' + plural(goals.length, 'цель', 'цели', 'целей') + ' в работе</div>' + goalRows
+          : '<div class="empty">В этом направлении нет ни одной цели. Задачи ниже — текучка без цели.</div>') +
+        (loose.length
+          ? '<div class="tr-sec">' + loose.length + ' ' + plural(loose.length, 'задача', 'задачи', 'задач') + ' вне целей</div>' + looseRows
+          : '') +
+      '</div></div>';
+    bindTree(view);
+  }
+
+  function renderTreeGoal(view) {
+    if (state.treeSteps === null || state.treeSteps === undefined) {
+      view.innerHTML = treeCrumbsCard(dashSkeleton()); loadTree();
+      bindTree(view); return;
+    }
+    var g = state.treeGoal, steps = state.treeSteps || [];
+    var done = steps.filter(function (s) { return s.status === 'done'; }).length;
+    var due = dueLabel(g);
+
+    var rows = steps.map(function (t) {
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var d = dueLabel(t);
+      return '<div class="trow tr-task' + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="tr-name">' + esc(t.title) +
+          '<span class="t-sub">' + (t.assignee_name ? esc(t.assignee_name) : 'не назначена') + '</span></div>' +
+        '<div class="tsk-due ' + d.cls + '">' + esc(d.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="tr-goalhead">' +
+        '<div class="tr-gh-main"><div class="tr-gh-t">' + esc(g.title) + '</div>' +
+          (g.result_expect ? '<div class="tr-gh-r">' + esc(g.result_expect) + '</div>' : '') + '</div>' +
+        '<div class="tr-gh-meta">' +
+          '<span class="tsk-mwho">' + ic('leads', 13) + (g.assignee_name ? esc(g.assignee_name) : 'без ответственного') + '</span>' +
+          '<span class="tsk-due ' + due.cls + '">' + ic('clock', 13) + esc(due.text) + '</span>' +
+        '</div>' +
+        progBar(done, steps.length) +
+      '</div>' +
+      '<div class="list-body">' +
+        (steps.length ? rows : '<div class="empty">У цели пока нет шагов. Открой ее карточку и добавь первый.</div>') +
+      '</div>' +
+      '<button class="bp sm tr-open" data-tid="' + g.id + '">Открыть карточку цели</button>' +
+    '</div>';
+    bindTree(view);
+  }
+
+  function treeCrumbsCard(inner) {
+    return '<div class="card listcard">' + treeCrumbs() + inner + '</div>';
+  }
+
+  function bindTree(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tr]'), function (b) {
+      b.addEventListener('click', function () {
+        var to = b.getAttribute('data-tr');
+        treeGo(to === 'root' ? null : state.treeDept, null);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (r) {
+      r.addEventListener('click', function () { treeGo(r.getAttribute('data-dept'), null); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goal]'), function (r) {
+      var id = +r.getAttribute('data-goal');
+      r.addEventListener('click', function () {
+        var g = (state.treeGoals || []).filter(function (x) { return x.id === id; })[0];
+        if (g) treeGo(state.treeDept, g);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openTask(+r.getAttribute('data-tid'));
+      });
+    });
+  }
+
   /* ── Срез «Готово» ─────────────────────────────────────────────────────────
      Плоская стопка закрытых задач не отвечает ни на один вопрос: по ней не
      видно ни движения, ни того, ради чего работа делалась. Поэтому здесь два

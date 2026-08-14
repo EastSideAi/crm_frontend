@@ -1783,6 +1783,44 @@ a { color: inherit; text-decoration: none; }
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
 
+/* ── Дерево «Вся команда» ────────────────────────────────────────────────────
+   Три уровня: направления, цели направления, шаги цели. Разворачивающихся
+   веток нет намеренно — на экране всегда один тип объектов, а где ты сейчас,
+   говорит путь сверху. */
+.tr-path { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 13px 20px; border-bottom: 1px solid var(--line); }
+.tr-crumb { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  transition: color .14s var(--ease); }
+button.tr-crumb:hover { color: var(--blue); }
+.tr-crumb.on { color: var(--ink); font-weight: 700; }
+.tr-sep { display: inline-flex; color: var(--ink-3); opacity: .6; }
+.tr-grid { grid-template-columns: minmax(180px,1fr) 190px 96px 110px 30px; }
+.tr-goal { grid-template-columns: minmax(180px,1fr) 190px 150px 30px; }
+.tr-task { grid-template-columns: minmax(180px,1fr) 150px 116px; }
+.tr-name { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; }
+.tr-name .t-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.tr-prog { min-width: 0; }
+.tr-prog .tsk-prog { margin-top: 0; }
+.tr-noprog { font-size: 11.5px; color: var(--ink-3); }
+.tr-go { width: 30px; height: 30px; border-radius: 9px; background: var(--fill);
+  display: grid; place-items: center; color: var(--ink-3); transition: .15s var(--ease); }
+.trow:hover .tr-go { background: var(--blue); color: #fff; }
+/* Подзаголовок внутри списка: «3 цели в работе», «2 задачи вне целей». Тот же
+   капс-микролейбл, что у шапок таблиц, — второй рецепт заголовка не заводим. */
+.tr-sec { padding: 15px 24px 7px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tr-goalhead { display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.tr-gh-t { font-size: 18px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  text-wrap: balance; }
+.tr-gh-r { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.tr-gh-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tr-goalhead .tsk-prog { margin-top: 0; }
+.tr-goalhead .tsk-prog-b { width: 100%; max-width: 320px; }
+.tr-open { margin: 14px 24px 18px; align-self: flex-start; }
+
 /* ── Срез «Готово» ───────────────────────────────────────────────────────────
    Сделанное за период, сгруппированное по целям. Зеленый здесь один и только
    на галочке принятой задачи: если красить зеленым все, экран превращается в
@@ -2094,6 +2132,24 @@ a { color: inherit; text-decoration: none; }
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
+  /* Дерево на телефоне: у направления числа уходят под название и называют
+     себя сами (шапка скрыта), у цели и задачи вторая строка — срок и статус. */
+  .trow.tr-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
+  .trow.tr-grid.thead { display: none; }
+  .trow.tr-grid .tr-name, .trow.tr-grid .tr-prog { grid-column: 1 / -1; }
+  .trow.tr-grid .brd-n { grid-column: auto; text-align: left;
+    display: flex; flex-direction: column-reverse; gap: 2px; }
+  .trow.tr-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.tr-grid .tr-go { display: none; }
+  .trow.tr-goal, .trow.tr-task { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 6px 10px; height: auto; padding: 13px 16px; align-items: start; }
+  .trow.tr-goal .tr-name, .trow.tr-task .tr-name { grid-column: 1 / -1; }
+  .trow.tr-goal .tr-prog { grid-column: 1 / -1; }
+  .trow.tr-goal .tr-go { display: none; }
+  .tr-goalhead { padding: 16px; }
+  .tr-open { margin: 12px 16px 16px; }
   /* «Готово» на телефоне: исполнитель и дата уходят под название задачи —
      в четыре колонки на 390px название схлопывается до трех слов. */
   .dn-t { grid-template-columns: 22px minmax(0,1fr); gap: 4px 10px; padding: 12px 14px; }
