@@ -4767,6 +4767,46 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-saved.on { opacity: 1; }
 .po-saved.bad { color: var(--red-ink); }
 .po-diff { display: none; margin-top: 5px; color: var(--amber-ink); }
+
+/* ценообразование: сводка по тарифу и прайс поштучно.
+   Якорь карточки — цена пакетом, поэтому крупная она одна; сумма поштучно
+   рядом тихая и зачеркнутая, выгода — единственное цветное пятно. */
+.po-pcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.po-pcard { padding: 20px 21px; }
+.po-pcard.accent { border-color: #CFE0FF; }
+.po-prow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin-top: 13px; font-size: 12.5px; color: var(--ink-3); }
+.po-prow b { font-size: 15px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em; }
+.po-prow.po-pfull b { color: var(--ink-3); text-decoration: line-through; }
+.po-prow b.big { font-size: 26px; letter-spacing: -.035em; color: var(--ink); }
+.po-psave { margin-top: 14px; background: var(--green-soft); color: var(--green-ink);
+  border-radius: var(--r-lg); padding: 9px 12px; font-size: 12.5px; font-weight: 600; }
+.po-psave.off { background: var(--fill); color: var(--ink-3); font-weight: 500; }
+.po-pwarn { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; line-height: 1.45;
+  color: var(--amber-ink); }
+.po-pwarn svg { flex: none; margin-top: 2px; }
+/* прайс: наименование широкое, цена и колонки тарифов узкие — читают сверху вниз
+   один столбец цен, а не бегают глазами по строке */
+.po-tbl.price { min-width: 720px; }
+.po-tbl.price .po-rl { width: auto; }
+.po-tbl.price th:nth-child(2), .po-tbl.price td:nth-child(2) { width: 118px; }
+.po-tbl.price th:nth-child(n+3), .po-tbl.price td:nth-child(n+3) { width: 132px; }
+.po-pprice { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.po-pin { text-align: center; }
+.po-pin svg { color: var(--ink-2); }
+.po-pdash { color: var(--line-2); }
+.po-r-grp td { padding-top: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--line-2);
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.po-r-grp small { margin-left: 10px; font-size: 11px; font-weight: 500; letter-spacing: 0;
+  text-transform: none; color: var(--ink-3); }
+.po-tbl.price .po-r-sum td, .po-tbl.price .po-r-big td { text-align: left; }
+.po-adds { margin-top: 4px; }
+.po-add { display: flex; align-items: baseline; justify-content: space-between; gap: 18px;
+  padding: 13px 0; border-bottom: 1px solid var(--line); }
+.po-add:last-child { border-bottom: 0; padding-bottom: 0; }
+.po-addt { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.po-addt small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.po-addp { flex: none; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
 .po-diff.on { display: block; }
 
 /* ссылки на внешние системы */
@@ -4789,6 +4829,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
+  .po-pcards { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .po-h1 { font-size: 23px; }
