@@ -1768,6 +1768,8 @@ a { color: inherit; text-decoration: none; }
     max-height: 94vh; max-height: 94dvh; transform: translateY(24px); }
   .al-head { padding: 18px 18px 0; }
   .al-sub, .al-body, .al-foot { padding-left: 18px; padding-right: 18px; }
+  /* Тело едет под шапкой — без линии верхнее поле выглядит просто обрезанным. */
+  .al-card > .al-body { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px; }
   .al-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); gap: 8px;
     border-top: 1px solid var(--line); background: #fff; }
   .al-foot .al-save { flex: 1; }
@@ -2157,6 +2159,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-ret button:hover { color: var(--ink); }
 .tsk-say.ret .al-in { border-color: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,.1); }
 .tsk-acts { flex-wrap: wrap; }
+.tsk-acts[hidden] { display: none; }
 
 /* ── Результат задачи ────────────────────────────────────────────────────────
    Ответ исполнителя на критерий приемки: пара строк и приложенные файлы. Стоит

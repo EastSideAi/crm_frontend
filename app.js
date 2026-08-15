@@ -3395,8 +3395,12 @@
       var setRes = function (mode) {
         resMode = mode;
         resF.hidden = !mode;
+        // Пока панель открыта, кнопки внизу прячем: иначе на экране две кнопки
+        // «сдать» и непонятно, какая настоящая.
+        var footActs = ov.querySelector('.tsk-acts');
+        if (footActs) footActs.hidden = !!mode;
         if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
-        el('tk-resok').textContent = mode === 'review' ? 'Сдать на проверку' : 'Сохранить результат';
+        el('tk-resok').textContent = mode === 'review' ? 'Сдать' : 'Сохранить';
         resT.value = mode === 'review' ? '' : (t.result_text || '');
         resT.focus();
         body.scrollTop = body.scrollHeight;
@@ -3430,7 +3434,9 @@
           var after = resMode;
           setRes('');
           ok.disabled = false;
-          if (after === 'review') { setStatus('review', text); return; }
+          // Текст в статус не дублируем: он уже уехал отдельным событием
+          // «результат», и в ленте это читалось бы дважды подряд.
+          if (after === 'review') { setStatus('review'); return; }
           state.tasks = null;
           api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
           showToast('Результат приложен');
