@@ -38,18 +38,32 @@
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
+    tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
+    taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
+    // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
+    board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
+    // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
+    donePeriod: 'week', doneShift: 0, donePeriodLabel: '', doneGoals: [],
+    // дерево «Вся команда»: где мы сейчас (null = уровень направлений)
+    tree: null, treeDept: null, treeGoal: null,
+    // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
+    cardTasks: {},
+    // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
+    portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
     try {
       localStorage.setItem(UI_LS, JSON.stringify({
-        page: state.page, seg: state.seg, viewMode: state.viewMode, filters: state.filters,
+        page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
+        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
       }));
     } catch (e) {}
   }
@@ -182,6 +196,8 @@
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.2 13.2 17 17"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
+      search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
+      tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -330,6 +346,10 @@
      из пуша попадаешь сразу в разговор, а не в общий список. */
   function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
   function hashDialogId() { return hashRouteId('dialog'); }
+  /* #task/<id> — прямая ссылка на задачу: по такой ссылке ведет кнопка из бота. */
+  function hashTaskId() { return hashRouteId('task'); }
+  /* #page/<id> — ссылка на раздел целиком (кнопка «Открыть задачи» в сводке бота). */
+  function hashPageId() { return hashRouteId('page'); }
   /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
      хэш-функция строки ниже по файлу, и одноимённое объявление её перетирало. */
   function hashRouteId(kind) {
@@ -1669,39 +1689,50 @@
      Возможности (caps) = что роль видит/делает. Роль = набор caps. Чтобы добавить
      новый блок: (1) заведи cap в CAP_ALL, (2) добавь его нужным ролям ниже,
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
+  // tasks — свои задачи, есть у КАЖДОГО: работа, которой нет в системе, не видна
+  // никому. tasks_all — видеть и вести задачи всей команды, это управленческое
+  // право, а не рабочее. templates — редактор мастер-планов поступления, отделен
+  // от students: преподаватель со своими учениками чужую работу не получает.
+  // Зеркало ROLE_CAPS на бэкенде (routers/admin.py).
   // 'contractors' — раздел «Исполнители» (самозанятые): ИНН, реквизиты, суммы выплат.
   // Отдельный cap намеренно: это не те же данные, что клиентские, и видеть их должна
-  // не вся команда. Зеркало на бэке — routers/admin.py ROLE_CAPS.
+  // не вся команда.
   // 'finmodel' — пространство «Финансы»: ведомость периода, P&L, операции, долги.
-  // Зарплаты, дивиденды, остатки фондов. Это не тот же уровень
-  // секретности, что клиентские платежи (cap 'finance'), поэтому cap свой.
+  // Зарплаты, дивиденды, остатки фондов. Это не тот же уровень секретности, что
+  // клиентские платежи (cap 'finance'), поэтому cap свой.
   // 'mywork' — «Моя работа»: свои задания сотрудника-самозанятого. Роли его не дают
   // вовсе, он приходит с сервера по факту связи учетки с карточкой исполнителя.
   // В модуле самозанятых две стороны, и они взаимоисключающие: связанному человеку
   // сервер выдает 'mywork' и снимает 'contractors' — задания раздает один, выполняет
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students', 'templates'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'contractors'] },
-    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
-    /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
-       заявок — чужая для них работа. Им нужен один экран: свои ученики. */
-    tutor:         { label: 'Тьютор',                 short: 'свои ученики',         caps: ['students'] },
-    teacher:       { label: 'Преподаватель',          short: 'свои ученики',         caps: ['students'] },
-    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
-    partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
-    contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash'] },
-    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'clients', 'analytics'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students', 'templates'] },
-    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'grants', 'clients'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
+    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
+    // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
+    // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal'] },
+    marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
+    partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
+    contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
+    diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
+    grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
+    // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
+    // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal'] },
+    // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
+    // данные несовершеннолетних, для бухгалтерии они не нужны.
+    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
-    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
+    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
   /* Право «mywork» не ролевое, а личное: оно есть у того, чья учетка связана со своей
@@ -1720,14 +1751,17 @@
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
+    { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
+    { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
     // «Финансы» — соседнее и про другие деньги, два одинаковых имени путали бы.
     { id: 'finance', label: 'Платежи', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
+    { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
@@ -1848,6 +1882,12 @@
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
         else if (it.id === 'inbox' && ho) extra = '<span class="bdg num" title="ждут ответа">' + ho + '</span>';
+        // Задачи: красный бейдж только на просроченном — иначе цифра горит всегда
+        // и перестает что-либо значить.
+        else if (it.id === 'tasks' && state.taskSum && state.taskSum.overdue)
+          extra = '<span class="bdg num" title="просрочено">' + state.taskSum.overdue + '</span>';
+        else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
+          extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
@@ -1957,6 +1997,7 @@
     saveUi();
     renderAll();
     if (p === 'finance') fetchFinance(false, function () { if (state.page === 'finance') { renderHead(); renderView(); } });
+    if (p === 'tasks') { state.tasks = null; loadTaskSummary(); }
     window.scrollTo(0, 0);
     var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
@@ -1984,6 +2025,26 @@
           else { renderTopbar(); renderHead(); renderView(); }
         });
       });
+    } else if (state.page === 'tasks') {
+      var tsegs = taskSegs();
+      tb.innerHTML = '<nav class="tabs">' + tsegs.map(function (k) {
+        var n = k === 'accept' && state.taskSum ? state.taskSum.to_accept : 0;
+        return '<a class="tab' + (taskSeg() === k ? ' on' : '') + '" data-tseg="' + k + '">' +
+          TASK_SEGS[k].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.taskSeg = t.getAttribute('data-tseg');
+          state.tasks = null;
+          state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
+          // Ушел из дерева — вернулся к его корню: иначе через час забываешь,
+          // что «Вся команда» показывает не всю команду, а один шаг одной цели.
+          state.treeDept = null; state.treeGoal = null; state.tree = null;
+          saveUi();
+          renderTopbar(); renderHead(); renderView();
+        });
+      });
+    } else if (state.page === 'path') {
     } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
       tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
@@ -2057,6 +2118,13 @@
       var meta = navMeta(state.page);
       tb.innerHTML = meta ? '<div class="freshchip"><span class="fok">' + ic(meta.icon, 11) + '</span>' + esc(meta.label) + '</div>' : '';
     }
+    // На телефоне полоса вкладок шире экрана и скроллится вбок. Открывается она
+    // на первой вкладке, поэтому активная может оказаться за краем — человек не
+    // видит, где он находится. Подкручиваем к ней.
+    var onTab = tb.querySelector('.tab.on');
+    if (onTab && tb.scrollWidth > tb.clientWidth) {
+      tb.scrollLeft = Math.max(0, onTab.offsetLeft - 12);
+    }
   }
 
   /* кастомный диапазон дат на дашборде */
@@ -2127,6 +2195,82 @@
         'Сквозная конверсия вход → клиент: <b>' + conv + '%</b>.' +
         (w2 ? ' Самый большой провал — <b>«' + esc(w2.step.label) + '»</b>: минус ' + Math.round(w2.pct * 100) + '% дошедших. Кликни по шагу — увидишь, кто ушел.' : '') +
         '</span></div></div>';
+    }
+    if (state.page === 'tasks') {
+      var ts = state.taskSum, tphr;
+      if (!ts) tphr = 'Смотрю, что на тебе.';
+      else if (ts.overdue) tphr = '<b>' + ts.overdue + ' ' + plural(ts.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '.</b> Начни с них — они выше в списке.';
+      else if (ts.to_accept) tphr = 'Просрочки нет. Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
+      else if (ts.open) tphr = 'Все в срок: <b>' + ts.open + '</b> ' + plural(ts.open, 'открытая задача', 'открытые задачи', 'открытых задач') + '.';
+      // Сводка всегда про МОИ задачи (summary считает по assignee_id), а список
+      // рядом может показывать всю команду — без «на тебе» фраза противоречит списку.
+      else tphr = 'Открытых задач на тебе нет.';
+      // На табло сводка «про меня» противоречит экрану: там вся команда.
+      if (TASK_SEGS[taskSeg()].view === 'board') {
+        var bd = state.board && state.board !== 'none' ? state.board : null;
+        var bt = bd ? (bd.total || {}) : null;
+        if (!bt) tphr = 'Собираю табло по людям.';
+        else if (bt.overdue) tphr = 'У команды <b>' + bt.overdue + ' ' +
+          plural(bt.overdue, 'просроченная задача', 'просроченные задачи', 'просроченных задач') +
+          '.</b> Сверху те, у кого горит.';
+        else if (bt.done) tphr = 'Просрочки нет. За период принято <b>' + bt.done + '</b> ' +
+          plural(bt.done, 'задача', 'задачи', 'задач') + '.';
+        else tphr = 'За этот период команда еще ничего не закрыла.';
+      }
+      // На «Целях» сводка про движение, а не про мои открытые задачи.
+      if (TASK_SEGS[taskSeg()].view === 'goals') {
+        var gls = Array.isArray(state.tasks) ? state.tasks : [];
+        var gTotal = gls.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+        var gDone = gls.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+        var gOver = gls.filter(function (g) { return g.overdue; }).length;
+        tphr = gls.length
+          ? '<b>' + gls.length + '</b> ' + plural(gls.length, 'цель', 'цели', 'целей') +
+            ' в работе, сделано <b>' + gDone + '</b> из ' + gTotal + ' шагов' +
+            (gOver ? '. Просрочены сроки у <b>' + gOver + '</b> ' +
+              plural(gOver, 'цели', 'целей', 'целей') : '') + '.'
+          : 'Целей в работе нет. Цель появляется, когда у задачи есть шаги.';
+      }
+      // В дереве сводка отвечает за тот уровень, на котором человек стоит.
+      if (TASK_SEGS[taskSeg()].view === 'tree') {
+        if (state.treeGoal) {
+          var stp = Array.isArray(state.treeSteps) ? state.treeSteps : [];
+          var dn2 = stp.filter(function (s) { return s.status === 'done'; }).length;
+          var ov2 = stp.filter(function (s) { return s.overdue; }).length;
+          tphr = 'Цель <b>' + esc(state.treeGoal.title) + '</b>: сделано ' + dn2 + ' из ' + stp.length +
+            (ov2 ? ', <b>' + ov2 + '</b> ' + plural(ov2, 'шаг просрочен', 'шага просрочено', 'шагов просрочено') : '') + '.';
+        } else if (state.treeDept !== null) {
+          var gl = Array.isArray(state.treeGoals) ? state.treeGoals.length : 0;
+          var ls = Array.isArray(state.treeLoose) ? state.treeLoose.length : 0;
+          tphr = esc(deptLabel(state.treeDept) || 'Без направления') + ': <b>' + gl + '</b> ' +
+            plural(gl, 'цель', 'цели', 'целей') + ' в работе' +
+            (ls ? ' и <b>' + ls + '</b> ' + plural(ls, 'задача', 'задачи', 'задач') + ' вне целей' : '') + '.';
+        } else {
+          var tr = Array.isArray(state.tree) ? state.tree : [];
+          var ovAll = tr.reduce(function (a, d) { return a + (d.overdue || 0); }, 0);
+          tphr = ovAll
+            ? 'Вся работа компании по направлениям. Горит <b>' + ovAll + '</b> ' +
+              plural(ovAll, 'задача', 'задачи', 'задач') + ', они помечены красным.'
+            : 'Вся работа компании по направлениям. Просрочек нет.';
+        }
+      }
+      // «Готово» — про отрезок времени, а не про то, что на мне сейчас.
+      if (TASK_SEGS[taskSeg()].view === 'done') {
+        var dn = Array.isArray(state.tasks) ? state.tasks : [];
+        var dnGoals = dn.filter(function (t) { return t.steps_total && t.status === 'done'; }).length;
+        var dnTasks = dn.length - dnGoals;
+        tphr = dn.length
+          ? 'Принято <b>' + dnTasks + '</b> ' + plural(dnTasks, 'задача', 'задачи', 'задач') +
+            (dnGoals ? ' и <b>' + dnGoals + '</b> ' +
+              plural(dnGoals, 'цель', 'цели', 'целей') : '') +
+            (state.donePeriodLabel ? ' за ' + esc(state.donePeriodLabel.toLowerCase()) : '') + '.'
+          : 'За этот период принятых задач нет.';
+      }
+      // Пришли из табло по человеку: «на тебе задач нет» рядом с чужим списком
+      // читается как ошибка системы.
+      if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
+        '</b>. Сними чип с именем, чтобы вернуться ко всей команде.';
+      html = '<div><h2>Задачи</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>';
     }
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
@@ -2332,10 +2476,13 @@
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
+    else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'students') renderStudents(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
@@ -2437,6 +2584,1692 @@
         throw new Error((j && typeof j.detail === 'string' && j.detail) ||
           'Не удалось сохранить — попробуйте еще раз');
       });
+    });
+  }
+  /* ── ЗАДАЧИ КОМАНДЫ ─────────────────────────────────────────────────────────
+     Рабочий стол сотрудника: что на мне сегодня, что просрочено, что я жду от
+     других. Задача живет по правилу «вести может исполнитель, принять — только
+     постановщик»: пока постановщик не принял, задача не сделана.
+
+     Это НЕ Задания самозанятых (пространство cz): там сумма, акт и налоговая.
+     Денег здесь нет намеренно — см. шапку миграции 065_staff_tasks.sql. */
+  var TASK_ST = {
+    wait:   { label: 'поставлена',   cls: 'st-wait' },
+    doing:  { label: 'в работе',     cls: 'st-doing' },
+    review: { label: 'на приемке',   cls: 'st-review' },
+    done:   { label: 'принята',      cls: 'st-done' },
+    return: { label: 'вернули',      cls: 'st-return' },
+    block:  { label: 'заблокирована', cls: 'st-block' },
+    cancel: { label: 'отменена',     cls: 'st-cancel' },
+  };
+  var TASK_SEGS = {
+    today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
+    // Цели идут сразу за «Сегодня» намеренно: сегодняшняя задача без цели —
+    // просто дело, а с целью — шаг к результату. Порядок вкладок и есть ответ
+    // на вопрос «зачем я это делаю» (решение Павла от 14.08.2026).
+    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'куда мы идем, по направлениям' },
+    week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
+    mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
+    // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
+    // учеником»: работа по одной семье разложена по разным исполнителям и в
+    // обычном списке между ее строками стоят чужие задачи.
+    stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
+    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
+    // «Вся команда» — не список, а дерево: направление, цель, шаги. Плоская
+    // выдача всех задач компании нечитаема в принципе: в ней рядом лежат
+    // «позвонить семье Ким» и «перевести школу на новый формат».
+    team:   { label: 'Вся команда', view: 'tree',   scope: 'all',    cap: 'tasks_all', hint: 'вся работа компании сверху вниз' },
+    // Третий вопрос руководителя — не «что сейчас», а «как идет у каждого».
+    // Тот же список задач, свернутый по людям и по периоду.
+    board:  { label: 'По людям',    view: 'board',  scope: 'all',    cap: 'tasks_all', hint: 'сколько закрыл каждый и что у него горит' },
+    done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
+  };
+  /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
+     staff_tasks.py — как и роли, справочник продублирован на двух концах: он
+     короткий и меняется раз в полгода, лишний запрос ради шести строк дороже.
+     Цветом направления НЕ кодируются: акцент в CRM один (design.md §3). */
+  var DEPTS = {
+    product:   'Продукт',
+    marketing: 'Маркетинг',
+    sales:     'Продажи',
+    edu:       'Обучение',
+    hr:        'HR и команда',
+    ops:       'Операционка',
+  };
+  function deptLabel(d) { return DEPTS[d] || ''; }
+  function taskSegs() {
+    return Object.keys(TASK_SEGS).filter(function (k) {
+      return !TASK_SEGS[k].cap || can(TASK_SEGS[k].cap);
+    });
+  }
+  function taskSeg() {
+    var s = state.taskSeg;
+    return TASK_SEGS[s] && taskSegs().indexOf(s) !== -1 ? s : 'today';
+  }
+
+  /* Дата через N дней в формате поля <input type=date> (местный день, не UTC:
+     иначе вечером 7-го «сегодня» превращается в 8-е). */
+  function isoDay(plus) {
+    var d = new Date();
+    d.setDate(d.getDate() + (plus || 0));
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  /* Срок словами. Просрочку считает сервер (поле overdue) — здесь только подпись. */
+  function dueLabel(t) {
+    if (!t.due_at) return { text: 'без срока', cls: 'due-none' };
+    var d = new Date(t.due_at), now = new Date();
+    var day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diff = Math.round((day - today) / 86400000);
+    if (t.overdue) {
+      var n = -diff;   // просрочка внутри того же дня — просто «просрочена»
+      return { text: n < 1 ? 'просрочена' : 'просрочена на ' + n + ' ' + plural(n, 'день', 'дня', 'дней'),
+               cls: 'due-over' };
+    }
+    if (diff === 0) return { text: 'сегодня', cls: 'due-now' };
+    if (diff === 1) return { text: 'завтра', cls: 'due-soon' };
+    if (diff < 0) return { text: dayLabel(t.due_at), cls: '' };
+    return { text: d.getDate() + ' ' + MONTHS_RU[d.getMonth()], cls: '' };
+  }
+
+  function loadTasks(cb) {
+    var seg = TASK_SEGS[taskSeg()];
+    if (seg.view === 'board') { loadBoard(cb); return; }
+    if (seg.view === 'tree') { loadTree(cb); return; }
+    if (seg.view === 'students') {
+      // Руководителю нужны все ученики компании, рядовому — те, по которым
+      // работа есть на нем; внутри ученика в обоих случаях видна работа всей
+      // команды, иначе экран не отвечает на свой же вопрос.
+      state.tasksLoading = true;
+      api('/admin/api/tasks/students?scope=' + (can('tasks_all') ? 'all' : 'my')).then(function (r) {
+        state.tasksLoading = false;
+        state.tasks = (r && r.students) || [];
+        state.taskMe = r ? r.me : null;
+        if (cb) cb();
+        else if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.tasksLoading = false;
+        state.tasks = 'none';
+        if (state.page === 'tasks') renderView();
+      });
+      return;
+    }
+    // «Цели» для руководителя — обзор всех проектов компании, а не своих четырех:
+    // ради этого срез и заводился. У кого прав на чужие задачи нет, видит цели,
+    // в которых участвует сам.
+    // «Цели» и «Готово» руководителю нужны по всей компании, а не по своим
+    // четырем задачам: оба среза отвечают на вопрос «что мы сделали», и у того,
+    // кто ведет команду, ответ на него не про себя.
+    var scope = (seg.view === 'goals' || seg.view === 'done') && can('tasks_all')
+      ? 'all' : seg.scope;
+    // «Готово» смотрят за отрезок времени: без периода это стопка, по которой
+    // не видно ни движения, ни того, что успели за неделю.
+    var per = seg.view === 'done'
+      ? '&period=' + state.donePeriod + '&shift=' + state.doneShift : '';
+    state.tasksLoading = true;
+    api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope + per +
+        (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '') +
+        (state.taskWho && scope === 'all' ? '&assignee=' + state.taskWho.id : '')).then(function (r) {
+      state.tasksLoading = false;
+      state.tasks = (r && r.tasks) || [];
+      state.taskMe = r ? r.me : null;
+      state.donePeriodLabel = r ? (r.period_label || '') : '';
+      state.doneGoals = r ? (r.goals || []) : [];
+      if (cb) cb();
+      else if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.tasks = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  /* Свод по людям за период. Отдельный запрос, а не подсчет на клиенте: считать
+     закрытые за месяц по списку из трехсот строк значит сначала выкачать месяц
+     задач, и «отчет за месяц открывается мгновенно» перестанет быть правдой. */
+  function loadBoard(cb) {
+    state.tasksLoading = true;
+    api('/admin/api/tasks/board?period=' + state.boardPeriod + '&shift=' + state.boardShift)
+      .then(function (r) {
+        state.tasksLoading = false;
+        state.board = r || null;
+        state.tasks = [];        // общий рендер задач ждет непустое состояние
+        if (cb) cb();
+        else if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.tasksLoading = false;
+        state.board = 'none';
+        state.tasks = [];
+        if (state.page === 'tasks') renderView();
+      });
+  }
+  /* Дерево «Вся команда». Три уровня — три разных запроса, и это осознанно:
+     тянуть всю структуру компании одним куском ради экрана из шести строк
+     значит ждать секунду там, где нужно мгновенно. */
+  function loadTree(cb) {
+    state.tasksLoading = true;
+    var done = function (r, key) {
+      state.tasksLoading = false;
+      state[key] = r;
+      state.tasks = [];             // общий рендер ждет непустое состояние
+      if (cb) cb();
+      else if (state.page === 'tasks') { renderHead(); renderView(); }
+    };
+    var fail = function () {
+      state.tasksLoading = false;
+      state.tree = 'none';
+      state.tasks = [];
+      if (state.page === 'tasks') renderView();
+    };
+    if (state.treeGoal) {
+      api('/admin/api/tasks?view=all&scope=all&limit=200&parent=' + state.treeGoal.id)
+        .then(function (r) { done((r && r.tasks) || [], 'treeSteps'); }).catch(fail);
+      return;
+    }
+    if (state.treeDept !== null) {
+      // Внутри направления два списка: его цели и его же задачи без цели.
+      Promise.all([
+        api('/admin/api/tasks?view=goals&scope=all&dept=' + encodeURIComponent(state.treeDept)),
+        api('/admin/api/tasks?view=open&scope=all&dept=' + encodeURIComponent(state.treeDept)),
+      ]).then(function (rs) {
+        state.treeLoose = ((rs[1] && rs[1].tasks) || []).filter(function (t) { return !t.parent_id; });
+        done(((rs[0] && rs[0].tasks) || []), 'treeGoals');
+      }).catch(fail);
+      return;
+    }
+    api('/admin/api/tasks/structure').then(function (r) {
+      done((r && r.depts) || [], 'tree');
+    }).catch(fail);
+  }
+  /* Счетчики для бейджа в навигации — дешевый запрос, дергаем отдельно от списка. */
+  function loadTaskSummary(cb) {
+    if (!can('tasks')) return;
+    api('/admin/api/tasks/summary').then(function (r) {
+      state.taskSum = r || null;
+      if (cb) cb(); else renderSide();
+    }).catch(function () {});
+  }
+  /* Задачи одного ученика для его карточки. Отдельным запросом, а не полем в
+     карточке: список задач меняется чаще самой карточки, и тянуть его вместе с
+     диагностикой и документами значит обновлять все ради одной строки. */
+  function loadCardTasks(id, cb) {
+    api('/admin/api/tasks?view=all&limit=100&session=' + encodeURIComponent(id)).then(function (r) {
+      state.cardTasks[id] = (r && r.tasks) || [];
+      if (cb) cb();
+    }).catch(function () {
+      state.cardTasks[id] = 'none';
+      if (cb) cb();
+    });
+  }
+  function loadTaskPeople(cb) {
+    if (state.taskPeople) { cb(state.taskPeople); return; }
+    api('/admin/api/tasks/people').then(function (r) {
+      state.taskPeople = (r && r.people) || [];
+      cb(state.taskPeople);
+    }).catch(function () { cb([]); });
+  }
+  /* Куда можно положить шаг. Кэш сбрасывается после постановки задачи: свежая
+     задача обязана появиться в списке целей, иначе разбить ее на шаги можно
+     будет только после перезагрузки страницы. */
+  function loadTaskGoals(cb) {
+    if (state.taskGoals) { cb(state.taskGoals); return; }
+    api('/admin/api/tasks/goals').then(function (r) {
+      state.taskGoals = (r && r.goals) || [];
+      cb(state.taskGoals);
+    }).catch(function () { cb([]); });
+  }
+
+  function renderTasks(view) {
+    if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
+    if (state.tasks === null) {
+      view.innerHTML = dashSkeleton();
+      loadTasks();
+      return;
+    }
+    if (state.tasks === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
+      return;
+    }
+    var seg = taskSeg();
+    if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
+    if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
+    if (TASK_SEGS[seg].view === 'tree') { renderTree(view); return; }
+    if (TASK_SEGS[seg].view === 'goals') { renderGoals(view); return; }
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = state.tasks.filter(function (t) {
+      if (!q) return true;
+      return (t.title + ' ' + (t.assignee_name || '') + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+    var showWho = TASK_SEGS[seg].scope !== 'my';
+
+    var rows = list.map(function (t) {
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var due = dueLabel(t);
+      // Подпись под названием отвечает на «откуда эта задача»: цель важнее
+      // постановщика — шаг «собрать документы» без цели читается как обрывок.
+      var sub = [];
+      if (t.author_name) sub.push('поставил ' + t.author_name);
+      else if (showWho) sub.push('без постановщика');
+      if (t.client_name) sub.push(t.client_name);
+      var steps = t.steps_total
+        ? '<div class="tsk-prog">' +
+            '<span class="tsk-prog-b"><i style="width:' + Math.round(t.steps_done / t.steps_total * 100) + '%"></i></span>' +
+            '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span></div>'
+        : '';
+      return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
+        (t.parent_title ? ' has-goal' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+          // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
+          // постановщиком: задача без цели просто дело, с целью — шаг к
+          // результату, и это первое, что должно читаться в списке.
+          (t.parent_title
+            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' +
+              ic('target', 11) + esc(t.parent_title) + '</button>'
+            : '') +
+          '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' + steps + '</div>' +
+        '<div class="tsk-who">' + (t.assignee_name
+          ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
+          : '<span class="tsk-nobody">не назначена</span>') + '</div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    // Направления показываем тем, кто видит чужие задачи: у тьютора все задачи в
+    // одном направлении, и шесть чипов над коротким списком — чистый шум.
+    var depts = can('tasks_all')
+      ? '<div class="list-quick depts">' +
+        // Пришли из табло по человеку — показываем, чьи это задачи, и даем выйти:
+        // иначе список выглядит как «у команды всего четыре задачи».
+        (state.taskWho ? '<button class="qchip on brd-who-chip" id="tsk-who">' +
+          esc(state.taskWho.name) + ic('x', 11) + '</button>' : '') +
+        [['', 'Все направления']].concat(Object.keys(DEPTS).map(function (d) {
+          return [d, DEPTS[d]];
+        })).map(function (o) {
+          return '<button class="qchip' + (state.taskDept === o[0] ? ' on' : '') + '" data-dept="' + o[0] + '">' + esc(o[1]) + '</button>';
+        }).join('') + '</div>'
+      : '';
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Задача, человек, ученик" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + (seg === 'goals'
+          ? plural(list.length, 'цель', 'цели', 'целей')
+          : plural(list.length, 'задача', 'задачи', 'задач')) + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' + depts +
+      '<div class="list-body">' +
+        (list.length
+          ? '<div class="trow tsk-grid thead"><span class="th">Задача</span><span class="th">Исполнитель</span>' +
+            '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows
+          : '<div class="empty">' + esc(emptyTasksText(seg)) + '</div>') +
+      '</div></div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    if (el('tsk-who')) el('tsk-who').addEventListener('click', function () {
+      state.taskWho = null;
+      state.tasks = null;        // фильтр серверный — выборку надо перезапросить
+      renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (c) {
+      c.addEventListener('click', function () {
+        state.taskDept = c.getAttribute('data-dept');
+        state.tasks = null;          // фильтр серверный: выборку надо перезапросить
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+    // Пометка цели открывает саму цель, а не задачу, в строке которой стоит.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openTask(+b.getAttribute('data-goalid'));
+      });
+    });
+  }
+  /* ── Срез «Цели» ───────────────────────────────────────────────────────────
+     Не плоский список, а разбивка по направлениям: вопрос к этому экрану —
+     «куда мы идем и где стоим», а он задается по отделам, а не по алфавиту.
+     Первым блоком — цели компании: они общие для всех, и направление у них не
+     пустое по забывчивости, а пустое по смыслу (решение Павла 15.08.2026).
+     Работают-то все в одном векторе, направления только делят зоны ответа. */
+  function renderGoals(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (g) {
+      if (!q) return true;
+      return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+
+    var order = [''].concat(Object.keys(DEPTS));
+    var groups = order.map(function (d) {
+      return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
+               hint: d ? '' : 'общие для всех направлений',
+               goals: list.filter(function (g) { return (g.dept || '') === d; }) };
+    }).filter(function (g) { return g.goals.length; });
+
+    var body = groups.map(function (grp) {
+      var rows = grp.goals.map(function (g) {
+        var due = dueLabel(g);
+        var pct = g.steps_total ? Math.round(g.steps_done / g.steps_total * 100) : 0;
+        return '<div class="trow gl-row' + (g.overdue ? ' r-crit' : '') + '" data-goalopen="' + g.id + '">' +
+          '<div class="tr-name">' + esc(g.title) +
+            '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
+          '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
+          '<span class="gl-pct num' + (pct === 100 ? ' full' : '') + '">' + pct + '%</span>' +
+          '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+          '<span class="tr-go">' + ic('go', 14) + '</span>' +
+        '</div>';
+      }).join('');
+      var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+      var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+      return '<div class="gl-sec' + (grp.dept ? '' : ' gl-company') + '">' +
+        '<span class="gl-sl">' + esc(grp.label) +
+          (grp.hint ? '<i class="gl-hint">' + esc(grp.hint) + '</i>' : '') + '</span>' +
+        '<span class="gl-sn num">' + grp.goals.length + ' ' +
+          plural(grp.goals.length, 'цель', 'цели', 'целей') +
+        (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') + '</span></div>' + rows;
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' +
+          plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая цель</button>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (list.length ? body
+          : '<div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.'
+              : 'Целей пока нет. Заведи первую: цель это большой результат, к которому потом добавляются шаги.') + '</div>') +
+      '</div></div>';
+
+    // На экране целей кнопка заводит цель, а не задачу: за задачей человек идет
+    // в «Сегодня», а сюда приходит ставить направление работы.
+    el('tsk-new').addEventListener('click', function () { openNewTask({ goal: true }); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    // Клик по цели ведет в ее шаги — тем же экраном, что и в дереве, чтобы у
+    // одной сущности не было двух разных представлений.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalopen]'), function (r) {
+      var id = +r.getAttribute('data-goalopen');
+      r.addEventListener('click', function () {
+        var g = (state.tasks || []).filter(function (x) { return x.id === id; })[0];
+        if (!g) return;
+        // Дерево живет под cap tasks_all. У кого его нет, тому шаги чужой цели
+        // все равно не отдадут — открываем карточку цели, она доступна всем
+        // участникам и показывает то же самое по сути.
+        if (!can('tasks_all')) { openTask(id); return; }
+        state.taskSeg = 'team';
+        state.taskWho = null;
+        saveUi();
+        treeGo(g.dept || '', g);
+        renderTopbar();
+      });
+    });
+  }
+
+  /* ── Дерево «Вся команда» ──────────────────────────────────────────────────
+     Работа компании читается сверху вниз: направление, цель, шаги. На каждом
+     уровне ровно один тип объектов — поэтому каши не бывает по устройству
+     экрана, а не по дисциплине того, кто заводит задачи. Возврат — по пути
+     сверху, разворачивающихся деревьев здесь нет намеренно: раскрытые три
+     уровня превращаются в ту же простыню, из которой мы уходили. */
+  function treeGo(dept, goal) {
+    state.treeDept = dept;
+    state.treeGoal = goal || null;
+    state.tree = dept === null ? null : state.tree;
+    state.treeGoals = null; state.treeSteps = null; state.treeLoose = null;
+    state.tasks = null;
+    renderHead(); renderView();
+  }
+
+  function treeCrumbs() {
+    var parts = ['<button class="tr-crumb" data-tr="root">Вся команда</button>'];
+    if (state.treeDept !== null) {
+      parts.push('<span class="tr-sep">' + ic('go', 11) + '</span>');
+      parts.push(state.treeGoal
+        ? '<button class="tr-crumb" data-tr="dept">' + esc(deptLabel(state.treeDept) || 'Без направления') + '</button>'
+        : '<span class="tr-crumb on">' + esc(deptLabel(state.treeDept) || 'Без направления') + '</span>');
+    }
+    if (state.treeGoal) {
+      parts.push('<span class="tr-sep">' + ic('go', 11) + '</span>');
+      parts.push('<span class="tr-crumb on">' + esc(state.treeGoal.title) + '</span>');
+    }
+    return '<div class="tr-path">' + parts.join('') + '</div>';
+  }
+
+  function progBar(done, total) {
+    // Пустая шкала ничего не сообщает: у направления без целей строка «шагов
+    // нет» просто занимает место, которое должно оставаться тихим.
+    if (!total) return '';
+    return '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
+      Math.round(done / total * 100) + '%"></i></span>' +
+      '<span class="tsk-prog-n num">' + done + ' из ' + total + '</span></div>';
+  }
+
+  function renderTree(view) {
+    if (state.tree === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить работу команды. Обнови страницу.</div></div>';
+      return;
+    }
+    if (state.treeGoal) { renderTreeGoal(view); return; }
+    if (state.treeDept !== null) { renderTreeDept(view); return; }
+    if (state.tree === null) { view.innerHTML = dashSkeleton(); loadTree(); return; }
+
+    var rows = (state.tree || []).map(function (d) {
+      return '<div class="trow tr-grid' + (d.overdue ? ' r-crit' : '') + '" data-dept="' + esc(d.dept) + '">' +
+        '<div class="tr-name">' + esc(d.label) +
+          '<span class="t-sub">' + (d.goals ? d.goals + ' ' + plural(d.goals, 'цель', 'цели', 'целей') : 'целей нет') +
+            (d.loose ? ' · ' + d.loose + ' вне целей' : '') + '</span></div>' +
+        '<div class="tr-prog">' + progBar(d.steps_done, d.steps_total) + '</div>' +
+        '<span class="brd-n num' + (d.open ? '' : ' zero') + '" data-l="В работе">' + d.open + '</span>' +
+        '<span class="brd-n num' + (d.overdue ? ' bad' : ' zero') + '" data-l="Просрочено">' + d.overdue + '</span>' +
+        '<span class="tr-go">' + ic('go', 14) + '</span>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="list-body">' +
+        '<div class="trow tr-grid thead"><span class="th">Направление</span>' +
+          '<span class="th">Движение по целям</span><span class="th">В работе</span>' +
+          '<span class="th">Просрочено</span><span class="th"></span></div>' + rows +
+      '</div></div>';
+    bindTree(view);
+  }
+
+  function renderTreeDept(view) {
+    if (state.treeGoals === null || state.treeGoals === undefined) {
+      view.innerHTML = treeCrumbsCard(dashSkeleton()); loadTree();
+      bindTree(view); return;
+    }
+    var goals = state.treeGoals || [], loose = state.treeLoose || [];
+
+    var goalRows = goals.map(function (g) {
+      var due = dueLabel(g);
+      return '<div class="trow tr-goal' + (g.overdue ? ' r-crit' : '') + '" data-goal="' + g.id + '">' +
+        '<div class="tr-name">' + esc(g.title) +
+          '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
+        '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<span class="tr-go">' + ic('go', 14) + '</span>' +
+      '</div>';
+    }).join('');
+
+    // Задачи вне целей — не мусор, а обычная текучка. Держим их отдельным
+    // блоком под целями: в общем списке они прячут структуру, а без них экран
+    // врет, что в направлении работы нет.
+    var looseRows = loose.map(function (t) {
+      var due = dueLabel(t);
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      return '<div class="trow tr-task' + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="tr-name">' + esc(t.title) +
+          '<span class="t-sub">' + (t.assignee_name ? esc(t.assignee_name) : 'не назначена') + '</span></div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="list-body">' +
+        (goals.length
+          ? '<div class="tr-sec">' + goals.length + ' ' + plural(goals.length, 'цель', 'цели', 'целей') + ' в работе</div>' + goalRows
+          : '<div class="empty">В этом направлении нет ни одной цели. Задачи ниже — текучка без цели.</div>') +
+        (loose.length
+          ? '<div class="tr-sec">' + loose.length + ' ' + plural(loose.length, 'задача', 'задачи', 'задач') + ' вне целей</div>' + looseRows
+          : '') +
+      '</div></div>';
+    bindTree(view);
+  }
+
+  function renderTreeGoal(view) {
+    if (state.treeSteps === null || state.treeSteps === undefined) {
+      view.innerHTML = treeCrumbsCard(dashSkeleton()); loadTree();
+      bindTree(view); return;
+    }
+    var g = state.treeGoal, steps = state.treeSteps || [];
+    var done = steps.filter(function (s) { return s.status === 'done'; }).length;
+    var due = dueLabel(g);
+
+    var rows = steps.map(function (t) {
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var d = dueLabel(t);
+      return '<div class="trow tr-task' + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="tr-name">' + esc(t.title) +
+          '<span class="t-sub">' + (t.assignee_name ? esc(t.assignee_name) : 'не назначена') + '</span></div>' +
+        '<div class="tsk-due ' + d.cls + '">' + esc(d.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + treeCrumbs() +
+      '<div class="tr-goalhead">' +
+        '<div class="tr-gh-main"><div class="tr-gh-t">' + esc(g.title) + '</div>' +
+          (g.result_expect ? '<div class="tr-gh-r">' + esc(g.result_expect) + '</div>' : '') + '</div>' +
+        '<div class="tr-gh-meta">' +
+          '<span class="tsk-mwho">' + ic('leads', 13) + (g.assignee_name ? esc(g.assignee_name) : 'без ответственного') + '</span>' +
+          '<span class="tsk-due ' + due.cls + '">' + ic('clock', 13) + esc(due.text) + '</span>' +
+        '</div>' +
+        progBar(done, steps.length) +
+      '</div>' +
+      '<div class="list-body">' +
+        (steps.length ? rows : '<div class="empty">У цели пока нет шагов. Открой ее карточку и добавь первый.</div>') +
+      '</div>' +
+      '<button class="bp sm tr-open" data-tid="' + g.id + '">Открыть карточку цели</button>' +
+    '</div>';
+    bindTree(view);
+  }
+
+  function treeCrumbsCard(inner) {
+    return '<div class="card listcard">' + treeCrumbs() + inner + '</div>';
+  }
+
+  function bindTree(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tr]'), function (b) {
+      b.addEventListener('click', function () {
+        var to = b.getAttribute('data-tr');
+        treeGo(to === 'root' ? null : state.treeDept, null);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (r) {
+      r.addEventListener('click', function () { treeGo(r.getAttribute('data-dept'), null); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goal]'), function (r) {
+      var id = +r.getAttribute('data-goal');
+      r.addEventListener('click', function () {
+        var g = (state.treeGoals || []).filter(function (x) { return x.id === id; })[0];
+        if (g) treeGo(state.treeDept, g);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openTask(+r.getAttribute('data-tid'));
+      });
+    });
+  }
+
+  /* ── Срез «Готово» ─────────────────────────────────────────────────────────
+     Плоская стопка закрытых задач не отвечает ни на один вопрос: по ней не
+     видно ни движения, ни того, ради чего работа делалась. Поэтому здесь два
+     разреза сразу — период (что успели за неделю) и цель (к чему это вело).
+
+     Группа = цель. Закрытая за период цель идет первой и помечается: это
+     результат, ради которого делались шаги, и он должен читаться раньше самих
+     шагов. Задачи без цели собираются в конце одной группой, а не мешаются
+     между шагами чужих целей. */
+  function doneGroups(list) {
+    var by = {}, order = [];
+    list.forEach(function (t) {
+      // Цель в этой же выдаче — значит она закрылась за период. Ее шаги идут
+      // внутрь нее, а сама она становится заголовком группы.
+      if (t.steps_total) {
+        if (!by['g' + t.id]) { by['g' + t.id] = { key: 'g' + t.id, tasks: [] }; order.push('g' + t.id); }
+        by['g' + t.id].goal = t;
+        by['g' + t.id].title = t.title;
+        return;
+      }
+      var key = t.parent_id ? 'g' + t.parent_id : '';
+      if (!by[key]) {
+        by[key] = { key: key, tasks: [], title: t.parent_title || 'Без цели' };
+        order.push(key);
+      }
+      by[key].tasks.push(t);
+    });
+    return order.map(function (k) { return by[k]; }).sort(function (a, b) {
+      if (!a.key !== !b.key) return a.key ? -1 : 1;              // «без цели» — вниз
+      if (!!a.goal !== !!b.goal) return a.goal ? -1 : 1;         // закрытые цели — вверх
+      return b.tasks.length - a.tasks.length;
+    });
+  }
+
+  /* Цель по ключу группы («g<id>») — из справочника, который отдает сервер
+     вместе со списком принятого. */
+  function goalById(key) {
+    if (!key) return null;
+    var id = +key.slice(1);
+    return (state.doneGoals || []).filter(function (g) { return g.id === id; })[0] || null;
+  }
+
+  function renderDone(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (t) {
+      if (!q) return true;
+      return (t.title + ' ' + (t.assignee_name || '') + ' ' + (t.parent_title || '') +
+              ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+    var groups = doneGroups(list);
+    var goalsClosed = groups.filter(function (g) { return g.goal && g.goal.status === 'done'; }).length;
+    var tasksDone = list.filter(function (t) { return !t.steps_total; }).length;
+
+    var cards = groups.map(function (g) {
+      var rows = g.tasks.map(function (t) {
+        return '<div class="dn-t" data-tid="' + t.id + '">' +
+          '<span class="dn-tick">' + ic('check', 12) + '</span>' +
+          '<div class="dn-tt">' + esc(t.title) +
+            (t.client_name ? '<span class="dn-cl">' + esc(t.client_name) + '</span>' : '') + '</div>' +
+          '<div class="dn-who">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
+          '<div class="dn-when">' + esc(dayLabel(t.closed_at)) + '</div>' +
+        '</div>';
+      }).join('');
+
+      // Прогресс показываем и у незакрытой цели: без него видно, что «что-то по
+      // ней сделали», но не видно, идет она к концу или третий месяц стоит.
+      var goal = g.goal || goalById(g.key);
+      // «Цель закрыта» — только по статусу самой цели. Считать закрытой ту, у
+      // которой за период приняли шаг, значит объявлять победу на первом шаге.
+      var closed = !!goal && goal.status === 'done';
+      var prog = goal && goal.steps_total
+        ? '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
+            Math.round(goal.steps_done / goal.steps_total * 100) + '%"></i></span>' +
+          '<span class="tsk-prog-n num">' + goal.steps_done + ' из ' + goal.steps_total + '</span></div>'
+        : '';
+
+      return '<div class="dn-g' + (closed ? ' closed' : '') + (g.key ? '' : ' nogoal') + '">' +
+        '<div class="dn-gh"' + (goal ? ' data-tid="' + goal.id + '"' : '') + '>' +
+          (closed ? '<span class="dn-flag">' + ic('award', 13) + 'Цель закрыта</span>' : '') +
+          '<span class="dn-gt">' + esc(g.title) + '</span>' + prog +
+          (g.tasks.length ? '<span class="dn-gn num">' + g.tasks.length + ' ' +
+            plural(g.tasks.length, 'задача', 'задачи', 'задач') + '</span>' : '') +
+        '</div>' + rows +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="dperiod" id="dn-per">' + BOARD_PERIODS.map(function (o) {
+          return '<button class="' + (state.donePeriod === o[0] ? 'on' : '') + '" data-dp="' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="brd-nav">' +
+          '<button class="icobtn sm brd-arrow prev" id="dn-prev" title="Предыдущий период">' + ic('go', 15) + '</button>' +
+          '<span class="brd-label">' + esc(state.donePeriodLabel || '') + '</span>' +
+          '<button class="icobtn sm brd-arrow" id="dn-next" title="Следующий период">' + ic('go', 15) + '</button>' +
+          (state.doneShift ? '<button class="qchip" id="dn-now">Сейчас</button>' : '') +
+        '</div>' +
+      '</div>' +
+      (list.length
+        ? '<div class="dn-sum"><b class="num">' + tasksDone + '</b> ' +
+          plural(tasksDone, 'задача принята', 'задачи приняты', 'задач принято') +
+          (goalsClosed ? ' · <b class="num">' + goalsClosed + '</b> ' +
+            plural(goalsClosed, 'цель закрыта', 'цели закрыты', 'целей закрыто') : '') +
+          '</div>'
+        : '') +
+      '<div class="list-body dn-body">' +
+        (list.length ? cards
+          : '<div class="empty">За этот период не принято ни одной задачи. Посмотри соседний период стрелками.</div>') +
+      '</div></div>';
+
+    function reload(fn) {
+      fn(); state.tasks = null; saveUi(); renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dp]'), function (btn) {
+      btn.addEventListener('click', function () {
+        reload(function () { state.donePeriod = btn.getAttribute('data-dp'); state.doneShift = 0; });
+      });
+    });
+    el('dn-prev').addEventListener('click', function () { reload(function () { state.doneShift -= 1; }); });
+    el('dn-next').addEventListener('click', function () { reload(function () { state.doneShift += 1; }); });
+    if (el('dn-now')) el('dn-now').addEventListener('click', function () { reload(function () { state.doneShift = 0; }); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+  }
+
+  /* ── Табло «По людям» ──────────────────────────────────────────────────────
+     Экран руководителя: строка на человека, числа за выбранный период. Пять
+     колонок, а не пятнадцать: план, факт, и три вещи, которые горят сейчас.
+     Колонка «в срок ли закрыто» намеренно не заведена — она превращает табло в
+     оценку человека, а на этом этапе нужен разговор про работу, а не рейтинг. */
+  var BOARD_PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
+  var BOARD_COLS = [
+    ['plan',    'План',       'намечено на период'],
+    ['done',    'Сделано',    'принято за период'],
+    ['overdue', 'Просрочено', 'горит прямо сейчас'],
+    ['review',  'На приемке', 'сдано, ждет постановщика'],
+    ['open',    'В работе',   'всего незакрытых'],
+  ];
+
+  function boardColLabel(key) {
+    var c = BOARD_COLS.filter(function (x) { return x[0] === key; })[0];
+    return c ? c[1] : key;
+  }
+
+  function boardCell(p, key) {
+    var v = p[key] || 0;
+    // Ноль — бледный: в таблице из тридцати чисел глаз должен цепляться за то,
+    // где работа есть, а не пересчитывать нули.
+    var cls = !v ? ' zero' : (key === 'overdue' ? ' bad' : (key === 'done' ? ' ok' : ''));
+    // data-l — подпись для телефона: там шапки таблицы нет, и голое число
+    // «3» ничего не значит (см. .brd-n::before в style.css).
+    return '<span class="brd-n num' + cls + '" data-l="' + boardColLabel(key) + '">' + v + '</span>';
+  }
+
+  function renderBoard(view) {
+    if (state.board === null) { view.innerHTML = dashSkeleton(); loadBoard(); return; }
+    if (state.board === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать табло. Обнови страницу.</div></div>';
+      return;
+    }
+    var b = state.board;
+    var head = '<div class="trow brd-grid thead"><span class="th">Сотрудник</span>' +
+      BOARD_COLS.map(function (c) { return '<span class="th" title="' + c[2] + '">' + c[1] + '</span>'; }).join('') +
+      '</div>';
+
+    var rows = (b.people || []).map(function (p) {
+      // Отчет за день — единственная строка на экране, написанная человеком, а
+      // не посчитанная системой. Она стоит под числами, потому что объясняет их.
+      var note = p.note
+        ? '<div class="brd-note-row">' + ic('chat', 13) + '<span>' + esc(p.note) + '</span></div>'
+        : '';
+      return '<div class="trow brd-grid' + (p.overdue ? ' r-crit' : '') + (note ? ' has-note' : '') +
+        '" data-uid="' + p.id + '">' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
+        BOARD_COLS.map(function (c) { return boardCell(p, c[0]); }).join('') + note +
+      '</div>';
+    }).join('');
+
+    var total = b.total || {};
+    var totalRow = (b.people || []).length > 1
+      ? '<div class="trow brd-grid brd-total"><div class="brd-who">Вся команда</div>' +
+        BOARD_COLS.map(function (c) { return boardCell(total, c[0]); }).join('') + '</div>'
+      : '';
+
+    // Кто без задач — именами под таблицей, а не строками нулей в ней: это ответ
+    // на вопрос «а кому я ничего не поставил», и он стоит одной строки, не пяти.
+    // Имен без задач бывает больше, чем строк в самом табло, и тогда подпись
+    // весит больше таблицы. Показываем восемь, остальных считаем числом.
+    var IDLE_SHOWN = 8;
+    var idleAll = b.idle || [];
+    var idle = idleAll.length
+      ? '<div class="brd-idle"><span class="brd-il">Без задач</span>' +
+        esc(idleAll.slice(0, IDLE_SHOWN).join(', ')) +
+        (idleAll.length > IDLE_SHOWN
+          ? ' <span class="brd-more num">и еще ' + (idleAll.length - IDLE_SHOWN) + '</span>' : '') +
+        '</div>'
+      : '';
+
+    // Три последние колонки отвечают на «что горит сейчас» и от периода не
+    // зависят. Пока смотришь текущий месяц, это незаметно; стоит уйти в июль —
+    // и семь просрочек читаются как «столько было в июле». Говорим прямо.
+    var nowNote = state.boardShift
+      ? '<div class="brd-note">Просрочено, на приемке и в работе — это состояние на сегодня. ' +
+        'От выбранного периода зависят только план и сделано.</div>'
+      : '';
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="dperiod" id="brd-per">' + BOARD_PERIODS.map(function (o) {
+          return '<button class="' + (state.boardPeriod === o[0] ? 'on' : '') + '" data-bp="' + o[0] + '">' + o[1] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="brd-nav">' +
+          '<button class="icobtn sm brd-arrow prev" id="brd-prev" title="Предыдущий период">' + ic('go', 15) + '</button>' +
+          '<span class="brd-label">' + esc(b.label || '') + '</span>' +
+          '<button class="icobtn sm brd-arrow" id="brd-next" title="Следующий период">' + ic('go', 15) + '</button>' +
+          (state.boardShift ? '<button class="qchip" id="brd-now">Сейчас</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (rows ? head + rows + totalRow
+              : '<div class="empty">За этот период задач ни у кого нет.</div>') +
+      '</div>' + nowNote + idle +
+    '</div>';
+
+    function reload(fn) { fn(); state.board = null; saveUi(); renderView(); }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bp]'), function (btn) {
+      btn.addEventListener('click', function () {
+        reload(function () {
+          state.boardPeriod = btn.getAttribute('data-bp');
+          state.boardShift = 0;   // при смене длины периода сдвиг теряет смысл
+        });
+      });
+    });
+    el('brd-prev').addEventListener('click', function () { reload(function () { state.boardShift -= 1; }); });
+    el('brd-next').addEventListener('click', function () { reload(function () { state.boardShift += 1; }); });
+    if (el('brd-now')) el('brd-now').addEventListener('click', function () { reload(function () { state.boardShift = 0; }); });
+
+    // Клик по человеку — его задачи. Табло без этого перехода тупик: увидел
+    // «четыре просрочено» и не можешь спросить какие.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (r) {
+      r.addEventListener('click', function () {
+        var id = +r.getAttribute('data-uid');
+        var p = (state.board.people || []).filter(function (x) { return x.id === id; })[0];
+        state.taskWho = { id: id, name: p ? p.name : '' };
+        state.taskSeg = 'team';
+        state.tasks = null;
+        saveUi();
+        renderTopbar(); renderHead(); renderView();
+      });
+    });
+  }
+
+  /* ── Срез «По ученикам» ────────────────────────────────────────────────────
+     Группа = ученик: имя, этап пути, заметка куратора и вся работа команды по
+     нему. Внутри задачи разложены по роли исполнителя, потому что вопрос звучит
+     именно так: что здесь на тьюторе, а что на администраторе. «Без
+     исполнителя» идет первым блоком — это не мелочь оформления, а работа,
+     которую никто не взял, и увидеть ее надо раньше остального. */
+  function studentGroups(s) {
+    var by = {};
+    (s.tasks || []).forEach(function (t) {
+      var key = t.assignee_id ? (t.assignee_role || 'other') : '';
+      if (!by[key]) {
+        by[key] = { key: key, tasks: [],
+                    label: t.assignee_id ? (t.assignee_role_label || 'Роль не указана') : 'Без исполнителя' };
+      }
+      by[key].tasks.push(t);
+    });
+    return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) {
+      if (!a.key !== !b.key) return a.key ? 1 : -1;      // без исполнителя — вверх
+      return a.label < b.label ? -1 : 1;
+    });
+  }
+
+  function renderStudentTasks(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (s) {
+      if (!q) return true;
+      var hay = s.client_name + ' ' + (s.stage || '') + ' ' + (s.tasks || []).map(function (t) {
+        return t.title + ' ' + (t.assignee_name || '');
+      }).join(' ');
+      return hay.toLowerCase().indexOf(q) !== -1;
+    });
+
+    var cards = list.map(function (s) {
+      var groups = studentGroups(s).map(function (g) {
+        var rows = g.tasks.map(function (t) {
+          var st = TASK_ST[t.status] || TASK_ST.wait;
+          var due = dueLabel(t);
+          return '<div class="stu-t' + (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+            '<div class="stu-tt">' + esc(t.title) + '</div>' +
+            '<div class="stu-tw">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
+            '<div class="stu-td ' + due.cls + '">' + esc(due.text) + '</div>' +
+            '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+          '</div>';
+        }).join('');
+        return '<div class="stu-g' + (g.key ? '' : ' nobody') + '">' +
+          '<div class="stu-gl">' + esc(g.label) + '</div>' + rows + '</div>';
+      }).join('');
+
+      var counters = (s.overdue ? '<span class="stu-c over num">' + s.overdue + ' ' + plural(s.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+        '<span class="stu-c num">' + s.open + ' ' + plural(s.open, 'задача', 'задачи', 'задач') + '</span>';
+
+      return '<div class="stu">' +
+        '<div class="stu-h">' +
+          '<button class="stu-n" data-sid="' + esc(s.session_id) + '">' + esc(s.client_name) + '</button>' +
+          (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
+            (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
+          '<span class="stu-cs">' + counters + '</span>' +
+        '</div>' +
+        (s.note ? '<div class="stu-note"><span>' + esc(s.note) + '</span></div>' : '') +
+        groups +
+        (s.plan_tasks && s.plan_tasks.length
+          ? '<div class="stu-plan"><span class="stu-pl">по плану на этом этапе</span>' +
+            s.plan_tasks.map(function (p) { return '<span class="stu-pt">' + esc(p.title) + '</span>'; }).join('') +
+            '</div>'
+          : '') +
+        '<button class="stu-add" data-add="' + esc(s.session_id) + '">' + ic('plus', 13) + 'Поставить задачу по ученику</button>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Ученик, задача, человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'ученик', 'ученика', 'учеников') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      '<div class="list-body stu-body">' +
+        (list.length ? cards
+          : '<div class="empty">' + (q ? 'Никого не нашлось по этому запросу.'
+              : 'Задач по ученикам нет. Поставь задачу и укажи в ней ученика — она появится здесь.') + '</div>') +
+      '</div></div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
+      r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sid]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-sid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-add]'), function (b) {
+      b.addEventListener('click', function () {
+        var sid = b.getAttribute('data-add');
+        var who = (state.tasks || []).filter(function (s) { return s.session_id === sid; })[0];
+        openNewTask({ session_id: sid, client_name: who && who.client_name,
+                      after: function () { state.tasks = null; renderView(); } });
+      });
+    });
+  }
+
+  function emptyTasksText(seg) {
+    if (state.taskDept) return 'В направлении «' + deptLabel(state.taskDept) + '» задач нет.';
+    if (seg === 'today') return 'На сегодня задач нет. Это нормально, а не ошибка.';
+    if (seg === 'accept') return 'Никто ничего не сдал на приемку.';
+    if (seg === 'done') return 'Закрытых задач пока нет.';
+    if (seg === 'team') return 'У команды нет открытых задач.';
+    if (seg === 'goals') return 'Больших задач с шагами пока нет. Открой задачу и добавь к ней шаги — она станет целью.';
+    return 'Задач нет.';
+  }
+
+  /* ── Карточка задачи ───────────────────────────────────────────────────────
+     Одна лента: смены статуса, переназначения, сдвиги срока и реплики людей
+     вперемешку по времени. Спор «когда перенесли срок» решается этой лентой. */
+  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads',
+                   due: 'cal', remind: 'bell', result: 'doc' };
+
+  /* Артефакт результата: до 8 МБ на файл и не больше пяти — те же границы держит
+     сервер (MAX_FILE_BYTES в staff_tasks.py). Читаем файл в base64 прямо в
+     браузере: отдельной загрузки на диск у нас нет, а скриншот и договор в эти
+     рамки помещаются с запасом. */
+  var RES_MAX_MB = 8, RES_MAX_FILES = 5;
+  function readFiles(fileList, done) {
+    var out = [], list = Array.prototype.slice.call(fileList, 0, RES_MAX_FILES), left = list.length;
+    if (!left) return done(out);
+    list.forEach(function (f) {
+      if (f.size > RES_MAX_MB * 1024 * 1024) {
+        showToast('«' + f.name + '» больше ' + RES_MAX_MB + ' МБ — такой не пройдет');
+        if (!--left) done(out);
+        return;
+      }
+      var fr = new FileReader();
+      fr.onload = function () {
+        out.push({ name: f.name || 'файл', mime: f.type || '', data: String(fr.result) });
+        if (!--left) done(out);
+      };
+      fr.onerror = function () { if (!--left) done(out); };
+      fr.readAsDataURL(f);
+    });
+  }
+  /* Прямая ссылка на файл. Идет мимо api(): браузер качает ее сам, поэтому ключ
+     подставляем в адрес — тот же прием, что у выгрузок CSV. */
+  function fileHref(id) {
+    return API + '/admin/api/task-files/' + id + '?k=' + encodeURIComponent(getKey());
+  }
+  function fileSize(n) {
+    if (!n) return '';
+    return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' КБ'
+                           : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
+  }
+
+  function openTask(id) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
+      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      if (location.hash.indexOf('#task/') === 0) history.replaceState(null, '', location.pathname + location.search);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
+
+    var draw = function (data) {
+      var t = data.task, events = data.events || [], steps = data.steps || [];
+      var files = data.files || [];
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var due = dueLabel(t);
+      // Кто я — берем из ответа карточки, а не только из списка: по ссылке из
+      // бота списка в памяти нет, и раньше исполнитель в таком заходе не видел
+      // ни «взять в работу», ни «сдать».
+      if (data.me != null) state.taskMe = data.me;
+      var me = data.me != null ? data.me : state.taskMe;
+      var isAssignee = me != null && me === t.assignee_id;
+      var isAuthor = me != null && me === t.author_id;
+      var boss = isAuthor || can('tasks_all');
+
+      // Кнопки — только те, что человек реально может нажать: серые запрещенные
+      // кнопки учат тыкать наугад и получать отказ.
+      var acts = [];
+      if (isAssignee && (t.status === 'wait' || t.status === 'return')) acts.push(['doing', 'Взять в работу', 'bp']);
+      if (isAssignee && t.status === 'doing') acts.push(['review', 'Сдать на проверку', 'bp']);
+      if (isAssignee && (t.status === 'doing' || t.status === 'wait')) acts.push(['block', 'Жду чужого действия', 'al-cancel']);
+      if (isAssignee && t.status === 'block') acts.push(['doing', 'Разблокировать', 'bp']);
+      // Принять можно ТОЛЬКО сданное. Кнопка «принять» на несданной задаче
+      // отменяет приемку как явление — а ее у команды как раз и не было.
+      if (boss && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
+      if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
+
+      var feed = events.map(function (e) {
+        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
+          '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
+          '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
+          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) + '</div></div></div>';
+      }).join('');
+
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head">' +
+          // Ученик в шапке — не подпись, а переход в его карточку: задача по
+          // человеку почти всегда требует посмотреть, что у него вообще
+          // происходит. Обратный путь — раздел «Заметки и задачи» карточки.
+          '<div><div class="al-eyebrow">Задача' +
+            (t.client_name
+              ? ' · <button class="al-eyelink" id="tk-lead"' + (t.session_id ? '' : ' disabled') + '>' +
+                esc(t.client_name) + '</button>'
+              : '') + '</div>' +
+            '<div class="al-title">' + esc(t.title) + '</div></div>' +
+          '<button class="al-x" id="tk-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="tsk-meta">' +
+          '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
+          '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
+          '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
+          (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
+          (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
+          // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
+          // (design.md §7.6), поэтому текущая карточка закрывается и открывается
+          // карточка цели.
+          (t.parent_id ? '<button class="tsk-mwho tsk-up" id="tk-up">' + ic('target', 12) + esc(t.parent_title || 'к цели') + '</button>' : '') +
+        '</div>' +
+        '<div class="al-body">' +
+          (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
+          (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
+          // приемка это сравнение двух блоков, а не поиск доказательств в ленте.
+          (t.result_text || files.length || (isAssignee && t.status !== 'cancel')
+            ? '<div class="tsk-sec tsk-res"><div class="tsk-l tsk-lrow">Результат' +
+                (t.result_at ? '<span class="tsk-resat">' + esc(fmtWhen(t.result_at)) + '</span>' : '') +
+                (isAssignee && t.status !== 'cancel'
+                  ? '<button class="tsk-addstep" id="tk-resadd">' + ic('plus', 12) +
+                    (t.result_text || files.length ? 'Дополнить' : 'Приложить') + '</button>'
+                  : '') +
+                '</div>' +
+                (!t.result_text && !files.length
+                  ? '<div class="tsk-nosteps">Пока пусто. Приложи то, по чему видно работу: скриншот, файл, ссылку или пару строк.</div>'
+                  : '') +
+                (t.result_text ? '<div class="tsk-p">' + esc(t.result_text) + '</div>' : '') +
+                (files.length ? '<div class="tsk-files">' + files.map(function (f) {
+                  return '<a class="tsk-file" href="' + esc(fileHref(f.id)) + '" target="_blank" rel="noopener">' +
+                    ic(f.link ? 'go' : 'doc', 13) +
+                    '<span class="tsk-file-n">' + esc(f.name) + '</span>' +
+                    '<span class="tsk-file-m">' + esc(f.link ? 'ссылка' : fileSize(f.size_bytes)) + '</span></a>';
+                }).join('') + '</div>' : '') +
+              '</div>'
+            : '') +
+          (t.parent_id ? '' :
+            '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
+              (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
+              '<button class="tsk-addstep" id="tk-add">' + ic('plus', 12) + 'Добавить шаг</button></div>' +
+              (steps.length
+                ? '<div class="tsk-steps">' + steps.map(function (s) {
+                    var sst = TASK_ST[s.status] || TASK_ST.wait;
+                    var sdue = dueLabel(s);
+                    return '<button class="tsk-step" data-step="' + s.id + '">' +
+                      '<span class="tsk-step-t">' + esc(s.title) + '</span>' +
+                      '<span class="tsk-step-m">' + esc(s.assignee_name || 'не назначена') +
+                        ' · <i class="' + sdue.cls + '">' + esc(sdue.text) + '</i></span>' +
+                      '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
+                  }).join('') + '</div>'
+                : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
+            '</div>') +
+          '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
+          '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
+            '<button type="button" id="tk-retx">не возвращать</button></div>' +
+          // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
+          // это событие, и текст «что сделано» с файлом должны уехать вместе,
+          // иначе постановщик принимает на слово.
+          '<div class="tsk-resform" id="tk-resf" hidden>' +
+            '<div class="tsk-l">Что сделано</div>' +
+            '<textarea id="tk-restext" class="al-in al-ta" rows="2" maxlength="4000" ' +
+              'placeholder="Коротко: что получилось и где это лежит"></textarea>' +
+            '<div class="tsk-picked" id="tk-picked"></div>' +
+            '<div class="tsk-resrow">' +
+              '<label class="tsk-attach">' + ic('doc', 13) + 'Скриншот или файл' +
+                '<input type="file" id="tk-resfile" multiple hidden></label>' +
+              '<span class="tsk-reshint">до ' + RES_MAX_MB + ' МБ, не больше ' + RES_MAX_FILES + '</span>' +
+              '<button class="al-cancel" id="tk-rescx">Отмена</button>' +
+              '<button class="bp" id="tk-resok">Сдать</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
+            '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+        '</div>' +
+        (acts.length ? '<div class="al-foot tsk-acts">' + acts.map(function (a) {
+          return '<button class="' + a[2] + '" data-act="' + a[0] + '">' + esc(a[1]) + '</button>';
+        }).join('') + '</div>' : '');
+
+      el('tk-x').addEventListener('click', close);
+
+      // Переход между целью и шагом — не вложенная модалка, а замена: сначала
+      // закрываем текущую (анимация ухода 180мс), потом открываем следующую.
+      var swap = function (fn) { close(); setTimeout(fn, 200); };
+      var up = el('tk-up');
+      if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var lead = el('tk-lead');
+      if (lead && t.session_id) lead.addEventListener('click', function () {
+        swap(function () { openDrawer(t.session_id); setModalSection('notes'); });
+      });
+      var add = el('tk-add');
+      if (add) add.addEventListener('click', function () {
+        swap(function () { openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept }); });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
+        b.addEventListener('click', function () {
+          var sid = +b.getAttribute('data-step');
+          swap(function () { openTask(sid); });
+        });
+      });
+
+      var say = el('tk-say');
+      var body = ov.querySelector('.al-body');
+      var retBar = el('tk-ret');
+      // Возврат = причина возврата. Она такой же текст обсуждения, как и
+      // комментарий, поэтому пишется в том же поле, а не в системном окне
+      // поверх карточки.
+      var retMode = false;
+      var setRet = function (on) {
+        retMode = on;
+        retBar.hidden = !on;
+        ov.querySelector('.tsk-say').classList.toggle('ret', on);
+        say.placeholder = on ? 'Что доделать?' : 'Написать по задаче';
+        if (on) { say.focus(); body.scrollTop = body.scrollHeight; }
+      };
+      el('tk-retx').addEventListener('click', function () { setRet(false); });
+
+      /* Сдача с результатом. Панель одна на два случая: «сдать на проверку» и
+         «доложить артефакт» по уже сданной или принятой задаче. Отправляем
+         сначала результат, потом статус — если файл не долетел, задача не
+         уедет на приемку пустой. */
+      var resF = el('tk-resf'), resT = el('tk-restext'), picked = [];
+      var resMode = '';
+      var drawPicked = function () {
+        el('tk-picked').innerHTML = picked.map(function (f, i) {
+          return '<span class="tsk-pick">' + esc(f.name) +
+            '<button type="button" data-drop="' + i + '" title="Убрать">' + ic('x', 11) + '</button></span>';
+        }).join('');
+        Array.prototype.forEach.call(el('tk-picked').querySelectorAll('[data-drop]'), function (b) {
+          b.addEventListener('click', function () {
+            picked.splice(+b.getAttribute('data-drop'), 1); drawPicked();
+          });
+        });
+      };
+      var setRes = function (mode) {
+        resMode = mode;
+        resF.hidden = !mode;
+        // Пока панель открыта, кнопки внизу прячем: иначе на экране две кнопки
+        // «сдать» и непонятно, какая настоящая.
+        var footActs = ov.querySelector('.tsk-acts');
+        if (footActs) footActs.hidden = !!mode;
+        if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
+        el('tk-resok').textContent = mode === 'review' ? 'Сдать' : 'Сохранить';
+        resT.value = mode === 'review' ? '' : (t.result_text || '');
+        resT.focus();
+        body.scrollTop = body.scrollHeight;
+      };
+      el('tk-rescx').addEventListener('click', function () { setRes(''); });
+      el('tk-resfile').addEventListener('change', function (e) {
+        readFiles(e.target.files, function (got) {
+          picked = picked.concat(got).slice(0, RES_MAX_FILES);
+          drawPicked();
+          e.target.value = '';
+        });
+      });
+      // Скриншот вставляют из буфера чаще, чем ищут в папке.
+      resT.addEventListener('paste', function (e) {
+        var items = (e.clipboardData || {}).items || [];
+        var imgs = Array.prototype.filter.call(items, function (i) { return i.kind === 'file'; })
+          .map(function (i) { return i.getAsFile(); }).filter(Boolean);
+        if (!imgs.length) return;
+        readFiles(imgs, function (got) { picked = picked.concat(got).slice(0, RES_MAX_FILES); drawPicked(); });
+      });
+      el('tk-resok').addEventListener('click', function () {
+        var text = (resT.value || '').trim();
+        var ok = el('tk-resok');
+        if (!text && !picked.length) {
+          showToast('Напиши, что сделано, или приложи файл');
+          resT.focus();
+          return;
+        }
+        ok.disabled = true;
+        apiSend('/admin/api/tasks/' + id + '/result', 'POST', { text: text, files: picked }, function () {
+          var after = resMode;
+          setRes('');
+          ok.disabled = false;
+          // Текст в статус не дублируем: он уже уехал отдельным событием
+          // «результат», и в ленте это читалось бы дважды подряд.
+          if (after === 'review') { setStatus('review'); return; }
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          showToast('Результат приложен');
+        }, function (code) {
+          ok.disabled = false;
+          showToast(code === 413 ? 'Файл слишком большой, до ' + RES_MAX_MB + ' МБ'
+                                 : 'Результат не сохранился — проверь интернет');
+        });
+      });
+      var resAdd = el('tk-resadd');
+      if (resAdd) resAdd.addEventListener('click', function () { setRes('add'); });
+
+      var setStatus = function (to, why, btn) {
+        if (btn) btn.disabled = true;
+        apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
+          state.tasks = null;
+          loadTaskSummary();
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          if (state.page === 'tasks') renderView();
+          showToast(to === 'done' ? 'Задача принята' : to === 'return' ? 'Вернули исполнителю' : 'Статус обновлен');
+        }, function (code) {
+          if (btn) btn.disabled = false;
+          showToast(code === 403 ? 'Принять или вернуть может только тот, кто поставил задачу' : 'Не получилось');
+        });
+      };
+
+      var send = function () {
+        var text = (say.value || '').trim();
+        if (!text) { if (retMode) say.focus(); return; }
+        say.value = '';
+        if (retMode) { setRet(false); setStatus('return', text); return; }
+        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
+          if (!r || !r.events) return;
+          // Перерисовываем тем же составом данных: без steps и files карточка
+          // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
+          draw({ task: t, events: r.events, steps: steps, files: files, me: me });
+          // Свое сообщение человек должен увидеть: карточка перерисовалась и
+          // прокрутка сбросилась наверх.
+          var again = ov.querySelector('.al-body');
+          if (again) again.scrollTop = again.scrollHeight;
+        }, function () { showToast('Сообщение не ушло — проверь интернет'); });
+      };
+      el('tk-send').addEventListener('click', send);
+      say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
+        b.addEventListener('click', function () {
+          var to = b.getAttribute('data-act');
+          if (to === 'return') { setRet(true); return; }
+          // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
+          // чего приемка превращалась в спор.
+          if (to === 'review' && isAssignee) { setRes('review'); return; }
+          if (to === 'cancel' && !confirm('Отменить задачу? Она уйдет из всех списков.')) return;
+          setStatus(to, '', b);
+        });
+      });
+    };
+
+    api('/admin/api/tasks/' + id).then(draw).catch(function () {
+      ov.querySelector('.al-card').innerHTML = '<div class="al-head"><div><div class="al-title">Задача не найдена</div></div>' +
+        '<button class="al-x" id="tk-x">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Возможно, она отменена или закрыта для тебя.</div>';
+      el('tk-x').addEventListener('click', close);
+    });
+  }
+
+  /* Постановка. Три поля обязательны по смыслу: кому, к какому сроку и что
+     считается сделанным. Без последнего задача сдается «как понял» и возвращается
+     по кругу — это ровно та боль, из-за которой модуль и появился. */
+  function openNewTask(preset) {
+    if (document.querySelector('.al-ov')) return;
+    preset = preset || {};
+    loadTaskPeople(function (people) {
+     loadTaskGoals(function (goals) {
+      var opts = '<option value="">— выбери человека —</option>' + people.map(function (p) {
+        return '<option value="' + p.id + '"' + (String(preset.assignee_id) === String(p.id) ? ' selected' : '') + '>' +
+          esc(p.name || p.login) + (p.linked ? '' : ' (не в боте)') + '</option>';
+      }).join('');
+      // Цель или обычная задача. Разница не косметическая: у цели свое место в
+      // иерархии (она верхний уровень и к ней цепляют шаги), поэтому спрашиваем
+      // мы в этих двух случаях разное.
+      var isGoal = !!preset.goal;
+      // Направление по умолчанию — то, что открыто фильтром: ставят задачу обычно
+      // там же, где на нее смотрели.
+      var dept0 = preset.dept || state.taskDept || '';
+      // «Пусто» у задачи значит «забыли выбрать», у цели — «цель всей компании».
+      // Одно и то же значение, но человеку это разные вещи, и подписи разные.
+      var dopts = '<option value="">' +
+          (isGoal ? 'Вся компания — общая цель' : '— без направления —') + '</option>' +
+        Object.keys(DEPTS).map(function (d) {
+          return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+        }).join('');
+      // Цель, из карточки которой пришли, могла появиться после того, как список
+      // закэшировался: без этой строки шаг молча стал бы самостоятельной задачей.
+      var known = preset.parent_id && goals.some(function (g) { return String(g.id) === String(preset.parent_id); });
+      var gopt = function (g) {
+        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
+          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
+        '</option>';
+      };
+      // Цели отдельной группой от обычных задач: положить шаг можно в любую
+      // задачу (она станет целью), но по умолчанию человек ищет глазами цель.
+      var realGoals = goals.filter(function (g) { return g.is_goal; });
+      var plainOnes = goals.filter(function (g) { return !g.is_goal; });
+      var gopts = '<option value="">— самостоятельная задача —</option>' +
+        (preset.parent_id && !known
+          ? '<option value="' + preset.parent_id + '" selected>' + esc(preset.parent_title || 'выбранная цель') + '</option>'
+          : '') +
+        (realGoals.length ? '<optgroup label="Цели">' + realGoals.map(gopt).join('') + '</optgroup>' : '') +
+        (plainOnes.length ? '<optgroup label="Задачи — станут целью">' + plainOnes.map(gopt).join('') + '</optgroup>' : '');
+      var ov = document.createElement('div');
+      ov.className = 'al-ov';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head">' +
+            '<div><div class="al-eyebrow">' + (isGoal ? 'Цели' : 'Задачи') + '</div><div class="al-title">' +
+              (isGoal ? 'Новая цель' : preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
+            '<button class="al-x" id="nt-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+          '</div>' +
+          '<div class="al-sub">' + (isGoal
+            ? 'Большой результат, к которому идем. Шаги добавишь сразу после — цель без шагов так и стоит на месте.'
+            : preset.parent_title
+              ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
+              : preset.client_name
+                ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
+                : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
+          '<div class="al-body">' +
+            // Помощник. Задачу ставят на бегу, и поэтому ставят плохо: без срока,
+            // без исполнителя, с названием «созвон». Здесь человек пишет фразу как
+            // коллеге, а поля ниже заполняются сами — и он видит, что именно
+            // получилось, до того как задача уйдет.
+            '<div class="al-ai" id="nt-ai">' +
+              '<div class="al-ai-h">' + ic('spark', 13) +
+                (isGoal ? 'Опиши цель словами, я разложу по полям'
+                        : 'Опиши задачу словами, я разложу по полям') + '</div>' +
+              '<textarea id="nt-aitext" class="al-in al-ta" rows="3" maxlength="2000" placeholder="' +
+                (isGoal ? 'Например: к сентябрю набрать 30 учеников, ведет Лиана, это по продажам'
+                        : 'Например: Маше сегодня позвонить трем семьям из вчерашних заявок, итог в карточку') +
+                '"></textarea>' +
+              '<div class="al-ai-row">' +
+                '<button type="button" class="bp sm" id="nt-aigo">' + ic('spark', 13) + 'Разобрать</button>' +
+                '<span class="al-ai-note" id="nt-ainote"></span>' +
+              '</div>' +
+            '</div>' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Чего добиваемся' : 'Что сделать') + ' <i>*</i></span>' +
+              '<input id="nt-title" class="al-in" placeholder="' +
+                (isGoal ? 'Результат, а не действие: «Набрали 30 учеников на осень»' : 'Коротко, одним предложением') +
+                '" maxlength="200"></label>' +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Кто ведет' : 'Кому') + ' <i>*</i></span><span class="al-selwrap">' +
+              '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
+            // У цели направление — первое, что нужно решить: это ее зона
+            // ответственности. У задачи — уточнение после «что-кому-когда».
+            (isGoal
+              ? '<label class="al-f" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                  '<select id="nt-dept" class="al-sel">' + dopts + '</select></span>' +
+                  '<span class="al-hint">Цель компании видна всем направлениям, цель отдела стоит в его блоке.</span></label>'
+              : '') +
+            '<div class="al-f"><span class="al-l">' + (isGoal ? 'К какому сроку' : 'Срок') + '</span>' +
+              '<span class="due-seg">' + (isGoal
+                ? [['7', 'неделя'], ['30', 'месяц'], ['90', 'квартал'], ['180', 'полгода']]
+                : [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']]).map(function (o) {
+                return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
+              }).join('') + '</span>' +
+              '<input id="nt-due" class="al-in" type="date" value="' +
+                esc(preset.due || isoDay(isGoal ? 30 : 1)) + '"></div>' +
+            // Направление и цель идут после «что-кому-когда»: это уточнения, а
+            // разрывать ими обязательную связку значит замедлять постановку.
+            // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
+            // свое направление, либо это шаг, и направление приезжает от цели.
+            (isGoal ? '' :
+              '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
+              '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
+                '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>') +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Зачем это нам' : 'Подробности') + '</span>' +
+              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="' +
+                (isGoal ? 'Что изменится, когда дойдем' : 'Что важно знать, ссылки, контекст') +
+                '"></textarea></label>' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Как поймем, что дошли' : 'Что считается сделанным') + '</span>' +
+              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="' +
+                (isGoal ? 'Измеримый признак: цифра, документ, запущенный процесс'
+                        : 'По чему поймем, что задача закрыта') + '"></textarea></label>' +
+          '</div>' +
+          '<div class="al-foot">' +
+            '<button class="al-cancel" id="nt-cancel">Отмена</button>' +
+            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) +
+              (isGoal ? 'Завести цель' : 'Поставить задачу') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') close(); };
+      document.addEventListener('keydown', onKey);
+      el('nt-x').addEventListener('click', close);
+      el('nt-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var ti = el('nt-title');
+      setTimeout(function () { ti.focus(); }, 30);
+      ti.addEventListener('input', function () { ti.classList.remove('al-err'); });
+      // Быстрые сроки: руками дату ставят редко, а задача без срока — ровно та
+      // болезнь, ради которой раздел и появился. По умолчанию стоит завтра.
+      var dueI = el('nt-due');
+      var markWhen = function () {
+        Array.prototype.forEach.call(ov.querySelectorAll('[data-day]'), function (c) {
+          c.classList.toggle('on', dueI.value === isoDay(+c.getAttribute('data-day')));
+        });
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-day]'), function (c) {
+        c.addEventListener('click', function () { dueI.value = isoDay(+c.getAttribute('data-day')); markWhen(); });
+      });
+      dueI.addEventListener('change', markWhen);
+      markWhen();
+
+      // Выбрали цель — направление больше не спрашиваем: шаг наследует его от цели
+      // (это же правило держит сервер, см. _resolve_parent). В режиме цели этого
+      // выбора нет вовсе: цель — верхний уровень, ее некуда вкладывать.
+      var goalS = el('nt-goal'), deptF = el('nt-df');
+      if (goalS) goalS.addEventListener('change', function () {
+        deptF.classList.toggle('hid', !!goalS.value);
+      });
+
+      /* Разбор фразы. Сервер возвращает предложение, а не готовую задачу: поля
+         заполняются, человек проверяет и правит. Ничего не сохраняется до
+         «поставить задачу» — агент, который заводит сущности сам, за неделю
+         засоряет задачник. */
+      var aiGo = el('nt-aigo'), aiText = el('nt-aitext'), aiNote = el('nt-ainote');
+      var applyDraft = function (r) {
+        var d = (r && r.draft) || {};
+        if (d.title) ti.value = d.title;
+        if (d.details) el('nt-det').value = d.details;
+        if (d.result_expect) el('nt-res').value = d.result_expect;
+        if (d.assignee_id) el('nt-who').value = String(d.assignee_id);
+        if (d.due_date) { el('nt-due').value = d.due_date; markWhen(); }
+        if (goalS && d.parent_id) {
+          goalS.value = String(d.parent_id);
+          deptF.classList.add('hid');
+        }
+        if (!d.parent_id && d.dept && el('nt-dept')) el('nt-dept').value = d.dept;
+        // Вопросы важнее пересказа: сначала то, чего не хватает, потом что понял.
+        var qs = (r && r.questions) || [];
+        aiNote.className = 'al-ai-note' + (qs.length ? ' ask' : '');
+        aiNote.textContent = qs.length ? qs.join(' ') : (r && r.note) || 'Готово, проверь поля';
+      };
+      aiGo.addEventListener('click', function () {
+        var say = (aiText.value || '').trim();
+        if (say.length < 5) { aiText.focus(); return; }
+        aiGo.disabled = true; aiGo.classList.add('loading');
+        aiNote.className = 'al-ai-note';
+        aiNote.textContent = 'Разбираю...';
+        apiSend('/admin/api/tasks/assist', 'POST', { text: say, goal: isGoal }, function (r) {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          applyDraft(r);
+        }, function () {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          aiNote.className = 'al-ai-note ask';
+          aiNote.textContent = 'Помощник не ответил, заполни поля руками';
+        });
+      });
+
+      var save = el('nt-save');
+      save.addEventListener('click', function () {
+        var title = (ti.value || '').trim();
+        if (!title) { ti.classList.add('al-err'); ti.focus(); return; }
+        var who = el('nt-who').value;
+        if (!who) { showToast(isGoal ? 'Выбери, кто ведет цель' : 'Выбери, кому ставим задачу'); return; }
+        var day = el('nt-due').value;
+        // Срок = конец выбранного дня: «до 12 августа» человек понимает как
+        // «весь день 12-го мой», а не «до полуночи с 11-го на 12-е».
+        var due = day ? new Date(day + 'T23:59:59').toISOString() : null;
+        save.disabled = true; save.classList.add('loading');
+        var goal = goalS ? goalS.value : '';
+        apiSend('/admin/api/tasks', 'POST', {
+          title: title, assignee_id: +who, due_at: due,
+          details: (el('nt-det').value || '').trim(),
+          result_expect: (el('nt-res').value || '').trim(),
+          session_id: preset.session_id || null,
+          dept: goal ? null : (el('nt-dept').value || ''),
+          parent_id: goal ? +goal : null,
+          is_goal: isGoal,
+        }, function (r) {
+          close();
+          state.tasks = null;
+          state.taskGoals = null;   // новая задача может стать целью для следующей
+          loadTaskSummary();
+          if (preset.after) preset.after();
+          else if (state.page === 'tasks') renderView();
+          showToast(isGoal ? 'Цель заведена' : goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
+          // Цель без шагов — просто надпись. Сразу открываем ее карточку: там
+          // кнопка «добавить шаг», и первый шаг ставится, пока думают о цели.
+          if (isGoal && r && r.task) openTask(r.task.id);
+        }, function () {
+          save.disabled = false; save.classList.remove('loading');
+          showToast(isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу');
+        });
+      });
+     });
+    });
+  }
+
+  /* ── Обучение: ученики по английскому ──────────────────────
+     Экран преподавателя. У преподавателя нет доступа ни к карточкам лидов, ни к
+     деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
+     учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
+     здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
+  function studentsLoad(force) {
+    if (state._students && !force) return;
+    state._students = null;
+    api('/admin/api/det/students').then(function (r) {
+      state._students = r || { students: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () { state._students = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentOpen(id) {
+    state.studentId = id;
+    state._student = null;
+    renderView();
+    api('/admin/api/det/students/' + id).then(function (r) {
+      state._student = r;
+      if (state.page === 'students' && state.studentId === id) renderView();
+    }).catch(function () { state._student = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentRow(s) {
+    var when = s.last_practice ? 'занимался ' + esc(ago(s.last_practice)) + ' назад' : 'еще не занимался';
+    return '<div class="tm-row st-row" data-sid="' + esc(s.id) + '" tabindex="0">' +
+      '<span class="tm-av">' + esc(initials(s.name)) + '</span>' +
+      '<div class="tm-i"><div class="tm-n">' + esc(s.name) + '</div>' +
+        '<div class="tm-l">' + when + (s.week ? ' · за неделю ' + s.week : '') + '</div></div>' +
+      (s.overall != null ? '<span class="st-score num">' + s.overall + '</span>'
+                         : '<span class="st-score none">теста нет</span>') +
+      '<span class="st-go">' + ic('go', 14) + '</span></div>';
+  }
+  function renderStudents(view) {
+    if (state.studentId) return renderStudentCard(view);
+    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
+    if (state._students === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      return;
+    }
+    var list = state._students.students || [];
+    var mine = state._students.mine_only;
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
+      '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
+      '<div class="s">' + (mine
+        ? 'кого вам передали: как занимаются в тренажерах и что с тестом'
+        : 'у кого назначен преподаватель — назначает менеджер в карточке человека') + '</div></div>' +
+      '<span class="cnt num">' + list.length + '</span></div>' +
+      '<div class="tm-list">' + (list.map(studentRow).join('') ||
+        '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
+        'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
+      var go = function () { studentOpen(row.getAttribute('data-sid')); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function renderStudentCard(view) {
+    if (!state._student) { view.innerHTML = dashSkeleton(); return; }
+    if (state._student === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось открыть ученика.</div></div>';
+      return;
+    }
+    var d = state._student;
+    var pr = d.practice || {};
+    var modes = (d.by_mode || []).map(function (m) {
+      var weak = m.accuracy_pct != null && m.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(m.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(m.n * 100 /
+          ((d.by_mode[0] && d.by_mode[0].n) || 1)) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + m.n +
+          (m.accuracy_pct != null ? ' · <b>' + m.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    var tests = (d.attempts || []).slice().reverse().map(function (a) {
+      return '<div class="tm-row"><div class="tm-i"><div class="tm-n">' +
+        (a.overall != null ? a.overall + ' баллов' : 'без балла') + '</div>' +
+        '<div class="tm-l">' + esc(fmtWhen(a.finished_at || a.started_at)) +
+        (a.reading != null ? ' · чтение ' + a.reading : '') +
+        (a.listening != null ? ' · аудирование ' + a.listening : '') +
+        (a.writing != null ? ' · письмо ' + a.writing : '') +
+        (a.speaking != null ? ' · речь ' + a.speaking : '') + '</div></div></div>';
+    }).join('');
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><button class="bp sm ghost st-back" id="st-back">' + ic('back', 13) + 'Все ученики</button>' +
+      '<div><div class="t">' + esc(d.name) + '</div>' +
+      '<div class="s">занятия в тренажерах и история тестов</div></div></div>' +
+      (pr.total ? detPractice(pr, { noSkills: true }) : '<div class="empty">Пока не занимался. Проверьте, что в карточке ' +
+        'человека включен тумблер «Тренажеры» — пока он выключен, занятия не записываются.</div>') +
+      (modes ? '<div class="m-sec"><div class="m-sec-h">По тренажерам</div>' + modes + '</div>' : '') +
+      '<div class="m-sec"><div class="m-sec-h">Тесты</div><div class="tm-list">' +
+        (tests || '<div class="empty">Тест еще не проходили.</div>') + '</div></div></div>';
+    var back = el('st-back');
+    if (back) back.addEventListener('click', function () {
+      state.studentId = null; state._student = null; renderView();
     });
   }
   function czLoad(cb) {
@@ -6091,6 +7924,7 @@
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
+      '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
@@ -6133,6 +7967,8 @@
         });
       });
     });
+    var tgb = el('tm-tg');
+    if (tgb) tgb.addEventListener('click', openBotLinks);
     var shb = el('tm-shared');
     if (shb) shb.addEventListener('click', function () {
       var next = !(state._teamShared !== false);
@@ -6205,6 +8041,164 @@
       });
     });
   }
+
+  /* ── Подключение команды к боту задач ──────────────────────────────────────
+     Telegram не дает боту написать первым: пока человек не нажал «Старт» по
+     СВОЕЙ ссылке, напоминания ему физически некуда слать. Поэтому здесь список
+     «кто подключился, кто нет» и личная ссылка на каждого — их рассылает
+     руководитель. Продавить людей нажать может только он, не бот. */
+  function openBotLinks() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
+      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    /* Общий чат — второе окно уведомлений: те же события команды падают в группу.
+       Личка дергает исполнителя, общий чат делает работу видимой руководителю:
+       чужую переписку с ботом не посмотришь, а группу — да. */
+    function groupBlock(g) {
+      if (!g) return '';
+      var on = !!g.chat_id;
+      var opts = (g.groups || []).filter(function (x) { return x.chat_id !== g.chat_id; });
+      return '<div class="tgg">' +
+        '<div class="tgg-h">Общий чат</div>' +
+        (on
+          ? '<div class="tgg-on">' + ic('check', 13) + '<b>' + esc(g.title || 'группа подключена') + '</b>' +
+              '<span class="tgg-acts">' +
+                '<button class="tgg-b" id="tgg-test">Проверить</button>' +
+                '<button class="tgg-b off" id="tgg-off">Отключить</button></span></div>' +
+            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка по команде. Личные напоминания идут как шли.</div>'
+          : '<div class="tgg-s">Второе окно: те же события в общую группу, чтобы работа была видна всем, а не только исполнителю. ' +
+              (g.bot ? 'Создай группу, добавь в нее <b>@' + esc(g.bot) + '</b> и напиши там «/start» — группа появится в списке ниже.'
+                     : 'Бот пока не подключен, поэтому сообщения не уйдут даже в выбранную группу.') + '</div>' +
+            (opts.length
+              ? '<div class="tgg-list">' + opts.map(function (x) {
+                  return '<button class="tgg-row" data-grp="' + esc(x.chat_id) + '">' +
+                    '<span>' + esc(x.title || x.chat_id) + '</span><i>подключить</i></button>';
+                }).join('') + '</div>'
+              : '') +
+            '<button class="tgg-b" id="tgg-refresh">Обновить список групп</button>') +
+      '</div>';
+    }
+
+    Promise.all([
+      api('/admin/api/tasks/tg/links'),
+      api('/admin/api/tasks/tg/group').catch(function () { return null; }),
+    ]).then(function (res) {
+      var r = res[0], grp = res[1];
+      var links = (r && r.links) || [];
+      var off = links.filter(function (x) { return !x.linked; });
+      // Бот вообще не настроен — тогда действия на этом экране нет, и повторять
+      // это в каждой строке незачем: говорим один раз наверху.
+      var noBot = links.length > 0 && !links.some(function (x) { return x.link; });
+      // Неподключенные наверх: список открывают ради них, а не ради галочек.
+      links = links.slice().sort(function (a, b) { return (a.linked ? 1 : 0) - (b.linked ? 1 : 0); });
+      var rows = links.map(function (x) {
+        var accs = x.accounts || [];
+        // Аккаунтов у человека может быть несколько: личный и рабочий. Список
+        // показываем только когда их больше одного — там появляется вопрос
+        // «куда придет», на который строка обязана ответить.
+        var many = accs.length > 1
+          ? '<div class="tgl-accs">' + accs.map(function (a) {
+              return '<span class="tgl-ac">' + esc(a.username ? '@' + a.username : 'аккаунт без ника') +
+                '<button class="tgl-un" data-unlink="' + esc(a.chat_id) + '" title="Отвязать этот аккаунт">' +
+                ic('x', 11) + '</button></span>';
+            }).join('') + '</div>'
+          : '';
+        return '<div class="tgl-row' + (x.linked ? ' on' : '') + '">' +
+          '<span class="tsk-av">' + esc(initials(x.name || x.login)) + '</span>' +
+          '<div class="tgl-i"><div class="tgl-n">' + esc(x.name || x.login) + '</div>' +
+            '<div class="tgl-s">' + (x.linked
+              ? (accs.length > 1
+                  ? 'подключен · ' + accs.length + ' ' + plural(accs.length, 'аккаунт', 'аккаунта', 'аккаунтов') + ', пишем на все'
+                  : 'подключен' + (x.tg_username ? ' · @' + esc(x.tg_username) : ''))
+              // Пока бота нет, «не нажал Старт» — не про человека, а про бота:
+              // об этом уже сказано наверху, в строке показываем роль.
+              : noBot ? esc((ROLES[x.role] && ROLES[x.role].label) || x.role || '')
+                : 'не нажал «Старт» — напоминания не идут') + '</div>' + many + '</div>' +
+          (x.link
+            ? '<button class="icobtn" data-cp="' + esc(x.link) + '" title="Скопировать личную ссылку">' + ic('copy', 15) + '</button>'
+            : '') +
+        '</div>';
+      }).join('');
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head"><div><div class="al-eyebrow">Команда</div>' +
+          '<div class="al-title">Бот задач</div></div>' +
+          '<button class="al-x" id="tg-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">' + (noBot
+          ? 'Бот задач еще не подключен — личных ссылок нет, напоминания не уходят никому. Скажи об этом мне, я подключу.'
+          : off.length
+            ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
+              ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
+            : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
+        '<div class="al-body">' + groupBlock(grp) +
+          '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
+          (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
+        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
+      el('tg-x').addEventListener('click', close);
+      el('tg-close').addEventListener('click', close);
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-cp]'), function (b) {
+        b.addEventListener('click', function () {
+          copyText(b.getAttribute('data-cp'));
+          showToast('Ссылка скопирована — отправь ее лично этому человеку');
+        });
+      });
+      // общий чат: выбрать группу, проверить связь, отключить
+      var reopen = function () { close(); setTimeout(openBotLinks, 200); };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-unlink]'), function (b) {
+        b.addEventListener('click', function () {
+          apiSend('/admin/api/tasks/tg/unlink', 'POST', { chat_id: b.getAttribute('data-unlink') },
+            function () { showToast('Аккаунт отвязан — на него больше не пишем'); reopen(); },
+            function () { showToast('Не получилось отвязать аккаунт'); });
+        });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-grp]'), function (b) {
+        b.addEventListener('click', function () {
+          apiSend('/admin/api/tasks/tg/group', 'POST', { chat_id: b.getAttribute('data-grp') },
+            function () { showToast('Группа подключена — проверь связь кнопкой'); reopen(); },
+            function () { showToast('Не получилось подключить группу'); });
+        });
+      });
+      var gt = el('tgg-test');
+      if (gt) gt.addEventListener('click', function () {
+        gt.disabled = true;
+        apiSend('/admin/api/tasks/tg/group/test', 'POST', {}, function (resp) {
+          gt.disabled = false;
+          showToast(resp && resp.ok ? 'Написал в группу — посмотри в телеграме'
+                                    : 'Бот не смог написать: проверь, что он в группе');
+        }, function () { gt.disabled = false; showToast('Бот не смог написать в группу'); });
+      });
+      var go = el('tgg-off');
+      if (go) go.addEventListener('click', function () {
+        apiSend('/admin/api/tasks/tg/group', 'POST', { chat_id: '' },
+          function () { showToast('Общий чат отключен'); reopen(); });
+      });
+      var gr = el('tgg-refresh');
+      if (gr) gr.addEventListener('click', reopen);
+    }).catch(function () {
+      ov.querySelector('.al-card').innerHTML =
+        '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +
+        '<button class="al-x" id="tg-x">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Список ссылок доступен только тем, кто ведет команду.</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
+      el('tg-x').addEventListener('click', close);
+      el('tg-close').addEventListener('click', close);
+    });
+  }
+
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
   /* копируемый /go-адрес: на проде — ЛАТИНСКИЙ go.eastside.study. Кириллический домен
      Instagram не принимает: в шапке профиля вместо ссылки висит `go.%D0%B8%D1%81...`, и она
@@ -6815,6 +8809,542 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-pdclose]'), function (b) {
       b.addEventListener('click', function () { state._pdEdit = null; renderView(); });
     });
+  }
+
+  /* ── ПРОДУКТОВЫЙ ПОРТАЛ — база знаний команды по продуктам ────────────────
+     Не путать с разделом «Продукты»: там живой каталог платформы (что видит
+     клиент в витрине), здесь — знания команды: чем торгуем, кому, за сколько,
+     сколько на этом зарабатываем.
+     Весь контент лежит структурой в `content/portal.json` — единый источник
+     правды: из него рисуется раздел и его же читают ИИ-агенты. Верстку под
+     новый продукт не пишем, дописываем json.
+     Вкладка «Экономика» открыта только ролям с доступом к деньгам (cap
+     finance): себестоимость и маржа не должны лежать перед всей командой. */
+  /* has(p) — вкладка появляется только там, где под нее есть контент: у языкового
+     направления нет тарифов, у флагмана нет списка продуктов, и пустая вкладка
+     врет человеку, что материал есть, а он его не нашел. */
+  var PORTAL_TABS = [
+    { id: 'tariffs', label: 'Тарифы', has: function (p) { return (p.tariffs || []).length; } },
+    { id: 'items', label: 'Продукты', has: function (p) { return (p.items || []).length; } },
+    { id: 'flow', label: 'Путь клиента', has: function (p) { return (p.flow || []).length; } },
+    { id: 'econ', label: 'Экономика', cap: 'finance', has: function (p) { return !!p.economics; } },
+    { id: 'kb', label: 'База знаний', has: function (p) { return (p.knowledge || []).length; } },
+    { id: 'sales', label: 'Продажи', has: function (p) { return !!p.sales; } },
+    { id: 'mkt', label: 'Маркетинг', has: function (p) { return !!p.marketing; } },
+    { id: 'links', label: 'Ссылки', has: function (p) { return (p.links || []).length; } },
+    { id: 'offer', label: 'Оферты', has: function (p) { return !!p.offer; } },
+  ];
+
+  function fetchPortal() {
+    /* путь относительный: превью ветки живет по адресу с префиксом /p/<оператор>__crm_frontend/,
+       от корня файл бы не нашелся */
+    fetch('content/portal.json', { cache: 'no-cache' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { state._portal = d; if (state.page === 'portal') renderView(); })
+      .catch(function () { state._portal = 'none'; if (state.page === 'portal') renderView(); });
+  }
+  function portalProduct(id) {
+    var ps = (state._portal && state._portal.products) || [];
+    for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i];
+    return null;
+  }
+  function portalTabs(p) {
+    return PORTAL_TABS.filter(function (t) {
+      if (t.cap && !can(t.cap)) return false;
+      return !p || !t.has || t.has(p);
+    });
+  }
+  function portalOpen(id) {
+    state.portalProduct = id || null;
+    var tabs = portalTabs(id ? portalProduct(id) : null);
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
+    renderView();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderPortal(view) {
+    if (!state._portal) { view.innerHTML = dashSkeleton(); fetchPortal(); return; }
+    if (state._portal === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить портал — обновите страницу.</div></div>';
+      return;
+    }
+    var p = state.portalProduct ? portalProduct(state.portalProduct) : null;
+    if (p) renderPortalProduct(view, p); else renderPortalHome(view);
+  }
+
+  /* ── главная портала: дерево продуктов ── */
+  function renderPortalHome(view) {
+    var d = state._portal, q = (state.portalQ || '').trim().toLowerCase();
+    var tree = d.tree || {}, prods = d.products || [];
+
+    var body = q ? portalSearchHtml(d, q) : portalTreeHtml(d, tree, prods);
+
+    view.innerHTML = '<div class="po-wrap">' +
+      '<div class="po-top">' +
+        '<div class="po-ttl"><h2 class="po-h1">Продуктовый портал</h2>' +
+          '<div class="po-sub">Что продаем, кому, за сколько и на чем зарабатываем. Нажмите на направление, чтобы провалиться внутрь.</div></div>' +
+        '<div class="searchwrap po-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="po-q" class="search" type="search" placeholder="Поиск по порталу" autocomplete="off" value="' + esc(state.portalQ || '') + '">' +
+          '<button class="s-clear" id="po-qclear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+      '</div>' + body + '</div>';
+
+    var qi = el('po-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.portalQ = qi.value;
+        var host = view.querySelector('.po-body');
+        if (host) host.outerHTML = state.portalQ.trim()
+          ? portalSearchHtml(d, state.portalQ.trim().toLowerCase())
+          : portalTreeHtml(d, tree, prods);
+        view.querySelector('.po-search').classList.toggle('has-val', !!state.portalQ);
+        portalWireLinks(view);
+      });
+    }
+    var qc = el('po-qclear');
+    if (qc) qc.addEventListener('click', function () { state.portalQ = ''; renderView(); });
+    portalWireLinks(view);
+  }
+
+  function portalTreeHtml(d, tree, prods) {
+    var intake = (tree.intake || []).map(function (n, i) {
+      return (i ? '<div class="po-drop"></div>' : '') +
+        '<a class="po-node" href="' + esc(n.href) + '" target="_blank" rel="noopener">' +
+          '<span class="po-ni">' + ic(n.icon || 'funnel', 15) + '</span>' +
+          '<span class="po-nt"><b>' + esc(n.title) + '</b><small>' + esc(n.note || '') + '</small></span>' +
+          '<span class="po-nx">' + ic('ext', 14) + '</span></a>';
+    }).join('');
+
+    var cols = prods.map(function (p) {
+      var brs = (p.branches || []).map(function (b) { return '<span class="po-br">' + esc(b) + '</span>'; }).join('');
+      return '<div class="po-col">' +
+        '<span class="po-tick"></span>' +
+        '<button type="button" class="po-flag' + (p.ready ? ' ready' : '') + '" data-po="' + esc(p.id) + '">' +
+          '<span class="po-fh"><b>' + esc(p.short || p.title) + '</b>' + ic('go', 14) + '</span>' +
+          '<span class="po-fb"><small>' + esc(p.note || '') + '</small>' +
+            (p.ready ? '' : '<span class="sev po-soon">наполняем</span>') + '</span>' +
+        '</button>' +
+        (brs ? '<div class="po-brs">' + brs + '</div>' : '') +
+      '</div>';
+    }).join('');
+
+    var ex = tree.extras || {};
+    var exItems = (ex.items || []).map(function (i) { return '<span class="po-x">' + esc(i) + '</span>'; }).join('');
+
+    return '<div class="po-body"><div class="po-tree">' +
+      '<div class="po-lbl">Вход</div>' +
+      '<div class="po-lane">' + intake + '</div>' +
+      '<div class="po-stem"><span class="po-lbl">Направления</span></div>' +
+      /* число колонок задает json, а не css: появилось новое направление — ряд
+         перестраивается сам, горизонтальная шина над колонками не рвется */
+      '<div class="po-cols" style="--po-n:' + (prods.length || 1) + '">' + cols + '</div>' +
+      (ex.title ? '<div class="po-extras"><div class="po-exh"><b>' + esc(ex.title) + '</b>' +
+        '<small>' + esc(ex.note || '') + '</small></div><div class="po-xs">' + exItems + '</div></div>' : '') +
+    '</div></div>';
+  }
+
+  /* поиск по порталу: продукт, его вкладки и внешние системы */
+  function portalIndex(d) {
+    var idx = [];
+    (d.products || []).forEach(function (p) {
+      idx.push({ kw: [p.title, p.note, p.lead].concat(p.branches || []).join(' '), label: p.title, sub: p.note || '', go: { pid: p.id } });
+      if (!p.ready) return;
+      portalTabs(p).forEach(function (t) {
+        var kw = t.label + ' ' + p.title;
+        if (t.id === 'tariffs') kw += ' ' + (p.tariffs || []).map(function (x) { return x.name + ' ' + x.price; }).join(' ');
+        if (t.id === 'econ') kw += ' маржа вклад расходы себестоимость налоги';
+        if (t.id === 'offer') kw += ' договор оферта';
+        idx.push({ kw: kw, label: t.label, sub: p.title, go: { pid: p.id, tab: t.id } });
+      });
+    });
+    var L = d.links || {};
+    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент регистрация', label: 'Платформа студента', sub: 'регистрация с диагностикой', go: { href: L.platform } });
+    if (L.nexis) idx.push({ kw: 'нексис нейропрофориентация профориентация профессия кем быть', label: 'Нексис', sub: 'нейропрофориентация', go: { href: L.nexis } });
+    if (L.crm) idx.push({ kw: 'crm клиенты сделки квалификация', label: 'CRM', sub: 'клиенты и сделки', go: { href: L.crm } });
+    if (L.bot) idx.push({ kw: 'бот телеграм лиды квалификация', label: 'Telegram-бот', sub: 'первичная обработка лидов', go: { href: L.bot } });
+    if (L.site) idx.push({ kw: 'сайт истсайд лендинг', label: 'Сайт ИСТСАЙД.РФ', sub: 'публичный сайт', go: { href: L.site } });
+    return idx;
+  }
+  function portalSearchHtml(d, q) {
+    var hits = portalIndex(d).filter(function (i) {
+      return (i.kw + ' ' + i.label).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 12);
+    if (!hits.length) {
+      return '<div class="po-body"><div class="card"><div class="empty">Ничего не нашли по запросу «' + esc(q) + '».</div></div></div>';
+    }
+    var rows = hits.map(function (h) {
+      var attr = h.go.href ? 'data-pohref="' + esc(h.go.href) + '"'
+        : 'data-po="' + esc(h.go.pid) + '"' + (h.go.tab ? ' data-potab="' + esc(h.go.tab) + '"' : '');
+      return '<button type="button" class="po-hit" ' + attr + '>' +
+        '<span class="po-hl"><b>' + esc(h.label) + '</b><small>' + esc(h.sub) + '</small></span>' +
+        (h.go.href ? ic('ext', 14) : ic('go', 14)) + '</button>';
+    }).join('');
+    return '<div class="po-body"><div class="card po-hits">' +
+      '<div class="po-cap">Найдено ' + hits.length + '</div>' + rows + '</div></div>';
+  }
+
+  /* ── страница продукта ── */
+  function renderPortalProduct(view, p) {
+    var tabs = portalTabs(p);
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
+    var head = '<div class="po-wrap">' +
+      '<button type="button" class="po-back" id="po-back">' + ic('go', 13) + 'Дерево продуктов</button>' +
+      '<div class="po-top"><div class="po-ttl"><h2 class="po-h1">' + esc(p.title) + '</h2>' +
+        '<div class="po-sub">' + esc(p.lead || '') + '</div></div></div>';
+
+    if (!p.ready) {
+      var brs = (p.branches || []).map(function (b) { return '<span class="po-x">' + esc(b) + '</span>'; }).join('');
+      view.innerHTML = head +
+        (brs ? '<div class="po-xs po-xs-wide">' + brs + '</div>' : '') +
+        '<div class="card po-card"><div class="sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">Этот блок наполним вместе</div>' +
+          '<div class="s">тарифы · экономика · база знаний · продажи · маркетинг · ссылки · оферты</div></div></div>' +
+          '<div class="po-note">Покажите материалы по направлению — соберем так же, как «Поступление на грант».</div></div></div>';
+      var b0 = el('po-back'); if (b0) b0.addEventListener('click', function () { portalOpen(null); });
+      return;
+    }
+
+    var segs = tabs.map(function (t) {
+      return '<button type="button" data-potab="' + t.id + '" class="' + (state.portalTab === t.id ? 'on' : '') + '">' + esc(t.label) + '</button>';
+    }).join('');
+
+    var bodyHtml = '';
+    if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'items') bodyHtml = portalItems(p);
+    else if (state.portalTab === 'flow') bodyHtml = portalFlow(p);
+    else if (state.portalTab === 'econ') bodyHtml = portalEcon(p);
+    else if (state.portalTab === 'kb') bodyHtml = portalKb(p);
+    else if (state.portalTab === 'sales') bodyHtml = portalMaterials(p.sales, 'Продажи', 'chat');
+    else if (state.portalTab === 'mkt') bodyHtml = portalMaterials(p.marketing, 'Маркетинг', 'mega');
+    else if (state.portalTab === 'links') bodyHtml = portalLinksTab(p);
+    else if (state.portalTab === 'offer') bodyHtml = portalMaterials(p.offer, 'Оферты', 'doc');
+
+    view.innerHTML = head + '<div class="po-tabs"><div class="dperiod">' + segs + '</div></div>' + bodyHtml + '</div>';
+
+    var b = el('po-back'); if (b) b.addEventListener('click', function () { portalOpen(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-potab]'), function (t) {
+      t.addEventListener('click', function () { state.portalTab = t.getAttribute('data-potab'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-poitem]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-poitem');
+        state.portalItem = state.portalItem === id ? null : id;
+        renderView();
+      });
+    });
+    if (state.portalTab === 'econ') portalWireEcon(view, p);
+    portalWireLinks(view);
+  }
+
+  function portalWireLinks(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-po]'), function (b) {
+      b.addEventListener('click', function () {
+        var tab = b.getAttribute('data-potab');
+        if (tab) state.portalTab = tab;
+        portalOpen(b.getAttribute('data-po'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pohref]'), function (b) {
+      b.addEventListener('click', function () { window.open(b.getAttribute('data-pohref'), '_blank', 'noopener'); });
+    });
+  }
+
+  function portalTariffs(p) {
+    var cards = (p.tariffs || []).map(function (t) {
+      var feats = (t.features || []).map(function (f) {
+        return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(f) + '</span></div>';
+      }).join('');
+      var sc = t.scope || {};
+      return '<div class="card po-tcard' + (t.accent ? ' accent' : '') + '">' +
+        (t.accent ? '<span class="uz-tag uz-tag--rev po-tflag">основной</span>' : '') +
+        '<div class="po-tname">' + esc(t.name) + '</div>' +
+        '<div class="po-tpos">' + esc(t.positioning || '') + '</div>' +
+        '<div class="po-tfmt">' + esc(t.formats || '') + '</div>' +
+        '<div class="po-tprice num">' + fmtMoney(t.price) + ' ₽</div>' +
+        (t.price_full ? '<div class="po-told num">' + fmtMoney(t.price_full) + ' ₽ без скидки</div>' : '') +
+        '<div class="po-feats">' + feats + '</div>' +
+        (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
+      '</div>';
+    }).join('');
+
+    var cmp = p.compare || {};
+    var cmpHtml = '';
+    if ((cmp.rows || []).length) {
+      var ths = (p.tariffs || []).map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+      var trs = (cmp.rows || []).map(function (r) {
+        var tds = (p.tariffs || []).map(function (t) {
+          var c = (r.cells || {})[t.id] || {};
+          var plus = (c.plus || []).map(function (x) { return '<span class="po-plus">' + esc(x) + '</span>'; }).join('');
+          return '<td>' + esc(c.text || '—') +
+            (c.hint ? '<span class="po-hint">' + esc(c.hint) + '</span>' : '') +
+            (plus ? '<span class="po-pluses">' + plus + '</span>' : '') + '</td>';
+        }).join('');
+        return '<tr><td class="po-rl">' + esc(r.label) + '</td>' + tds + '</tr>';
+      }).join('');
+      cmpHtml = '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">' + esc(cmp.title || 'Сравнение тарифов') + '</div>' +
+          '<div class="s">чем тарифы отличаются на деле — для разговора с клиентом</div></div></div>' +
+        '<div class="po-tblwrap"><table class="po-tbl cmp"><thead><tr><th class="po-rl"></th>' + ths + '</tr></thead>' +
+        '<tbody>' + trs + '</tbody></table></div></div>';
+    }
+
+    return '<div class="po-tariffs">' + cards + '</div>' +
+      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') + cmpHtml;
+  }
+
+  /* Экономика: структура (какие статьи и тарифы) — из content/portal.json,
+     САМИ ЦИФРЫ — из базы через /admin/api/portal/econ под cap finance.
+     В файле статики их держать нельзя: он раздается по прямой ссылке без входа,
+     а себестоимость и маржа внутренние. Правка сразу общая для команды. */
+  function econLoad() {
+    if (state._poEconLoading) return;
+    state._poEconLoading = true;
+    api('/admin/api/portal/econ').then(function (r) {
+      state._poEconApi = (r && r.items) || {};
+    }).catch(function (e) {
+      state._poEconApi = e && e.status === 403 ? 'denied' : 'none';
+    }).finally(function () {
+      state._poEconLoading = false;
+      if (state.page === 'portal' && state.portalTab === 'econ') renderView();
+    });
+  }
+  /* рабочая копия цифр продукта: то, что человек видит и правит на экране */
+  function econModel(p) {
+    state._poEcon = state._poEcon || {};
+    if (state._poEcon[p.id]) return state._poEcon[p.id];
+    var ec = p.economics || {}, saved = (state._poEconApi || {})[p.id] || {};
+    var d = saved.data || {}, m = { price: {}, rates: {}, costs: {} };
+    (p.tariffs || []).forEach(function (t) {
+      m.price[t.id] = (d.price && d.price[t.id] != null) ? d.price[t.id] : (t.price || 0);
+    });
+    (ec.rates || []).forEach(function (r) { m.rates[r.id] = (d.rates && d.rates[r.id]) || 0; });
+    (ec.costs || []).forEach(function (c) {
+      m.costs[c.id] = {};
+      (p.tariffs || []).forEach(function (t) {
+        m.costs[c.id][t.id] = (d.costs && d.costs[c.id] && d.costs[c.id][t.id]) || 0;
+      });
+    });
+    state._poEcon[p.id] = m;
+    return m;
+  }
+  function econNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  function econCalc(p, m) {
+    var ec = p.economics || {}, out = {};
+    (p.tariffs || []).forEach(function (t) {
+      var price = econNum(m.price[t.id]), sum = 0, rates = {}, costs = {};
+      (ec.rates || []).forEach(function (r) {
+        var v = Math.round(price * econNum(m.rates[r.id]) / 100);
+        rates[r.id] = v; sum += v;
+      });
+      (ec.costs || []).forEach(function (c) {
+        var v = econNum((m.costs[c.id] || {})[t.id]);
+        costs[c.id] = v; sum += v;
+      });
+      out[t.id] = { total: sum, contrib: price - sum, margin: price ? Math.round((price - sum) / price * 100) : 0, rates: rates, costs: costs };
+    });
+    return out;
+  }
+  function econWhoLine(p) {
+    var saved = (state._poEconApi || {})[p.id];
+    if (!saved || !saved.updated_at) return 'Цифры общие для команды: правку видят все, у кого есть доступ к деньгам.';
+    return 'Последняя правка — ' + esc(saved.updated_by || 'кто-то из команды') + ', ' + fmtWhen(saved.updated_at) + '.';
+  }
+  function portalEcon(p) {
+    if (!state._poEconApi) { econLoad(); return dashSkeleton(); }
+    if (state._poEconApi === 'denied') {
+      return '<div class="card"><div class="empty">Экономика открыта только ролям с доступом к деньгам.</div></div>';
+    }
+    if (state._poEconApi === 'none') {
+      return '<div class="card"><div class="empty">Не удалось загрузить экономику — проверьте связь и обновите страницу.</div></div>';
+    }
+    var ec = p.economics || {}, m = econModel(p), ts = p.tariffs || [];
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    /* цена в калькуляторе своя: тут крутят «что если». Если она разошлась с ценой
+       на вкладке «Тарифы» — показываем это прямо, чтобы расхождение не молчало. */
+    var priceRow = '<tr class="po-r-price"><td class="po-rl">Цена, выручка</td>' + ts.map(function (t) {
+      var diff = econNum(m.price[t.id]) !== econNum(t.price);
+      return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-price="' + esc(t.id) + '" value="' + econNum(m.price[t.id]) + '">' +
+        '<span class="po-hint po-diff' + (diff ? ' on' : '') + '" data-diff="' + esc(t.id) + '">в тарифах — ' + fmtMoney(t.price) + ' ₽</span></td>';
+    }).join('') + '</tr>';
+    var rateRows = (ec.rates || []).map(function (r) {
+      return '<tr><td class="po-rl">' + esc(r.label) +
+        '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-rate="' + esc(r.id) + '" value="' + econNum(m.rates[r.id]) + '"><span class="po-pc">%</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="' + esc(r.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+    }).join('');
+    var costRows = (ec.costs || []).map(function (c) {
+      return '<tr><td class="po-rl">' + esc(c.label) + '</td>' + ts.map(function (t) {
+        return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Итого расходы</td>' + ts.map(function (t) { return '<td class="num" data-ec="total:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Вклад с клиента, ₽</td>' + ts.map(function (t) { return '<td class="num" data-ec="contrib:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+      '<tr class="po-r-big"><td class="po-rl">Маржа вклада</td>' + ts.map(function (t) { return '<td class="num" data-ec="margin:' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Юнит-экономика</div><div class="s">сколько остается компании с одного клиента до постоянных расходов</div></div>' +
+        '<span class="po-saved" id="po-saved"></span></div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
+      '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
+      '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
+      '</div>';
+  }
+  function portalWireEcon(view, p) {
+    if (!state._poEconApi || typeof state._poEconApi === 'string') return;
+    var m = econModel(p), saveTimer = null;
+    function recalc() {
+      var r = econCalc(p, m);
+      Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
+        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0], v = r[parts[1]];
+        if (!v) return;
+        if (kind === 'total') c.textContent = fmtMoney(v.total);
+        else if (kind === 'contrib') c.textContent = fmtMoney(v.contrib);
+        else if (kind === 'margin') {
+          c.textContent = v.margin + '%';
+          c.className = 'num' + (v.contrib < 0 ? ' po-neg' : v.margin >= 50 ? ' po-pos' : '');
+        } else if (v.rates[kind] != null) c.textContent = fmtMoney(v.rates[kind]);
+        else if (v.costs[kind] != null) c.textContent = fmtMoney(v.costs[kind]);
+      });
+      (p.tariffs || []).forEach(function (t) {
+        var hint = view.querySelector('[data-diff="' + t.id + '"]');
+        if (hint) hint.classList.toggle('on', econNum(m.price[t.id]) !== econNum(t.price));
+      });
+    }
+    function mark(text, bad) {
+      var s = el('po-saved');
+      if (!s) return;
+      s.textContent = text;
+      s.className = 'po-saved on' + (bad ? ' bad' : '');
+    }
+    /* сохраняем с задержкой: человек печатает число посимвольно, а не разом */
+    function save() {
+      if (saveTimer) clearTimeout(saveTimer);
+      mark('сохраняем…');
+      saveTimer = setTimeout(function () {
+        apiSend('/admin/api/portal/econ/' + encodeURIComponent(p.id), 'PUT',
+          { price: m.price, rates: m.rates, costs: m.costs },
+          function (r) {
+            if (state._poEconApi && typeof state._poEconApi === 'object') state._poEconApi[p.id] = r;
+            mark('сохранено');
+          },
+          function () { mark('не сохранилось — проверьте связь', true); });
+      }, 700);
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
+      i.addEventListener('input', function () {
+        var k;
+        if ((k = i.getAttribute('data-price'))) m.price[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-rate'))) m.rates[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-cost'))) {
+          var pr = k.split(':');
+          (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
+        }
+        recalc(); save();
+      });
+    });
+    recalc();
+  }
+
+  /* ── «Продукты направления» и «Путь клиента» ───────────────────────────────
+     Один формат на оба экрана: кому и зачем · как проходит у человека · что с
+     этим делает команда в CRM. Так продукт описан у Веры на внутренней странице
+     истсайд.рф/team-products, и так его пересказывает менеджер клиенту — значит
+     и в портале он должен лежать так же, а не тремя разными способами. */
+  function portalSteps(steps, kind) {
+    return (steps || []).map(function (s, i) {
+      return '<div class="po-step">' +
+        '<span class="po-stn num">' + (i + 1) + '</span>' +
+        '<span class="po-stt">' + esc(typeof s === 'string' ? s : (s.text || '')) +
+          (s && s.when ? '<em class="po-stw">' + esc(s.when) + '</em>' : '') + '</span>' +
+      '</div>';
+    }).join('') + (kind === 'crm' ? '' : '');
+  }
+  function portalNotes(list, icon) {
+    return (list || []).map(function (t) {
+      return '<div class="po-feat">' + ic(icon || 'check', 13) + '<span>' + esc(t) + '</span></div>';
+    }).join('');
+  }
+  /* Блок продукта: кому · шаги · что в CRM · ссылки. Используется и как карточка
+     под-продукта направления, и как тело вкладки «Путь клиента». */
+  function portalFlowBody(f) {
+    var out = '';
+    if (f.who) out += '<div class="po-fsec"><div class="po-flbl">Кому и зачем</div>' +
+      '<p class="po-txt">' + esc(f.who) + '</p></div>';
+    if ((f.steps || []).length) out += '<div class="po-fsec"><div class="po-flbl">' +
+      esc(f.steps_title || 'Как проходит у человека') + '</div>' +
+      '<div class="po-steps">' + portalSteps(f.steps) + '</div></div>';
+    if ((f.crm || []).length) out += '<div class="po-fsec"><div class="po-flbl">Что с этим делает команда</div>' +
+      '<div class="po-feats">' + portalNotes(f.crm, 'check') + '</div></div>';
+    if ((f.links || []).length) out += '<div class="po-flinks">' + (f.links || []).map(function (l) {
+      return '<a class="po-x po-xl" href="' + esc(l.href) + '" target="_blank" rel="noopener">' +
+        esc(l.label || l.href) + ic('ext', 12) + '</a>';
+    }).join('') + '</div>';
+    return out;
+  }
+  function portalFlow(p) {
+    return (p.flow || []).map(function (f) {
+      return '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic(f.icon || 'path', 14) + '</span>' +
+          '<div><div class="t">' + esc(f.title) + '</div>' +
+          (f.note ? '<div class="s">' + esc(f.note) + '</div>' : '') + '</div>' +
+          (f.when ? '<span class="po-when">' + esc(f.when) + '</span>' : '') + '</div>' +
+        portalFlowBody(f) + '</div>';
+    }).join('');
+  }
+  /* Карточки продуктов направления. Раскрываются по клику: шесть продуктов,
+     развернутых разом, — это стена текста, в которой не найти нужный. */
+  function portalItems(p) {
+    var cards = (p.items || []).map(function (it) {
+      var open = state.portalItem === it.id;
+      var tags = (it.tags || []).map(function (t) { return '<span class="po-x">' + esc(t) + '</span>'; }).join('');
+      return '<div class="card po-card po-item' + (open ? ' open' : '') + '">' +
+        '<button type="button" class="po-ih" data-poitem="' + esc(it.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<span class="po-ic">' + ic(it.icon || 'box', 15) + '</span>' +
+          '<span class="po-it"><b>' + esc(it.title) + '</b>' +
+            (it.note ? '<small>' + esc(it.note) + '</small>' : '') + '</span>' +
+          '<span class="po-ip num">' + esc(it.price_label || (it.price ? fmtMoney(it.price) + ' ₽' : 'Бесплатно')) + '</span>' +
+          '<span class="po-iv">' + ic('go', 14) + '</span>' +
+        '</button>' +
+        (tags ? '<div class="po-itags">' + tags + '</div>' : '') +
+        (open ? '<div class="po-ibody">' + portalFlowBody(it) + '</div>' : '') +
+      '</div>';
+    }).join('');
+    return cards + (p.items_note ? '<div class="po-note wide">' + esc(p.items_note) + '</div>' : '');
+  }
+
+  function portalKb(p) {
+    return (p.knowledge || []).map(function (k) {
+      return '<div class="card po-card po-kb">' +
+        '<div class="sec-head"><span class="ic">' + ic('note', 14) + '</span><div><div class="t">' + esc(k.h) + '</div></div></div>' +
+        '<p class="po-txt">' + esc(k.text) + '</p></div>';
+    }).join('') || '<div class="card"><div class="empty">База знаний по продукту пока пустая.</div></div>';
+  }
+  function portalLinkCard(l) {
+    return '<a class="card po-link" href="' + esc(l.href) + '" target="_blank" rel="noopener">' +
+      '<span class="po-lt"><b>' + esc(l.title) + '</b><small>' + esc(l.note || '') + '</small></span>' +
+      '<span class="po-lu">' + esc(l.label || l.href) + ic('ext', 13) + '</span></a>';
+  }
+  function portalMaterials(block, title, icon) {
+    block = block || {};
+    var links = (block.links || []).map(portalLinkCard).join('');
+    return links + (block.soon
+      ? '<div class="card po-card"><div class="sec-head"><span class="ic">' + ic(icon, 14) + '</span>' +
+        '<div><div class="t">' + esc(title) + '</div></div></div>' +
+        '<div class="po-note">' + esc(block.soon) + '</div></div>'
+      : (links ? '' : '<div class="card"><div class="empty">Материалов пока нет.</div></div>'));
+  }
+  function portalLinksTab(p) {
+    var links = (p.links || []).map(portalLinkCard).join('');
+    return links || '<div class="card"><div class="empty">Ссылок пока нет.</div></div>';
   }
 
   function renderTemplates(view) {
@@ -9822,7 +12352,7 @@
     if (d) state.details[id] = d;
     var base = d || lead;
     var crm = (lead && lead.crm) || (d && d.crm) || { status: 'new', note: '', tasks: [], comms: [] };
-    return { lead: lead, d: d, base: base, crm: crm };
+    return { id: id, lead: lead, d: d, base: base, crm: crm };
   }
 
   function renderDrawer(keepScroll) {
@@ -9855,7 +12385,11 @@
 
     var nm = ov(ctx, 'name');
     var openTasks = (crm.tasks || []).filter(function (t) { return !t.done; }).length;
-    var navHtml = MODAL_SECTIONS.map(function (sct) {
+    // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
+    // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
+    var navHtml = MODAL_SECTIONS.filter(function (sct) {
+      return sct.id !== 'pay' || can('finance');
+    }).map(function (sct) {
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
@@ -9935,6 +12469,9 @@
     if (!host || !id) return;
     var ctx = leadCtx(id);
     var s = state.modalSection;
+    // Секцию оплат без финансовой роли не открыть даже прямым переключением
+    // состояния — уводим на «Главное».
+    if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
@@ -10063,7 +12600,7 @@
             '>' + esc(x.name) + '</option>';
         }).join('')) + '</select>' +
       '<span class="det-teacher-s">' + (t
-        ? 'закреплен за учеником: разбирает его занятия и проверяет тесты'
+        ? 'видит занятия этого ученика в разделе «Обучение»'
         : 'пока не назначен — занятия ученика не видит ни один преподаватель') + '</span></div>';
   }
 
@@ -10388,34 +12925,95 @@
   }
 
   /* ── HSK-тренажёр в той же вкладке «Китайский» ──
-     Тренажёр китайского открыт по прямой ссылке всем (localStorage, без входа),
-     поэтому «доступ» тут — не гейт, а отметка менеджера «я дал этому ученику» плюс
-     ссылка под рукой. Флаг живёт в overrides.hsk лида (частичный мердж на бэке),
-     отдельная ручка и таблица не нужны. Персонального входа, как у курса и DET,
-     пока нет — это отдельная работа. */
-  var HSK_LINK = 'https://истсайд.рф/hsk_cabinet.html';
+     Личный вход и доступ как у DET. Две ссылки из одного кода: на тест и на тренажёр.
+     Первый пробный тест бесплатный всем; повторный и тренажёр открываются галочками
+     (повтор разовый, тренажёр снимает и лимит на тесты — так у оплативших). Данные
+     (попытки, занятия, доступ, ссылки) грузим отдельным запросом — как блок DET. */
+  var HSK = {}, HSK_BUSY = {};
+  function loadHsk(id, force) {
+    if (HSK_BUSY[id]) return;
+    if (force) delete HSK[id];
+    HSK_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/hsk').then(function (r) {
+      HSK_BUSY[id] = false; HSK[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      HSK_BUSY[id] = false;
+      if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function hskAttemptRow(a) {
+    var col = a.pct >= 85 ? 's-client' : a.pct >= 65 ? 's-new' : a.pct >= 45 ? 's-wait' : 's-rejected';
+    return '<div class="det-row" style="cursor:default">' +
+      '<span class="det-row-v num">' + a.pct + '<small style="font-size:.55em;opacity:.6">%</small></span>' +
+      '<div class="det-row-b"><div class="det-row-t">' + esc(a.level) +
+        ' <span class="sev ' + col + '">' + a.correct + ' из ' + a.total + '</span></div>' +
+        '<div class="det-row-m">' + esc(fmtWhen(a.at)) +
+          (a.weak_label ? ' · слабое место: ' + esc(a.weak_label) : '') + '</div></div></div>';
+  }
+
   function buildHskBlock(id) {
-    var det = state.details[id];
-    var h = (det && det.crm && det.crm.overrides && det.crm.overrides.hsk) || {};
-    var on = !!h.open;
-    return '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
-      '<div class="m-csub">Слова, иероглифы, аудио, пробный тест. Открыт по прямой ссылке ' +
-      'всем; тумблер отмечает, что вы дали доступ этому ученику, и держит ссылку под рукой.</div>' +
+    var head = '<div class="m-sec"><div class="m-sec-h">HSK — тренажёр китайского</div>' +
+      '<div class="m-csub">Пробный тест и тренажёр (слова, иероглифы, аудио). Первый тест ' +
+      'бесплатный всем; повторный тест и тренажёр открываются галочками ниже — оплатившим ' +
+      'обучение или точечно. Выдайте ссылки, и результаты придут сюда.</div></div>';
+
+    var b = HSK[id];
+    if (!b) { loadHsk(id); return head + '<div class="field-empty" style="margin-top:10px">Загружаю…</div>'; }
+    if (b === 'none') { return head + '<div class="field-empty" style="margin-top:10px">Не удалось загрузить. Обновите страницу.</div>'; }
+
+    var acc = b.access || {};
+    var accessRows =
       '<div class="det-sw-row">' +
-        '<div class="det-sw-b"><div class="det-sw-t">Тренажёр HSK</div>' +
-          '<div class="det-sw-s">' + (on ? 'вы отметили доступ' : 'доступ не отмечен') + '</div></div>' +
-        '<button type="button" class="pd-sw' + (on ? ' on' : '') + '" id="hsk-sw">' +
-          '<span class="pd-sw-l">' + (on ? 'Открыт' : 'Закрыт') + '</span>' +
+        '<div class="det-sw-b"><div class="det-sw-t">Разрешить повторный тест</div>' +
+          '<div class="det-sw-s">' + (acc.attempts_used
+            ? 'Пройдено тестов: ' + acc.attempts_used + '. Разрешение одноразовое — уйдёт на следующий тест.'
+            : 'Первый тест человек проходит сам, разрешение не нужно.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.retakes > 0 ? ' on' : '') + '" id="hsk-sw-retake">' +
+          '<span class="pd-sw-l">' + (acc.retakes > 0 ? 'Разрешён' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
-      (on && h.by ? '<div class="det-sw-by">отметил ' + esc(h.by) +
-        (h.at ? ' · ' + esc(fmtWhen(h.at)) : '') + '</div>' : '') +
-      '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
-      '<div class="det-link">' +
-        '<input class="al-in det-url" id="hsk-url" readonly value="' + esc(HSK_LINK) + '">' +
-        '<button class="bp sm" id="hsk-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
-      '<div class="det-link-m">ссылка общая: тренажёр без входа, прогресс хранится ' +
-      'у ученика в браузере</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажёр</div>' +
+          '<div class="det-sw-s">Словарь, прописи, аудио. Открытый тренажёр снимает и лимит ' +
+            'на тесты (так у оплативших). Пока закрыт — по ссылке на тренажёр человек видит ' +
+            '«пока закрыто».</div></div>' +
+        '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="hsk-sw-practice">' +
+          '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) +
+        (acc.updated_at ? ' · ' + esc(fmtWhen(acc.updated_at)) : '') + '</div>' : '');
+
+    var inv = b.invite;
+    var links = inv
+      ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
+        '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
+          '<div class="det-link">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+            '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
+        '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
+          (inv.expires_at ? ' · до ' + esc(fmtWhen(inv.expires_at)) : '') + ' · код у ссылок один</div>'
+      : '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылки ученика</div>' +
+          '<div class="det-link"><span class="det-link-none">Ссылок нет — создайте, будет две: на тест и на тренажёр</span>' +
+            '<button class="bp sm" id="hsk-newlink">' + ic('plus', 13) + 'Создать ссылки</button></div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ</div>' + accessRows + links + '</div>';
+
+    var attempts = (b.attempts || []).slice().reverse();
+    var tests = '<div class="m-sec"><div class="m-sec-h">Пробные тесты</div>' +
+      (attempts.length
+        ? attempts.map(hskAttemptRow).join('')
+        : '<div class="field-empty">Тест ещё не проходили — результат придёт сюда сам.</div>') +
       '</div>';
+
+    var pr = b.practice || {};
+    var practice = detPractice(Object.assign({}, pr, { by_skill: pr.by_type || [] }));
+
+    return head + access + tests + practice;
   }
 
   function wireCourse(id) {
@@ -10476,26 +13074,53 @@
       post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
     });
 
-    // HSK-тренажёр: тумблер-отметка доступа (флаг в overrides.hsk) + копирование ссылки.
-    // Полный overrides шлём целиком, чтобы оптимистичный рендер не потерял имя/контакт.
-    var hsw = el('hsk-sw');
-    if (hsw) hsw.addEventListener('click', function () {
-      var det = state.details[id];
-      var ov = Object.assign({}, (det && det.crm && det.crm.overrides) || {});
-      var cur = ov.hsk || {};
-      var next = !cur.open;
-      ov.hsk = next
-        ? { open: true, by: state.userName || '', at: new Date().toISOString() }
-        : { open: false, by: cur.by || '', at: cur.at || '' };
-      patch(id, { overrides: ov }, null, function () {
+    // HSK: галочки доступа (повтор теста / тренажёр) как у DET и две личные ссылки.
+    // Ответ бэка авторитетный — берём access из него и перерисовываем блок.
+    function hskAccess(body, okMsg) {
+      api('/admin/api/leads/' + id + '/hsk/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        if (HSK[id] && r.access) HSK[id].access = r.access;
         if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+        if (okMsg) showToast(okMsg);
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не удалось сохранить');
       });
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
-      showToast(next ? 'HSK отмечен доступным' : 'Отметка HSK снята');
+    }
+    var hre = el('hsk-sw-retake');
+    if (hre) hre.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).retakes > 0;
+      hskAccess({ retake: !on }, on ? 'Повторный тест закрыт' : 'Повторный тест разрешён');
+    });
+    var hpr = el('hsk-sw-practice');
+    if (hpr) hpr.addEventListener('click', function () {
+      var on = ((HSK[id] || {}).access || {}).practice_open;
+      hskAccess({ practice_open: !on }, on ? 'Тренажёр закрыт' : 'Тренажёр открыт');
     });
 
-    var hcp = el('hsk-copy');
-    if (hcp) hcp.addEventListener('click', function () { copyText(HSK_LINK, hcp); });
+    // Копирование ссылок — данные в HSK[id].invite (test_url / trainer_url).
+    var htc = el('hsk-test-copy');
+    if (htc) htc.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.test_url) || '', htc);
+    });
+    var htr = el('hsk-tr-copy');
+    if (htr) htr.addEventListener('click', function () {
+      var b = HSK[id]; copyText((b && b.invite && b.invite.trainer_url) || '', htr);
+    });
+    var hnl = el('hsk-newlink');
+    if (hnl) hnl.addEventListener('click', function () {
+      if (hnl.disabled) return;
+      hnl.disabled = true; hnl.style.opacity = '.55';
+      api('/admin/api/leads/' + id + '/hsk/invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      }).then(function () {
+        loadHsk(id, true);   // перечитать блок — покажет свежие ссылки
+        showToast('Личные ссылки HSK готовы');
+      }).catch(function () {
+        hnl.disabled = false; hnl.style.opacity = '';
+        showToast('Не удалось создать ссылки');
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -10919,13 +13544,43 @@
     return '<div class="path-tl">' + rows + '</div>';
   }
 
-  /* ── РАЗДЕЛ «Заметки» — заметка + задачи + лог ── */
+  /* ── РАЗДЕЛ «Заметки» — заметка + задачи по ученику + лог ──────────────────
+     Задачи здесь — обычные задачи команды с проставленным учеником (staff_tasks,
+     см. шапку миграции 071), а не свой список галочек. Поэтому у каждой есть
+     исполнитель с ролью, приемка, лента и напоминание в боте, а руководитель
+     видит ту же работу в срезе «По ученикам». Ведется задача в своей карточке —
+     здесь только показ и постановка. */
+  function cardTaskRow(t) {
+    var st = TASK_ST[t.status] || TASK_ST.wait;
+    var due = dueLabel(t);
+    var who = t.assignee_name
+      ? t.assignee_name + (t.assignee_role_label ? ' · ' + t.assignee_role_label : '')
+      : 'без исполнителя';
+    var closed = t.status === 'done' || t.status === 'cancel';
+    return '<div class="ct-row' + (t.overdue ? ' over' : '') + (closed ? ' off' : '') +
+      '" data-ctid="' + t.id + '">' +
+      '<div class="ct-b"><div class="ct-t">' + esc(t.title) + '</div>' +
+        '<div class="ct-m">' + esc(who) + ' · <i class="' + due.cls + '">' + esc(due.text) + '</i></div></div>' +
+      '<span class="sev ' + st.cls + '">' + st.label + '</span></div>';
+  }
+
   function buildNotesSection(ctx) {
     var crm = ctx.crm;
-    var tasks = (crm.tasks || []).slice().sort(function (a, b) {
-      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
-      return (a.due || '9999') < (b.due || '9999') ? -1 : 1;
-    });
+    var loaded = state.cardTasks[ctx.id];
+    var body;
+    if (loaded === undefined) {
+      body = '<div class="ct-skel shim"></div><div class="ct-skel shim"></div>';
+    } else if (loaded === 'none') {
+      body = '<div class="field-empty">Не удалось загрузить задачи. Открой раздел заново.</div>';
+    } else {
+      var open = loaded.filter(function (t) { return t.status !== 'done' && t.status !== 'cancel'; });
+      // Закрытых со временем набирается много, и они топят живые. Показываем
+      // последние пять — этого хватает, чтобы вспомнить, что уже сделано.
+      var closed = loaded.filter(function (t) { return t.status === 'done' || t.status === 'cancel'; }).slice(0, 5);
+      body = (open.length ? open.map(cardTaskRow).join('')
+                : '<div class="field-empty">Открытых задач по ученику нет.</div>') +
+        (closed.length ? '<div class="ct-off-l">закрытые</div>' + closed.map(cardTaskRow).join('') : '');
+    }
     var comms = (crm.comms || []).slice(-8).reverse();
     var commIc = { call: 'phone', msg: 'send', meet: 'cal' };
     return '<div class="m-ctitle">Заметки и задачи</div>' +
@@ -10933,16 +13588,11 @@
       '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
         '<textarea class="note-ta" id="m-note" placeholder="О чем договорились, что обещали, нюансы">' + esc(crm.note || '') + '</textarea>' +
         '<div class="note-state" id="m-notestate"></div></div>' +
-      '<div class="m-sec"><div class="m-sec-h">Задачи</div><div id="m-tasks">' + tasks.map(function (t) {
-        var over = !t.done && t.due && t.due < todayISO(0);
-        return '<div class="task' + (t.done ? ' done' : '') + (over ? ' overdue' : '') + '" data-tid="' + esc(t.id) + '">' +
-          '<button class="task-chk">' + ic('check', 11) + '</button>' +
-          '<div class="task-body"><div class="task-text">' + esc(t.text) + '</div>' +
-          (t.due ? '<div class="task-due">' + (over ? ic('clock', 11) : '') + fmtDue(t.due) + '</div>' : '') + '</div>' +
-          '<button class="task-del">' + ic('x', 12) + '</button></div>';
-      }).join('') + (tasks.length ? '' : '<div class="field-empty">Задач нет. Поставь следующий шаг ниже.</div>') + '</div>' +
-        '<div class="task-add"><input id="m-task-in" placeholder="Новая задача — Enter" autocomplete="off">' +
-        '<span class="due-seg" id="m-due"><button data-d="0" class="on">сегодня</button><button data-d="1">завтра</button><button data-d="">без срока</button></span></div></div>';
+      '<div class="m-sec"><div class="m-sec-h">Задачи по ученику</div>' +
+        '<div id="m-tasks">' + body + '</div>' +
+        '<button class="bp sm ct-add" id="m-task-add">' + ic('plus', 13) + 'Поставить задачу</button>' +
+        '<div class="ct-hint">Задача уйдет исполнителю в бота и появится в общем списке команды — в срезе «По ученикам».</div>' +
+      '</div>';
   }
 
   /* ── РАЗДЕЛ «Документы» — ручная загрузка ── */
@@ -11056,6 +13706,17 @@
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
         '</div></div>' +
+      /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
+         здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
+         спрашивать не надо — его впишет сама семья на странице оплаты. */
+      '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
+        '<div class="pay-grid sch">' +
+          '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+          '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
+          '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
+        '</div>' +
+        '<div id="sch-out"></div></div>' +
       '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
         '<summary><span class="pm-t">Записать оплату вручную</span>' +
           '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
@@ -11078,6 +13739,15 @@
       '<input type="file" id="pay-rcpt-file" style="display:none">';
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+  /* «21 урок», а не «21 уроков»: строку читает менеджер, а следом за ним семья */
+  function lessonWord(n) {
+    var h = n % 100, t = n % 10;
+    if (h >= 11 && h <= 14) return 'уроков';
+    if (t === 1) return 'урок';
+    if (t >= 2 && t <= 4) return 'урока';
+    return 'уроков';
+  }
 
   /* ── обработчики активного раздела ── */
   /* Обработчики раздела «Английский». Все действия — отдельные ручки бэка; после каждой
@@ -11365,37 +14035,34 @@
       clearTimeout(noteTimer);
       noteTimer = setTimeout(function () { patch(id, { note: note.value }, noteState); }, 900);
     });
-    // задачи
-    function curTasks() { var lc = findLead(id); return ((lc && lc.crm.tasks) || crm.tasks || []).slice(); }
-    Array.prototype.forEach.call(host.querySelectorAll('.task'), function (tEl) {
-      var tid = tEl.getAttribute('data-tid');
-      tEl.querySelector('.task-chk').addEventListener('click', function () {
-        patch(id, { tasks: curTasks().map(function (t) { return String(t.id) === tid ? Object.assign({}, t, { done: !t.done }) : t; }) });
+    // задачи по ученику: список приезжает из общего контура задач команды
+    var taskHost = el('m-tasks');
+    if (taskHost && state.cardTasks[id] === undefined) {
+      loadCardTasks(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
       });
-      tEl.querySelector('.task-del').addEventListener('click', function () {
-        patch(id, { tasks: curTasks().filter(function (t) { return String(t.id) !== tid; }) });
+    }
+    // Вложенных модалок в системе нет (design.md §7.6): карточка ученика
+    // закрывается, открывается карточка задачи, а из нее по имени ученика можно
+    // вернуться обратно.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ctid]'), function (r) {
+      r.addEventListener('click', function () {
+        var tid = +r.getAttribute('data-ctid');
+        closeDrawer();
+        openTask(tid);
       });
     });
-    var dueSeg = el('m-due'), dueVal = '0';
-    if (dueSeg) Array.prototype.forEach.call(dueSeg.children, function (b) {
-      b.addEventListener('click', function () { dueVal = b.getAttribute('data-d'); Array.prototype.forEach.call(dueSeg.children, function (x) { x.classList.toggle('on', x === b); }); });
-    });
-    var taskIn = el('m-task-in');
-    if (taskIn) taskIn.addEventListener('keydown', function (e) {
-      if (e.key !== 'Enter') return;
-      var text = taskIn.value.trim(); if (!text) return;
-      var t = { id: String(Date.now()), text: text, done: false, created_at: new Date().toISOString() };
-      if (dueVal !== '') t.due = todayISO(parseInt(dueVal, 10));
-      taskIn.value = '';
-      patch(id, { tasks: curTasks().concat([t]) });
-    });
-    // лог
-    var commHost = el('m-comms');
-    if (commHost) Array.prototype.forEach.call(commHost.children, function (b) {
-      b.addEventListener('click', function () {
-        var lc = findLead(id); var cur = ((lc && lc.crm.comms) || crm.comms || []).slice();
-        cur.push({ kind: b.getAttribute('data-k'), text: '', at: new Date().toISOString() });
-        patch(id, { comms: cur });
+    var addBtn = el('m-task-add');
+    if (addBtn) addBtn.addEventListener('click', function () {
+      var lead = findLead(id);
+      openNewTask({
+        session_id: id, client_name: (lead && lead.name) || ctx.d.name,
+        after: function () {
+          loadCardTasks(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+          refreshDetail(id);   // бейджи и риски списка считаются по этим же задачам
+        },
       });
     });
 
@@ -11606,6 +14273,42 @@
         });
       });
     }
+
+    /* Счет за уроки школы. Ответ читаем сырым fetch, а не через api(): у отказа тут
+       есть человеческий текст («карточка не связана с учеником»), и потерять его —
+       значит показать менеджеру бессмысленное «HTTP 404». */
+    var schBtn = el('sch-btn');
+    if (schBtn) schBtn.addEventListener('click', function () {
+      var out = el('sch-out');
+      var amt = parseInt((el('sch-amt').value || '').replace(/\D/g, ''), 10) || 0;
+      var les = parseInt((el('sch-les').value || '').replace(/\D/g, ''), 10) || 0;
+      if (!amt) { el('sch-amt').focus(); return; }
+      var body = { session_id: id, amount: amt };
+      if (les) body.lessons = les;
+      schBtn.disabled = true;
+      out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
+      fetch(API + '/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
+      }).then(function (x) {
+        schBtn.disabled = false;
+        if (!x.ok) {
+          out.innerHTML = '<div class="field-empty">' + esc(x.d.detail || 'Счет не выставился — проверьте сеть') + '</div>';
+          return;
+        }
+        el('sch-amt').value = ''; el('sch-les').value = '';
+        out.innerHTML = '<div class="pay-row">' +
+          '<div class="doc-b"><div class="doc-n">' + fmtMoney(x.d.amount) + ' ₽ · ' + x.d.lessons + ' ' + lessonWord(x.d.lessons) + '</div>' +
+            '<div class="doc-m">' + esc(x.d.url) + '</div></div>' +
+          '<button class="pay-rcpt" id="sch-copy">' + ic('copy', 13) + 'Копировать</button></div>';
+        var cp = el('sch-copy');
+        if (cp) cp.addEventListener('click', function () { copyText(x.d.url, cp); });
+      }).catch(function () {
+        schBtn.disabled = false;
+        out.innerHTML = '<div class="field-empty">Счет не выставился — проверьте сеть</div>';
+      });
+    });
 
     var payBtn = el('pay-add-btn');
     if (payBtn) {
@@ -12490,12 +15193,26 @@
     state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
     saveUi(); renderSide(); renderTopbar(); renderView();
   }
+  /* ссылка на задачу: #task/<id> — открываем карточку задачи поверх любой страницы.
+     Такую ссылку присылает бот в напоминании: человек жмет и сразу видит дело. */
+  function openTaskFromHash() {
+    var tid = hashTaskId();
+    if (!tid || document.querySelector('.al-ov')) return;
+    if (!can('tasks')) return;
+    openTask(+tid);
+  }
+  function openPageFromHash() {
+    var pg = hashPageId();
+    if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
+    setPage(pg);
+  }
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
     var id = hashLeadId();
     if (id) openFromHash();
     else if (hashDialogId()) openDialogFromHash();
-    else if (openPageFromHash()) return;
+    else if (hashTaskId()) openTaskFromHash();
+    else if (hashPageId()) openPageFromHash();
     else if (state.drawerId) closeDrawer();
   });
   function startApp() {
@@ -12515,6 +15232,10 @@
     if (can('clients')) loadLeads(false, openFromHash);
     else { state.loaded = true; renderView(); }
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
+    // счетчик задач нужен бейджу в меню сразу, до открытия раздела
+    loadTaskSummary();
+    if (hashTaskId()) openTaskFromHash();
+    else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     if (can('inbox')) refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
@@ -12536,10 +15257,14 @@
       pollInboxLive();
     }, 6000);
   }
-  /* выход / смена аккаунта — сразу на логин (без ожидания фонового 403) */
-  function logout() {
+  /* фоновые опросы сервера — гасим, когда уходим из рабочего экрана */
+  function stopPolling() {
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
     if (state.inboxTimer) { clearInterval(state.inboxTimer); state.inboxTimer = null; }
+  }
+  /* выход / смена аккаунта — сразу на логин (без ожидания фонового 403) */
+  function logout() {
+    stopPolling();
     closeSmenu();
     state.drawerId = null; state.botConvoId = null;
     localStorage.removeItem(KEY_LS);

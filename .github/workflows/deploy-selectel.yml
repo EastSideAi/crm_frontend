@@ -1,8 +1,10 @@
 name: deploy-crm-selectel
 # Автодеплой CRM на Selectel (crm.истсайд.рф).
 # Репозиторий статический — сборки нет, отдаём файлы из корня как есть
-# (ровно то, что делал Vercel: outputDirectory "."). Исключения повторяют
-# .vercelignore плюс служебные папки, чтобы на сервер не уезжали спеки и дизайн-исходники.
+# (ровно то, что делал Vercel: outputDirectory "."). Список --exclude ниже —
+# ЕДИНСТВЕННАЯ настоящая защита: боевая выкладка идет этим tar-ом и .vercelignore
+# не читает. Кладешь в репозиторий внутренний документ — добавляй его сюда,
+# иначе он откроется по прямой ссылке на crm.истсайд.рф без входа.
 on:
   push:
     branches: [main]
@@ -46,8 +48,15 @@ jobs:
             --exclude='./CLAUDE.md' \
             --exclude='./vercel.json' \
             --exclude='./.vercelignore' \
+            --exclude='./docs' \
+            --exclude='./WORKSPACE.md' \
+            --exclude='./memory.md' \
+            --exclude='./.agents' \
+            --exclude='./.tmp' \
+            --exclude='./files' \
             --exclude='./_*.mjs' \
             --exclude='./_*.py' \
+            --exclude='./_*.html' \
             --exclude='./fonts/*.txt' \
             -C . .
           tar -tzf _out/site.tgz | head -20
