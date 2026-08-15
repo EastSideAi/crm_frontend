@@ -4892,7 +4892,11 @@
   function portalOpen(id) {
     state.portalProduct = id || null;
     var tabs = portalTabs(id ? portalProduct(id) : null);
-    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
     renderView();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -5020,7 +5024,11 @@
   /* ── страница продукта ── */
   function renderPortalProduct(view, p) {
     var tabs = portalTabs(p);
-    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
     var head = '<div class="po-wrap">' +
       '<button type="button" class="po-back" id="po-back">' + ic('go', 13) + 'Дерево продуктов</button>' +
       '<div class="po-top"><div class="po-ttl"><h2 class="po-h1">' + esc(p.title) + '</h2>' +
