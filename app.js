@@ -5913,6 +5913,10 @@
       '<span class="dc-main"><span class="dc-ic">' + ic(DC_ICON[d.kind] || 'doc', 14) + '</span>' +
         '<b>' + esc(d.title) + '</b></span>' +
       '<span class="dc-who">' + esc(d.contractor || '—') +
+        // Документы уволенного лежат тут же — их и спрашивают. Но по фамилии не видно,
+        // работаем мы с человеком или нет, а для разговора с налоговой это первое,
+        // что уточняют.
+        (d.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
         (d.inn ? '<span class="dc-inn">' + esc(d.inn) + '</span>' : '') + '</span>' +
       '<span class="dc-when">' + esc(when) + '</span>' +
       '<span class="dc-sum">' + (d.amount ? '<b>' + ctMoney(d.amount) + ' ₽</b>' : '—') + '</span>' +
@@ -5928,8 +5932,9 @@
       return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') + '" data-dkind="' +
         k[0] + '">' + k[1] + '</button>';
     }).join('') +
-      // Тот же фильтр, что и в «Заданиях»: документы никуда не делись, они у людей,
-      // с которыми мы больше не работаем.
+      // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
+      // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
+      // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
       '<button class="qchip q-arch' + (DC.archived ? ' on' : '') + '" data-dcarch="1">' +
         ic('box', 12) + 'Убранные</button>';
     var body = DC.err
