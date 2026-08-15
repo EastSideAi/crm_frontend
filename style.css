@@ -1730,7 +1730,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 700; color: var(--navy); }
 .al-ai-h svg { color: var(--blue); }
 .al-ai .al-in { background: #fff; }
-.al-ai-row { display: flex; align-items: center; gap: 10px; }
+.al-ai-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .al-ai-row .bp { flex: none; }
 .al-ai-row .bp.loading { opacity: .6; pointer-events: none; }
 .al-ai-note { font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }

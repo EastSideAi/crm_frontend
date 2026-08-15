@@ -3576,7 +3576,7 @@
               '<div class="al-ai-h">' + ic('spark', 13) +
                 (isGoal ? 'Опиши цель словами, я разложу по полям'
                         : 'Опиши задачу словами, я разложу по полям') + '</div>' +
-              '<textarea id="nt-aitext" class="al-in al-ta" rows="2" maxlength="2000" placeholder="' +
+              '<textarea id="nt-aitext" class="al-in al-ta" rows="3" maxlength="2000" placeholder="' +
                 (isGoal ? 'Например: к сентябрю набрать 30 учеников, ведет Лиана, это по продажам'
                         : 'Например: Маше сегодня позвонить трем семьям из вчерашних заявок, итог в карточку') +
                 '"></textarea>' +
