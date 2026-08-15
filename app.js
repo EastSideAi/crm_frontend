@@ -3222,7 +3222,11 @@
       var files = data.files || [];
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
-      var me = state.taskMe;
+      // Кто я — берем из ответа карточки, а не только из списка: по ссылке из
+      // бота списка в памяти нет, и раньше исполнитель в таком заходе не видел
+      // ни «взять в работу», ни «сдать».
+      if (data.me != null) state.taskMe = data.me;
+      var me = data.me != null ? data.me : state.taskMe;
       var isAssignee = me != null && me === t.assignee_id;
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
@@ -3470,7 +3474,9 @@
         if (retMode) { setRet(false); setStatus('return', text); return; }
         apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
           if (!r || !r.events) return;
-          draw({ task: t, events: r.events });
+          // Перерисовываем тем же составом данных: без steps и files карточка
+          // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
+          draw({ task: t, events: r.events, steps: steps, files: files, me: me });
           // Свое сообщение человек должен увидеть: карточка перерисовалась и
           // прокрутка сбросилась наверх.
           var again = ov.querySelector('.al-body');
