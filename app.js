@@ -5204,7 +5204,10 @@
      после акта. Все это считает сервер (routers/contractor_tasks.py), а экран только
      показывает разрешенные действия — те же правила на этапах 5 и 6 будут решать,
      можно ли собрать акт и можно ли платить. */
-  var CT = { list: null, stats: null, err: '', q: '', tab: 'all', openId: null,
+  /* archived — задания людей, убранных из работы. Отдельный фильтр, а не строки в общем
+     списке: список отвечает на вопрос «сколько мы должны сейчас», и работа человека, с
+     которым мы больше не работаем, этот ответ портит. Удаления нет — за заданием акт. */
+  var CT = { list: null, stats: null, err: '', q: '', tab: 'all', archived: false, openId: null,
              detail: {}, services: null, busy: false,
              // cat — весь каталог для экрана «Услуги» (вместе с выключенными),
              // services — только активные, для выбора при создании задания
@@ -5228,6 +5231,7 @@
   }
   function ctLoad(cb) {
     var p = '/admin/api/contractor-tasks?tab=' + encodeURIComponent(CT.tab) +
+      (CT.archived ? '&archived=1' : '') +
       (CT.q ? '&q=' + encodeURIComponent(CT.q) : '');
     api(p).then(function (r) {
       CT.list = r.tasks || []; CT.stats = r.stats || null; CT.err = '';
@@ -5288,13 +5292,20 @@
       var n = (st.by_tab || {})[t[0]];
       return '<button class="qchip' + (CT.tab === t[0] ? ' on' : '') + '" data-ctab="' + t[0] + '">' +
         t[1] + (n === undefined ? '' : ' <span class="qn">' + n + '</span>') + '</button>';
-    }).join('');
+    }).join('') +
+      // «Убранные» стоит особняком от вкладок состояния: это не еще одно состояние
+      // задания, а другой набор людей. Показываем всегда, чтобы работа не выглядела
+      // пропавшей, — по нему видно, куда она делась.
+      '<button class="qchip q-arch' + (CT.archived ? ' on' : '') + '" data-ctarch="1">' +
+        ic('box', 12) + 'Убранные</button>';
     var rows = CT.list;
     var body = CT.err
       ? '<div class="empty">' + esc(CT.err) + '</div>'
       : (!rows.length
         ? '<div class="empty">' + (CT.q
             ? 'По запросу «' + esc(CT.q) + '» заданий не нашли.'
+            : CT.archived
+            ? 'Здесь пусто. Тут появятся задания тех, кого убрали из работы — они не удаляются, просто уходят с глаз.'
             : 'Заданий пока нет. Создайте первое — из принятых заданий потом собирается акт, а по акту идет выплата.') + '</div>'
         : rows.map(ctRow).join(''));
 
@@ -5333,6 +5344,11 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-ctab]'), function (b) {
       b.addEventListener('click', function () {
         CT.tab = b.getAttribute('data-ctab'); CT.list = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ctarch]'), function (b) {
+      b.addEventListener('click', function () {
+        CT.archived = !CT.archived; CT.list = null; renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-ct]'), function (r) {
@@ -5866,7 +5882,7 @@
 
      Акт открывается печатной формой в новой вкладке: этот документ печатают и
      отправляют, а не рассматривают в интерфейсе CRM. */
-  var DC = { items: null, err: '', q: '', kind: 'all', _t: null };
+  var DC = { items: null, err: '', q: '', kind: 'all', archived: false, _t: null };
   var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
@@ -5876,6 +5892,7 @@
 
   function dcLoad(cb) {
     var p = '/admin/api/contractor-documents?kind=' + encodeURIComponent(DC.kind) +
+      (DC.archived ? '&archived=1' : '') +
       (DC.q ? '&q=' + encodeURIComponent(DC.q) : '');
     api(p).then(function (r) {
       DC.items = r.items || []; DC.err = '';
@@ -5910,12 +5927,18 @@
     var chips = DC_KINDS.map(function (k) {
       return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') + '" data-dkind="' +
         k[0] + '">' + k[1] + '</button>';
-    }).join('');
+    }).join('') +
+      // Тот же фильтр, что и в «Заданиях»: документы никуда не делись, они у людей,
+      // с которыми мы больше не работаем.
+      '<button class="qchip q-arch' + (DC.archived ? ' on' : '') + '" data-dcarch="1">' +
+        ic('box', 12) + 'Убранные</button>';
     var body = DC.err
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.q
             ? 'По запросу «' + esc(DC.q) + '» документов не нашли.'
+            : DC.archived
+            ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
         : list.map(dcRow).join(''));
 
@@ -5951,6 +5974,11 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dkind]'), function (b) {
       b.addEventListener('click', function () {
         DC.kind = b.getAttribute('data-dkind'); DC.items = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dcarch]'), function (b) {
+      b.addEventListener('click', function () {
+        DC.archived = !DC.archived; DC.items = null; renderView();
       });
     });
     /* Клик по акту открывает задание, а не сам документ: спор идет о работе, а

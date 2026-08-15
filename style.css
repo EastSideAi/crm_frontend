@@ -225,6 +225,10 @@ a { color: inherit; text-decoration: none; }
 .qchip.hot.on { background: var(--red); border-color: var(--red); }
 .qchip.hot .qn { color: var(--red-ink); }
 .qchip.hot.on .qn { color: rgba(255,255,255,.85); }
+/* «Убранные» — не еще одно состояние в ряду, а выход в другой набор людей. Поэтому
+   отбит воздухом вправо и тише соседей: смотреть туда нужно редко. */
+.q-arch { margin-left: auto; background: transparent; color: var(--ink-3); }
+.q-arch:hover { background: var(--fill); }
 
 /* премиальные пустые состояния списка */
 .list-empty { display: flex; flex-direction: column; align-items: center; text-align: center;
