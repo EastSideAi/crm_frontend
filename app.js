@@ -4860,6 +4860,7 @@
      врет человеку, что материал есть, а он его не нашел. */
   var PORTAL_TABS = [
     { id: 'tariffs', label: 'Тарифы', has: function (p) { return (p.tariffs || []).length; } },
+    { id: 'price', label: 'Ценообразование', has: function (p) { return !!p.pricing; } },
     { id: 'items', label: 'Продукты', has: function (p) { return (p.items || []).length; } },
     { id: 'flow', label: 'Путь клиента', has: function (p) { return (p.flow || []).length; } },
     { id: 'econ', label: 'Экономика', cap: 'finance', has: function (p) { return !!p.economics; } },
@@ -5052,6 +5053,7 @@
 
     var bodyHtml = '';
     if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'price') bodyHtml = portalPricing(p);
     else if (state.portalTab === 'items') bodyHtml = portalItems(p);
     else if (state.portalTab === 'flow') bodyHtml = portalFlow(p);
     else if (state.portalTab === 'econ') bodyHtml = portalEcon(p);
@@ -5133,6 +5135,86 @@
 
     return '<div class="po-tariffs">' + cards + '</div>' +
       (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') + cmpHtml;
+  }
+
+  /* ── Ценообразование ──────────────────────────────────────────────────────
+     Цена пакета не назначается сверху, а собирается снизу: у каждой услуги
+     своя цена, сумма услуг тарифа и есть цена без скидки, разница с ценой
+     пакета — выгода клиента. Отсюда же берутся цифры для оферты и для ответа
+     «а почему столько». Если сумма разошлась с ценой из «Тарифов», говорим об
+     этом на экране: молчащее расхождение развалится при первом вопросе
+     клиента, а чинить его будет некому. */
+  function pricingSum(p, tid) {
+    var s = 0;
+    ((p.pricing || {}).groups || []).forEach(function (g) {
+      (g.services || []).forEach(function (sv) {
+        if ((sv.in || []).indexOf(tid) >= 0) s += sv.price || 0;
+      });
+    });
+    return s;
+  }
+  function portalPricing(p) {
+    var pr = p.pricing || {}, ts = p.tariffs || [];
+    var cards = ts.map(function (t) {
+      var sum = pricingSum(p, t.id), full = t.price_full || t.price || 0;
+      var save = full - (t.price || 0), pct = full ? Math.round(save / full * 100) : 0;
+      return '<div class="card po-pcard' + (t.accent ? ' accent' : '') + '">' +
+        '<div class="po-tname">' + esc(t.name) + '</div>' +
+        /* зачеркиваем сумму поштучно только там, где пакет дешевле: у «Навигатора»
+           она и есть цена, и зачеркивание врало бы про скидку */
+        '<div class="po-prow' + (save > 0 ? ' po-pfull' : '') + '"><span>Услуги поштучно</span><b class="num">' + fmtMoney(sum) + ' ₽</b></div>' +
+        '<div class="po-prow"><span>Цена пакетом</span><b class="num big">' + fmtMoney(t.price) + ' ₽</b></div>' +
+        (save > 0
+          ? '<div class="po-psave num">выгода ' + fmtMoney(save) + ' ₽ · ' + pct + '%</div>'
+          : '<div class="po-psave off">это и есть прайс: пакетной скидки нет</div>') +
+        (sum !== full ? '<div class="po-pwarn">' + ic('alert', 13) + '<span>Сумма услуг разошлась с ценой без скидки из «Тарифов»: там ' + fmtMoney(full) + ' ₽</span></div>' : '') +
+      '</div>';
+    }).join('');
+
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var rows = (pr.groups || []).map(function (g) {
+      var head = '<tr class="po-r-grp"><td class="po-rl" colspan="' + (2 + ts.length) + '">' +
+        esc(g.title) + (g.sub ? '<small>' + esc(g.sub) + '</small>' : '') + '</td></tr>';
+      return head + (g.services || []).map(function (sv) {
+        return '<tr><td class="po-rl">' + esc(sv.name) +
+          (sv.unit ? '<span class="po-hint">' + esc(sv.unit) + '</span>' : '') + '</td>' +
+          '<td class="num po-pprice">' + fmtMoney(sv.price) + ' ₽</td>' +
+          ts.map(function (t) {
+            var on = (sv.in || []).indexOf(t.id) >= 0;
+            return '<td class="po-pin">' + (on ? ic('check', 14) : '<span class="po-pdash">—</span>') + '</td>';
+          }).join('') + '</tr>';
+      }).join('');
+    }).join('');
+    var totals =
+      '<tr class="po-r-sum"><td class="po-rl">Итого поштучно</td><td></td>' +
+      ts.map(function (t) { return '<td class="num">' + fmtMoney(pricingSum(p, t.id)) + ' ₽</td>'; }).join('') + '</tr>' +
+      '<tr class="po-r-big"><td class="po-rl">Цена пакетом</td><td></td>' +
+      ts.map(function (t) { return '<td class="num">' + fmtMoney(t.price) + ' ₽</td>'; }).join('') + '</tr>';
+
+    var adds = (pr.addons || []).map(function (a) {
+      return '<div class="po-add">' +
+        '<div class="po-addt">' + esc(a.name) +
+          (a.note ? '<small>' + esc(a.note) + '</small>' : '') + '</div>' +
+        '<div class="po-addp num">' + esc(a.price_label || '') + '</div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="po-pcards">' + cards + '</div>' +
+      (pr.note ? '<div class="po-note wide">' + esc(pr.note) + '</div>' : '') +
+      '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(pr.title || 'Из чего складывается цена') + '</div>' +
+          '<div class="s">цена каждой услуги отдельно — для оферты и для ответа «почему столько»</div></div></div>' +
+        '<div class="po-tblwrap"><table class="po-tbl price"><thead><tr>' +
+          '<th class="po-rl">Услуга</th><th>Цена</th>' + ths + '</tr></thead>' +
+        '<tbody>' + rows + totals + '</tbody></table></div>' +
+        (pr.rule ? '<div class="po-note">' + esc(pr.rule) + '</div>' : '') +
+      '</div>' +
+      (adds ? '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('plus', 14) + '</span>' +
+          '<div><div class="t">' + esc(pr.addons_title || 'Докупается сверх пакета') + '</div>' +
+          '<div class="s">чем добираем тариф под запрос семьи</div></div></div>' +
+        '<div class="po-adds">' + adds + '</div></div>' : '');
   }
 
   /* Экономика: структура (какие статьи и тарифы) — из content/portal.json,
