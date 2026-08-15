@@ -3568,6 +3568,23 @@
                 ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
                 : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
           '<div class="al-body">' +
+            // Помощник. Задачу ставят на бегу, и поэтому ставят плохо: без срока,
+            // без исполнителя, с названием «созвон». Здесь человек пишет фразу как
+            // коллеге, а поля ниже заполняются сами — и он видит, что именно
+            // получилось, до того как задача уйдет.
+            '<div class="al-ai" id="nt-ai">' +
+              '<div class="al-ai-h">' + ic('spark', 13) +
+                (isGoal ? 'Опиши цель словами, я разложу по полям'
+                        : 'Опиши задачу словами, я разложу по полям') + '</div>' +
+              '<textarea id="nt-aitext" class="al-in al-ta" rows="2" maxlength="2000" placeholder="' +
+                (isGoal ? 'Например: к сентябрю набрать 30 учеников, ведет Лиана, это по продажам'
+                        : 'Например: Маше сегодня позвонить трем семьям из вчерашних заявок, итог в карточку') +
+                '"></textarea>' +
+              '<div class="al-ai-row">' +
+                '<button type="button" class="bp sm" id="nt-aigo">' + ic('spark', 13) + 'Разобрать</button>' +
+                '<span class="al-ai-note" id="nt-ainote"></span>' +
+              '</div>' +
+            '</div>' +
             '<label class="al-f"><span class="al-l">' +
               (isGoal ? 'Чего добиваемся' : 'Что сделать') + ' <i>*</i></span>' +
               '<input id="nt-title" class="al-in" placeholder="' +
@@ -3652,6 +3669,44 @@
       var goalS = el('nt-goal'), deptF = el('nt-df');
       if (goalS) goalS.addEventListener('change', function () {
         deptF.classList.toggle('hid', !!goalS.value);
+      });
+
+      /* Разбор фразы. Сервер возвращает предложение, а не готовую задачу: поля
+         заполняются, человек проверяет и правит. Ничего не сохраняется до
+         «поставить задачу» — агент, который заводит сущности сам, за неделю
+         засоряет задачник. */
+      var aiGo = el('nt-aigo'), aiText = el('nt-aitext'), aiNote = el('nt-ainote');
+      var applyDraft = function (r) {
+        var d = (r && r.draft) || {};
+        if (d.title) ti.value = d.title;
+        if (d.details) el('nt-det').value = d.details;
+        if (d.result_expect) el('nt-res').value = d.result_expect;
+        if (d.assignee_id) el('nt-who').value = String(d.assignee_id);
+        if (d.due_date) { el('nt-due').value = d.due_date; markWhen(); }
+        if (goalS && d.parent_id) {
+          goalS.value = String(d.parent_id);
+          deptF.classList.add('hid');
+        }
+        if (!d.parent_id && d.dept && el('nt-dept')) el('nt-dept').value = d.dept;
+        // Вопросы важнее пересказа: сначала то, чего не хватает, потом что понял.
+        var qs = (r && r.questions) || [];
+        aiNote.className = 'al-ai-note' + (qs.length ? ' ask' : '');
+        aiNote.textContent = qs.length ? qs.join(' ') : (r && r.note) || 'Готово, проверь поля';
+      };
+      aiGo.addEventListener('click', function () {
+        var say = (aiText.value || '').trim();
+        if (say.length < 5) { aiText.focus(); return; }
+        aiGo.disabled = true; aiGo.classList.add('loading');
+        aiNote.className = 'al-ai-note';
+        aiNote.textContent = 'Разбираю...';
+        apiSend('/admin/api/tasks/assist', 'POST', { text: say, goal: isGoal }, function (r) {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          applyDraft(r);
+        }, function () {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          aiNote.className = 'al-ai-note ask';
+          aiNote.textContent = 'Помощник не ответил, заполни поля руками';
+        });
       });
 
       var save = el('nt-save');
