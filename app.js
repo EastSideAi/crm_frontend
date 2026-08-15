@@ -2013,6 +2013,19 @@
           plural(bt.done, 'задача', 'задачи', 'задач') + '.';
         else tphr = 'За этот период команда еще ничего не закрыла.';
       }
+      // На «Целях» сводка про движение, а не про мои открытые задачи.
+      if (TASK_SEGS[taskSeg()].view === 'goals') {
+        var gls = Array.isArray(state.tasks) ? state.tasks : [];
+        var gTotal = gls.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+        var gDone = gls.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+        var gOver = gls.filter(function (g) { return g.overdue; }).length;
+        tphr = gls.length
+          ? '<b>' + gls.length + '</b> ' + plural(gls.length, 'цель', 'цели', 'целей') +
+            ' в работе, сделано <b>' + gDone + '</b> из ' + gTotal + ' шагов' +
+            (gOver ? '. Просрочены сроки у <b>' + gOver + '</b> ' +
+              plural(gOver, 'цели', 'целей', 'целей') : '') + '.'
+          : 'Целей в работе нет. Цель появляется, когда у задачи есть шаги.';
+      }
       // В дереве сводка отвечает за тот уровень, на котором человек стоит.
       if (TASK_SEGS[taskSeg()].view === 'tree') {
         if (state.treeGoal) {
@@ -2164,9 +2177,12 @@
   };
   var TASK_SEGS = {
     today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
+    // Цели идут сразу за «Сегодня» намеренно: сегодняшняя задача без цели —
+    // просто дело, а с целью — шаг к результату. Порядок вкладок и есть ответ
+    // на вопрос «зачем я это делаю» (решение Павла от 14.08.2026).
+    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'куда мы идем, по направлениям' },
     week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
     mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
-    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'большие задачи и прогресс по шагам' },
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям и в
     // обычном списке между ее строками стоят чужие задачи.
@@ -2391,6 +2407,7 @@
     if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
     if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
     if (TASK_SEGS[seg].view === 'tree') { renderTree(view); return; }
+    if (TASK_SEGS[seg].view === 'goals') { renderGoals(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
       if (!q) return true;
@@ -2404,7 +2421,6 @@
       // Подпись под названием отвечает на «откуда эта задача»: цель важнее
       // постановщика — шаг «собрать документы» без цели читается как обрывок.
       var sub = [];
-      if (t.parent_title) sub.push('в цели: ' + t.parent_title);
       if (t.author_name) sub.push('поставил ' + t.author_name);
       else if (showWho) sub.push('без постановщика');
       if (t.client_name) sub.push(t.client_name);
@@ -2414,8 +2430,15 @@
             '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span></div>'
         : '';
       return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
-        (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        (t.parent_title ? ' has-goal' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
         '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+          // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
+          // постановщиком: задача без цели просто дело, с целью — шаг к
+          // результату, и это первое, что должно читаться в списке.
+          (t.parent_title
+            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' +
+              ic('target', 11) + esc(t.parent_title) + '</button>'
+            : '') +
           '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' + steps + '</div>' +
         '<div class="tsk-who">' + (t.assignee_name
           ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
@@ -2482,7 +2505,104 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
+    // Пометка цели открывает саму цель, а не задачу, в строке которой стоит.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openTask(+b.getAttribute('data-goalid'));
+      });
+    });
   }
+  /* ── Срез «Цели» ───────────────────────────────────────────────────────────
+     Не плоский список, а разбивка по направлениям: вопрос к этому экрану —
+     «куда мы идем и где стоим», а он задается по отделам, а не по алфавиту.
+     Первым блоком — цели компании: они общие для всех, и направление у них не
+     пустое по забывчивости, а пустое по смыслу (решение Павла 15.08.2026).
+     Работают-то все в одном векторе, направления только делят зоны ответа. */
+  function renderGoals(view) {
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (g) {
+      if (!q) return true;
+      return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
+    });
+
+    var order = [''].concat(Object.keys(DEPTS));
+    var groups = order.map(function (d) {
+      return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
+               hint: d ? '' : 'общие для всех направлений',
+               goals: list.filter(function (g) { return (g.dept || '') === d; }) };
+    }).filter(function (g) { return g.goals.length; });
+
+    var body = groups.map(function (grp) {
+      var rows = grp.goals.map(function (g) {
+        var due = dueLabel(g);
+        var pct = g.steps_total ? Math.round(g.steps_done / g.steps_total * 100) : 0;
+        return '<div class="trow gl-row' + (g.overdue ? ' r-crit' : '') + '" data-goalopen="' + g.id + '">' +
+          '<div class="tr-name">' + esc(g.title) +
+            '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
+          '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
+          '<span class="gl-pct num' + (pct === 100 ? ' full' : '') + '">' + pct + '%</span>' +
+          '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+          '<span class="tr-go">' + ic('go', 14) + '</span>' +
+        '</div>';
+      }).join('');
+      var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
+      var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
+      return '<div class="gl-sec' + (grp.dept ? '' : ' gl-company') + '">' +
+        '<span class="gl-sl">' + esc(grp.label) +
+          (grp.hint ? '<i class="gl-hint">' + esc(grp.hint) + '</i>' : '') + '</span>' +
+        '<span class="gl-sn num">' + grp.goals.length + ' ' +
+          plural(grp.goals.length, 'цель', 'цели', 'целей') +
+        (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') + '</span></div>' + rows;
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' +
+          plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая цель</button>' +
+      '</div>' +
+      '<div class="list-body">' +
+        (list.length ? body
+          : '<div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.'
+              : 'Целей пока нет. Заведи первую: цель это большой результат, к которому потом добавляются шаги.') + '</div>') +
+      '</div></div>';
+
+    // На экране целей кнопка заводит цель, а не задачу: за задачей человек идет
+    // в «Сегодня», а сюда приходит ставить направление работы.
+    el('tsk-new').addEventListener('click', function () { openNewTask({ goal: true }); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value;
+      var pos = qi.selectionStart;
+      renderView();
+      var again = el('tsk-q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    // Клик по цели ведет в ее шаги — тем же экраном, что и в дереве, чтобы у
+    // одной сущности не было двух разных представлений.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalopen]'), function (r) {
+      var id = +r.getAttribute('data-goalopen');
+      r.addEventListener('click', function () {
+        var g = (state.tasks || []).filter(function (x) { return x.id === id; })[0];
+        if (!g) return;
+        // Дерево живет под cap tasks_all. У кого его нет, тому шаги чужой цели
+        // все равно не отдадут — открываем карточку цели, она доступна всем
+        // участникам и показывает то же самое по сути.
+        if (!can('tasks_all')) { openTask(id); return; }
+        state.taskSeg = 'team';
+        state.taskWho = null;
+        saveUi();
+        treeGo(g.dept || '', g);
+        renderTopbar();
+      });
+    });
+  }
+
   /* ── Дерево «Вся команда» ──────────────────────────────────────────────────
      Работа компании читается сверху вниз: направление, цель, шаги. На каждом
      уровне ровно один тип объектов — поэтому каши не бывает по устройству
@@ -3039,7 +3159,42 @@
   /* ── Карточка задачи ───────────────────────────────────────────────────────
      Одна лента: смены статуса, переназначения, сдвиги срока и реплики людей
      вперемешку по времени. Спор «когда перенесли срок» решается этой лентой. */
-  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads', due: 'cal', remind: 'bell' };
+  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads',
+                   due: 'cal', remind: 'bell', result: 'doc' };
+
+  /* Артефакт результата: до 8 МБ на файл и не больше пяти — те же границы держит
+     сервер (MAX_FILE_BYTES в staff_tasks.py). Читаем файл в base64 прямо в
+     браузере: отдельной загрузки на диск у нас нет, а скриншот и договор в эти
+     рамки помещаются с запасом. */
+  var RES_MAX_MB = 8, RES_MAX_FILES = 5;
+  function readFiles(fileList, done) {
+    var out = [], list = Array.prototype.slice.call(fileList, 0, RES_MAX_FILES), left = list.length;
+    if (!left) return done(out);
+    list.forEach(function (f) {
+      if (f.size > RES_MAX_MB * 1024 * 1024) {
+        showToast('«' + f.name + '» больше ' + RES_MAX_MB + ' МБ — такой не пройдет');
+        if (!--left) done(out);
+        return;
+      }
+      var fr = new FileReader();
+      fr.onload = function () {
+        out.push({ name: f.name || 'файл', mime: f.type || '', data: String(fr.result) });
+        if (!--left) done(out);
+      };
+      fr.onerror = function () { if (!--left) done(out); };
+      fr.readAsDataURL(f);
+    });
+  }
+  /* Прямая ссылка на файл. Идет мимо api(): браузер качает ее сам, поэтому ключ
+     подставляем в адрес — тот же прием, что у выгрузок CSV. */
+  function fileHref(id) {
+    return API + '/admin/api/task-files/' + id + '?k=' + encodeURIComponent(getKey());
+  }
+  function fileSize(n) {
+    if (!n) return '';
+    return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' КБ'
+                           : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
+  }
 
   function openTask(id) {
     if (document.querySelector('.al-ov')) return;
@@ -3064,9 +3219,14 @@
 
     var draw = function (data) {
       var t = data.task, events = data.events || [], steps = data.steps || [];
+      var files = data.files || [];
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
-      var me = state.taskMe;
+      // Кто я — берем из ответа карточки, а не только из списка: по ссылке из
+      // бота списка в памяти нет, и раньше исполнитель в таком заходе не видел
+      // ни «взять в работу», ни «сдать».
+      if (data.me != null) state.taskMe = data.me;
+      var me = data.me != null ? data.me : state.taskMe;
       var isAssignee = me != null && me === t.assignee_id;
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
@@ -3117,6 +3277,28 @@
         '<div class="al-body">' +
           (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
           (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
+          // приемка это сравнение двух блоков, а не поиск доказательств в ленте.
+          (t.result_text || files.length || (isAssignee && t.status !== 'cancel')
+            ? '<div class="tsk-sec tsk-res"><div class="tsk-l tsk-lrow">Результат' +
+                (t.result_at ? '<span class="tsk-resat">' + esc(fmtWhen(t.result_at)) + '</span>' : '') +
+                (isAssignee && t.status !== 'cancel'
+                  ? '<button class="tsk-addstep" id="tk-resadd">' + ic('plus', 12) +
+                    (t.result_text || files.length ? 'Дополнить' : 'Приложить') + '</button>'
+                  : '') +
+                '</div>' +
+                (!t.result_text && !files.length
+                  ? '<div class="tsk-nosteps">Пока пусто. Приложи то, по чему видно работу: скриншот, файл, ссылку или пару строк.</div>'
+                  : '') +
+                (t.result_text ? '<div class="tsk-p">' + esc(t.result_text) + '</div>' : '') +
+                (files.length ? '<div class="tsk-files">' + files.map(function (f) {
+                  return '<a class="tsk-file" href="' + esc(fileHref(f.id)) + '" target="_blank" rel="noopener">' +
+                    ic(f.link ? 'go' : 'doc', 13) +
+                    '<span class="tsk-file-n">' + esc(f.name) + '</span>' +
+                    '<span class="tsk-file-m">' + esc(f.link ? 'ссылка' : fileSize(f.size_bytes)) + '</span></a>';
+                }).join('') + '</div>' : '') +
+              '</div>'
+            : '') +
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
@@ -3136,6 +3318,22 @@
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
           '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
             '<button type="button" id="tk-retx">не возвращать</button></div>' +
+          // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
+          // это событие, и текст «что сделано» с файлом должны уехать вместе,
+          // иначе постановщик принимает на слово.
+          '<div class="tsk-resform" id="tk-resf" hidden>' +
+            '<div class="tsk-l">Что сделано</div>' +
+            '<textarea id="tk-restext" class="al-in al-ta" rows="2" maxlength="4000" ' +
+              'placeholder="Коротко: что получилось и где это лежит"></textarea>' +
+            '<div class="tsk-picked" id="tk-picked"></div>' +
+            '<div class="tsk-resrow">' +
+              '<label class="tsk-attach">' + ic('doc', 13) + 'Скриншот или файл' +
+                '<input type="file" id="tk-resfile" multiple hidden></label>' +
+              '<span class="tsk-reshint">до ' + RES_MAX_MB + ' МБ, не больше ' + RES_MAX_FILES + '</span>' +
+              '<button class="al-cancel" id="tk-rescx">Отмена</button>' +
+              '<button class="bp" id="tk-resok">Сдать</button>' +
+            '</div>' +
+          '</div>' +
           '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
             '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
         '</div>' +
@@ -3181,6 +3379,80 @@
       };
       el('tk-retx').addEventListener('click', function () { setRet(false); });
 
+      /* Сдача с результатом. Панель одна на два случая: «сдать на проверку» и
+         «доложить артефакт» по уже сданной или принятой задаче. Отправляем
+         сначала результат, потом статус — если файл не долетел, задача не
+         уедет на приемку пустой. */
+      var resF = el('tk-resf'), resT = el('tk-restext'), picked = [];
+      var resMode = '';
+      var drawPicked = function () {
+        el('tk-picked').innerHTML = picked.map(function (f, i) {
+          return '<span class="tsk-pick">' + esc(f.name) +
+            '<button type="button" data-drop="' + i + '" title="Убрать">' + ic('x', 11) + '</button></span>';
+        }).join('');
+        Array.prototype.forEach.call(el('tk-picked').querySelectorAll('[data-drop]'), function (b) {
+          b.addEventListener('click', function () {
+            picked.splice(+b.getAttribute('data-drop'), 1); drawPicked();
+          });
+        });
+      };
+      var setRes = function (mode) {
+        resMode = mode;
+        resF.hidden = !mode;
+        // Пока панель открыта, кнопки внизу прячем: иначе на экране две кнопки
+        // «сдать» и непонятно, какая настоящая.
+        var footActs = ov.querySelector('.tsk-acts');
+        if (footActs) footActs.hidden = !!mode;
+        if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
+        el('tk-resok').textContent = mode === 'review' ? 'Сдать' : 'Сохранить';
+        resT.value = mode === 'review' ? '' : (t.result_text || '');
+        resT.focus();
+        body.scrollTop = body.scrollHeight;
+      };
+      el('tk-rescx').addEventListener('click', function () { setRes(''); });
+      el('tk-resfile').addEventListener('change', function (e) {
+        readFiles(e.target.files, function (got) {
+          picked = picked.concat(got).slice(0, RES_MAX_FILES);
+          drawPicked();
+          e.target.value = '';
+        });
+      });
+      // Скриншот вставляют из буфера чаще, чем ищут в папке.
+      resT.addEventListener('paste', function (e) {
+        var items = (e.clipboardData || {}).items || [];
+        var imgs = Array.prototype.filter.call(items, function (i) { return i.kind === 'file'; })
+          .map(function (i) { return i.getAsFile(); }).filter(Boolean);
+        if (!imgs.length) return;
+        readFiles(imgs, function (got) { picked = picked.concat(got).slice(0, RES_MAX_FILES); drawPicked(); });
+      });
+      el('tk-resok').addEventListener('click', function () {
+        var text = (resT.value || '').trim();
+        var ok = el('tk-resok');
+        if (!text && !picked.length) {
+          showToast('Напиши, что сделано, или приложи файл');
+          resT.focus();
+          return;
+        }
+        ok.disabled = true;
+        apiSend('/admin/api/tasks/' + id + '/result', 'POST', { text: text, files: picked }, function () {
+          var after = resMode;
+          setRes('');
+          ok.disabled = false;
+          // Текст в статус не дублируем: он уже уехал отдельным событием
+          // «результат», и в ленте это читалось бы дважды подряд.
+          if (after === 'review') { setStatus('review'); return; }
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          showToast('Результат приложен');
+        }, function (code) {
+          ok.disabled = false;
+          showToast(code === 413 ? 'Файл слишком большой, до ' + RES_MAX_MB + ' МБ'
+                                 : 'Результат не сохранился — проверь интернет');
+        });
+      });
+      var resAdd = el('tk-resadd');
+      if (resAdd) resAdd.addEventListener('click', function () { setRes('add'); });
+
       var setStatus = function (to, why, btn) {
         if (btn) btn.disabled = true;
         apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
@@ -3202,7 +3474,9 @@
         if (retMode) { setRet(false); setStatus('return', text); return; }
         apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
           if (!r || !r.events) return;
-          draw({ task: t, events: r.events });
+          // Перерисовываем тем же составом данных: без steps и files карточка
+          // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
+          draw({ task: t, events: r.events, steps: steps, files: files, me: me });
           // Свое сообщение человек должен увидеть: карточка перерисовалась и
           // прокрутка сбросилась наверх.
           var again = ov.querySelector('.al-body');
@@ -3216,6 +3490,9 @@
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
           if (to === 'return') { setRet(true); return; }
+          // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
+          // чего приемка превращалась в спор.
+          if (to === 'review' && isAssignee) { setRes('review'); return; }
           if (to === 'cancel' && !confirm('Отменить задачу? Она уйдет из всех списков.')) return;
           setStatus(to, '', b);
         });
@@ -3242,64 +3519,117 @@
         return '<option value="' + p.id + '"' + (String(preset.assignee_id) === String(p.id) ? ' selected' : '') + '>' +
           esc(p.name || p.login) + (p.linked ? '' : ' (не в боте)') + '</option>';
       }).join('');
+      // Цель или обычная задача. Разница не косметическая: у цели свое место в
+      // иерархии (она верхний уровень и к ней цепляют шаги), поэтому спрашиваем
+      // мы в этих двух случаях разное.
+      var isGoal = !!preset.goal;
       // Направление по умолчанию — то, что открыто фильтром: ставят задачу обычно
       // там же, где на нее смотрели.
       var dept0 = preset.dept || state.taskDept || '';
-      var dopts = '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
-        return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
-      }).join('');
+      // «Пусто» у задачи значит «забыли выбрать», у цели — «цель всей компании».
+      // Одно и то же значение, но человеку это разные вещи, и подписи разные.
+      var dopts = '<option value="">' +
+          (isGoal ? 'Вся компания — общая цель' : '— без направления —') + '</option>' +
+        Object.keys(DEPTS).map(function (d) {
+          return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+        }).join('');
       // Цель, из карточки которой пришли, могла появиться после того, как список
       // закэшировался: без этой строки шаг молча стал бы самостоятельной задачей.
       var known = preset.parent_id && goals.some(function (g) { return String(g.id) === String(preset.parent_id); });
+      var gopt = function (g) {
+        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
+          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
+        '</option>';
+      };
+      // Цели отдельной группой от обычных задач: положить шаг можно в любую
+      // задачу (она станет целью), но по умолчанию человек ищет глазами цель.
+      var realGoals = goals.filter(function (g) { return g.is_goal; });
+      var plainOnes = goals.filter(function (g) { return !g.is_goal; });
       var gopts = '<option value="">— самостоятельная задача —</option>' +
         (preset.parent_id && !known
           ? '<option value="' + preset.parent_id + '" selected>' + esc(preset.parent_title || 'выбранная цель') + '</option>'
           : '') +
-        goals.map(function (g) {
-        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
-          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
-        '</option>';
-      }).join('');
+        (realGoals.length ? '<optgroup label="Цели">' + realGoals.map(gopt).join('') + '</optgroup>' : '') +
+        (plainOnes.length ? '<optgroup label="Задачи — станут целью">' + plainOnes.map(gopt).join('') + '</optgroup>' : '');
       var ov = document.createElement('div');
       ov.className = 'al-ov';
       ov.innerHTML =
         '<div class="al-card" role="dialog" aria-modal="true">' +
           '<div class="al-head">' +
-            '<div><div class="al-eyebrow">Задачи</div><div class="al-title">' +
-              (preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
+            '<div><div class="al-eyebrow">' + (isGoal ? 'Цели' : 'Задачи') + '</div><div class="al-title">' +
+              (isGoal ? 'Новая цель' : preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
             '<button class="al-x" id="nt-x" title="Закрыть">' + ic('x', 16) + '</button>' +
           '</div>' +
-          '<div class="al-sub">' + (preset.parent_title
-            ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
-            : preset.client_name
-              ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
-              : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
+          '<div class="al-sub">' + (isGoal
+            ? 'Большой результат, к которому идем. Шаги добавишь сразу после — цель без шагов так и стоит на месте.'
+            : preset.parent_title
+              ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
+              : preset.client_name
+                ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
+                : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
           '<div class="al-body">' +
-            '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
-              '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
-            '<label class="al-f"><span class="al-l">Кому <i>*</i></span><span class="al-selwrap">' +
+            // Помощник. Задачу ставят на бегу, и поэтому ставят плохо: без срока,
+            // без исполнителя, с названием «созвон». Здесь человек пишет фразу как
+            // коллеге, а поля ниже заполняются сами — и он видит, что именно
+            // получилось, до того как задача уйдет.
+            '<div class="al-ai" id="nt-ai">' +
+              '<div class="al-ai-h">' + ic('spark', 13) +
+                (isGoal ? 'Опиши цель словами, я разложу по полям'
+                        : 'Опиши задачу словами, я разложу по полям') + '</div>' +
+              '<textarea id="nt-aitext" class="al-in al-ta" rows="3" maxlength="2000" placeholder="' +
+                (isGoal ? 'Например: к сентябрю набрать 30 учеников, ведет Лиана, это по продажам'
+                        : 'Например: Маше сегодня позвонить трем семьям из вчерашних заявок, итог в карточку') +
+                '"></textarea>' +
+              '<div class="al-ai-row">' +
+                '<button type="button" class="bp sm" id="nt-aigo">' + ic('spark', 13) + 'Разобрать</button>' +
+                '<span class="al-ai-note" id="nt-ainote"></span>' +
+              '</div>' +
+            '</div>' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Чего добиваемся' : 'Что сделать') + ' <i>*</i></span>' +
+              '<input id="nt-title" class="al-in" placeholder="' +
+                (isGoal ? 'Результат, а не действие: «Набрали 30 учеников на осень»' : 'Коротко, одним предложением') +
+                '" maxlength="200"></label>' +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Кто ведет' : 'Кому') + ' <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
-            '<div class="al-f"><span class="al-l">Срок</span>' +
-              '<span class="due-seg">' + [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']].map(function (o) {
+            // У цели направление — первое, что нужно решить: это ее зона
+            // ответственности. У задачи — уточнение после «что-кому-когда».
+            (isGoal
+              ? '<label class="al-f" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                  '<select id="nt-dept" class="al-sel">' + dopts + '</select></span>' +
+                  '<span class="al-hint">Цель компании видна всем направлениям, цель отдела стоит в его блоке.</span></label>'
+              : '') +
+            '<div class="al-f"><span class="al-l">' + (isGoal ? 'К какому сроку' : 'Срок') + '</span>' +
+              '<span class="due-seg">' + (isGoal
+                ? [['7', 'неделя'], ['30', 'месяц'], ['90', 'квартал'], ['180', 'полгода']]
+                : [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']]).map(function (o) {
                 return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
               }).join('') + '</span>' +
-              '<input id="nt-due" class="al-in" type="date" value="' + esc(preset.due || isoDay(1)) + '"></div>' +
+              '<input id="nt-due" class="al-in" type="date" value="' +
+                esc(preset.due || isoDay(isGoal ? 30 : 1)) + '"></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
             // свое направление, либо это шаг, и направление приезжает от цели.
-            '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
-              '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
-            '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
-              '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>' +
-            '<label class="al-f"><span class="al-l">Подробности</span>' +
-              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="Что важно знать, ссылки, контекст"></textarea></label>' +
-            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
-              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="По чему поймем, что задача закрыта"></textarea></label>' +
+            (isGoal ? '' :
+              '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
+              '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
+                '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>') +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Зачем это нам' : 'Подробности') + '</span>' +
+              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="' +
+                (isGoal ? 'Что изменится, когда дойдем' : 'Что важно знать, ссылки, контекст') +
+                '"></textarea></label>' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Как поймем, что дошли' : 'Что считается сделанным') + '</span>' +
+              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="' +
+                (isGoal ? 'Измеримый признак: цифра, документ, запущенный процесс'
+                        : 'По чему поймем, что задача закрыта') + '"></textarea></label>' +
           '</div>' +
           '<div class="al-foot">' +
             '<button class="al-cancel" id="nt-cancel">Отмена</button>' +
-            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) + 'Поставить задачу</button>' +
+            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) +
+              (isGoal ? 'Завести цель' : 'Поставить задачу') + '</button>' +
           '</div>' +
         '</div>';
       document.body.appendChild(ov);
@@ -3334,10 +3664,49 @@
       markWhen();
 
       // Выбрали цель — направление больше не спрашиваем: шаг наследует его от цели
-      // (это же правило держит сервер, см. _resolve_parent).
+      // (это же правило держит сервер, см. _resolve_parent). В режиме цели этого
+      // выбора нет вовсе: цель — верхний уровень, ее некуда вкладывать.
       var goalS = el('nt-goal'), deptF = el('nt-df');
-      goalS.addEventListener('change', function () {
+      if (goalS) goalS.addEventListener('change', function () {
         deptF.classList.toggle('hid', !!goalS.value);
+      });
+
+      /* Разбор фразы. Сервер возвращает предложение, а не готовую задачу: поля
+         заполняются, человек проверяет и правит. Ничего не сохраняется до
+         «поставить задачу» — агент, который заводит сущности сам, за неделю
+         засоряет задачник. */
+      var aiGo = el('nt-aigo'), aiText = el('nt-aitext'), aiNote = el('nt-ainote');
+      var applyDraft = function (r) {
+        var d = (r && r.draft) || {};
+        if (d.title) ti.value = d.title;
+        if (d.details) el('nt-det').value = d.details;
+        if (d.result_expect) el('nt-res').value = d.result_expect;
+        if (d.assignee_id) el('nt-who').value = String(d.assignee_id);
+        if (d.due_date) { el('nt-due').value = d.due_date; markWhen(); }
+        if (goalS && d.parent_id) {
+          goalS.value = String(d.parent_id);
+          deptF.classList.add('hid');
+        }
+        if (!d.parent_id && d.dept && el('nt-dept')) el('nt-dept').value = d.dept;
+        // Вопросы важнее пересказа: сначала то, чего не хватает, потом что понял.
+        var qs = (r && r.questions) || [];
+        aiNote.className = 'al-ai-note' + (qs.length ? ' ask' : '');
+        aiNote.textContent = qs.length ? qs.join(' ') : (r && r.note) || 'Готово, проверь поля';
+      };
+      aiGo.addEventListener('click', function () {
+        var say = (aiText.value || '').trim();
+        if (say.length < 5) { aiText.focus(); return; }
+        aiGo.disabled = true; aiGo.classList.add('loading');
+        aiNote.className = 'al-ai-note';
+        aiNote.textContent = 'Разбираю...';
+        apiSend('/admin/api/tasks/assist', 'POST', { text: say, goal: isGoal }, function (r) {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          applyDraft(r);
+        }, function () {
+          aiGo.disabled = false; aiGo.classList.remove('loading');
+          aiNote.className = 'al-ai-note ask';
+          aiNote.textContent = 'Помощник не ответил, заполни поля руками';
+        });
       });
 
       var save = el('nt-save');
@@ -3345,13 +3714,13 @@
         var title = (ti.value || '').trim();
         if (!title) { ti.classList.add('al-err'); ti.focus(); return; }
         var who = el('nt-who').value;
-        if (!who) { showToast('Выбери, кому ставим задачу'); return; }
+        if (!who) { showToast(isGoal ? 'Выбери, кто ведет цель' : 'Выбери, кому ставим задачу'); return; }
         var day = el('nt-due').value;
         // Срок = конец выбранного дня: «до 12 августа» человек понимает как
         // «весь день 12-го мой», а не «до полуночи с 11-го на 12-е».
         var due = day ? new Date(day + 'T23:59:59').toISOString() : null;
         save.disabled = true; save.classList.add('loading');
-        var goal = goalS.value;
+        var goal = goalS ? goalS.value : '';
         apiSend('/admin/api/tasks', 'POST', {
           title: title, assignee_id: +who, due_at: due,
           details: (el('nt-det').value || '').trim(),
@@ -3359,17 +3728,21 @@
           session_id: preset.session_id || null,
           dept: goal ? null : (el('nt-dept').value || ''),
           parent_id: goal ? +goal : null,
-        }, function () {
+          is_goal: isGoal,
+        }, function (r) {
           close();
           state.tasks = null;
           state.taskGoals = null;   // новая задача может стать целью для следующей
           loadTaskSummary();
           if (preset.after) preset.after();
           else if (state.page === 'tasks') renderView();
-          showToast(goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
+          showToast(isGoal ? 'Цель заведена' : goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
+          // Цель без шагов — просто надпись. Сразу открываем ее карточку: там
+          // кнопка «добавить шаг», и первый шаг ставится, пока думают о цели.
+          if (isGoal && r && r.task) openTask(r.task.id);
         }, function () {
           save.disabled = false; save.classList.remove('loading');
-          showToast('Не получилось поставить задачу');
+          showToast(isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу');
         });
       });
      });
@@ -4519,7 +4892,11 @@
   function portalOpen(id) {
     state.portalProduct = id || null;
     var tabs = portalTabs(id ? portalProduct(id) : null);
-    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
     renderView();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -4571,7 +4948,7 @@
     var intake = (tree.intake || []).map(function (n, i) {
       return (i ? '<div class="po-drop"></div>' : '') +
         '<a class="po-node" href="' + esc(n.href) + '" target="_blank" rel="noopener">' +
-          '<span class="po-ni">' + ic(n.id === 'diag' ? 'spark' : 'funnel', 15) + '</span>' +
+          '<span class="po-ni">' + ic(n.icon || 'funnel', 15) + '</span>' +
           '<span class="po-nt"><b>' + esc(n.title) + '</b><small>' + esc(n.note || '') + '</small></span>' +
           '<span class="po-nx">' + ic('ext', 14) + '</span></a>';
     }).join('');
@@ -4596,7 +4973,9 @@
       '<div class="po-lbl">Вход</div>' +
       '<div class="po-lane">' + intake + '</div>' +
       '<div class="po-stem"><span class="po-lbl">Направления</span></div>' +
-      '<div class="po-cols">' + cols + '</div>' +
+      /* число колонок задает json, а не css: появилось новое направление — ряд
+         перестраивается сам, горизонтальная шина над колонками не рвется */
+      '<div class="po-cols" style="--po-n:' + (prods.length || 1) + '">' + cols + '</div>' +
       (ex.title ? '<div class="po-extras"><div class="po-exh"><b>' + esc(ex.title) + '</b>' +
         '<small>' + esc(ex.note || '') + '</small></div><div class="po-xs">' + exItems + '</div></div>' : '') +
     '</div></div>';
@@ -4617,7 +4996,8 @@
       });
     });
     var L = d.links || {};
-    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент', label: 'Платформа студента', sub: 'диагностика и кабинет', go: { href: L.platform } });
+    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент регистрация', label: 'Платформа студента', sub: 'регистрация с диагностикой', go: { href: L.platform } });
+    if (L.nexis) idx.push({ kw: 'нексис нейропрофориентация профориентация профессия кем быть', label: 'Нексис', sub: 'нейропрофориентация', go: { href: L.nexis } });
     if (L.crm) idx.push({ kw: 'crm клиенты сделки квалификация', label: 'CRM', sub: 'клиенты и сделки', go: { href: L.crm } });
     if (L.bot) idx.push({ kw: 'бот телеграм лиды квалификация', label: 'Telegram-бот', sub: 'первичная обработка лидов', go: { href: L.bot } });
     if (L.site) idx.push({ kw: 'сайт истсайд лендинг', label: 'Сайт ИСТСАЙД.РФ', sub: 'публичный сайт', go: { href: L.site } });
@@ -4644,7 +5024,11 @@
   /* ── страница продукта ── */
   function renderPortalProduct(view, p) {
     var tabs = portalTabs(p);
-    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) state.portalTab = tabs[0].id;
+    /* у ненаполненного направления вкладок нет вообще: без проверки на пустой
+       список карточка молча не открывалась */
+    if (!state.portalTab || !tabs.some(function (t) { return t.id === state.portalTab; })) {
+      state.portalTab = tabs.length ? tabs[0].id : null;
+    }
     var head = '<div class="po-wrap">' +
       '<button type="button" class="po-back" id="po-back">' + ic('go', 13) + 'Дерево продуктов</button>' +
       '<div class="po-top"><div class="po-ttl"><h2 class="po-h1">' + esc(p.title) + '</h2>' +

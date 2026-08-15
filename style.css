@@ -1680,9 +1680,18 @@ a { color: inherit; text-decoration: none; }
   padding: 24px; background: rgba(17,21,31,.34); backdrop-filter: blur(3px);
   opacity: 0; transition: opacity .18s var(--ease); }
 .al-ov.show { opacity: 1; }
+/* Форма выше экрана — обычное дело на телефоне: семь полей в 390px не помещаются
+   никогда. Поэтому карточка это колонка с фиксированной высотой, прокручивается
+   внутри только тело, а шапка и кнопка сохранения стоят на месте. Без этого
+   карточка центрировалась целиком, уезжала за оба края экрана, и кнопка
+   «Поставить задачу» оказывалась там, куда нельзя доскроллить. */
 .al-card { width: 100%; max-width: 460px; background: #fff; border-radius: 20px; overflow: hidden;
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
   box-shadow: 0 30px 80px -24px rgba(17,21,31,.5), 0 2px 8px rgba(17,21,31,.08);
   transform: translateY(10px) scale(.985); opacity: 0; transition: transform .2s var(--ease), opacity .2s var(--ease); }
+.al-card > .al-head, .al-card > .al-sub, .al-card > .al-foot { flex: none; }
+.al-card > .al-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; }
 .al-ov.show .al-card { transform: none; opacity: 1; }
 .al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 24px 0; }
 .al-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
@@ -1709,6 +1718,23 @@ a { color: inherit; text-decoration: none; }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
 .al-in.al-err { box-shadow: inset 0 0 0 1.5px var(--red), 0 0 0 3px rgba(196,42,47,.1); background: #fff; }
 .al-ta { resize: vertical; min-height: 46px; line-height: 1.5; }
+/* подсказка под полем — там, где выбор неочевиден по подписи (направление цели) */
+.al-hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+
+/* ── Помощник в форме постановки ────────────────────────────────────────────
+   Единственный цветной блок формы: он приглашает начать отсюда, а не с поля
+   «что сделать». Остальные поля остаются тихими. */
+.al-ai { display: flex; flex-direction: column; gap: 9px; padding: 13px;
+  border-radius: 14px; background: var(--blue-tint); }
+.al-ai-h { display: flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 700; color: var(--navy); }
+.al-ai-h svg { color: var(--blue); }
+.al-ai .al-in { background: #fff; }
+.al-ai-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.al-ai-row .bp { flex: none; }
+.al-ai-row .bp.loading { opacity: .6; pointer-events: none; }
+.al-ai-note { font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }
+.al-ai-note.ask { color: var(--navy); font-weight: 600; }
 .al-selwrap { position: relative; display: block; }
 .al-sel { width: 100%; appearance: none; -webkit-appearance: none; font: 500 14px 'Manrope', sans-serif;
   color: var(--ink); background: var(--fill); border-radius: 11px; padding: 11px 34px 11px 13px;
@@ -1748,6 +1774,21 @@ a { color: inherit; text-decoration: none; }
 .al-save.loading { opacity: .6; pointer-events: none; }
 .lead-add { gap: 6px; }
 @media (max-width: 760px) { .al-row { flex-direction: column; gap: 13px; } .lead-add span { display: none; } }
+/* Телефон: форма встает листом снизу — так же, как везде на мобильных. Экран
+   отдан ей целиком, кнопка сохранения всегда на виду над нижним краем, а
+   поля прокручиваются под ней. Отступ снизу учитывает индикатор жестов iPhone. */
+@media (max-width: 560px) {
+  .al-ov { align-items: flex-end; padding: 0; }
+  .al-card { max-width: none; border-radius: 18px 18px 0 0;
+    max-height: 94vh; max-height: 94dvh; transform: translateY(24px); }
+  .al-head { padding: 18px 18px 0; }
+  .al-sub, .al-body, .al-foot { padding-left: 18px; padding-right: 18px; }
+  /* Тело едет под шапкой — без линии верхнее поле выглядит просто обрезанным. */
+  .al-card > .al-body { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px; }
+  .al-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); gap: 8px;
+    border-top: 1px solid var(--line); background: #fff; }
+  .al-foot .al-save { flex: 1; }
+}
 
 /* ════ ЗАДАЧИ КОМАНДЫ ════════════════════════════════════════════════════════
    Строка списка и карточка задачи. Тех же рецептов, что весь список лидов:
@@ -1782,6 +1823,38 @@ a { color: inherit; text-decoration: none; }
 .tsk-prog-b i { display: block; height: 100%; border-radius: 999px; background: var(--blue);
   transition: width .9s var(--ease); }
 .tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
+
+/* Пометка цели в строке задачи. Не чип-статус и не тег: это ссылка на смысл
+   задачи, поэтому тихая, но кликабельная — синеет только на наведении.
+   Строка с пометкой выше фиксированных 58px: та же логика, что у строки цели
+   с прогрессом (.tsk-grid.has-prog). */
+.trow.tsk-grid.has-goal { height: auto; min-height: 78px; padding-top: 12px; padding-bottom: 12px; }
+.tsk-goal { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  max-width: 100%; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
+  transition: .14s var(--ease); overflow: hidden; }
+.tsk-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-goal svg { flex: none; color: var(--ink-3); }
+.tsk-goal:hover { background: var(--blue-tint); color: var(--blue); }
+.tsk-goal:hover svg { color: var(--blue); }
+
+/* ── Срез «Цели» ─────────────────────────────────────────────────────────────
+   Цели по направлениям: заголовок отдела, под ним его цели с процентом. */
+.gl-sec { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 16px 24px 8px; }
+.gl-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.gl-sn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+/* Цели компании — первый блок и единственный акцент экрана: остальные
+   направления это зоны ответственности внутри того же вектора. */
+.gl-sec.gl-company { padding-top: 14px; }
+.gl-company .gl-sl { color: var(--blue); }
+.gl-hint { font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ink-3); margin-left: 8px; }
+.gl-row { grid-template-columns: minmax(180px,1fr) 180px 54px 130px 30px; }
+.gl-pct { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em;
+  text-align: right; }
+.gl-pct.full { color: var(--green-ink); }
 
 /* ── Дерево «Вся команда» ────────────────────────────────────────────────────
    Три уровня: направления, цели направления, шаги цели. Разворачивающихся
@@ -2101,6 +2174,46 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-ret button:hover { color: var(--ink); }
 .tsk-say.ret .al-in { border-color: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,.1); }
 .tsk-acts { flex-wrap: wrap; }
+.tsk-acts[hidden] { display: none; }
+
+/* ── Результат задачи ────────────────────────────────────────────────────────
+   Ответ исполнителя на критерий приемки: пара строк и приложенные файлы. Стоит
+   сразу под критерием, поэтому своей рамки не просит — читается как его пара. */
+.tsk-resat { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  text-transform: none; letter-spacing: 0; }
+.tsk-resat + .tsk-addstep { margin-left: 12px; }
+.tsk-files { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.tsk-file { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 11px;
+  border-radius: 10px; background: var(--fill); color: var(--ink);
+  font-size: 13px; font-weight: 600; transition: background .15s; }
+.tsk-file:hover { background: #ECEEF1; }
+.tsk-file svg { flex: none; color: var(--ink-3); }
+.tsk-file-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-file-m { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+
+/* Панель сдачи: текст плюс файлы уезжают вместе, одним событием. */
+.tsk-resform { display: flex; flex-direction: column; gap: 9px; padding: 14px;
+  border-radius: 14px; background: var(--blue-tint); }
+.tsk-resform[hidden] { display: none; }
+.tsk-resform .al-in { background: #fff; }
+.tsk-resrow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.tsk-attach { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; color: var(--blue); }
+.tsk-attach:hover { color: var(--blue-d); }
+.tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
+.tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
+.tsk-resrow .bp { height: 36px; }
+.tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
+.tsk-picked:empty { display: none; }
+.tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 5px 8px 5px 10px; border-radius: 999px; background: #fff;
+  font-size: 12px; font-weight: 600; color: var(--ink); }
+.tsk-pick button { display: inline-flex; color: var(--ink-3); }
+.tsk-pick button:hover { color: var(--red-ink); }
+@media (max-width: 560px) {
+  .tsk-resrow .al-cancel { margin-left: 0; }
+  .tsk-resrow .bp, .tsk-resrow .al-cancel { flex: 1; justify-content: center; }
+}
 @media (max-width: 760px) {
   /* Общая мобильная сетка строк (.trow) прибита !important под три колонки лида —
      у задачи их четыре, поэтому переопределяем с большей специфичностью, а не
@@ -2145,6 +2258,12 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tr-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.tr-grid .tr-go { display: none; }
+  /* Цели на телефоне: процент и срок под названием, шкала во всю ширину. */
+  .trow.gl-row { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 6px 10px; height: auto; padding: 13px 16px; align-items: center; }
+  .trow.gl-row .tr-name, .trow.gl-row .tr-prog { grid-column: 1 / -1; }
+  .trow.gl-row .gl-pct { text-align: left; }
+  .trow.gl-row .tr-go { display: none; }
   .trow.tr-goal, .trow.tr-task { grid-template-columns: minmax(0,1fr) auto !important;
     gap: 6px 10px; height: auto; padding: 13px 16px; align-items: start; }
   .trow.tr-goal .tr-name, .trow.tr-task .tr-name { grid-column: 1 / -1; }
@@ -3699,7 +3818,14 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--po-wire); }
 
-.po-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+/* Ряд направлений. minmax(0,·), а не 1fr: длинное слово в подписи иначе распирает
+   свою колонку и колонки перестают быть равными.
+   Три общие строки (шина, карточка, ветки) + subgrid в колонке: карточки в ряду
+   одной высоты и ветки стартуют с одной линии, сколько бы строк ни занял текст.
+   row-gap: 0 — между шиной и карточкой не должно быть разрыва, там идет провод. */
+.po-cols { display: grid; grid-template-columns: repeat(var(--po-n, 4), minmax(0, 1fr));
+  grid-template-rows: auto auto auto; column-gap: 16px; row-gap: 0; align-items: start; }
+.po-col { display: grid; grid-template-rows: subgrid; grid-row: span 3; }
 .po-tick { display: block; height: 22px; position: relative; }
 .po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--po-wire); }
 .po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--po-wire); }
@@ -3714,13 +3840,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-fh b { flex: 1; min-width: 0; }
 .po-fh svg { flex: none; color: var(--ink-3); transition: .14s var(--ease); }
 .po-flag:hover .po-fh svg { color: var(--blue); transform: translateX(2px); }
-.po-fb { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-.po-flag small { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-3); }
+/* подпись и метка «наполняем» столбиком, а не в строку: в узкой колонке подпись
+   переносится на две-три строки, и метка сбоку встает ровно посреди текста */
+.po-fb { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 5px; }
+.po-flag small { min-width: 0; font-size: 12px; color: var(--ink-3); }
 .po-flag.ready { border-color: #CFE0FF; }
 .po-flag:not(.ready) .po-fh b { color: var(--ink-2); }
 /* .sev и .uz-tag — готовые пилюли системы; тут только место в потоке */
 .po-soon { flex: none; padding: 4px 10px; font-size: 11.5px; font-weight: 500; }
-.po-brs { margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--po-wire);
+/* align-self: start — иначе в общей сетке строк список тянется на всю высоту
+   ряда и вертикальная линия слева уходит вниз, ниже последней ветки */
+.po-brs { align-self: start; margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--po-wire);
   display: flex; flex-direction: column; gap: 8px; }
 .po-br { position: relative; font-size: 12.5px; color: var(--ink-2); }
 .po-br::before { content: ''; position: absolute; left: -12px; top: 9px; width: 8px; height: 1px; background: var(--po-wire); }
@@ -3876,7 +4006,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-weight: 600; color: var(--blue); white-space: nowrap; }
 
 @media (max-width: 960px) {
-  .po-cols { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  /* на планшете и телефоне колонок две, ряды переносятся — общая сетка строк
+     тут только мешает, каждая колонка живет своей высотой */
+  .po-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: 22px 14px; }
+  .po-col { display: block; }
   .po-tick { display: none; }
   .po-stem { height: 26px; }
   .po-stem::before { display: none; }
@@ -3885,7 +4018,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 }
 @media (max-width: 620px) {
   .po-h1 { font-size: 23px; }
-  .po-cols { grid-template-columns: 1fr; gap: 24px; }
+  .po-cols { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .po-search { flex-basis: 100%; max-width: none; }
   .po-card { padding: 17px 16px; }
   .po-rl { width: 140px; }
