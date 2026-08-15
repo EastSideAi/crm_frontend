@@ -2516,8 +2516,9 @@
   /* ── Срез «Цели» ───────────────────────────────────────────────────────────
      Не плоский список, а разбивка по направлениям: вопрос к этому экрану —
      «куда мы идем и где стоим», а он задается по отделам, а не по алфавиту.
-     Цели без направления идут последними: это чаще всего забытая графа при
-     заведении, а не отдельный смысл. */
+     Первым блоком — цели компании: они общие для всех, и направление у них не
+     пустое по забывчивости, а пустое по смыслу (решение Павла 15.08.2026).
+     Работают-то все в одном векторе, направления только делят зоны ответа. */
   function renderGoals(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = (state.tasks || []).filter(function (g) {
@@ -2525,9 +2526,10 @@
       return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
     });
 
-    var order = Object.keys(DEPTS).concat(['']);
+    var order = [''].concat(Object.keys(DEPTS));
     var groups = order.map(function (d) {
-      return { dept: d, label: d ? DEPTS[d] : 'Без направления',
+      return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
+               hint: d ? '' : 'общие для всех направлений',
                goals: list.filter(function (g) { return (g.dept || '') === d; }) };
     }).filter(function (g) { return g.goals.length; });
 
@@ -2546,7 +2548,9 @@
       }).join('');
       var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
       var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
-      return '<div class="gl-sec"><span class="gl-sl">' + esc(grp.label) + '</span>' +
+      return '<div class="gl-sec' + (grp.dept ? '' : ' gl-company') + '">' +
+        '<span class="gl-sl">' + esc(grp.label) +
+          (grp.hint ? '<i class="gl-hint">' + esc(grp.hint) + '</i>' : '') + '</span>' +
         '<span class="gl-sn num">' + grp.goals.length + ' ' +
           plural(grp.goals.length, 'цель', 'цели', 'целей') +
         (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') + '</span></div>' + rows;
@@ -2559,15 +2563,17 @@
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count"><b>' + list.length + '</b> ' +
           plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
-        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая цель</button>' +
       '</div>' +
       '<div class="list-body">' +
         (list.length ? body
           : '<div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.'
-              : 'Целей пока нет. Цель появляется, когда у задачи есть шаги: открой задачу и добавь первый.') + '</div>') +
+              : 'Целей пока нет. Заведи первую: цель это большой результат, к которому потом добавляются шаги.') + '</div>') +
       '</div></div>';
 
-    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    // На экране целей кнопка заводит цель, а не задачу: за задачей человек идет
+    // в «Сегодня», а сюда приходит ставить направление работы.
+    el('tsk-new').addEventListener('click', function () { openNewTask({ goal: true }); });
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
       state.taskQ = qi.value;
@@ -3356,64 +3362,100 @@
         return '<option value="' + p.id + '"' + (String(preset.assignee_id) === String(p.id) ? ' selected' : '') + '>' +
           esc(p.name || p.login) + (p.linked ? '' : ' (не в боте)') + '</option>';
       }).join('');
+      // Цель или обычная задача. Разница не косметическая: у цели свое место в
+      // иерархии (она верхний уровень и к ней цепляют шаги), поэтому спрашиваем
+      // мы в этих двух случаях разное.
+      var isGoal = !!preset.goal;
       // Направление по умолчанию — то, что открыто фильтром: ставят задачу обычно
       // там же, где на нее смотрели.
       var dept0 = preset.dept || state.taskDept || '';
-      var dopts = '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
-        return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
-      }).join('');
+      // «Пусто» у задачи значит «забыли выбрать», у цели — «цель всей компании».
+      // Одно и то же значение, но человеку это разные вещи, и подписи разные.
+      var dopts = '<option value="">' +
+          (isGoal ? 'Вся компания — общая цель' : '— без направления —') + '</option>' +
+        Object.keys(DEPTS).map(function (d) {
+          return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+        }).join('');
       // Цель, из карточки которой пришли, могла появиться после того, как список
       // закэшировался: без этой строки шаг молча стал бы самостоятельной задачей.
       var known = preset.parent_id && goals.some(function (g) { return String(g.id) === String(preset.parent_id); });
+      var gopt = function (g) {
+        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
+          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
+        '</option>';
+      };
+      // Цели отдельной группой от обычных задач: положить шаг можно в любую
+      // задачу (она станет целью), но по умолчанию человек ищет глазами цель.
+      var realGoals = goals.filter(function (g) { return g.is_goal; });
+      var plainOnes = goals.filter(function (g) { return !g.is_goal; });
       var gopts = '<option value="">— самостоятельная задача —</option>' +
         (preset.parent_id && !known
           ? '<option value="' + preset.parent_id + '" selected>' + esc(preset.parent_title || 'выбранная цель') + '</option>'
           : '') +
-        goals.map(function (g) {
-        return '<option value="' + g.id + '"' + (String(preset.parent_id) === String(g.id) ? ' selected' : '') + '>' +
-          esc(g.title) + (g.steps_total ? ' (' + g.steps_total + ' ' + plural(g.steps_total, 'шаг', 'шага', 'шагов') + ')' : '') +
-        '</option>';
-      }).join('');
+        (realGoals.length ? '<optgroup label="Цели">' + realGoals.map(gopt).join('') + '</optgroup>' : '') +
+        (plainOnes.length ? '<optgroup label="Задачи — станут целью">' + plainOnes.map(gopt).join('') + '</optgroup>' : '');
       var ov = document.createElement('div');
       ov.className = 'al-ov';
       ov.innerHTML =
         '<div class="al-card" role="dialog" aria-modal="true">' +
           '<div class="al-head">' +
-            '<div><div class="al-eyebrow">Задачи</div><div class="al-title">' +
-              (preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
+            '<div><div class="al-eyebrow">' + (isGoal ? 'Цели' : 'Задачи') + '</div><div class="al-title">' +
+              (isGoal ? 'Новая цель' : preset.parent_title ? 'Шаг цели' : 'Новая задача') + '</div></div>' +
             '<button class="al-x" id="nt-x" title="Закрыть">' + ic('x', 16) + '</button>' +
           '</div>' +
-          '<div class="al-sub">' + (preset.parent_title
-            ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
-            : preset.client_name
-              ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
-              : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
+          '<div class="al-sub">' + (isGoal
+            ? 'Большой результат, к которому идем. Шаги добавишь сразу после — цель без шагов так и стоит на месте.'
+            : preset.parent_title
+              ? 'Шаг цели «' + esc(preset.parent_title) + '». Направление он берет у цели.'
+              : preset.client_name
+                ? 'Задача по ученику «' + esc(preset.client_name) + '» — она появится и в его карточке, и в срезе «По ученикам».'
+                : 'Человек получит ее в CRM и в боте. Кто не нажал «Старт» в боте, увидит задачу только в CRM.') + '</div>' +
           '<div class="al-body">' +
-            '<label class="al-f"><span class="al-l">Что сделать <i>*</i></span>' +
-              '<input id="nt-title" class="al-in" placeholder="Коротко, одним предложением" maxlength="200"></label>' +
-            '<label class="al-f"><span class="al-l">Кому <i>*</i></span><span class="al-selwrap">' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Чего добиваемся' : 'Что сделать') + ' <i>*</i></span>' +
+              '<input id="nt-title" class="al-in" placeholder="' +
+                (isGoal ? 'Результат, а не действие: «Набрали 30 учеников на осень»' : 'Коротко, одним предложением') +
+                '" maxlength="200"></label>' +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Кто ведет' : 'Кому') + ' <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
-            '<div class="al-f"><span class="al-l">Срок</span>' +
-              '<span class="due-seg">' + [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']].map(function (o) {
+            // У цели направление — первое, что нужно решить: это ее зона
+            // ответственности. У задачи — уточнение после «что-кому-когда».
+            (isGoal
+              ? '<label class="al-f" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                  '<select id="nt-dept" class="al-sel">' + dopts + '</select></span>' +
+                  '<span class="al-hint">Цель компании видна всем направлениям, цель отдела стоит в его блоке.</span></label>'
+              : '') +
+            '<div class="al-f"><span class="al-l">' + (isGoal ? 'К какому сроку' : 'Срок') + '</span>' +
+              '<span class="due-seg">' + (isGoal
+                ? [['7', 'неделя'], ['30', 'месяц'], ['90', 'квартал'], ['180', 'полгода']]
+                : [['0', 'сегодня'], ['1', 'завтра'], ['3', 'через 3 дня'], ['7', 'через неделю']]).map(function (o) {
                 return '<button type="button" data-day="' + o[0] + '">' + o[1] + '</button>';
               }).join('') + '</span>' +
-              '<input id="nt-due" class="al-in" type="date" value="' + esc(preset.due || isoDay(1)) + '"></div>' +
+              '<input id="nt-due" class="al-in" type="date" value="' +
+                esc(preset.due || isoDay(isGoal ? 30 : 1)) + '"></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
             // свое направление, либо это шаг, и направление приезжает от цели.
-            '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
-              '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
-            '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
-              '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>' +
-            '<label class="al-f"><span class="al-l">Подробности</span>' +
-              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="Что важно знать, ссылки, контекст"></textarea></label>' +
-            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
-              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="По чему поймем, что задача закрыта"></textarea></label>' +
+            (isGoal ? '' :
+              '<label class="al-f' + (preset.parent_id ? ' hid' : '') + '" id="nt-df"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="nt-dept" class="al-sel">' + dopts + '</select></span></label>' +
+              '<label class="al-f"><span class="al-l">Шаг цели</span><span class="al-selwrap">' +
+                '<select id="nt-goal" class="al-sel">' + gopts + '</select></span></label>') +
+            '<label class="al-f"><span class="al-l">' + (isGoal ? 'Зачем это нам' : 'Подробности') + '</span>' +
+              '<textarea id="nt-det" class="al-in al-ta" rows="3" placeholder="' +
+                (isGoal ? 'Что изменится, когда дойдем' : 'Что важно знать, ссылки, контекст') +
+                '"></textarea></label>' +
+            '<label class="al-f"><span class="al-l">' +
+              (isGoal ? 'Как поймем, что дошли' : 'Что считается сделанным') + '</span>' +
+              '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="' +
+                (isGoal ? 'Измеримый признак: цифра, документ, запущенный процесс'
+                        : 'По чему поймем, что задача закрыта') + '"></textarea></label>' +
           '</div>' +
           '<div class="al-foot">' +
             '<button class="al-cancel" id="nt-cancel">Отмена</button>' +
-            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) + 'Поставить задачу</button>' +
+            '<button class="bp al-save" id="nt-save">' + ic('plus', 14) +
+              (isGoal ? 'Завести цель' : 'Поставить задачу') + '</button>' +
           '</div>' +
         '</div>';
       document.body.appendChild(ov);
@@ -3448,9 +3490,10 @@
       markWhen();
 
       // Выбрали цель — направление больше не спрашиваем: шаг наследует его от цели
-      // (это же правило держит сервер, см. _resolve_parent).
+      // (это же правило держит сервер, см. _resolve_parent). В режиме цели этого
+      // выбора нет вовсе: цель — верхний уровень, ее некуда вкладывать.
       var goalS = el('nt-goal'), deptF = el('nt-df');
-      goalS.addEventListener('change', function () {
+      if (goalS) goalS.addEventListener('change', function () {
         deptF.classList.toggle('hid', !!goalS.value);
       });
 
@@ -3459,13 +3502,13 @@
         var title = (ti.value || '').trim();
         if (!title) { ti.classList.add('al-err'); ti.focus(); return; }
         var who = el('nt-who').value;
-        if (!who) { showToast('Выбери, кому ставим задачу'); return; }
+        if (!who) { showToast(isGoal ? 'Выбери, кто ведет цель' : 'Выбери, кому ставим задачу'); return; }
         var day = el('nt-due').value;
         // Срок = конец выбранного дня: «до 12 августа» человек понимает как
         // «весь день 12-го мой», а не «до полуночи с 11-го на 12-е».
         var due = day ? new Date(day + 'T23:59:59').toISOString() : null;
         save.disabled = true; save.classList.add('loading');
-        var goal = goalS.value;
+        var goal = goalS ? goalS.value : '';
         apiSend('/admin/api/tasks', 'POST', {
           title: title, assignee_id: +who, due_at: due,
           details: (el('nt-det').value || '').trim(),
@@ -3473,17 +3516,21 @@
           session_id: preset.session_id || null,
           dept: goal ? null : (el('nt-dept').value || ''),
           parent_id: goal ? +goal : null,
-        }, function () {
+          is_goal: isGoal,
+        }, function (r) {
           close();
           state.tasks = null;
           state.taskGoals = null;   // новая задача может стать целью для следующей
           loadTaskSummary();
           if (preset.after) preset.after();
           else if (state.page === 'tasks') renderView();
-          showToast(goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
+          showToast(isGoal ? 'Цель заведена' : goal ? 'Шаг добавлен в цель' : 'Задача поставлена');
+          // Цель без шагов — просто надпись. Сразу открываем ее карточку: там
+          // кнопка «добавить шаг», и первый шаг ставится, пока думают о цели.
+          if (isGoal && r && r.task) openTask(r.task.id);
         }, function () {
           save.disabled = false; save.classList.remove('loading');
-          showToast('Не получилось поставить задачу');
+          showToast(isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу');
         });
       });
      });

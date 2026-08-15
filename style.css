@@ -1680,9 +1680,18 @@ a { color: inherit; text-decoration: none; }
   padding: 24px; background: rgba(17,21,31,.34); backdrop-filter: blur(3px);
   opacity: 0; transition: opacity .18s var(--ease); }
 .al-ov.show { opacity: 1; }
+/* Форма выше экрана — обычное дело на телефоне: семь полей в 390px не помещаются
+   никогда. Поэтому карточка это колонка с фиксированной высотой, прокручивается
+   внутри только тело, а шапка и кнопка сохранения стоят на месте. Без этого
+   карточка центрировалась целиком, уезжала за оба края экрана, и кнопка
+   «Поставить задачу» оказывалась там, куда нельзя доскроллить. */
 .al-card { width: 100%; max-width: 460px; background: #fff; border-radius: 20px; overflow: hidden;
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
   box-shadow: 0 30px 80px -24px rgba(17,21,31,.5), 0 2px 8px rgba(17,21,31,.08);
   transform: translateY(10px) scale(.985); opacity: 0; transition: transform .2s var(--ease), opacity .2s var(--ease); }
+.al-card > .al-head, .al-card > .al-sub, .al-card > .al-foot { flex: none; }
+.al-card > .al-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; }
 .al-ov.show .al-card { transform: none; opacity: 1; }
 .al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 24px 0; }
 .al-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
@@ -1709,6 +1718,8 @@ a { color: inherit; text-decoration: none; }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
 .al-in.al-err { box-shadow: inset 0 0 0 1.5px var(--red), 0 0 0 3px rgba(196,42,47,.1); background: #fff; }
 .al-ta { resize: vertical; min-height: 46px; line-height: 1.5; }
+/* подсказка под полем — там, где выбор неочевиден по подписи (направление цели) */
+.al-hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 .al-selwrap { position: relative; display: block; }
 .al-sel { width: 100%; appearance: none; -webkit-appearance: none; font: 500 14px 'Manrope', sans-serif;
   color: var(--ink); background: var(--fill); border-radius: 11px; padding: 11px 34px 11px 13px;
@@ -1748,6 +1759,19 @@ a { color: inherit; text-decoration: none; }
 .al-save.loading { opacity: .6; pointer-events: none; }
 .lead-add { gap: 6px; }
 @media (max-width: 760px) { .al-row { flex-direction: column; gap: 13px; } .lead-add span { display: none; } }
+/* Телефон: форма встает листом снизу — так же, как везде на мобильных. Экран
+   отдан ей целиком, кнопка сохранения всегда на виду над нижним краем, а
+   поля прокручиваются под ней. Отступ снизу учитывает индикатор жестов iPhone. */
+@media (max-width: 560px) {
+  .al-ov { align-items: flex-end; padding: 0; }
+  .al-card { max-width: none; border-radius: 18px 18px 0 0;
+    max-height: 94vh; max-height: 94dvh; transform: translateY(24px); }
+  .al-head { padding: 18px 18px 0; }
+  .al-sub, .al-body, .al-foot { padding-left: 18px; padding-right: 18px; }
+  .al-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); gap: 8px;
+    border-top: 1px solid var(--line); background: #fff; }
+  .al-foot .al-save { flex: 1; }
+}
 
 /* ════ ЗАДАЧИ КОМАНДЫ ════════════════════════════════════════════════════════
    Строка списка и карточка задачи. Тех же рецептов, что весь список лидов:
@@ -1804,6 +1828,12 @@ a { color: inherit; text-decoration: none; }
 .gl-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
 .gl-sn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+/* Цели компании — первый блок и единственный акцент экрана: остальные
+   направления это зоны ответственности внутри того же вектора. */
+.gl-sec.gl-company { padding-top: 14px; }
+.gl-company .gl-sl { color: var(--blue); }
+.gl-hint { font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ink-3); margin-left: 8px; }
 .gl-row { grid-template-columns: minmax(180px,1fr) 180px 54px 130px 30px; }
 .gl-pct { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em;
   text-align: right; }
