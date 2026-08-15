@@ -3159,7 +3159,42 @@
   /* ── Карточка задачи ───────────────────────────────────────────────────────
      Одна лента: смены статуса, переназначения, сдвиги срока и реплики людей
      вперемешку по времени. Спор «когда перенесли срок» решается этой лентой. */
-  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads', due: 'cal', remind: 'bell' };
+  var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads',
+                   due: 'cal', remind: 'bell', result: 'doc' };
+
+  /* Артефакт результата: до 8 МБ на файл и не больше пяти — те же границы держит
+     сервер (MAX_FILE_BYTES в staff_tasks.py). Читаем файл в base64 прямо в
+     браузере: отдельной загрузки на диск у нас нет, а скриншот и договор в эти
+     рамки помещаются с запасом. */
+  var RES_MAX_MB = 8, RES_MAX_FILES = 5;
+  function readFiles(fileList, done) {
+    var out = [], list = Array.prototype.slice.call(fileList, 0, RES_MAX_FILES), left = list.length;
+    if (!left) return done(out);
+    list.forEach(function (f) {
+      if (f.size > RES_MAX_MB * 1024 * 1024) {
+        showToast('«' + f.name + '» больше ' + RES_MAX_MB + ' МБ — такой не пройдет');
+        if (!--left) done(out);
+        return;
+      }
+      var fr = new FileReader();
+      fr.onload = function () {
+        out.push({ name: f.name || 'файл', mime: f.type || '', data: String(fr.result) });
+        if (!--left) done(out);
+      };
+      fr.onerror = function () { if (!--left) done(out); };
+      fr.readAsDataURL(f);
+    });
+  }
+  /* Прямая ссылка на файл. Идет мимо api(): браузер качает ее сам, поэтому ключ
+     подставляем в адрес — тот же прием, что у выгрузок CSV. */
+  function fileHref(id) {
+    return API + '/admin/api/task-files/' + id + '?k=' + encodeURIComponent(getKey());
+  }
+  function fileSize(n) {
+    if (!n) return '';
+    return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' КБ'
+                           : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
+  }
 
   function openTask(id) {
     if (document.querySelector('.al-ov')) return;
@@ -3184,6 +3219,7 @@
 
     var draw = function (data) {
       var t = data.task, events = data.events || [], steps = data.steps || [];
+      var files = data.files || [];
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
       var me = state.taskMe;
@@ -3237,6 +3273,28 @@
         '<div class="al-body">' +
           (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
           (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
+          // приемка это сравнение двух блоков, а не поиск доказательств в ленте.
+          (t.result_text || files.length || (isAssignee && t.status !== 'cancel')
+            ? '<div class="tsk-sec tsk-res"><div class="tsk-l tsk-lrow">Результат' +
+                (t.result_at ? '<span class="tsk-resat">' + esc(fmtWhen(t.result_at)) + '</span>' : '') +
+                (isAssignee && t.status !== 'cancel'
+                  ? '<button class="tsk-addstep" id="tk-resadd">' + ic('plus', 12) +
+                    (t.result_text || files.length ? 'Дополнить' : 'Приложить') + '</button>'
+                  : '') +
+                '</div>' +
+                (!t.result_text && !files.length
+                  ? '<div class="tsk-nosteps">Пока пусто. Приложи то, по чему видно работу: скриншот, файл, ссылку или пару строк.</div>'
+                  : '') +
+                (t.result_text ? '<div class="tsk-p">' + esc(t.result_text) + '</div>' : '') +
+                (files.length ? '<div class="tsk-files">' + files.map(function (f) {
+                  return '<a class="tsk-file" href="' + esc(fileHref(f.id)) + '" target="_blank" rel="noopener">' +
+                    ic(f.link ? 'go' : 'doc', 13) +
+                    '<span class="tsk-file-n">' + esc(f.name) + '</span>' +
+                    '<span class="tsk-file-m">' + esc(f.link ? 'ссылка' : fileSize(f.size_bytes)) + '</span></a>';
+                }).join('') + '</div>' : '') +
+              '</div>'
+            : '') +
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
@@ -3256,6 +3314,22 @@
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
           '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
             '<button type="button" id="tk-retx">не возвращать</button></div>' +
+          // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
+          // это событие, и текст «что сделано» с файлом должны уехать вместе,
+          // иначе постановщик принимает на слово.
+          '<div class="tsk-resform" id="tk-resf" hidden>' +
+            '<div class="tsk-l">Что сделано</div>' +
+            '<textarea id="tk-restext" class="al-in al-ta" rows="2" maxlength="4000" ' +
+              'placeholder="Коротко: что получилось и где это лежит"></textarea>' +
+            '<div class="tsk-picked" id="tk-picked"></div>' +
+            '<div class="tsk-resrow">' +
+              '<label class="tsk-attach">' + ic('doc', 13) + 'Скриншот или файл' +
+                '<input type="file" id="tk-resfile" multiple hidden></label>' +
+              '<span class="tsk-reshint">до ' + RES_MAX_MB + ' МБ, не больше ' + RES_MAX_FILES + '</span>' +
+              '<button class="al-cancel" id="tk-rescx">Отмена</button>' +
+              '<button class="bp" id="tk-resok">Сдать</button>' +
+            '</div>' +
+          '</div>' +
           '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
             '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
         '</div>' +
@@ -3301,6 +3375,74 @@
       };
       el('tk-retx').addEventListener('click', function () { setRet(false); });
 
+      /* Сдача с результатом. Панель одна на два случая: «сдать на проверку» и
+         «доложить артефакт» по уже сданной или принятой задаче. Отправляем
+         сначала результат, потом статус — если файл не долетел, задача не
+         уедет на приемку пустой. */
+      var resF = el('tk-resf'), resT = el('tk-restext'), picked = [];
+      var resMode = '';
+      var drawPicked = function () {
+        el('tk-picked').innerHTML = picked.map(function (f, i) {
+          return '<span class="tsk-pick">' + esc(f.name) +
+            '<button type="button" data-drop="' + i + '" title="Убрать">' + ic('x', 11) + '</button></span>';
+        }).join('');
+        Array.prototype.forEach.call(el('tk-picked').querySelectorAll('[data-drop]'), function (b) {
+          b.addEventListener('click', function () {
+            picked.splice(+b.getAttribute('data-drop'), 1); drawPicked();
+          });
+        });
+      };
+      var setRes = function (mode) {
+        resMode = mode;
+        resF.hidden = !mode;
+        if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
+        el('tk-resok').textContent = mode === 'review' ? 'Сдать на проверку' : 'Сохранить результат';
+        resT.value = mode === 'review' ? '' : (t.result_text || '');
+        resT.focus();
+        body.scrollTop = body.scrollHeight;
+      };
+      el('tk-rescx').addEventListener('click', function () { setRes(''); });
+      el('tk-resfile').addEventListener('change', function (e) {
+        readFiles(e.target.files, function (got) {
+          picked = picked.concat(got).slice(0, RES_MAX_FILES);
+          drawPicked();
+          e.target.value = '';
+        });
+      });
+      // Скриншот вставляют из буфера чаще, чем ищут в папке.
+      resT.addEventListener('paste', function (e) {
+        var items = (e.clipboardData || {}).items || [];
+        var imgs = Array.prototype.filter.call(items, function (i) { return i.kind === 'file'; })
+          .map(function (i) { return i.getAsFile(); }).filter(Boolean);
+        if (!imgs.length) return;
+        readFiles(imgs, function (got) { picked = picked.concat(got).slice(0, RES_MAX_FILES); drawPicked(); });
+      });
+      el('tk-resok').addEventListener('click', function () {
+        var text = (resT.value || '').trim();
+        var ok = el('tk-resok');
+        if (!text && !picked.length) {
+          showToast('Напиши, что сделано, или приложи файл');
+          resT.focus();
+          return;
+        }
+        ok.disabled = true;
+        apiSend('/admin/api/tasks/' + id + '/result', 'POST', { text: text, files: picked }, function () {
+          var after = resMode;
+          setRes('');
+          ok.disabled = false;
+          if (after === 'review') { setStatus('review', text); return; }
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          showToast('Результат приложен');
+        }, function (code) {
+          ok.disabled = false;
+          showToast(code === 413 ? 'Файл слишком большой, до ' + RES_MAX_MB + ' МБ'
+                                 : 'Результат не сохранился — проверь интернет');
+        });
+      });
+      var resAdd = el('tk-resadd');
+      if (resAdd) resAdd.addEventListener('click', function () { setRes('add'); });
+
       var setStatus = function (to, why, btn) {
         if (btn) btn.disabled = true;
         apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
@@ -3336,6 +3478,9 @@
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
           if (to === 'return') { setRet(true); return; }
+          // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
+          // чего приемка превращалась в спор.
+          if (to === 'review' && isAssignee) { setRes('review'); return; }
           if (to === 'cancel' && !confirm('Отменить задачу? Она уйдет из всех списков.')) return;
           setStatus(to, '', b);
         });

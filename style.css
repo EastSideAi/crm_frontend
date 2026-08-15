@@ -2157,6 +2157,45 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-ret button:hover { color: var(--ink); }
 .tsk-say.ret .al-in { border-color: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,.1); }
 .tsk-acts { flex-wrap: wrap; }
+
+/* ── Результат задачи ────────────────────────────────────────────────────────
+   Ответ исполнителя на критерий приемки: пара строк и приложенные файлы. Стоит
+   сразу под критерием, поэтому своей рамки не просит — читается как его пара. */
+.tsk-resat { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  text-transform: none; letter-spacing: 0; }
+.tsk-resat + .tsk-addstep { margin-left: 12px; }
+.tsk-files { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.tsk-file { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 11px;
+  border-radius: 10px; background: var(--fill); color: var(--ink);
+  font-size: 13px; font-weight: 600; transition: background .15s; }
+.tsk-file:hover { background: #ECEEF1; }
+.tsk-file svg { flex: none; color: var(--ink-3); }
+.tsk-file-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-file-m { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+
+/* Панель сдачи: текст плюс файлы уезжают вместе, одним событием. */
+.tsk-resform { display: flex; flex-direction: column; gap: 9px; padding: 14px;
+  border-radius: 14px; background: var(--blue-tint); }
+.tsk-resform[hidden] { display: none; }
+.tsk-resform .al-in { background: #fff; }
+.tsk-resrow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.tsk-attach { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; color: var(--blue); }
+.tsk-attach:hover { color: var(--blue-d); }
+.tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
+.tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
+.tsk-resrow .bp { height: 36px; }
+.tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
+.tsk-picked:empty { display: none; }
+.tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 5px 8px 5px 10px; border-radius: 999px; background: #fff;
+  font-size: 12px; font-weight: 600; color: var(--ink); }
+.tsk-pick button { display: inline-flex; color: var(--ink-3); }
+.tsk-pick button:hover { color: var(--red-ink); }
+@media (max-width: 560px) {
+  .tsk-resrow .al-cancel { margin-left: 0; }
+  .tsk-resrow .bp, .tsk-resrow .al-cancel { flex: 1; justify-content: center; }
+}
 @media (max-width: 760px) {
   /* Общая мобильная сетка строк (.trow) прибита !important под три колонки лида —
      у задачи их четыре, поэтому переопределяем с большей специфичностью, а не
