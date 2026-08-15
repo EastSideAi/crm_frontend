@@ -1784,6 +1784,7 @@
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
+    { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
@@ -2078,6 +2079,19 @@
           FIN.scope = t.getAttribute('data-fsc'); FIN.pnl = null;
           renderTopbar(); renderView();
         });
+      });
+    } else if (state.page === 'finfund') {
+      // У фонда переключатель не по периодам, а по фондам: экран смотрит накопление
+      // за все время, и период тут не контекст, а строка таблицы.
+      var flist = (FIN.fund && FIN.fund !== 'none' ? FIN.fund.funds : null) || [];
+      tb.innerHTML = flist.length
+        ? '<nav class="tabs">' + flist.map(function (f) {
+            return '<a class="tab' + (FIN.fundId === f.id ? ' on' : '') + '" data-ffund="' + esc(f.id) + '">' +
+              esc(f.name) + '</a>';
+          }).join('') + '</nav>'
+        : '<div class="freshchip"><span class="fok">' + ic('wallet', 11) + '</span>фонды</div>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
       });
     } else if (state.page === 'finsheet' || state.page === 'finops') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
@@ -2416,12 +2430,23 @@
       var per = finPeriod();
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
-                     finops: 'Карта операций', finref: 'Сервисы и долги' };
+                     finops: 'Карта операций', finref: 'Сервисы и долги',
+                     finfund: 'Фонды' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
       // «Сервисы и долги» живут вне периода — им ждать список ведомостей незачем.
       else if (state.page === 'finref') ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
+      // Фонд считается за все время и без периода: вопрос «сколько всего отложено»
+      // не про открытую ведомость, а про накопление.
+      else if (state.page === 'finfund') {
+        var fd = FIN.fund && FIN.fund !== 'none' ? FIN.fund : null;
+        ph = fd
+          ? 'Отложено <b>' + finRub(fd.totals.added, 0) + '</b>, потрачено <b>' +
+            finRub(fd.totals.spent, 0) + '</b>, остаток <b>' + finRub(fd.totals.balance, 0) +
+            '</b> — за все время, по всем ведомостям.'
+          : 'Считаю фонд за все время…';
+      }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
         ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
@@ -2491,6 +2516,7 @@
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
+    else if (state.page === 'finfund') renderFinFund(view);
     else if (state.page === 'finpnl') renderFinPnl(view);
     else if (state.page === 'finops') renderFinOps(view);
     else if (state.page === 'finref') renderFinRefs(view);
@@ -7431,6 +7457,7 @@
      зовет функции схемы finmodel: две копии формул разъедутся, и никто не докажет, чья
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
+              fund: null, fundId: 'shortterm',
               scope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -7507,6 +7534,17 @@
       FIN.pnl = r; FIN.err = '';
       if (state.page === 'finpnl') renderAll();
     }).catch(function (e) { finFail(e, 'pnl'); });
+  }
+  function finLoadFund() {
+    api('/admin/api/fin/fund?account_id=' + encodeURIComponent(FIN.fundId)).then(function (r) {
+      FIN.fund = r; FIN.err = '';
+      if (state.page === 'finfund') renderAll();
+    }).catch(function (e) { finFail(e, 'fund'); });
+  }
+  function finSetFund(id) {
+    if (FIN.fundId === id) return;
+    FIN.fundId = id; FIN.fund = null;
+    renderAll();
   }
   function finLoadRefs() {
     api('/admin/api/fin/refs').then(function (r) {
@@ -7648,6 +7686,122 @@
     view.innerHTML = bar + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
       '<div class="sp5">' + fundsCard + cashCard + warn + '</div></div>';
+    pageAnim(view);
+  }
+
+  /* Фонд за все время. Отдельный экран появился после созвона 15.08.2026, где на
+     простой вопрос — сколько отложено на фонд краткосрочки и сколько с него потрачено —
+     не смог ответить никто. Ведомость показывает фонд внутри периода, а вопрос про
+     накопление, и складывать периоды глазами человек не должен.
+
+     Второе назначение экрана: показывать, чего в данных НЕТ. Деньги без проставленной
+     услуги идут строкой «не отнесено» и не размазываются по программам — иначе экран
+     нарисует уверенную картинку из воздуха. */
+  function renderFinFund(view) {
+    /* Ошибку показываем только свою. Экран фонда не зависит от периода, и падение
+       соседнего запроса не повод прятать цифры, которые загрузились. */
+    if (!FIN.fund) { view.innerHTML = dashSkeleton(); finLoadFund(); return; }
+    if (FIN.fund === 'none') return finErrView(view);
+    var f = FIN.fund, t = f.totals, offs = f.offerings || [], pers = f.periods || [];
+    var noOff = null, named = [];
+    offs.forEach(function (o) { if (o.id) named.push(o); else noOff = o; });
+
+    var bar = statBar([
+      { label: 'Отложено всего', value: finRub(t.added, 0), sub: 'по правилу ведомости' },
+      { label: 'Потрачено с фонда', value: finRub(t.spent, 0), sub: 'факт, все ведомости' },
+      { label: 'Остаток', value: finRub(t.balance, 0), sub: 'уедет в следующий период' },
+      { label: 'Ведомостей', value: String(t.periods),
+        sub: t.periods < 2 ? 'период всего один' : 'учтено в расчете' },
+    ]);
+
+    var maxInc = 0;
+    named.forEach(function (o) { if (o.income > maxInc) maxInc = o.income; });
+    var byOff = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">По программам</div>' +
+        '<div class="s">продажи программы и сколько с фонда на нее ушло</div></div></div>' +
+      (named.length
+        ? '<div class="fin-list">' + named.map(function (o) {
+            var w = maxInc ? Math.max(2, Math.round(o.income / maxInc * 100)) : 0;
+            return '<div class="fl-row"><div class="fl-main">' +
+              '<span class="fl-name">' + esc(o.name || o.id) + '</span>' +
+              '<span class="fl-sub">с фонда ' + finRub(o.spent, 0) + '</span></div>' +
+              '<div class="fl-bar"><i style="width:' + w + '%"></i></div>' +
+              '<div class="fl-v num">' + finRub(o.income, 0) + '</div></div>';
+          }).join('') + '</div>'
+        : '<div class="empty">Ни у одной операции не проставлена программа, поэтому ' +
+          'разбивки нет. Справочник программ в ведомости заведен — не заполнено поле ' +
+          'в самих операциях.</div>') +
+      (noOff && (noOff.income || noOff.spent)
+        ? '<div class="fin-list"><div class="fl-row fl-2 warn"><div class="fl-main">' +
+          '<span class="fl-name">Без программы</span>' +
+          '<span class="fl-sub">продажи ' + finRub(noOff.income, 0) + ' · ' + noOff.count + ' ' +
+          plural(noOff.count, 'расход', 'расхода', 'расходов') + ' с фонда</span></div>' +
+          '<div class="fl-v num">' + finRub(noOff.spent, 0) + '</div></div></div>'
+        : '') +
+      '</div>';
+
+    var opsCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">Расходы фонда</div>' +
+        '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div></div>' +
+      ((f.operations || []).length
+        ? '<div class="fin-list">' + f.operations.map(function (o) {
+            return '<div class="fl-row fl-2"><div class="fl-main">' +
+              '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
+              '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
+              (o.offering ? ' · ' + esc(o.offering) : '') +
+              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + '</span></div>' +
+              '<div class="fl-v num">' + finRub(o.amount) + '</div></div>';
+          }).join('') + '</div>'
+        : '<div class="empty">С этого фонда пока ничего не платили.</div>') +
+      '</div>';
+
+    var persCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">По ведомостям</div>' +
+        '<div class="s">как фонд рос и на что уходил от периода к периоду</div></div></div>' +
+      '<div class="fin-funds">' + pers.map(function (p) {
+        return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
+          '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
+            (p.open ? ' · открыт' : '') + '</span>' +
+            '<span class="ff-v num">' + finRub(p.next, 0) + '</span></div>' +
+          '<div class="ff-sub"><span>было ' + finNum(p.opening, 0) + '</span>' +
+            '<span>отложили ' + finNum(p.added, 0) + '</span>' +
+            '<span>потратили ' + finNum(p.spent, 0) + '</span></div>' +
+        '</div>';
+      }).join('') + '</div></div>';
+
+    /* Карточка честности. Показываем только когда в данных реально дыра: экран без
+       нее выглядит законченным, и человек уносит с созвона цифру, которой верить
+       нельзя. Каждая строка — проверяемый факт из базы, а не догадка. */
+    var gaps = [];
+    if (t.periods < 2) {
+      gaps.push('Заведена всего одна ведомость. Периоды после нее в систему не вносили, ' +
+        'поэтому «за все время» — это на самом деле один период.');
+    }
+    if (noOff && (noOff.income || noOff.spent)) {
+      gaps.push('У ' + noOff.count + ' ' + plural(noOff.count, 'операции', 'операций', 'операций') +
+        ' фонда не проставлена программа. Пока поле пустое, план и факт по Шэньчжэню, ' +
+        'Шанхаю и Харбину показать не из чего.');
+    }
+    if (pers.length && pers[pers.length - 1].alert) {
+      gaps.push('Фонд уходил в минус: с него платили раньше, чем на него отложили.');
+    }
+    var gapCard = gaps.length
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Чего не хватает данным</div>' +
+          '<div class="s">почему этим цифрам пока нельзя верить целиком</div></div></div>' +
+        '<div class="fin-list">' + gaps.map(function (g) {
+          return '<div class="fl-row fl-2 warn"><div class="fl-main">' +
+            '<span class="fl-sub">' + esc(g) + '</span></div></div>';
+        }).join('') + '</div></div>'
+      : '';
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp7">' + byOff + opsCard + '</div>' +
+      '<div class="sp5">' + persCard + gapCard + '</div></div>';
     pageAnim(view);
   }
 
