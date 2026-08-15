@@ -3818,7 +3818,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--po-wire); }
 
-.po-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+.po-cols { display: grid; grid-template-columns: repeat(var(--po-n, 4), 1fr); gap: 16px; align-items: start; }
 .po-tick { display: block; height: 22px; position: relative; }
 .po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--po-wire); }
 .po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--po-wire); }

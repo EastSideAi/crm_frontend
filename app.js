@@ -4944,7 +4944,7 @@
     var intake = (tree.intake || []).map(function (n, i) {
       return (i ? '<div class="po-drop"></div>' : '') +
         '<a class="po-node" href="' + esc(n.href) + '" target="_blank" rel="noopener">' +
-          '<span class="po-ni">' + ic(n.id === 'diag' ? 'spark' : 'funnel', 15) + '</span>' +
+          '<span class="po-ni">' + ic(n.icon || 'funnel', 15) + '</span>' +
           '<span class="po-nt"><b>' + esc(n.title) + '</b><small>' + esc(n.note || '') + '</small></span>' +
           '<span class="po-nx">' + ic('ext', 14) + '</span></a>';
     }).join('');
@@ -4969,7 +4969,9 @@
       '<div class="po-lbl">Вход</div>' +
       '<div class="po-lane">' + intake + '</div>' +
       '<div class="po-stem"><span class="po-lbl">Направления</span></div>' +
-      '<div class="po-cols">' + cols + '</div>' +
+      /* число колонок задает json, а не css: появилось новое направление — ряд
+         перестраивается сам, горизонтальная шина над колонками не рвется */
+      '<div class="po-cols" style="--po-n:' + (prods.length || 1) + '">' + cols + '</div>' +
       (ex.title ? '<div class="po-extras"><div class="po-exh"><b>' + esc(ex.title) + '</b>' +
         '<small>' + esc(ex.note || '') + '</small></div><div class="po-xs">' + exItems + '</div></div>' : '') +
     '</div></div>';
@@ -4990,7 +4992,8 @@
       });
     });
     var L = d.links || {};
-    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент', label: 'Платформа студента', sub: 'диагностика и кабинет', go: { href: L.platform } });
+    if (L.platform) idx.push({ kw: 'платформа диагностика кабинет анкета студент регистрация', label: 'Платформа студента', sub: 'регистрация с диагностикой', go: { href: L.platform } });
+    if (L.nexis) idx.push({ kw: 'нексис нейропрофориентация профориентация профессия кем быть', label: 'Нексис', sub: 'нейропрофориентация', go: { href: L.nexis } });
     if (L.crm) idx.push({ kw: 'crm клиенты сделки квалификация', label: 'CRM', sub: 'клиенты и сделки', go: { href: L.crm } });
     if (L.bot) idx.push({ kw: 'бот телеграм лиды квалификация', label: 'Telegram-бот', sub: 'первичная обработка лидов', go: { href: L.bot } });
     if (L.site) idx.push({ kw: 'сайт истсайд лендинг', label: 'Сайт ИСТСАЙД.РФ', sub: 'публичный сайт', go: { href: L.site } });
