@@ -3818,7 +3818,14 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--po-wire); }
 
-.po-cols { display: grid; grid-template-columns: repeat(var(--po-n, 4), 1fr); gap: 16px; align-items: start; }
+/* Ряд направлений. minmax(0,·), а не 1fr: длинное слово в подписи иначе распирает
+   свою колонку и колонки перестают быть равными.
+   Три общие строки (шина, карточка, ветки) + subgrid в колонке: карточки в ряду
+   одной высоты и ветки стартуют с одной линии, сколько бы строк ни занял текст.
+   row-gap: 0 — между шиной и карточкой не должно быть разрыва, там идет провод. */
+.po-cols { display: grid; grid-template-columns: repeat(var(--po-n, 4), minmax(0, 1fr));
+  grid-template-rows: auto auto auto; column-gap: 16px; row-gap: 0; align-items: start; }
+.po-col { display: grid; grid-template-rows: subgrid; grid-row: span 3; }
 .po-tick { display: block; height: 22px; position: relative; }
 .po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--po-wire); }
 .po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--po-wire); }
@@ -3833,8 +3840,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-fh b { flex: 1; min-width: 0; }
 .po-fh svg { flex: none; color: var(--ink-3); transition: .14s var(--ease); }
 .po-flag:hover .po-fh svg { color: var(--blue); transform: translateX(2px); }
-.po-fb { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-.po-flag small { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-3); }
+/* подпись и метка «наполняем» столбиком, а не в строку: в узкой колонке подпись
+   переносится на две-три строки, и метка сбоку встает ровно посреди текста */
+.po-fb { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 5px; }
+.po-flag small { min-width: 0; font-size: 12px; color: var(--ink-3); }
 .po-flag.ready { border-color: #CFE0FF; }
 .po-flag:not(.ready) .po-fh b { color: var(--ink-2); }
 /* .sev и .uz-tag — готовые пилюли системы; тут только место в потоке */
@@ -3995,7 +4004,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-weight: 600; color: var(--blue); white-space: nowrap; }
 
 @media (max-width: 960px) {
-  .po-cols { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  /* на планшете и телефоне колонок две, ряды переносятся — общая сетка строк
+     тут только мешает, каждая колонка живет своей высотой */
+  .po-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: 22px 14px; }
+  .po-col { display: block; }
   .po-tick { display: none; }
   .po-stem { height: 26px; }
   .po-stem::before { display: none; }
@@ -4004,7 +4016,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 }
 @media (max-width: 620px) {
   .po-h1 { font-size: 23px; }
-  .po-cols { grid-template-columns: 1fr; gap: 24px; }
+  .po-cols { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .po-search { flex-basis: 100%; max-width: none; }
   .po-card { padding: 17px 16px; }
   .po-rl { width: 140px; }
