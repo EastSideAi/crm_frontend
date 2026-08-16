@@ -4306,6 +4306,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   border-radius: 11px; background: var(--amber-soft); color: var(--amber-ink);
   font-size: 12.5px; font-weight: 600; }
 .fin-note svg { flex: none; }
+/* Спокойный вариант той же плашки: не предупреждение, а справка (точка
+   безубыточности). Амбер тут врал бы — он означает «посмотри, что-то не так». */
+.fin-note.calm { background: var(--fill); color: var(--ink-2); }
+.fin-note.calm svg { color: var(--ink-3); }
 
 .fin-groups { margin-top: 12px; }
 .fg + .fg { margin-top: 16px; }
