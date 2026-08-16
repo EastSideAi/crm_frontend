@@ -4287,6 +4287,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ff-fix-form .al-f { min-width: 160px; }
 .ff-fix-btns { display: flex; gap: 8px; }
 
+/* Счетчик карты операций несет три числа вместо одного, и на телефоне запрет
+   переноса срезал бы ему хвост. Остальные списки трогать незачем: там строка
+   короткая, и перенос ей только мешает. */
+@media (max-width: 700px) {
+  .list-count.fin-count { white-space: normal; margin-left: 0; line-height: 1.5; }
+}
+
 .fin-kv { margin-top: 12px; }
 .fkv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
   padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }

@@ -2451,14 +2451,21 @@
       }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
+        // Остаток счета берем у самого счета: в «показателях центра» лежит движение
+        // за период, без остатка с прошлого (см. statBar на экране ведомости).
+        var vtbAcc = null;
+        (sh.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtbAcc = a; });
         ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
           '. К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
-          finRub(sh.metrics ? sh.metrics.on_vtb : 0) + '</b>.' +
+          finRub(vtbAcc ? vtbAcc.live : (sh.metrics ? sh.metrics.on_vtb : 0)) + '</b>.' +
           ((sh.warnings || []).length ? ' Перед закрытием проверьте остатки — список справа.' : '');
       } else if (state.page === 'finpnl') {
-        ph = 'Только факт, нарастающим итогом. План в этот отчет не попадает никогда.';
+        ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
+          'по расчету периода, даже пока они планом.';
       } else if (state.page === 'finops') {
-        ph = 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.';
+        ph = FIN.opsScope === 'period'
+          ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
+          : 'Все ведомости одной лентой: доходы, расходы и переводы, новое сверху. У каждой строки видно свою ведомость.';
       } else {
         ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
       }
@@ -7460,7 +7467,7 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
-              scope: 'all', src: '', kind: '', q: '', err: '', _t: null };
+              scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
      «для красоты» превращается в расхождение, которое потом ищут руками. */
@@ -7521,7 +7528,7 @@
   }
   function finLoadOps() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadOps(); });
-    var ex = [];
+    var ex = ['scope=' + FIN.opsScope];
     if (FIN.src) ex.push('source=' + encodeURIComponent(FIN.src));
     if (FIN.kind) ex.push('kind=' + encodeURIComponent(FIN.kind));
     if (FIN.q) ex.push('q=' + encodeURIComponent(FIN.q));
@@ -7588,11 +7595,19 @@
       if (r.account_id === 'flex') flexRule = r;
     });
 
+    /* Остаток счета берем из самого счета, а не из «показателей центра»: там лежит
+       движение за период (пришло минус ушло), без остатка с прошлого. Пока остаток
+       ВТБ равен нулю, обе цифры совпадают — и разойдутся ровно в тот день, когда
+       остаток счета внесут. Подпись «сколько реально на ВТБ» обязана быть правдой. */
+    var vtb = null;
+    (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
     var bar = statBar([
       { label: 'Доход к зачислению', value: finRub(c.income, 0), sub: 'уже за вычетом комиссии' },
       { label: 'Дивиденды', value: finRub(c.dividends, 0), sub: 'после всех отчислений' },
       { label: 'Денег в фондах', value: finRub(m.in_funds, 0), sub: 'по всем фондам сразу' },
-      { label: 'Остаток на р/с', value: finRub(m.on_vtb, 0), sub: 'сколько реально на ВТБ' },
+      { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb, 0),
+        sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening, 0) + ' с прошлого'
+                                : 'сколько реально на ВТБ' },
     ]);
 
     var rows = [{ cls: 'in', name: 'Доход к зачислению',
@@ -7664,12 +7679,20 @@
     var cashCard = '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
         '<div><div class="t">Движение денег</div>' +
-        '<div class="s">это не прибыль, а сколько осталось на расчетном счете</div></div></div>' +
+        '<div class="s">это не прибыль: пришло, ушло и что лежит на расчетном счете</div></div></div>' +
       '<div class="fin-kv">' +
         '<div class="fkv"><span>Пришло на р/с</span><b class="num">' + finRub(cash.in) + '</b></div>' +
         '<div class="fkv"><span>Ушло наружу</span><b class="num">' + finRub(-cash.out) + '</b></div>' +
         '<div class="fkv"><span>Ушло в фонды</span><b class="num">' + finRub(-cash.to_funds) + '</b></div>' +
-        '<div class="fkv total"><span>Остаток на р/с</span><b class="num">' + finRub(cash.flow) + '</b></div>' +
+        /* Движение и остаток — разные вещи, и подписаны они по-разному нарочно
+           (правило владельца: «пусть разные, но подпиши четко»). Движение — что
+           случилось за период; остаток — что лежит на счете с учетом прошлого. */
+        '<div class="fkv"><span>Движение за период</span><b class="num">' + finRub(cash.flow) + '</b></div>' +
+        (vtb && vtb.opening
+          ? '<div class="fkv"><span>Было на начало</span><b class="num">' + finRub(vtb.opening) + '</b></div>'
+          : '') +
+        '<div class="fkv total"><span>Остаток на счете</span><b class="num">' +
+          finRub(vtb ? vtb.live : cash.flow) + '</b></div>' +
       '</div></div>';
 
     var warn = (s.warnings || []).length
@@ -7886,8 +7909,13 @@
       .then(function () { FIN.fundBusy = false; });
   }
 
-  /* P&L: только факт, нарастающим итогом. План сюда не попадает никогда — это отчет о
-     том, что случилось, а не о том, что собирались сделать. */
+  /* P&L: нарастающим итогом. Доходы и расходы — только факт: отчет о том, что
+     случилось, а не о том, что собирались сделать. Одно исключение, и оно сознательное:
+     отчисления в фонды входят в расходы периода целиком, даже пока стоят планом.
+     Отложение начисляется в момент дохода (20 % от базы), деньги фактически уходят
+     на счет фонда при закрытии ведомости, и если ждать закрытия, отчет открытого
+     периода показывал бы прибыль до отчислений — то есть завышенную. Подпись под
+     заголовком об этом говорит прямо. */
   function renderFinPnl(view) {
     if (!FIN.pnl) {
       if (FIN.err) return finErrView(view);
@@ -7912,7 +7940,7 @@
       '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
         '<div><div class="t">Отчет о прибылях и убытках</div>' +
         '<div class="s">' + (p.from ? finDate(p.from) + ' — ' + finDate(p.to) : 'за все время') +
-        ', только факт</div></div></div>' +
+        ', факт плюс отчисления в фонды за период</div></div></div>' +
       '<div class="fc-rows">' + ladder.map(function (r) {
         return '<div class="fc-row ' + r.cls + '">' +
           '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
@@ -7966,7 +7994,12 @@
     }
     if (FIN.ops === 'none') return finErrView(view);
     var o = FIN.ops;
-    var chips = FIN_KINDS.map(function (kk) {
+    /* Лента по умолчанию за все ведомости: операции не исчезают из истории, когда
+       открывается новый период. Одной ведомостью человек ограничивает сам. */
+    var chips = [['all', 'Все ведомости'], ['period', 'Эта ведомость']].map(function (sc) {
+      return '<button class="qchip' + (FIN.opsScope === sc[0] ? ' on' : '') +
+        '" data-fops="' + sc[0] + '">' + sc[1] + '</button>';
+    }).join('') + '<span class="qsep">тип</span>' + FIN_KINDS.map(function (kk) {
       return '<button class="qchip' + (FIN.kind === kk[0] ? ' on' : '') + '" data-fkind="' + kk[0] + '">' + kk[1] + '</button>';
     }).join('') + ((o.sources || []).length ? '<span class="qsep">раздел</span>' : '') +
       (o.sources || []).map(function (src) {
@@ -7977,8 +8010,14 @@
       var neg = it.kind === 'расход';
       return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        // Подстрочник собираем из непустых кусков: у переводов нет статьи, и жестко
+        // склеенная строка начиналась бы с висящей точки.
         '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
-          '<i>' + esc(it.item || it.category || '') + (it.comment ? ' · ' + esc(it.comment) : '') + '</i></span>' +
+          '<i>' + [it.item || it.category || '',
+                   // Ведомость — только в общей ленте: внутри одной она у всех строк
+                   // одинаковая и место занимает зря.
+                   FIN.opsScope === 'all' ? (it.sheet || '') : '',
+                   it.comment || ''].filter(Boolean).map(esc).join(' · ') + '</i></span>' +
         '<span class="fo-src">' + esc(it.source || '—') + '</span>' +
         '<span class="fo-acc">' + esc(it.account || '—') +
           (it.account_to ? ' → ' + esc(it.account_to) : '') + '</span>' +
@@ -7993,7 +8032,9 @@
           '<input class="search" id="fo-q" placeholder="Поиск по контрагенту, статье или комментарию" value="' + esc(FIN.q) + '">' +
           (FIN.q ? '<button class="s-clear" id="fo-qx">' + ic('x', 13) + '</button>' : '') +
         '</div>' +
-        '<span class="list-count"><b>' + o.total + '</b> ' +
+        // fin-count: строка длиннее обычного счетчика списка (три числа вместо одного),
+        // на телефоне ей нужен перенос, иначе хвост уезжает за край.
+        '<span class="list-count fin-count"><b>' + o.total + '</b> ' +
           plural(o.total, 'операция', 'операции', 'операций') +
           ' · доход <b>' + finRub(o.income) + '</b> · расход <b>' + finRub(o.expense) + '</b></span>' +
       '</div>' +
@@ -8019,6 +8060,11 @@
     }
     var qx = el('fo-qx');
     if (qx) qx.addEventListener('click', function () { FIN.q = ''; finLoadOps(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fops]'), function (b) {
+      b.addEventListener('click', function () {
+        FIN.opsScope = b.getAttribute('data-fops'); finLoadOps();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-fkind]'), function (b) {
       b.addEventListener('click', function () { FIN.kind = b.getAttribute('data-fkind'); finLoadOps(); });
     });

@@ -12,8 +12,11 @@ BEGIN
          base='продажи вручную', manual_base=20000 WHERE period_id=p AND account_id='shortterm';
   UPDATE finmodel.period_rules SET base='доход' WHERE period_id=p AND account_id='taxes';
 
+  -- Остаток расчетного счета с прошлого периода заведен нарочно: без него «остаток
+  -- на счете» и «движение за период» дают одно и то же число, и подмена одного
+  -- другим на экране незаметна.
   INSERT INTO finmodel.period_accounts (period_id, account_id, opening)
-  VALUES (p,'safety',40000),(p,'contractors',43500),(p,'marketing',12000)
+  VALUES (p,'safety',40000),(p,'contractors',43500),(p,'marketing',12000),(p,'vtb',318400)
   ON CONFLICT (period_id, account_id) DO NOTHING;
 
   -- Доходы: платежи с эквайринга
@@ -63,5 +66,27 @@ BEGIN
   INSERT INTO finmodel.obligations (kind, title, counterparty, principal, paid, payment, status, opened_on)
   VALUES ('кредит','Кредит на оборудование','Банк', 480000, 180000, 40000, 'открыт','2026-02-10'),
          ('долг','Заем от учредителя','Учредитель', 300000, 300000, 0, 'погашен','2025-11-01')
+  ON CONFLICT DO NOTHING;
+END $$;
+
+-- Прошлая, уже закрытая ведомость. Нужна, чтобы проверить то, что видно только на
+-- двух периодах: ленту операций за все время, перенос остатка фонда и разницу между
+-- «за ведомость» и «за все время» в P&L.
+DO $$
+DECLARE q uuid := '99999999-8888-7777-6666-555555555555';
+BEGIN
+  INSERT INTO finmodel.periods (id, name, starts_on, ends_on, status, closed_at)
+  VALUES (q, '01.05.2026 — 20.05.2026', '2026-05-01', '2026-05-20', 'закрыт', now())
+  ON CONFLICT (id) DO NOTHING;
+
+  PERFORM finmodel.seed_rules(q);
+  UPDATE finmodel.period_rules SET base='доход' WHERE period_id=q AND account_id='taxes';
+
+  INSERT INTO finmodel.operations (period_id, op_date, kind, status, account_id, source, counterparty, amount)
+  VALUES
+    (q,'2026-05-04','доход','факт','vtb','доходы','ЮKassa / платеж', 214500),
+    (q,'2026-05-12','доход','факт','vtb','доходы','Перевод на счет', 180000),
+    (q,'2026-05-06','расход','факт','vtb','продажи','Менеджер продаж', 48000),
+    (q,'2026-05-15','расход','факт','vtb','сервисы','Хостинг и домены', 3200)
   ON CONFLICT DO NOTHING;
 END $$;
