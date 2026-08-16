@@ -1705,7 +1705,9 @@
   // В модуле самозанятых две стороны, и они взаимоисключающие: связанному человеку
   // сервер выдает 'mywork' и снимает 'contractors' — задания раздает один, выполняет
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel'];
+  // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
+  // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
@@ -7457,7 +7459,7 @@
      зовет функции схемы finmodel: две копии формул разъедутся, и никто не докажет, чья
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
-              fund: null, fundId: 'shortterm',
+              fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               scope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -7757,18 +7759,33 @@
         : '<div class="empty">С этого фонда пока ничего не платили.</div>') +
       '</div>';
 
+    /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
+       есть раздел, а правит финансист. Кнопки, которая всегда откажет, тут не будет. */
+    var canFix = can('finmodel_edit');
     var persCard = '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">По ведомостям</div>' +
         '<div class="s">как фонд рос и на что уходил от периода к периоду</div></div></div>' +
       '<div class="fin-funds">' + pers.map(function (p) {
+        var editing = p.open && canFix && FIN.fundEdit === p.id;
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
             (p.open ? ' · открыт' : '') + '</span>' +
             '<span class="ff-v num">' + finRub(p.next, 0) + '</span></div>' +
-          '<div class="ff-sub"><span>было ' + finNum(p.opening, 0) + '</span>' +
+          /* «Было» — с копейками, в отличие от соседей: это единственная цифра
+             строки, которую человек сверяет с банковской выпиской и вводит руками.
+             Округление «для красоты» тут превращается в расхождение с банком. */
+          '<div class="ff-sub"><span>было ' + finNum(p.opening) + '</span>' +
             '<span>отложили ' + finNum(p.added, 0) + '</span>' +
-            '<span>потратили ' + finNum(p.spent, 0) + '</span></div>' +
+            '<span>потратили ' + finNum(p.spent, 0) + '</span>' +
+            (p.open && canFix && !editing
+              ? '<button class="ff-fix" id="ff-fix">поправить остаток</button>' : '') +
+          '</div>' +
+          /* Остаток, поставленный руками, обязан объяснять себя: иначе через месяц
+             он неотличим от опечатки, а переезжает он во все следующие периоды. */
+          (p.opening_by_hand && p.opening_note && !editing
+            ? '<div class="ff-note">' + esc(p.opening_note) + '</div>' : '') +
+          (editing ? finOpeningForm(p) : '') +
         '</div>';
       }).join('') + '</div></div>';
 
@@ -7802,7 +7819,71 @@
     view.innerHTML = bar + '<div class="grid">' +
       '<div class="sp7">' + byOff + opsCard + '</div>' +
       '<div class="sp5">' + persCard + gapCard + '</div></div>';
+    var fix = el('ff-fix'), save = el('ff-save'), undo = el('ff-cancel'), sum = el('ff-sum');
+    if (fix) fix.addEventListener('click', function () {
+      var open = null;
+      pers.forEach(function (p) { if (p.open) open = p; });
+      if (open) { FIN.fundEdit = open.id; renderAll(); }
+    });
+    if (undo) undo.addEventListener('click', function () { FIN.fundEdit = null; renderAll(); });
+    if (save) save.addEventListener('click', finSaveOpening);
+    if (sum) sum.focus();
     pageAnim(view);
+  }
+
+  /* Правка остатка фонда — единственная правка ведомости, которая живет в CRM.
+     Остаток с прошлого периода — единственная цифра, которая переезжает из ведомости
+     в ведомость: доходы и расходы каждый период считаются заново, а остаток тянется
+     дальше и врет дальше, если разошелся с выпиской. */
+  function finOpeningForm(p) {
+    return '<div class="ff-fix-form">' +
+      '<div class="al-row">' +
+        '<div class="al-f"><span class="al-l">Остаток с прошлого периода</span>' +
+          '<input class="al-in" id="ff-sum" inputmode="decimal" autocomplete="off" value="' +
+            esc(finNum(p.opening)) + '"></div>' +
+        '<div class="al-f"><span class="al-l">Откуда цифра</span>' +
+          '<input class="al-in" id="ff-why" autocomplete="off" maxlength="200" ' +
+            'placeholder="сверено с выпиской ВТБ на 25.08"></div>' +
+      '</div>' +
+      '<div class="al-hint">Причина обязательна. Через месяц по ней будет видно, откуда ' +
+        'взялась сумма, — иначе она неотличима от опечатки.</div>' +
+      '<div class="ff-fix-btns">' +
+        '<button class="bp sm" id="ff-save">Сохранить остаток</button>' +
+        '<button class="bp sm ghost" id="ff-cancel">Отмена</button></div>' +
+    '</div>';
+  }
+  /* «465 978,40», «465978.4» и «465 978» — это одна и та же сумма. Человек вводит ее
+     так, как видит в выписке, а не так, как удобно машине. */
+  function finParseSum(s) {
+    var raw = String(s || '').replace(/[\s  ]/g, '').replace(',', '.');
+    return /^-?\d+(\.\d+)?$/.test(raw) ? parseFloat(raw) : NaN;
+  }
+  function finSaveOpening() {
+    var pid = FIN.fundEdit, sum = el('ff-sum'), why = el('ff-why');
+    if (!pid || !sum || !why || FIN.fundBusy) return;
+    var v = finParseSum(sum.value);
+    if (!isFinite(v)) {
+      sum.classList.add('al-err'); sum.focus();
+      return showToast('Впишите сумму цифрами, как в выписке');
+    }
+    var note = (why.value || '').trim();
+    if (note.length < 3) {
+      why.classList.add('al-err'); why.focus();
+      return showToast('Напишите, откуда эта цифра');
+    }
+    FIN.fundBusy = true;
+    czSend('/admin/api/fin/fund/opening', 'POST',
+           { period_id: pid, account_id: FIN.fundId, amount: v, note: note })
+      .then(function (r) {
+        FIN.fundEdit = null;
+        /* Остаток входит во все цифры ведомости, не только в этот экран: сбрасываем
+           и ее, иначе на соседней вкладке останется старая. */
+        FIN.fund = null; FIN.sheet = null;
+        renderAll();
+        showToast('Остаток: ' + finRub(r.was) + ' → ' + finRub(r.now));
+      })
+      .catch(function (e) { showToast(e.message); })
+      .then(function () { FIN.fundBusy = false; });
   }
 
   /* P&L: только факт, нарастающим итогом. План сюда не попадает никогда — это отчет о

@@ -4274,6 +4274,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
 .ff-warn { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink);
   background: var(--amber-soft); padding: 6px 10px; border-radius: 9px; }
+/* Правка остатка фонда. Кнопка живет в строке мелочей, а не отдельным блоком:
+   это редкое действие финансиста, а не то, ради чего люди открывают экран. */
+.ff-fix { font: 600 11.5px 'Manrope', sans-serif; color: var(--blue); background: none;
+  border: 0; padding: 0; cursor: pointer; border-bottom: 1px dashed rgba(47,107,255,.4); }
+.ff-fix:hover { color: var(--blue-d); border-bottom-color: var(--blue-d); }
+.ff-note { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+.ff-fix-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+/* Карточка фондов стоит в узкой колонке, а на телефоне она еще уже: два поля в ряд
+   там схлопываются в нечитаемые огрызки, поэтому разрешаем перенос. */
+.ff-fix-form .al-row { flex-wrap: wrap; }
+.ff-fix-form .al-f { min-width: 160px; }
+.ff-fix-btns { display: flex; gap: 8px; }
 
 .fin-kv { margin-top: 12px; }
 .fkv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
