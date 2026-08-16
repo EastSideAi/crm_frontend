@@ -259,6 +259,10 @@ a { color: inherit; text-decoration: none; }
 .sec-head .s { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
 .sec-head .cnt { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
   background: var(--fill); border-radius: var(--r-pill); padding: 8px 14px; white-space: nowrap; }
+.sec-head > .bp { margin-left: auto; flex: none; }
+/* чип-действие перед основной кнопкой: вправо уезжает он, кнопка держится рядом */
+.sec-head > .qchip { margin-left: auto; flex: none; }
+.sec-head > .qchip + .bp { margin-left: 8px; }
 .sec-head .lnk { margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; font-weight: 600; color: var(--blue); }
 .sec-head .lnk:hover { text-decoration: underline; }
@@ -439,6 +443,19 @@ a { color: inherit; text-decoration: none; }
 .sev.s-client        { color: var(--green-ink); background: var(--green-soft); }
 .sev.s-rejected      { color: var(--ink-3);     background: var(--fill); }
 .sev.s-wait          { color: var(--amber-ink); background: var(--amber-soft); }
+/* статусы задач команды (st-) — своя семья, чтобы не путать со статусами лида.
+   Формула та же: -soft фон + -ink текст, насыщенной заливки в чипе не бывает.
+   «поставлена» намеренно нейтральная: это норма, а не повод для внимания. */
+.sev.st-wait         { color: var(--ink-2);     background: var(--fill); }
+.sev.st-doing        { color: var(--blue);      background: var(--blue-tint); }
+/* «на приемке» и «заблокирована» — разные вещи: первое ждет постановщика,
+   второе стоит вообще. Разводим по прецеденту s-call_scheduled / s-call_done:
+   один тинт, разные чернила. Амбер остается блокировке — она про заминку. */
+.sev.st-review       { color: var(--navy);      background: var(--blue-tint); }
+.sev.st-block        { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.st-done         { color: var(--green-ink); background: var(--green-soft); }
+.sev.st-return       { color: var(--red-ink);   background: var(--red-soft); }
+.sev.st-cancel       { color: var(--ink-3);     background: var(--fill); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -462,6 +479,7 @@ a { color: inherit; text-decoration: none; }
 .ar-grid { grid-template-columns: 104px 1fr 92px 30px; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
+.tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
 
 /* мини-шкала балла */
 .score { display: flex; align-items: center; gap: 9px; }
@@ -1662,9 +1680,18 @@ a { color: inherit; text-decoration: none; }
   padding: 24px; background: rgba(17,21,31,.34); backdrop-filter: blur(3px);
   opacity: 0; transition: opacity .18s var(--ease); }
 .al-ov.show { opacity: 1; }
+/* Форма выше экрана — обычное дело на телефоне: семь полей в 390px не помещаются
+   никогда. Поэтому карточка это колонка с фиксированной высотой, прокручивается
+   внутри только тело, а шапка и кнопка сохранения стоят на месте. Без этого
+   карточка центрировалась целиком, уезжала за оба края экрана, и кнопка
+   «Поставить задачу» оказывалась там, куда нельзя доскроллить. */
 .al-card { width: 100%; max-width: 460px; background: #fff; border-radius: 20px; overflow: hidden;
+  display: flex; flex-direction: column; max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px);
   box-shadow: 0 30px 80px -24px rgba(17,21,31,.5), 0 2px 8px rgba(17,21,31,.08);
   transform: translateY(10px) scale(.985); opacity: 0; transition: transform .2s var(--ease), opacity .2s var(--ease); }
+.al-card > .al-head, .al-card > .al-sub, .al-card > .al-foot { flex: none; }
+.al-card > .al-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; }
 .al-ov.show .al-card { transform: none; opacity: 1; }
 .al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 22px 24px 0; }
 .al-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
@@ -1677,6 +1704,9 @@ a { color: inherit; text-decoration: none; }
 .al-row { display: flex; gap: 12px; }
 .al-row .al-f { flex: 1; min-width: 0; }
 .al-f { display: flex; flex-direction: column; gap: 6px; }
+/* поле, которое в текущем режиме формы не спрашивают (например направление у
+   шага цели — он берет его у цели) */
+.al-f.hid { display: none; }
 .al-l { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em; }
 .al-l i { color: var(--blue); font-style: normal; }
 /* border: 0 — иначе браузер рисует свою серую рамку поверх нашей inset-обводки,
@@ -1688,6 +1718,23 @@ a { color: inherit; text-decoration: none; }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
 .al-in.al-err { box-shadow: inset 0 0 0 1.5px var(--red), 0 0 0 3px rgba(196,42,47,.1); background: #fff; }
 .al-ta { resize: vertical; min-height: 46px; line-height: 1.5; }
+/* подсказка под полем — там, где выбор неочевиден по подписи (направление цели) */
+.al-hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+
+/* ── Помощник в форме постановки ────────────────────────────────────────────
+   Единственный цветной блок формы: он приглашает начать отсюда, а не с поля
+   «что сделать». Остальные поля остаются тихими. */
+.al-ai { display: flex; flex-direction: column; gap: 9px; padding: 13px;
+  border-radius: 14px; background: var(--blue-tint); }
+.al-ai-h { display: flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 700; color: var(--navy); }
+.al-ai-h svg { color: var(--blue); }
+.al-ai .al-in { background: #fff; }
+.al-ai-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.al-ai-row .bp { flex: none; }
+.al-ai-row .bp.loading { opacity: .6; pointer-events: none; }
+.al-ai-note { font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }
+.al-ai-note.ask { color: var(--navy); font-weight: 600; }
 .al-selwrap { position: relative; display: block; }
 .al-sel { width: 100%; appearance: none; -webkit-appearance: none; font: 500 14px 'Manrope', sans-serif;
   color: var(--ink); background: var(--fill); border-radius: 11px; padding: 11px 34px 11px 13px;
@@ -1727,6 +1774,532 @@ a { color: inherit; text-decoration: none; }
 .al-save.loading { opacity: .6; pointer-events: none; }
 .lead-add { gap: 6px; }
 @media (max-width: 760px) { .al-row { flex-direction: column; gap: 13px; } .lead-add span { display: none; } }
+/* Телефон: форма встает листом снизу — так же, как везде на мобильных. Экран
+   отдан ей целиком, кнопка сохранения всегда на виду над нижним краем, а
+   поля прокручиваются под ней. Отступ снизу учитывает индикатор жестов iPhone. */
+@media (max-width: 560px) {
+  .al-ov { align-items: flex-end; padding: 0; }
+  .al-card { max-width: none; border-radius: 18px 18px 0 0;
+    max-height: 94vh; max-height: 94dvh; transform: translateY(24px); }
+  .al-head { padding: 18px 18px 0; }
+  .al-sub, .al-body, .al-foot { padding-left: 18px; padding-right: 18px; }
+  /* Тело едет под шапкой — без линии верхнее поле выглядит просто обрезанным. */
+  .al-card > .al-body { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px; }
+  .al-foot { padding-bottom: calc(16px + env(safe-area-inset-bottom)); gap: 8px;
+    border-top: 1px solid var(--line); background: #fff; }
+  .al-foot .al-save { flex: 1; }
+}
+
+/* ════ ЗАДАЧИ КОМАНДЫ ════════════════════════════════════════════════════════
+   Строка списка и карточка задачи. Тех же рецептов, что весь список лидов:
+   плоско, плотно, семантика цветом только по формуле -soft + -ink. */
+.tsk-who { display: flex; align-items: center; gap: 9px; min-width: 0;
+  font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.tsk-who > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-av { width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 700; color: #fff; letter-spacing: -.01em;
+  background: linear-gradient(140deg, var(--blue), var(--navy)); }
+.tsk-nobody { color: var(--ink-3); font-weight: 500; }
+.tsk-due { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; }
+.tsk-due svg { color: var(--ink-3); }
+.tsk-due.due-none { color: var(--ink-3); font-weight: 500; }
+.tsk-due.due-now { color: var(--amber-ink); }
+.tsk-due.due-soon { color: var(--ink-2); }
+/* просрочка — единственное красное в списке: большое красное = только негатив */
+.tsk-due.due-over { color: var(--red-ink); }
+.tsk-due.due-over svg { color: var(--red-ink); }
+
+/* Прогресс цели в строке списка. Единственная шкала здесь намеренно тонкая:
+   строка списка — не дашборд, полоса подсказывает движение боковым зрением, а
+   точное «сколько» дочитывается цифрой рядом. Растет тем же width .9s, что и
+   шкалы дашборда. */
+/* Строка с полосой выше фиксированных 58px. Смешанных списков не бывает: цель с
+   шагами живет только в срезе «Цели», а туда попадают одни цели — ряд остается
+   ровным. */
+.trow.tsk-grid.has-prog { height: auto; min-height: 74px; padding-top: 12px; padding-bottom: 12px; }
+.tsk-prog { display: flex; align-items: center; gap: 9px; margin-top: 7px; }
+.tsk-prog-b { width: 132px; flex: none; height: 4px; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.tsk-prog-b i { display: block; height: 100%; border-radius: 999px; background: var(--blue);
+  transition: width .9s var(--ease); }
+.tsk-prog-n { font-size: 11.5px; font-weight: 700; color: var(--ink-3); letter-spacing: -.02em; }
+
+/* Пометка цели в строке задачи. Не чип-статус и не тег: это ссылка на смысл
+   задачи, поэтому тихая, но кликабельная — синеет только на наведении.
+   Строка с пометкой выше фиксированных 58px: та же логика, что у строки цели
+   с прогрессом (.tsk-grid.has-prog). */
+.trow.tsk-grid.has-goal { height: auto; min-height: 78px; padding-top: 12px; padding-bottom: 12px; }
+.tsk-goal { display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  max-width: 100%; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
+  transition: .14s var(--ease); overflow: hidden; }
+.tsk-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-goal svg { flex: none; color: var(--ink-3); }
+.tsk-goal:hover { background: var(--blue-tint); color: var(--blue); }
+.tsk-goal:hover svg { color: var(--blue); }
+
+/* ── Срез «Цели» ─────────────────────────────────────────────────────────────
+   Цели по направлениям: заголовок отдела, под ним его цели с процентом. */
+.gl-sec { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 16px 24px 8px; }
+.gl-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.gl-sn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+/* Цели компании — первый блок и единственный акцент экрана: остальные
+   направления это зоны ответственности внутри того же вектора. */
+.gl-sec.gl-company { padding-top: 14px; }
+.gl-company .gl-sl { color: var(--blue); }
+.gl-hint { font-style: normal; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ink-3); margin-left: 8px; }
+.gl-row { grid-template-columns: minmax(180px,1fr) 180px 54px 130px 30px; }
+.gl-pct { font-size: 13px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em;
+  text-align: right; }
+.gl-pct.full { color: var(--green-ink); }
+
+/* ── Дерево «Вся команда» ────────────────────────────────────────────────────
+   Три уровня: направления, цели направления, шаги цели. Разворачивающихся
+   веток нет намеренно — на экране всегда один тип объектов, а где ты сейчас,
+   говорит путь сверху. */
+.tr-path { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 13px 20px; border-bottom: 1px solid var(--line); }
+.tr-crumb { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  transition: color .14s var(--ease); }
+button.tr-crumb:hover { color: var(--blue); }
+.tr-crumb.on { color: var(--ink); font-weight: 700; }
+.tr-sep { display: inline-flex; color: var(--ink-3); opacity: .6; }
+.tr-grid { grid-template-columns: minmax(180px,1fr) 190px 96px 110px 30px; }
+.tr-goal { grid-template-columns: minmax(180px,1fr) 190px 150px 30px; }
+.tr-task { grid-template-columns: minmax(180px,1fr) 150px 116px; }
+.tr-name { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; }
+.tr-name .t-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.tr-prog { min-width: 0; }
+.tr-prog .tsk-prog { margin-top: 0; }
+.tr-go { width: 30px; height: 30px; border-radius: 9px; background: var(--fill);
+  display: grid; place-items: center; color: var(--ink-3); transition: .15s var(--ease); }
+.trow:hover .tr-go { background: var(--blue); color: #fff; }
+/* Подзаголовок внутри списка: «3 цели в работе», «2 задачи вне целей». Тот же
+   капс-микролейбл, что у шапок таблиц, — второй рецепт заголовка не заводим. */
+.tr-sec { padding: 15px 24px 7px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tr-goalhead { display: flex; flex-direction: column; gap: 12px;
+  padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.tr-gh-t { font-size: 18px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  text-wrap: balance; }
+.tr-gh-r { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.tr-gh-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.tr-goalhead .tsk-prog { margin-top: 0; }
+.tr-goalhead .tsk-prog-b { flex: 1 1 160px; width: auto; max-width: 320px; }
+/* Подпись «1 из 4» не сжимаем: на узком экране она иначе переносится по слову
+   и встает в три строки столбиком. */
+.tr-goalhead .tsk-prog-n { flex: none; white-space: nowrap; }
+.tr-open { margin: 14px 24px 18px; align-self: flex-start; }
+
+/* ── Срез «Готово» ───────────────────────────────────────────────────────────
+   Сделанное за период, сгруппированное по целям. Зеленый здесь один и только
+   на галочке принятой задачи: если красить зеленым все, экран превращается в
+   поздравительную открытку и перестает читаться. */
+.dn-sum { padding: 13px 24px; border-bottom: 1px solid var(--line);
+  font-size: 13px; color: var(--ink-2); }
+.dn-sum b { color: var(--ink); font-weight: 700; letter-spacing: -.02em; }
+.dn-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.dn-g { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.dn-g.closed { border-color: #CFE7D9; }
+.dn-gh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; background: var(--fill); }
+.dn-g.closed .dn-gh { background: var(--green-soft); }
+.dn-g.nogoal .dn-gt { color: var(--ink-2); }
+.dn-gt { font-size: 13.5px; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-gn { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-3); flex: none; }
+.dn-flag { display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--green-ink); }
+.dn-gh .tsk-prog { margin-top: 0; }
+.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px; align-items: center;
+  gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); cursor: pointer;
+  transition: background .14s var(--ease); }
+.dn-t:hover { background: #FBFBFC; }
+.dn-tick { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--green-soft); color: var(--green-ink); }
+.dn-tt { font-size: 13.5px; color: var(--ink); display: flex; align-items: baseline; gap: 8px;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-cl { font-size: 12px; color: var(--ink-3); flex: none; }
+.dn-who { font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dn-when { font-size: 12.5px; color: var(--ink-3); text-align: right; }
+
+/* ── Табло «По людям» ────────────────────────────────────────────────────────
+   Свод по сотрудникам за период: строка на человека, пять чисел. Это таблица
+   чисел, поэтому все украшение здесь — типографика. Нули приглушены (глаз
+   ищет, где работа есть, а не пересчитывает пустые клетки), красное одно —
+   просрочка, зеленое одно — принятое. Никакой зебры и вертикальных линеек. */
+/* Имя тянется, но не бесконечно: на широком мониторе колонка в 1.6fr отрывает
+   человека от его же чисел на пол-экрана. */
+.brd-grid { grid-template-columns: minmax(200px, 460px) repeat(5, minmax(94px, 1fr)); }
+.brd-grid .th:not(:first-child), .brd-n { text-align: right; }
+.brd-who { display: flex; align-items: center; gap: 10px; min-width: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.brd-nm { display: flex; flex-direction: column; gap: 1px; min-width: 0; overflow: hidden; }
+.brd-nm .t-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.brd-n { font-size: 15px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.brd-n.zero { color: var(--ink-3); font-weight: 500; }
+.brd-n.bad  { color: var(--red-ink); }
+.brd-n.ok   { color: var(--green-ink); }
+/* Итог отделен линией, а не заливкой: заливка здесь читалась бы как еще один
+   человек, только выделенный. Ховера у него нет — кликать не по чему. */
+.brd-total { border-top: 1px solid var(--line-2); }
+.brd-total:hover { background: none; }
+.brd-total .brd-who { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.brd-nav { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.brd-label { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em;
+  min-width: 138px; text-align: center; }
+.brd-arrow { width: 28px; height: 28px; border-radius: 9px; }
+.brd-arrow.prev svg { transform: rotate(180deg); }
+.brd-note { padding: 12px 24px; border-top: 1px solid var(--line);
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+/* Отчет за день внутри строки: занимает всю ширину под числами, поэтому строка
+   становится выше — как строка цели с прогрессом (.tsk-grid.has-prog). */
+.trow.brd-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.brd-note-row { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.brd-note-row svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.brd-idle { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 13px 24px; border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink-3); }
+.brd-il { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); flex: none; }
+.brd-more { font-weight: 700; color: var(--ink-2); }
+
+/* карточка задачи: та же модалка, но шире — внутри лента истории */
+.tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
+.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0; }
+.tsk-mwho { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2); }
+.tsk-mwho svg { color: var(--ink-3); }
+.tsk-mwho.dim { color: var(--ink-3); font-weight: 500; }
+.tsk-card .al-body { overflow-y: auto; gap: 16px; padding-bottom: 16px; }
+.tsk-sec { display: flex; flex-direction: column; gap: 7px; }
+.tsk-l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tsk-p { font-size: 13.5px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+/* критерий приемки — единственный выделенный блок карточки: по нему спорят */
+.tsk-sec.tsk-crit .tsk-p { background: var(--blue-tint); border-radius: 12px; padding: 12px 14px;
+  color: var(--navy); font-weight: 500; }
+
+/* ── Цель и шаги ────────────────────────────────────────────────────────────
+   Глубина одна: цель и ее шаги (см. шапку миграции 068). Шаг — не вложенная
+   карточка, а строка-кнопка: клик закрывает текущую карточку и открывает
+   карточку шага, вложенных модалок в системе нет. */
+/* Синий, а не чернильный: это единственное действие в шапке карточки, и оно
+   должно читаться как действие, а не как еще одна подпись. */
+.tsk-up { color: var(--blue); transition: .15s; }
+.tsk-up svg { color: var(--blue); }
+.tsk-up:hover { color: var(--blue-d); }
+.tsk-up:hover svg { color: var(--blue-d); }
+.tsk-l.tsk-lrow { display: flex; align-items: center; gap: 10px; }
+.tsk-addstep { margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--blue); transition: .15s; }
+.tsk-addstep svg { width: 12px; height: 12px; }
+.tsk-addstep:hover { color: var(--blue-d); }
+.tsk-steps { display: flex; flex-direction: column; }
+.tsk-step { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 2px 10px;
+  align-items: center; text-align: left; width: 100%; padding: 9px 10px; border-radius: 10px;
+  border-top: 1px solid var(--line); transition: .12s; }
+.tsk-step:first-child { border-top: none; }
+.tsk-step:hover { background: #FBFBFC; }
+.tsk-step-t { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-step-m { grid-column: 1; font-size: 11.5px; color: var(--ink-3); }
+.tsk-step-m i { font-style: normal; }
+.tsk-step-m i.due-over { color: var(--red-ink); font-weight: 600; }
+.tsk-step-m i.due-now { color: var(--amber-ink); font-weight: 600; }
+.tsk-step .sev { grid-column: 2; grid-row: 1 / span 2; }
+.tsk-nosteps { font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+
+/* Своей высоты у ленты нет намеренно: скроллится тело карточки, и колесо не
+   застревает во вложенной области. */
+.tsk-feed { display: flex; flex-direction: column; gap: 2px; }
+.tsk-ev { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.tsk-ev:first-child { border-top: none; }
+.tsk-ev-ic { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
+  background: var(--fill); color: var(--ink-3); }
+.tsk-ev.cm .tsk-ev-ic { background: var(--blue-tint); color: var(--blue); }
+.tsk-ev-b { min-width: 0; }
+.tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word; }
+.tsk-ev-m { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+
+/* ── Общий чат задач (в окне «Бот задач») ────────────────────────────────────
+   Блок про канал, а не про людей, поэтому стоит отдельной плашкой над списком
+   команды: сначала «куда идут уведомления», потом «кто их получает». */
+.tgg { background: var(--fill); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.tgg-h { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 7px; }
+.tgg-on { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); }
+.tgg-on svg { color: var(--green-ink); }
+.tgg-acts { margin-left: auto; display: flex; gap: 8px; }
+.tgg-s { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin-top: 6px; }
+.tgg-s b { font-weight: 700; color: var(--ink); }
+.tgg-b { margin-top: 10px; font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--blue); transition: .15s; }
+.tgg-b:hover { color: var(--blue-d); }
+.tgg-b[disabled] { color: var(--ink-3); }
+.tgg-acts .tgg-b { margin-top: 0; }
+.tgg-b.off { color: var(--ink-3); }
+.tgg-b.off:hover { color: var(--red-ink); }
+.tgg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tgg-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px;
+  font-size: 13px; font-weight: 600; color: var(--ink); transition: .12s; }
+.tgg-row:hover { border-color: var(--blue); }
+.tgg-row i { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--blue); }
+
+/* список подключений к боту задач (раздел «Команда») */
+.tgl-list { display: flex; flex-direction: column; }
+.tgl-row { display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center;
+  padding: 10px 0; border-top: 1px solid var(--line); }
+.tgl-row:first-child { border-top: none; }
+.tgl-i { min-width: 0; }
+.tgl-n { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+.tgl-s { font-size: 11.5px; color: var(--amber-ink); margin-top: 2px; }
+.tgl-list.nobot .tgl-s { color: var(--ink-3); }
+/* Подключен человек или нет — говорит подпись, а не аватар: инициалы это
+   идентичность, навешивать на нее статус значит читать строку дважды. */
+.tgl-row.on .tgl-s { color: var(--green-ink); }
+/* Аккаунты человека — служебная строка под подписью: показывается только когда
+   их больше одного, то есть когда есть что решать (какой из них лишний). */
+.tgl-accs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tgl-ac { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px;
+  font-size: 11px; color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); }
+.tgl-un { display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; padding: 0; border: none; border-radius: 50%;
+  background: none; color: var(--ink-3); cursor: pointer; transition: color .12s, background .12s; }
+.tgl-un:hover { color: var(--red-ink); background: var(--red-soft); }
+
+/* ── Срез «По ученикам» ──────────────────────────────────────────────────────
+   Группа = ученик, внутри группы — подгруппы по роли исполнителя. Своих карточек
+   с бордером внутри списка не заводим: это тот же список, только с заголовками,
+   поэтому разделитель — линия, а иерархия — весом и кеглем (design.md §3). */
+.stu-body { padding: 0; }
+.stu { padding: 16px 18px 14px; border-top: 1px solid var(--line); }
+.stu:first-child { border-top: none; }
+.stu-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+/* Имя ученика — переход в его карточку, поэтому кнопка, а не текст. */
+.stu-n { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
+  transition: .12s; }
+.stu-n:hover { color: var(--blue); }
+.stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.stu-cs { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.stu-c { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.stu-c.over { color: var(--red-ink); }
+/* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
+   остального. Полностью она читается в карточке ученика. */
+.stu-note { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
+  background: var(--fill); border-radius: 10px; padding: 8px 11px; }
+/* Обрезка живет на внутреннем span, а не на самой плашке: overflow:hidden режет
+   по padding-box, и третья строка проглядывала бы в нижнем отступе — блок
+   выглядел бы сломанным, а не сокращенным. */
+.stu-note span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
+.stu-g { margin-top: 12px; }
+.stu-gl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 4px; }
+/* Работа, которую никто не взял, — состояние «внимание», а не поломка: красный
+   в этом экране занят просрочкой. */
+.stu-g.nobody .stu-gl { color: var(--amber-ink); }
+.stu-t { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap: 10px;
+  align-items: center; padding: 8px 10px; margin: 0 -10px; border-radius: 10px;
+  cursor: pointer; transition: .12s; }
+.stu-t:hover { background: #FBFBFC; }
+.stu-tt { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stu-tw { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.stu-td { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.stu-td.due-none { color: var(--ink-3); font-weight: 500; }
+.stu-td.due-now { color: var(--amber-ink); }
+.stu-td.due-over { color: var(--red-ink); }
+/* Подсказки плана — не задачи: они не кликаются и написаны тише, иначе экран
+   работы команды превращается в пересказ плана ученика. */
+.stu-plan { margin-top: 11px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.stu-pl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.stu-pt { font-size: 12px; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 4px 10px; }
+.stu-add { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--blue); transition: .15s; }
+.stu-add:hover { color: var(--blue-d); }
+
+/* ── Задачи в карточке ученика ───────────────────────────────────────────────
+   Тот же контур задач, вид покороче: в карточке важнее «кто и когда», а вести
+   задачу человек уходит в ее собственную карточку. */
+.ct-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px;
+  align-items: center; padding: 10px 0; border-top: 1px solid var(--line);
+  cursor: pointer; transition: .12s; }
+.ct-row:first-child { border-top: none; }
+.ct-row:hover { background: #FBFBFC; }
+.ct-t { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em; }
+.ct-m { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.ct-m i { font-style: normal; }
+.ct-m i.due-over { color: var(--red-ink); font-weight: 600; }
+.ct-m i.due-now { color: var(--amber-ink); font-weight: 600; }
+/* Закрытые лежат ниже и тише: они здесь как память, а не как работа. */
+.ct-row.off .ct-t { color: var(--ink-2); font-weight: 500; }
+.ct-off-l { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding: 14px 0 2px; }
+.ct-skel { height: 44px; border-radius: 10px; background: var(--fill); margin-bottom: 6px; }
+.ct-add { margin-top: 12px; }
+.ct-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+/* Ученик в шапке карточки задачи — ссылка в его карточку. */
+.al-eyelink { font: inherit; color: var(--blue); transition: .12s; }
+.al-eyelink:hover { color: var(--blue-d); }
+.al-eyelink[disabled] { color: inherit; cursor: default; }
+
+/* быстрые сроки в форме постановки — тот же сегмент, что в карточке лида */
+.al-f > .due-seg { align-self: flex-start; flex-wrap: wrap; }
+
+.tsk-say { display: flex; gap: 8px; align-items: center; }
+.tsk-say .al-in { flex: 1; min-width: 0; }
+/* режим возврата: причину пишут в том же поле, что и комментарии — она и
+   ложится в ленту рядом с ними. Отдельного окна для этого не нужно. */
+.tsk-ret { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
+.tsk-ret[hidden] { display: none; }
+.tsk-ret b { color: var(--red-ink); font-weight: 700; }
+.tsk-ret button { color: var(--ink-3); font-size: 12px; font-weight: 600; text-decoration: underline; }
+.tsk-ret button:hover { color: var(--ink); }
+.tsk-say.ret .al-in { border-color: var(--red); box-shadow: 0 0 0 3px rgba(229,72,77,.1); }
+.tsk-acts { flex-wrap: wrap; }
+.tsk-acts[hidden] { display: none; }
+
+/* ── Результат задачи ────────────────────────────────────────────────────────
+   Ответ исполнителя на критерий приемки: пара строк и приложенные файлы. Стоит
+   сразу под критерием, поэтому своей рамки не просит — читается как его пара. */
+.tsk-resat { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  text-transform: none; letter-spacing: 0; }
+.tsk-resat + .tsk-addstep { margin-left: 12px; }
+.tsk-files { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.tsk-file { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px 11px;
+  border-radius: 10px; background: var(--fill); color: var(--ink);
+  font-size: 13px; font-weight: 600; transition: background .15s; }
+.tsk-file:hover { background: #ECEEF1; }
+.tsk-file svg { flex: none; color: var(--ink-3); }
+.tsk-file-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-file-m { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+
+/* Панель сдачи: текст плюс файлы уезжают вместе, одним событием. */
+.tsk-resform { display: flex; flex-direction: column; gap: 9px; padding: 14px;
+  border-radius: 14px; background: var(--blue-tint); }
+.tsk-resform[hidden] { display: none; }
+.tsk-resform .al-in { background: #fff; }
+.tsk-resrow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.tsk-attach { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 12.5px; font-weight: 700; color: var(--blue); }
+.tsk-attach:hover { color: var(--blue-d); }
+.tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
+.tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
+.tsk-resrow .bp { height: 36px; }
+.tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
+.tsk-picked:empty { display: none; }
+.tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 5px 8px 5px 10px; border-radius: 999px; background: #fff;
+  font-size: 12px; font-weight: 600; color: var(--ink); }
+.tsk-pick button { display: inline-flex; color: var(--ink-3); }
+.tsk-pick button:hover { color: var(--red-ink); }
+@media (max-width: 560px) {
+  .tsk-resrow .al-cancel { margin-left: 0; }
+  .tsk-resrow .bp, .tsk-resrow .al-cancel { flex: 1; justify-content: center; }
+}
+@media (max-width: 760px) {
+  /* Общая мобильная сетка строк (.trow) прибита !important под три колонки лида —
+     у задачи их четыре, поэтому переопределяем с большей специфичностью, а не
+     порядком правил. Исполнителя на телефоне прячем: свои задачи и так свои,
+     а в срезе команды имя уходит в подпись под названием. */
+  .trow.tsk-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 5px 10px; height: auto; padding: 13px 16px; align-items: start; }
+  .trow.tsk-grid.thead { display: none; }
+  /* Название — во всю ширину: на телефоне это единственный признак, по которому
+     задачу узнают, и отжимать его чипом статуса нельзя. Срок со статусом идут
+     второй строкой (вместе они и есть вопрос «горит ли»), исполнитель третьей —
+     в трех колонках на 390px имя схлопывается в «Свод…». */
+  .trow.tsk-grid .t-cell { grid-column: 1 / -1; grid-row: 1; }
+  .trow.tsk-grid .tsk-due { grid-column: 1; grid-row: 2; justify-self: start; font-size: 12px; }
+  .trow.tsk-grid > div:last-child { grid-column: 2; grid-row: 2; justify-self: end; }
+  .trow.tsk-grid .tsk-who { grid-column: 1 / -1; grid-row: 3; font-size: 12.5px; }
+  .trow.tsk-grid .tsk-who .tsk-av { width: 20px; height: 20px; font-size: 9px; }
+  /* на телефоне название переносим в две строки: обрезанная задача не читается */
+  .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+  .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
+     строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
+     число обязано назвать себя само — подпись берется из data-l. */
+  .trow.brd-grid { grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+    gap: 10px 12px; height: auto; padding: 14px 16px; align-items: start; }
+  .trow.brd-grid.thead { display: none; }
+  .trow.brd-grid .brd-who { grid-column: 1 / -1; }
+  .trow.brd-grid .brd-n { text-align: left; display: flex; flex-direction: column-reverse; gap: 2px; }
+  .trow.brd-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .brd-nav { margin-left: 0; }
+  .brd-label { min-width: 0; flex: 1; }
+  /* Дерево на телефоне: у направления числа уходят под название и называют
+     себя сами (шапка скрыта), у цели и задачи вторая строка — срок и статус. */
+  .trow.tr-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
+  .trow.tr-grid.thead { display: none; }
+  .trow.tr-grid .tr-name, .trow.tr-grid .tr-prog { grid-column: 1 / -1; }
+  .trow.tr-grid .brd-n { grid-column: auto; text-align: left;
+    display: flex; flex-direction: column-reverse; gap: 2px; }
+  .trow.tr-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.tr-grid .tr-go { display: none; }
+  /* Цели на телефоне: процент и срок под названием, шкала во всю ширину. */
+  .trow.gl-row { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 6px 10px; height: auto; padding: 13px 16px; align-items: center; }
+  .trow.gl-row .tr-name, .trow.gl-row .tr-prog { grid-column: 1 / -1; }
+  .trow.gl-row .gl-pct { text-align: left; }
+  .trow.gl-row .tr-go { display: none; }
+  .trow.tr-goal, .trow.tr-task { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 6px 10px; height: auto; padding: 13px 16px; align-items: start; }
+  .trow.tr-goal .tr-name, .trow.tr-task .tr-name { grid-column: 1 / -1; }
+  .trow.tr-goal .tr-prog { grid-column: 1 / -1; }
+  .trow.tr-goal .tr-go { display: none; }
+  .tr-goalhead { padding: 16px; }
+  .tr-open { margin: 12px 16px 16px; }
+  /* «Готово» на телефоне: исполнитель и дата уходят под название задачи —
+     в четыре колонки на 390px название схлопывается до трех слов. */
+  .dn-t { grid-template-columns: 22px minmax(0,1fr); gap: 4px 10px; padding: 12px 14px; }
+  .dn-tt { grid-column: 2; white-space: normal; }
+  .dn-who, .dn-when { grid-column: 2; text-align: left; font-size: 12px; }
+  .dn-when { color: var(--ink-3); }
+  /* Семь направлений в три ряда на 390px съедают экран целиком, а список под
+     ними — одну строку. Уводим в один ряд с горизонтальным скроллом. */
+  .list-quick.depts { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .list-quick.depts::-webkit-scrollbar { display: none; }
+  .list-quick.depts .qchip { flex: none; }
+  /* «По ученикам» на телефоне: название задачи во всю ширину, под ним человек и
+     срок, статус справа. В четыре колонки на 390px имя схлопывается в «Ть…». */
+  .stu { padding: 14px 16px 12px; }
+  .stu-t { grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px; align-items: start;
+    padding: 10px; }
+  .stu-tt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+  .stu-t .stu-tw { grid-column: 1; grid-row: 2; font-size: 12px; }
+  .stu-t .stu-td { grid-column: 2; grid-row: 2; justify-self: end; font-size: 12px; }
+  .stu-t > div:last-child { grid-column: 2; grid-row: 1; justify-self: end; }
+  .stu-cs { margin-left: 0; width: 100%; }
+  /* Обрезанное название шага на телефоне не читается — переносим в две строки,
+     как и название задачи в строке списка. */
+  .tsk-step-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
+  .tsk-card { max-height: calc(100vh - 24px); }
+  .sec-head > .qchip { order: 2; margin-left: 0; }
+}
 
 /* журнал контактов — без верхней полоски */
 .comm-btns { display: flex; gap: 8px; }
@@ -2276,10 +2849,22 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .side { display: none; }
   .main { overflow: visible; }
   .topbar { padding: 12px 16px; border-radius: var(--r-xl) var(--r-xl) 0 0; position: static; flex-wrap: wrap; }
-  /* на узком экране от профиля остается только аватар: имя и роль и так видно негде,
-     а кнопка нужна — за ней «Уведомления» и смена аккаунта, и это единственный вход
-     в них на телефоне (сайдбар с «Выйти» здесь скрыт) */
-  .tbr .profile { padding: 4px; gap: 0; border-radius: var(--r-pill); }
+  /* Вкладки раздела шире экрана телефона. Без этого они молча обрезались
+     справа: «На приемку», «Готово» и «По ученикам» не существовало, пока
+     телефон не повернешь горизонтально.
+     Скроллится ОБЕРТКА (#tb-left), а не сама капсула: браузер, показывая
+     активную вкладку, прокручивает ближайшего прокручиваемого предка. Если им
+     оказывается страница, весь экран уезжает влево и содержимое раздела просто
+     пропадает — так и было, пока капсула скроллилась «сама в себе». */
+  #tb-left { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  #tb-left::-webkit-scrollbar { display: none; }
+  .tabs { flex-wrap: nowrap; width: max-content; }
+  .tab { flex: none; }
+  /* Профиль на узком экране сжимается до аватара, но не прячется: за ним
+     «Уведомления» и смена аккаунта, и на телефоне это единственный вход в них
+     (сайдбар с «Выйти» здесь скрыт). Места он теперь занимает ровно столько,
+     чтобы не спорить со скроллом вкладок. */
+  .tbr .profile { padding: 4px; gap: 0; border-radius: var(--r-pill); flex: none; }
   .tbr .profile .pinfo, .tbr .profile .pchev { display: none; }
   .content { padding: 16px 16px 36px; }
   .chead h2 { font-size: 23px; }
@@ -2330,10 +2915,16 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .tg.show-chat .tg-list { display: none; }
   .tg.show-chat .tg-chat { display: flex; }
   .tg-back { display: grid; place-items: center; }
+  /* Разделов больше, чем влезает в ширину телефона: у руководителя их девять.
+     Раньше лишние просто обрезались краем плашки — пункт «Продукты» с экрана
+     пропадал совсем. Теперь ряд скроллится, а при малом числе разделов кнопки
+     по-прежнему растягиваются на всю ширину. */
   .mtabs { display: flex; position: fixed; left: 10px; right: 10px; bottom: 10px; z-index: 50;
     background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 6px; gap: 4px;
+    overflow-x: auto; scrollbar-width: none;
     box-shadow: 0 14px 36px -10px rgba(15,19,32,.28); }
-  .mtab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  .mtabs::-webkit-scrollbar { display: none; }
+  .mtab { flex: 1 0 auto; min-width: 62px; display: flex; flex-direction: column; align-items: center; gap: 3px;
     color: var(--ink-3); font: 600 10.5px 'Manrope', sans-serif; padding: 8px 2px; border-radius: 11px; position: relative; }
   .mtab svg { width: 18px; height: 18px; }
   .mtab.on { color: #fff; background: var(--blue); }
@@ -3183,4 +3774,303 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .det-sw-row { flex-wrap: wrap; }
   .det-link { flex-wrap: wrap; }
   .det-skl { grid-template-columns: 84px 1fr 68px; gap: 9px; }
+}
+
+/* ════ ПРОДУКТОВЫЙ ПОРТАЛ (раздел «Портал») ════
+   База знаний команды по продуктам: дерево → карточка продукта → вкладки.
+   Контент приходит из content/portal.json, разметка — в renderPortal*.
+   Дерево — единственный визуальный якорь раздела; все остальное тихое и
+   собрано из готовых рецептов (карточка, сегмент .dperiod, .sec-head). */
+.po-wrap { max-width: 1120px; }
+.po-top { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 28px; }
+.po-ttl { flex: 1; min-width: 240px; }
+.po-h1 { font-size: 27px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; }
+.po-sub { margin-top: 9px; font-size: 14px; line-height: 1.55; color: var(--ink-2); max-width: 92ch; }
+.po-search { flex: 0 1 340px; margin-top: 3px; }
+/* заголовок карточки портала тянется сам, отметка «сохранено» прижата вправо */
+.po-card .sec-head > div { flex: 1; min-width: 0; }
+
+/* дерево: два входных узла → четыре направления → допуслуги.
+   Подписи полос живут ВНУТРИ ствола: линия идет по центру, подпись прижата влево,
+   поэтому вертикаль не рвется — и переживает мобильную ширину, где линий нет. */
+.po-lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.po-tree > .po-lbl { margin-bottom: 11px; }
+.po-lane { margin-bottom: 0; }
+/* вход — служебная полоса, а не второй якорь: тихий фон, серая иконка.
+   Синим в дереве светятся только флагманские направления. */
+.po-node { display: flex; align-items: center; gap: 11px; background: var(--fill);
+  border: 1px solid transparent; border-radius: var(--r-lg); padding: 11px 14px; transition: .14s var(--ease); }
+.po-node:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-ni { width: 28px; height: 28px; border-radius: 9px; flex: none;
+  background: var(--card); color: var(--ink-3); display: grid; place-items: center; }
+.po-node:hover .po-ni { color: var(--blue); }
+.po-nt { flex: 1; min-width: 0; }
+.po-nt b { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink-2); }
+.po-nt small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.po-nx { color: var(--ink-3); transition: .14s var(--ease); }
+.po-node:hover .po-nx { color: var(--blue); }
+.po-drop, .po-stem { position: relative; height: 20px; }
+.po-stem { height: 34px; display: flex; align-items: center; }
+/* Линии дерева темнее общих разделителей: на 1px светло-серая ветка читается как
+   случайный штрих рядом с карточкой, а не как связь между узлами. */
+.po-tree { --po-wire: #C9CEDA; }
+.po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--po-wire); }
+
+/* Ряд направлений. minmax(0,·), а не 1fr: длинное слово в подписи иначе распирает
+   свою колонку и колонки перестают быть равными.
+   Три общие строки (шина, карточка, ветки) + subgrid в колонке: карточки в ряду
+   одной высоты и ветки стартуют с одной линии, сколько бы строк ни занял текст.
+   row-gap: 0 — между шиной и карточкой не должно быть разрыва, там идет провод. */
+.po-cols { display: grid; grid-template-columns: repeat(var(--po-n, 4), minmax(0, 1fr));
+  grid-template-rows: auto auto auto; column-gap: 16px; row-gap: 0; align-items: start; }
+.po-col { display: grid; grid-template-rows: subgrid; grid-row: span 3; }
+.po-tick { display: block; height: 22px; position: relative; }
+.po-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--po-wire); }
+.po-tick::after { content: ''; position: absolute; top: 0; height: 1px; left: -8px; right: -8px; background: var(--po-wire); }
+.po-col:first-child .po-tick::after { left: 50%; }
+.po-col:last-child .po-tick::after { right: 50%; }
+
+.po-flag { display: block; width: 100%; min-height: 90px; text-align: left; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-lg); padding: 15px 16px; transition: .14s var(--ease); }
+.po-flag:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-fh { display: flex; align-items: center; gap: 8px; }
+.po-fh b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.po-fh b { flex: 1; min-width: 0; }
+.po-fh svg { flex: none; color: var(--ink-3); transition: .14s var(--ease); }
+.po-flag:hover .po-fh svg { color: var(--blue); transform: translateX(2px); }
+/* подпись и метка «наполняем» столбиком, а не в строку: в узкой колонке подпись
+   переносится на две-три строки, и метка сбоку встает ровно посреди текста */
+.po-fb { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin-top: 5px; }
+.po-flag small { min-width: 0; font-size: 12px; color: var(--ink-3); }
+.po-flag.ready { border-color: #CFE0FF; }
+.po-flag:not(.ready) .po-fh b { color: var(--ink-2); }
+/* .sev и .uz-tag — готовые пилюли системы; тут только место в потоке */
+.po-soon { flex: none; padding: 4px 10px; font-size: 11.5px; font-weight: 500; }
+/* align-self: start — иначе в общей сетке строк список тянется на всю высоту
+   ряда и вертикальная линия слева уходит вниз, ниже последней ветки */
+.po-brs { align-self: start; margin: 11px 0 0 16px; padding-left: 12px; border-left: 1px solid var(--po-wire);
+  display: flex; flex-direction: column; gap: 8px; }
+.po-br { position: relative; font-size: 12.5px; color: var(--ink-2); }
+.po-br::before { content: ''; position: absolute; left: -12px; top: 9px; width: 8px; height: 1px; background: var(--po-wire); }
+
+.po-extras { margin-top: 28px; background: var(--fill); border-radius: var(--r-lg); padding: 17px 19px; }
+.po-exh b { font-size: 13.5px; font-weight: 700; }
+.po-exh small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.po-xs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+.po-xs-wide { margin: -12px 0 22px; }
+/* та же пилюля, что .uz-tag, но лежит на заливке — поэтому фон карточный, не --fill */
+.po-x { background: var(--card); border-radius: var(--r-pill);
+  padding: 5px 11px; font-size: 11.5px; font-weight: 500; color: var(--ink-2); }
+
+/* поиск по порталу */
+.po-hits { padding: 8px; }
+.po-cap { padding: 9px 12px 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.po-hit { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 11px 12px; border-radius: 11px; transition: .12s; }
+.po-hit:hover { background: var(--fill); }
+.po-hl { flex: 1; min-width: 0; }
+.po-hl b { display: block; font-size: 13.5px; font-weight: 600; }
+.po-hl small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.po-hit svg { color: var(--ink-3); }
+.po-hit:hover svg { color: var(--blue); }
+
+/* страница продукта */
+.po-back { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 18px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); transition: .12s; }
+.po-back svg { transform: rotate(180deg); color: var(--ink-3); }
+.po-back:hover { color: var(--blue); }
+.po-back:hover svg { color: var(--blue); }
+.po-tabs { margin-bottom: 22px; overflow-x: auto; padding-bottom: 2px; }
+.po-tabs::-webkit-scrollbar { height: 0; }
+.po-card { padding: 20px 22px; margin-bottom: 16px; }
+.po-txt { margin-top: 13px; font-size: 13.5px; color: var(--ink-2); line-height: 1.62; }
+.po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+.po-note.wide { margin: 16px 0 26px; }
+
+/* тарифы */
+.po-tariffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.po-tcard { padding: 21px; position: relative; }
+.po-tcard.accent { border-color: #CFE0FF; }
+.po-tflag { position: absolute; top: 17px; right: 17px; }
+.po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
+.po-tpos { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-tfmt { margin-top: 9px; min-height: 35px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.po-tprice { margin-top: 15px; font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
+.po-told { margin-top: 3px; font-size: 12px; color: var(--ink-3); text-decoration: line-through; }
+.po-feats { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px; }
+.po-feat { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.42; }
+/* галочка тут — маркер списка, а не «хорошо»: зеленый в разделе значит только маржу */
+.po-feat svg { margin-top: 2px; color: var(--ink-3); }
+.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 12px 14px; }
+.po-scope b { display: block; font-size: 13.5px; font-weight: 700; letter-spacing: -.015em; }
+.po-scope small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+
+/* продукты направления и путь клиента.
+   Один рецепт на оба экрана: подпись-микролейбл, шаги с тихими номерами,
+   список «что делает команда» теми же .po-feat, что и состав тарифа.
+   Номер шага — не украшение: он держит порядок, поэтому крупный и тихий,
+   а не цветной кружок, который спорил бы с синим дерева. */
+.po-fsec { margin-top: 18px; }
+.po-fsec:first-child { margin-top: 14px; }
+.po-flbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 11px; }
+.po-fsec .po-txt { margin-top: 0; }
+.po-fsec .po-feats { margin-top: 0; padding-top: 0; border-top: 0; }
+.po-steps { display: flex; flex-direction: column; gap: 11px; }
+.po-step { display: flex; align-items: baseline; gap: 13px; }
+.po-stn { flex: none; width: 20px; font-size: 13px; font-weight: 700; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+.po-stt { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+.po-stw { display: block; margin-top: 3px; font-size: 11.5px; font-style: normal; color: var(--ink-3); }
+.po-when { flex: none; align-self: center; background: var(--fill); border-radius: var(--r-pill);
+  padding: 5px 11px; font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+.po-flinks { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
+.po-xl { display: inline-flex; align-items: center; gap: 6px; background: var(--fill);
+  color: var(--ink-2); transition: .12s var(--ease); }
+.po-xl:hover { background: var(--card); color: var(--blue); }
+.po-xl svg { color: var(--ink-3); }
+.po-xl:hover svg { color: var(--blue); }
+
+/* карточка продукта направления: шапка-кнопка раскрывает содержимое */
+.po-item { padding: 0; overflow: hidden; }
+.po-ih { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left;
+  padding: 17px 20px; transition: .12s var(--ease); }
+.po-ih:hover { background: var(--fill); }
+.po-ic { width: 32px; height: 32px; border-radius: 10px; flex: none; background: var(--fill);
+  color: var(--ink-3); display: grid; place-items: center; transition: .12s var(--ease); }
+.po-item.open .po-ic, .po-ih:hover .po-ic { color: var(--blue); }
+.po-it { flex: 1; min-width: 0; }
+.po-it b { display: block; font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; }
+.po-it small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.po-ip { flex: none; font-size: 13px; font-weight: 700; letter-spacing: -.02em; color: var(--ink-2); }
+.po-iv { flex: none; color: var(--ink-3); transform: rotate(90deg); transition: .18s var(--ease); }
+.po-item.open .po-iv { transform: rotate(-90deg); color: var(--blue); }
+.po-itags { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 20px 16px 65px; margin-top: -6px; }
+.po-itags .po-x { background: var(--fill); }
+.po-ibody { padding: 4px 20px 22px 65px; border-top: 1px solid var(--line); margin-top: 2px; }
+.po-ibody .po-fsec:first-child { margin-top: 16px; }
+
+/* таблицы портала: сравнение тарифов и экономика */
+.po-tblwrap { margin-top: 17px; overflow-x: auto; }
+.po-tblwrap::-webkit-scrollbar { height: 6px; }
+.po-tblwrap::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
+.po-tbl { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
+.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.po-tbl td { padding: 13px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
+  color: var(--ink-2); line-height: 1.5; vertical-align: top; }
+.po-tbl tbody tr:last-child td { border-bottom: 0; }
+.po-rl { width: 178px; font-weight: 600; color: var(--ink); }
+.po-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+.po-pluses { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
+.po-plus { position: relative; padding-left: 14px; font-size: 12.5px; }
+.po-plus::before { content: '+'; position: absolute; left: 0; top: -1px; color: var(--blue); font-weight: 700; }
+
+.po-tbl.econ td { padding: 8px 12px; vertical-align: middle; }
+.po-tbl.econ .po-rl { width: 250px; }
+/* поля экономики — системный .al-in, компактный размер (прецедент — .ed-input.big).
+   Своего рецепта инпута в разделе нет: фокус, фон и обводка приходят из системы. */
+.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px; }
+.po-in { max-width: 152px; }
+.po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
+  display: inline-block; vertical-align: middle; }
+.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
+.po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
+.po-r-sum .po-rl { background: var(--fill); }
+.po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
+  letter-spacing: -.03em; color: var(--ink); }
+.po-tbl .po-pos { color: var(--green-ink); }
+.po-tbl .po-neg { color: var(--red-ink); }
+/* «сохранено» рядом с заголовком: цифры общие, человек должен видеть, что
+   его правка доехала до базы, а не осталась на экране */
+.po-saved { opacity: 0; font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+  transition: opacity .2s var(--ease); }
+.po-saved.on { opacity: 1; }
+.po-saved.bad { color: var(--red-ink); }
+.po-diff { display: none; margin-top: 5px; color: var(--amber-ink); }
+
+/* ценообразование: сводка по тарифу и прайс поштучно.
+   Якорь карточки — цена пакетом, поэтому крупная она одна; сумма поштучно
+   рядом тихая и зачеркнутая, выгода — единственное цветное пятно. */
+.po-pcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.po-pcard { padding: 20px 21px; }
+.po-pcard.accent { border-color: #CFE0FF; }
+.po-prow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  margin-top: 13px; font-size: 12.5px; color: var(--ink-3); }
+.po-prow b { font-size: 15px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em; }
+.po-prow.po-pfull b { color: var(--ink-3); text-decoration: line-through; }
+.po-prow b.big { font-size: 26px; letter-spacing: -.035em; color: var(--ink); }
+.po-psave { margin-top: 14px; background: var(--green-soft); color: var(--green-ink);
+  border-radius: var(--r-lg); padding: 9px 12px; font-size: 12.5px; font-weight: 600; }
+.po-psave.off { background: var(--fill); color: var(--ink-3); font-weight: 500; }
+.po-pwarn { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; line-height: 1.45;
+  color: var(--amber-ink); }
+.po-pwarn svg { flex: none; margin-top: 2px; }
+/* прайс: наименование широкое, цена и колонки тарифов узкие — читают сверху вниз
+   один столбец цен, а не бегают глазами по строке */
+.po-tbl.price { min-width: 720px; }
+.po-tbl.price .po-rl { width: auto; }
+.po-tbl.price th:nth-child(2), .po-tbl.price td:nth-child(2) { width: 118px; }
+.po-tbl.price th:nth-child(n+3), .po-tbl.price td:nth-child(n+3) { width: 132px; }
+.po-pprice { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.po-pin { text-align: center; }
+.po-pin svg { color: var(--ink-2); }
+.po-pdash { color: var(--line-2); }
+.po-r-grp td { padding-top: 20px; padding-bottom: 8px; border-bottom: 1px solid var(--line-2);
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.po-r-grp small { margin-left: 10px; font-size: 11px; font-weight: 500; letter-spacing: 0;
+  text-transform: none; color: var(--ink-3); }
+.po-tbl.price .po-r-sum td, .po-tbl.price .po-r-big td { text-align: left; }
+.po-adds { margin-top: 4px; }
+.po-add { display: flex; align-items: baseline; justify-content: space-between; gap: 18px;
+  padding: 13px 0; border-bottom: 1px solid var(--line); }
+.po-add:last-child { border-bottom: 0; padding-bottom: 0; }
+.po-addt { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.po-addt small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.po-addp { flex: none; font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.po-diff.on { display: block; }
+
+/* ссылки на внешние системы */
+.po-link { display: flex; align-items: center; gap: 16px; padding: 17px 19px;
+  margin-bottom: 12px; transition: .14s var(--ease); }
+.po-link:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.po-lt { flex: 1; min-width: 0; }
+.po-lt b { display: block; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.po-lt small { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-3); }
+.po-lu { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 600; color: var(--blue); white-space: nowrap; }
+
+@media (max-width: 960px) {
+  /* на планшете и телефоне колонок две, ряды переносятся — общая сетка строк
+     тут только мешает, каждая колонка живет своей высотой */
+  .po-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: none; gap: 22px 14px; }
+  .po-col { display: block; }
+  .po-tick { display: none; }
+  .po-stem { height: 26px; }
+  .po-stem::before { display: none; }
+  .po-lane { margin-bottom: 18px; }
+  .po-tariffs { grid-template-columns: 1fr; }
+  .po-pcards { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .po-h1 { font-size: 23px; }
+  .po-cols { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .po-search { flex-basis: 100%; max-width: none; }
+  .po-card { padding: 17px 16px; }
+  .po-rl { width: 140px; }
+  /* на телефоне содержимое продукта идет во всю ширину: отступ под иконку
+     съедал бы треть строки, а читать надо текст, а не поле слева */
+  .po-ih { padding: 15px 16px; gap: 11px; }
+  .po-ibody { padding: 4px 16px 18px; }
+  .po-itags { padding: 0 16px 14px; }
+  .po-ip { font-size: 12.5px; }
+  /* срок этапа не прячем — это половина смысла пути. Он уходит на свою строку
+     целиком (flex-basis 100%), иначе отбирает ширину у заголовка и тот ломается
+     на три строки рядом с иконкой. */
+  .po-when { order: 3; flex-basis: 100%; align-self: flex-start; margin-top: 4px; }
 }

@@ -9,10 +9,14 @@
 <title>ИстСайд · CRM</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2303081C'/%3E%3Cpath d='M32 12l5.5 14.5L52 32l-14.5 5.5L32 52l-5.5-14.5L12 32l14.5-5.5L32 12z' fill='%232B8FFF'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css">
+<!-- ?v= — метка версии файлов. Сборки у нас нет, значит имена app.js и style.css
+     никогда не меняются, и браузер честно отдает вчерашнюю копию из кэша: человек
+     открывает превью и не видит правку, которую только что показали. Меняешь
+     app.js или style.css — подними дату здесь тем же коммитом. -->
+<link rel="stylesheet" href="style.css?v=20260815h">
 </head>
 <body>
 <div id="root"></div>
-<script src="app.js"></script>
+<script src="app.js?v=20260815h"></script>
 </body>
 </html>
