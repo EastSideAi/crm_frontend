@@ -89,6 +89,7 @@
     tg_nudge_sent: 'бот напомнил о записи',
     magnet_registered: 'забрал бесплатный мини-курс',
     magnet_progress: 'мини-курс: прогресс',
+    csca_result: 'прошел пробный тест CSCA',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -99,6 +100,13 @@
     if (e.type === 'magnet_progress') {
       label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
+    }
+    if (e.type === 'csca_result') {
+      /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
+         проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
+      label = 'CSCA: ' + (p.subject_name || p.subject || '') +
+        (p.difficulty ? ' ур.' + p.difficulty : '') +
+        (p.score_pct == null ? ' — ждет проверки' : ' — ' + p.score_pct + '%');
     }
     return label;
   }
