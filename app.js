@@ -1794,6 +1794,10 @@
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
+    /* Ввод — отдельный раздел, а не кнопки внутри отчетов. В старом файле места
+       ввода тоже были собраны вместе («расчетные листы — ввод расходов»): человек
+       приходит либо смотреть, либо вносить, и это разные приходы. */
+    { id: 'finedit', label: 'Внести', icon: 'plus', cap: 'finmodel_edit', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
@@ -2103,7 +2107,8 @@
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
       });
-    } else if (state.page === 'finsheet' || state.page === 'finops') {
+    } else if (state.page === 'finsheet' || state.page === 'finops' ||
+               state.page === 'finedit') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
       tb.innerHTML = pers2.length
@@ -2441,7 +2446,7 @@
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
-                     finfund: 'Фонды' };
+                     finfund: 'Фонды', finedit: 'Внести в ведомость' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -2470,6 +2475,10 @@
       } else if (state.page === 'finpnl') {
         ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
           'по расчету периода, даже пока они планом.';
+      } else if (state.page === 'finedit') {
+        ph = 'Строки ведомости <b>' + esc(per.name) + '</b>' +
+          (per.open ? '' : ' — она закрыта, правка пометит ее как измененную') +
+          '. Отчисления в фонды пересчитываются сами после каждой правки.';
       } else if (state.page === 'finops') {
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
@@ -2536,6 +2545,7 @@
     else if (state.page === 'finfund') renderFinFund(view);
     else if (state.page === 'finpnl') renderFinPnl(view);
     else if (state.page === 'finops') renderFinOps(view);
+    else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
@@ -7475,6 +7485,7 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
+              lines: null, form: 'доход', lineBusy: false,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -7569,11 +7580,24 @@
       if (state.page === 'finref') renderAll();
     }).catch(function (e) { finFail(e, 'refs'); });
   }
+  function finLoadLines() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadLines(); });
+    api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent(FIN.form)))
+      .then(function (r) {
+        FIN.lines = r; FIN.err = '';
+        if (state.page === 'finedit') renderAll();
+      }).catch(function (e) { finFail(e, 'lines'); });
+  }
+  function finSetForm(f) {
+    if (FIN.form === f) return;
+    FIN.form = f; FIN.lines = null;
+    renderAll();
+  }
   /* Смена периода сбрасывает ВСЕ куски экрана разом: каскад одного периода рядом с
      операциями другого — это не «частично устарело», это неправильные данные. */
   function finSetPeriod(id) {
     if (FIN.id === id) return;
-    FIN.id = id; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+    FIN.id = id; FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.lines = null;
     renderAll();
   }
   function finPeriod() {
@@ -8103,6 +8127,351 @@
       });
     });
     pageAnim(view);
+  }
+
+  /* ── Внесение строк ведомости ──────────────────────────────────────────────
+     Пять форм ввода, по которым владелец разложил работу в старом файле: доходы,
+     прямые расходы и три расчетных листа. Разложены они не по прихоти — у каждой
+     свой хозяин: продажи ведет руководитель продаж, маркетинг маркетолог, прямые
+     расходы финансист. Поэтому и здесь это формы, а не одна таблица со столбцом
+     «раздел»: человек приходит вносить свое.
+
+     Куда именно ляжет строка, решает сервер (routers/fin.py): счет, раздел, метка
+     листа и сумма выплаты по проценту — это правила ведомости, а не поля формы. */
+  var FIN_FORMS = [
+    ['доход', 'Доходы', 'что пришло на расчетный счет'],
+    ['прямой', 'Прямые расходы', 'зарплаты и сервисы с расчетного счета'],
+    ['лист-продаж', 'Лист продаж', 'процент менеджеру с продажи'],
+    ['лист-маркетинга', 'Лист маркетинга', 'реклама с фонда маркетинга'],
+    ['лист-продукта', 'Лист продукта', 'команда продукта по должностям'],
+  ];
+  var FIN_SECTIONS = ['продажи', 'продукт', 'администрирование', 'управление', 'сервисы'];
+  var FIN_ROLES = ['Руководитель отдела продукта', 'Методист', 'Отдел продукта',
+                   'Администратор', 'Преподаватель', 'Технический администратор',
+                   'Проджект', 'Управление'];
+
+  function finFormMeta(id) {
+    for (var i = 0; i < FIN_FORMS.length; i++) if (FIN_FORMS[i][0] === id) return FIN_FORMS[i];
+    return FIN_FORMS[0];
+  }
+
+  function renderFinEdit(view) {
+    if (!FIN.lines) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadLines(); return;
+    }
+    if (FIN.lines === 'none') return finErrView(view);
+    var L = FIN.lines, meta = finFormMeta(L.form), items = L.items || [];
+    var fact = 0, plan = 0;
+    items.forEach(function (i) {
+      if (i.status === 'план') plan += i.amount;
+      else if (i.included) fact += i.amount;
+    });
+
+    var chips = FIN_FORMS.map(function (f) {
+      return '<button class="qchip' + (FIN.form === f[0] ? ' on' : '') +
+        '" data-fform="' + f[0] + '">' + f[1] + '</button>';
+    }).join('');
+
+    var rows = items.map(function (it) {
+      var sub = [
+        // В листе продаж статья и контрагент — это одна и та же продажа: в заголовке
+        // строки она уже есть, второй раз ее печатать незачем.
+        it.item && it.item !== it.counterparty ? it.item : '',
+        L.form === 'прямой' ? it.section : '',
+        L.form === 'лист-продаж' && it.sale_amount
+          ? finRub(it.sale_amount, 0) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
+          : '',
+        it.comment || '',
+      ].filter(Boolean).map(esc).join(' · ');
+      return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
+        '" data-fline="' + it.id + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st">' +
+          (it.locked
+            ? '<span class="fst wait">из сервисов</span>'
+            : '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+              esc(it.status) + '</span>') +
+          (it.included === false ? '<span class="fst wait">не в доход</span>' : '') +
+        '</span>' +
+      '</div>';
+    }).join('');
+
+    var canFix = can('finmodel_edit');
+    view.innerHTML =
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
+            '<div class="s fe-s">' + esc(meta[2]) + '</div></div>' +
+          '<span class="list-count fin-count">' +
+            '<b>' + items.length + '</b> ' +
+            plural(items.length, 'строка', 'строки', 'строк') +
+            ' · факт <b>' + finRub(fact) + '</b>' +
+            (plan ? ' · план <b>' + finRub(plan) + '</b>' : '') + '</span>' +
+        '</div>' +
+        '<div class="list-quick">' + chips +
+          (canFix ? '<button class="qchip add" id="fe-add">' + ic('plus', 12) +
+            'Добавить</button>' : '') + '</div>' +
+        (rows ||
+          '<div class="empty">В этой ведомости таких строк еще нет. ' +
+          (canFix ? 'Нажмите «Добавить».' : 'Вносит их финансист.') + '</div>') +
+      '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fform]'), function (b) {
+      b.addEventListener('click', function () { finSetForm(b.getAttribute('data-fform')); });
+    });
+    var add = el('fe-add');
+    if (add) add.addEventListener('click', function () { finLineForm(null); });
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-fline]'), function (r) {
+        r.addEventListener('click', function () {
+          var id = r.getAttribute('data-fline');
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].id === id) {
+              // Строку, которую создал справочник сервисов, правят там же: сумму и
+              // дату двигает он, и правка здесь разъехалась бы с ним.
+              if (items[i].locked) {
+                return showToast('Эта строка пришла из сервисов — правьте ее в разделе «Сервисы и долги»');
+              }
+              return finLineForm(items[i]);
+            }
+          }
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  /* Дата новой строки — сегодня, но только если сегодня внутри ведомости. Иначе
+     начало периода: строка, внесенная задним числом в закрытый или будущий период,
+     с сегодняшней датой уехала бы за его границы. */
+  function finTodayInPeriod() {
+    var p = FIN.lines && FIN.lines !== 'none' ? FIN.lines.period : null;
+    var t = new Date();
+    var iso = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
+    if (!p) return iso;
+    return (iso >= p.starts_on && iso <= p.ends_on) ? iso : p.starts_on;
+  }
+
+  /* Форма строки. Одна на все пять видов: поля разные, но жизнь у них одна —
+     открыть, поправить, сохранить или удалить. */
+  function finLineForm(line) {
+    if (document.querySelector('.al-ov')) return;
+    var form = FIN.form, isNew = !line;
+    var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '', item: '',
+                      comment: '', amount: '', included: true, section: FIN_SECTIONS[0],
+                      sale_amount: '', percent: '', product: '', payment_id: '' };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var f = function (label, inner) {
+      return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+    };
+    var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
+    var num = function (x) { return x === '' || x === null || x === undefined ? '' : String(x); };
+    var body = '';
+
+    if (form === 'доход') {
+      body =
+        '<div class="al-row">' +
+          f('От кого <i>*</i>', '<input id="fl-who" class="al-in" maxlength="200" value="' +
+            v(s.counterparty) + '" placeholder="Семья Ким, ЮKassa / СБП">') +
+          f('Сумма к зачислению, ₽ <i>*</i>', '<input id="fl-sum" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + num(s.amount) + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          f('За что', '<input id="fl-item" class="al-in" maxlength="200" value="' +
+            v(s.item) + '" placeholder="Обучение, краткосрочка">') +
+          f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+        '</div>' +
+        f('Номер платежа в ЮKassa', '<input id="fl-pid" class="al-in" maxlength="120" value="' +
+          v(s.payment_id) + '" placeholder="если платеж пришел из кассы">') +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="fl-inc"' +
+          (s.included === false ? '' : ' checked') + '>' +
+          '<span>Считать в доход. Снимите галочку, если это дубль платежа: строка ' +
+          'останется видна, но в доход и в отчисления не пойдет</span></label>';
+    } else if (form === 'лист-продаж') {
+      body =
+        '<div class="al-row">' +
+          f('Продажа кому <i>*</i>', '<input id="fl-who" class="al-in" maxlength="200" value="' +
+            v(s.counterparty) + '" placeholder="Семья Ли">') +
+          f('Продукт', '<input id="fl-prod" class="al-in" maxlength="200" value="' +
+            v(s.product) + '" placeholder="Шанхай стандарт">') +
+        '</div>' +
+        '<div class="al-row">' +
+          f('Сумма продажи, ₽ <i>*</i>', '<input id="fl-sale" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + num(s.sale_amount) + '">') +
+          f('Процент менеджеру <i>*</i>', '<input id="fl-pct" class="al-in" type="number" ' +
+            'min="0" max="100" step="0.01" value="' + num(s.percent) + '">') +
+        '</div>' +
+        '<div class="fin-note calm" id="fl-calc">Выплата посчитается сама</div>' +
+        '<div class="al-row">' +
+          f('Кому выплата', '<input id="fl-item" class="al-in" maxlength="200" value="' +
+            v(s.item) + '" placeholder="менеджер">') +
+          f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+        '</div>';
+    } else {
+      var whoLabel = form === 'лист-продукта' ? 'Сотрудник <i>*</i>' : 'Получатель <i>*</i>';
+      var itemField = form === 'лист-продукта'
+        ? f('Должность <i>*</i>', '<select id="fl-item" class="al-in">' +
+            FIN_ROLES.map(function (r) {
+              return '<option' + (s.item === r ? ' selected' : '') + '>' + esc(r) + '</option>';
+            }).join('') + '</select>')
+        : f(form === 'лист-маркетинга' ? 'Статья' : 'За что',
+            '<input id="fl-item" class="al-in" maxlength="200" value="' + v(s.item) +
+            '" placeholder="' + (form === 'лист-маркетинга' ? 'Лидогенерация' : 'зарплата, подписка') + '">');
+      body =
+        '<div class="al-row">' +
+          f(whoLabel, '<input id="fl-who" class="al-in" maxlength="200" value="' +
+            v(s.counterparty) + '">') +
+          f('Сумма, ₽ <i>*</i>', '<input id="fl-sum" class="al-in" type="number" min="0" ' +
+            'step="0.01" value="' + num(s.amount) + '">') +
+        '</div>' +
+        '<div class="al-row">' + itemField +
+          (form === 'прямой'
+            ? f('Раздел <i>*</i>', '<select id="fl-sec" class="al-in">' +
+                FIN_SECTIONS.map(function (x) {
+                  return '<option' + (s.section === x ? ' selected' : '') + '>' + esc(x) + '</option>';
+                }).join('') + '</select>')
+            : f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">')) +
+        '</div>' +
+        (form === 'прямой'
+          ? '<div class="al-row">' +
+              f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+              f('Это', '<select id="fl-st" class="al-in">' +
+                '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже заплатили</option>' +
+                '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>план, еще не платили</option>' +
+                '</select>') +
+            '</div>'
+          : f('Это', '<select id="fl-st" class="al-in">' +
+              '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже заплатили</option>' +
+              '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>план, еще не платили</option>' +
+              '</select>'));
+    }
+
+    var meta = finFormMeta(form);
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">' + esc(meta[1]) + '</div>' +
+            '<div class="al-title">' + (isNew ? 'Новая строка' : 'Строка ведомости') + '</div></div>' +
+          '<button class="al-x" id="fl-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + esc(meta[2]) +
+          '. После сохранения отчисления в фонды пересчитаются сами.</div>' +
+        '<div class="al-body">' + body +
+          f('Комментарий', '<input id="fl-note" class="al-in" maxlength="300" value="' +
+            v(s.comment) + '">') +
+          '<div class="ct-err" id="fl-err"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (isNew ? '' : '<button class="al-cancel fl-del" id="fl-del">Удалить</button>') +
+          '<button class="al-cancel" id="fl-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="fl-ok">Сохранить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('fl-x').addEventListener('click', close);
+    el('fl-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    // Лист продаж: показываем выплату до сохранения — процент от суммы человек
+    // должен видеть, а не узнавать из таблицы после.
+    var calc = el('fl-calc');
+    if (calc) {
+      var recalc = function () {
+        var sale = Number(el('fl-sale').value) || 0, pct = Number(el('fl-pct').value) || 0;
+        calc.textContent = sale && pct
+          ? 'К выплате ' + finRub(sale * pct / 100) + ' — это ' + finNum(pct, pct % 1 ? 2 : 0) +
+            '% от ' + finRub(sale, 0)
+          : 'Выплата посчитается сама';
+      };
+      el('fl-sale').addEventListener('input', recalc);
+      el('fl-pct').addEventListener('input', recalc);
+      recalc();
+    }
+
+    var val = function (id) { var e = el(id); return e ? e.value.trim() : ''; };
+    el('fl-ok').addEventListener('click', function () {
+      if (FIN.lineBusy) return;
+      var err = el('fl-err');
+      var who = val('fl-who');
+      if (who.length < 2) { err.textContent = 'Напишите, от кого или кому'; return; }
+      var payload = {
+        id: line ? line.id : null, period_id: FIN.id, form: form,
+        counterparty: who, comment: val('fl-note'),
+        op_date: val('fl-date') || null,
+        status: el('fl-st') ? el('fl-st').value : 'факт',
+        item: el('fl-item') ? el('fl-item').value.trim() : '',
+      };
+      if (form === 'доход') {
+        payload.amount = val('fl-sum');
+        payload.included = el('fl-inc').checked;
+        payload.payment_id = val('fl-pid');
+      } else if (form === 'лист-продаж') {
+        payload.sale_amount = val('fl-sale');
+        payload.percent = val('fl-pct');
+        payload.product = val('fl-prod');
+      } else {
+        payload.amount = val('fl-sum');
+        if (form === 'прямой') payload.section = el('fl-sec').value;
+      }
+      var sum = Number(form === 'лист-продаж' ? payload.sale_amount : payload.amount);
+      if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
+
+      FIN.lineBusy = true;
+      err.textContent = '';
+      czSend('/admin/api/fin/operation', 'POST', payload)
+        .then(function () {
+          close();
+          // Строка меняет каскад и фонды, а не только этот список: сбрасываем все,
+          // иначе на соседнем экране останется цифра до правки.
+          FIN.lines = null; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+          renderAll();
+          showToast(isNew ? 'Строка внесена' : 'Строка поправлена');
+        })
+        .catch(function (e) { err.textContent = finLineErr(e); })
+        .then(function () { FIN.lineBusy = false; });
+    });
+
+    var del = el('fl-del');
+    if (del) del.addEventListener('click', function () {
+      if (FIN.lineBusy) return;
+      FIN.lineBusy = true;
+      czSend('/admin/api/fin/operation?id=' + encodeURIComponent(line.id) +
+             '&period_id=' + encodeURIComponent(FIN.id), 'DELETE')
+        .then(function () {
+          close();
+          FIN.lines = null; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+          renderAll();
+          showToast('Строка убрана');
+        })
+        .catch(function (e) { el('fl-err').textContent = finLineErr(e); })
+        .then(function () { FIN.lineBusy = false; });
+    });
+  }
+
+  function finLineErr(e) {
+    var m = String((e && e.message) || '');
+    // Ответ сервера уже написан человеческим языком (routers/fin.py), кроме отказа
+    // по правам: там текст служебный, и в форме от него толку нет.
+    if (m.indexOf('no access') === 0 || m.indexOf('403') === 0) {
+      return 'Вносить строки в ведомость может финансист или админ';
+    }
+    return m || 'Не сохранилось. Проверьте связь и попробуйте еще раз';
   }
 
   /* Сервисы и обязательства: то, что спишется само, и то, что мы должны. */

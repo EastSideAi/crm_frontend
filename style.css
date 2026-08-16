@@ -4083,6 +4083,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .sv-onoff { flex-direction: row; align-items: center; gap: 9px; font-size: 13px;
   color: var(--ink-2); cursor: pointer; }
 .sv-onoff input { width: 16px; height: 16px; accent-color: var(--blue); }
+/* Объяснение длиной в три строки рядом с галочкой, выровненной по центру, читается
+   как чужой абзац: галочка держится верхней строки. */
+.sv-onoff.top { align-items: flex-start; }
+.sv-onoff.top input { margin-top: 2px; flex: none; }
 /* Что у человека сейчас — в карточке исполнителя. Строки тихие: это контекст, а
    решения принимают на своих экранах. Задание кликабельно, пункт плана нет. */
 .cz-work { display: flex; flex-direction: column; }
@@ -4363,6 +4367,23 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .fc-row.sum, .fc-row.total, .fkv.total { margin-left: -16px; margin-right: -16px;
     padding-left: 16px; padding-right: 16px; }
 }
+/* Экран ввода: та же строка ведомости, но колонок меньше — здесь не разбираются
+   в чужих операциях, а вносят свои, и счет с разделом уже сказаны формой. */
+.fe-grid { grid-template-columns: 92px 1.6fr 150px 150px; cursor: pointer; }
+.fe-t { font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.fe-s { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
+.fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; }
+/* Кнопка «добавить» стоит в одном ряду с чипами форм, но она действие, а не фильтр:
+   синие чернила отделяют ее, не заводя третьего рецепта кнопки. */
+.qchip.add { display: inline-flex; align-items: center; gap: 5px; color: var(--blue);
+  border-color: var(--blue-tint); background: var(--blue-tint); }
+.qchip.add:hover { border-color: var(--blue); }
+.al-cancel.fl-del { margin-right: auto; color: var(--red-ink); }
+@media (max-width: 760px) {
+  .trow.fe-grid { grid-template-columns: 1fr auto !important; }
+  .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
+}
+
 /* Разделитель в ряду фильтров: тип операции и раздел — разные вопросы, и одним
    сплошным рядом чипов они читаются как один список. */
 .qsep { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
