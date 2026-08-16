@@ -28,6 +28,7 @@
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '',
+    mkTab: 'dash', mkDays: 30, _mkDash: null, // дашборд маркетинга: вкладка, окно в сутках, кэш ответа
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -42,7 +43,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -50,6 +51,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
+        mkTab: state.mkTab, mkDays: state.mkDays,
       }));
     } catch (e) {}
   }
@@ -1824,6 +1826,32 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
+    } else if (state.page === 'marketing') {
+      /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
+         период справа — период относится только к цифрам, поэтому на вкладке ссылок его нет */
+      var mkTabs = [['dash', 'Дашборд'], ['links', 'Воронки и ссылки']];
+      var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
+      tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
+        return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>' +
+        (state.mkTab === 'dash'
+          ? '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
+              return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+            }).join('') + '</div>'
+          : '');
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-mktab]'), function (t) {
+        t.addEventListener('click', function () {
+          state.mkTab = t.getAttribute('data-mktab');
+          saveUi(); renderTopbar(); renderView();
+        });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('#mk-period button'), function (b) {
+        b.addEventListener('click', function () {
+          state.mkDays = parseInt(b.getAttribute('data-mkd'), 10);
+          state._mkDash = null;   // цифры за другой период — новый запрос, не фильтр по месту
+          saveUi(); renderTopbar(); renderView();
+        });
+      });
     } else if (state.page === 'inbox') {
       var bsrc = state.inboxMode === 'threads' ? 'обсуждения по задачам'
         : (state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс');
@@ -2298,6 +2326,10 @@
   function mkSourceName(source) {
     return MK_SOURCE_NAMES[source] || source || 'Другое';
   }
+  function mkMediumName(medium) {
+    for (var i = 0; i < MK_MEDIUMS.length; i++) if (MK_MEDIUMS[i].utm === medium) return MK_MEDIUMS[i].label;
+    return medium || '';
+  }
   function mkChips(code, kinds) {
     return '<span class="mk-chips" data-code="' + esc(code) + '">' +
       kinds.map(function (k) {
@@ -2685,7 +2717,183 @@
     });
   }
 
+  /* ── Дашборд маркетинга ──────────────────────────────────────────────
+     Отвечает на один вопрос: где мы теряем людей между размещением и деньгами.
+     Все числа приходят с сервера одной ручкой за выбранный период; здесь только
+     раскладка. Ничего не досчитываем в браузере — иначе цифра в CRM и цифра в
+     базе разъедутся, и верить будет нечему. */
+  function fetchMkDash() {
+    var days = state.mkDays;
+    api('/admin/api/marketing/dashboard?days=' + days).then(function (r) {
+      /* пока ходили, могли переключить период — ответ от старого запроса не кладем */
+      if (state.mkDays !== days) return;
+      state._mkDash = r || 'none';
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (state.mkDays !== days) return;
+      state._mkDash = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function mkPct(n, base) { return base ? Math.round(n / base * 100) : 0; }
+  /* конверсия шага: зеленая — держим большинство, красная — теряем больше половины */
+  function mkConvCls(pct, has) {
+    if (!has) return 'none';
+    if (pct >= 50) return 'good';
+    if (pct < 25) return 'weak';
+    return '';
+  }
+  function mkNum(n, cls) {
+    return '<span class="mkd-v' + (n ? '' : ' zero') + (cls ? ' ' + cls : '') + ' num">' + n + '</span>';
+  }
+
+  function mkStageLadder(t, meta) {
+    var top = t[meta[0].key] || 0;
+    /* худший шаг — где потеряли больше всего людей в штуках, а не в процентах:
+       80% отвала от двух человек это не проблема, а 30% от сотни — проблема */
+    var worst = -1, worstLoss = 0;
+    meta.forEach(function (s, i) {
+      if (!i) return;
+      var loss = (t[meta[i - 1].key] || 0) - (t[s.key] || 0);
+      if (loss > worstLoss) { worstLoss = loss; worst = i; }
+    });
+    return meta.map(function (s, i) {
+      var n = t[s.key] || 0;
+      var prev = i ? (t[meta[i - 1].key] || 0) : 0;
+      var conv = i ? mkPct(n, prev) : 100;
+      var loss = i ? Math.max(0, prev - n) : 0;
+      var w = top ? Math.round(n / top * 100) : 0;
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.label) + '<small>' + esc(s.hint) + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + n + '</div>' +
+        '<div class="lad-right">' +
+          '<span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+          (i ? '<span class="lad-drop' + (loss ? '' : ' zero') + ' num">' +
+            (loss ? '− ' + loss + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  /* Строка таблицы: название, пять чисел и конверсия «из бота в карточку».
+     Считаем от входа в бота, а не от клика: по кодовому слову человек приходит вообще
+     без клика (в такой строке входов больше, чем кликов), и процент от кликов там врет. */
+  function mkRow(name, sub, r) {
+    var conv = mkPct(r.leads, r.entered);
+    return '<div class="mkd-tr">' +
+      '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
+      mkNum(r.clicks) + mkNum(r.entered) +
+      mkNum(r.finished, 'hidem') + mkNum(r.leads) + mkNum(r.clients, 'hidem') +
+      '<span class="mkd-cv ' + mkConvCls(conv, r.entered) + ' num">' +
+        (r.entered ? conv + '%' : '—') + '</span>' +
+    '</div>';
+  }
+  function mkHead() {
+    return '<div class="mkd-th"><span>Название</span><span>Клики</span><span>В боте</span>' +
+      '<span class="hidem">До конца</span><span>Карточки</span>' +
+      '<span class="hidem">Клиенты</span><span>Бот в карточку</span></div>';
+  }
+
+  function renderMkDash(view) {
+    if (!state._mkDash) { view.innerHTML = dashSkeleton(); fetchMkDash(); return; }
+    if (state._mkDash === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._mkDash, t = d.total || {}, meta = d.stage_meta || [];
+    var webinars = Object.keys(d.events && d.events.webinar || {})
+      .reduce(function (n, key) { return n + d.events.webinar[key]; }, 0);
+
+    var bar = statBar([
+      { label: 'Кликов по меткам', value: t.clicks || 0,
+        sub: (d.placements || []).length + ' ' + plural((d.placements || []).length, 'размещение', 'размещения', 'размещений') },
+      { label: 'Зашли в бота', value: t.entered || 0,
+        sub: mkPct(t.entered || 0, t.clicks || 0) + '% от кликов' },
+      { label: 'Дошли до менеджера', value: t.handoff || 0, sub: 'просят живого человека' },
+      { label: 'Стали клиентом', value: t.clients || 0,
+        sub: (t.revenue ? fmtMoney(t.revenue) + ' \u20BD' : 'оплат за период нет') },
+    ]);
+
+    /* динамика: столбик = день, синий сверху клики, темный снизу входы в бота */
+    var series = (d.series || []).slice(-30);
+    var maxDay = Math.max(1, series.reduce(function (m, s) { return Math.max(m, s.clicks, s.entered); }, 0));
+    /* подпись не у каждого столбика: 30 дат в узкой карточке склеиваются в кашу */
+    var lbEvery = series.length > 20 ? 7 : (series.length > 10 ? 3 : 1);
+    var days = series.map(function (s, i) {
+      var last = i === series.length - 1;
+      /* последняя дата важнее регулярной сетки: если они рядом, регулярную гасим */
+      var lb = (last || (i % lbEvery === 0 && series.length - 1 - i > 2))
+        ? s.day.slice(8) + '.' + s.day.slice(5, 7) : '';
+      /* пустой день — плоская линия у основания, а не столбик-обманка */
+      function h(v) { return v ? Math.max(4, Math.round(v / maxDay * 100)) : 0; }
+      return '<div class="mkd-day" title="' + s.day + ': кликов ' + s.clicks + ', зашли в бота ' + s.entered + '">' +
+        '<div class="st">' +
+          '<div class="b1" style="height:' + h(s.clicks) + '%"></div>' +
+          '<div class="b2" style="height:' + h(s.entered) + '%"></div>' +
+        '</div><span class="lb">' + lb + '</span></div>';
+    }).join('');
+
+    var channels = (d.channels || []).map(function (c) {
+      return mkRow(mkSourceName(c.source),
+        c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений'), c);
+    }).join('');
+    var places = (d.placements || []).slice(0, 20).map(function (p) {
+      /* код обязателен в подписи: у двух размещений в одном канале одинаковые названия,
+         и без кода их не различить */
+      var sub = [p.code, mkSourceName(p.source), p.medium ? mkMediumName(p.medium) : '', p.note || '']
+        .filter(Boolean).join(' · ');
+      return mkRow(p.title, sub, p);
+    }).join('');
+
+    /* Честный блок: что в этих цифрах не учтено. Без него дашборд врет умолчанием —
+       человек решит, что видит весь маркетинг, а видит только размеченный трафик. */
+    var noSrc = (d.coverage || {}).sessions_without_source || 0;
+    var gaps = [
+      ['Охваты и просмотры в соцсетях', 'Instagram, Telegram, ВКонтакте, YouTube — статистика площадок не подключена. Здесь видно только переходы по нашим меткам.'],
+      ['Заходы на сайт без метки', noSrc ? noSrc + ' ' + plural(noSrc, 'заход', 'захода', 'заходов') + ' за период пришли без источника — в разбивке по каналам их нет' : 'Все заходы за период размечены'],
+      ['Регистрации на эфир формой', webinars ? webinars + ' ' + plural(webinars, 'регистрация', 'регистрации', 'регистраций') + ' — отдельный список, с воронкой бота не связан' : 'За период регистраций формой не было'],
+      ['Расходы на рекламу', 'Пока вводить некуда, поэтому стоимости лида и окупаемости здесь нет.'],
+    ].map(function (g) {
+      return '<div class="mkd-gap"><div><b>' + esc(g[0]) + '</b><small>' + esc(g[1]) + '</small></div>' +
+        '<span class="sev n-wait">не в цифрах</span></div>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' + bar + '<div class="grid">' +
+      '<div class="card sp7" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">От клика до оплаты</div>' +
+        '<div class="s">красная полоса — где теряем больше всего людей</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
+      '<div class="card mkd-card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('bolt', 14) + '</span>' +
+        '<div><div class="t">По дням</div><div class="s">клики и входы в бота</div></div></div>' +
+        (series.length ? '<div class="mkd-days">' + days + '</div>' +
+          '<div class="mkd-lg"><span><i style="background:var(--blue)"></i>клики</span>' +
+          '<span><i style="background:var(--navy)"></i>зашли в бота</span></div>'
+          : '<div class="empty">За период данных нет.</div>') + '</div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('mega', 14) + '</span>' +
+        '<div><div class="t">Каналы</div><div class="s">где размещаем и что из этого доходит до карточки</div></div></div>' +
+        (channels ? '<div class="mkd-tbl">' + mkHead() + channels + '</div>'
+          : '<div class="empty">За период переходов по меткам не было.</div>') + '</div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">Размещения</div><div class="s">каждая ссылка отдельно, топ-20 по кликам</div></div></div>' +
+        (places ? '<div class="mkd-tbl">' + mkHead() + places + '</div>'
+          : '<div class="empty">Ссылок с переходами за период нет.</div>') + '</div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('alert', 14) + '</span>' +
+        '<div><div class="t">Чего в этих цифрах нет</div>' +
+        '<div class="s">чтобы не считать дашборд полной картиной</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
+    '</div></div>';
+    animBars(view);
+  }
+
   function renderMarketing(view) {
+    if (state.mkTab === 'dash') { renderMkDash(view); return; }
     if (!state._mk) {
       view.innerHTML = dashSkeleton();
       fetchMk();

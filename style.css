@@ -2254,8 +2254,15 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
-  .lad-row { grid-template-columns: 130px 1fr 90px; gap: 10px; padding: 0 14px; }
-  .lad-row .lad-n { display: none; }
+  /* на телефоне ряд воронки ломается на две строки: сверху название, число и
+     конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
+     без главной цифры, а длинное название вылезало из фиксированной высоты */
+  .lad-row { grid-template-columns: 1fr auto auto; gap: 8px 10px; padding: 11px 14px;
+    height: auto; min-height: 62px; }
+  .lad-row .lad-nm { grid-column: 1; grid-row: 1; }
+  .lad-row .lad-n { grid-column: 2; grid-row: 1; }
+  .lad-row .lad-right { grid-column: 3; grid-row: 1; }
+  .lad-row .lad-track { grid-column: 1 / -1; grid-row: 2; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
@@ -2538,7 +2545,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-logic-badge.ok { color: var(--green-ink); background: var(--green-soft); }
 .mk-logic-badge.wait { color: var(--amber-ink); background: var(--amber-soft); }
 .mk-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
-  padding: 2px 6px; border-radius: 7px; background: var(--blue-soft); color: var(--blue);
+  padding: 2px 6px; border-radius: 7px; background: var(--blue-tint); color: var(--blue);
   font-size: 10px; font-weight: 800; letter-spacing: .2px; }
 .mk-field-grid { display: grid; grid-template-columns: 1fr 180px; gap: 10px; }
 .mk-field-grid .mk-qblock + .mk-qblock { margin: 0; padding: 0; border: 0; }
@@ -2547,6 +2554,70 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-qblock + .mk-qblock { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-code-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .3px; }
+/* ── Дашборд маркетинга: сквозная воронка, каналы, размещения ──
+   Отдельная вкладка раздела «Маркетинг». Строки таблиц собраны на общем рецепте
+   ховер-строки с левой полоской, чтобы не заводить третий вид списка в CRM. */
+.mkd-sub { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
+.mkd-tbl { border-top: 1px solid var(--line); }
+.mkd-th, .mkd-tr { display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(150px, 1.7fr) repeat(5, minmax(58px, .5fr)) 118px;
+  padding: 0 24px; }
+.mkd-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
+.mkd-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.mkd-th span:first-child { text-align: left; }
+.mkd-tr { height: 54px; border-bottom: 1px solid var(--line); position: relative;
+  transition: background .14s var(--ease); }
+.mkd-tr:last-child { border-bottom: none; }
+.mkd-tr:hover { background: #FBFBFC; }
+.mkd-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.mkd-tr:hover::before { opacity: 1; }
+.mkd-nm { min-width: 0; }
+.mkd-nm b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-v { text-align: right; font-size: 14px; font-weight: 600; color: var(--ink); }
+.mkd-v.zero { color: var(--ink-3); font-weight: 500; }
+.mkd-cv { text-align: right; font-size: 12.5px; font-weight: 700; }
+.mkd-cv.good { color: var(--green-ink); }
+.mkd-cv.weak { color: var(--red-ink); }
+.mkd-cv.none { color: var(--ink-3); font-weight: 500; }
+/* столбики динамики по дням: два тонких столбика на день рядом, не друг на друге —
+   так видно и объем трафика, и сколько из него дошло до бота */
+.mkd-card { display: flex; flex-direction: column; }
+.mkd-days { display: flex; align-items: stretch; gap: 5px; flex: 1; min-height: 168px;
+  padding: 6px 0 0; border-bottom: 1px solid var(--line); }
+.mkd-day { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: flex-end; align-items: center; gap: 7px; }
+.mkd-day .st { width: 100%; display: flex; align-items: flex-end; justify-content: center;
+  gap: 2px; flex: 1; }
+.mkd-day .b1, .mkd-day .b2 { flex: 1; max-width: 9px; border-radius: 3px 3px 0 0;
+  transition: height .9s var(--ease); }
+.mkd-day .b1 { background: var(--blue); }
+.mkd-day .b2 { background: var(--navy); }
+.mkd-day .lb { height: 12px; font-size: 9.5px; font-weight: 600; color: var(--ink-3);
+  white-space: nowrap; }
+.mkd-lg { display: flex; gap: 14px; margin-top: 12px; }
+.mkd-lg span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-2); }
+.mkd-lg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+/* честный список того, чего в цифрах пока нет */
+.mkd-gap { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  padding: 13px 24px; border-bottom: 1px solid var(--line); }
+.mkd-gap:last-child { border-bottom: none; }
+.mkd-gap b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.mkd-gap small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+@media (max-width: 900px) {
+  .mkd-th, .mkd-tr { grid-template-columns: minmax(96px, 1.3fr) repeat(3, minmax(40px, .5fr)) 74px;
+    gap: 8px; padding: 0 16px; }
+  .mkd-th span.hidem, .mkd-tr .hidem { display: none; }
+  /* заголовок последней колонки длинный — пускаем в две строки, а не режем по краю */
+  .mkd-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+  .mkd-th span:last-child { font-size: 9.5px; line-height: 1.15; white-space: normal; }
+}
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
