@@ -95,3 +95,8 @@ SELECT finmodel.recalc_allocations(id) FROM finmodel.periods WHERE status = 'о�
 --
 -- Откат: DROP TRIGGER recalc_allocations_income_trg ON finmodel.operations;
 --        DROP TRIGGER recalc_allocations_rules_trg  ON finmodel.period_rules;
+--
+-- ПРОГНАН на боевой базе 2026-08-17 с разрешения Романа («ну делай»). Разовый пересчёт
+-- открытого периода выровнял расхождение 40 320 ₽: плановые переводы 897 700,41 (было
+-- 857 380,41), налоги 99 216,73 (было 58 896,73), чистая прибыль в P&L 2 678,77 —
+-- совпала с каскадом. Оба триггера подтверждены в pg_trigger, снимок схемы обновлён.
