@@ -1801,14 +1801,17 @@
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
-    /* Ввод — отдельный раздел, а не кнопки внутри отчетов. В старом файле места
-       ввода тоже были собраны вместе («расчетные листы — ввод расходов»): человек
-       приходит либо смотреть, либо вносить, и это разные приходы. */
+    /* Ввод разложен на три места, а не свален в один экран (правки Романа 17.08.2026,
+       как было на старом сайте): доходы отдельно, расчетные листы отдельно, прямые
+       расходы блоками отдельно. Человек приходит вносить что-то одно — и должен сразу
+       попадать туда, а не искать нужную вкладку в общей куче. */
+    { id: 'finincome', label: 'Доходы', icon: 'card', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». */
-    { id: 'finedit', label: 'Внести', icon: 'plus', space: 'fin',
+    { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
+    { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
     { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
@@ -2121,6 +2124,7 @@
       });
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
+               state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
@@ -2459,7 +2463,8 @@
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
-                     finfund: 'Фонды', finedit: 'Внести в ведомость',
+                     finfund: 'Фонды', finincome: 'Доходы',
+                     finedit: 'Расчетные листы', findirect: 'Прямые расходы',
                      finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
@@ -2503,10 +2508,18 @@
       } else if (state.page === 'finpnl') {
         ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
           'по расчету периода, даже пока они планом.';
+      } else if (state.page === 'finincome') {
+        ph = 'Что пришло на расчетный счет за ведомость <b>' + esc(per.name) + '</b>. ' +
+          'Дубль платежа из кассы снимите галочкой «в доход» — строка останется видна, ' +
+          'а в расчет не пойдет.';
       } else if (state.page === 'finedit') {
-        ph = 'Строки ведомости <b>' + esc(per.name) + '</b>' +
-          (per.open ? '' : ' — она закрыта, правка пометит ее как измененную') +
+        ph = 'Расчетные листы ведомости <b>' + esc(per.name) + '</b>: продажи, маркетинг, ' +
+          'продукт. Каждый вносит свой лист' +
+          (per.open ? '' : ' — ведомость закрыта, правка пометит ее как измененную') +
           '. Отчисления в фонды пересчитываются сами после каждой правки.';
+      } else if (state.page === 'findirect') {
+        ph = 'Расходы с расчетного счета по направлениям за ведомость <b>' + esc(per.name) +
+          '</b>. Строки из расчетных листов попадают в свой блок сами — видно, что откуда.';
       } else if (state.page === 'finops') {
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
@@ -2573,7 +2586,9 @@
     else if (state.page === 'finfund') renderFinFund(view);
     else if (state.page === 'finpnl') renderFinPnl(view);
     else if (state.page === 'finops') renderFinOps(view);
+    else if (state.page === 'finincome') renderFinIncome(view);
     else if (state.page === 'finedit') renderFinEdit(view);
+    else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
@@ -7671,6 +7686,16 @@
         }).catch(function (e) { finFail(e, 'lines'); }).then(done);
     });
   }
+  function finLoadDirect() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadDirect(); });
+    finBusy('direct', function (done) {
+      api('/admin/api/fin/direct' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.direct = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'direct'); }).then(done);
+    });
+  }
   function finSetForm(f) {
     if (FIN.form === f) return;
     FIN.form = f; FIN.lines = null;
@@ -7689,7 +7714,7 @@
      иначе на соседнем экране останется цифра до правки. */
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
-    FIN.lines = null; FIN.refs = null; FIN.fund = null;
+    FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     if (!keepPeriods) FIN.periods = null;
   }
   function finPeriod() {
@@ -8192,10 +8217,16 @@
         : '') +
       '</div>';
 
+    // Выплату с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
+    // налоги, краткосрочка) это единственное место, где можно записать расход с фонда
+    // (пункт 1 Романа). Уходит в открытую ведомость, фонд предвыбран.
+    var canPay = can('finmodel_edit');
     var opsCard = '<div class="card fin-block">' +
-      '<div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">Расходы фонда</div>' +
-        '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div></div>' +
+        '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div>' +
+        (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
+          'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
             return '<div class="fl-row fl-2"><div class="fl-main">' +
@@ -8276,6 +8307,10 @@
     });
     if (undo) undo.addEventListener('click', function () { FIN.fundEdit = null; renderAll(); });
     if (save) save.addEventListener('click', finSaveOpening);
+    var pay = el('ff-pay');
+    if (pay) pay.addEventListener('click', function () {
+      finLineForm(null, { form: 'фонд', section: FIN.fundId });
+    });
     if (sum) sum.focus();
     pageAnim(view);
   }
@@ -8550,6 +8585,25 @@
   function finMyForms() {
     return FIN_FORMS.filter(function (f) { return can(f[3]); });
   }
+  /* Ввод разложен по экранам (правки Романа 17.08.2026): доходы, расчетные листы и
+     прямые расходы — разные приходы. Экран решает, какие формы на нем живут. Прямые
+     расходы и выплаты с фондов формой ввода тут не заводятся: прямые — свой экран с
+     блоками, выплата с фонда — кнопка на странице фонда. */
+  var FIN_SHEET_IDS = { 'лист-продаж': 1, 'лист-маркетинга': 1, 'лист-продукта': 1 };
+  function finFormsForPage(page) {
+    if (page === 'finincome') return FIN_FORMS.filter(function (f) { return f[0] === 'доход'; });
+    return FIN_FORMS.filter(function (f) { return FIN_SHEET_IDS[f[0]]; });
+  }
+  function finMyFormsForPage(page) {
+    return finFormsForPage(page).filter(function (f) { return can(f[3]); });
+  }
+  // Кнопка добавления называет то, что добавляет, а не абстрактное «Добавить» рядом с
+  // вкладками листов — иначе читается как «добавить лист» (пункт 4 Романа).
+  var FIN_ADD_LABEL = {
+    'доход': 'Добавить доход', 'лист-продаж': 'Добавить продажу',
+    'лист-маркетинга': 'Добавить расход', 'лист-продукта': 'Добавить выплату',
+    'прямой': 'Добавить расход', 'фонд': 'Добавить выплату',
+  };
   var FIN_SECTIONS = ['продажи', 'продукт', 'администрирование', 'управление', 'сервисы'];
   var FIN_ROLES = ['Руководитель отдела продукта', 'Методист', 'Отдел продукта',
                    'Администратор', 'Преподаватель', 'Технический администратор',
@@ -8560,19 +8614,37 @@
     return FIN_FORMS[0];
   }
   function finFundName(id) {
-    var l = (FIN.lines && FIN.lines !== 'none' ? FIN.lines.funds : null) || [];
+    var l = finFundsList();
     for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].name;
     return id || '';
   }
+  /* Список фондов для формы выплаты. Форму открывают с трех экранов — листы, прямые,
+     страница фонда, — и в каждом список фондов лежит в своем месте. Берем оттуда, где
+     он уже загружен, чтобы форма не зависела от того, откуда ее позвали. */
+  function finFundsList() {
+    var src = (FIN.lines && FIN.lines !== 'none' && FIN.lines.funds) ||
+              (FIN.fund && FIN.fund !== 'none' && FIN.fund.funds) || null;
+    if (src) return src;
+    var acc = (FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet.accounts : null) || [];
+    return acc.filter(function (a) { return a.kind === 'фонд'; })
+      .map(function (a) { return { id: a.id, name: a.name }; });
+  }
 
-  function renderFinEdit(view) {
-    // Открыли раздел с формой, на которую права нет (или ее убрали) — молча
-    // переключаемся на свою: пустой экран без объяснения хуже.
-    if (!can(finFormMeta(FIN.form)[3])) {
-      var mine = finMyForms();
-      if (!mine.length) return finErrView(view);
-      FIN.form = mine[0][0]; FIN.lines = null;
-    }
+  // Доходы и расчетные листы — один и тот же список строк, разные наборы форм.
+  // Держим их в одной функции, чтобы правка списка не разъезжалась между экранами.
+  function renderFinIncome(view) { return finLinesScreen(view, 'finincome'); }
+  function renderFinEdit(view) { return finLinesScreen(view, 'finedit'); }
+
+  function finLinesScreen(view, page) {
+    var forms = finMyFormsForPage(page);
+    // Доход сюда пускает право смотреть ведомость; лист — свое листовое право. Нет ни
+    // одного — экрана для этой роли нет.
+    if (!forms.length) return finErrView(view);
+    // Форма должна быть из набора этого экрана: перешли с Доходов на Листы — не
+    // показываем доход под чужим заголовком и не грузим его строки.
+    var inSet = false;
+    for (var j = 0; j < forms.length; j++) if (forms[j][0] === FIN.form) inSet = true;
+    if (!inSet) { FIN.form = forms[0][0]; FIN.lines = null; }
     if (!FIN.lines) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadLines(); return;
@@ -8585,10 +8657,12 @@
       else if (i.included) fact += i.amount;
     });
 
-    var chips = finMyForms().map(function (f) {
+    // Чипы — только когда форм больше одной (расчетные листы). У доходов форма одна,
+    // одинокая кнопка-вкладка выглядела бы сломанной.
+    var chips = forms.length > 1 ? forms.map(function (f) {
       return '<button class="qchip' + (FIN.form === f[0] ? ' on' : '') +
         '" data-fform="' + f[0] + '">' + f[1] + '</button>';
-    }).join('');
+    }).join('') : '';
 
     var rows = items.map(function (it) {
       var sub = [
@@ -8596,8 +8670,6 @@
         // менеджеру: обоих надо видеть, иначе непонятно, кому платим.
         L.form === 'лист-продаж' && it.payout_to ? 'выплата: ' + it.payout_to : '',
         L.form === 'лист-продаж' ? '' : it.item,
-        L.form === 'прямой' ? it.section : '',
-        L.form === 'фонд' ? finFundName(it.account_id) : '',
         L.form === 'лист-продаж' && it.sale_amount
           ? finRub(it.sale_amount, 0) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
           : '',
@@ -8618,6 +8690,10 @@
     }).join('');
 
     var canFix = can(meta[3]);
+    // Кнопка добавления — в шапке карточки, а не в ряду вкладок: там она читалась как
+    // «добавить лист» (пункт 4 Романа). И называет, что именно добавит.
+    var addBtn = canFix ? '<button class="qchip add" id="fe-add">' + ic('plus', 12) +
+      (FIN_ADD_LABEL[FIN.form] || 'Добавить') + '</button>' : '';
     view.innerHTML =
       '<div class="card listcard">' +
         '<div class="list-tools">' +
@@ -8628,13 +8704,13 @@
             plural(items.length, 'строка', 'строки', 'строк') +
             ' · факт <b>' + finRub(fact) + '</b>' +
             (plan ? ' · план <b>' + finRub(plan) + '</b>' : '') + '</span>' +
+          addBtn +
         '</div>' +
-        '<div class="list-quick">' + chips +
-          (canFix ? '<button class="qchip add" id="fe-add">' + ic('plus', 12) +
-            'Добавить</button>' : '') + '</div>' +
+        (chips ? '<div class="list-quick">' + chips + '</div>' : '') +
         (rows ||
           '<div class="empty">В этой ведомости таких строк еще нет. ' +
-          (canFix ? 'Нажмите «Добавить».' : 'Вносит их финансист.') + '</div>') +
+          (canFix ? 'Нажмите «' + (FIN_ADD_LABEL[FIN.form] || 'Добавить') + '».' :
+            'Вносит их финансист.') + '</div>') +
       '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-fform]'), function (b) {
@@ -8655,6 +8731,99 @@
     pageAnim(view);
   }
 
+  /* Прямые расходы — расходы с расчетного счета по пяти блокам-направлениям. В блок
+     попадают и строки, внесенные руками, и те, что расчетный лист разложил сам:
+     видно полную нагрузку направления и откуда взялась каждая строка (пункт 3
+     Романа, как на старом сайте). Правится руками только своя строка; пришедшую из
+     листа или сервиса правят в ее разделе. */
+  function finDirectBadge(origin, role) {
+    if (origin === 'sheet:sales') return '<span class="fst src">лист продаж</span>';
+    if (origin === 'sheet:product') {
+      return '<span class="fst src">лист продукта' + (role ? ': ' + esc(role) : '') + '</span>';
+    }
+    if (origin === 'service') return '<span class="fst src">сервис</span>';
+    return '';
+  }
+  function finDirectFind(id) {
+    var bl = (FIN.direct && FIN.direct !== 'none' ? FIN.direct.blocks : []) || [];
+    for (var i = 0; i < bl.length; i++) {
+      for (var j = 0; j < bl[i].items.length; j++) {
+        if (bl[i].items[j].id === id) return { it: bl[i].items[j], block: bl[i].id };
+      }
+    }
+    return null;
+  }
+  function finDirectToLine(it, blockId) {
+    return { id: it.id, date: it.date, status: it.status, counterparty: it.counterparty,
+      item: it.item, comment: it.comment, amount: it.amount, section: blockId,
+      included: true, payout_to: '', sale_amount: '', percent: '', product: '',
+      payment_id: '' };
+  }
+
+  function renderFinDirect(view) {
+    if (!FIN.direct) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadDirect(); return;
+    }
+    if (FIN.direct === 'none') return finErrView(view);
+    var D = FIN.direct, blocks = D.blocks || [], canFix = can('finmodel_edit');
+    var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
+
+    var bar = statBar([
+      { label: 'Прямые расходы, факт', value: finRub(D.fact, 0), sub: 'ушло с расчетного счета' },
+      { label: 'В плане', value: finRub(D.plan, 0), sub: 'намечено, еще не списано' },
+      { label: 'Блоков', value: String(blocks.length), sub: 'направлений трат' },
+      { label: 'Строк', value: String(nRows), sub: 'всего по прямым расходам' },
+    ]);
+
+    var cards = blocks.map(function (b) {
+      var rows = b.items.map(function (it) {
+        var editable = canFix && it.origin === 'manual';
+        // «Получатель» лежит в counterparty, роль или основание — в item. Второе в
+        // подстрочник, только если оно вправду другое, а не дубль имени.
+        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
+          .filter(Boolean).map(esc).join(' · ');
+        return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') + '"' +
+          (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
+          '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+          '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+          '<span class="fo-st">' +
+            (it.status === 'план' ? '<span class="fst wait">план</span>' : '') +
+            finDirectBadge(it.origin, it.role) +
+          '</span>' +
+        '</div>';
+      }).join('');
+      return '<div class="card listcard fd-block">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(b.name) + '</div>' +
+          '<div class="s">' + esc(b.desc) + ' · факт ' + finRub(b.fact, 0) +
+            (b.plan ? ' · план ' + finRub(b.plan, 0) : '') + '</div></div>' +
+          (canFix ? '<button class="qchip add" data-dadd="' + esc(b.id) + '">' +
+            ic('plus', 12) + 'Добавить расход</button>' : '') + '</div>' +
+        (rows || '<div class="empty">В этом блоке пока пусто.</div>') +
+        '</div>';
+    }).join('');
+
+    view.innerHTML = bar + cards;
+
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-dadd]'), function (btn) {
+        btn.addEventListener('click', function () {
+          finLineForm(null, { form: 'прямой', section: btn.getAttribute('data-dadd') });
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-dline]'), function (r) {
+        r.addEventListener('click', function () {
+          var hit = finDirectFind(r.getAttribute('data-dline'));
+          if (hit) finLineForm(finDirectToLine(hit.it, hit.block), { form: 'прямой' });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
   /* Дата новой строки — сегодня, но только если сегодня внутри ведомости. Иначе
      начало периода: строка, внесенная задним числом в закрытый или будущий период,
      с сегодняшней датой уехала бы за его границы. */
@@ -8666,14 +8835,19 @@
     return (iso >= p.starts_on && iso <= p.ends_on) ? iso : p.starts_on;
   }
 
-  /* Форма строки. Одна на все пять видов: поля разные, но жизнь у них одна —
-     открыть, поправить, сохранить или удалить. */
-  function finLineForm(line) {
+  /* Форма строки. Одна на все шесть видов: поля разные, но жизнь у них одна —
+     открыть, поправить, сохранить или удалить. opts задает форму и предвыбор раздела,
+     когда открываем не из экрана листов: прямой расход из блока, выплату со страницы
+     фонда. */
+  function finLineForm(line, opts) {
     if (document.querySelector('.al-ov')) return;
-    var form = FIN.form, isNew = !line;
+    opts = opts || {};
+    var form = opts.form || FIN.form, isNew = !line;
+    var preSec = opts.section ||
+      (form === 'фонд' ? '' : FIN_SECTIONS[0]);
     var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '', item: '',
                       comment: '', amount: '', included: true, payout_to: '',
-                      section: form === 'фонд' ? '' : FIN_SECTIONS[0],
+                      section: preSec,
                       sale_amount: '', percent: '', product: '', payment_id: '' };
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -8730,7 +8904,7 @@
     } else if (form === 'фонд') {
       // Выплата с фонда: деньги уходят со счета фонда, а не с расчетного. Поэтому
       // главный вопрос формы — какой это фонд, и он стоит первым.
-      var flist = (FIN.lines && FIN.lines !== 'none' ? FIN.lines.funds : null) || [];
+      var flist = finFundsList();
       body =
         '<div class="al-row">' +
           f('С какого фонда <i>*</i>', '<select id="fl-sec" class="al-in">' +
@@ -9006,18 +9180,25 @@
     var list = (r.services || []).map(function (x) {
       var soon = x.active && x.next_on && x.next_on <= today;
       var row = finSvcRow(srows, x.id);
-      return '<div class="fl-row fl-2' + (soon ? ' warn' : '') + (x.active ? '' : ' muted') +
+      // Метку состояния держим в подстрочнике: в названии она первой попадает под
+      // многоточие на узком экране, и строка теряет смысл.
+      var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) +
+        (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
+        (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact, 0) : '') +
+        (soon ? ' · пора платить' : '');
+      // Дату следующего списания правим прямо в строке, как на старом сайте (пункт 5
+      // Романа): открывать ради даты модалку — лишний шаг, а дату двигают часто.
+      // Клик по полю не должен открывать карточку сервиса — гасим всплытие в обработчике.
+      var dateCell = canFix
+        ? '<input class="fsv-date' + (soon ? ' soon' : '') + '" type="date" value="' +
+            esc(x.next_on || '') + '" data-svdate="' + x.id + '" title="Когда ждем списание">'
+        : '<span class="fsv-date ro' + (soon ? ' soon' : '') + '">' +
+            (x.next_on ? finDate(x.next_on) : 'дата не задана') + '</span>';
+      return '<div class="fl-row fsv-row' + (soon ? ' warn' : '') + (x.active ? '' : ' muted') +
         (canFix ? ' click' : '') + '" data-svc="' + x.id + '">' +
         '<div class="fl-main"><span class="fl-name">' + esc(x.name) + '</span>' +
-          // Метку состояния держим в подстрочнике: в названии она первой попадает
-          // под многоточие на узком экране, и строка теряет смысл.
-          '<span class="fl-sub">' + (x.active ? '' : 'отключен · ') + (x.next_on
-            ? (soon ? 'пора платить — срок был ' + finDate(x.next_on)
-                    : 'следующее списание ' + finDate(x.next_on))
-            : 'дата списания не задана') + ' · ' + esc(finEvery(x)) +
-          (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
-          (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact, 0) : '') +
-          '</span></div>' +
+          '<span class="fl-sub">' + sub + '</span></div>' +
+        dateCell +
         '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
 
@@ -9119,6 +9300,24 @@
           });
           i.addEventListener('keydown', function (e) { if (e.key === 'Enter') i.blur(); });
         });
+      // Дата списания правится инлайн. Клик по полю не должен открывать карточку
+      // сервиса (строка кликабельна), поэтому гасим всплытие; сохраняем сам сервис с
+      // новой датой — остальные поля берем из текущего состояния.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svdate]'), function (i) {
+        i.addEventListener('click', function (e) { e.stopPropagation(); });
+        i.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        i.addEventListener('change', function () {
+          var id = i.getAttribute('data-svdate'), svc = null;
+          (r.services || []).forEach(function (x) { if (x.id === id) svc = x; });
+          if (!svc) return;
+          finDo('/admin/api/fin/service', 'POST', {
+            id: svc.id, period_id: FIN.id, name: svc.name,
+            counterparty: svc.counterparty || '', amount: svc.amount,
+            next_on: i.value || null, every: svc.every || 1, unit: svc.unit || null,
+            active: svc.active,
+          }, 'Дата сохранена');
+        });
+      });
       Array.prototype.forEach.call(view.querySelectorAll('[data-pay]'), function (b) {
         b.addEventListener('click', function () {
           var row = b.closest('.op-grid');
