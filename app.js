@@ -206,6 +206,8 @@
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
       tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
+      pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
+      lock: '<rect x="4" y="8.5" width="12" height="8.5" rx="2.2"/><path d="M7 8.5V6.4a3 3 0 0 1 6 0v2.1"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -1754,8 +1756,13 @@
     // как запасной вариант: сложить два набора нельзя, иначе новая роль на бэкенде
     // молча получает разделы соседней роли, ручки отвечают 403, и человек упирается
     // в экран с ошибкой вместо своей работы.
-    if (state.caps && state.caps.length) return state.caps.indexOf(cap) !== -1;
-    return roleInfo().caps.indexOf(cap) !== -1;
+    //
+    // «А|Б» значит «хватит любого». Так открывается раздел, куда ведут разные двери:
+    // ведомость правит финансист целиком, а руководитель продаж — только свой лист.
+    var list = String(cap).split('|');
+    var mine = (state.caps && state.caps.length) ? state.caps : roleInfo().caps;
+    for (var i = 0; i < list.length; i++) if (mine.indexOf(list[i]) !== -1) return true;
+    return false;
   }
 
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
@@ -1797,7 +1804,12 @@
     /* Ввод — отдельный раздел, а не кнопки внутри отчетов. В старом файле места
        ввода тоже были собраны вместе («расчетные листы — ввод расходов»): человек
        приходит либо смотреть, либо вносить, и это разные приходы. */
-    { id: 'finedit', label: 'Внести', icon: 'plus', cap: 'finmodel_edit', space: 'fin' },
+    /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
+       целиком: правило владельца от 11.08.2026 — править только свое. У такого
+       человека это единственный раздел «Финансов». */
+    { id: 'finedit', label: 'Внести', icon: 'plus', space: 'fin',
+      cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
+    { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
@@ -2108,7 +2120,8 @@
         t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
       });
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
-               state.page === 'finedit') {
+               state.page === 'finedit' || state.page === 'finref' ||
+               state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
       tb.innerHTML = pers2.length
@@ -2446,20 +2459,32 @@
       var sh = FIN.sheet && FIN.sheet !== 'none' ? FIN.sheet : null;
       var titles = { finsheet: 'Ведомость', finpnl: 'Прибыль и убытки',
                      finops: 'Карта операций', finref: 'Сервисы и долги',
-                     finfund: 'Фонды', finedit: 'Внести в ведомость' };
+                     finfund: 'Фонды', finedit: 'Внести в ведомость',
+                     finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
-      // «Сервисы и долги» живут вне периода — им ждать список ведомостей незачем.
-      else if (state.page === 'finref') ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
+      else if (state.page === 'finref') {
+        ph = 'Что списывается само и что мы должны. Сервис с наступившим сроком ' +
+          'проставляется фактом сам — сумму потом проверьте. Остаток долга едет в ' +
+          'следующий период, пока не погашен.';
+      } else if (state.page === 'finmetrics') {
+        ph = 'Здоровье центра, откуда берется прибыль и куда уходят деньги со счета. ' +
+          'Остаток на счете и прибыль — разные вещи, и разницу тут видно.';
+      }
       // Фонд считается за все время и без периода: вопрос «сколько всего отложено»
       // не про открытую ведомость, а про накопление.
       else if (state.page === 'finfund') {
         var fd = FIN.fund && FIN.fund !== 'none' ? FIN.fund : null;
+        // Остаток НЕ равен «отложено минус потрачено»: в него входит то, что было на
+        // фонде до первой ведомости, и правки по выписке банка. Поэтому две фразы,
+        // а не одна с вычитанием — иначе цифры выглядят как ошибка счета.
+        var fhand = fd && (fd.periods || []).some(function (p) { return p.opening_by_hand; });
         ph = fd
-          ? 'Отложено <b>' + finRub(fd.totals.added, 0) + '</b>, потрачено <b>' +
-            finRub(fd.totals.spent, 0) + '</b>, остаток <b>' + finRub(fd.totals.balance, 0) +
-            '</b> — за все время, по всем ведомостям.'
+          ? 'За все время отложено <b>' + finRub(fd.totals.added, 0) + '</b>, потрачено <b>' +
+            finRub(fd.totals.spent, 0) + '</b>. Сейчас на фонде <b>' +
+            finRub(fd.totals.balance, 0) + '</b> — по последней ведомости' +
+            (fhand ? ', остаток правился руками по выписке.' : '.')
           : 'Считаю фонд за все время…';
       }
       else if (!per) ph = 'Загружаю ведомость…';
@@ -2471,7 +2496,10 @@
         ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
           '. К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
           finRub(vtbAcc ? vtbAcc.live : (sh.metrics ? sh.metrics.on_vtb : 0)) + '</b>.' +
-          ((sh.warnings || []).length ? ' Перед закрытием проверьте остатки — список справа.' : '');
+          ((sh.warnings || []).length
+            ? ' Перед закрытием сверьте остатки — что не сошлось, показано в карточке ' +
+              '«Перед закрытием периода».'
+            : '');
       } else if (state.page === 'finpnl') {
         ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
           'по расчету периода, даже пока они планом.';
@@ -2546,6 +2574,7 @@
     else if (state.page === 'finpnl') renderFinPnl(view);
     else if (state.page === 'finops') renderFinOps(view);
     else if (state.page === 'finedit') renderFinEdit(view);
+    else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
@@ -7485,7 +7514,7 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
-              lines: null, form: 'доход', lineBusy: false,
+              lines: null, pnlp: null, form: 'доход', lineBusy: false,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -7529,21 +7558,47 @@
     FIN[key] = FIN[key] || 'none';
     renderAll();
   }
+  /* Один запрос на кусок данных за раз. Экраны ведомости перерисовываются от любой
+     правки, а рисуются они из того, что уже загружено: без этого замка каждая
+     перерисовка со скелетоном отправляла бы еще один такой же запрос. */
+  function finBusy(key, run) {
+    FIN._busy = FIN._busy || {};
+    FIN._again = FIN._again || {};
+    // Пока запрос в пути, второй такой же не шлем — но и не теряем: если за это
+    // время сменился период, ответ придет про старый, и повтор обязателен.
+    if (FIN._busy[key]) { FIN._again[key] = run; return; }
+    FIN._busy[key] = true;
+    run(function () {
+      FIN._busy[key] = false;
+      var again = FIN._again[key];
+      if (again) { FIN._again[key] = null; finBusy(key, again); }
+    });
+  }
+  /* Ответ про чужую ведомость — не данные, а мусор: пока он летел, человек уже
+     переключил период (или закрыл его, и открылся следующий). */
+  function finStale(r) {
+    return !!(r && r.period && FIN.id && r.period.id !== FIN.id);
+  }
   function finLoadPeriods(cb) {
-    api('/admin/api/fin/periods').then(function (r) {
-      FIN.periods = r.periods || [];
-      FIN.err = '';
-      if (!FIN.id) FIN.id = r.open_id || (FIN.periods[0] && FIN.periods[0].id) || null;
-      if (cb) cb();
-      renderAll();
-    }).catch(function (e) { FIN.periods = []; finFail(e, 'periods'); });
+    finBusy('periods', function (done) {
+      api('/admin/api/fin/periods').then(function (r) {
+        FIN.periods = r.periods || [];
+        FIN.err = '';
+        if (!FIN.id) FIN.id = r.open_id || (FIN.periods[0] && FIN.periods[0].id) || null;
+        if (cb) cb();
+        renderAll();
+      }).catch(function (e) { FIN.periods = []; finFail(e, 'periods'); }).then(done);
+    });
   }
   function finLoadSheet() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadSheet(); });
-    api('/admin/api/fin/period' + finQ()).then(function (r) {
-      FIN.sheet = r; FIN.err = '';
-      if (state.page === 'finsheet') renderAll();
-    }).catch(function (e) { finFail(e, 'sheet'); });
+    finBusy('sheet', function (done) {
+      api('/admin/api/fin/period' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.sheet = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'sheet'); }).then(done);
+    });
   }
   function finLoadOps() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadOps(); });
@@ -7551,23 +7606,44 @@
     if (FIN.src) ex.push('source=' + encodeURIComponent(FIN.src));
     if (FIN.kind) ex.push('kind=' + encodeURIComponent(FIN.kind));
     if (FIN.q) ex.push('q=' + encodeURIComponent(FIN.q));
-    api('/admin/api/fin/operations' + finQ(ex.join('&'))).then(function (r) {
-      FIN.ops = r; FIN.err = '';
-      if (state.page === 'finops') renderAll();
-    }).catch(function (e) { finFail(e, 'ops'); });
+    finBusy('ops', function (done) {
+      api('/admin/api/fin/operations' + finQ(ex.join('&'))).then(function (r) {
+        if (finStale(r)) return;
+        FIN.ops = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'ops'); }).then(done);
+    });
   }
   function finLoadPnl() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadPnl(); });
-    api('/admin/api/fin/pnl' + finQ('scope=' + FIN.scope)).then(function (r) {
-      FIN.pnl = r; FIN.err = '';
-      if (state.page === 'finpnl') renderAll();
-    }).catch(function (e) { finFail(e, 'pnl'); });
+    finBusy('pnl', function (done) {
+      api('/admin/api/fin/pnl' + finQ('scope=' + FIN.scope)).then(function (r) {
+        if (finStale(r)) return;
+        FIN.pnl = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'pnl'); }).then(done);
+    });
+  }
+  /* Отдельная загрузка P&L за ОДНУ ведомость. У экрана «P&L» свой переключатель
+     масштаба, и «Итоги» не имеют права его двигать: там человек смотрит период, а
+     здесь — итог ведомости, и две выручки на одном экране читались бы как ошибка. */
+  function finLoadPnlPeriod() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadPnlPeriod(); });
+    finBusy('pnlp', function (done) {
+      api('/admin/api/fin/pnl' + finQ('scope=period')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.pnlp = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'pnlp'); }).then(done);
+    });
   }
   function finLoadFund() {
-    api('/admin/api/fin/fund?account_id=' + encodeURIComponent(FIN.fundId)).then(function (r) {
-      FIN.fund = r; FIN.err = '';
-      if (state.page === 'finfund') renderAll();
-    }).catch(function (e) { finFail(e, 'fund'); });
+    finBusy('fund', function (done) {
+      api('/admin/api/fin/fund?account_id=' + encodeURIComponent(FIN.fundId)).then(function (r) {
+        FIN.fund = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'fund'); }).then(done);
+    });
   }
   function finSetFund(id) {
     if (FIN.fundId === id) return;
@@ -7575,18 +7651,25 @@
     renderAll();
   }
   function finLoadRefs() {
-    api('/admin/api/fin/refs').then(function (r) {
-      FIN.refs = r; FIN.err = '';
-      if (state.page === 'finref') renderAll();
-    }).catch(function (e) { finFail(e, 'refs'); });
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadRefs(); });
+    finBusy('refs', function (done) {
+      api('/admin/api/fin/refs' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.refs = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'refs'); }).then(done);
+    });
   }
   function finLoadLines() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadLines(); });
-    api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent(FIN.form)))
-      .then(function (r) {
+    finBusy('lines', function (done) {
+      api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent(FIN.form)))
+        .then(function (r) {
+          if (finStale(r)) return;
         FIN.lines = r; FIN.err = '';
-        if (state.page === 'finedit') renderAll();
-      }).catch(function (e) { finFail(e, 'lines'); });
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'lines'); }).then(done);
+    });
   }
   function finSetForm(f) {
     if (FIN.form === f) return;
@@ -7597,8 +7680,17 @@
      операциями другого — это не «частично устарело», это неправильные данные. */
   function finSetPeriod(id) {
     if (FIN.id === id) return;
-    FIN.id = id; FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.lines = null;
+    FIN.id = id;
+    finForget(true);
     renderAll();
+  }
+  /* Сброс всего, что зависит от ведомости. Любая правда меняет соседние экраны:
+     внесли доход — поехали отчисления, фонды, P&L и лента. Пересобирать надо все,
+     иначе на соседнем экране останется цифра до правки. */
+  function finForget(keepPeriods) {
+    FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
+    FIN.lines = null; FIN.refs = null; FIN.fund = null;
+    if (!keepPeriods) FIN.periods = null;
   }
   function finPeriod() {
     var l = FIN.periods || [];
@@ -7642,33 +7734,42 @@
                                 : 'сколько реально на ВТБ' },
     ]);
 
+    /* Правило фонда правится там же, где видно его действие: строка каскада — это и
+       есть результат правила, и открывать ради нее отдельный экран незачем. */
+    var canFix = can('finmodel_edit');
+    var editable = canFix && s.period.open;
     var rows = [{ cls: 'in', name: 'Доход к зачислению',
                   why: 'все, что пришло за период, за вычетом комиссии эквайринга',
                   v: c.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -c.shortterm });
+                v: -c.shortterm, rule: stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
                 why: 'от нее считаются проценты фондов', v: c.base });
     funds.forEach(function (r) {
-      rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount });
+      rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount, rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
                 why: 'факт из расчетных листов: зарплаты, сервисы, реклама',
                 v: -c.direct });
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: c.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
-                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -c.flex });
+                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -c.flex,
+                rule: flexRule });
     rows.push({ cls: 'total', name: 'Дивиденды', why: 'то, что остается к распределению',
                 v: c.dividends });
 
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">Каскад ведомости</div>' +
-        '<div class="s">каждый шаг считается от предыдущего — сверху вниз</div></div></div>' +
+        '<div class="s">каждый шаг считается от предыдущего — сверху вниз' +
+        (editable ? '. Правило фонда меняется по клику на строке' : '') + '</div></div></div>' +
       '<div class="fc-rows">' + rows.map(function (r) {
-        return '<div class="fc-row ' + r.cls + '">' +
-          '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
+        var live = editable && r.rule;
+        return '<div class="fc-row ' + r.cls + (live ? ' click' : '') + '"' +
+          (live ? ' data-frule="' + esc(r.rule.account_id) + '"' : '') + '>' +
+          '<div class="fc-l"><span class="fc-name">' + esc(r.name) +
+            (live ? '<span class="fc-pen">' + ic('pen', 11) + '</span>' : '') + '</span>' +
             (r.why ? '<span class="fc-why">' + esc(r.why) + '</span>' : '') + '</div>' +
           '<div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
       }).join('') + '</div></div>';
@@ -7731,19 +7832,312 @@
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
           '<div><div class="t">Перед закрытием периода</div>' +
-          '<div class="s">что стоит проверить, прежде чем платить</div></div></div>' +
+          '<div class="s">что стоит проверить, прежде чем платить' +
+          (editable ? '. Сверить остаток — по клику на строке' : '') + '</div></div></div>' +
         '<div class="fin-list">' + s.warnings.map(function (w) {
-          return '<div class="fl-row fl-2 warn"><div class="fl-main">' +
+          var acc = null;
+          (s.accounts || []).forEach(function (a) { if (a.name === w.account) acc = a; });
+          return '<div class="fl-row fl-2 warn' + (editable && acc ? ' click' : '') + '"' +
+            (editable && acc ? ' data-facc="' + esc(acc.id) + '"' : '') + '>' +
+            '<div class="fl-main">' +
             '<span class="fl-name">' + esc(w.account) + '</span>' +
             '<span class="fl-sub">' + esc(w.problem) + '</span></div>' +
             '<div class="fl-v num">' + finRub(w.amount) + '</div></div>';
         }).join('') + '</div></div>'
       : '';
 
-    view.innerHTML = bar + '<div class="grid">' +
+    /* Панель ведомости: закрыть и продлить. В старом файле продления не было ни разу,
+       хотя правило владельца его требует («иногда продлеваем, если не хватает денег
+       на выплаты») — функция в базе лежала без кнопки. */
+    /* Имя периода уже стоит во вкладках и в подзаголовке — здесь оно было бы третьим.
+       Полоса отвечает на другой вопрос: сколько эта ведомость еще идет и что с ней
+       можно сделать. */
+    var days = Math.ceil((new Date(s.period.ends_on) - new Date()) / 86400000);
+    var head = '<div class="card fin-perbar">' +
+      '<div class="fp-l"><div class="fp-name">' +
+        (s.period.open
+          ? 'Идет до ' + finDate(s.period.ends_on) +
+            '<span class="fst ' + (days < 0 ? 'wait' : 'ok') + '">' +
+            (days < 0 ? 'срок вышел ' + (-days) + ' ' + plural(-days, 'день', 'дня', 'дней') + ' назад'
+             : days === 0 ? 'последний день'
+             : 'осталось ' + days + ' ' + plural(days, 'день', 'дня', 'дней')) + '</span>'
+          : 'Закрыта' + (s.closed_at
+              ? ' ' + finDate(String(s.closed_at).slice(0, 10)) : '')) +
+        '</div>' +
+        '<div class="fp-sub">' + finDate(s.period.starts_on) + ' — ' +
+        finDate(s.period.ends_on) +
+        (s.period.open
+          ? ' · при закрытии отчисления станут фактом, а остатки уедут в следующую'
+          : ' · правка пометит ее как измененную после закрытия') +
+        '</div></div>' +
+      (editable
+        ? '<div class="fp-act">' +
+            '<button class="qchip" id="fp-ext">' + ic('cal', 12) + 'Продлить</button>' +
+            '<button class="qchip go" id="fp-close">' + ic('lock', 12) + 'Закрыть ведомость</button>' +
+          '</div>'
+        : '') +
+    '</div>';
+
+    view.innerHTML = bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + warn + '</div></div>';
+      '<div class="sp5">' + fundsCard + cashCard + finAccountsCard(s, editable) + warn +
+      '</div></div>';
+
+    if (editable) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-frule]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-frule');
+          (s.rules || []).forEach(function (r) {
+            if (r.account_id === id) finRuleForm(r, s);
+          });
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-facc]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-facc');
+          (s.accounts || []).forEach(function (a) { if (a.id === id) finActualForm(a); });
+        });
+      });
+      el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
+      el('fp-close').addEventListener('click', function () { finCloseForm(s); });
+    }
     pageAnim(view);
+  }
+
+  /* Остатки по счетам: что насчитала ведомость и что показывает банк. Пока остаток
+     не сверен, закрывать период рано — расхождение уедет в следующий с остатками. */
+  function finAccountsCard(s, editable) {
+    var accs = (s.accounts || []).filter(function (a) { return a.kind !== 'распределение'; });
+    if (!accs.length) return '';
+    return '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('check', 14) + '</span>' +
+        '<div><div class="t">Остатки по счетам</div>' +
+        '<div class="s">что должно лежать на счете по факту — против выписки банка' +
+        (editable ? '. Сверить — по клику' : '') + '</div></div></div>' +
+      '<div class="fin-list">' + accs.map(function (a) {
+        /* Сверяем ФАКТ, а не остаток с отчислениями: плановый перевод в фонд деньги
+           со счета еще не увел, и в выписке его нет. Разница между этими двумя
+           цифрами — это и есть «уже начислено, но еще не ушло». */
+        var diff = a.actual === null ? null : a.actual - a.closing;
+        var sub = a.actual === null ? 'с банком не сверяли'
+          : (Math.abs(diff) < 0.01 ? 'сошлось с выпиской ' + finDate(String(a.actual_at || '').slice(0, 10))
+             : (diff > 0 ? 'в банке больше на ' + finRub(diff, 0) + ' — что-то не внесли'
+                         : 'в банке меньше на ' + finRub(-diff, 0) + ' — лишняя строка или потеря'));
+        var held = a.live - a.closing;
+        return '<div class="fl-row fl-2' +
+          (diff !== null && Math.abs(diff) >= 0.01 ? ' warn' : '') +
+          (editable ? ' click' : '') + '"' +
+          (editable ? ' data-facc="' + esc(a.id) + '"' : '') + '>' +
+          '<div class="fl-main"><span class="fl-name">' + esc(a.name) + '</span>' +
+          '<span class="fl-sub">' + esc(sub) +
+          (Math.abs(held) >= 0.01
+            ? ' · ' + finRub(Math.abs(held), 0) +
+              (held < 0 ? ' уже начислено фондам' : ' придет с отчислениями')
+            : '') + '</span></div>' +
+          '<div class="fl-v num">' + finRub(a.closing) + '</div></div>';
+      }).join('') + '</div></div>';
+  }
+
+  /* Правило отчисления: сколько фонд забирает и от чего считает. Правило живет внутри
+     ведомости — правка не трогает закрытые периоды, по которым уже заплатили. */
+  var FIN_RULE_MODES = [['процент', 'Процент'], ['сумма', 'Фиксированная сумма'],
+                        ['сумма+процент', 'Сумма плюс процент']];
+  var FIN_RULE_BASES = [['доход', 'от дохода к зачислению'], ['база', 'от базы'],
+                        ['продажи вручную', 'от продаж — сумму впишу руками'],
+                        ['продажи услуг', 'от продаж по выбранным услугам'],
+                        ['чистая прибыль', 'от чистой прибыли']];
+  function finRuleForm(rule, sheet) {
+    var offs = sheet.offerings || [], picked = rule.offerings || [];
+    var m = finModal({
+      eyebrow: 'Правило отчисления', title: rule.name,
+      sub: 'Правило действует только в этой ведомости: в закрытых периодах ' +
+        'останется то, по которому платили. После сохранения отчисление пересчитается.',
+      body:
+        '<div class="al-row">' +
+          finField('Как считаем <i>*</i>', '<select id="ru-mode" class="al-in">' +
+            FIN_RULE_MODES.map(function (x) {
+              return '<option value="' + x[0] + '"' + (rule.mode === x[0] ? ' selected' : '') +
+                '>' + x[1] + '</option>';
+            }).join('') + '</select>') +
+          finField('Процент', '<input id="ru-pct" class="al-in" type="number" min="0" ' +
+            'max="100" step="0.01" value="' + rule.percent + '">') +
+        '</div>' +
+        '<div id="ru-base-row">' +
+          finField('Процент считать', '<select id="ru-base" class="al-in">' +
+            FIN_RULE_BASES.map(function (x) {
+              return '<option value="' + x[0] + '"' + (rule.base === x[0] ? ' selected' : '') +
+                '>' + x[1] + '</option>';
+            }).join('') + '</select>') + '</div>' +
+        '<div id="ru-fix-row">' +
+          finField('Фиксированная часть, ₽', '<input id="ru-fix" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + rule.fixed + '">') + '</div>' +
+        '<div id="ru-manual">' + finField('Сумма продаж, ₽ — от нее берется процент',
+          '<input id="ru-mb" class="al-in" type="number" min="0" step="0.01" value="' +
+          rule.manual_base + '">') + '</div>' +
+        '<div id="ru-offs"><span class="al-l">Какие услуги считаем продажами</span>' +
+          '<div class="ru-chips">' + (offs.length
+            ? offs.map(function (o) {
+                return '<button type="button" class="qchip' +
+                  (picked.indexOf(o.id) >= 0 ? ' on' : '') + '" data-roff="' + esc(o.id) +
+                  '">' + esc(o.name) + '</button>';
+              }).join('')
+            : '<span class="al-l">Услуг в справочнике нет — процент считать не от чего</span>') +
+          '</div></div>' +
+        '<div class="fin-note calm" id="ru-prev"></div>',
+    });
+    if (!m) return;
+    var mode = el('ru-mode'), base = el('ru-base');
+    var pick = picked.slice();
+    var sync = function () {
+      var isFixed = mode.value === 'сумма';
+      el('ru-pct').closest('.al-f').style.display = isFixed ? 'none' : '';
+      el('ru-base-row').style.display = isFixed ? 'none' : '';
+      // Фиксированная часть нужна двум режимам из трех — «процент» ее не спрашивает.
+      el('ru-fix-row').style.display = (mode.value === 'процент') ? 'none' : '';
+      el('ru-manual').style.display =
+        (!isFixed && base.value === 'продажи вручную') ? '' : 'none';
+      el('ru-offs').style.display =
+        (!isFixed && base.value === 'продажи услуг') ? '' : 'none';
+      // Предпоказ считаем по той же базе, что и сервер: цифра на экране не должна
+      // отличаться от той, что ляжет в фонд.
+      var b = base.value === 'продажи вручную' ? Number(el('ru-mb').value) || 0
+        : (base.value === 'доход' ? sheet.cascade.income
+           : (base.value === 'чистая прибыль' ? sheet.cascade.profit
+              : (base.value === 'база' ? sheet.cascade.base : null)));
+      var pct = Number(el('ru-pct').value) || 0, fix = Number(el('ru-fix').value) || 0;
+      var prev = el('ru-prev');
+      if (isFixed) {
+        prev.textContent = 'Фонд получит ' + finRub(fix) + ' — сумма не зависит от дохода.';
+      } else if (b === null) {
+        prev.textContent = pick.length
+          ? 'Процент посчитается от продаж по выбранным услугам — сумму посчитает сервер.'
+          : 'Услуги не выбраны — процент считать не от чего, отчисление будет нулевым.';
+      } else {
+        var part = b * pct / 100;
+        prev.textContent = finRub(b, 0) + ' × ' + finNum(pct, pct % 1 ? 2 : 0) + '% = ' +
+          finRub(part) + (mode.value === 'сумма+процент'
+            ? ', плюс ' + finRub(fix) + ' — итого ' + finRub(part + fix) : '');
+      }
+    };
+    mode.addEventListener('change', sync);
+    base.addEventListener('change', sync);
+    ['ru-pct', 'ru-fix', 'ru-mb'].forEach(function (id) {
+      el(id).addEventListener('input', sync);
+    });
+    Array.prototype.forEach.call(m.ov.querySelectorAll('[data-roff]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-roff'), at = pick.indexOf(id);
+        if (at >= 0) { pick.splice(at, 1); b.classList.remove('on'); }
+        else { pick.push(id); b.classList.add('on'); }
+        sync();
+      });
+    });
+    sync();
+    el('fm-ok').addEventListener('click', function () {
+      m.close();
+      finDo('/admin/api/fin/rule', 'POST', {
+        period_id: FIN.id, account_id: rule.account_id, mode: mode.value,
+        percent: finVal('ru-pct') || '0', fixed: finVal('ru-fix') || '0',
+        base: mode.value === 'сумма' ? rule.base : base.value,
+        manual_base: finVal('ru-mb') || '0',
+        offerings: base.value === 'продажи услуг' ? pick : null,
+      }, 'Правило сохранено, отчисление пересчитано');
+    });
+  }
+
+  /* Сверка с банком: сколько на счете по расчету и сколько по выписке. */
+  function finActualForm(acc) {
+    var m = finModal({
+      eyebrow: 'Сверка с банком', title: acc.name,
+      sub: 'По факту на счете должно быть ' + finRub(acc.closing) +
+        '. Впишите остаток из выписки — расхождение ведомость покажет сама. ' +
+        'Плановые отчисления в эту цифру не входят: деньги по ним еще не ушли.',
+      body:
+        finField('Остаток по выписке, ₽ <i>*</i>', '<input id="ac-sum" class="al-in" ' +
+          'type="number" step="0.01" value="' +
+          (acc.actual === null ? '' : acc.actual) + '">') +
+        finField('Чем объясняется расхождение', '<input id="ac-note" class="al-in" ' +
+          'maxlength="300" placeholder="например: комиссия банка за перевод">'),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (finVal('ac-sum') === '') { m.err.textContent = 'Впишите остаток из выписки'; return; }
+      m.close();
+      finDo('/admin/api/fin/account/actual', 'POST', {
+        period_id: FIN.id, account_id: acc.id, actual: finVal('ac-sum'),
+        note: finVal('ac-note'),
+      }, 'Сверка записана');
+    });
+  }
+
+  /* Продление ведомости. Правило владельца: иногда денег на выплаты не хватает, и
+     период тянут дальше вместо того, чтобы закрывать его в минус. */
+  function finExtendForm(per) {
+    var m = finModal({
+      eyebrow: 'Ведомость', title: 'Продлить период',
+      ok: 'Продлить',
+      sub: 'Сейчас ведомость идет с ' + finDate(per.starts_on) + ' по ' +
+        finDate(per.ends_on) + '. Продление сдвигает конец: все, что придет до новой ' +
+        'даты, попадет в эту ведомость, а не в следующую.',
+      body: finField('Новый конец периода <i>*</i>', '<input id="ex-date" class="al-in" ' +
+        'type="date" value="' + esc(per.ends_on) + '">'),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      var v = finVal('ex-date');
+      if (!v) { m.err.textContent = 'Выберите дату'; return; }
+      if (v < per.starts_on) { m.err.textContent = 'Конец не может быть раньше начала'; return; }
+      m.close();
+      finDo('/admin/api/fin/period/extend', 'POST',
+            { period_id: per.id, ends_on: v }, 'Ведомость продлена');
+    });
+  }
+
+  /* Закрытие ведомости — единственное необратимое действие раздела, поэтому оно
+     показывает, что именно произойдет, и что осталось несведенным. */
+  function finCloseForm(s) {
+    var warns = s.warnings || [], pl = s.plan_left;
+    var m = finModal({
+      eyebrow: 'Ведомость', title: 'Закрыть ' + s.period.name,
+      ok: 'Закрыть и открыть следующую',
+      sub: 'Расчет отчислений станет фактом: деньги уйдут на счета фондов. Остатки ' +
+        'счетов и непогашенные долги переедут в новую ведомость, обычный план — нет.',
+      body:
+        '<div class="fin-kv">' +
+          '<div class="fkv"><span>Отложим в фонды</span><b class="num">' +
+            finRub(s.cascade.allocations) + '</b></div>' +
+          '<div class="fkv"><span>Чистая прибыль</span><b class="num">' +
+            finRub(s.cascade.profit) + '</b></div>' +
+          '<div class="fkv total"><span>Дивиденды</span><b class="num">' +
+            finRub(s.cascade.dividends) + '</b></div>' +
+        '</div>' +
+        (warns.length
+          ? '<div class="fin-note">' + ic('alert', 13) + 'Не сведено: ' +
+            warns.map(function (w) { return esc(w.account); }).join(', ') +
+            '. Закрыть можно, но расхождение уедет в следующую ведомость вместе с ' +
+            'остатками.</div>'
+          : '<div class="fin-note calm">' + ic('check', 13) +
+            'Остатки сведены — закрывать можно.</div>') +
+        /* План, который так и не стал фактом, при закрытии никуда не переезжает —
+           он просто останется невыполненным. Показываем это до нажатия, а не после. */
+        (pl && pl.count
+          ? '<div class="fin-note">' + ic('alert', 13) + 'Не отмечено фактом: ' +
+            pl.count + ' ' + plural(pl.count, 'плановая строка', 'плановые строки',
+              'плановых строк') + ' на ' + finRub(pl.amount) +
+            '. Долги и кредиты переедут сами, эти — нет.</div>'
+          : ''),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      m.close();
+      finDo('/admin/api/fin/period/close', 'POST', { period_id: s.period.id }, null,
+        function (res) {
+          // Переезжаем в новую ведомость сразу: закрытая больше не рабочая.
+          FIN.id = res.period.id;
+          FIN.periods = null;
+          showToast('Ведомость закрыта. Открыта «' + res.period.name + '»');
+        });
+    });
   }
 
   /* Фонд за все время. Отдельный экран появился после созвона 15.08.2026, где на
@@ -8138,13 +8532,24 @@
 
      Куда именно ляжет строка, решает сервер (routers/fin.py): счет, раздел, метка
      листа и сумма выплаты по проценту — это правила ведомости, а не поля формы. */
+  /* Форма ввода, ее подпись и право, которое ее открывает. Право на форме, а не на
+     разделе: руководитель продаж вносит свои проценты и не видит зарплат команды
+     (правило владельца от 11.08.2026, зеркало FORM_CAPS в routers/fin.py). */
   var FIN_FORMS = [
-    ['доход', 'Доходы', 'что пришло на расчетный счет'],
-    ['прямой', 'Прямые расходы', 'зарплаты и сервисы с расчетного счета'],
-    ['лист-продаж', 'Лист продаж', 'процент менеджеру с продажи'],
-    ['лист-маркетинга', 'Лист маркетинга', 'реклама с фонда маркетинга'],
-    ['лист-продукта', 'Лист продукта', 'команда продукта по должностям'],
+    ['доход', 'Доходы', 'что пришло на расчетный счет', 'finmodel_edit'],
+    ['прямой', 'Прямые расходы', 'зарплаты и сервисы с расчетного счета', 'finmodel_edit'],
+    ['лист-продаж', 'Лист продаж', 'процент менеджеру с продажи',
+     'finmodel_edit|finmodel_sales'],
+    ['лист-маркетинга', 'Лист маркетинга', 'реклама с фонда маркетинга',
+     'finmodel_edit|finmodel_marketing'],
+    ['лист-продукта', 'Лист продукта', 'команда продукта по должностям',
+     'finmodel_edit|finmodel_product'],
+    ['фонд', 'Выплаты с фондов', 'то, что платим деньгами фонда, а не с р/с',
+     'finmodel_edit'],
   ];
+  function finMyForms() {
+    return FIN_FORMS.filter(function (f) { return can(f[3]); });
+  }
   var FIN_SECTIONS = ['продажи', 'продукт', 'администрирование', 'управление', 'сервисы'];
   var FIN_ROLES = ['Руководитель отдела продукта', 'Методист', 'Отдел продукта',
                    'Администратор', 'Преподаватель', 'Технический администратор',
@@ -8154,8 +8559,20 @@
     for (var i = 0; i < FIN_FORMS.length; i++) if (FIN_FORMS[i][0] === id) return FIN_FORMS[i];
     return FIN_FORMS[0];
   }
+  function finFundName(id) {
+    var l = (FIN.lines && FIN.lines !== 'none' ? FIN.lines.funds : null) || [];
+    for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].name;
+    return id || '';
+  }
 
   function renderFinEdit(view) {
+    // Открыли раздел с формой, на которую права нет (или ее убрали) — молча
+    // переключаемся на свою: пустой экран без объяснения хуже.
+    if (!can(finFormMeta(FIN.form)[3])) {
+      var mine = finMyForms();
+      if (!mine.length) return finErrView(view);
+      FIN.form = mine[0][0]; FIN.lines = null;
+    }
     if (!FIN.lines) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadLines(); return;
@@ -8168,17 +8585,19 @@
       else if (i.included) fact += i.amount;
     });
 
-    var chips = FIN_FORMS.map(function (f) {
+    var chips = finMyForms().map(function (f) {
       return '<button class="qchip' + (FIN.form === f[0] ? ' on' : '') +
         '" data-fform="' + f[0] + '">' + f[1] + '</button>';
     }).join('');
 
     var rows = items.map(function (it) {
       var sub = [
-        // В листе продаж статья и контрагент — это одна и та же продажа: в заголовке
-        // строки она уже есть, второй раз ее печатать незачем.
-        it.item && it.item !== it.counterparty ? it.item : '',
+        // В листе продаж главный человек строки — покупатель, а деньги уходят
+        // менеджеру: обоих надо видеть, иначе непонятно, кому платим.
+        L.form === 'лист-продаж' && it.payout_to ? 'выплата: ' + it.payout_to : '',
+        L.form === 'лист-продаж' ? '' : it.item,
         L.form === 'прямой' ? it.section : '',
+        L.form === 'фонд' ? finFundName(it.account_id) : '',
         L.form === 'лист-продаж' && it.sale_amount
           ? finRub(it.sale_amount, 0) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
           : '',
@@ -8191,16 +8610,14 @@
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
-          (it.locked
-            ? '<span class="fst wait">из сервисов</span>'
-            : '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-              esc(it.status) + '</span>') +
+          '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+            esc(it.status) + '</span>' +
           (it.included === false ? '<span class="fst wait">не в доход</span>' : '') +
         '</span>' +
       '</div>';
     }).join('');
 
-    var canFix = can('finmodel_edit');
+    var canFix = can(meta[3]);
     view.innerHTML =
       '<div class="card listcard">' +
         '<div class="list-tools">' +
@@ -8230,14 +8647,7 @@
         r.addEventListener('click', function () {
           var id = r.getAttribute('data-fline');
           for (var i = 0; i < items.length; i++) {
-            if (items[i].id === id) {
-              // Строку, которую создал справочник сервисов, правят там же: сумму и
-              // дату двигает он, и правка здесь разъехалась бы с ним.
-              if (items[i].locked) {
-                return showToast('Эта строка пришла из сервисов — правьте ее в разделе «Сервисы и долги»');
-              }
-              return finLineForm(items[i]);
-            }
+            if (items[i].id === id) return finLineForm(items[i]);
           }
         });
       });
@@ -8262,7 +8672,8 @@
     if (document.querySelector('.al-ov')) return;
     var form = FIN.form, isNew = !line;
     var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '', item: '',
-                      comment: '', amount: '', included: true, section: FIN_SECTIONS[0],
+                      comment: '', amount: '', included: true, payout_to: '',
+                      section: form === 'фонд' ? '' : FIN_SECTIONS[0],
                       sale_amount: '', percent: '', product: '', payment_id: '' };
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -8308,9 +8719,40 @@
         '</div>' +
         '<div class="fin-note calm" id="fl-calc">Выплата посчитается сама</div>' +
         '<div class="al-row">' +
-          f('Кому выплата', '<input id="fl-item" class="al-in" maxlength="200" value="' +
-            v(s.item) + '" placeholder="менеджер">') +
+          f('Кому выплата <i>*</i>', '<input id="fl-payout" class="al-in" maxlength="200" ' +
+            'value="' + v(s.payout_to) + '" placeholder="менеджер, который продал">') +
           f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+        '</div>' +
+        f('Это', '<select id="fl-st" class="al-in">' +
+          '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже заплатили</option>' +
+          '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>план, еще не платили</option>' +
+          '</select>');
+    } else if (form === 'фонд') {
+      // Выплата с фонда: деньги уходят со счета фонда, а не с расчетного. Поэтому
+      // главный вопрос формы — какой это фонд, и он стоит первым.
+      var flist = (FIN.lines && FIN.lines !== 'none' ? FIN.lines.funds : null) || [];
+      body =
+        '<div class="al-row">' +
+          f('С какого фонда <i>*</i>', '<select id="fl-sec" class="al-in">' +
+            flist.map(function (x) {
+              return '<option value="' + esc(x.id) + '"' +
+                (s.section === x.id ? ' selected' : '') + '>' + esc(x.name) + '</option>';
+            }).join('') + '</select>') +
+          f('Сумма, ₽ <i>*</i>', '<input id="fl-sum" class="al-in" type="number" min="0" ' +
+            'step="0.01" value="' + num(s.amount) + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          f('Получатель <i>*</i>', '<input id="fl-who" class="al-in" maxlength="200" ' +
+            'value="' + v(s.counterparty) + '" placeholder="кому платим">') +
+          f('За что', '<input id="fl-item" class="al-in" maxlength="200" value="' +
+            v(s.item) + '" placeholder="роль или основание">') +
+        '</div>' +
+        '<div class="al-row">' +
+          f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+          f('Это', '<select id="fl-st" class="al-in">' +
+            '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже заплатили</option>' +
+            '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>план, еще не платили</option>' +
+            '</select>') +
         '</div>';
     } else {
       var whoLabel = form === 'лист-продукта' ? 'Сотрудник <i>*</i>' : 'Получатель <i>*</i>';
@@ -8425,9 +8867,16 @@
         payload.sale_amount = val('fl-sale');
         payload.percent = val('fl-pct');
         payload.product = val('fl-prod');
+        payload.payout_to = val('fl-payout');
+        if (payload.payout_to.length < 2) {
+          err.textContent = 'Напишите, кому уходит процент'; return;
+        }
       } else {
         payload.amount = val('fl-sum');
-        if (form === 'прямой') payload.section = el('fl-sec').value;
+        if (form === 'прямой' || form === 'фонд') payload.section = el('fl-sec').value;
+        if (form === 'фонд' && !payload.section) {
+          err.textContent = 'Выберите фонд, с которого платим'; return;
+        }
       }
       var sum = Number(form === 'лист-продаж' ? payload.sale_amount : payload.amount);
       if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
@@ -8439,7 +8888,7 @@
           close();
           // Строка меняет каскад и фонды, а не только этот список: сбрасываем все,
           // иначе на соседнем экране останется цифра до правки.
-          FIN.lines = null; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+          finForget(true);
           renderAll();
           showToast(isNew ? 'Строка внесена' : 'Строка поправлена');
         })
@@ -8455,7 +8904,7 @@
              '&period_id=' + encodeURIComponent(FIN.id), 'DELETE')
         .then(function () {
           close();
-          FIN.lines = null; FIN.sheet = null; FIN.ops = null; FIN.pnl = null;
+          finForget(true);
           renderAll();
           showToast('Строка убрана');
         })
@@ -8474,50 +8923,606 @@
     return m || 'Не сохранилось. Проверьте связь и попробуйте еще раз';
   }
 
-  /* Сервисы и обязательства: то, что спишется само, и то, что мы должны. */
+  /* ── Сервисы и обязательства ────────────────────────────────────────────────
+     Два справочника, которые ведомость обслуживает сама: сервисы списываются по
+     сроку, обязательства гасятся по графику. Оба живут дольше периода, поэтому
+     экран делится надвое: слева то, что списывается само, справа то, что мы должны.
+     Платежи текущей ведомости стоят рядом со своим справочником — вопрос «что уже
+     списалось» задают в ту же минуту, что и «сколько у нас подписок». */
+
+  function finSvcRow(rows, sid) {
+    for (var i = 0; i < rows.length; i++) if (rows[i].service_id === sid) return rows[i];
+    return null;
+  }
+  var FIN_UNITS = [['', 'не повторяется'], ['день', 'дней'], ['неделя', 'недель'],
+                   ['месяц', 'месяцев'], ['год', 'лет']];
+  function finEvery(s) {
+    if (!s.unit) return 'без повтора';
+    var n = s.every || 1;
+    if (s.unit === 'день') return 'раз в ' + n + ' ' + plural(n, 'день', 'дня', 'дней');
+    if (s.unit === 'неделя') return 'раз в ' + n + ' ' + plural(n, 'неделю', 'недели', 'недель');
+    if (s.unit === 'месяц') return 'раз в ' + n + ' ' + plural(n, 'месяц', 'месяца', 'месяцев');
+    return 'раз в ' + n + ' ' + plural(n, 'год', 'года', 'лет');
+  }
+
   function renderFinRefs(view) {
     if (!FIN.refs) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadRefs(); return;
     }
     if (FIN.refs === 'none') return finErrView(view);
-    var r = FIN.refs;
+    var r = FIN.refs, canFix = can('finmodel_edit');
+    var open = (FIN.refs.period || {}).open;
     var today = new Date().toISOString().slice(0, 10);
-    var services = (r.services || []).map(function (s) {
-      var soon = s.next_on && s.next_on <= today;
-      return '<div class="fl-row fl-2' + (soon ? ' warn' : '') + (s.active ? '' : ' muted') + '">' +
-        '<div class="fl-main"><span class="fl-name">' + esc(s.name) + '</span>' +
-          // Прошедшая дата — это не «следующее списание», а «пора платить»: подпись
-          // должна говорить, что делать, а не когда собирались.
-          '<span class="fl-sub">' + (s.next_on
-            ? (soon ? 'пора платить — срок был ' + finDate(s.next_on)
-                    : 'следующее списание ' + finDate(s.next_on))
-            : 'дата списания не задана') +
-          (s.counterparty ? ' · ' + esc(s.counterparty) : '') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(s.amount) + '</div></div>';
+    var srows = r.service_rows || [], orows = r.obligation_rows || [];
+    var live = (r.services || []).filter(function (s) { return s.active; });
+    var debts = (r.obligations || []).filter(function (o) { return o.status === 'открыт'; });
+
+    var plan = 0, paid = 0;
+    srows.forEach(function (x) { plan += x.planned; if (x.fact !== null) paid += x.fact; });
+    var oplan = 0;
+    orows.forEach(function (x) { if (x.status === 'план') oplan += x.amount; });
+    var left = 0;
+    debts.forEach(function (o) { left += o.remaining; });
+
+    var bar = statBar([
+      { label: 'Сервисов в работе', value: String(live.length),
+        sub: 'списываются сами по сроку' },
+      { label: 'План на ведомость', value: finRub(plan, 0), sub: 'сколько ждем к списанию' },
+      { label: 'Уже списалось', value: finRub(paid, 0),
+        sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan, 0) : 'по факту' },
+      { label: 'Долгов к погашению', value: finRub(left, 0),
+        sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') +
+             ' · платеж ' + finRub(oplan, 0) },
+    ]);
+
+    /* Платежи ведомости: план и факт правятся раздельно и на месте. Пока факт пуст,
+       сервис в расход не идет — это и есть ответ на вопрос «списалось или нет». */
+    var pay = srows.map(function (x) {
+      var diff = x.fact === null ? null : x.fact - x.planned;
+      var hint = x.auto ? 'проставлено по сроку — проверьте сумму'
+        : (x.fact === null
+            ? (x.next_on ? 'ждем ' + finDate(x.next_on) : 'еще не списалось')
+            : (Math.abs(diff) >= 0.01
+                ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff), 0) + ' к плану'
+                : 'как в плане'));
+      return '<div class="trow fin-grid fsv-grid' + (x.fact !== null ? ' done' : '') +
+        (x.auto ? ' warn' : '') + '">' +
+        '<span class="sv-what"><b>' + esc(x.name) + '</b>' +
+          (x.counterparty ? '<i>' + esc(x.counterparty) + '</i>' : '') + '</span>' +
+        '<span class="sv-in">' + (canFix && open
+          ? '<input class="sv-num" type="number" step="0.01" min="0" data-svplan="' + x.id +
+            '" value="' + x.planned.toFixed(2) + '" title="План: сколько ждем">'
+          : '<span class="num">' + finRub(x.planned) + '</span>') + '</span>' +
+        '<span class="sv-in">' + (canFix && open
+          ? '<input class="sv-num' + (x.fact !== null ? ' is-fact' : '') + '" type="number" ' +
+            'step="0.01" min="0" placeholder="—" data-svfact="' + x.id + '" value="' +
+            (x.fact !== null ? x.fact.toFixed(2) : '') + '" title="Факт: сколько списалось">'
+          : '<span class="num">' + (x.fact !== null ? finRub(x.fact) : '—') + '</span>') + '</span>' +
+        '<span class="sv-hint">' + esc(hint) + '</span>' +
+      '</div>';
     }).join('');
-    var obl = (r.obligations || []).map(function (o) {
+
+    var list = (r.services || []).map(function (x) {
+      var soon = x.active && x.next_on && x.next_on <= today;
+      var row = finSvcRow(srows, x.id);
+      return '<div class="fl-row fl-2' + (soon ? ' warn' : '') + (x.active ? '' : ' muted') +
+        (canFix ? ' click' : '') + '" data-svc="' + x.id + '">' +
+        '<div class="fl-main"><span class="fl-name">' + esc(x.name) + '</span>' +
+          // Метку состояния держим в подстрочнике: в названии она первой попадает
+          // под многоточие на узком экране, и строка теряет смысл.
+          '<span class="fl-sub">' + (x.active ? '' : 'отключен · ') + (x.next_on
+            ? (soon ? 'пора платить — срок был ' + finDate(x.next_on)
+                    : 'следующее списание ' + finDate(x.next_on))
+            : 'дата списания не задана') + ' · ' + esc(finEvery(x)) +
+          (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
+          (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact, 0) : '') +
+          '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
+    }).join('');
+
+    var oblList = (r.obligations || []).map(function (o) {
       var done = o.status === 'погашен' || o.remaining <= 0;
-      return '<div class="fl-row fl-2' + (done ? ' muted' : '') + '">' +
+      var w = o.principal > 0 ? Math.min(100, Math.round(o.paid / o.principal * 100)) : 0;
+      return '<div class="fl-row obl' + (done ? ' muted' : '') + (canFix ? ' click' : '') +
+        '" data-obl="' + o.id + '">' +
         '<div class="fl-main"><span class="fl-name">' + esc(o.title || o.kind) + '</span>' +
-          '<span class="fl-sub">' + esc(o.counterparty || '') +
-          ' · всего ' + finRub(o.principal) + ' · погашено ' + finRub(o.paid) + '</span></div>' +
+          '<span class="fl-sub">' + (done ? 'погашен · ' : '') +
+          esc(o.counterparty || o.kind) +
+          ' · всего ' + finRub(o.principal, 0) + ' · погашено ' + finRub(o.paid, 0) +
+          (o.payment > 0 ? ' · по ' + finRub(o.payment, 0) + ' за ведомость' : ' · все разом') +
+          (o.interest > 0 ? ' · проценты ' + finRub(o.interest, 0) : '') + '</span>' +
+          // Погашенному полоса не нужна: она всегда полная и читается как разделитель.
+          (done ? '' : '<div class="obl-bar"><i style="width:' + w + '%"></i></div>') +
+          '</div>' +
         '<div class="fl-v num">' + finRub(o.remaining) + '</div></div>';
     }).join('');
 
-    view.innerHTML = '<div class="grid">' +
-      '<div class="sp7"><div class="card fin-block">' +
-        '<div class="sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
-          '<div><div class="t">Сервисы</div>' +
-          '<div class="s">регулярные списания: подписки, связь, банк</div></div></div>' +
-        '<div class="fin-list">' + (services || '<div class="empty">Сервисов пока нет.</div>') + '</div>' +
-      '</div></div>' +
-      '<div class="sp5"><div class="card fin-block">' +
-        '<div class="sec-head"><span class="ic">' + ic('shield', 14) + '</span>' +
-          '<div><div class="t">Долги и кредиты</div>' +
-          '<div class="s">остаток едет в следующий период, пока не погашен</div></div></div>' +
-        '<div class="fin-list">' + (obl || '<div class="empty">Обязательств нет.</div>') + '</div>' +
-      '</div></div></div>';
+    var oblPay = orows.map(function (x) {
+      var done = x.status === 'факт';
+      return '<div class="trow fin-grid op-grid' + (done ? ' done' : '') + '">' +
+        '<span class="sv-what"><b>' + esc(x.name) + '</b>' +
+          '<i>' + esc(x.counterparty || '') + (x.counterparty ? ' · ' : '') +
+          (x.part === 'interest' ? 'проценты — идут в P&L' : 'тело — мимо P&L') + '</i></span>' +
+        '<span class="num op-sum">' + finRub(x.amount) + '</span>' +
+        '<span class="op-act">' + (done
+          ? '<span class="fst ok">оплачено</span>' +
+            (canFix && open ? '<button class="qchip mini" data-unpay="' + x.id + '">отменить</button>' : '')
+          : (canFix && open
+              ? '<button class="qchip mini go" data-pay="' + x.id + '">Оплатить</button>'
+              : '<span class="fst wait">план</span>')) + '</span>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp7">' +
+        '<div class="card listcard">' +
+          '<div class="list-tools sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
+            '<div><div class="t">Списания этой ведомости</div>' +
+            '<div class="s">план — сколько ждем, факт — сколько списалось. Пока факт пуст, ' +
+            'сервис в расход не идет</div></div></div>' +
+          (pay || '<div class="empty">Сервисов в этой ведомости нет.</div>') +
+        '</div>' +
+        '<div class="card listcard">' +
+          '<div class="list-tools sec-head"><span class="ic">' + ic('refresh', 14) + '</span>' +
+            '<div><div class="t">Справочник сервисов</div>' +
+            '<div class="s">подписки, связь, банк — то, что списывается само</div></div>' +
+            (canFix ? '<button class="qchip add" id="sv-add">' + ic('plus', 12) +
+              'Новый сервис</button>' : '') + '</div>' +
+          '<div class="fin-list">' + (list ||
+            '<div class="empty">Сервисов пока нет. Заведите первый — он появится строкой ' +
+            'в каждой ведомости.</div>') + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="sp5">' +
+        '<div class="card listcard">' +
+          '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+            '<div><div class="t">Долги и кредиты</div>' +
+            '<div class="s">остаток едет дальше, пока не погашен</div></div>' +
+            (canFix ? '<button class="qchip add" id="ob-add">' + ic('plus', 12) +
+              'Обязательство</button>' : '') + '</div>' +
+          '<div class="fin-list">' + (oblList || '<div class="empty">Обязательств нет.</div>') +
+          '</div>' +
+        '</div>' +
+        '<div class="card listcard">' +
+          '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+            '<div><div class="t">Платежи по обязательствам</div>' +
+            '<div class="s">плановые платежи этой ведомости</div></div></div>' +
+          (oblPay || '<div class="empty">Плановых платежей нет.</div>') +
+        '</div>' +
+      '</div></div>';
+
+    var add = el('sv-add');
+    if (add) add.addEventListener('click', function () { finServiceForm(null); });
+    var oadd = el('ob-add');
+    if (oadd) oadd.addEventListener('click', function () { finObligationForm(null); });
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svc]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-svc');
+          (r.services || []).forEach(function (x) { if (x.id === id) finServiceForm(x); });
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-obl]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-obl');
+          (r.obligations || []).forEach(function (x) { if (x.id === id) finObligationForm(x); });
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svplan],[data-svfact]'),
+        function (i) {
+          i.addEventListener('change', function () {
+            var isPlan = i.hasAttribute('data-svplan');
+            var body = { operation_id: i.getAttribute(isPlan ? 'data-svplan' : 'data-svfact') };
+            body[isPlan ? 'planned' : 'fact'] = i.value === '' ? '0' : i.value;
+            finDo('/admin/api/fin/service/row', 'POST', body, 'Сохранено');
+          });
+          i.addEventListener('keydown', function (e) { if (e.key === 'Enter') i.blur(); });
+        });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-pay]'), function (b) {
+        b.addEventListener('click', function () {
+          var row = b.closest('.op-grid');
+          var what = row ? row.querySelector('b').textContent : 'этот платеж';
+          var sum = row ? row.querySelector('.op-sum').textContent : '';
+          finConfirm('Провести платеж?', 'Платеж «' + what + '» на ' + sum +
+            '. Остаток долга уменьшится. Отменить можно кнопкой рядом со строкой.',
+            'Провести', function () {
+              finDo('/admin/api/fin/obligation/pay', 'POST',
+                    { operation_id: b.getAttribute('data-pay') }, 'Платеж проведен');
+            });
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-unpay]'), function (b) {
+        b.addEventListener('click', function () {
+          finConfirm('Отменить платеж?', 'Строка вернется в план, а сумма — в остаток долга.',
+            'Отменить платеж', function () {
+              finDo('/admin/api/fin/obligation/unpay', 'POST',
+                    { operation_id: b.getAttribute('data-unpay') }, 'Платеж отменен');
+            });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  /* Общая отправка правки ведомости: сохранили — забыли все посчитанное и
+     пересобрали экран. Полумеры тут опасны: одна строка меняет и каскад, и фонды. */
+  function finDo(path, method, body, okText, after) {
+    if (FIN.lineBusy) return;
+    FIN.lineBusy = true;
+    return czSend(path, method, body)
+      .then(function (res) {
+        // Сначала отдаем ответ вызывающему: закрытие периода на этом шаге меняет
+        // выбранную ведомость, и перезагружать надо уже новую, а не прошлую.
+        if (after) after(res);
+        finForget(true);
+        renderAll();
+        if (okText) showToast(okText);
+      })
+      .catch(function (e) { showToast(finLineErr(e)); })
+      .then(function () { FIN.lineBusy = false; });
+  }
+
+  /* Подтверждение опасного шага. Платеж, удаление и закрытие периода меняют деньги —
+     родной confirm() браузера тут выглядит как ошибка сайта, а не как вопрос. */
+  function finConfirm(title, text, okLabel, run) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-title">' + esc(title) + '</div></div></div>' +
+      '<div class="al-body"><div class="fin-note calm">' + esc(text) + '</div></div>' +
+      '<div class="al-foot"><button class="al-cancel" id="fc-no">Отмена</button>' +
+        '<button class="bp al-save" id="fc-yes">' + esc(okLabel) + '</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('fc-no').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('fc-yes').addEventListener('click', function () { close(); run(); });
+  }
+
+  /* Каркас формы ведомости: шапка, поля, ошибка, кнопки. Все правки ведомости
+     выглядят одинаково — человек учится форме один раз. */
+  function finModal(o) {
+    if (document.querySelector('.al-ov')) return null;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">' + esc(o.eyebrow) + '</div>' +
+        '<div class="al-title">' + esc(o.title) + '</div></div>' +
+        '<button class="al-x" id="fm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      (o.sub ? '<div class="al-sub">' + o.sub + '</div>' : '') +
+      '<div class="al-body">' + o.body + '<div class="ct-err" id="fm-err"></div></div>' +
+      '<div class="al-foot">' +
+        (o.del ? '<button class="al-cancel fl-del" id="fm-del">' + esc(o.del) + '</button>' : '') +
+        '<button class="al-cancel" id="fm-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="fm-ok">' + esc(o.ok || 'Сохранить') + '</button>' +
+      '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('fm-x').addEventListener('click', close);
+    el('fm-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    return { ov: ov, close: close, err: el('fm-err') };
+  }
+  function finField(label, inner) {
+    return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+  }
+  function finVal(id) { var e = el(id); return e ? String(e.value).trim() : ''; }
+
+  /* Сервис: название, сумма, срок и периодичность. Все остальное ведомость делает
+     сама — строку в периоде, автопроставление по сроку, перенос даты вперед. */
+  function finServiceForm(svc) {
+    var isNew = !svc;
+    var s = svc || { name: '', counterparty: '', amount: '', next_on: '', every: 1,
+                     unit: 'месяц', active: true };
+    var m = finModal({
+      eyebrow: 'Сервис', title: isNew ? 'Новый сервис' : esc(s.name),
+      sub: 'Когда дата наступит, факт проставится сам плановой суммой — сумму потом ' +
+        'можно поправить. Периодичность нужна, чтобы дата сдвинулась на следующий раз.',
+      del: isNew ? '' : 'Удалить',
+      body:
+        '<div class="al-row">' +
+          finField('Название <i>*</i>', '<input id="sv-name" class="al-in" maxlength="200" ' +
+            'value="' + esc(s.name) + '" placeholder="ChatGPT Plus">') +
+          finField('Получатель', '<input id="sv-who" class="al-in" maxlength="200" value="' +
+            esc(s.counterparty || '') + '" placeholder="OpenAI">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Плановая сумма, ₽ <i>*</i>', '<input id="sv-sum" class="al-in" ' +
+            'type="number" min="0" step="0.01" value="' + (s.amount || '') + '">') +
+          finField('Когда ждем списание', '<input id="sv-next" class="al-in" type="date" ' +
+            'value="' + esc(s.next_on || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Повторяется', '<input id="sv-every" class="al-in" type="number" min="1" ' +
+            'step="1" value="' + (s.every || 1) + '">') +
+          finField('&nbsp;', '<select id="sv-unit" class="al-in">' + FIN_UNITS.map(function (u) {
+            return '<option value="' + u[0] + '"' + ((s.unit || '') === u[0] ? ' selected' : '') +
+              '>' + u[1] + '</option>';
+          }).join('') + '</select>') +
+        '</div>' +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="sv-on"' +
+          (s.active === false ? '' : ' checked') + '>' +
+          '<span>Сервис в работе. Снимите галочку, чтобы он перестал появляться строкой ' +
+          'в новых ведомостях — прошлые останутся как были</span></label>' +
+        (isNew ? '' : '<div id="sv-hist" class="fin-hist">Загружаю историю…</div>'),
+    });
+    if (!m) return;
+    if (!isNew) finLoadSvcHistory(s.id);
+    el('fm-ok').addEventListener('click', function () {
+      var name = finVal('sv-name');
+      if (name.length < 2) { m.err.textContent = 'Впишите название сервиса'; return; }
+      if (!(Number(finVal('sv-sum')) > 0)) {
+        m.err.textContent = 'Впишите плановую сумму больше нуля'; return;
+      }
+      m.close();
+      finDo('/admin/api/fin/service', 'POST', {
+        id: isNew ? null : s.id, period_id: FIN.id, name: name,
+        counterparty: finVal('sv-who'), amount: finVal('sv-sum'),
+        next_on: finVal('sv-next') || null, every: Number(finVal('sv-every')) || 1,
+        unit: finVal('sv-unit') || null, active: el('sv-on').checked,
+      }, isNew ? 'Сервис заведен' : 'Сервис поправлен');
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Удалить сервис?', 'Плановые строки по нему исчезнут. Если по сервису ' +
+        'уже были оплаты, удалить не получится — тогда отключите его.', 'Удалить',
+        function () {
+          finDo('/admin/api/fin/service?id=' + encodeURIComponent(s.id) +
+                '&period_id=' + encodeURIComponent(FIN.id), 'DELETE', null, 'Сервис удален');
+        });
+    });
+  }
+  function finLoadSvcHistory(id) {
+    api('/admin/api/fin/service/history?id=' + encodeURIComponent(id)).then(function (r) {
+      var host = el('sv-hist');
+      if (!host) return;
+      var items = r.items || [];
+      if (!items.length) { host.textContent = 'Платежей еще не было.'; return; }
+      host.innerHTML = '<b>История</b>' + items.slice(0, 8).map(function (h) {
+        return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
+          '<span class="num">план ' + finRub(h.planned, 0) + '</span>' +
+          '<span class="num">' + (h.fact === null ? 'ждем' : 'факт ' + finRub(h.fact, 0)) + '</span>' +
+          (h.diff && Math.abs(h.diff) >= 0.01
+            ? '<span class="num ' + (h.diff > 0 ? 'up' : '') + '">' +
+              (h.diff > 0 ? '+' : '−') + finRub(Math.abs(h.diff), 0) + '</span>'
+            : '<span></span>') + '</div>';
+      }).join('');
+    }).catch(function () {
+      var host = el('sv-hist');
+      if (host) host.textContent = 'История не загрузилась.';
+    });
+  }
+
+  /* Долг или кредит. Разница одна, но важная: у кредита есть проценты, и они идут
+     в P&L, а тело — мимо. Поэтому поле процентов появляется только у кредита. */
+  function finObligationForm(obl) {
+    var isNew = !obl;
+    var o = obl || { kind: 'долг', title: '', counterparty: '', principal: '',
+                     payment: '', interest: '', note: '' };
+    var m = finModal({
+      eyebrow: 'Обязательство', title: isNew ? 'Новое обязательство' : esc(o.title),
+      sub: 'Тело гасится платежом за ведомость, пока не закроется. Ноль в платеже ' +
+        'значит «все разом». Долг в юанях переведите в рубли и впишите итог.',
+      del: isNew ? '' : 'Удалить',
+      body:
+        '<div class="al-row">' +
+          finField('Тип <i>*</i>', '<select id="ob-kind" class="al-in">' +
+            '<option value="долг"' + (o.kind === 'долг' ? ' selected' : '') + '>Долг</option>' +
+            '<option value="кредит"' + (o.kind === 'кредит' ? ' selected' : '') +
+            '>Кредит (с процентами)</option></select>') +
+          finField('Название <i>*</i>', '<input id="ob-title" class="al-in" maxlength="200" ' +
+            'value="' + esc(o.title) + '" placeholder="Долг подрядчику">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Кому / кредитор', '<input id="ob-who" class="al-in" maxlength="200" ' +
+            'value="' + esc(o.counterparty || '') + '">') +
+          finField('Тело, ₽ <i>*</i>', '<input id="ob-body" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (o.principal || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Платеж за ведомость, ₽', '<input id="ob-pay" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (o.payment || '') + '" placeholder="0 — все разом">') +
+          '<label class="al-f" id="ob-int-wrap"><span class="al-l">Проценты за ведомость, ₽</span>' +
+            '<input id="ob-int" class="al-in" type="number" min="0" step="0.01" value="' +
+            (o.interest || '') + '"></label>' +
+        '</div>' +
+        (isNew ? '' :
+          '<div class="fin-note calm">Погашено ' + finRub(o.paid) + ' из ' +
+          finRub(o.principal) + ', осталось ' + finRub(o.remaining) + '.</div>' +
+          '<div id="ob-hist" class="fin-hist">Загружаю историю…</div>'),
+    });
+    if (!m) return;
+    var kind = el('ob-kind'), wrap = el('ob-int-wrap');
+    var toggle = function () { wrap.style.display = kind.value === 'кредит' ? '' : 'none'; };
+    kind.addEventListener('change', toggle); toggle();
+    if (!isNew) finLoadOblHistory(o.id);
+
+    el('fm-ok').addEventListener('click', function () {
+      var title = finVal('ob-title');
+      if (title.length < 2) { m.err.textContent = 'Впишите название обязательства'; return; }
+      if (!(Number(finVal('ob-body')) > 0)) {
+        m.err.textContent = 'Тело должно быть больше нуля'; return;
+      }
+      m.close();
+      finDo('/admin/api/fin/obligation', 'POST', {
+        id: isNew ? null : o.id, period_id: FIN.id, kind: kind.value, title: title,
+        counterparty: finVal('ob-who'), principal: finVal('ob-body'),
+        payment: finVal('ob-pay') || '0', interest: finVal('ob-int') || '0',
+      }, isNew ? 'Обязательство заведено' : 'Обязательство поправлено');
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Удалить обязательство?', 'Плановые платежи по нему тоже исчезнут. ' +
+        'Если платежи уже проводили, удалить не получится.', 'Удалить', function () {
+          finDo('/admin/api/fin/obligation?id=' + encodeURIComponent(o.id), 'DELETE',
+                null, 'Обязательство удалено');
+        });
+    });
+  }
+  function finLoadOblHistory(id) {
+    api('/admin/api/fin/obligation/history?id=' + encodeURIComponent(id)).then(function (r) {
+      var host = el('ob-hist');
+      if (!host) return;
+      var items = r.items || [];
+      if (!items.length) {
+        host.textContent = 'Платежей пока не было. Первый появится, когда проведете оплату.';
+        return;
+      }
+      host.innerHTML = '<b>История погашения</b>' + items.slice(0, 8).map(function (h) {
+        return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
+          '<span class="num">было ' + finRub(h.was, 0) + '</span>' +
+          '<span class="num">−' + finRub(h.paid, 0) + '</span>' +
+          '<span class="num">' + finRub(h.left, 0) +
+          (h.status === 'факт' ? '' : ' <i>план</i>') + '</span></div>';
+      }).join('');
+    }).catch(function () {
+      var host = el('ob-hist');
+      if (host) host.textContent = 'История не загрузилась.';
+    });
+  }
+
+  /* ── Итоги периода ──────────────────────────────────────────────────────────
+     Три вопроса в одном экране, потому что их задают подряд: здоров ли центр
+     (показатели), откуда взялась прибыль (мост от выручки к операционной), и куда
+     делись деньги со счета (движение). Последнее — главное недоразумение
+     ведомости: остаток на счете и прибыль не равны, и экран обязан объяснить
+     разницу словами, а не оставлять человека с двумя разными числами. */
+  function renderFinMetrics(view) {
+    if (!FIN.sheet) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSheet(); return;
+    }
+    if (FIN.sheet === 'none') return finErrView(view);
+    if (!FIN.pnlp) finLoadPnlPeriod();
+    var s = FIN.sheet, m = s.metrics || {}, cash = s.cash || {}, dist = s.distribution || {};
+    var c = s.cascade;
+    var t = (FIN.pnlp && FIN.pnlp !== 'none' && FIN.pnlp.totals) ? FIN.pnlp.totals : null;
+    var vtb = null;
+    (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
+
+    var bar = statBar([
+      { label: 'Выручка за период', value: finRub(m.revenue, 0), sub: 'доход, пришедший за ведомость' },
+      { label: 'Маржинальность', value: finPct(m.margin_pct), sub: 'операционная прибыль к выручке' },
+      { label: 'Чистая прибыль', value: finRub(m.profit, 0), sub: 'после всех расходов и фондов' },
+      { label: 'Рентабельность', value: finPct(m.profit_pct), sub: 'чистая прибыль к выручке' },
+    ]);
+
+    var kpi = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('bolt', 14) + '</span>' +
+        '<div><div class="t">Здоровье центра</div>' +
+        '<div class="s">шесть цифр, по которым видно, что происходит с деньгами</div></div></div>' +
+      '<div class="fin-kv">' +
+        '<div class="fkv"><span>Выручка за период</span><b class="num">' + finRub(m.revenue) + '</b></div>' +
+        '<div class="fkv"><span>Маржинальность</span><b class="num">' + finPct(m.margin_pct) + '</b></div>' +
+        '<div class="fkv"><span>Чистая прибыль</span><b class="num">' + finRub(m.profit) + '</b></div>' +
+        '<div class="fkv"><span>Рентабельность</span><b class="num">' + finPct(m.profit_pct) + '</b></div>' +
+        '<div class="fkv"><span>Денег в фондах</span><b class="num">' + finRub(m.in_funds) + '</b></div>' +
+        '<div class="fkv total"><span>Остаток на р/с</span><b class="num">' +
+          finRub(vtb ? vtb.live : m.on_vtb) + '</b></div>' +
+      '</div></div>';
+
+    /* Мост от выручки к операционной прибыли. Считает P&L (те же статьи, что в
+       отчете), поэтому без него блок не рисуем: две методики рядом — спор о том,
+       чья цифра верная. */
+    var bridge = '';
+    if (t) {
+      var steps = [
+        { n: 'Выручка', v: t.revenue, cls: 'in' },
+        { n: 'Переменные расходы', v: -t.variable, cls: 'out' },
+        { n: 'Валовая прибыль', v: t.gross, cls: 'sum', why: finPct(t.gross_pct) + ' от выручки' },
+        { n: 'Постоянные расходы', v: -t.fixed, cls: 'out' },
+        { n: 'Операционная прибыль', v: t.operating, cls: 'total',
+          why: finPct(t.margin_pct) + ' от выручки — это и есть «маржинальность»' },
+      ];
+      var max = 1;
+      steps.forEach(function (x) { max = Math.max(max, Math.abs(x.v)); });
+      bridge = '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+          '<div><div class="t">От выручки к операционной прибыли</div>' +
+          '<div class="s">по статьям отчета, за эту ведомость</div></div></div>' +
+        '<div class="fin-bridge">' + steps.map(function (x) {
+          var w = Math.max(2, Math.round(Math.abs(x.v) / max * 100));
+          return '<div class="fb-row ' + x.cls + '">' +
+            '<div class="fb-l"><span>' + esc(x.n) + '</span>' +
+              (x.why ? '<i>' + esc(x.why) + '</i>' : '') + '</div>' +
+            '<div class="fb-bar"><i style="width:' + w + '%"></i></div>' +
+            '<div class="fb-v num">' + finRub(x.v, 0) + '</div></div>';
+        }).join('') + '</div></div>';
+    }
+
+    var fundSplit = (s.funds || []).filter(function (f) {
+      return f.kind === 'фонд' && f.added > 0;
+    }).map(function (f) {
+      return '<div class="fkv sub"><span>→ в фонд «' + esc(f.name) + '»</span>' +
+        '<b class="num">' + finRub(-f.added) + '</b></div>';
+    }).join('');
+
+    var gap = (vtb ? vtb.live : cash.flow) - c.profit;
+    var flow = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+        '<div><div class="t">Куда ушли деньги со счета</div>' +
+        '<div class="s">движение по расчетному счету за ведомость</div></div></div>' +
+      '<div class="fin-kv">' +
+        '<div class="fkv"><span>Пришло на р/с</span><b class="num">' + finRub(cash.in) + '</b></div>' +
+        '<div class="fkv"><span>Ушло наружу</span><b class="num">' + finRub(-cash.out) + '</b></div>' +
+        '<div class="fkv"><span>Отложено в фонды</span><b class="num">' + finRub(-cash.to_funds) + '</b></div>' +
+        fundSplit +
+        '<div class="fkv total"><span>Остаток на счете</span><b class="num">' +
+          finRub(vtb ? vtb.live : cash.flow) + '</b></div>' +
+      '</div>' +
+      (Math.abs(gap) >= 0.01
+        ? '<div class="fin-note">' + ic('alert', 13) +
+          'Остаток на счете и прибыль — разные вещи. На счете ' +
+          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
+          '. Разница ' + finRub(Math.abs(gap), 0) + ' — это деньги, которые лежат на счете, ' +
+          'но уже обещаны фондам, и остаток с прошлых периодов.</div>'
+        : '') +
+    '</div>';
+
+    var split = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Что осталось людям</div>' +
+        '<div class="s">как заработанное делится в конце ведомости</div></div></div>' +
+      /* Строку «к распределению» из finmodel.pnl_distribution тут не показываем: она
+         считается как «заработали минус осело в фондах», а отчисления в фонды уже
+         вычтены внутри чистой прибыли. На демо-числах она давала −124 040 ₽ рядом с
+         прибылью 84 280 ₽ и дивидендами 67 424 ₽ — арифметика, которую человек не
+         сойдет. Делим то, что делится по каскаду: прибыль → флекс → дивиденды.
+         Фонды стоят рядом справкой, а не шагом вычитания. */
+      '<div class="fin-kv">' +
+        '<div class="fkv"><span>Чистая прибыль</span><b class="num">' + finRub(dist.earned) + '</b></div>' +
+        '<div class="fkv"><span>Флекс проджекта</span><b class="num">' + finRub(dist.flex) + '</b></div>' +
+        '<div class="fkv total"><span>Дивиденды</span><b class="num">' + finRub(dist.dividends) + '</b></div>' +
+        '<div class="fkv sub"><span>Осело в фондах за период</span><b class="num">' +
+          finRub(dist.in_funds) + '</b></div>' +
+      '</div>' +
+      '<div class="fin-note calm">' + ic('check', 13) +
+        'Фонды уже вычтены из прибыли — они не делятся, а лежат на своих счетах.</div>' +
+    '</div>';
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp7">' + (bridge || kpi) + flow + '</div>' +
+      '<div class="sp5">' + (bridge ? kpi : '') + split + '</div></div>';
     pageAnim(view);
   }
 

@@ -104,7 +104,11 @@ a { color: inherit; text-decoration: none; }
 .tab:hover { color: var(--ink); }
 .tab.on { background: var(--blue); color: #fff; }
 .tab .n { opacity: .6; margin-left: 5px; font-size: 12px; }
-.tbr { display: flex; align-items: center; gap: 11px; }
+/* Правая часть шапки не сжимается: в финансах вкладки ведомостей длинные и раньше
+   рвали имя пользователя на три строки. Сжимается и скроллится список вкладок. */
+.tbr { display: flex; align-items: center; gap: 11px; flex: none; }
+.topbar > .tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.topbar > .tabs::-webkit-scrollbar { height: 0; }
 .icocirc { width: 38px; height: 38px; border-radius: 50%; background: var(--fill);
   display: grid; place-items: center; color: var(--ink-2); cursor: pointer; transition: .15s; }
 .icocirc:hover { background: #ECEEF1; }
@@ -117,8 +121,8 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(135deg, #2F6BFF, #1C2B4A); display: grid; place-items: center;
   color: #fff; font-weight: 600; font-size: 12.5px; flex: none; }
 .profile .pinfo { text-align: left; }
-.profile .pn { font-size: 13px; font-weight: 600; line-height: 1.2; }
-.profile .pe { font-size: 11.5px; color: var(--ink-3); }
+.profile .pn { font-size: 13px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+.profile .pe { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 .profile .pchev { color: var(--ink-3); display: flex; transition: transform .2s; }
 .profile.open .pchev { transform: rotate(180deg); }
 
@@ -4382,6 +4386,120 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 @media (max-width: 760px) {
   .trow.fe-grid { grid-template-columns: 1fr auto !important; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
+}
+
+/* ── Управление ведомостью ──────────────────────────────────────────────────
+   Правка живет там, где видно ее последствие: правило фонда — в строке каскада,
+   сверка — в строке счета. Отдельного «режима редактирования» нет: строка,
+   которую можно поправить, показывает карандаш при наведении, остальные молчат. */
+.fin-perbar { display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 15px 24px; margin-bottom: 16px; }
+.fp-name { display: flex; align-items: center; gap: 9px;
+  font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.fp-sub { margin-top: 3px; font-size: 12px; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+.fp-act { display: flex; gap: 8px; flex: none; }
+/* Закрытие периода — главное действие экрана и единственное необратимое:
+   единственная плотная кнопка среди чипов. */
+.qchip.go { background: var(--navy); border-color: transparent; color: #fff; }
+.qchip.go:hover { background: var(--ink); color: #fff; }
+.qchip.mini { padding: 4px 9px; font-size: 11.5px; }
+
+.fc-row.click, .fl-row.click { cursor: pointer; }
+.fc-row.click:hover .fc-name, .fl-row.click:hover .fl-name { color: var(--blue); }
+.fc-pen { display: inline-flex; margin-left: 6px; color: var(--ink-3); opacity: 0;
+  transition: opacity .15s var(--ease); vertical-align: -1px; }
+.fc-row.click:hover .fc-pen { opacity: 1; }
+.obl-bar { height: 3px; margin-top: 7px; border-radius: var(--r-pill);
+  background: var(--line); overflow: hidden; }
+.obl-bar i { display: block; height: 100%; border-radius: inherit; background: var(--navy);
+  transition: width .9s var(--ease); }
+
+/* Списания ведомости: план и факт стоят рядом и правятся на месте — вопрос
+   «сколько ждали / сколько списалось» задают об одной строке, а не о двух. */
+.fsv-grid { grid-template-columns: 1.5fr 128px 128px 1fr; }
+/* Платеж по обязательству живет в узкой колонке: три колонки в ряд там режут
+   название до многоточия. Сумма и действие уходят под собой, а название дышит. */
+.op-grid { grid-template-columns: 1fr auto; gap: 4px 14px; height: auto;
+  padding-top: 12px; padding-bottom: 12px; align-items: center; }
+.op-grid .sv-what { grid-row: 1 / span 2; }
+.op-grid .sv-what b { white-space: normal; }
+.op-grid .op-sum { grid-column: 2; grid-row: 1; }
+.op-grid .op-act { grid-column: 2; grid-row: 2; }
+/* Список внутри карточки-списка: у самой карточки полей нет — они у строк .trow.
+   Строкам .fl-row поля нужны свои, иначе суммы упираются в край карточки. */
+.listcard .fin-list { padding: 2px 20px 10px; }
+/* Заголовок карточки-списка с иконкой. .list-tools переносит содержимое, и на
+   телефоне иконка оставалась одна на строке, а текст уезжал вниз. Иконка не
+   сжимается, текст занимает остаток строки, кнопка переносится под них. */
+.list-tools.sec-head > .ic { flex: none; }
+.list-tools.sec-head > div { flex: 1 1 140px; min-width: 0; }
+.sv-what { min-width: 0; }
+.sv-what b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-what i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal;
+  color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-in { display: flex; justify-content: flex-end; }
+.sv-num { width: 100%; max-width: 116px; padding: 7px 10px; text-align: right;
+  border: 1px solid var(--line-2); border-radius: 9px; background: var(--card);
+  color: var(--ink); font: 700 13px 'Manrope', sans-serif;
+  font-feature-settings: 'tnum'; transition: border-color .15s var(--ease); }
+.sv-num:focus { outline: 0; border-color: var(--blue); }
+.sv-num.is-fact { color: var(--green-ink); border-color: var(--green-soft); }
+.sv-hint { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+.trow.fsv-grid.warn .sv-hint { color: var(--amber-ink); font-weight: 600; }
+.trow.fsv-grid.done .sv-what b, .trow.op-grid.done .sv-what b { color: var(--ink-2); }
+.op-sum { text-align: right; font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; }
+.op-act { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+.fkv.sub { padding-left: 16px; font-size: 12px; color: var(--ink-3); }
+.fkv.sub b { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+
+/* Мост от выручки к операционной прибыли: полоса показывает вес шага, а не просто
+   украшает — по ней видно, что съедает результат. */
+.fin-bridge { margin-top: 14px; }
+.fb-row { display: grid; grid-template-columns: 1.1fr 1fr auto; align-items: center;
+  gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fb-row:last-child { border-bottom: 0; }
+.fb-l span { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.fb-l i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal;
+  color: var(--ink-3); }
+.fb-bar { height: 6px; border-radius: var(--r-pill); background: var(--line);
+  overflow: hidden; }
+.fb-bar i { display: block; height: 100%; border-radius: inherit; background: var(--navy);
+  transition: width .9s var(--ease); }
+.fb-row.out .fb-bar i { background: var(--line-2); }
+.fb-v { text-align: right; font-size: 14px; font-weight: 700; letter-spacing: -.02em;
+  white-space: nowrap; }
+.fb-row.out .fb-v { color: var(--ink-2); }
+.fb-row.total .fb-v { font-size: 19px; font-weight: 800; }
+
+.ru-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* История платежей внутри формы: справка, а не предупреждение — тон спокойный. */
+.fin-hist { margin-top: 14px; padding: 11px 14px; border-radius: 11px;
+  background: var(--fill); color: var(--ink-2); font-size: 12px; }
+.fin-hist b { display: block; margin-bottom: 6px;
+  font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.sv-h { display: grid; grid-template-columns: 1.3fr 1fr 1fr .9fr; gap: 10px;
+  padding: 5px 0; border-top: 1px solid var(--line); font-feature-settings: 'tnum'; }
+.sv-h:first-of-type { border-top: 0; }
+.sv-h .num { text-align: right; }
+.sv-h .num.up { color: var(--red-ink); }
+.sv-h i { font-style: normal; color: var(--ink-3); }
+.al-card.ct-slim { max-width: 440px; }
+
+@media (max-width: 1100px) {
+  .trow.fsv-grid { grid-template-columns: 1.4fr 112px 112px !important; }
+  .fsv-grid .sv-hint { display: none; }
+}
+@media (max-width: 760px) {
+  .fin-perbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .fp-act { width: 100%; }
+  .fp-act .qchip { flex: 1; justify-content: center; }
+  .trow.fsv-grid { grid-template-columns: 1fr 96px 96px !important; gap: 6px 8px; }
+  .fb-row { grid-template-columns: 1fr auto; gap: 4px 12px; }
+  .fb-bar { grid-column: 1 / span 2; grid-row: 2; }
 }
 
 /* Разделитель в ряду фильтров: тип операции и раздел — разные вопросы, и одним
