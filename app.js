@@ -7735,6 +7735,10 @@
     }
     if (FIN.sheet === 'none') return finErrView(view);
     var s = FIN.sheet, c = s.cascade, m = s.metrics || {}, cash = s.cash || {};
+    // EBITDA считает P&L (`pnl_totals`) — тянем итоги периода лениво, как «Итоги».
+    // Загрузчик сам перерисует «Ведомость», когда ответ придет.
+    if (!FIN.pnlp) finLoadPnlPeriod();
+    var t = (FIN.pnlp && FIN.pnlp !== 'none' && FIN.pnlp.totals) ? FIN.pnlp.totals : null;
     var funds = (s.rules || []).filter(function (r) {
       return r.account_id !== 'shortterm' && r.account_id !== 'flex';
     });
@@ -7834,14 +7838,25 @@
         '</div>';
       }).join('') + '</div></div>';
 
+    // Cash Flow как на старом сайте (решение Романа 17.08.2026: не отдельной страницей,
+    // а тут): отложенное показываем с разбивкой по каждому фонду, а под итогом — плашку
+    // «остаток не равен прибыли», иначе человек читает остаток счета как заработок.
+    var fundSplit = (s.funds || []).filter(function (f) {
+      return f.kind === 'фонд' && f.added > 0;
+    }).map(function (f) {
+      return '<div class="fkv sub"><span>→ в фонд «' + esc(f.name) + '»</span>' +
+        '<b class="num">' + finRub(-f.added) + '</b></div>';
+    }).join('');
+    var cashGap = (vtb ? vtb.live : cash.flow) - c.profit;
     var cashCard = '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
-        '<div><div class="t">Движение денег</div>' +
+        '<div><div class="t">Движение денег (Cash Flow)</div>' +
         '<div class="s">это не прибыль: пришло, ушло и что лежит на расчетном счете</div></div></div>' +
       '<div class="fin-kv">' +
         '<div class="fkv"><span>Пришло на р/с</span><b class="num">' + finRub(cash.in) + '</b></div>' +
         '<div class="fkv"><span>Ушло наружу</span><b class="num">' + finRub(-cash.out) + '</b></div>' +
         '<div class="fkv"><span>Ушло в фонды</span><b class="num">' + finRub(-cash.to_funds) + '</b></div>' +
+        fundSplit +
         /* Движение и остаток — разные вещи, и подписаны они по-разному нарочно
            (правило владельца: «пусть разные, но подпиши четко»). Движение — что
            случилось за период; остаток — что лежит на счете с учетом прошлого. */
@@ -7851,7 +7866,40 @@
           : '') +
         '<div class="fkv total"><span>Остаток на счете</span><b class="num">' +
           finRub(vtb ? vtb.live : cash.flow) + '</b></div>' +
-      '</div></div>';
+      '</div>' +
+      (Math.abs(cashGap) >= 0.01
+        ? '<div class="fin-note">' + ic('alert', 13) +
+          'Остаток на счете не равен прибыли. На счете ' +
+          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
+          '. Разница ' + finRub(Math.abs(cashGap), 0) + ' — деньги, что лежат на счете, ' +
+          'но уже обещаны фондам, плюс остаток с прошлых периодов.</div>'
+        : '') +
+    '</div>';
+
+    /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
+       прибыль до процентов и налогов — тот же результат, к которому ведет мост в
+       «Итогах». Считает P&L (`pnl_totals`), без него блок не рисуем: две методики
+       рядом — спор, чья цифра верная. Маркетинг к выручке берем как траты фонда
+       маркетинга за период к доходу — та же метрика эффективности, что на старом сайте. */
+    var mktFund = (s.funds || []).filter(function (f) {
+      return f.kind === 'фонд' && /аркетинг/.test(f.name);
+    })[0];
+    var opex = t ? -((t.variable || 0) + (t.fixed || 0)) : 0;
+    var ebitdaCard = t
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+          '<div><div class="t">EBITDA</div>' +
+          '<div class="s">операционная прибыль за ведомость, до процентов и налогов</div></div></div>' +
+        '<div class="fin-kv">' +
+          '<div class="fkv total"><span>EBITDA</span><b class="num">' + finRub(t.operating) + '</b></div>' +
+          '<div class="fkv"><span>EBITDA margin</span><b class="num">' + finPct(t.margin_pct) + '</b></div>' +
+          '<div class="fkv"><span>Операционные расходы</span><b class="num">' + finRub(opex) + '</b></div>' +
+          (t.revenue && mktFund
+            ? '<div class="fkv"><span>Маркетинг к выручке</span><b class="num">' +
+              finPct(mktFund.spent / t.revenue * 100) + '</b></div>'
+            : '') +
+        '</div></div>'
+      : '';
 
     var warn = (s.warnings || []).length
       ? '<div class="card fin-block">' +
@@ -7905,7 +7953,7 @@
 
     view.innerHTML = bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + finAccountsCard(s, editable) + warn +
+      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + finAccountsCard(s, editable) + warn +
       '</div></div>';
 
     if (editable) {
