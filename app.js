@@ -14744,6 +14744,49 @@
   /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
      один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
      полоска по дням и распределение по навыкам, без таблиц. */
+  /* ── Блок «Интенсив DET» в разделе «Английский» ──
+     Интенсив живет отдельным приложением: там свои ученики и свои уроки, связи с
+     карточкой нет. Бэкенд сводит людей по телефону, нику и почте и говорит, чем сшил
+     (`match`); контакта в карточке может не быть вовсе — тогда связывает менеджер
+     кнопкой, и его слово сильнее автоматики. Блок показываем ВСЕГДА: «не нашли» —
+     это тоже ответ, и за ним есть действие. */
+  var INT_MATCH = {
+    manual: 'связал менеджер вручную',
+    login:  'по входу в интенсив — телеграм или почта',
+    phone:  'по телефону из карточки',
+    nick:   'по телеграм-нику из карточки',
+    email:  'по почте из карточки',
+  };
+  function detIntensive(it) {
+    var head = '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>';
+    if (!it) {
+      return head + '<div class="field-empty">Интенсив сейчас недоступен — его страница живет ' +
+        'отдельным приложением.</div></div>';
+    }
+    if (!it.found) {
+      return head +
+        '<div class="int-none">Этого человека на интенсиве не нашли. Ищем по телефону, ' +
+        'телеграм-нику и почте из карточки — если контакта тут нет, найдите его в списке сами.</div>' +
+        '<div class="int-find"><button class="bp ghost sm" id="int-find">' + ic('search', 13) +
+          'Найти на интенсиве</button></div>' +
+        '<div id="int-list"></div></div>';
+    }
+    return head +
+      '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
+      ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
+      (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
+      (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Доступ к интенсиву</div>' +
+          '<div class="det-sw-s">' + esc(it.name || '') +
+            (it.contact ? ' · ' + esc(it.contact) : '') +
+            '. Открытый доступ у оплатившего снять нельзя.</div></div>' +
+        '<button type="button" class="pd-sw' + (it.has_access ? ' on' : '') + '" id="int-sw">' +
+          '<span class="pd-sw-l">' + (it.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-by">' + esc(INT_MATCH[it.match] || 'сведено автоматически') +
+        ' · <button class="int-unlink" id="int-unlink">это не он</button></div></div>';
+  }
   function detPractice(pr, opts) {
     if (!pr.total) return '';
     opts = opts || {};
@@ -14962,15 +15005,7 @@
 
     var practice = detPractice(b.practice || {});
 
-    var it = b.intensive;
-    var intensive = it
-      ? '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>' +
-        '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
-        ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
-        (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
-        (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
-        '<div class="det-sw-by">свели по телефону — интенсив живет отдельным приложением</div></div>'
-      : '';
+    var intensive = detIntensive(b.intensive);
 
     return head + hero +
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
@@ -15976,6 +16011,46 @@
     if (sp) sp.addEventListener('click', function () {
       post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
+    });
+
+    /* интенсив DET: доступ, ручная связка и список учеников для нее */
+    var it = b.intensive || {};
+    var isw = el('int-sw');
+    if (isw) isw.addEventListener('click', function () {
+      post('/admin/api/intensive/students/' + it.student_id + '/access', { open: !it.has_access },
+           it.has_access ? 'Доступ к интенсиву закрыт' : 'Доступ к интенсиву открыт');
+    });
+    var iun = el('int-unlink');
+    if (iun) iun.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/intensive/link', { student_id: null }, 'Связка снята');
+    });
+    var ifind = el('int-find');
+    if (ifind) ifind.addEventListener('click', function () {
+      var host2 = el('int-list'); if (!host2) return;
+      ifind.disabled = true;
+      host2.innerHTML = '<span class="shim" style="display:block;width:70%;height:12px;border-radius:6px"></span>';
+      api('/admin/api/intensive/students?limit=200').then(function (r) {
+        var items = (r && r.items) || [];
+        host2.innerHTML = items.length
+          ? '<div class="int-rows">' + items.map(function (s) {
+              return '<div class="int-row"><div class="int-b"><div class="int-n">' + esc(s.name || 'Без имени') +
+                '</div><div class="int-m">' + esc(s.contact || '') +
+                ' · ' + (s.has_access ? 'доступ открыт' : 'доступа нет') +
+                ' · уроков ' + (s.results_n || 0) + '</div></div>' +
+                '<button class="bp ghost sm" data-link="' + esc(s.id) + '">Это он</button></div>';
+            }).join('') + '</div>'
+          : '<div class="field-empty">На интенсиве пока никто не зарегистрирован.</div>';
+        Array.prototype.forEach.call(host2.querySelectorAll('[data-link]'), function (btn) {
+          btn.addEventListener('click', function () {
+            post('/admin/api/leads/' + id + '/intensive/link',
+                 { student_id: btn.getAttribute('data-link') }, 'Связали с учеником интенсива');
+          });
+        });
+      }).catch(function (e) {
+        ifind.disabled = false;
+        host2.innerHTML = '<div class="field-empty">Список не загрузился' +
+          (e && e.message === '403' ? '' : ' — попробуйте еще раз') + '.</div>';
+      });
     });
 
     var tsel = el('det-teacher');

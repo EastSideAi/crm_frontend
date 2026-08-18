@@ -3929,6 +3929,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-link-m { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
 .det-pr { font-size: 13px; color: var(--ink-2); }
 
+/* интенсив DET: связка карточки с учеником отдельного приложения */
+.int-none { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.int-find { margin-top: 12px; }
+.int-unlink { font: inherit; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.int-unlink:hover { color: var(--blue); }
+.int-rows { margin-top: 12px; display: flex; flex-direction: column; }
+.int-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+.int-row:first-child { border-top: 0; }
+.int-b { flex: 1; min-width: 0; }
+.int-n { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.int-m { margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+
 /* занятия в тренажерах: не разбор заданий, а ответ на «живой ученик или бросил» */
 .det-prl { margin-top: 20px; }
 .det-days { display: flex; flex-wrap: wrap; gap: 5px; }
