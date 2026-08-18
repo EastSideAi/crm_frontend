@@ -34,6 +34,7 @@
     drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
+    leadConv: {},       // переписка бота, сведенная с карточкой лида: { session_id: ответ | 'load' }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
@@ -103,7 +104,23 @@
     tg_nudge_sent: 'бот напомнил о записи',
     magnet_registered: 'забрал бесплатный мини-курс',
     magnet_progress: 'мини-курс: прогресс',
+    course_paid: 'оплатил курс',
+    course_access_granted: 'открыт доступ к курсу',
+    course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    // Раньше эти события показывались в ленте сырым английским именем: человек читал
+    // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
+    lead_created_bot: 'написал боту',
+    lead_created_manual: 'заведен в CRM вручную',
+    lead_name_bot: 'бот узнал имя',
+    dormant_no_anketa_sent: 'бот напомнил про анкету',
+    geo: 'определен город',
+    det_test_started: 'начал тест по английскому',
+    webinar_registered: 'записался на вебинар',
+    webinar_comment: 'написал в чате вебинара',
+    call_reminder_sent: 'напомнили о созвоне',
+    offer_paid: 'оплатил счет',
+    hsk_signup: 'записался на HSK',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -111,10 +128,18 @@
     if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
     if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
     if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'course_paid' || e.type === 'course_access_granted' || e.type === 'course_access_closed') {
+      if (p.title) label += ' «' + p.title + '»';
+      if (e.type === 'course_paid' && p.amount) label += ', ' + p.amount + ' ₽';
+      if (p.by) label += ' — ' + p.by;
+    }
     if (e.type === 'magnet_progress') {
       label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
+    if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
+    if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -13429,39 +13454,82 @@
     });
   }
 
-  /* ── РАЗДЕЛ «Диалог» в карточке лида (демо) ── */
+  /* ── РАЗДЕЛ «Диалог» в карточке лида ──
+     Та же переписка, что в «Диалогах», только рядом с человеком. Связи «карточка ↔
+     диалог бота» в базе нет: карточка живет в анкетах, переписка — в таблицах бота, и
+     заводятся они порознь. Сводит их бэкенд (по телеграму, аккаунту платформы и нику) и
+     говорит, чем именно сшил, — по нику бывает мимо, менеджер должен это видеть.
+     Отправка идет той же ручкой, что из «Диалогов»: вторая копия отправки разъехалась бы
+     с первой, а клиент получил бы два разных поведения бота. */
+  function leadConvLoad(id) {
+    if (state.leadConv[id]) return;
+    state.leadConv[id] = 'load';
+    api('/admin/api/leads/' + id + '/conversation').then(function (r) {
+      state.leadConv[id] = r || { conversations: [], messages: [] };
+    }).catch(function (e) {
+      state.leadConv[id] = { conversations: [], messages: [], error: (e && e.message) || 'err' };
+    }).then(function () {
+      if (state.drawerId === id && state.modalSection === 'dialog') renderModalContent();
+    });
+  }
+  function leadConvMsgs(d) {
+    return (d.messages || []).map(function (m) {
+      var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
+      return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
+    });
+  }
   function buildDialog(ctx) {
-    var l = ctx.lead || ctx.base;
-    var dlg = getDialog(l.crm ? l : ctx.base);
-    var aiOn = dlg.ai_on;
-    var thread = dlg.messages.map(function (m) {
-      var side = m.from === 'client' ? 'in' : 'out';
-      var tag = m.from === 'bot' ? '<span class="msg-by ai">' + ic('bot', 11) + 'AI-бот</span>'
-        : m.from === 'manager' ? '<span class="msg-by hum">' + ic('hand', 11) + 'Менеджер</span>' : '';
-      return '<div class="msg ' + side + (m.from === 'manager' ? ' mgr' : '') + '">' +
-        (tag ? '<div class="msg-h">' + tag + '</div>' : '') +
-        '<div class="msg-b">' + esc(m.text) + '</div><div class="msg-t num">' + fmtWhen(m.at) + '</div></div>';
-    }).join('');
-    if (dlg.handed) thread += '<div class="msg-sys">' + ic('hand', 12) + 'Диалог передан менеджеру</div>';
+    var id = ctx.id;
+    var d = state.leadConv[id];
+    if (!d) { leadConvLoad(id); d = 'load'; }
+    var head = '<div class="m-ctitle">Диалог</div>' +
+      '<div class="m-csub">Переписка человека с ботом — та же, что в разделе «Диалоги». ' +
+        'Ответите отсюда — сообщение уйдет ему тем же каналом, а бот в этом диалоге замолчит.</div>';
 
-    var handoffBanner = (dlg.handoff_req && !dlg.handed)
-      ? '<div class="handoff-banner">' + ic('hand', 14) + '<div><b>Клиент просит менеджера</b><span>бот продолжает отвечать. Возьми диалог, когда готов.</span></div></div>' : '';
+    if (d === 'load') {
+      return head + '<div class="m-dlg"><div class="m-dlg-thread">' + buildThread(null) + '</div></div>' +
+        buildNotifyFold(id);
+    }
+    if (d.error === '403') {
+      return head + '<div class="field-empty">Переписка клиентов доступна тем, у кого открыт раздел «Диалоги».</div>';
+    }
+    if (d.error) {
+      return head + '<div class="field-empty">Не удалось загрузить переписку — бот сейчас недоступен.</div>' +
+        buildNotifyFold(id);
+    }
+    var c = (d.conversations || [])[0];
+    if (!c) {
+      return head + '<div class="m-dlg-none">' + ic('chat', 22) +
+        '<div><b>Переписки с ботом нет</b>' +
+        '<span>Этот человек боту не писал, либо писал с другого аккаунта: сводим по телеграму, ' +
+        'аккаунту платформы и нику. Появится ник или телеграм в контактах — диалог подтянется сюда сам.</span></div></div>' +
+        buildNotifyFold(id);
+    }
+    var aiOn = c.ai_enabled !== false;
+    var st = c.handoff_requested ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
+      : aiOn ? '<span class="tg-tag ai">' + ic('bot', 10) + 'бот отвечает</span>'
+      : '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведет менеджер') + '</span>';
+    var more = (d.conversations || []).length > 1
+      ? '<div class="m-dlg-more">Есть еще ' + ((d.conversations || []).length - 1) + ' ' +
+        plural((d.conversations || []).length - 1, 'диалог', 'диалога', 'диалогов') +
+        ' этого человека в других каналах — они в разделе «Диалоги».</div>' : '';
+    var matched = c.match === 'username'
+      ? '<div class="m-dlg-by">' + ic('alert', 11) + 'сведено по нику ' + esc('@' + (c.username || '')) +
+        ' — если ник чужой, скажите, отвяжем</div>' : '';
 
-    return '<div class="m-ctitle">Диалог</div>' +
-      '<div class="m-csub">Как человек общается с ботом. Канал, история, расход AI. Демо — оживёт с подключением бота.</div>' +
-      handoffBanner +
-      '<div class="dlg-bar">' +
-        '<div class="dlg-ch">' + chBadge(dlg.channel) + '</div>' +
-        (aiOn
-          ? '<div class="dlg-acts"><button class="ai-toggle on" id="dlg-ai"><span class="ait-dot"></span>AI ведёт диалог</button>' +
-            '<button class="bp sm" id="dlg-take">' + ic('hand', 13) + 'Взять диалог</button></div>'
-          : '<div class="dlg-acts"><button class="ai-toggle" id="dlg-ai"><span class="ait-dot"></span>AI выключен</button>' +
-            '<button class="bp ghost sm" id="dlg-return">' + ic('bot', 13) + 'Вернуть AI</button></div>') +
-      '</div>' +
-      '<div class="dlg-thread">' + thread + '</div>' +
-      '<div class="dlg-cost"><div class="dc-cell"><div class="dc-v num">' + dlg.msgs + '</div><div class="dc-l">сообщений</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num">' + fmtMoney(dlg.tokens) + '</div><div class="dc-l">токенов AI</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num" style="color:var(--amber-ink)">' + dlg.cost_rub + ' ₽</div><div class="dc-l">расход на диалог</div></div></div>';
+    return head +
+      '<div class="m-dlg">' +
+        '<div class="m-dlg-h">' + chBadge(c.channel) + st +
+          '<button class="bp ghost sm" id="dlg-open">' + ic('chat', 13) + 'Открыть в «Диалогах»</button></div>' +
+        matched +
+        '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
+        '<div class="m-dlg-compose">' +
+          '<textarea id="dlg-in" rows="1" placeholder="' +
+            (aiOn ? 'Ответить — вы перехватите диалог у бота' : 'Ответить клиенту') + '"></textarea>' +
+          '<button class="tg-send" id="dlg-send" title="Отправить (Enter)">' + ic('send', 16) + '</button>' +
+        '</div>' +
+      '</div>' + more +
+      buildNotifyFold(id);
   }
 
   /* ── СТРАНИЦА «Аналитика бота» (owner) — api с фоллбэком на демо ── */
@@ -13576,7 +13644,7 @@
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
-    { id: 'notify', label: 'Написать',   icon: 'send' },
+    { id: 'dialog', label: 'Диалог',     icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
 
@@ -14462,6 +14530,9 @@
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
       else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
+      // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
+      // видно только внутри вкладки, куда без повода не заходят.
+      else if (sct.id === 'course' && lead && lead.course && lead.course.has_access) extra = '<span class="doto"></span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -14548,7 +14619,6 @@
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
-    else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
@@ -15255,6 +15325,20 @@
            : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>');
     html += '<div class="m-sec"><div class="m-sec-h">Анкета абитуриента</div>' + profInner + '</div>';
 
+    /* что у человека открыто из наших продуктов — сразу на «Главном».
+       Раньше это жило только на своей вкладке, и менеджер, открыв карточку клиента,
+       который у нас учится, честно не видел, что он у нас учится. */
+    var crs = lead && lead.course;
+    if (crs) {
+      var crsVal = crs.has_access
+        ? (crs.until ? 'открыт до ' + dayFull(crs.until) : 'открыт бессрочно')
+        : (crs.until ? 'доступ кончился ' + dayFull(crs.until) : 'доступ закрыт');
+      html += '<div class="m-sec"><div class="m-sec-h">Учится у нас</div><div class="ab">' +
+        '<div class="r"><span class="k">Живой китайский</span><span class="v">' + esc(crsVal) + '</span></div>' +
+        (crs.since ? '<div class="r"><span class="k">С какого дня</span><span class="v">' + esc(dayFull(crs.since)) + '</span></div>' : '') +
+      '</div></div>';
+    }
+
     /* контакты (редактируемые) */
     var contact = ov(ctx, 'contact'), email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Контакты</div><div class="who">' +
@@ -15699,24 +15783,30 @@
     refunded: { label: 'возврат',   sev: 'rejected' },
   };
 
-  /* ── РАЗДЕЛ «Написать» — отправить уведомление клиенту через бота + история отправок ── */
-  function buildNotifySection(ctx) {
-    var id = ctx.id;
-    return '<div class="m-ctitle">Написать клиенту</div>' +
-      '<div class="m-csub">Сообщение уходит клиенту в его канал через бота. AI-режим — опиши суть, бот сформулирует сам (по тону куратора и истории переписки); Текст — отправится как есть.</div>' +
-      '<div class="m-sec">' +
-        '<div class="m-sec-h">Новое сообщение</div>' +
-        '<div class="ntf-mode" id="ntf-mode">' +
-          '<button data-m="event" class="on">AI сформулирует</button>' +
-          '<button data-m="text">Готовый текст</button>' +
+  /* ── «Попросить бота написать» — второй блок раздела «Диалог» ──
+     Это не ответ в переписке, а уведомление: менеджер описывает суть, бот формулирует
+     сам и шлет клиенту. Отдельным разделом это жило рядом с «Диалогом» и делило один
+     вопрос («написать человеку») на два экрана, поэтому свернуто сюда. */
+  function buildNotifyFold(id) {
+    return '<details class="m-fold">' +
+      '<summary><span class="pm-t">Попросить бота написать</span>' +
+        '<span class="pm-h">напоминание или новость — бот сформулирует и отправит</span>' +
+        ic('go', 13) + '</summary>' +
+      '<div class="m-fold__body">' +
+        '<div class="m-sec">' +
+          '<div class="m-sec-h">Новое сообщение</div>' +
+          '<div class="ntf-mode" id="ntf-mode">' +
+            '<button data-m="event" class="on">AI сформулирует</button>' +
+            '<button data-m="text">Готовый текст</button>' +
+          '</div>' +
+          '<textarea class="note-ta" id="ntf-input" placeholder="Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
+          '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
+          '<span class="ntf-state" id="ntf-state"></span></div>' +
         '</div>' +
-        '<textarea class="note-ta" id="ntf-input" placeholder="Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
-        '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
-        '<span class="ntf-state" id="ntf-state"></span></div>' +
-      '</div>' +
-      '<div class="m-sec"><div class="m-sec-h">История отправок' +
-        '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div id="ntf-log"></div></div>';
+        '<div class="m-sec"><div class="m-sec-h">История отправок' +
+          '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+          '<div id="ntf-log"></div></div>' +
+      '</div></details>';
   }
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
   function buildPaySection(ctx) {
@@ -16427,21 +16517,47 @@
     Array.prototype.forEach.call(host.querySelectorAll('.qa-fold .m-sec-h'), function (h) {
       h.addEventListener('click', function () { h.parentNode.classList.toggle('open'); });
     });
-    // переключатель AI в диалоге (демо — храним локально) + взять/вернуть
-    function setDlgAi(on) {
-      state.dialogAi[id] = on;
-      var dlg = getDialog(ctx.lead || ctx.base);
-      if (on) dlg.handoff_req = false;
+    // раздел «Диалог»: ответ клиенту и переход в «Диалоги»
+    var dconv = state.leadConv[id];
+    var dcv = (dconv && dconv !== 'load' && (dconv.conversations || [])[0]) || null;
+    var dOpen = el('dlg-open');
+    if (dOpen && dcv) dOpen.addEventListener('click', function () {
+      closeDrawer(); state.inboxMode = 'bot'; state.inboxSel = dcv.user_id;
+      setPage('inbox'); loadBotData(function () { renderAll(); });
+    });
+    var dIn = el('dlg-in'), dSend = el('dlg-send');
+    function dlgSend() {
+      if (!dIn || !dcv) return;
+      var t = dIn.value.trim(); if (!t) { dIn.focus(); return; }
+      dIn.value = '';
+      // рисуем сразу, доставку проверяем ответом: менеджер не должен ждать бота,
+      // но и «отправлено» без доставки писать нельзя — не ушло, пузырь помечается
+      var tmp = { role: 'assistant', sender: 'manager', text: t, at: new Date().toISOString() };
+      dconv.messages = (dconv.messages || []).concat([tmp]);
+      dcv.ai_enabled = false;   // ответил менеджер — бот в этом диалоге замолкает (так же на бэке)
       renderModalContent();
-      showToast(on ? 'AI снова ведёт диалог' : 'Диалог за тобой — AI выключен');
+      api('/admin/api/bot/conversations/' + dcv.user_id + '/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }),
+      }).then(function (res) {
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Не доставлено: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          if (state.modalSection === 'dialog') renderModalContent();
+        }
+      }).catch(function () {
+        dconv.messages = (dconv.messages || []).filter(function (m) { return m !== tmp; });
+        showToast('Сообщение не отправлено — проверьте связь с ботом');
+        if (state.modalSection === 'dialog') renderModalContent();
+      });
     }
-    var aiT = el('dlg-ai');
-    if (aiT) aiT.addEventListener('click', function () { setDlgAi(!getDialog(ctx.lead || ctx.base).ai_on); });
-    var tk = el('dlg-take'); if (tk) tk.addEventListener('click', function () { setDlgAi(false); });
-    var rt = el('dlg-return'); if (rt) rt.addEventListener('click', function () { setDlgAi(true); });
+    if (dSend) dSend.addEventListener('click', dlgSend);
+    if (dIn) dIn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
+    });
+    var dTh = el('dlg-thread'); if (dTh) dTh.scrollTop = dTh.scrollHeight;
 
     // раздел «Написать»: режим/отправка/история
-    if (state.modalSection === 'notify') {
+    if (state.modalSection === 'dialog') {
       var ntfMode = 'event';
       var modeBar = el('ntf-mode');
       if (modeBar) Array.prototype.forEach.call(modeBar.children, function (b) {
