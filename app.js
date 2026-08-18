@@ -13638,6 +13638,7 @@
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
+    { id: 'exams',     label: 'Экзамены',    icon: 'award' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
@@ -14621,6 +14622,7 @@
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
+    else if (s === 'exams') host.innerHTML = buildExams(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -14688,7 +14690,8 @@
     DET_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/det').then(function (r) {
       DET_BUSY[id] = false; DET[id] = r;
-      if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+      // блок DET читают две вкладки — «Английский» и сводка «Экзамены»
+      if (state.drawerId === id && (state.modalSection === 'det' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       DET_BUSY[id] = false;
       if (e.message !== '403') { DET[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -15013,6 +15016,122 @@
       access + practice + intensive;
   }
 
+  /* ── РАЗДЕЛ «Экзамены»: DET, HSK и CSCA в одном месте ──
+     Просьба Веры 18.08.2026: экзамены разбросаны по вкладкам языков, а вопрос у
+     менеджера один — «что человек вообще сдавал». Раздел не заводит новых данных: это
+     сводка тех же трех блоков, каждый со ссылкой в свою вкладку. CSCA (экзамен для
+     поступления: математика, физика, химия) своей вкладки не имеет и живет целиком тут. */
+  var CSCA = {}, CSCA_BUSY = {};
+  var CSCA_SUBJ = [['mathematics', 'Математика'], ['physics', 'Физика'], ['chemistry', 'Химия']];
+  function loadCsca(id, force) {
+    if (CSCA_BUSY[id]) return;
+    if (force) delete CSCA[id];
+    CSCA_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+      CSCA_BUSY[id] = false; CSCA[id] = r;
+      if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+    }).catch(function (e) {
+      CSCA_BUSY[id] = false;
+      if (e.message !== '403') { CSCA[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function examCard(opts) {
+    /* Одна строка экзамена: крупное число слева — это ответ на «сдавал или нет».
+       Кнопка ведет в свою вкладку, а не дублирует ее содержимое: две копии управления
+       разъедутся, а менеджеру тут нужен факт, а не настройки. */
+    return '<div class="ex-card' + (opts.value == null ? ' empty' : '') + '">' +
+      '<div class="ex-v num">' + (opts.value == null ? '—' : esc(String(opts.value))) +
+        (opts.unit && opts.value != null ? '<small>' + esc(opts.unit) + '</small>' : '') + '</div>' +
+      '<div class="ex-b"><div class="ex-t">' + esc(opts.title) + '</div>' +
+        '<div class="ex-m">' + opts.sub + '</div></div>' +
+      (opts.go ? '<button class="bp ghost sm" data-exgo="' + opts.go + '">Открыть</button>' : '') +
+      '</div>';
+  }
+
+  function buildExams(id) {
+    var head = '<div class="m-ctitle">Экзамены</div>' +
+      '<div class="m-csub">Все проверки уровня в одном месте: английский DET, китайский HSK ' +
+      'и пробный CSCA — экзамен, который сдают при поступлении в вуз.</div>';
+
+    var d = DET[id]; if (!d) loadDet(id);
+    var h = HSK[id]; if (!h) loadHsk(id);
+    var c = CSCA[id]; if (!c) loadCsca(id);
+
+    // DET
+    var det;
+    if (!d || d === 'none') {
+      det = examCard({ title: 'Английский · DET', value: null,
+        sub: d === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var dl = d.latest;
+      det = examCard({
+        title: 'Английский · DET', value: dl ? dl.overall : null, unit: ' из 160', go: 'det',
+        sub: dl
+          ? esc(DET_KIND[dl.kind] || dl.kind || 'тест') + ' · ' + esc(fmtWhen(dl.finished_at || dl.started_at)) +
+            (d.delta ? ' · к прошлому ' + detDelta(d.delta) : '') +
+            '<span class="ex-note">' + esc(detVerdict(dl.overall).t) + '</span>'
+          : 'тест еще не проходил' + (d.invite ? ' — ссылка выдана' : ' — ссылку можно создать во вкладке «Английский»'),
+      });
+    }
+
+    // HSK
+    var hsk;
+    if (!h || h === 'none') {
+      hsk = examCard({ title: 'Китайский · HSK', value: null,
+        sub: h === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var hl = h.latest;
+      hsk = examCard({
+        title: 'Китайский · HSK', value: hl ? hl.pct : null, unit: '%', go: 'course',
+        sub: hl
+          ? esc(hl.level || '') + ' · ' + hl.correct + ' из ' + hl.total + ' · ' + esc(fmtWhen(hl.at)) +
+            (h.delta ? ' · к прошлому ' + detDelta(h.delta) : '')
+          : 'пробный тест еще не проходил',
+      });
+    }
+
+    // CSCA — свои предметы, свой список попыток
+    var csca;
+    if (!c || c === 'none') {
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления</div>' +
+        '<div class="field-empty">' + (c === 'none' ? 'Не удалось загрузить.' : 'Загружаю…') + '</div></div>';
+    } else {
+      var at = c.attempts || [];
+      var best = {};
+      at.forEach(function (a) {
+        if (a.score_pct == null) return;
+        if (best[a.subject] == null || a.score_pct > best[a.subject]) best[a.subject] = a.score_pct;
+      });
+      var board = '<div class="pay-board">' + CSCA_SUBJ.map(function (s) {
+        var v = best[s[0]];
+        return '<div class="pay-cell' + (v == null ? ' muted' : '') + '">' +
+          '<div class="pc-l">' + s[1] + '</div>' +
+          '<div class="pc-v num">' + (v == null ? '—' : v + '%') + '</div></div>';
+      }).join('') + '</div>';
+      var rows = at.length
+        ? at.slice(0, 12).map(function (a) {
+            return '<div class="det-row" style="cursor:default">' +
+              '<span class="det-row-v num">' + (a.score_pct == null ? '—' : a.score_pct +
+                '<small style="font-size:.55em;opacity:.6">%</small>') + '</span>' +
+              '<div class="det-row-b"><div class="det-row-t">' + esc(a.subject_name || a.subject) +
+                ' <span class="sev s-new">уровень ' + esc(String(a.difficulty)) + '</span></div>' +
+                '<div class="det-row-m">' + esc(fmtWhen(a.submitted_at)) +
+                  ' · ответов ' + a.answered + ' из ' + a.total +
+                  (a.correct != null ? ' · верных ' + a.correct : '') + '</div></div></div>';
+          }).join('')
+        : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
+          'дает лендинг экзамена, результат придет сюда сам.</div>';
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
+        '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
+        'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
+        board + '<div class="det-prl">' + rows + '</div></div>';
+    }
+
+    return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
+  }
+
   /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
      Близнец блока DET: тот же вопрос менеджера — «что у человека открыто» — и та же
      кнопка на том же месте. Курс живет по личной ссылке, аккаунт платформы для него
@@ -15108,7 +15227,7 @@
     HSK_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/hsk').then(function (r) {
       HSK_BUSY[id] = false; HSK[id] = r;
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      if (state.drawerId === id && (state.modalSection === 'course' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       HSK_BUSY[id] = false;
       if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -16103,6 +16222,13 @@
 
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
+
+    // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
+    Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {
+      b.addEventListener('click', function () { setModalSection(b.getAttribute('data-exgo')); });
+    });
+    var exr = el('ex-refresh');
+    if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');

@@ -186,6 +186,28 @@
     </div>
   </div>
 
+  <!-- ── ЭКЗАМЕНЫ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.ex-card — строка экзамена: крупное число слева отвечает на «сдавал или нет», кнопка уводит в свою вкладку</div>
+    <div class="sc-panel">
+      <div class="ex-list" style="max-width:640px">
+        <div class="ex-card">
+          <div class="ex-v num">105<small> из 160</small></div>
+          <div class="ex-b"><div class="ex-t">Английский · DET</div>
+            <div class="ex-m">входной · 13.08 14:49<span class="ex-note">Почти порог — небольшая подготовка закроет разрыв</span></div></div>
+          <button class="bp ghost sm">Открыть</button>
+        </div>
+        <div class="ex-card empty">
+          <div class="ex-v num">—</div>
+          <div class="ex-b"><div class="ex-t">Китайский · HSK</div>
+            <div class="ex-m">пробный тест еще не проходил</div></div>
+          <button class="bp ghost sm">Открыть</button>
+        </div>
+      </div>
+    </div>
+    <div class="sc-note">Пусто — это <b>.ex-card.empty</b>: серая заливка и прочерк вместо числа. «Не сдавал» такой же ответ, как балл, и место в списке он занимает то же.</div>
+  </div>
+
   <!-- ── СТЕППЕР ВОРОНКИ ── -->
   <div class="sc-sec">
     <div class="sc-lab">.pipe / .pstep — состояния: past (синий) · cur (залит) · cur.s-client (зеленый) · next</div>
