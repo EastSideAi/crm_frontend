@@ -1053,8 +1053,15 @@
   var NOTIFY_CH = [
     { id: 'tg', label: 'Telegram', icon: 'send', bot: 'бот EastSide' },
     { id: 'max', label: 'Макс', icon: 'max', bot: 'бот «Истсайд команда»' },
+    { id: 'both', label: 'Оба', icon: 'dialogs', bot: '' },
     { id: 'off', label: 'Не беспокоить', icon: 'bell', bot: '' },
   ];
+  /* Какие мессенджеры стоят за выбором: «Оба» — это два подключения, и каждое надо
+     довести до «Начать» отдельно, иначе половина уведомлений молча не дойдёт. */
+  function notifyChans(ch) { return ch === 'both' ? ['tg', 'max'] : (ch === 'off' ? [] : [ch]); }
+  function notifyMeta(id) {
+    return NOTIFY_CH.filter(function (c) { return c.id === id; })[0] || NOTIFY_CH[3];
+  }
 
   function openNotifyPrefs() {
     if (typeof closeSmenu === 'function') closeSmenu();
@@ -1068,7 +1075,7 @@
           '<button class="al-x" id="al-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         '<div class="al-sub">Заявки на разбор, отмены записи, передача клиента живому ' +
-          'человеку и напоминания приходят в один мессенджер — выберите свой.</div>' +
+          'человеку и напоминания приходят в мессенджер — выберите свой или сразу оба.</div>' +
         '<div class="al-body" id="np-body">' +
           '<div class="np-skel shim"></div><div class="np-skel shim"></div>' +
         '</div>' +
@@ -1094,27 +1101,34 @@
       var ch = (st && st.channel) || 'off';
       var linked = (st && st.linked) || {};
       var links = (st && st.links) || {};
-      var cur = NOTIFY_CH.filter(function (c) { return c.id === ch; })[0] || NOTIFY_CH[2];
-      var isOn = ch !== 'off';
-      var ready = isOn && !!linked[ch];
-      var link = isOn ? links[ch] : null;
+      var chans = notifyChans(ch);
+      var need = chans.filter(function (c) { return !linked[c]; });
+      var names = chans.map(function (c) { return notifyMeta(c).label; }).join(' и ');
 
-      var state1 = !isOn
+      /* Шаг «Начать» на каждый неподключённый мессенджер: у «Оба» их может быть два,
+         и одна общая кнопка тут врала бы — ссылки у ботов разные. */
+      var step = function (c) {
+        var m = notifyMeta(c);
+        return '<div class="np-step"><div class="np-hint">Откройте ' + esc(m.bot) + ' и нажмите «Начать». ' +
+          'Пока вы этого не сделали, мессенджер не пропустит сообщение.</div>' +
+          (links[c]
+            ? '<div class="np-act"><a class="bp np-open" href="' + esc(links[c]) + '" target="_blank" rel="noopener">' +
+                ic('ext', 14) + 'Открыть ' + esc(m.label) + '</a>' +
+                '<button class="al-cancel np-copy" data-l="' + esc(links[c]) + '">' + ic('copy', 13) + 'Скопировать ссылку</button></div>'
+            : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(m.label) + '.</div>') +
+          '</div>';
+      };
+
+      var state1 = !chans.length
         ? '<div class="np-state"><span class="sev n-off">Выключено</span>' +
             '<div class="np-hint">Уведомления команды вам не приходят. Выберите мессенджер, ' +
             'чтобы получать заявки и передачи клиентов.</div></div>'
-        : ready
+        : !need.length
           ? '<div class="np-state"><span class="sev n-ok">' + ic('check', 12) + 'Подключено</span>' +
-              '<div class="np-hint">Всё готово — уведомления идут в ' + esc(cur.label) + '.</div></div>'
-          : '<div class="np-state"><span class="sev n-wait">Нужен один шаг</span>' +
-              '<div class="np-hint">Откройте ' + esc(cur.bot) + ' и нажмите «Начать». ' +
-              'Пока вы этого не сделали, мессенджер не пропустит сообщение — ' +
-              'так устроены и Telegram, и Макс.</div>' +
-              (link
-                ? '<div class="np-act"><a class="bp np-open" href="' + esc(link) + '" target="_blank" rel="noopener">' +
-                    ic('ext', 14) + 'Открыть ' + esc(cur.label) + '</a>' +
-                    '<button class="al-cancel np-copy" data-l="' + esc(link) + '">' + ic('copy', 13) + 'Скопировать ссылку</button></div>'
-                : '<div class="np-hint">Ссылка появится, когда админ подключит бота ' + esc(cur.label) + '.</div>') +
+              '<div class="np-hint">Всё готово — уведомления идут в ' + esc(names) + '.</div></div>'
+          : '<div class="np-state"><span class="sev n-wait">' +
+              (need.length > 1 ? 'Нужны два шага' : 'Нужен один шаг') + '</span>' +
+              need.map(step).join('') +
             '</div>';
 
       /* За какие темы вам приходят уведомления — только на просмотр: закрепляет их
@@ -1143,19 +1157,22 @@
           }).then(function (r) {
             body.classList.remove('np-wait');
             render(r);
-            var nx = NOTIFY_CH.filter(function (c) { return c.id === next; })[0];
-            showToast(next === 'off' ? 'Уведомления выключены' : 'Мессенджер: ' + nx.label);
+            showToast(next === 'off' ? 'Уведомления выключены'
+              : 'Уведомления идут в ' + notifyChans(next).map(function (c) {
+                  return notifyMeta(c).label;
+                }).join(' и '));
           }).catch(function () {
             body.classList.remove('np-wait');
             showToast('Не удалось сохранить — попробуйте ещё раз');
           });
         });
       });
-      var cp = body.querySelector('.np-copy');
-      if (cp) cp.addEventListener('click', function () {
-        var v = cp.getAttribute('data-l');
-        if (navigator.clipboard) navigator.clipboard.writeText(v);
-        showToast('Ссылка скопирована');
+      Array.prototype.forEach.call(body.querySelectorAll('.np-copy'), function (cp) {
+        cp.addEventListener('click', function () {
+          var v = cp.getAttribute('data-l');
+          if (navigator.clipboard) navigator.clipboard.writeText(v);
+          showToast('Ссылка скопирована');
+        });
       });
     };
 
@@ -9803,7 +9820,8 @@
       return '<span class="tm-warn" title="Тема отмечена, но человек не нажал «Начать» ' +
         'у бота уведомлений — сообщение ему не дойдет">' + ic('alert', 11) + 'нет мессенджера</span>';
     }
-    return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс' : 'Телеграм');
+    return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс'
+      : u.notify_channel === 'both' ? 'Телеграм и Макс' : 'Телеграм');
   }
   function tmLine(u) {
     var sub = tmSub(u);
