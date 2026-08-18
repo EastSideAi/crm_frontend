@@ -4272,6 +4272,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   letter-spacing: -.02em; text-align: right; }
 .fl-row.fl-2 { grid-template-columns: 1fr auto; }
 
+/* План выручки: статус строки маленькой плашкой у имени, а не отдельной колонкой —
+   ожидание/получено/отменено читается на месте, строка остается плотной. */
+.rp-tag { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 6px;
+  font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .01em; vertical-align: 1px; }
+.rp-tag.wait { background: var(--blue-tint); color: var(--blue); }
+.rp-tag.ok { background: var(--green-soft); color: var(--green-ink); }
+.rp-tag.off { background: var(--fill); color: var(--ink-3); }
+/* Платежный календарь: строка-итог отделяется весом и линией сверху, а не рамкой. */
+.cal-row.total { border-top: 1px solid var(--line-2); margin-top: 2px; }
+.cal-row.total .fl-name { font-weight: 700; }
+.cal-row.total .fl-v { color: var(--ink); }
+
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }

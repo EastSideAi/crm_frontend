@@ -1806,6 +1806,10 @@
        расходы блоками отдельно. Человек приходит вносить что-то одно — и должен сразу
        попадать туда, а не искать нужную вкладку в общей куче. */
     { id: 'finincome', label: 'Доходы', icon: 'card', cap: 'finmodel', space: 'fin' },
+    /* План выручки — прогноз (новые продажи и дебиторка), платежный календарь сводит
+       ожидаемый приход с плановым расходом. Раздел старого сайта, вернули 18.08.2026. */
+    { id: 'finplan', label: 'План выручки', icon: 'target', cap: 'finmodel', space: 'fin' },
+    { id: 'fincalendar', label: 'Платежный календарь', icon: 'cal', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». */
@@ -2125,6 +2129,7 @@
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
+               state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
@@ -2465,6 +2470,7 @@
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
+                     finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
@@ -2524,6 +2530,14 @@
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
           : 'Все ведомости одной лентой: доходы, расходы и переводы, новое сверху. У каждой строки видно свою ведомость.';
+      } else if (state.page === 'finplan') {
+        ph = 'Прогноз выручки по ведомости <b>' + esc(per.name) + '</b>: новые продажи и ' +
+          'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
+          'сравнивает план с тем, что уже пришло.';
+      } else if (state.page === 'fincalendar') {
+        ph = 'Хватит ли денег: ожидаемый приход из плана выручки против плановых выплат ' +
+          'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
+          'часть уйдет по обязательствам.';
       } else {
         ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
       }
@@ -2591,6 +2605,8 @@
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finplan') renderFinPlan(view);
+    else if (state.page === 'fincalendar') renderFinCalendar(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -7529,7 +7545,8 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
-              lines: null, pnlp: null, form: 'доход', lineBusy: false,
+              lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
+              calendar: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -7715,7 +7732,30 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
+    FIN.revplan = null; FIN.calendar = null;
     if (!keepPeriods) FIN.periods = null;
+  }
+
+  function finLoadRevPlan() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadRevPlan(); });
+    finBusy('revplan', function (done) {
+      api('/admin/api/fin/revenue-plan' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.revplan = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'revplan'); }).then(done);
+    });
+  }
+
+  function finLoadCalendar() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadCalendar(); });
+    finBusy('calendar', function (done) {
+      api('/admin/api/fin/calendar' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.calendar = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'calendar'); }).then(done);
+    });
   }
   function finPeriod() {
     var l = FIN.periods || [];
@@ -9396,6 +9436,215 @@
       });
     }
     pageAnim(view);
+  }
+
+  /* ── План выручки и платежный календарь ────────────────────────────────────
+     Раздел старого сайта, которого не было в базе (perenos.md §1.3, §1.7). План
+     выручки — прогноз ожидаемых поступлений (новые продажи + дебиторка). Платежный
+     календарь сводит этот приход с плановым расходом периода. В каскад и отчисления
+     план не входит: это ожидание, а не факт. */
+
+  var RP_STATUS = { 'ожидается': 'wait', 'получено': 'ok', 'отменено': 'off' };
+
+  function renderFinPlan(view) {
+    if (!FIN.revplan) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadRevPlan(); return;
+    }
+    if (FIN.revplan === 'none') return finErrView(view);
+    var r = FIN.revplan, canFix = can('finmodel_edit'), t = r.totals || {};
+    var items = r.items || [];
+    var sales = items.filter(function (x) { return x.kind === 'продажа'; });
+    var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
+    var planFact = t.income_fact > 0
+      ? Math.round(t.income_fact / (t.planned_revenue || t.income_fact) * 100) + '% от плана уже пришло'
+      : 'факта по этой ведомости еще нет';
+
+    var bar = statBar([
+      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
+        sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
+      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
+        sub: receiv.length + ' ' + plural(receiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+      { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
+        sub: 'новые продажи плюс дебиторка' },
+      { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
+    ]);
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
+        'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
+      '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
+        'кто уже должен и за что — ожидаемые поступления по долгам клиентов') + '</div>' +
+    '</div>';
+
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpadd]'), function (b) {
+        b.addEventListener('click', function () {
+          finRevForm(null, b.getAttribute('data-rpadd'));
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rp]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-rp');
+          items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  function finRevCard(title, kind, rows, canFix, sub) {
+    var body = rows.map(function (x) {
+      var st = RP_STATUS[x.status] || 'wait';
+      var muted = x.status !== 'ожидается';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '', x.comment]
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') + (canFix ? ' click' : '') +
+        '" data-rp="' + x.id + '">' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
+          '<span class="rp-tag ' + st + '">' + esc(x.status) + '</span></span>' +
+          '<span class="fl-sub">' + (line || '—') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
+    return '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' +
+        ic(kind === 'продажа' ? 'card' : 'clock', 14) + '</span>' +
+        '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(sub) + '</div></div>' +
+        (canFix ? '<button class="qchip add" data-rpadd="' + kind + '">' + ic('plus', 12) +
+          'Добавить</button>' : '') + '</div>' +
+      (body || '<div class="empty">Пока пусто. ' +
+        (canFix ? 'Добавьте строку кнопкой выше.' : 'Строк нет.') + '</div>') +
+    '</div>';
+  }
+
+  function finRevForm(row, kind) {
+    var isNew = !row;
+    var o = row || { kind: kind || 'продажа', client: '', item: '', amount: '',
+                     status: 'ожидается', due_on: '', comment: '' };
+    var isSale = (o.kind === 'продажа');
+    var m = finModal({
+      eyebrow: 'План выручки',
+      title: isNew ? (isSale ? 'Новая продажа' : 'Строка дебиторки') : (o.client || 'Строка'),
+      sub: isSale
+        ? 'Ожидаемая продажа: кого закрываем, на какой продукт и сумму. В факт дохода это не идет — только в план.'
+        : 'Клиент уже должен: за что и сколько ждем получить. Это ожидание, не факт.',
+      del: isNew ? '' : 'Удалить',
+      body:
+        '<div class="al-row">' +
+          finField(isSale ? 'Клиент / источник' : 'Кто должен',
+            '<input id="rp-client" class="al-in" maxlength="200" value="' + esc(o.client) +
+            '" placeholder="' + (isSale ? 'Семья Ли' : 'Семья Ван') + '">') +
+          finField('Сумма, ₽ <i>*</i>', '<input id="rp-amount" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (o.amount || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField(isSale ? 'Продукт / направление' : 'Основание',
+            '<input id="rp-item" class="al-in" maxlength="200" value="' + esc(o.item) +
+            '" placeholder="' + (isSale ? 'Харбин базовый' : 'второй взнос') + '">') +
+          finField('Срок', '<input id="rp-due" class="al-in" type="date" value="' +
+            esc(o.due_on || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Статус', '<select id="rp-status" class="al-in">' +
+            ['ожидается', 'получено', 'отменено'].map(function (s) {
+              return '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' +
+                s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+            }).join('') + '</select>') +
+          finField('Комментарий', '<input id="rp-comment" class="al-in" maxlength="1000" value="' +
+            esc(o.comment || '') + '">') +
+        '</div>',
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (!(Number(finVal('rp-amount')) >= 0) || finVal('rp-amount') === '') {
+        m.err.textContent = 'Впишите сумму'; return;
+      }
+      if (!finVal('rp-client') && !finVal('rp-item')) {
+        m.err.textContent = 'Впишите клиента или продукт'; return;
+      }
+      m.close();
+      finDo('/admin/api/fin/revenue-plan', 'POST', {
+        id: isNew ? null : o.id, period_id: FIN.id, kind: o.kind,
+        client: finVal('rp-client'), item: finVal('rp-item'), amount: finVal('rp-amount'),
+        status: el('rp-status').value, due_on: finVal('rp-due') || null,
+        comment: finVal('rp-comment'),
+      }, isNew ? 'Строка добавлена' : 'Строка поправлена');
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Удалить строку?', 'Строка плана выручки исчезнет. На факт дохода это не влияет.',
+        'Удалить', function () {
+          finDo('/admin/api/fin/revenue-plan?id=' + encodeURIComponent(o.id), 'DELETE',
+                null, 'Строка удалена');
+        });
+    });
+  }
+
+  function renderFinCalendar(view) {
+    if (!FIN.calendar) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
+    }
+    if (FIN.calendar === 'none') return finErrView(view);
+    var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
+    // Остаток на р/с сейчас берем из уже загруженной ведомости, если она есть: календарь
+    // считает движение, а «после нагрузки» — это остаток плюс движение.
+    var cash = null;
+    if (FIN.sheet && FIN.sheet !== 'none') {
+      (FIN.sheet.accounts || []).forEach(function (a) { if (a.id === 'vtb') cash = a.live; });
+    }
+    var after = cash === null ? null : cash + c.net;
+
+    var bar = statBar([
+      { label: 'Ждем получить', value: finRub(inc.total, 0),
+        sub: 'новые продажи и дебиторка' },
+      { label: 'Должны выплатить', value: finRub(out.total, 0),
+        sub: 'плановые расходы, фонды, кредиты' },
+      { label: 'Прогноз движения', value: finRub(c.net, 0),
+        sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
+      cash === null
+        ? { label: 'После нагрузки', value: '—', sub: 'откройте «Ведомость», чтобы увидеть остаток' }
+        : { label: 'На счете после нагрузки', value: finRub(after, 0),
+            sub: after < 0 ? 'денег не хватит — нужен приход или перенос' : 'если план сойдется' },
+    ]);
+
+    var incRows = finCalRows([
+      ['Новые продажи', inc.sales], ['Дебиторка', inc.receivables],
+    ], inc.total, 'Итого ждем получить');
+    var outRows = finCalRows([
+      ['Плановые прямые расходы', out.direct], ['Отчисления в фонды', out.funds],
+      ['Платежи по кредитам и долгам', out.debts],
+    ], out.total, 'Итого к выплате');
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+          '<div><div class="t">Ожидаем получить</div>' +
+          '<div class="s">из плана выручки — что должно прийти в этом периоде</div></div></div>' +
+        incRows + '</div></div>' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">Плановые выплаты</div>' +
+          '<div class="s">плановые строки этой ведомости: расходы, фонды, кредиты</div></div></div>' +
+        outRows + '</div></div>' +
+    '</div>' +
+    '<div class="card"><div class="fin-note ' + (c.net >= 0 ? 'calm' : 'warn') + '">' +
+      'Прогноз считается по плановым строкам ведомости и плану выручки. Остаток на счете не равен ' +
+      'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
+      'чтобы прогноз был точнее.</div></div>';
+    pageAnim(view);
+  }
+
+  function finCalRows(rows, total, totalLabel) {
+    var body = rows.map(function (p) {
+      return '<div class="fl-row fl-2 cal-row"><div class="fl-main">' +
+        '<span class="fl-name">' + esc(p[0]) + '</span></div>' +
+        '<div class="fl-v num">' + finRub(p[1] || 0, 0) + '</div></div>';
+    }).join('');
+    return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
+      '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
+      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
   }
 
   /* Общая отправка правки ведомости: сохранили — забыли все посчитанное и
