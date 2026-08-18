@@ -331,7 +331,8 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.green { background: var(--green); }
 .stat .sdot.coral, .stat .sdot.red { background: var(--red); }
 .stat .sdot.amber { background: var(--amber); }
-.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1; }
+.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -4292,6 +4293,49 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Погашенная плитка statBar: остаток счета еще грузится — тихий текст вместо
    числа-героя, чтобы пустой слот не читался как сломанные данные. */
 .stat-idle { font-size: 14px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+
+/* План против факта: анкер экрана «План выручки». Одна полоса вместо голых цифр —
+   видно, сколько из плана уже на счете. Плоско, заливка полосы, без теней. */
+.fpf { margin-bottom: 20px; padding: 22px 26px; }
+.fpf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fpf-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fpf-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fpf-pct { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: .9; color: var(--blue);
+  white-space: nowrap; }
+.fpf-pct span { font-size: 17px; font-weight: 700; margin-left: 2px; }
+.fpf-pct.done, .fpf-pct.over { color: var(--green-ink); }
+.fpf-track { height: 12px; border-radius: 7px; background: var(--fill); margin-top: 18px; overflow: hidden; }
+.fpf-fill { height: 100%; border-radius: 7px; background: var(--blue); transition: width .6s var(--ease); }
+.fpf-fill.done, .fpf-fill.over { background: var(--green); }
+.fpf-legend { display: flex; align-items: center; justify-content: space-between; margin-top: 12px;
+  font-size: 12.5px; color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fpf-legend .fpf-v { color: var(--ink-3); }
+.fpf-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px; }
+.fpf-dot.plan { background: var(--line-2); }
+.fpf-dot.fact { background: var(--blue); }
+.fpf-dot.fact.done, .fpf-dot.fact.over { background: var(--green); }
+.fpf-empty { margin-top: 14px; font-size: 13px; color: var(--ink-3); }
+
+/* Баланс периода в платежном календаре: две полосы на одной шкале, приход против
+   выплат. Приход зеленый, выплаты навигационно-темные (не тревога), знак несет net. */
+.fbal { margin-bottom: 20px; padding: 22px 26px; }
+.fbal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fbal-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fbal-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fbal-net { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1; white-space: nowrap;
+  display: flex; align-items: baseline; gap: 8px; }
+.fbal-net.ok { color: var(--green-ink); }
+.fbal-net.bad { color: var(--red-ink); }
+.fbal-net span { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+.fbal-rows { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.fbal-r { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 16px; }
+.fbal-l { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.fbal-track { height: 12px; border-radius: 7px; background: var(--fill); overflow: hidden; }
+.fbal-fill { height: 100%; border-radius: 7px; transition: width .6s var(--ease); }
+.fbal-fill.inc { background: var(--green); }
+.fbal-fill.out { background: var(--navy); }
+.fbal-v { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
 
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }

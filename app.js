@@ -9837,7 +9837,8 @@
       { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
     ]);
 
-    view.innerHTML = bar + '<div class="grid">' +
+    view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
+      '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
         'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
@@ -9858,6 +9859,36 @@
       });
     }
     pageAnim(view);
+  }
+
+  // План против факта: одна полоса вместо голых цифр. Анкер экрана — сразу видно,
+  // сколько из запланированного уже на счёте, и перевыполнен план или нет.
+  function finPlanFactCard(planned, fact) {
+    var head = '<div class="fpf-head"><div class="t">План против факта</div>' +
+      '<div class="s">сколько из запланированной выручки уже пришло на счет</div></div>';
+    if (!(planned > 0)) {
+      return '<div class="card fpf"><div class="fpf-top">' + head + '</div>' +
+        '<div class="fpf-empty">' + (fact > 0
+          ? 'Факт есть, а плана нет. Заведи ожидаемые продажи и дебиторку, чтобы ' +
+            'сравнить план с тем, что уже пришло.'
+          : 'Ни плана, ни факта по этой ведомости пока нет.') + '</div></div>';
+    }
+    var pct = Math.round(fact / planned * 100);
+    var over = fact > planned;
+    var fillPct = Math.max(2, Math.min(100, Math.round(fact / planned * 100)));
+    var cls = over ? 'over' : (pct >= 100 ? 'done' : 'go');
+    var verdict = over
+      ? 'план перевыполнен на ' + (pct - 100) + '%'
+      : pct + '% плана уже на счете';
+    return '<div class="card fpf">' +
+      '<div class="fpf-top">' + head +
+        '<div class="fpf-pct num ' + cls + '">' + pct + '<span>%</span></div></div>' +
+      '<div class="fpf-track"><div class="fpf-fill ' + cls + '" style="width:' + fillPct + '%"></div></div>' +
+      '<div class="fpf-legend">' +
+        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned, 0) + '</span>' +
+        '<span class="fpf-v">' + esc(verdict) + '</span>' +
+        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact, 0) + '</span>' +
+      '</div></div>';
   }
 
   function finRevCard(title, kind, rows, canFix, sub) {
@@ -9989,7 +10020,8 @@
       ['Платежи по кредитам и долгам', out.debts],
     ], out.total, 'Итого к выплате');
 
-    view.innerHTML = bar + '<div class="grid">' +
+    view.innerHTML = bar + finCashBalanceCard(inc.total || 0, out.total || 0, c.net || 0) +
+      '<div class="grid">' +
       '<div class="sp6"><div class="card listcard">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
           '<div><div class="t">Ожидаем получить</div>' +
@@ -10006,6 +10038,29 @@
       'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
       'чтобы прогноз был точнее.</div></div>';
     pageAnim(view);
+  }
+
+  // Приход против выплат: две полосы на одной шкале — сразу видно, перекрывает ли
+  // ожидаемый приход плановые выплаты. Анкер платежного календаря.
+  function finCashBalanceCard(income, outflow, net) {
+    var scale = Math.max(income, outflow, 1);
+    var incW = Math.max(income > 0 ? 3 : 0, Math.round(income / scale * 100));
+    var outW = Math.max(outflow > 0 ? 3 : 0, Math.round(outflow / scale * 100));
+    var ok = net >= 0;
+    return '<div class="card fbal">' +
+      '<div class="fbal-head"><div><div class="t">Хватает ли на период</div>' +
+        '<div class="s">ожидаемый приход против плановых выплат</div></div>' +
+        '<div class="fbal-net num ' + (ok ? 'ok' : 'bad') + '">' +
+          (ok ? '+' : '') + finRub(net, 0) +
+          '<span>' + (ok ? 'остается' : 'не хватает') + '</span></div></div>' +
+      '<div class="fbal-rows">' +
+        '<div class="fbal-r"><span class="fbal-l">Приход</span>' +
+          '<div class="fbal-track"><div class="fbal-fill inc" style="width:' + incW + '%"></div></div>' +
+          '<span class="fbal-v num">' + finRub(income, 0) + '</span></div>' +
+        '<div class="fbal-r"><span class="fbal-l">Выплаты</span>' +
+          '<div class="fbal-track"><div class="fbal-fill out" style="width:' + outW + '%"></div></div>' +
+          '<span class="fbal-v num">' + finRub(outflow, 0) + '</span></div>' +
+      '</div></div>';
   }
 
   function finCalRows(rows, total, totalLabel) {
