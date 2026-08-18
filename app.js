@@ -3104,6 +3104,7 @@
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count"><b>' + list.length + '</b> ' +
           plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
+        '<button class="bp ghost sm" id="tsk-meet">' + ic('doc', 14) + 'Импорт встречи</button>' +
         '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая цель</button>' +
       '</div>' +
       '<div class="list-body">' +
@@ -3115,6 +3116,9 @@
     // На экране целей кнопка заводит цель, а не задачу: за задачей человек идет
     // в «Сегодня», а сюда приходит ставить направление работы.
     el('tsk-new').addEventListener('click', function () { openNewTask({ goal: true }); });
+    // Протокол встречи — второй способ завести работу: не по одной задаче руками,
+    // а разом весь список договоренностей, с проверкой перед заведением.
+    el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
       state.taskQ = qi.value;
@@ -4288,6 +4292,350 @@
       });
      });
     });
+  }
+
+  /* ── Импорт встречи: протокол → задачи ───────────────────────────────────
+     Протокол координации раньше растаскивали в задачник руками, по пункту.
+     Теперь файл разбирает модель, а человек проверяет результат ЗДЕСЬ и только
+     потом нажимает «завести». Экран проверки существует именно поэтому: модель
+     ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
+     задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
+  var MEET_MAX_MB = 2;
+
+  function openMeetingUpload() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Задачи</div><div class="al-title">Импорт встречи</div></div>' +
+          '<button class="al-x" id="mu-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Протокол или заметки со встречи. Разберу на цели и шаги, ' +
+          'покажу список с исполнителями и сроками — заведешь после проверки.</div>' +
+        '<div class="al-body">' +
+          '<div class="mu-drop" id="mu-drop">' +
+            '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
+            '<div class="mu-drop-t">Выбери файл или перетащи сюда</div>' +
+            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ</div>' +
+            '<input type="file" id="mu-file" accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+          '</div>' +
+          '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
+            '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
+              'placeholder="Скопируй протокол сюда, если файла нет"></textarea></label>' +
+          '<div class="al-ai-note" id="mu-note"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="mu-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="mu-go">' + ic('spark', 14) + 'Разобрать</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('mu-x').addEventListener('click', close);
+    el('mu-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var drop = el('mu-drop'), fileI = el('mu-file'), note = el('mu-note'), go = el('mu-go');
+    var picked = null;   // { name, data }
+    var show = function (t, ask) {
+      note.className = 'al-ai-note' + (ask ? ' ask' : '');
+      note.textContent = t || '';
+    };
+    var take = function (list) {
+      if (!list || !list.length) return;
+      var f = list[0];
+      if (f.size > MEET_MAX_MB * 1024 * 1024) {
+        show('Файл больше ' + MEET_MAX_MB + ' МБ. Пришли текстом или вырежи лишнее.', true);
+        return;
+      }
+      readFiles([f], function (out) {
+        picked = out[0] || null;
+        if (!picked) { show('Файл не прочитался, попробуй другой', true); return; }
+        drop.classList.add('has');
+        drop.querySelector('.mu-drop-t').textContent = picked.name;
+        drop.querySelector('.mu-drop-s').textContent = 'Готов к разбору';
+        show('');
+      });
+    };
+    drop.addEventListener('click', function () { fileI.click(); });
+    fileI.addEventListener('change', function () { take(fileI.files); });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+    });
+    drop.addEventListener('drop', function (e) { take(e.dataTransfer && e.dataTransfer.files); });
+
+    go.addEventListener('click', function () {
+      var text = (el('mu-text').value || '').trim();
+      if (!picked && text.length < 200) {
+        show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл или вставь текст', true);
+        return;
+      }
+      go.disabled = true; go.classList.add('loading');
+      show('Читаю протокол, это займет полминуты');
+      apiSend('/admin/api/meetings', 'POST',
+        picked ? { name: picked.name, data: picked.data } : { text: text },
+        function (r) {
+          close();
+          openMeetingImport((r && r.import && r.import.id) || 0, r && r.import);
+        },
+        function (err) {
+          go.disabled = false; go.classList.remove('loading');
+          show((err && err.detail) || 'Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+        });
+    });
+  }
+
+  /* Экран проверки. Открывается и по ссылке из бота (#meeting/<id>), поэтому
+     умеет грузить разбор сам, а не только принимать свежий из формы. */
+  function openMeetingImport(id, ready) {
+    if (!id || document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card mi-card" role="dialog" aria-modal="true">' +
+      '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      if (location.hash.indexOf('#meeting/') === 0) history.replaceState(null, '', location.pathname + location.search);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    try { history.replaceState(null, '', '#meeting/' + id); } catch (e) {}
+
+    var card = ov.querySelector('.mi-card');
+    // Пересчет счетчика живет здесь, а не внутри draw: обработчик клика вешается
+    // на карточку один раз, а перерисовок после «Завести» может быть несколько —
+    // второй такой же обработчик отменял бы действие первого.
+    var markRef = function () {};
+    var wired = false;
+    var draw = function (imp, people, goals) {
+      var gs = imp.goals || [], dec = imp.for_decision || [], st = imp.stats || {};
+      var applied = imp.status === 'applied';
+      var whoOpts = function (sel) {
+        return '<option value="0">— не назначен —</option>' + people.map(function (p) {
+          return '<option value="' + p.id + '"' + (String(sel || '') === String(p.id) ? ' selected' : '') + '>' +
+            esc(p.name || p.login) + '</option>';
+        }).join('');
+      };
+      var deptOpts = function (sel) {
+        return '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
+          return '<option value="' + d + '"' + (sel === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+        }).join('');
+      };
+      var goalOpts = function (sel) {
+        return '<option value="">Завести новую цель</option>' + goals.filter(function (g) { return g.is_goal; })
+          .map(function (g) {
+            return '<option value="' + g.id + '"' + (String(sel || '') === String(g.id) ? ' selected' : '') + '>' +
+              esc(g.title) + '</option>';
+          }).join('');
+      };
+      // Строка пункта одинакова у цели и шага: разница только в том, что у цели
+      // есть направление и выбор «новая или уже живущая цель».
+      var row = function (it, gi, si) {
+        var made = !!it.task_id;
+        var key = 'data-g="' + gi + '"' + (si === null ? '' : ' data-s="' + si + '"');
+        return '<div class="mi-item' + (made ? ' made' : '') + (it.skip ? ' off' : '') + '" ' + key + '>' +
+          '<div class="mi-line">' +
+            // Заголовок — textarea, а не input: формулировку надо видеть целиком,
+            // а на телефоне в одну строку влезает треть. Высота растет по тексту.
+            '<textarea class="al-in mi-title" rows="1" maxlength="200"' +
+              (made ? ' disabled' : '') + '>' + esc(it.title || '') + '</textarea>' +
+            (made
+              ? '<a class="mi-made" href="#task/' + it.task_id + '">' + ic('check', 13) + 'в задачнике</a>'
+              : '<button type="button" class="mi-skip" title="' +
+                  (it.skip ? 'Вернуть' : 'Не заводить') + '">' + ic(it.skip ? 'plus' : 'x', 14) + '</button>') +
+          '</div>' +
+          '<div class="mi-row">' +
+            // Порядок ряда — как в голове у человека: куда кладем, кто делает,
+            // чье направление, к какому сроку.
+            (si === null && !made
+              ? '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
+                  goalOpts(it.existing_goal_id) + '</select></span>'
+              : '') +
+            '<span class="al-selwrap mi-who"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
+              whoOpts(it.assignee_id) + '</select></span>' +
+            (si === null
+              ? '<span class="al-selwrap mi-dept"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
+                  deptOpts(it.dept || '') + '</select></span>'
+              : '') +
+            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '"' +
+              (made ? ' disabled' : '') + '>' +
+          '</div>' +
+        '</div>';
+      };
+      var body = gs.map(function (g, gi) {
+        return '<div class="mi-goal" data-g="' + gi + '">' +
+          '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
+          row(g, gi, null) +
+          (g.steps && g.steps.length
+            ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
+            : '<div class="mi-nosteps">Без шагов — цель останется одной строкой</div>') +
+        '</div>';
+      }).join('');
+
+      card.innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Импорт встречи</div><div class="al-title">' +
+            esc(imp.file_name || 'Протокол встречи') + '</div></div>' +
+          '<button class="al-x" id="mi-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + (applied
+          ? 'Уже заведено: ' + imp.made + ' ' + plural(imp.made, 'задача', 'задачи', 'задач') +
+            '. Повторное нажатие ничего не задвоит — заведется только то, что осталось.'
+          : 'Проверь исполнителей и сроки. В задачник ничего не попадет, пока не нажмешь «Завести».') +
+        '</div>' +
+        '<div class="mi-stat">' +
+          '<span><b>' + (st.goals || 0) + '</b> ' + plural(st.goals || 0, 'цель', 'цели', 'целей') + '</span>' +
+          '<span><b>' + (st.steps || 0) + '</b> ' + plural(st.steps || 0, 'шаг', 'шага', 'шагов') + '</span>' +
+          (st.no_assignee ? '<span class="warn"><b>' + st.no_assignee + '</b> без исполнителя</span>' : '') +
+          (st.no_due ? '<span class="warn"><b>' + st.no_due + '</b> без срока</span>' : '') +
+        '</div>' +
+        '<div class="al-body mi-body">' +
+          (imp.note ? '<div class="mi-note">' + esc(imp.note) + '</div>' : '') +
+          (body || '<div class="empty">В протоколе не нашлось задач.</div>') +
+          (dec.length
+            ? '<div class="mi-dec"><div class="mi-dec-h">' + ic('note', 13) + 'Не задачи, а вопросы на решение</div>' +
+              '<ul>' + dec.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul>' +
+              '<div class="mi-dec-s">Их я не завожу: пока нет решения, задача будет висеть без смысла.</div></div>'
+            : '') +
+        '</div>' +
+        '<div class="al-foot mi-foot">' +
+          '<span class="mi-count" id="mi-count"></span>' +
+          '<button class="al-cancel" id="mi-cancel">Закрыть</button>' +
+          '<button class="bp al-save" id="mi-save">' + ic('plus', 14) + 'Завести</button>' +
+        '</div>';
+      el('mi-x').addEventListener('click', close);
+      el('mi-cancel').addEventListener('click', close);
+
+      var save = el('mi-save'), count = el('mi-count');
+      var itemsLeft = function () {
+        return card.querySelectorAll('.mi-item:not(.made):not(.off)').length;
+      };
+      var mark = function () {
+        var n = itemsLeft();
+        // «Сняты» и «уже заведены» — разные новости, и путать их нельзя: в
+        // первом случае человек сам отказался, во втором работа уже в задачнике.
+        var off = card.querySelectorAll('.mi-item.off:not(.made)').length;
+        var made = card.querySelectorAll('.mi-item.made').length;
+        count.textContent = n
+          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
+          : !off ? 'Все пункты уже в задачнике'
+          : made ? 'Заведено все, кроме снятого'
+          : 'Все пункты сняты';
+        save.disabled = !n;
+        save.classList.toggle('off', !n);
+      };
+      markRef = mark;
+      // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
+      // scrollHeight еще нулевой.
+      var grow = function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; };
+      var growAll = function () {
+        Array.prototype.forEach.call(card.querySelectorAll('.mi-title'), grow);
+      };
+      // Считаем в следующем кадре: сразу после вставки flex еще не отдал место
+      // кнопке справа, ширина у поля больше настоящей, и длинный заголовок
+      // получает высоту в одну строку. Второй проход — после подгрузки шрифта,
+      // до нее строка меряется системным и выходит уже.
+      requestAnimationFrame(growAll);
+      setTimeout(growAll, 80);   // финальная ширина после анимации появления карточки
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(growAll);
+      // Снять пункт целиком: у цели вместе с ее шагами — шаг без цели повисает
+      // в воздухе, и человек все равно потом удаляет его руками.
+      if (!wired) {
+        card.addEventListener('input', function (e) {
+          if (e.target.classList && e.target.classList.contains('mi-title')) {
+            e.target.style.height = 'auto';
+            e.target.style.height = (e.target.scrollHeight + 2) + 'px';
+          }
+        });
+      }
+      if (!wired) { wired = true; card.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('.mi-skip');
+        if (!btn) return;
+        var item = btn.closest('.mi-item');
+        var off = !item.classList.contains('off');
+        item.classList.toggle('off', off);
+        btn.innerHTML = ic(off ? 'plus' : 'x', 14);
+        btn.title = off ? 'Вернуть' : 'Не заводить';
+        if (item.getAttribute('data-s') === null) {
+          var goal = item.closest('.mi-goal');
+          Array.prototype.forEach.call(goal.querySelectorAll('.mi-steps .mi-item:not(.made)'), function (s) {
+            s.classList.toggle('off', off);
+            var b = s.querySelector('.mi-skip');
+            if (b) { b.innerHTML = ic(off ? 'plus' : 'x', 14); }
+          });
+        }
+        markRef();
+      }); }
+      mark();
+
+      var collect = function () {
+        return Array.prototype.map.call(card.querySelectorAll('.mi-goal'), function (gEl) {
+          var head = gEl.querySelector(':scope > .mi-item');
+          var read = function (itEl) {
+            return {
+              title: (itEl.querySelector('.mi-title').value || '').trim(),
+              assignee_id: +(itEl.querySelector('.mi-who select').value || 0),
+              due_date: itEl.querySelector('.mi-due').value || null,
+              skip: itEl.classList.contains('off'),
+            };
+          };
+          var g = read(head);
+          g.dept = head.querySelector('.mi-dept select').value || '';
+          var ex = gEl.querySelector('.mi-exist');
+          g.existing_goal_id = ex ? (+(ex.value || 0) || null) : null;
+          g.steps = Array.prototype.map.call(gEl.querySelectorAll('.mi-steps .mi-item'), read);
+          return g;
+        });
+      };
+      save.addEventListener('click', function () {
+        if (save.disabled) return;
+        save.disabled = true; save.classList.add('loading');
+        apiSend('/admin/api/meetings/' + imp.id + '/apply', 'POST', { goals: collect() }, function (r) {
+          state.tasks = null;
+          state.taskGoals = null;
+          loadTaskSummary();
+          var n = ((r && r.goals) || 0) + ((r && r.steps) || 0);
+          showToast(n ? 'Завел ' + n + ' ' + plural(n, 'задачу', 'задачи', 'задач') : 'Новых задач не было');
+          if (r && r.import) draw(r.import, people, goals);
+          if (state.page === 'tasks') renderView();
+        }, function () {
+          save.disabled = false; save.classList.remove('loading');
+          showToast('Не получилось завести, попробуй еще раз');
+        });
+      });
+    };
+
+    var start = function (imp) {
+      loadTaskPeople(function (people) {
+        loadTaskGoals(function (goals) { draw(imp, people, goals); });
+      });
+    };
+    if (ready) { start(ready); return; }
+    api('/admin/api/meetings/' + id).then(function (r) {
+      if (r && r.import) start(r.import);
+      else { close(); showToast('Разбор не найден'); }
+    }).catch(function () { close(); showToast('Разбор не открылся'); });
   }
 
   /* ── Обучение: ученики по английскому ──────────────────────
@@ -17269,6 +17617,18 @@
     if (!can('tasks')) return;
     openTask(+tid);
   }
+  /* #meeting/<id> — разбор протокола встречи. На эту ссылку ведет ответ бота
+     на присланный файл: человек жмет и попадает сразу в список на проверку. */
+  function hashMeetingId() { return hashRouteId('meeting'); }
+  function openMeetingFromHash() {
+    var mid = hashMeetingId();
+    if (!mid || document.querySelector('.al-ov')) return;
+    if (!can('tasks')) return;
+    // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
+    // тому, кто ведет встречи и заводит их протоколы каждую неделю.
+    if (mid === 'new') { openMeetingUpload(); return; }
+    openMeetingImport(+mid);
+  }
   function openPageFromHash() {
     var pg = hashPageId();
     if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
@@ -17280,6 +17640,7 @@
     if (id) openFromHash();
     else if (hashDialogId()) openDialogFromHash();
     else if (hashTaskId()) openTaskFromHash();
+    else if (hashMeetingId()) openMeetingFromHash();
     else if (hashPageId()) openPageFromHash();
     else if (state.drawerId) closeDrawer();
   });
@@ -17303,6 +17664,7 @@
     // счетчик задач нужен бейджу в меню сразу, до открытия раздела
     loadTaskSummary();
     if (hashTaskId()) openTaskFromHash();
+    else if (hashMeetingId()) openMeetingFromHash();
     else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     if (can('inbox')) refreshBot(function () { renderSide(); });
