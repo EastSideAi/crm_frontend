@@ -9809,7 +9809,9 @@
      календарь сводит этот приход с плановым расходом периода. В каскад и отчисления
      план не входит: это ожидание, а не факт. */
 
-  var RP_STATUS = { 'ожидается': 'wait', 'получено': 'ok', 'отменено': 'off' };
+  // Статус строки — та же семья чипов .sev, что во всем модуле (cz-*/ct-*/st-*):
+  // ожидание синим, получено зеленым, отменено серым. Отдельного стиля не заводим.
+  var RP_STATUS = { 'ожидается': 'cz-wait', 'получено': 'cz-ok', 'отменено': 'cz-off' };
 
   function renderFinPlan(view) {
     if (!FIN.revplan) {
@@ -9821,9 +9823,9 @@
     var items = r.items || [];
     var sales = items.filter(function (x) { return x.kind === 'продажа'; });
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
-    var planFact = t.income_fact > 0
-      ? Math.round(t.income_fact / (t.planned_revenue || t.income_fact) * 100) + '% от плана уже пришло'
-      : 'факта по этой ведомости еще нет';
+    var planFact = t.planned_revenue > 0
+      ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
+      : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
@@ -9860,14 +9862,14 @@
 
   function finRevCard(title, kind, rows, canFix, sub) {
     var body = rows.map(function (x) {
-      var st = RP_STATUS[x.status] || 'wait';
+      var st = RP_STATUS[x.status] || 'cz-wait';
       var muted = x.status !== 'ожидается';
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '', x.comment]
         .filter(Boolean).map(esc).join(' · ');
       return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') + (canFix ? ' click' : '') +
         '" data-rp="' + x.id + '">' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
-          '<span class="rp-tag ' + st + '">' + esc(x.status) + '</span></span>' +
+          '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
     }).join('');
@@ -9953,11 +9955,13 @@
     }
     if (FIN.calendar === 'none') return finErrView(view);
     var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
-    // Остаток на р/с сейчас берем из уже загруженной ведомости, если она есть: календарь
-    // считает движение, а «после нагрузки» — это остаток плюс движение.
+    // Остаток на р/с берем из ведомости. Ее не открывали — подтягиваем сами (finBusy
+    // не даст дублю), чтобы четвертая плитка показала живой остаток, а не пустой прочерк.
     var cash = null;
     if (FIN.sheet && FIN.sheet !== 'none') {
       (FIN.sheet.accounts || []).forEach(function (a) { if (a.id === 'vtb') cash = a.live; });
+    } else if (FIN.sheet === null) {
+      finLoadSheet();
     }
     var after = cash === null ? null : cash + c.net;
 
@@ -9969,9 +9973,12 @@
       { label: 'Прогноз движения', value: finRub(c.net, 0),
         sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
       cash === null
-        ? { label: 'После нагрузки', value: '—', sub: 'откройте «Ведомость», чтобы увидеть остаток' }
+        // Остаток еще грузится или ведомости нет: плитку гасим (тихий текст вместо
+        // числа-героя), чтобы пустой прочерк не читался как сломанные данные.
+        ? { label: 'После нагрузки', value: '<span class="stat-idle">считаю остаток…</span>',
+            sub: 'из «Ведомости» — сколько останется на счете' }
         : { label: 'На счете после нагрузки', value: finRub(after, 0),
-            sub: after < 0 ? 'денег не хватит — нужен приход или перенос' : 'если план сойдется' },
+            sub: after < 0 ? 'денег не хватит, нужен приход или перенос' : 'если план сойдется' },
     ]);
 
     var incRows = finCalRows([
