@@ -9110,10 +9110,10 @@
     }
     if (FIN.lines === 'none') return finErrView(view);
     var L = FIN.lines, meta = finFormMeta(L.form), items = L.items || [];
-    var fact = 0, plan = 0;
+    var fact = 0, plan = 0, factN = 0, biggest = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
-      else if (i.included) fact += i.amount;
+      else if (i.included) { fact += i.amount; factN += 1; if (i.amount > biggest) biggest = i.amount; }
     });
 
     // Чипы — только когда форм больше одной (расчетные листы). У доходов форма одна,
@@ -9153,7 +9153,22 @@
     // «добавить лист» (пункт 4 Романа). И называет, что именно добавит.
     var addBtn = canFix ? '<button class="qchip add" id="fe-add">' + ic('plus', 12) +
       (FIN_ADD_LABEL[FIN.form] || 'Добавить') + '</button>' : '';
-    view.innerHTML =
+    // Анкер-плитки: у экрана был только список, из-за чего он читался беднее соседних.
+    // Доходы и листы фондов меряем «пришло/списано», расчетные листы — факт против плана.
+    var isIncome = (page === 'finincome');
+    var avg = factN ? Math.round(fact / factN) : 0;
+    var statTiles = isIncome ? [
+      { label: 'Пришло на счет', value: finRub(fact, 0), sub: 'зачислено по факту' },
+      { label: 'Записей', value: String(items.length), sub: 'строк дохода' },
+      { label: 'Средний доход', value: finRub(avg, 0), sub: 'в среднем на строку' },
+      { label: 'Крупнейший', value: finRub(biggest, 0), sub: 'самая большая сумма' },
+    ] : [
+      { label: 'Списано по факту', value: finRub(fact, 0), sub: 'уже ушло со счета' },
+      { label: 'В плане', value: finRub(plan, 0), sub: 'намечено, не списано' },
+      { label: 'Строк', value: String(items.length), sub: 'записей в листе' },
+      { label: 'Средняя строка', value: finRub(avg, 0), sub: 'по факту' },
+    ];
+    view.innerHTML = statBar(statTiles) +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
