@@ -130,7 +130,6 @@
     if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
     if (e.type === 'course_paid' || e.type === 'course_access_granted' || e.type === 'course_access_closed') {
       if (p.title) label += ' «' + p.title + '»';
-      if (e.type === 'course_paid' && p.amount) label += ', ' + p.amount + ' ₽';
       if (p.by) label += ' — ' + p.by;
     }
     if (e.type === 'magnet_progress') {
@@ -15799,7 +15798,7 @@
             '<button data-m="event" class="on">AI сформулирует</button>' +
             '<button data-m="text">Готовый текст</button>' +
           '</div>' +
-          '<textarea class="note-ta" id="ntf-input" placeholder="Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
+          '<textarea class="note-ta" id="ntf-input" placeholder="Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
           '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
           '<span class="ntf-state" id="ntf-state"></span></div>' +
         '</div>' +
@@ -16566,7 +16565,7 @@
           Array.prototype.forEach.call(modeBar.children, function (x) { x.classList.toggle('on', x === b); });
           var inp = el('ntf-input');
           if (inp) inp.placeholder = ntfMode === 'event'
-            ? 'Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести»'
+            ? 'Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести»'
             : 'Готовый текст сообщения — отправится как есть';
         });
       });

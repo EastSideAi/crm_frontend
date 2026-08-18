@@ -133,15 +133,29 @@
                 </div>
               </div>
 
-              <!-- секция «Переписка» -->
+              <!-- секция «Диалог» — переписка с ботом прямо в карточке -->
               <div class="m-sec">
-                <div class="m-sec-h">Переписка</div>
-                <div style="display:flex; flex-direction:column; gap:14px;">
-                  <div class="msg in"><div class="msg-b">Здравствуйте! Заполнила анкету, но не поняла, что дальше по срокам подачи?</div><div class="msg-t">09:14</div></div>
-                  <div class="msg out"><div class="msg-h"><span class="msg-by ai"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg>Ассистент</span></div><div class="msg-b">Диагностика готова — балл 78. Куратор свяжется сегодня и разберет сроки подачи в выбранные вузы.</div><div class="msg-t">09:15</div></div>
-                  <div class="msg-sys"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Куратор Артем подключился к диалогу</div>
-                  <div class="msg out mgr"><div class="msg-h"><span class="msg-by hum"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Артем · куратор</span></div><div class="msg-b">Мэйлинь, добрый день! Предлагаю созвон завтра в 15:00 — покажу маршрут по вашим вузам. Удобно?</div><div class="msg-t">09:22</div></div>
+                <div class="m-sec-h">Диалог</div>
+                <div class="m-dlg">
+                  <div class="m-dlg-h">
+                    <span class="tg-ch tg" ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>Telegram</span>
+                    <span class="tg-tag ai"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><line x1="12" y1="4" x2="12" y2="8"/></svg>бот отвечает</span>
+                    <button class="bp ghost sm">Открыть в «Диалогах»</button>
+                  </div>
+                  <div class="m-dlg-thread">
+                    <div class="tg-msg in"><div class="tg-bub">Здравствуйте! Заполнила анкету, но не поняла, что дальше по срокам подачи?<span class="tg-mt num">09:14</span></div></div>
+                    <div class="tg-msg out ai"><div class="tg-bub">Диагностика готова — балл 78. Куратор свяжется сегодня и разберет сроки подачи в выбранные вузы.<span class="tg-mt num">09:15</span></div><span class="tg-by">AI</span></div>
+                    <div class="tg-msg out mgr"><div class="tg-bub">Мэйлинь, добрый день! Предлагаю созвон завтра в 15:00 — покажу маршрут по вашим вузам. Удобно?<span class="tg-mt num">09:22</span></div><span class="tg-by">Менеджер</span></div>
+                  </div>
+                  <div class="m-dlg-compose">
+                    <textarea rows="1" placeholder="Ответить — вы перехватите диалог у бота"></textarea>
+                    <button class="tg-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+                  </div>
                 </div>
+                <details class="m-fold">
+                  <summary><span class="pm-t">Попросить бота написать</span><span class="pm-h">напоминание или новость — бот сформулирует и отправит</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></summary>
+                  <div class="m-fold__body"><div class="field-empty">Форма уведомления — та же, что была в разделе «Написать».</div></div>
+                </details>
               </div>
 
             </div>
@@ -162,13 +176,12 @@
 
   <!-- ── РОЛИ В ПЕРЕПИСКЕ ── -->
   <div class="sc-sec">
-    <div class="sc-lab">.msg — фиксированные цвета ролей: серый входящий · синий бот · зеленый менеджер</div>
+    <div class="sc-lab">.tg-msg — один рецепт переписки на весь продукт (инбокс и карточка): белый входящий · синий бот · navy менеджер</div>
     <div class="sc-panel">
-      <div style="display:flex; flex-direction:column; gap:14px; max-width:560px;">
-        <div class="msg in"><div class="msg-h"><span class="msg-by">Клиент</span></div><div class="msg-b">Входящее — серый пузырь <b>.msg.in</b>, срезан левый нижний угол.</div><div class="msg-t">10:02</div></div>
-        <div class="msg out"><div class="msg-h"><span class="msg-by ai"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.9 5.8L20 9l-4.6 4 1.4 6-4.8-3.2L7.2 19l1.4-6L4 9l6.1-1.2z"/></svg>Ассистент</span></div><div class="msg-b">Ответ бота — синий пузырь <b>.msg.out</b>.</div><div class="msg-t">10:03</div></div>
-        <div class="msg out mgr"><div class="msg-h"><span class="msg-by hum"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Менеджер</span></div><div class="msg-b">Ответ менеджера — зеленый пузырь <b>.msg.out.mgr</b>.</div><div class="msg-t">10:05</div></div>
-        <div class="msg-sys"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Системное — зеленая пилюля по центру</div>
+      <div class="m-dlg-thread" style="max-width:560px">
+        <div class="tg-msg in"><div class="tg-bub">Входящее — белый пузырь <b>.tg-msg.in</b>, срезан левый нижний угол.<span class="tg-mt num">10:02</span></div></div>
+        <div class="tg-msg out ai"><div class="tg-bub">Ответ бота — синий пузырь <b>.tg-msg.out</b>.<span class="tg-mt num">10:03</span></div><span class="tg-by">AI</span></div>
+        <div class="tg-msg out mgr"><div class="tg-bub">Ответ менеджера — navy пузырь <b>.tg-msg.out.mgr</b>.<span class="tg-mt num">10:05</span></div><span class="tg-by">Менеджер</span></div>
       </div>
     </div>
   </div>

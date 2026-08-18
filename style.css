@@ -2878,6 +2878,11 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .m-dlg-by { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber-ink); margin-top: 10px; }
 .m-dlg-by svg { color: var(--amber-ink); flex: none; }
 .m-dlg-more { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
+@media (max-width: 560px) {
+  .m-dlg-h { flex-wrap: wrap; }
+  .m-dlg-h .bp { margin-left: 0; width: 100%; justify-content: center; }
+  .m-dlg-thread { max-height: 52vh; padding: 12px; }
+}
 .ai-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 8px 14px; transition: .15s; }
 .ai-toggle .ait-dot { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 2px var(--line-2); position: relative; transition: .15s; }
