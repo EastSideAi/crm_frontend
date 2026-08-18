@@ -4317,7 +4317,7 @@
         '<div class="al-body">' +
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
-            '<div class="mu-drop-t">Перетащи файл или выбери</div>' +
+            '<div class="mu-drop-t">Выбери файл или перетащи сюда</div>' +
             '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ</div>' +
             '<input type="file" id="mu-file" accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
           '</div>' +
@@ -4456,14 +4456,22 @@
         var key = 'data-g="' + gi + '"' + (si === null ? '' : ' data-s="' + si + '"');
         return '<div class="mi-item' + (made ? ' made' : '') + (it.skip ? ' off' : '') + '" ' + key + '>' +
           '<div class="mi-line">' +
-            '<input class="al-in mi-title" value="' + esc(it.title || '') + '" maxlength="200"' +
-              (made ? ' disabled' : '') + '>' +
+            // Заголовок — textarea, а не input: формулировку надо видеть целиком,
+            // а на телефоне в одну строку влезает треть. Высота растет по тексту.
+            '<textarea class="al-in mi-title" rows="1" maxlength="200"' +
+              (made ? ' disabled' : '') + '>' + esc(it.title || '') + '</textarea>' +
             (made
               ? '<a class="mi-made" href="#task/' + it.task_id + '">' + ic('check', 13) + 'в задачнике</a>'
               : '<button type="button" class="mi-skip" title="' +
                   (it.skip ? 'Вернуть' : 'Не заводить') + '">' + ic(it.skip ? 'plus' : 'x', 14) + '</button>') +
           '</div>' +
           '<div class="mi-row">' +
+            // Порядок ряда — как в голове у человека: куда кладем, кто делает,
+            // чье направление, к какому сроку.
+            (si === null && !made
+              ? '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
+                  goalOpts(it.existing_goal_id) + '</select></span>'
+              : '') +
             '<span class="al-selwrap mi-who"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
               whoOpts(it.assignee_id) + '</select></span>' +
             (si === null
@@ -4477,12 +4485,7 @@
       };
       var body = gs.map(function (g, gi) {
         return '<div class="mi-goal" data-g="' + gi + '">' +
-          '<div class="mi-g-h">' +
-            '<span class="mi-tag">Цель</span>' +
-            '<span class="mi-to">Куда положить</span>' +
-            '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
-              goalOpts(g.existing_goal_id) + '</select></span>' +
-          '</div>' +
+          '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
           row(g, gi, null) +
           (g.steps && g.steps.length
             ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
@@ -4530,13 +4533,42 @@
       };
       var mark = function () {
         var n = itemsLeft();
-        count.textContent = n ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению' : 'Все пункты сняты';
+        // «Сняты» и «уже заведены» — разные новости, и путать их нельзя: в
+        // первом случае человек сам отказался, во втором работа уже в задачнике.
+        var off = card.querySelectorAll('.mi-item.off:not(.made)').length;
+        var made = card.querySelectorAll('.mi-item.made').length;
+        count.textContent = n
+          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
+          : !off ? 'Все пункты уже в задачнике'
+          : made ? 'Заведено все, кроме снятого'
+          : 'Все пункты сняты';
         save.disabled = !n;
         save.classList.toggle('off', !n);
       };
       markRef = mark;
+      // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
+      // scrollHeight еще нулевой.
+      var grow = function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; };
+      var growAll = function () {
+        Array.prototype.forEach.call(card.querySelectorAll('.mi-title'), grow);
+      };
+      // Считаем в следующем кадре: сразу после вставки flex еще не отдал место
+      // кнопке справа, ширина у поля больше настоящей, и длинный заголовок
+      // получает высоту в одну строку. Второй проход — после подгрузки шрифта,
+      // до нее строка меряется системным и выходит уже.
+      requestAnimationFrame(growAll);
+      setTimeout(growAll, 80);   // финальная ширина после анимации появления карточки
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(growAll);
       // Снять пункт целиком: у цели вместе с ее шагами — шаг без цели повисает
       // в воздухе, и человек все равно потом удаляет его руками.
+      if (!wired) {
+        card.addEventListener('input', function (e) {
+          if (e.target.classList && e.target.classList.contains('mi-title')) {
+            e.target.style.height = 'auto';
+            e.target.style.height = (e.target.scrollHeight + 2) + 'px';
+          }
+        });
+      }
       if (!wired) { wired = true; card.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('.mi-skip');
         if (!btn) return;
@@ -4570,7 +4602,8 @@
           };
           var g = read(head);
           g.dept = head.querySelector('.mi-dept select').value || '';
-          g.existing_goal_id = +(gEl.querySelector('.mi-exist').value || 0) || null;
+          var ex = gEl.querySelector('.mi-exist');
+          g.existing_goal_id = ex ? (+(ex.value || 0) || null) : null;
           g.steps = Array.prototype.map.call(gEl.querySelectorAll('.mi-steps .mi-item'), read);
           return g;
         });
@@ -17591,6 +17624,9 @@
     var mid = hashMeetingId();
     if (!mid || document.querySelector('.al-ov')) return;
     if (!can('tasks')) return;
+    // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
+    // тому, кто ведет встречи и заводит их протоколы каждую неделю.
+    if (mid === 'new') { openMeetingUpload(); return; }
     openMeetingImport(+mid);
   }
   function openPageFromHash() {

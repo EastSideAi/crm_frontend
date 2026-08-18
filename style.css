@@ -5052,10 +5052,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Зона файла. Единственный цветной элемент формы — с нее и начинают. */
 .mu-drop { display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 26px 18px; border-radius: 14px; background: var(--blue-tint);
-  box-shadow: inset 0 0 0 1.5px #DCE7FF; cursor: pointer; text-align: center;
+  box-shadow: inset 0 0 0 1.5px rgba(47,107,255,.18); cursor: pointer; text-align: center;
   transition: box-shadow .15s, background .15s; }
 .mu-drop:hover, .mu-drop.over { box-shadow: inset 0 0 0 1.5px var(--blue); }
-.mu-drop.has { background: var(--green-soft); box-shadow: inset 0 0 0 1.5px #C7EBD6; }
+.mu-drop.has { background: var(--green-soft); box-shadow: inset 0 0 0 1.5px rgba(24,169,87,.22); }
 .mu-drop-i { color: var(--blue); margin-bottom: 4px; }
 .mu-drop.has .mu-drop-i { color: var(--green-ink); }
 .mu-drop-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
@@ -5075,29 +5075,39 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .mi-goal { display: flex; flex-direction: column; gap: 9px; }
 .mi-g-h { display: flex; align-items: center; gap: 10px; }
-.mi-to { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ink-3); margin-left: auto; }
-.mi-tag { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--blue); }
-.mi-link { flex: 0 1 240px; min-width: 0; }
+.mi-tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.mi-row .mi-link { flex: 1 1 160px; min-width: 0; }
 
 .mi-item { display: flex; flex-direction: column; gap: 6px; transition: opacity .15s; }
 .mi-item.off { opacity: .4; }
 .mi-item.off .mi-title { text-decoration: line-through; }
 .mi-line { display: flex; align-items: center; gap: 8px; }
-.mi-line .mi-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: -.015em; }
+/* Заголовок цели читается как заголовок, а не как еще одно поле: фона нет,
+   обводка приезжает под курсор и на фокус. Иначе десять одинаковых серых
+   прямоугольников подряд, и глазу не за что зацепиться. */
+.mi-line .mi-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: -.015em;
+  line-height: 1.35; background: transparent; box-shadow: none;
+  /* Не hidden: если высота почему-то не сошлась, хвост фразы должен быть
+     доступен прокруткой, а не отрезан насовсем. */
+  resize: none; overflow-y: auto; min-height: 0;
+  /* Высота по тексту силами браузера. JS-подгонка в app.js остается для тех,
+     где свойства еще нет (Safari): она считает то же самое, но после кадра. */
+  field-sizing: content; }
+.mi-line .mi-title:hover { background: var(--fill); box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
+.mi-line .mi-title:focus { background: #fff; }
 .mi-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.mi-row .mi-who { flex: 1 1 170px; min-width: 0; }
-.mi-row .mi-dept { flex: 1 1 150px; min-width: 0; }
-.mi-row .mi-due { flex: 0 0 152px; }
+.mi-row .mi-who { flex: 1 1 150px; min-width: 0; }
+.mi-row .mi-dept { flex: 1 1 130px; min-width: 0; }
+.mi-row .mi-due { flex: 0 0 144px; }
 .al-sel.sm { font-size: 12.5px; font-weight: 600; border-radius: 10px; padding: 8px 30px 8px 11px; }
 
 /* Шаги живут внутри цели: отступ слева и полупрозрачная линия вместо рамки. */
 .mi-steps { display: flex; flex-direction: column; gap: 9px; margin-left: 15px;
-  padding-left: 16px; border-left: 1.5px solid rgba(17,21,31,.06); }
+  padding-left: 16px; border-left: 1.5px solid var(--line-2); }
 .mi-steps .mi-item { gap: 5px; }
 .mi-steps .mi-title { font-size: 13px; font-weight: 500; letter-spacing: 0;
-  padding: 9px 12px; border-radius: 10px; }
+  padding: 9px 12px; border-radius: 10px; line-height: 1.4; }
 .mi-steps .mi-skip { width: 28px; height: 28px; border-radius: 8px; }
 .mi-nosteps { margin-left: 28px; font-size: 11.5px; color: var(--ink-3); }
 
@@ -5118,16 +5128,24 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .mi-foot { align-items: center; }
 .mi-count { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--ink-2); }
-.al-save.off { background: var(--fill); color: var(--ink-3); pointer-events: none; }
+/* Погашенная кнопка все равно читается: --ink-3 на --fill дает контраст 2:1,
+   и главное действие экрана просто исчезало. */
+.al-save.off { background: var(--fill); color: var(--ink-2); pointer-events: none; }
 
 @media (max-width: 620px) {
   .mi-card { max-width: none; }
   .mi-stat { padding: 10px 16px 0; }
-  .mi-link { max-width: none; }
   /* На телефоне поля идут в столбец: три контрола в строку дают по 90px каждому,
-     и имя исполнителя в них не читается. */
+     и имя исполнителя в них не читается. Сброс flex обязателен — в колонке
+     flex-basis становится ВЫСОТОЙ, и селект вытягивается на пол-экрана. */
   .mi-row { flex-direction: column; }
-  .mi-row .mi-due { flex: 1 1 auto; }
+  .mi-row > .mi-who, .mi-row > .mi-dept, .mi-row > .mi-due, .mi-row > .mi-link { flex: 0 0 auto; width: 100%; }
+  /* На телефоне заголовок почти всегда идет в две строки. Держим место под них
+     заранее: подгонка высоты скриптом промахивается, пока не устоялась ширина,
+     и хвост фразы прячется под обрез — а проверять формулировки и есть смысл
+     этого экрана. */
+  .mi-line .mi-title { font-size: 14px; min-height: 62px; }
+  .mi-steps .mi-line .mi-title { min-height: 56px; }
   .mi-steps { margin-left: 8px; padding-left: 10px; }
   .mi-nosteps { margin-left: 18px; }
 }
