@@ -1791,9 +1791,18 @@ a { color: inherit; text-decoration: none; }
 /* на телефоне иконки в сегменте уступают место подписи: «Не беспокоить» иначе обрезается
    внутри своей кнопки (треть от 294px не вмещает иконку и текст) */
 @media (max-width: 480px) { .np-seg button svg { display: none; } .np-seg button { gap: 0; } }
+/* вариантов четыре («Оба» — отдельный), в одну строку на телефоне они не помещаются:
+   раскладываем сегмент в две строки, иначе «Не беспокоить» уезжает за край карточки */
+@media (max-width: 520px) {
+  .np-seg { flex-wrap: wrap; }
+  .np-seg button { flex: 1 1 calc(50% - 3px); }
+}
 .np-state { display: flex; flex-direction: column; align-items: flex-start; gap: 9px;
   padding: 14px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); }
 .np-hint { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+/* «Оба» = два подключения: шаги разделяем линией, иначе два абзаца с кнопками
+   читаются как один и человек делает только первый */
+.np-step + .np-step { margin-top: 13px; padding-top: 13px; border-top: 1px solid var(--line); }
 .np-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .np-act .bp { padding: 10px 15px; font-size: 13px; text-decoration: none; }
 .np-act .al-cancel { padding: 10px 14px; display: inline-flex; align-items: center; gap: 7px; }
