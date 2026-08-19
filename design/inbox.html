@@ -82,6 +82,7 @@
             <div class="tg-cn">Марина К.</div>
             <div class="tg-cs"><span class="tg-st ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>Отвечает бот</span></div>
           </div>
+          <span class="tg-cwrap"><button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</button></span>
         </div>
         <div class="tg-thread">
           <div class="tg-day"><span>Сегодня</span></div>
@@ -105,6 +106,15 @@
         </div>
       </div>
     </div>
+    <div class="sc-lab" style="margin-top:22px">КНОПКА КАРТОЧКИ В ШАПКЕ ЧАТА · .tg-cact</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+      <button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</button>
+      <button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка<span class="tg-cw">по нику</span></button>
+      <button class="tg-cact new"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>
+      <span class="tg-cact off"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</span>
+    </div>
+    <p class="sc-note">Тихая таблетка рядом с тумблером бота: якорь экрана — переписка. Открывает карточку в НОВОЙ вкладке, диалог остается на месте. Связки в базе нет, сшивает бэкенд: сшито по нику — говорим об этом пометкой <code>.tg-cw</code>. Карточки нет вовсе (боту пишет кто угодно) — та же кнопка ее заводит, <code>.new</code>. Четвертое состояние — пока грузится связка, <code>.off</code>.</p>
+
     <p class="sc-note">Фон ленты <code>#F3F5F8</code> — единственный «не белый» фон контента в CRM. Пузыри: входящий белый с тонкой тенью, бот синий, менеджер navy, недоставленный — красная инсет-рамка. Разделитель дней <code>.tg-day</code>, подпись автора <code>.tg-by</code>.</p>
   </section>
 
