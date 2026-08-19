@@ -27,13 +27,14 @@
     leads: [], page: 'dash', seg: 'queue', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '',
+    pathSel: null, pathPeriod: '', mkDays: 30,
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
     drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
+    leadConv: {},       // переписка бота, сведенная с карточкой лида: { session_id: ответ | 'load' }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
@@ -55,7 +56,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -63,7 +64,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
+        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod, mkDays: state.mkDays,
       }));
     } catch (e) {}
   }
@@ -103,7 +104,23 @@
     tg_nudge_sent: 'бот напомнил о записи',
     magnet_registered: 'забрал бесплатный мини-курс',
     magnet_progress: 'мини-курс: прогресс',
+    course_paid: 'оплатил курс',
+    course_access_granted: 'открыт доступ к курсу',
+    course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    // Раньше эти события показывались в ленте сырым английским именем: человек читал
+    // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
+    lead_created_bot: 'написал боту',
+    lead_created_manual: 'заведен в CRM вручную',
+    lead_name_bot: 'бот узнал имя',
+    dormant_no_anketa_sent: 'бот напомнил про анкету',
+    geo: 'определен город',
+    det_test_started: 'начал тест по английскому',
+    webinar_registered: 'записался на вебинар',
+    webinar_comment: 'написал в чате вебинара',
+    call_reminder_sent: 'напомнили о созвоне',
+    offer_paid: 'оплатил счет',
+    hsk_signup: 'записался на HSK',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -111,10 +128,17 @@
     if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
     if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
     if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'course_paid' || e.type === 'course_access_granted' || e.type === 'course_access_closed') {
+      if (p.title) label += ' «' + p.title + '»';
+      if (p.by) label += ' — ' + p.by;
+    }
     if (e.type === 'magnet_progress') {
       label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
+    if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
+    if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -1826,6 +1850,10 @@
        расходы блоками отдельно. Человек приходит вносить что-то одно — и должен сразу
        попадать туда, а не искать нужную вкладку в общей куче. */
     { id: 'finincome', label: 'Доходы', icon: 'card', cap: 'finmodel', space: 'fin' },
+    /* План выручки — прогноз (новые продажи и дебиторка), платежный календарь сводит
+       ожидаемый приход с плановым расходом. Раздел старого сайта, вернули 18.08.2026. */
+    { id: 'finplan', label: 'План выручки', icon: 'target', cap: 'finmodel', space: 'fin' },
+    { id: 'fincalendar', label: 'Платежный календарь', icon: 'cal', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». */
@@ -2094,6 +2122,19 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
+    } else if (state.page === 'marketing') {
+      /* период смотрит только воронка курса — у воронок бота свой период внутри */
+      var mopts = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']];
+      tb.innerHTML = '<nav class="tabs">' + mopts.map(function (o) {
+        return '<a class="tab' + ((state.mkDays || 30) === o[0] ? ' on' : '') + '" data-mkd="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.mkDays = parseInt(t.getAttribute('data-mkd'), 10);
+          saveUi();
+          renderTopbar(); renderView();
+        });
+      });
     } else if (state.page === 'path') {
     } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
@@ -2145,6 +2186,7 @@
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
+               state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
@@ -2485,6 +2527,7 @@
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
+                     finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
@@ -2544,6 +2587,14 @@
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
           : 'Все ведомости одной лентой: доходы, расходы и переводы, новое сверху. У каждой строки видно свою ведомость.';
+      } else if (state.page === 'finplan') {
+        ph = 'Прогноз выручки по ведомости <b>' + esc(per.name) + '</b>: новые продажи и ' +
+          'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
+          'сравнивает план с тем, что уже пришло.';
+      } else if (state.page === 'fincalendar') {
+        ph = 'Хватит ли денег: ожидаемый приход из плана выручки против плановых выплат ' +
+          'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
+          'часть уйдет по обязательствам.';
       } else {
         ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
       }
@@ -2611,6 +2662,8 @@
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finplan') renderFinPlan(view);
+    else if (state.page === 'fincalendar') renderFinCalendar(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -7998,7 +8051,8 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
-              lines: null, pnlp: null, form: 'доход', lineBusy: false,
+              lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
+              calendar: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -8184,7 +8238,30 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
+    FIN.revplan = null; FIN.calendar = null;
     if (!keepPeriods) FIN.periods = null;
+  }
+
+  function finLoadRevPlan() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadRevPlan(); });
+    finBusy('revplan', function (done) {
+      api('/admin/api/fin/revenue-plan' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.revplan = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'revplan'); }).then(done);
+    });
+  }
+
+  function finLoadCalendar() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadCalendar(); });
+    finBusy('calendar', function (done) {
+      api('/admin/api/fin/calendar' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.calendar = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'calendar'); }).then(done);
+    });
   }
   function finPeriod() {
     var l = FIN.periods || [];
@@ -9867,6 +9944,222 @@
     pageAnim(view);
   }
 
+  /* ── План выручки и платежный календарь ────────────────────────────────────
+     Раздел старого сайта, которого не было в базе (perenos.md §1.3, §1.7). План
+     выручки — прогноз ожидаемых поступлений (новые продажи + дебиторка). Платежный
+     календарь сводит этот приход с плановым расходом периода. В каскад и отчисления
+     план не входит: это ожидание, а не факт. */
+
+  // Статус строки — та же семья чипов .sev, что во всем модуле (cz-*/ct-*/st-*):
+  // ожидание синим, получено зеленым, отменено серым. Отдельного стиля не заводим.
+  var RP_STATUS = { 'ожидается': 'cz-wait', 'получено': 'cz-ok', 'отменено': 'cz-off' };
+
+  function renderFinPlan(view) {
+    if (!FIN.revplan) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadRevPlan(); return;
+    }
+    if (FIN.revplan === 'none') return finErrView(view);
+    var r = FIN.revplan, canFix = can('finmodel_edit'), t = r.totals || {};
+    var items = r.items || [];
+    var sales = items.filter(function (x) { return x.kind === 'продажа'; });
+    var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
+    var planFact = t.planned_revenue > 0
+      ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
+      : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
+
+    var bar = statBar([
+      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
+        sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
+      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
+        sub: receiv.length + ' ' + plural(receiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+      { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
+        sub: 'новые продажи плюс дебиторка' },
+      { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
+    ]);
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
+        'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
+      '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
+        'кто уже должен и за что — ожидаемые поступления по долгам клиентов') + '</div>' +
+    '</div>';
+
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpadd]'), function (b) {
+        b.addEventListener('click', function () {
+          finRevForm(null, b.getAttribute('data-rpadd'));
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rp]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-rp');
+          items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  function finRevCard(title, kind, rows, canFix, sub) {
+    var body = rows.map(function (x) {
+      var st = RP_STATUS[x.status] || 'cz-wait';
+      var muted = x.status !== 'ожидается';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '', x.comment]
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') + (canFix ? ' click' : '') +
+        '" data-rp="' + x.id + '">' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
+          '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
+          '<span class="fl-sub">' + (line || '—') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
+    return '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' +
+        ic(kind === 'продажа' ? 'card' : 'clock', 14) + '</span>' +
+        '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(sub) + '</div></div>' +
+        (canFix ? '<button class="qchip add" data-rpadd="' + kind + '">' + ic('plus', 12) +
+          'Добавить</button>' : '') + '</div>' +
+      (body || '<div class="empty">Пока пусто. ' +
+        (canFix ? 'Добавьте строку кнопкой выше.' : 'Строк нет.') + '</div>') +
+    '</div>';
+  }
+
+  function finRevForm(row, kind) {
+    var isNew = !row;
+    var o = row || { kind: kind || 'продажа', client: '', item: '', amount: '',
+                     status: 'ожидается', due_on: '', comment: '' };
+    var isSale = (o.kind === 'продажа');
+    var m = finModal({
+      eyebrow: 'План выручки',
+      title: isNew ? (isSale ? 'Новая продажа' : 'Строка дебиторки') : (o.client || 'Строка'),
+      sub: isSale
+        ? 'Ожидаемая продажа: кого закрываем, на какой продукт и сумму. В факт дохода это не идет — только в план.'
+        : 'Клиент уже должен: за что и сколько ждем получить. Это ожидание, не факт.',
+      del: isNew ? '' : 'Удалить',
+      body:
+        '<div class="al-row">' +
+          finField(isSale ? 'Клиент / источник' : 'Кто должен',
+            '<input id="rp-client" class="al-in" maxlength="200" value="' + esc(o.client) +
+            '" placeholder="' + (isSale ? 'Семья Ли' : 'Семья Ван') + '">') +
+          finField('Сумма, ₽ <i>*</i>', '<input id="rp-amount" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (o.amount || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField(isSale ? 'Продукт / направление' : 'Основание',
+            '<input id="rp-item" class="al-in" maxlength="200" value="' + esc(o.item) +
+            '" placeholder="' + (isSale ? 'Харбин базовый' : 'второй взнос') + '">') +
+          finField('Срок', '<input id="rp-due" class="al-in" type="date" value="' +
+            esc(o.due_on || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Статус', '<select id="rp-status" class="al-in">' +
+            ['ожидается', 'получено', 'отменено'].map(function (s) {
+              return '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' +
+                s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+            }).join('') + '</select>') +
+          finField('Комментарий', '<input id="rp-comment" class="al-in" maxlength="1000" value="' +
+            esc(o.comment || '') + '">') +
+        '</div>',
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (!(Number(finVal('rp-amount')) >= 0) || finVal('rp-amount') === '') {
+        m.err.textContent = 'Впишите сумму'; return;
+      }
+      if (!finVal('rp-client') && !finVal('rp-item')) {
+        m.err.textContent = 'Впишите клиента или продукт'; return;
+      }
+      m.close();
+      finDo('/admin/api/fin/revenue-plan', 'POST', {
+        id: isNew ? null : o.id, period_id: FIN.id, kind: o.kind,
+        client: finVal('rp-client'), item: finVal('rp-item'), amount: finVal('rp-amount'),
+        status: el('rp-status').value, due_on: finVal('rp-due') || null,
+        comment: finVal('rp-comment'),
+      }, isNew ? 'Строка добавлена' : 'Строка поправлена');
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Удалить строку?', 'Строка плана выручки исчезнет. На факт дохода это не влияет.',
+        'Удалить', function () {
+          finDo('/admin/api/fin/revenue-plan?id=' + encodeURIComponent(o.id), 'DELETE',
+                null, 'Строка удалена');
+        });
+    });
+  }
+
+  function renderFinCalendar(view) {
+    if (!FIN.calendar) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
+    }
+    if (FIN.calendar === 'none') return finErrView(view);
+    var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
+    // Остаток на р/с берем из ведомости. Ее не открывали — подтягиваем сами (finBusy
+    // не даст дублю), чтобы четвертая плитка показала живой остаток, а не пустой прочерк.
+    var cash = null;
+    if (FIN.sheet && FIN.sheet !== 'none') {
+      (FIN.sheet.accounts || []).forEach(function (a) { if (a.id === 'vtb') cash = a.live; });
+    } else if (FIN.sheet === null) {
+      finLoadSheet();
+    }
+    var after = cash === null ? null : cash + c.net;
+
+    var bar = statBar([
+      { label: 'Ждем получить', value: finRub(inc.total, 0),
+        sub: 'новые продажи и дебиторка' },
+      { label: 'Должны выплатить', value: finRub(out.total, 0),
+        sub: 'плановые расходы, фонды, кредиты' },
+      { label: 'Прогноз движения', value: finRub(c.net, 0),
+        sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
+      cash === null
+        // Остаток еще грузится или ведомости нет: плитку гасим (тихий текст вместо
+        // числа-героя), чтобы пустой прочерк не читался как сломанные данные.
+        ? { label: 'После нагрузки', value: '<span class="stat-idle">считаю остаток…</span>',
+            sub: 'из «Ведомости» — сколько останется на счете' }
+        : { label: 'На счете после нагрузки', value: finRub(after, 0),
+            sub: after < 0 ? 'денег не хватит, нужен приход или перенос' : 'если план сойдется' },
+    ]);
+
+    var incRows = finCalRows([
+      ['Новые продажи', inc.sales], ['Дебиторка', inc.receivables],
+    ], inc.total, 'Итого ждем получить');
+    var outRows = finCalRows([
+      ['Плановые прямые расходы', out.direct], ['Отчисления в фонды', out.funds],
+      ['Платежи по кредитам и долгам', out.debts],
+    ], out.total, 'Итого к выплате');
+
+    view.innerHTML = bar + '<div class="grid">' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+          '<div><div class="t">Ожидаем получить</div>' +
+          '<div class="s">из плана выручки — что должно прийти в этом периоде</div></div></div>' +
+        incRows + '</div></div>' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">Плановые выплаты</div>' +
+          '<div class="s">плановые строки этой ведомости: расходы, фонды, кредиты</div></div></div>' +
+        outRows + '</div></div>' +
+    '</div>' +
+    '<div class="card"><div class="fin-note ' + (c.net >= 0 ? 'calm' : 'warn') + '">' +
+      'Прогноз считается по плановым строкам ведомости и плану выручки. Остаток на счете не равен ' +
+      'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
+      'чтобы прогноз был точнее.</div></div>';
+    pageAnim(view);
+  }
+
+  function finCalRows(rows, total, totalLabel) {
+    var body = rows.map(function (p) {
+      return '<div class="fl-row fl-2 cal-row"><div class="fl-main">' +
+        '<span class="fl-name">' + esc(p[0]) + '</span></div>' +
+        '<div class="fl-v num">' + finRub(p[1] || 0, 0) + '</div></div>';
+    }).join('');
+    return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
+      '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
+      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+  }
+
   /* Общая отправка правки ведомости: сохранили — забыли все посчитанное и
      пересобрали экран. Полумеры тут опасны: одна строка меняет и каскад, и фонды. */
   function finDo(path, method, body, okText, after) {
@@ -11084,14 +11377,117 @@
     });
   }
 
+  /* ── Воронка курса в записи ────────────────────────────────────────────────
+     Курс продают со страницы, мимо бота, поэтому в воронках выше его не видно
+     вовсе. Шаги до оплаты считает сама страница (routers/course.py), оплаты —
+     покупатели: человек в одном браузере учитывается один раз, перезагрузка
+     ничего не добавляет. */
+  function cfDays() { return state.mkDays || 30; }
+
+  function fetchCourseFunnel() {
+    var days = cfDays();
+    state._cfLoad = days;
+    api('/admin/api/course/funnel?days=' + days).then(function (r) {
+      state._cf = r; state._cfDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') {
+        state._cf = 'none'; state._cfDays = days;
+        if (state.page === 'marketing') renderView();
+      }
+    });
+  }
+
+  function courseFunnelCard() {
+    var d = state._cf;
+    var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
+      '<span class="ic">' + ic('cap', 14) + '</span>' +
+      '<div><div class="t">Курс «Живой китайский»</div>' +
+      '<div class="s">путь покупателя со страницы курса</div></div>' +
+      (d && d !== 'none' && d.revenue
+        ? '<span style="flex:1"></span><div class="lad-n num">' + fmtMoney(d.revenue) + ' ₽</div>' : '') +
+      '</div>';
+
+    if (!d) return '<div class="card">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') {
+      return '<div class="card">' + head +
+        '<div class="empty">Не удалось загрузить воронку курса — проверь сеть или доступ.</div></div>';
+    }
+
+    var steps = d.steps || [];
+    var first = steps.length ? steps[0].n : 0;
+    if (!first && !(steps[steps.length - 1] || {}).n) {
+      return '<div class="card">' + head +
+        '<div class="empty">За этот период на странице курса никого не было.</div></div>';
+    }
+
+    /* худший шаг — где теряем больше всего людей в долях, а не в штуках */
+    var worst = -1, worstConv = 101;
+    steps.forEach(function (s, i) {
+      if (!i || !steps[i - 1].n) return;
+      var c = Math.round(s.n / steps[i - 1].n * 100);
+      if (c <= 100 && c < worstConv) { worstConv = c; worst = i; }
+    });
+
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.min(100, Math.round(s.n / first * 100)) : 0;
+      var prev = i ? steps[i - 1].n : 0;
+      var conv = i ? (prev ? Math.round(s.n / prev * 100) : 0) : 100;
+      var lost = i ? Math.max(0, prev - s.n) : 0;
+      /* Оплат может оказаться больше, чем дошедших до оплаты: доступ к курсу
+         открывают и руками из карточки лида, а такой человек по странице не шёл.
+         Считать это конверсией 2125% нельзя — говорим, что произошло. */
+      var over = i && conv > 100;
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.title) + '</div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right">' +
+        (over ? '' : '<span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+          (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' +
+            (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '')) +
+        '</div></div>';
+    }).join('');
+    /* Сноска нужна ровно тогда, когда цифры на первый взгляд не сходятся. */
+    var overPaid = steps.length > 1 &&
+      steps[steps.length - 1].n > steps[steps.length - 2].n;
+    var note = overPaid
+      ? '<div class="cf-note">Оплативших больше, чем дошедших до оплаты: часть доступов ' +
+        'открывают руками из карточки в CRM, и эти люди по странице не шли.</div>' : '';
+
+    var srcs = (d.sources || []).filter(function (s) { return s.landing || s.paid; });
+    var srows = srcs.map(function (s) {
+      return '<div class="trow cf-grid">' +
+        '<div class="t-cell"><div class="t-ttl' + (s.source ? '' : ' anon') + '">' +
+          esc(s.source || 'без метки') + '</div></div>' +
+        '<div class="num">' + s.landing + '</div>' +
+        '<div class="num hidem">' + s.free_open + '</div>' +
+        '<div class="num hidem">' + s.checkout + '</div>' +
+        '<div class="num">' + s.paid + '</div>' +
+        '<div class="num">' + (s.revenue ? fmtMoney(s.revenue) + ' ₽' : '—') + '</div></div>';
+    }).join('');
+    var sources = srows
+      ? '<div class="trow cf-grid thead"><span class="th">Источник</span><span class="th">Зашли</span>' +
+        '<span class="th hidem">Пробный</span><span class="th hidem">На оплату</span>' +
+        '<span class="th">Купили</span><span class="th">Деньги</span></div>' + srows
+      : '';
+
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+  }
+
   function renderMarketing(view) {
+    if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
+    /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
+       права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
     if (!state._mk) {
-      view.innerHTML = dashSkeleton();
+      view.innerHTML = courseFunnelCard() + dashSkeleton();
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить маркетинг — проверь сеть или доступ.</div></div>';
+      view.innerHTML = courseFunnelCard() +
+        '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
       return;
     }
     var d = state._mk;
@@ -11114,7 +11510,7 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML =
+    view.innerHTML = courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
@@ -13881,39 +14277,82 @@
     });
   }
 
-  /* ── РАЗДЕЛ «Диалог» в карточке лида (демо) ── */
+  /* ── РАЗДЕЛ «Диалог» в карточке лида ──
+     Та же переписка, что в «Диалогах», только рядом с человеком. Связи «карточка ↔
+     диалог бота» в базе нет: карточка живет в анкетах, переписка — в таблицах бота, и
+     заводятся они порознь. Сводит их бэкенд (по телеграму, аккаунту платформы и нику) и
+     говорит, чем именно сшил, — по нику бывает мимо, менеджер должен это видеть.
+     Отправка идет той же ручкой, что из «Диалогов»: вторая копия отправки разъехалась бы
+     с первой, а клиент получил бы два разных поведения бота. */
+  function leadConvLoad(id) {
+    if (state.leadConv[id]) return;
+    state.leadConv[id] = 'load';
+    api('/admin/api/leads/' + id + '/conversation').then(function (r) {
+      state.leadConv[id] = r || { conversations: [], messages: [] };
+    }).catch(function (e) {
+      state.leadConv[id] = { conversations: [], messages: [], error: (e && e.message) || 'err' };
+    }).then(function () {
+      if (state.drawerId === id && state.modalSection === 'dialog') renderModalContent();
+    });
+  }
+  function leadConvMsgs(d) {
+    return (d.messages || []).map(function (m) {
+      var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
+      return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
+    });
+  }
   function buildDialog(ctx) {
-    var l = ctx.lead || ctx.base;
-    var dlg = getDialog(l.crm ? l : ctx.base);
-    var aiOn = dlg.ai_on;
-    var thread = dlg.messages.map(function (m) {
-      var side = m.from === 'client' ? 'in' : 'out';
-      var tag = m.from === 'bot' ? '<span class="msg-by ai">' + ic('bot', 11) + 'AI-бот</span>'
-        : m.from === 'manager' ? '<span class="msg-by hum">' + ic('hand', 11) + 'Менеджер</span>' : '';
-      return '<div class="msg ' + side + (m.from === 'manager' ? ' mgr' : '') + '">' +
-        (tag ? '<div class="msg-h">' + tag + '</div>' : '') +
-        '<div class="msg-b">' + esc(m.text) + '</div><div class="msg-t num">' + fmtWhen(m.at) + '</div></div>';
-    }).join('');
-    if (dlg.handed) thread += '<div class="msg-sys">' + ic('hand', 12) + 'Диалог передан менеджеру</div>';
+    var id = ctx.id;
+    var d = state.leadConv[id];
+    if (!d) { leadConvLoad(id); d = 'load'; }
+    var head = '<div class="m-ctitle">Диалог</div>' +
+      '<div class="m-csub">Переписка человека с ботом — та же, что в разделе «Диалоги». ' +
+        'Ответите отсюда — сообщение уйдет ему тем же каналом, а бот в этом диалоге замолчит.</div>';
 
-    var handoffBanner = (dlg.handoff_req && !dlg.handed)
-      ? '<div class="handoff-banner">' + ic('hand', 14) + '<div><b>Клиент просит менеджера</b><span>бот продолжает отвечать. Возьми диалог, когда готов.</span></div></div>' : '';
+    if (d === 'load') {
+      return head + '<div class="m-dlg"><div class="m-dlg-thread">' + buildThread(null) + '</div></div>' +
+        buildNotifyFold(id);
+    }
+    if (d.error === '403') {
+      return head + '<div class="field-empty">Переписка клиентов доступна тем, у кого открыт раздел «Диалоги».</div>';
+    }
+    if (d.error) {
+      return head + '<div class="field-empty">Не удалось загрузить переписку — бот сейчас недоступен.</div>' +
+        buildNotifyFold(id);
+    }
+    var c = (d.conversations || [])[0];
+    if (!c) {
+      return head + '<div class="m-dlg-none">' + ic('chat', 22) +
+        '<div><b>Переписки с ботом нет</b>' +
+        '<span>Этот человек боту не писал, либо писал с другого аккаунта: сводим по телеграму, ' +
+        'аккаунту платформы и нику. Появится ник или телеграм в контактах — диалог подтянется сюда сам.</span></div></div>' +
+        buildNotifyFold(id);
+    }
+    var aiOn = c.ai_enabled !== false;
+    var st = c.handoff_requested ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
+      : aiOn ? '<span class="tg-tag ai">' + ic('bot', 10) + 'бот отвечает</span>'
+      : '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведет менеджер') + '</span>';
+    var more = (d.conversations || []).length > 1
+      ? '<div class="m-dlg-more">Есть еще ' + ((d.conversations || []).length - 1) + ' ' +
+        plural((d.conversations || []).length - 1, 'диалог', 'диалога', 'диалогов') +
+        ' этого человека в других каналах — они в разделе «Диалоги».</div>' : '';
+    var matched = c.match === 'username'
+      ? '<div class="m-dlg-by">' + ic('alert', 11) + 'сведено по нику ' + esc('@' + (c.username || '')) +
+        ' — если ник чужой, скажите, отвяжем</div>' : '';
 
-    return '<div class="m-ctitle">Диалог</div>' +
-      '<div class="m-csub">Как человек общается с ботом. Канал, история, расход AI. Демо — оживёт с подключением бота.</div>' +
-      handoffBanner +
-      '<div class="dlg-bar">' +
-        '<div class="dlg-ch">' + chBadge(dlg.channel) + '</div>' +
-        (aiOn
-          ? '<div class="dlg-acts"><button class="ai-toggle on" id="dlg-ai"><span class="ait-dot"></span>AI ведёт диалог</button>' +
-            '<button class="bp sm" id="dlg-take">' + ic('hand', 13) + 'Взять диалог</button></div>'
-          : '<div class="dlg-acts"><button class="ai-toggle" id="dlg-ai"><span class="ait-dot"></span>AI выключен</button>' +
-            '<button class="bp ghost sm" id="dlg-return">' + ic('bot', 13) + 'Вернуть AI</button></div>') +
-      '</div>' +
-      '<div class="dlg-thread">' + thread + '</div>' +
-      '<div class="dlg-cost"><div class="dc-cell"><div class="dc-v num">' + dlg.msgs + '</div><div class="dc-l">сообщений</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num">' + fmtMoney(dlg.tokens) + '</div><div class="dc-l">токенов AI</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num" style="color:var(--amber-ink)">' + dlg.cost_rub + ' ₽</div><div class="dc-l">расход на диалог</div></div></div>';
+    return head +
+      '<div class="m-dlg">' +
+        '<div class="m-dlg-h">' + chBadge(c.channel) + st +
+          '<button class="bp ghost sm" id="dlg-open">' + ic('chat', 13) + 'Открыть в «Диалогах»</button></div>' +
+        matched +
+        '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
+        '<div class="m-dlg-compose">' +
+          '<textarea id="dlg-in" rows="1" placeholder="' +
+            (aiOn ? 'Ответить — вы перехватите диалог у бота' : 'Ответить клиенту') + '"></textarea>' +
+          '<button class="tg-send" id="dlg-send" title="Отправить (Enter)">' + ic('send', 16) + '</button>' +
+        '</div>' +
+      '</div>' + more +
+      buildNotifyFold(id);
   }
 
   /* ── СТРАНИЦА «Аналитика бота» (owner) — api с фоллбэком на демо ── */
@@ -14023,12 +14462,13 @@
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
+    { id: 'exams',     label: 'Экзамены',    icon: 'award' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
-    { id: 'notify', label: 'Написать',   icon: 'send' },
+    { id: 'dialog', label: 'Диалог',     icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
 
@@ -14914,6 +15354,9 @@
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
       else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
+      // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
+      // видно только внутри вкладки, куда без повода не заходят.
+      else if (sct.id === 'course' && lead && lead.course && lead.course.has_access) extra = '<span class="doto"></span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -15000,10 +15443,10 @@
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
-    else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
+    else if (s === 'exams') host.innerHTML = buildExams(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -15071,7 +15514,8 @@
     DET_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/det').then(function (r) {
       DET_BUSY[id] = false; DET[id] = r;
-      if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+      // блок DET читают две вкладки — «Английский» и сводка «Экзамены»
+      if (state.drawerId === id && (state.modalSection === 'det' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       DET_BUSY[id] = false;
       if (e.message !== '403') { DET[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -15127,6 +15571,49 @@
   /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
      один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
      полоска по дням и распределение по навыкам, без таблиц. */
+  /* ── Блок «Интенсив DET» в разделе «Английский» ──
+     Интенсив живет отдельным приложением: там свои ученики и свои уроки, связи с
+     карточкой нет. Бэкенд сводит людей по телефону, нику и почте и говорит, чем сшил
+     (`match`); контакта в карточке может не быть вовсе — тогда связывает менеджер
+     кнопкой, и его слово сильнее автоматики. Блок показываем ВСЕГДА: «не нашли» —
+     это тоже ответ, и за ним есть действие. */
+  var INT_MATCH = {
+    manual: 'связал менеджер вручную',
+    login:  'по входу в интенсив — телеграм или почта',
+    phone:  'по телефону из карточки',
+    nick:   'по телеграм-нику из карточки',
+    email:  'по почте из карточки',
+  };
+  function detIntensive(it) {
+    var head = '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>';
+    if (!it) {
+      return head + '<div class="field-empty">Интенсив сейчас недоступен — его страница живет ' +
+        'отдельным приложением.</div></div>';
+    }
+    if (!it.found) {
+      return head +
+        '<div class="int-none">Этого человека на интенсиве не нашли. Ищем по телефону, ' +
+        'телеграм-нику и почте из карточки — если контакта тут нет, найдите его в списке сами.</div>' +
+        '<div class="int-find"><button class="bp ghost sm" id="int-find">' + ic('search', 13) +
+          'Найти на интенсиве</button></div>' +
+        '<div id="int-list"></div></div>';
+    }
+    return head +
+      '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
+      ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
+      (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
+      (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Доступ к интенсиву</div>' +
+          '<div class="det-sw-s">' + esc(it.name || '') +
+            (it.contact ? ' · ' + esc(it.contact) : '') +
+            '. Открытый доступ у оплатившего снять нельзя.</div></div>' +
+        '<button type="button" class="pd-sw' + (it.has_access ? ' on' : '') + '" id="int-sw">' +
+          '<span class="pd-sw-l">' + (it.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-by">' + esc(INT_MATCH[it.match] || 'сведено автоматически') +
+        ' · <button class="int-unlink" id="int-unlink">это не он</button></div></div>';
+  }
   function detPractice(pr, opts) {
     if (!pr.total) return '';
     opts = opts || {};
@@ -15345,20 +15832,128 @@
 
     var practice = detPractice(b.practice || {});
 
-    var it = b.intensive;
-    var intensive = it
-      ? '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>' +
-        '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
-        ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
-        (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
-        (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
-        '<div class="det-sw-by">свели по телефону — интенсив живет отдельным приложением</div></div>'
-      : '';
+    var intensive = detIntensive(b.intensive);
 
     return head + hero +
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
         '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
       access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Экзамены»: DET, HSK и CSCA в одном месте ──
+     Просьба Веры 18.08.2026: экзамены разбросаны по вкладкам языков, а вопрос у
+     менеджера один — «что человек вообще сдавал». Раздел не заводит новых данных: это
+     сводка тех же трех блоков, каждый со ссылкой в свою вкладку. CSCA (экзамен для
+     поступления: математика, физика, химия) своей вкладки не имеет и живет целиком тут. */
+  var CSCA = {}, CSCA_BUSY = {};
+  var CSCA_SUBJ = [['mathematics', 'Математика'], ['physics', 'Физика'], ['chemistry', 'Химия']];
+  function loadCsca(id, force) {
+    if (CSCA_BUSY[id]) return;
+    if (force) delete CSCA[id];
+    CSCA_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+      CSCA_BUSY[id] = false; CSCA[id] = r;
+      if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+    }).catch(function (e) {
+      CSCA_BUSY[id] = false;
+      if (e.message !== '403') { CSCA[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function examCard(opts) {
+    /* Одна строка экзамена: крупное число слева — это ответ на «сдавал или нет».
+       Кнопка ведет в свою вкладку, а не дублирует ее содержимое: две копии управления
+       разъедутся, а менеджеру тут нужен факт, а не настройки. */
+    return '<div class="ex-card' + (opts.value == null ? ' empty' : '') + '">' +
+      '<div class="ex-v num">' + (opts.value == null ? '—' : esc(String(opts.value))) +
+        (opts.unit && opts.value != null ? '<small>' + esc(opts.unit) + '</small>' : '') + '</div>' +
+      '<div class="ex-b"><div class="ex-t">' + esc(opts.title) + '</div>' +
+        '<div class="ex-m">' + opts.sub + '</div></div>' +
+      (opts.go ? '<button class="bp ghost sm" data-exgo="' + opts.go + '">Открыть</button>' : '') +
+      '</div>';
+  }
+
+  function buildExams(id) {
+    var head = '<div class="m-ctitle">Экзамены</div>' +
+      '<div class="m-csub">Все проверки уровня в одном месте: английский DET, китайский HSK ' +
+      'и пробный CSCA — экзамен, который сдают при поступлении в вуз.</div>';
+
+    var d = DET[id]; if (!d) loadDet(id);
+    var h = HSK[id]; if (!h) loadHsk(id);
+    var c = CSCA[id]; if (!c) loadCsca(id);
+
+    // DET
+    var det;
+    if (!d || d === 'none') {
+      det = examCard({ title: 'Английский · DET', value: null,
+        sub: d === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var dl = d.latest;
+      det = examCard({
+        title: 'Английский · DET', value: dl ? dl.overall : null, unit: ' из 160', go: 'det',
+        sub: dl
+          ? esc(DET_KIND[dl.kind] || dl.kind || 'тест') + ' · ' + esc(fmtWhen(dl.finished_at || dl.started_at)) +
+            (d.delta ? ' · к прошлому ' + detDelta(d.delta) : '') +
+            '<span class="ex-note">' + esc(detVerdict(dl.overall).t) + '</span>'
+          : 'тест еще не проходил' + (d.invite ? ' — ссылка выдана' : ' — ссылку можно создать во вкладке «Английский»'),
+      });
+    }
+
+    // HSK
+    var hsk;
+    if (!h || h === 'none') {
+      hsk = examCard({ title: 'Китайский · HSK', value: null,
+        sub: h === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var hl = h.latest;
+      hsk = examCard({
+        title: 'Китайский · HSK', value: hl ? hl.pct : null, unit: '%', go: 'course',
+        sub: hl
+          ? esc(hl.level || '') + ' · ' + hl.correct + ' из ' + hl.total + ' · ' + esc(fmtWhen(hl.at)) +
+            (h.delta ? ' · к прошлому ' + detDelta(h.delta) : '')
+          : 'пробный тест еще не проходил',
+      });
+    }
+
+    // CSCA — свои предметы, свой список попыток
+    var csca;
+    if (!c || c === 'none') {
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления</div>' +
+        '<div class="field-empty">' + (c === 'none' ? 'Не удалось загрузить.' : 'Загружаю…') + '</div></div>';
+    } else {
+      var at = c.attempts || [];
+      var best = {};
+      at.forEach(function (a) {
+        if (a.score_pct == null) return;
+        if (best[a.subject] == null || a.score_pct > best[a.subject]) best[a.subject] = a.score_pct;
+      });
+      var board = '<div class="pay-board">' + CSCA_SUBJ.map(function (s) {
+        var v = best[s[0]];
+        return '<div class="pay-cell' + (v == null ? ' muted' : '') + '">' +
+          '<div class="pc-l">' + s[1] + '</div>' +
+          '<div class="pc-v num">' + (v == null ? '—' : v + '%') + '</div></div>';
+      }).join('') + '</div>';
+      var rows = at.length
+        ? at.slice(0, 12).map(function (a) {
+            return '<div class="det-row" style="cursor:default">' +
+              '<span class="det-row-v num">' + (a.score_pct == null ? '—' : a.score_pct +
+                '<small style="font-size:.55em;opacity:.6">%</small>') + '</span>' +
+              '<div class="det-row-b"><div class="det-row-t">' + esc(a.subject_name || a.subject) +
+                ' <span class="sev s-new">уровень ' + esc(String(a.difficulty)) + '</span></div>' +
+                '<div class="det-row-m">' + esc(fmtWhen(a.submitted_at)) +
+                  ' · ответов ' + a.answered + ' из ' + a.total +
+                  (a.correct != null ? ' · верных ' + a.correct : '') + '</div></div></div>';
+          }).join('')
+        : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
+          'дает лендинг экзамена, результат придет сюда сам.</div>';
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
+        '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
+        'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
+        board + '<div class="det-prl">' + rows + '</div></div>';
+    }
+
+    return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
   }
 
   /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
@@ -15456,7 +16051,7 @@
     HSK_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/hsk').then(function (r) {
       HSK_BUSY[id] = false; HSK[id] = r;
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      if (state.drawerId === id && (state.modalSection === 'course' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       HSK_BUSY[id] = false;
       if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -15706,6 +16301,20 @@
       : (d ? '<div class="field-empty">Анкету пока не заполнил.</div>'
            : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>');
     html += '<div class="m-sec"><div class="m-sec-h">Анкета абитуриента</div>' + profInner + '</div>';
+
+    /* что у человека открыто из наших продуктов — сразу на «Главном».
+       Раньше это жило только на своей вкладке, и менеджер, открыв карточку клиента,
+       который у нас учится, честно не видел, что он у нас учится. */
+    var crs = lead && lead.course;
+    if (crs) {
+      var crsVal = crs.has_access
+        ? (crs.until ? 'открыт до ' + dayFull(crs.until) : 'открыт бессрочно')
+        : (crs.until ? 'доступ кончился ' + dayFull(crs.until) : 'доступ закрыт');
+      html += '<div class="m-sec"><div class="m-sec-h">Учится у нас</div><div class="ab">' +
+        '<div class="r"><span class="k">Живой китайский</span><span class="v">' + esc(crsVal) + '</span></div>' +
+        (crs.since ? '<div class="r"><span class="k">С какого дня</span><span class="v">' + esc(dayFull(crs.since)) + '</span></div>' : '') +
+      '</div></div>';
+    }
 
     /* контакты (редактируемые) */
     var contact = ov(ctx, 'contact'), email = ov(ctx, 'email'), city = ov(ctx, 'city');
@@ -16151,24 +16760,30 @@
     refunded: { label: 'возврат',   sev: 'rejected' },
   };
 
-  /* ── РАЗДЕЛ «Написать» — отправить уведомление клиенту через бота + история отправок ── */
-  function buildNotifySection(ctx) {
-    var id = ctx.id;
-    return '<div class="m-ctitle">Написать клиенту</div>' +
-      '<div class="m-csub">Сообщение уходит клиенту в его канал через бота. AI-режим — опиши суть, бот сформулирует сам (по тону куратора и истории переписки); Текст — отправится как есть.</div>' +
-      '<div class="m-sec">' +
-        '<div class="m-sec-h">Новое сообщение</div>' +
-        '<div class="ntf-mode" id="ntf-mode">' +
-          '<button data-m="event" class="on">AI сформулирует</button>' +
-          '<button data-m="text">Готовый текст</button>' +
+  /* ── «Попросить бота написать» — второй блок раздела «Диалог» ──
+     Это не ответ в переписке, а уведомление: менеджер описывает суть, бот формулирует
+     сам и шлет клиенту. Отдельным разделом это жило рядом с «Диалогом» и делило один
+     вопрос («написать человеку») на два экрана, поэтому свернуто сюда. */
+  function buildNotifyFold(id) {
+    return '<details class="m-fold">' +
+      '<summary><span class="pm-t">Попросить бота написать</span>' +
+        '<span class="pm-h">напоминание или новость — бот сформулирует и отправит</span>' +
+        ic('go', 13) + '</summary>' +
+      '<div class="m-fold__body">' +
+        '<div class="m-sec">' +
+          '<div class="m-sec-h">Новое сообщение</div>' +
+          '<div class="ntf-mode" id="ntf-mode">' +
+            '<button data-m="event" class="on">AI сформулирует</button>' +
+            '<button data-m="text">Готовый текст</button>' +
+          '</div>' +
+          '<textarea class="note-ta" id="ntf-input" placeholder="Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
+          '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
+          '<span class="ntf-state" id="ntf-state"></span></div>' +
         '</div>' +
-        '<textarea class="note-ta" id="ntf-input" placeholder="Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
-        '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
-        '<span class="ntf-state" id="ntf-state"></span></div>' +
-      '</div>' +
-      '<div class="m-sec"><div class="m-sec-h">История отправок' +
-        '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div id="ntf-log"></div></div>';
+        '<div class="m-sec"><div class="m-sec-h">История отправок' +
+          '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+          '<div id="ntf-log"></div></div>' +
+      '</div></details>';
   }
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
   function buildPaySection(ctx) {
@@ -16341,6 +16956,46 @@
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
     });
 
+    /* интенсив DET: доступ, ручная связка и список учеников для нее */
+    var it = b.intensive || {};
+    var isw = el('int-sw');
+    if (isw) isw.addEventListener('click', function () {
+      post('/admin/api/intensive/students/' + it.student_id + '/access', { open: !it.has_access },
+           it.has_access ? 'Доступ к интенсиву закрыт' : 'Доступ к интенсиву открыт');
+    });
+    var iun = el('int-unlink');
+    if (iun) iun.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/intensive/link', { student_id: null }, 'Связка снята');
+    });
+    var ifind = el('int-find');
+    if (ifind) ifind.addEventListener('click', function () {
+      var host2 = el('int-list'); if (!host2) return;
+      ifind.disabled = true;
+      host2.innerHTML = '<span class="shim" style="display:block;width:70%;height:12px;border-radius:6px"></span>';
+      api('/admin/api/intensive/students?limit=200').then(function (r) {
+        var items = (r && r.items) || [];
+        host2.innerHTML = items.length
+          ? '<div class="int-rows">' + items.map(function (s) {
+              return '<div class="int-row"><div class="int-b"><div class="int-n">' + esc(s.name || 'Без имени') +
+                '</div><div class="int-m">' + esc(s.contact || '') +
+                ' · ' + (s.has_access ? 'доступ открыт' : 'доступа нет') +
+                ' · уроков ' + (s.results_n || 0) + '</div></div>' +
+                '<button class="bp ghost sm" data-link="' + esc(s.id) + '">Это он</button></div>';
+            }).join('') + '</div>'
+          : '<div class="field-empty">На интенсиве пока никто не зарегистрирован.</div>';
+        Array.prototype.forEach.call(host2.querySelectorAll('[data-link]'), function (btn) {
+          btn.addEventListener('click', function () {
+            post('/admin/api/leads/' + id + '/intensive/link',
+                 { student_id: btn.getAttribute('data-link') }, 'Связали с учеником интенсива');
+          });
+        });
+      }).catch(function (e) {
+        ifind.disabled = false;
+        host2.innerHTML = '<div class="field-empty">Список не загрузился' +
+          (e && e.message === '403' ? '' : ' — попробуйте еще раз') + '.</div>';
+      });
+    });
+
     var tsel = el('det-teacher');
     if (tsel) {
       // Список преподавателей грузим один раз на сессию и перерисовываем поле.
@@ -16391,6 +17046,13 @@
 
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
+
+    // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
+    Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {
+      b.addEventListener('click', function () { setModalSection(b.getAttribute('data-exgo')); });
+    });
+    var exr = el('ex-refresh');
+    if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
@@ -16879,21 +17541,47 @@
     Array.prototype.forEach.call(host.querySelectorAll('.qa-fold .m-sec-h'), function (h) {
       h.addEventListener('click', function () { h.parentNode.classList.toggle('open'); });
     });
-    // переключатель AI в диалоге (демо — храним локально) + взять/вернуть
-    function setDlgAi(on) {
-      state.dialogAi[id] = on;
-      var dlg = getDialog(ctx.lead || ctx.base);
-      if (on) dlg.handoff_req = false;
+    // раздел «Диалог»: ответ клиенту и переход в «Диалоги»
+    var dconv = state.leadConv[id];
+    var dcv = (dconv && dconv !== 'load' && (dconv.conversations || [])[0]) || null;
+    var dOpen = el('dlg-open');
+    if (dOpen && dcv) dOpen.addEventListener('click', function () {
+      closeDrawer(); state.inboxMode = 'bot'; state.inboxSel = dcv.user_id;
+      setPage('inbox'); loadBotData(function () { renderAll(); });
+    });
+    var dIn = el('dlg-in'), dSend = el('dlg-send');
+    function dlgSend() {
+      if (!dIn || !dcv) return;
+      var t = dIn.value.trim(); if (!t) { dIn.focus(); return; }
+      dIn.value = '';
+      // рисуем сразу, доставку проверяем ответом: менеджер не должен ждать бота,
+      // но и «отправлено» без доставки писать нельзя — не ушло, пузырь помечается
+      var tmp = { role: 'assistant', sender: 'manager', text: t, at: new Date().toISOString() };
+      dconv.messages = (dconv.messages || []).concat([tmp]);
+      dcv.ai_enabled = false;   // ответил менеджер — бот в этом диалоге замолкает (так же на бэке)
       renderModalContent();
-      showToast(on ? 'AI снова ведёт диалог' : 'Диалог за тобой — AI выключен');
+      api('/admin/api/bot/conversations/' + dcv.user_id + '/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }),
+      }).then(function (res) {
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Не доставлено: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          if (state.modalSection === 'dialog') renderModalContent();
+        }
+      }).catch(function () {
+        dconv.messages = (dconv.messages || []).filter(function (m) { return m !== tmp; });
+        showToast('Сообщение не отправлено — проверьте связь с ботом');
+        if (state.modalSection === 'dialog') renderModalContent();
+      });
     }
-    var aiT = el('dlg-ai');
-    if (aiT) aiT.addEventListener('click', function () { setDlgAi(!getDialog(ctx.lead || ctx.base).ai_on); });
-    var tk = el('dlg-take'); if (tk) tk.addEventListener('click', function () { setDlgAi(false); });
-    var rt = el('dlg-return'); if (rt) rt.addEventListener('click', function () { setDlgAi(true); });
+    if (dSend) dSend.addEventListener('click', dlgSend);
+    if (dIn) dIn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
+    });
+    var dTh = el('dlg-thread'); if (dTh) dTh.scrollTop = dTh.scrollHeight;
 
     // раздел «Написать»: режим/отправка/история
-    if (state.modalSection === 'notify') {
+    if (state.modalSection === 'dialog') {
       var ntfMode = 'event';
       var modeBar = el('ntf-mode');
       if (modeBar) Array.prototype.forEach.call(modeBar.children, function (b) {
@@ -16902,7 +17590,7 @@
           Array.prototype.forEach.call(modeBar.children, function (x) { x.classList.toggle('on', x === b); });
           var inp = el('ntf-input');
           if (inp) inp.placeholder = ntfMode === 'event'
-            ? 'Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести»'
+            ? 'Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести»'
             : 'Готовый текст сообщения — отправится как есть';
         });
       });
