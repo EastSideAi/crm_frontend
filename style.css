@@ -4054,6 +4054,27 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ct-chip.ct-ok    { color: var(--green-ink); background: var(--green-soft); }
 .ct-chip.ct-paid  { color: #fff;             background: var(--green); }
 .ct-chip.ct-off   { color: var(--ink-3);     background: var(--fill); }
+.ct-chip.ct-bad   { color: var(--red-ink);   background: var(--red-soft); }
+
+/* ── чеки в «Документах»: полоса долга и действия по строке ── */
+.dc-alert { display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+  padding: 12px 16px; border-radius: var(--r-lg); background: var(--red-soft);
+  color: var(--red-ink); }
+.dc-alert .ic { flex: none; color: var(--red); }
+.dc-alert b { font-weight: 700; }
+.dc-alert .dc-alert-go { margin-left: auto; flex: none; border: 0; cursor: pointer;
+  background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
+  padding: 7px 14px; border-radius: var(--r-pill); }
+.dc-alert .dc-alert-go:hover { filter: brightness(.95); }
+.rcp-state { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rcp-why { font-size: 11.5px; color: var(--ink-3); }
+.rcp-act { display: inline-flex; gap: 6px; }
+.rcp-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  padding: 5px 11px; border-radius: var(--r-pill); }
+.rcp-a:hover { background: var(--fill); color: var(--ink-1); }
+.rcp-a.p { border-color: var(--blue); color: var(--blue-d); }
+.rcp-a.p:hover { background: var(--blue-tint); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой

@@ -6414,12 +6414,103 @@
      Акт открывается печатной формой в новой вкладке: этот документ печатают и
      отправляют, а не рассматривают в интерфейсе CRM. */
   var DC = { items: null, err: '', q: '', kind: 'all', archived: false, _t: null };
-  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['contract', 'Договоры'],
+  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['receipt', 'Чеки'],
+                  ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
+  // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
+  // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
+  var RCP = { items: null, stats: null };
+  var RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
                 signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off',
                 none: 'ct-draft', sent: 'ct-wait' };
   var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc' };
+
+  function rcpLoad(cb) {
+    api('/admin/api/contractor-receipts').then(function (r) {
+      RCP.items = r.items || []; RCP.stats = r.stats || {};
+      if (state.page === 'czdocs') renderAll();
+      if (cb) cb();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RCP.items = RCP.items || []; RCP.stats = RCP.stats || {};
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  // Чеки грузим целиком и фильтруем на месте: их немного (по одному на выплату), а
+  // поиск в разделе один на оба списка.
+  function rcpFiltered() {
+    var q = (DC.q || '').trim().toLowerCase();
+    var list = RCP.items || [];
+    if (!q) return list;
+    return list.filter(function (i) {
+      return (i.contractor || '').toLowerCase().indexOf(q) >= 0 ||
+        (i.inn || '').indexOf(q) >= 0 ||
+        String(i.number).indexOf(q) >= 0 ||
+        String(i.task_number).indexOf(q) >= 0;
+    });
+  }
+
+  function rcpAttach(pid) {
+    openSheet('Приложить чек', 'Вставьте ссылку на чек из «Мой налог». Платформа сверит ' +
+      'его с базой ФНС по ИНН, сумме и дате.',
+      [['url', 'line', 'Ссылка на чек', '']],
+      function (v, close) {
+        var url = (v.url || '').trim();
+        if (url.length < 8) return 'Вставьте ссылку на чек';
+        apiSend('/admin/api/contractor-payouts/' + pid + '/receipt', 'POST', { url: url },
+          function (r) {
+            close();
+            var rec = r.receipt || {};
+            showToast(rec.verify_status === 'verified' ? 'Чек подтвержден в ФНС'
+              : rec.verify_status === 'pending' ? 'Чек на сверке с ФНС'
+              : (rec.verify_message || 'Чек приложен'));
+            RCP.items = null; rcpLoad();
+          },
+          function () { el('sh-err').textContent = 'Не удалось приложить чек — проверьте ссылку'; });
+        return;
+      }, null, 'Чек', 'Сверить');
+  }
+
+  function rcpAction(path, okMsg) {
+    apiSend(path, 'POST', null, function () {
+      if (okMsg) showToast(okMsg);
+      RCP.items = null; rcpLoad();
+    });
+  }
+
+  function rcpRow(i) {
+    var demo = RCP.stats && RCP.stats.demo;
+    var rec = i.receipt;
+    var acts = '';
+    if (i.state !== 'ok') {
+      acts += '<button class="rcp-a p" data-rcp-attach="' + esc(i.payout_id) + '">' +
+        (rec ? 'Заменить чек' : 'Приложить чек') + '</button>';
+    }
+    if (rec) {
+      acts += '<button class="rcp-a" data-rcp-recheck="' + esc(rec.id) + '">Перепроверить</button>';
+      if (demo && i.state !== 'ok') {
+        acts += '<button class="rcp-a" data-rcp-demo="' + esc(rec.id) + '">Отметить (демо)</button>';
+      }
+    }
+    var why = (i.state !== 'ok' && i.state_why)
+      ? '<span class="rcp-why">' + esc(i.state_why) + '</span>' : '';
+    return '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
+      '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+        '<b>Выплата № ' + esc(i.number) + '</b>' +
+        '<span class="rcp-why">задание № ' + esc(i.task_number) +
+          (i.title ? ' — ' + esc(i.title) : '') + '</span></span>' +
+      '<span class="dc-who">' + esc(i.contractor || '—') +
+        (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
+        (i.inn ? '<span class="dc-inn">' + esc(i.inn) + '</span>' : '') + '</span>' +
+      '<span class="dc-when">' + esc(i.paid_at ? czDate(i.paid_at) : '—') + '</span>' +
+      '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
+      '<span class="dc-state rcp-state"><span class="ct-chip ' + (RCP_ST[i.state] || 'ct-draft') +
+        '">' + esc(i.state_title) + '</span>' + why +
+        (acts ? '<span class="rcp-act">' + acts + '</span>' : '') + '</span>' +
+      '</div>';
+  }
 
   function dcLoad(cb) {
     var p = '/admin/api/contractor-documents?kind=' + encodeURIComponent(DC.kind) +
@@ -6457,42 +6548,71 @@
   }
 
   function renderCzDocs(view) {
-    if (DC.items === null) { view.innerHTML = dashSkeleton(); dcLoad(); return; }
-    var list = DC.items;
+    var isRcp = DC.kind === 'receipt';
+    // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
+    if (RCP.items === null) rcpLoad();
+    if (isRcp) {
+      if (RCP.items === null) { view.innerHTML = dashSkeleton(); return; }
+    } else if (DC.items === null) {
+      view.innerHTML = dashSkeleton(); dcLoad(); return;
+    }
+
+    var list = isRcp ? rcpFiltered() : DC.items;
     var chips = DC_KINDS.map(function (k) {
-      return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') + '" data-dkind="' +
-        k[0] + '">' + k[1] + '</button>';
+      var n = (k[0] === 'receipt' && RCP.stats && RCP.stats.debt)
+        ? ' <span class="qn">' + RCP.stats.debt + '</span>' : '';
+      return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') +
+        (k[0] === 'receipt' && RCP.stats && RCP.stats.debt ? ' hot' : '') +
+        '" data-dkind="' + k[0] + '">' + k[1] + n + '</button>';
     }).join('') +
       // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
       // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
       // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
-      '<button class="qchip q-arch' + (DC.archived ? ' on' : '') + '" data-dcarch="1">' +
-        ic('box', 12) + 'Убранные</button>';
-    var body = DC.err
+      (isRcp ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
+        '" data-dcarch="1">' + ic('box', 12) + 'Убранные</button>');
+
+    // Полоса долга по чекам — главный ответ раздела на «по кому не хватает чека».
+    // Показываем на всех вкладках, кроме самой вкладки чеков (там и так все видно).
+    var debtN = (RCP.stats && RCP.stats.debt) || 0;
+    var alert = (!isRcp && debtN)
+      ? '<div class="dc-alert">' + ic('warn', 18) +
+          '<span><b>' + debtN + ' ' + plural(debtN, 'выплата', 'выплаты', 'выплат') +
+          '</b> без подтвержденного чека. Пока чек не приложат, следующая выплата этим ' +
+          'людям не пройдет.</span>' +
+          '<button class="dc-alert-go" id="dc-to-rcp">Показать</button></div>'
+      : '';
+
+    var body = (!isRcp && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.q
-            ? 'По запросу «' + esc(DC.q) + '» документов не нашли.'
+            ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
+            : isRcp
+            ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
             : DC.archived
             ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
-        : list.map(dcRow).join(''));
+        : (isRcp ? list.map(rcpRow) : list.map(dcRow)).join(''));
+
+    var noun = isRcp
+      ? plural(list.length, 'чек', 'чека', 'чеков')
+      : plural(list.length, 'документ', 'документа', 'документов');
 
     view.innerHTML =
-      '<div class="card listcard">' +
+      '<div class="card listcard">' + alert +
         '<div class="list-tools">' +
           '<div class="searchwrap' + (DC.q ? ' has-val' : '') + '">' + ic('search', 16) +
             '<input class="search" id="dc-q" placeholder="Поиск по фамилии, ИНН, телефону или названию" value="' + esc(DC.q) + '">' +
             (DC.q ? '<button class="s-clear" id="dc-qx">' + ic('x', 13) + '</button>' : '') +
           '</div>' +
-          '<span class="list-count"><b>' + list.length + '</b> ' +
-            plural(list.length, 'документ', 'документа', 'документов') + '</span>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
         '</div>' +
         '<div class="list-quick">' + chips + '</div>' +
         '<div class="trow dc-grid thead">' +
-          '<span class="th">Документ</span><span class="th">Исполнитель</span>' +
+          '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+          '<span class="th">Исполнитель</span>' +
           '<span class="th">Дата</span><span class="th">Сумма</span>' +
-          '<span class="th">Состояние</span>' +
+          '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
         '</div>' + body +
       '</div>';
 
@@ -6529,6 +6649,33 @@
         }
         openCz(r.getAttribute('data-dc'));
       });
+    });
+    // Чеки: полоса долга ведет на вкладку чеков; кнопки в строке не открывают задание.
+    var toRcp = el('dc-to-rcp');
+    if (toRcp) toRcp.addEventListener('click', function () {
+      DC.kind = 'receipt'; renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-attach]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); rcpAttach(b.getAttribute('data-rcp-attach'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-recheck]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        rcpAction('/admin/api/contractor-receipts/' + b.getAttribute('data-rcp-recheck') +
+          '/recheck', 'Перепроверили чек');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-demo]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        rcpAction('/admin/api/contractor-receipts/' + b.getAttribute('data-rcp-demo') +
+          '/demo-verify', 'Чек отмечен подтвержденным (демо)');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-task]'), function (r) {
+      r.addEventListener('click', function () { openCt(r.getAttribute('data-rcp-task')); });
     });
     pageAnim(view);
   }
