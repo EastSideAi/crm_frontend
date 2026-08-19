@@ -1734,7 +1734,10 @@
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
+  // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
+  // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
+  // переносить срок — только суперадмин, иначе просрочка ничего не значит.
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
@@ -3741,6 +3744,94 @@
                            : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
   }
 
+  /* Перенос срока. Отдельный поповер у самой плашки срока, а не форма правки
+     задачи: срок двигают на бегу и по одной штуке, ради одной даты открывать
+     форму со всеми полями — четыре лишних клика и риск задеть соседнее.
+
+     Кто двигает — только суперадмин (cap tasks_due, правило Павла 19.08.2026),
+     поэтому для остальных плашка остается подписью и поповера у нее нет. */
+  function duePop(anchor, task, after) {
+    var host = anchor.parentNode;
+    var open = host.querySelector('.due-pop');
+    if (open) { open.parentNode.removeChild(open); return; }
+
+    // Ближайший понедельник: «давай с новой недели» — самый частый перенос
+    // после «на завтра», и считать его руками в календаре человек не должен.
+    var toMon = (8 - (new Date().getDay() || 7)) % 7 || 7;
+    // Три варианта, а не четыре: в одну строку сегмента влезают ровно они, а
+    // произвольный «через 3 дня» и так набирается полем даты рядом.
+    var quick = [['сегодня', 0], ['завтра', 1], ['понедельник', toMon]];
+    var cur = '';
+    if (task.due_at) {
+      var d = new Date(task.due_at);
+      cur = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    var pop = document.createElement('div');
+    pop.className = 'due-pop';
+    pop.innerHTML =
+      '<div class="tsk-l">' + (task.due_at ? 'Перенести срок' : 'Поставить срок') + '</div>' +
+      // Сегмент быстрых сроков — тот же .due-seg, что в форме постановки: два
+      // разных набора чипов под одну задачу читались бы как разные механики.
+      '<span class="due-seg">' + quick.map(function (q) {
+        return '<button type="button" data-day="' + isoDay(q[1]) + '">' + q[0] + '</button>';
+      }).join('') + '</span>' +
+      '<div class="due-row"><input type="date" class="al-in due-day" value="' + cur + '">' +
+        '<button class="bp sm due-ok">Поставить</button></div>' +
+      (task.due_at ? '<button class="due-off">Снять срок совсем</button>' : '');
+    host.appendChild(pop);
+    // Поповер встает под саму плашку, а не под левый край строки: иначе он
+    // висит непонятно от чего, когда чипы переносятся на вторую строку.
+    pop.style.left = Math.max(0, Math.min(anchor.offsetLeft,
+      host.offsetWidth - pop.offsetWidth - 16)) + 'px';
+
+    var close = function () {
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOut, true);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    // anchor.contains, а не сравнение с самим anchor: клик почти всегда
+    // приходится на иконку или текст внутри кнопки, и поповер закрывался бы
+    // сразу же, не дав нажать ни на что.
+    var onOut = function (e) { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onOut, true);
+
+    var send = function (body, done) {
+      apiSend('/admin/api/tasks/' + task.id, 'PATCH', body, function () {
+        close();
+        state.tasks = null;
+        loadTaskSummary();
+        if (after) after();
+        if (state.page === 'tasks') renderView();
+        showToast(done);
+      }, function (code) {
+        showToast(code === 403 ? 'Срок двигает только суперадмин'
+                               : 'Срок не сохранился, проверь интернет');
+      });
+    };
+    // Срок = конец выбранного дня ПО МОСКВЕ: «до 21 августа» человек читает как
+    // «весь день 21-го мой», а календарь у команды один — московский (по нему
+    // сервер считает просрочку и утренние сводки). Без явного +03:00 у человека
+    // из другого пояса тот же выбор уезжал бы на сутки.
+    var setDay = function (day) {
+      send({ due_at: new Date(day + 'T23:59:59+03:00').toISOString() }, 'Срок перенесен');
+    };
+
+    Array.prototype.forEach.call(pop.querySelectorAll('.due-seg button'), function (b) {
+      b.addEventListener('click', function () { setDay(b.getAttribute('data-day')); });
+    });
+    var day = pop.querySelector('.due-day');
+    pop.querySelector('.due-ok').addEventListener('click', function () {
+      if (!day.value) { day.focus(); return; }
+      setDay(day.value);
+    });
+    day.addEventListener('keydown', function (e) { if (e.key === 'Enter') pop.querySelector('.due-ok').click(); });
+    var off = pop.querySelector('.due-off');
+    if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
+  }
+
   function openTask(id) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -3775,6 +3866,9 @@
       var isAssignee = me != null && me === t.assignee_id;
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
+      // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
+      // назначает, а история должна остаться такой, какой была.
+      var canDue = can('tasks_due') && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -3810,7 +3904,12 @@
         '</div>' +
         '<div class="tsk-meta">' +
           '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
-          '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
+          // Срок кликабелен только у того, кто вправе его двигать: серая кнопка,
+          // которая отвечает отказом, учит тыкать наугад.
+          (canDue
+            ? '<button class="tsk-due tsk-duebtn ' + due.cls + '" id="tk-due">' + ic('cal', 12) +
+              esc(due.text) + chev() + '</button>'
+            : '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>') +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
@@ -3893,6 +3992,11 @@
       var swap = function (fn) { close(); setTimeout(fn, 200); };
       var up = el('tk-up');
       if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var dueBtn = el('tk-due');
+      if (dueBtn) dueBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        duePop(dueBtn, t, function () { api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); }); });
+      });
       var lead = el('tk-lead');
       if (lead && t.session_id) lead.addEventListener('click', function () {
         swap(function () { openDrawer(t.session_id); setModalSection('notes'); });
