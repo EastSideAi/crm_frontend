@@ -18,10 +18,12 @@ CREATE TABLE IF NOT EXISTS finmodel.programs (
     name         text NOT NULL,                          -- «Харбин лето 2026»
     match_key    text DEFAULT ''::text NOT NULL,         -- ключ поиска в позиции чека ЮKassa (нижний регистр)
     status       text DEFAULT 'идет'::text NOT NULL,     -- 'идет' | 'завершена'
-    season_start date,                                   -- с какой даты считать доход из чеков
+    season_start date,                                   -- начало сезона: доход из чеков считаем с этой даты
+    season_end   date,                                   -- конец сезона: платежи позже — уже другой сезон; NULL = ещё идёт
     expense      numeric(14,2) DEFAULT 0 NOT NULL,       -- полный расход программы (из P&L), правится в CRM
     comment      text DEFAULT ''::text NOT NULL,         -- откуда цифра расхода
     count_excursions boolean DEFAULT true NOT NULL,      -- экскурсии в доход? Шанхай — нет (шли не через компанию)
+    archived     boolean DEFAULT false NOT NULL,         -- убрана с глаз в архив (руками); данные остаются
     sort         integer DEFAULT 0 NOT NULL,
     created_at   timestamp with time zone DEFAULT now() NOT NULL,
     updated_at   timestamp with time zone DEFAULT now() NOT NULL,

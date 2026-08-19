@@ -10180,22 +10180,65 @@
       '<span>Доход из ЮKassa на этой базе недоступен — нет ключей магазина. Пока экран ' +
       'открыт не на боевой базе, доход показан нулём.</span></div>';
 
-    var cards = progs.length
-      ? '<div class="prg-list">' + progs.map(function (p) {
+    var active = progs.filter(function (p) { return !p.archived; });
+    var arch = progs.filter(function (p) { return p.archived; });
+
+    // Панель списка: слева заголовок со счётом активных, справа «Добавить программу».
+    var addBtn = canFix ? '<button class="qchip add" id="prg-add">' + ic('plus', 12) +
+      'Добавить программу</button>' : '';
+    var tools = '<div class="prg-tools"><span class="prg-th">Активные ' +
+      '<b>' + active.length + '</b></span>' + addBtn + '</div>';
+
+    var cards = active.length
+      ? '<div class="prg-list">' + active.map(function (p) {
           return finProgCard(p, canFix);
         }).join('') + '</div>'
-      : '<div class="card"><div class="empty">Программ пока нет.</div></div>';
+      : '<div class="card"><div class="empty">Программ пока нет.' +
+        (canFix ? ' Нажмите «Добавить программу».' : '') + '</div></div>';
 
-    view.innerHTML = bar + note + cards;
+    // Архив — свёрнут, разворачивается кликом. Прошлые сезоны с цифрами, но не в глазах
+    // и не в итоге сверху. Убирает и достаёт из архива сам финансист.
+    var archBlock = arch.length
+      ? '<div class="prg-arch"><button class="prg-archh" id="prg-archh" aria-expanded="false">' +
+          ic('box', 14) + 'Архив <b>' + arch.length + '</b>' +
+          '<span class="prg-archcue">показать</span></button>' +
+        '<div class="prg-list prg-archlist" id="prg-archlist" hidden>' +
+          arch.map(function (p) { return finProgCard(p, canFix); }).join('') + '</div></div>'
+      : '';
 
+    view.innerHTML = bar + note + tools + cards + archBlock;
+
+    var byId = function (id) { return progs.filter(function (p) { return p.id === id; })[0]; };
     if (canFix) {
+      var add = el('prg-add');
+      if (add) add.addEventListener('click', function () { finProgramForm(null); });
       Array.prototype.forEach.call(view.querySelectorAll('[data-prg]'), function (b) {
         b.addEventListener('click', function () {
-          var id = b.getAttribute('data-prg');
-          progs.forEach(function (p) { if (p.id === id) finProgramForm(p); });
+          var p = byId(b.getAttribute('data-prg')); if (p) finProgramForm(p);
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-arch]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/programs/' + encodeURIComponent(b.getAttribute('data-arch')),
+            'PATCH', { archived: true }, 'Убрал в архив');
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-unarch]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/programs/' + encodeURIComponent(b.getAttribute('data-unarch')),
+            'PATCH', { archived: false }, 'Вернул из архива');
         });
       });
     }
+    var ah = el('prg-archh');
+    if (ah) ah.addEventListener('click', function () {
+      var list = el('prg-archlist'); if (!list) return;
+      var open = list.hidden;
+      list.hidden = !open;
+      ah.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var cue = ah.querySelector('.prg-archcue');
+      if (cue) cue.textContent = open ? 'скрыть' : 'показать';
+    });
     pageAnim(view);
   }
 
@@ -10214,8 +10257,20 @@
     parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
     if (p.count_excursions === false) parts.push('экскурсии мимо компании');
     var sub = parts.join(' · ') + (p.comment ? ' · ' + p.comment : '');
+    // Сезон программы — по нему доход отделяется от повторов в другие годы.
+    var season = p.since
+      ? finDate(p.since) + (p.until ? ' – ' + finDate(p.until) : ' – идёт')
+      : '';
 
-    return '<div class="card prg' + (loss ? ' loss' : '') + '">' +
+    // Управление: активной — правка и «в архив»; архивной — только «вернуть».
+    var acts = !canFix ? '' : (p.archived
+      ? '<button class="prg-act" data-unarch="' + p.id + '">Вернуть</button>'
+      : '<button class="prg-pen" data-prg="' + p.id + '" title="Поправить программу">' +
+          ic('pen', 12) + '</button>' +
+        '<button class="prg-pen" data-arch="' + p.id + '" title="Убрать в архив">' +
+          ic('box', 12) + '</button>');
+
+    return '<div class="card prg' + (loss ? ' loss' : '') + (p.archived ? ' arch' : '') + '">' +
       '<div class="prg-head">' +
         '<span class="prg-name">' + esc(p.name) + '</span>' +
         '<div class="prg-marg num' + (loss ? ' bad' : ' ok') + '">' +
@@ -10224,8 +10279,8 @@
       '</div>' +
       '<div class="prg-meta">' +
         '<span class="sev mini ' + stCls + '">' + esc(p.status) + '</span>' +
-        (canFix ? '<button class="prg-pen" data-prg="' + p.id + '" title="Поправить расход или статус">' +
-          ic('pen', 12) + '</button>' : '') +
+        (season ? '<span class="prg-season">' + esc(season) + '</span>' : '') +
+        (acts ? '<span class="prg-acts">' + acts + '</span>' : '') +
       '</div>' +
       finProgBar(p.income, p.expense) +
       '<div class="prg-stats">' +
@@ -10260,14 +10315,24 @@
   }
 
   function finProgramForm(p) {
+    var isNew = !p;
+    p = p || { name: '', match_key: '', status: 'идет', expense: '', comment: '',
+               since: '', until: '', count_excursions: true };
     var m = finModal({
       eyebrow: 'Программа',
-      title: p.name,
-      sub: 'Доход считается сам из чеков ЮKassa, руками его не правят. Правится расход ' +
-        '(из P&L программы), статус и название.',
+      title: isNew ? 'Новая программа' : esc(p.name),
+      sub: isNew
+        ? 'Доход подтянется сам из чеков ЮKassa по слову и датам сезона. Расход впишешь из ' +
+          'P&L программы — прибыль система посчитает.'
+        : 'Доход считается сам из чеков ЮKassa, руками его не правят. Правятся название, ' +
+          'слово поиска, расход, статус и даты сезона.',
       body:
         finField('Название', '<input id="pg-name" class="al-in" maxlength="120" value="' +
-          esc(p.name) + '">') +
+          esc(p.name) + '" placeholder="Харбин лето 2027">') +
+        finField('Слово в чеке <i>*</i>', '<input id="pg-key" class="al-in" maxlength="120" ' +
+          'value="' + esc(p.match_key || '') + '" placeholder="харбин">' +
+          '<div class="al-hint">По этому слову доход находится в чеке ЮKassa. Обычно город: ' +
+          'Харбин, Шанхай. Регистр не важен.</div>') +
         '<div class="al-row">' +
           finField('Расход, ₽ <i>*</i>', '<input id="pg-expense" class="al-in" type="number" ' +
             'min="0" step="0.01" value="' + (p.expense || 0) + '">') +
@@ -10277,6 +10342,14 @@
                 '>' + s[1] + '</option>';
             }).join('') + '</select>') +
         '</div>' +
+        '<div class="al-row">' +
+          finField('Начало сезона', '<input id="pg-start" class="al-in" type="date" value="' +
+            esc(p.since || '') + '">') +
+          finField('Конец сезона', '<input id="pg-end" class="al-in" type="date" value="' +
+            esc(p.until || '') + '">') +
+        '</div>' +
+        '<div class="al-hint pg-datehint">Даты нужны, чтобы платежи одного города за разные ' +
+        'годы не смешались. Конец пустой — сезон ещё идёт.</div>' +
         finField('Откуда цифра расхода', '<input id="pg-comment" class="al-in" maxlength="300" ' +
           'value="' + esc(p.comment || '') + '" placeholder="из итогового P&L, с налогами">') +
         '<label class="al-f sv-onoff top"><input type="checkbox" id="pg-exc"' +
@@ -10286,16 +10359,26 @@
     });
     if (!m) return;
     el('fm-ok').addEventListener('click', function () {
+      if (!finVal('pg-name')) { m.err.textContent = 'Впишите название'; return; }
+      if (!finVal('pg-key')) { m.err.textContent = 'Впишите слово для поиска в чеке'; return; }
       if (!(Number(finVal('pg-expense')) >= 0) || finVal('pg-expense') === '') {
         m.err.textContent = 'Впишите расход'; return;
       }
-      if (!finVal('pg-name')) { m.err.textContent = 'Впишите название'; return; }
+      var s = finVal('pg-start'), e = finVal('pg-end');
+      if (s && e && e < s) { m.err.textContent = 'Конец сезона раньше начала'; return; }
       m.close();
-      finDo('/admin/api/fin/programs/' + encodeURIComponent(p.id), 'PATCH', {
-        name: finVal('pg-name'), expense: finVal('pg-expense'),
-        status: el('pg-status').value, comment: finVal('pg-comment'),
-        count_excursions: el('pg-exc').checked,
-      }, 'Программа поправлена');
+      var body = {
+        name: finVal('pg-name'), match_key: finVal('pg-key'),
+        expense: finVal('pg-expense'), status: el('pg-status').value,
+        comment: finVal('pg-comment'), count_excursions: el('pg-exc').checked,
+        season_start: s || null, season_end: e || null,
+      };
+      if (isNew) {
+        finDo('/admin/api/fin/programs', 'POST', body, 'Программа заведена');
+      } else {
+        finDo('/admin/api/fin/programs/' + encodeURIComponent(p.id), 'PATCH', body,
+          'Программа поправлена');
+      }
     });
   }
 

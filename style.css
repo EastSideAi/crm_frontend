@@ -4434,6 +4434,31 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background: var(--amber-soft); }
 .prg-note svg { flex: none; color: var(--amber-ink); }
 
+/* Панель списка программ: заголовок «Активные N» + кнопка «Добавить программу». */
+.prg-tools { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.prg-th { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.prg-th b { color: var(--ink); font-weight: 700; }
+.prg-tools .qchip.add { margin-left: auto; }
+/* Сезон программы и кнопки управления в мета-ряду карточки. */
+.prg-meta .prg-season { font-size: 11px; font-weight: 600; color: var(--ink-3);
+  font-feature-settings: 'tnum'; white-space: nowrap; }
+.prg-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.prg-act { flex: none; height: 26px; padding: 0 11px; border-radius: 8px; border: 0;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: var(--fill);
+  cursor: pointer; transition: background .15s var(--ease), color .15s var(--ease); }
+.prg-act:hover { color: var(--ink); background: #EDEFF3; }
+/* Архивная карточка — приглушена, но читаема; данные на месте. */
+.prg.arch { opacity: .68; }
+.prg.arch:hover { opacity: 1; }
+.prg-arch { margin-top: 22px; }
+.prg-archh { display: flex; align-items: center; gap: 9px; width: 100%; padding: 11px 2px;
+  border: 0; border-top: 1px solid var(--line); background: none; cursor: pointer;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); }
+.prg-archh svg { color: var(--ink-3); }
+.prg-archh b { color: var(--ink); font-weight: 700; }
+.prg-archcue { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.prg-archlist { margin-top: 4px; }
+
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
