@@ -510,6 +510,12 @@ a { color: inherit; text-decoration: none; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
+/* воронка курса в записи на «Маркетинге»: источник, шаги, деньги */
+.cf-grid { grid-template-columns: minmax(0,1.4fr) 74px 92px 106px 84px 116px; }
+.cf-grid .num { text-align: right; }
+.cf-grid .th:not(:first-child) { text-align: right; }
+.cf-note { padding: 14px 24px 16px; border-top: 1px solid var(--line); font-size: 12.5px;
+  line-height: 1.45; color: var(--ink-2); }
 
 /* мини-шкала балла */
 .score { display: flex; align-items: center; gap: 9px; }
@@ -2931,6 +2937,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
+  /* на телефоне у воронки курса остаются источник, заходы, покупки и деньги */
+  .trow.cf-grid { grid-template-columns: minmax(0,1fr) 54px 54px 86px !important; }
   .lad-row { grid-template-columns: 130px 1fr 90px; gap: 10px; padding: 0 14px; }
   .lad-row .lad-n { display: none; }
   .search { width: 100%; }

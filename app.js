@@ -27,7 +27,7 @@
     leads: [], page: 'dash', seg: 'queue', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '',
+    pathSel: null, pathPeriod: '', mkDays: 30,
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -56,7 +56,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -64,7 +64,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
+        boardPeriod: state.boardPeriod, donePeriod: state.donePeriod, mkDays: state.mkDays,
       }));
     } catch (e) {}
   }
@@ -2117,6 +2117,19 @@
           state.treeDept = null; state.treeGoal = null; state.tree = null;
           saveUi();
           renderTopbar(); renderHead(); renderView();
+        });
+      });
+    } else if (state.page === 'marketing') {
+      /* период смотрит только воронка курса — у воронок бота свой период внутри */
+      var mopts = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней']];
+      tb.innerHTML = '<nav class="tabs">' + mopts.map(function (o) {
+        return '<a class="tab' + ((state.mkDays || 30) === o[0] ? ' on' : '') + '" data-mkd="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.mkDays = parseInt(t.getAttribute('data-mkd'), 10);
+          saveUi();
+          renderTopbar(); renderView();
         });
       });
     } else if (state.page === 'path') {
@@ -11260,14 +11273,117 @@
     });
   }
 
+  /* ── Воронка курса в записи ────────────────────────────────────────────────
+     Курс продают со страницы, мимо бота, поэтому в воронках выше его не видно
+     вовсе. Шаги до оплаты считает сама страница (routers/course.py), оплаты —
+     покупатели: человек в одном браузере учитывается один раз, перезагрузка
+     ничего не добавляет. */
+  function cfDays() { return state.mkDays || 30; }
+
+  function fetchCourseFunnel() {
+    var days = cfDays();
+    state._cfLoad = days;
+    api('/admin/api/course/funnel?days=' + days).then(function (r) {
+      state._cf = r; state._cfDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') {
+        state._cf = 'none'; state._cfDays = days;
+        if (state.page === 'marketing') renderView();
+      }
+    });
+  }
+
+  function courseFunnelCard() {
+    var d = state._cf;
+    var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
+      '<span class="ic">' + ic('cap', 14) + '</span>' +
+      '<div><div class="t">Курс «Живой китайский»</div>' +
+      '<div class="s">путь покупателя со страницы курса</div></div>' +
+      (d && d !== 'none' && d.revenue
+        ? '<span style="flex:1"></span><div class="lad-n num">' + fmtMoney(d.revenue) + ' ₽</div>' : '') +
+      '</div>';
+
+    if (!d) return '<div class="card">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') {
+      return '<div class="card">' + head +
+        '<div class="empty">Не удалось загрузить воронку курса — проверь сеть или доступ.</div></div>';
+    }
+
+    var steps = d.steps || [];
+    var first = steps.length ? steps[0].n : 0;
+    if (!first && !(steps[steps.length - 1] || {}).n) {
+      return '<div class="card">' + head +
+        '<div class="empty">За этот период на странице курса никого не было.</div></div>';
+    }
+
+    /* худший шаг — где теряем больше всего людей в долях, а не в штуках */
+    var worst = -1, worstConv = 101;
+    steps.forEach(function (s, i) {
+      if (!i || !steps[i - 1].n) return;
+      var c = Math.round(s.n / steps[i - 1].n * 100);
+      if (c <= 100 && c < worstConv) { worstConv = c; worst = i; }
+    });
+
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.min(100, Math.round(s.n / first * 100)) : 0;
+      var prev = i ? steps[i - 1].n : 0;
+      var conv = i ? (prev ? Math.round(s.n / prev * 100) : 0) : 100;
+      var lost = i ? Math.max(0, prev - s.n) : 0;
+      /* Оплат может оказаться больше, чем дошедших до оплаты: доступ к курсу
+         открывают и руками из карточки лида, а такой человек по странице не шёл.
+         Считать это конверсией 2125% нельзя — говорим, что произошло. */
+      var over = i && conv > 100;
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.title) + '</div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right">' +
+        (over ? '' : '<span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+          (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' +
+            (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '')) +
+        '</div></div>';
+    }).join('');
+    /* Сноска нужна ровно тогда, когда цифры на первый взгляд не сходятся. */
+    var overPaid = steps.length > 1 &&
+      steps[steps.length - 1].n > steps[steps.length - 2].n;
+    var note = overPaid
+      ? '<div class="cf-note">Оплативших больше, чем дошедших до оплаты: часть доступов ' +
+        'открывают руками из карточки в CRM, и эти люди по странице не шли.</div>' : '';
+
+    var srcs = (d.sources || []).filter(function (s) { return s.landing || s.paid; });
+    var srows = srcs.map(function (s) {
+      return '<div class="trow cf-grid">' +
+        '<div class="t-cell"><div class="t-ttl' + (s.source ? '' : ' anon') + '">' +
+          esc(s.source || 'без метки') + '</div></div>' +
+        '<div class="num">' + s.landing + '</div>' +
+        '<div class="num hidem">' + s.free_open + '</div>' +
+        '<div class="num hidem">' + s.checkout + '</div>' +
+        '<div class="num">' + s.paid + '</div>' +
+        '<div class="num">' + (s.revenue ? fmtMoney(s.revenue) + ' ₽' : '—') + '</div></div>';
+    }).join('');
+    var sources = srows
+      ? '<div class="trow cf-grid thead"><span class="th">Источник</span><span class="th">Зашли</span>' +
+        '<span class="th hidem">Пробный</span><span class="th hidem">На оплату</span>' +
+        '<span class="th">Купили</span><span class="th">Деньги</span></div>' + srows
+      : '';
+
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+  }
+
   function renderMarketing(view) {
+    if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
+    /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
+       права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
     if (!state._mk) {
-      view.innerHTML = dashSkeleton();
+      view.innerHTML = courseFunnelCard() + dashSkeleton();
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить маркетинг — проверь сеть или доступ.</div></div>';
+      view.innerHTML = courseFunnelCard() +
+        '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
       return;
     }
     var d = state._mk;
@@ -11290,7 +11406,7 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML =
+    view.innerHTML = courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
