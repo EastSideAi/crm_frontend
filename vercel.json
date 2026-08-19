@@ -3,5 +3,12 @@
   "framework": null,
   "buildCommand": null,
   "installCommand": null,
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "headers": [
+    {
+      "//": "Сборки нет, имена файлов постоянные: без этого браузер кэширует app.js и style.css эвристически и показывает вчерашнюю версию. no-cache не запрещает кэш, а требует проверять свежесть — при неизменившемся файле ответ 304 и трафика столько же.",
+      "source": "/(index.html|app.js|style.css)?",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
+  ]
 }
