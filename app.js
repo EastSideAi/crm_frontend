@@ -10212,6 +10212,7 @@
       parts.push('экскурсии ' + finRub(p.income_exc, 0));
     }
     parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
+    if (p.count_excursions === false) parts.push('экскурсии мимо компании');
     var sub = parts.join(' · ') + (p.comment ? ' · ' + p.comment : '');
 
     return '<div class="card prg' + (loss ? ' loss' : '') + '">' +
@@ -10277,7 +10278,11 @@
             }).join('') + '</select>') +
         '</div>' +
         finField('Откуда цифра расхода', '<input id="pg-comment" class="al-in" maxlength="300" ' +
-          'value="' + esc(p.comment || '') + '" placeholder="из итогового P&L, с налогами">'),
+          'value="' + esc(p.comment || '') + '" placeholder="из итогового P&L, с налогами">') +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="pg-exc"' +
+          (p.count_excursions === false ? '' : ' checked') + '>' +
+          '<span>Экскурсии идут в доход программы. Снимите, если экскурсии оплачивались ' +
+          'мимо компании — тогда они не попадут в выручку (как у Шанхая)</span></label>',
     });
     if (!m) return;
     el('fm-ok').addEventListener('click', function () {
@@ -10289,6 +10294,7 @@
       finDo('/admin/api/fin/programs/' + encodeURIComponent(p.id), 'PATCH', {
         name: finVal('pg-name'), expense: finVal('pg-expense'),
         status: el('pg-status').value, comment: finVal('pg-comment'),
+        count_excursions: el('pg-exc').checked,
       }, 'Программа поправлена');
     });
   }

@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS finmodel.programs (
     season_start date,                                   -- с какой даты считать доход из чеков
     expense      numeric(14,2) DEFAULT 0 NOT NULL,       -- полный расход программы (из P&L), правится в CRM
     comment      text DEFAULT ''::text NOT NULL,         -- откуда цифра расхода
+    count_excursions boolean DEFAULT true NOT NULL,      -- экскурсии в доход? Шанхай — нет (шли не через компанию)
     sort         integer DEFAULT 0 NOT NULL,
     created_at   timestamp with time zone DEFAULT now() NOT NULL,
     updated_at   timestamp with time zone DEFAULT now() NOT NULL,
@@ -54,8 +55,9 @@ CREATE POLICY "programs: удаляет финансист" ON finmodel.programs
     FOR DELETE USING ((finmodel.my_role() = ANY (ARRAY['Админ'::text, 'Финансист'::text])));
 
 -- Программы сезона лето-2026 (расход из P&L, дальше правится в CRM). Идемпотентно.
-INSERT INTO finmodel.programs (name, match_key, status, season_start, expense, sort, comment) VALUES
-    ('Харбин лето 2026', 'харбин', 'завершена', '2026-03-01', 876099, 1, 'расход с налогами и резервами, из итогового P&L'),
-    ('Шанхай лето 2026', 'шанха', 'идет', '2026-03-01', 978837, 2, 'расход с налогами, из P&L (факт плюс прогноз)'),
-    ('Шэньчжэнь 2026', 'ньчж', 'идет', '2026-03-01', 757992, 3, 'прямые траты по сводке 19.08, программа не закрыта')
+-- count_excursions: у Шанхая экскурсии шли не через компанию — в доход не берём.
+INSERT INTO finmodel.programs (name, match_key, status, season_start, expense, sort, comment, count_excursions) VALUES
+    ('Харбин лето 2026', 'харбин', 'завершена', '2026-03-01', 876099, 1, 'расход с налогами и резервами, из итогового P&L', true),
+    ('Шанхай лето 2026', 'шанха', 'идет', '2026-03-01', 978837, 2, 'расход с налогами, из P&L (факт плюс прогноз)', false),
+    ('Шэньчжэнь 2026', 'ньчж', 'идет', '2026-03-01', 757992, 3, 'прямые траты по сводке 19.08, программа не закрыта', true)
 ON CONFLICT (name) DO NOTHING;
