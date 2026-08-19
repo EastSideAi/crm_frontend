@@ -2031,7 +2031,32 @@ button.tr-crumb:hover { color: var(--blue); }
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
-.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0; }
+.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0;
+  position: relative; }
+
+/* Перенос срока (только cap tasks_due). Плашка-кнопка отличается от подписи
+   шевроном и ховером: срок остается тем же чипом, а не превращается в контрол
+   ради права его менять. */
+.tsk-duebtn { cursor: pointer; border-radius: var(--r-pill); padding: 3px 9px 3px 8px; margin: -3px 0;
+  transition: background .14s, color .14s; }
+.tsk-duebtn .cdd-ch { width: 11px; height: 11px; color: var(--ink-3); }
+.tsk-duebtn:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tsk-duebtn:hover svg { color: var(--blue); }
+.tsk-duebtn.due-over:hover { background: var(--red-soft); color: var(--red-ink); }
+.tsk-duebtn.due-over:hover svg { color: var(--red-ink); }
+.due-pop { position: absolute; z-index: 30; top: calc(100% + 8px); left: 24px; width: 300px; max-width: calc(100% - 32px);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; animation: rmPop .16s ease; }
+.due-pop > .due-seg { align-self: flex-start; flex-wrap: wrap; }
+.due-pop > .due-seg button:hover { color: var(--blue); }
+.due-row { display: flex; align-items: center; gap: 8px; }
+.due-row .due-day { flex: 1; min-width: 0; }
+/* «Снять срок» — тихое действие последней строкой: оно редкое и необратимое на
+   глаз, кнопкой одного веса с «Поставить» его нажимали бы промахом. */
+.due-off { align-self: flex-start; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  padding: 2px; transition: color .14s; }
+.due-off:hover { color: var(--coral); }
 .tsk-mwho { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); }
 .tsk-mwho svg { color: var(--ink-3); }
