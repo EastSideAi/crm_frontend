@@ -278,6 +278,7 @@ a { color: inherit; text-decoration: none; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl); }
 .grid > .card { display: flex; flex-direction: column; }
 .sp7 { grid-column: span 7; } .sp5 { grid-column: span 5; } .sp12 { grid-column: 1 / span 12; }
+.sp6 { grid-column: span 6; }
 
 .sec-head { display: flex; align-items: center; gap: 11px; }
 .sec-head .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--blue-tint);
@@ -4326,6 +4327,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   letter-spacing: -.02em; text-align: right; }
 .fl-row.fl-2 { grid-template-columns: 1fr auto; }
 
+/* Мелкий вариант статус-чипа .sev для инлайна у имени: та же семья и те же цвета
+   (.cz-wait/.cz-ok/.cz-off), только компактнее — на будущие инлайн-чипы тоже он. */
+.sev.mini { padding: 2px 7px; font-size: 10.5px; border-radius: 6px; margin-left: 8px; }
+/* Платежный календарь: строка-итог отделяется весом и линией сверху, а не рамкой. */
+.cal-row.total { border-top: 1px solid var(--line-2); margin-top: 2px; }
+.cal-row.total .fl-name { font-weight: 700; }
+.cal-row.total .fl-v { color: var(--ink); }
+/* Погашенная плитка statBar: остаток счета еще грузится — тихий текст вместо
+   числа-героя, чтобы пустой слот не читался как сломанные данные. */
+.stat-idle { font-size: 14px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
@@ -5086,4 +5098,111 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      целиком (flex-basis 100%), иначе отбирает ширину у заголовка и тот ломается
      на три строки рядом с иконкой. */
   .po-when { order: 3; flex-basis: 100%; align-self: flex-start; margin-top: 4px; }
+}
+
+/* ════ ИМПОРТ ВСТРЕЧИ — загрузка протокола и экран проверки ════
+   Экран длинный по природе: в протоколе бывает полсотни пунктов. Поэтому
+   иерархия держится не рамками, а плотностью — цель шире и темнее, ее шаги
+   вплотную под ней и с отступом слева, снятый пункт гаснет, но остается
+   виден. Никаких карточек с тенями: это рабочий список, а не витрина. */
+
+/* Зона файла. Единственный цветной элемент формы — с нее и начинают. */
+.mu-drop { display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 26px 18px; border-radius: 14px; background: var(--blue-tint);
+  box-shadow: inset 0 0 0 1.5px rgba(47,107,255,.18); cursor: pointer; text-align: center;
+  transition: box-shadow .15s, background .15s; }
+.mu-drop:hover, .mu-drop.over { box-shadow: inset 0 0 0 1.5px var(--blue); }
+.mu-drop.has { background: var(--green-soft); box-shadow: inset 0 0 0 1.5px rgba(24,169,87,.22); }
+.mu-drop-i { color: var(--blue); margin-bottom: 4px; }
+.mu-drop.has .mu-drop-i { color: var(--green-ink); }
+.mu-drop-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
+  overflow-wrap: anywhere; }
+.mu-drop-s { font-size: 11.5px; color: var(--ink-2); }
+
+/* Экран проверки */
+.mi-card { max-width: 720px; }
+.mi-stat { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 12px 24px 0;
+  font-size: 12px; color: var(--ink-2); }
+.mi-stat b { color: var(--ink); font-weight: 700; }
+.mi-stat .warn { color: var(--amber-ink); }
+.mi-stat .warn b { color: var(--amber-ink); }
+.mi-body { gap: 26px; padding-bottom: 18px; }
+.mi-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
+  padding: 11px 13px; border-radius: 12px; background: var(--fill); }
+
+.mi-goal { display: flex; flex-direction: column; gap: 9px; }
+.mi-g-h { display: flex; align-items: center; gap: 10px; }
+.mi-tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.mi-row .mi-link { flex: 1 1 160px; min-width: 0; }
+
+.mi-item { display: flex; flex-direction: column; gap: 6px; transition: opacity .15s; }
+.mi-item.off { opacity: .4; }
+.mi-item.off .mi-title { text-decoration: line-through; }
+.mi-line { display: flex; align-items: center; gap: 8px; }
+/* Заголовок цели читается как заголовок, а не как еще одно поле: фона нет,
+   обводка приезжает под курсор и на фокус. Иначе десять одинаковых серых
+   прямоугольников подряд, и глазу не за что зацепиться. */
+.mi-line .mi-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: -.015em;
+  line-height: 1.35; background: transparent; box-shadow: none;
+  /* Не hidden: если высота почему-то не сошлась, хвост фразы должен быть
+     доступен прокруткой, а не отрезан насовсем. */
+  resize: none; overflow-y: auto; min-height: 0;
+  /* Высота по тексту силами браузера. JS-подгонка в app.js остается для тех,
+     где свойства еще нет (Safari): она считает то же самое, но после кадра. */
+  field-sizing: content; }
+.mi-line .mi-title:hover { background: var(--fill); box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
+.mi-line .mi-title:focus { background: #fff; }
+.mi-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.mi-row .mi-who { flex: 1 1 150px; min-width: 0; }
+.mi-row .mi-dept { flex: 1 1 130px; min-width: 0; }
+.mi-row .mi-due { flex: 0 0 144px; }
+.al-sel.sm { font-size: 12.5px; font-weight: 600; border-radius: 10px; padding: 8px 30px 8px 11px; }
+
+/* Шаги живут внутри цели: отступ слева и полупрозрачная линия вместо рамки. */
+.mi-steps { display: flex; flex-direction: column; gap: 9px; margin-left: 15px;
+  padding-left: 16px; border-left: 1.5px solid var(--line-2); }
+.mi-steps .mi-item { gap: 5px; }
+.mi-steps .mi-title { font-size: 13px; font-weight: 500; letter-spacing: 0;
+  padding: 9px 12px; border-radius: 10px; line-height: 1.4; }
+.mi-steps .mi-skip { width: 28px; height: 28px; border-radius: 8px; }
+.mi-nosteps { margin-left: 28px; font-size: 11.5px; color: var(--ink-3); }
+
+.mi-skip { flex: none; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--ink-3); background: var(--fill); transition: color .15s, background .15s; }
+.mi-skip:hover { color: var(--ink); background: #ECEEF1; }
+.mi-made { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 0 10px; height: 32px;
+  border-radius: 9px; font-size: 11.5px; font-weight: 700; color: var(--green-ink); background: var(--green-soft); }
+
+/* Вопросы на решение — не задачи, поэтому и выглядят иначе: без полей, тише. */
+.mi-dec { padding: 13px 15px; border-radius: 14px; background: var(--fill);
+  display: flex; flex-direction: column; gap: 7px; }
+.mi-dec-h { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--ink); }
+.mi-dec-h svg { color: var(--ink-2); }
+.mi-dec ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px;
+  font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.mi-dec-s { font-size: 11.5px; color: var(--ink-3); }
+
+.mi-foot { align-items: center; }
+.mi-count { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+/* Погашенная кнопка все равно читается: --ink-3 на --fill дает контраст 2:1,
+   и главное действие экрана просто исчезало. */
+.al-save.off { background: var(--fill); color: var(--ink-2); pointer-events: none; }
+
+@media (max-width: 620px) {
+  .mi-card { max-width: none; }
+  .mi-stat { padding: 10px 16px 0; }
+  /* На телефоне поля идут в столбец: три контрола в строку дают по 90px каждому,
+     и имя исполнителя в них не читается. Сброс flex обязателен — в колонке
+     flex-basis становится ВЫСОТОЙ, и селект вытягивается на пол-экрана. */
+  .mi-row { flex-direction: column; }
+  .mi-row > .mi-who, .mi-row > .mi-dept, .mi-row > .mi-due, .mi-row > .mi-link { flex: 0 0 auto; width: 100%; }
+  /* На телефоне заголовок почти всегда идет в две строки. Держим место под них
+     заранее: подгонка высоты скриптом промахивается, пока не устоялась ширина,
+     и хвост фразы прячется под обрез — а проверять формулировки и есть смысл
+     этого экрана. */
+  .mi-line .mi-title { font-size: 14px; min-height: 62px; }
+  .mi-steps .mi-line .mi-title { min-height: 56px; }
+  .mi-steps { margin-left: 8px; padding-left: 10px; }
+  .mi-nosteps { margin-left: 18px; }
 }
