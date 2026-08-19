@@ -843,6 +843,10 @@ a { color: inherit; text-decoration: none; }
 .m-ni.on .cnt { background: var(--blue-tint); color: var(--blue); }
 .m-ni .dotw { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--amber);
   box-shadow: 0 0 0 3px var(--amber-soft); }
+/* Зеленая точка — «у человека тут открыт доступ». Не тревога, а факт: тем же
+   размером, что и .dotw, чтобы столбец разделов не прыгал. */
+.m-ni .doto { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft); }
 
 .m-content { flex: 1; overflow-y: auto; padding: 26px 30px 36px; min-width: 0; }
 .m-content::-webkit-scrollbar { width: 7px; }
@@ -1187,15 +1191,15 @@ a { color: inherit; text-decoration: none; }
 .ordm-chip.custom { color: var(--ink-2); border: 1px dashed rgba(21,32,59,.18); background: transparent; }
 
 /* Аккордеон ручного учета */
-.pay-manual { margin-top: 16px; border-top: 1px solid rgba(21,32,59,.07); }
-.pay-manual > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+.pay-manual, .m-fold { margin-top: 16px; border-top: 1px solid rgba(21,32,59,.07); }
+.pay-manual > summary, .m-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
   padding: 14px 2px 4px; user-select: none; }
-.pay-manual > summary::-webkit-details-marker { display: none; }
-.pay-manual .pm-t { font: 700 13px 'Manrope', sans-serif; color: var(--ink); }
-.pay-manual .pm-h { font: 500 12px 'Manrope', sans-serif; color: var(--ink-3); }
-.pay-manual > summary svg { margin-left: auto; color: var(--ink-3); transform: rotate(90deg); transition: transform .18s; }
-.pay-manual[open] > summary svg { transform: rotate(-90deg); }
-.pay-manual__body { padding-top: 10px; }
+.pay-manual > summary::-webkit-details-marker, .m-fold > summary::-webkit-details-marker { display: none; }
+.pay-manual .pm-t, .m-fold .pm-t { font: 700 13px 'Manrope', sans-serif; color: var(--ink); }
+.pay-manual .pm-h, .m-fold .pm-h { font: 500 12px 'Manrope', sans-serif; color: var(--ink-3); }
+.pay-manual > summary svg, .m-fold > summary svg { margin-left: auto; color: var(--ink-3); transform: rotate(90deg); transition: transform .18s; }
+.pay-manual[open] > summary svg, .m-fold[open] > summary svg { transform: rotate(-90deg); }
+.pay-manual__body, .m-fold__body { padding-top: 10px; }
 .ord-items { display: flex; flex-direction: column; gap: 7px; }
 .ord-empty { text-align: center; color: var(--ink-3); font-size: 12.5px; padding: 16px 10px;
   background: var(--fill); border-radius: 10px; border: 1px dashed rgba(21,32,59,.12); }
@@ -2829,9 +2833,9 @@ button.tr-crumb:hover { color: var(--blue); }
   background: var(--fill); border: 1px solid transparent; border-radius: 21px; padding: 11px 16px; transition: border-color .15s, background .15s, box-shadow .15s;
   resize: none; max-height: 128px; overflow-y: auto; display: block; }
 .tg-compose textarea:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
-.tg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
+.tg-compose .tg-send, .m-dlg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
-.tg-compose .tg-send:hover { background: var(--blue-d); }
+.tg-compose .tg-send:hover, .m-dlg-compose .tg-send:hover { background: var(--blue-d); }
 .tg-chead .ai-toggle { flex: none; }
 
 /* инбокс на всю высоту: контейнер фиксируется под экран, скроллит только внутри */
@@ -2853,38 +2857,39 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .bc-foot { justify-content: space-between; align-items: center; }
 .bc-foot .ai-toggle { margin-right: auto; }
 
-/* раздел «Диалог» в карточке */
-.dlg-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+/* Раздел «Диалог» в карточке лида. Рецепт переписки один на продукт — тот же .tg-*,
+   что в «Диалогах»; здесь только оправа под модалку: свой скролл треду и поле ответа
+   снизу. Прежний второй рецепт (.msg-*, зеленый пузырь менеджера) убран — два разных
+   вида одной переписки читались как два разных места. */
+.m-dlg { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: #fff; }
+.m-dlg-h { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--line); }
+.m-dlg-h .bp { margin-left: auto; }
+.m-dlg-thread { max-height: min(46vh, 460px); overflow-y: auto; padding: 16px; display: flex;
+  flex-direction: column; gap: 8px; background: #F3F5F8; }
+.m-dlg-thread::-webkit-scrollbar { width: 7px; }
+.m-dlg-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
+.m-dlg-compose { display: flex; align-items: flex-end; gap: 10px; padding: 11px 12px; border-top: 1px solid var(--line); }
+.m-dlg-compose textarea { flex: 1; min-width: 0; outline: none; resize: none; font: 500 13.5px/1.45 'Manrope', sans-serif;
+  color: var(--ink); background: var(--fill); border: 1px solid transparent; border-radius: 12px; padding: 11px 13px; }
+.m-dlg-compose textarea:focus { background: #fff; border-color: #CFE0FF; box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
+.m-dlg-none { display: flex; gap: 12px; align-items: flex-start; background: var(--fill); border-radius: 14px; padding: 16px; }
+.m-dlg-none > svg { color: var(--ink-3); flex: none; margin-top: 2px; }
+.m-dlg-none b { display: block; font-size: 13.5px; color: var(--ink); }
+.m-dlg-none span { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 4px; line-height: 1.45; }
+.m-dlg-by { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--amber-ink); margin-top: 10px; }
+.m-dlg-by svg { color: var(--amber-ink); flex: none; }
+.m-dlg-more { font-size: 12.5px; color: var(--ink-2); margin-top: 12px; }
+@media (max-width: 560px) {
+  .m-dlg-h { flex-wrap: wrap; }
+  .m-dlg-h .bp { margin-left: 0; width: 100%; justify-content: center; }
+  .m-dlg-thread { max-height: 52vh; padding: 12px; }
+}
 .ai-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 8px 14px; transition: .15s; }
 .ai-toggle .ait-dot { width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: inset 0 0 0 2px var(--line-2); position: relative; transition: .15s; }
 .ai-toggle.on { color: var(--blue); background: var(--blue-tint); }
 .ai-toggle.on .ait-dot { box-shadow: inset 0 0 0 6px var(--blue); background: #fff; }
 .ai-toggle:hover { background: #EDEFF3; }
-
-.dlg-thread { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
-.msg { max-width: 78%; display: flex; flex-direction: column; }
-.msg.in { align-self: flex-start; }
-.msg.out { align-self: flex-end; align-items: flex-end; }
-.msg-h { margin-bottom: 4px; }
-.msg-by { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .04em; }
-.msg-by.ai { color: var(--blue); } .msg-by.ai svg { color: var(--blue); }
-.msg-by.hum { color: var(--green-ink); } .msg-by.hum svg { color: var(--green-ink); }
-.msg-b { font-size: 13.5px; line-height: 1.5; padding: 11px 14px; border-radius: 15px; }
-.msg.in .msg-b { background: var(--fill); color: var(--ink); border-bottom-left-radius: 5px; }
-.msg.out .msg-b { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
-.msg.out.mgr .msg-b { background: var(--green); }
-.msg-t { font-size: 10.5px; color: var(--ink-3); margin-top: 4px; }
-.msg-sys { align-self: center; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600;
-  color: var(--green-ink); background: var(--green-soft); border-radius: var(--r-pill); padding: 7px 14px; margin: 4px 0; }
-.msg-sys svg { color: var(--green-ink); }
-
-.dlg-cost { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px;
-  background: var(--fill); border-radius: 14px; padding: 16px; }
-.dc-cell { text-align: center; }
-.dc-v { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
-.dc-l { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
 
 /* ════ МОБИЛА ════ */
 .mtabs { display: none; }
@@ -2945,7 +2950,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .m-nav { width: auto; flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 12px 14px;
     border-right: 0; border-bottom: 1px solid var(--line); }
   .m-ni { flex-direction: column; gap: 5px; padding: 8px 12px; white-space: nowrap; font-size: 11px; min-width: 64px; position: relative; }
-  .m-ni .cnt, .m-ni .dotw { position: absolute; top: 3px; right: 4px; margin: 0;
+  .m-ni .cnt, .m-ni .dotw, .m-ni .doto { position: absolute; top: 3px; right: 4px; margin: 0;
     font-size: 10px; padding: 1px 5px; }
   .m-content { padding: 20px 18px 28px; }
   .pipe { flex-wrap: wrap; }
@@ -3924,6 +3929,38 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-link-none { flex: 1; font-size: 12.5px; color: var(--ink-3); }
 .det-link-m { margin-top: 8px; font-size: 11.5px; color: var(--ink-3); }
 .det-pr { font-size: 13px; color: var(--ink-2); }
+
+/* раздел «Экзамены»: сводка DET и HSK строками, крупное число — ответ на «сдавал или нет» */
+.ex-list { display: flex; flex-direction: column; gap: 10px; }
+.ex-card { display: flex; align-items: center; gap: 16px; background: var(--card);
+  border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.ex-card.empty { background: var(--fill); border-color: transparent; }
+.ex-v { flex: none; min-width: 92px; font-size: 30px; font-weight: 700; letter-spacing: -.035em; color: var(--ink); }
+.ex-card.empty .ex-v { color: var(--ink-3); }
+.ex-v small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; margin-left: 2px; }
+.ex-b { flex: 1; min-width: 0; text-align: left; }
+.ex-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ex-m { margin-top: 4px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.ex-note { display: block; margin-top: 3px; color: var(--ink-2); }
+@media (max-width: 560px) {
+  /* на телефоне кнопка уезжает под строку: в три колонки на 390px название экзамена
+     ломается на три строки, и карточка перестает читаться с одного взгляда */
+  .ex-card { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: center; }
+  .ex-v { min-width: 0; }
+  .ex-card .bp { grid-column: 1 / -1; justify-content: center; margin-top: 10px; }
+}
+
+/* интенсив DET: связка карточки с учеником отдельного приложения */
+.int-none { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.int-find { margin-top: 12px; }
+.int-unlink { font: inherit; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.int-unlink:hover { color: var(--blue); }
+.int-rows { margin-top: 12px; display: flex; flex-direction: column; }
+.int-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+.int-row:first-child { border-top: 0; }
+.int-b { flex: 1; min-width: 0; }
+.int-n { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.int-m { margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
 
 /* занятия в тренажерах: не разбор заданий, а ответ на «живой ученик или бросил» */
 .det-prl { margin-top: 20px; }
