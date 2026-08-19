@@ -35,6 +35,7 @@
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     leadConv: {},       // переписка бота, сведенная с карточкой лида: { session_id: ответ | 'load' }
+    convLead: {},       // обратный ход: карточка лида по диалогу бота { user_id: ответ | 'load' }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
@@ -14075,6 +14076,71 @@
     renderInboxChat(list);
   }
 
+  /* ── Карточка клиента из диалога ──────────────────────────────────────────
+     Менеджер отвечает человеку и одновременно смотрит его карточку, поэтому она
+     открывается в НОВОЙ вкладке: диалог остается на месте, вместе с недописанным
+     ответом. Сшивает бэкенд теми же ключами, что и в обратную сторону (см.
+     buildDialog), и говорит, чем сшил: по нику бывает мимо.
+     Карточки может не быть вовсе — боту пишет кто угодно, а заводит ее кодовое
+     слово. Тогда та же кнопка ее и заводит: искать человека руками в «Людях», чтобы
+     убедиться, что его там нет, — не работа. */
+  function convLeadLoad(uid) {
+    if (state.convLead[uid]) return;
+    state.convLead[uid] = 'load';
+    api('/admin/api/bot/conversations/' + uid + '/lead').then(function (r) {
+      state.convLead[uid] = r || {};
+    }).catch(function () {
+      state.convLead[uid] = { error: true };   // не нашли из-за сети — кнопки лучше не показывать
+    }).then(function () { convCardPaint(uid); });
+  }
+  function convCardHtml(uid) {
+    var d = state.convLead[uid];
+    if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Карточка</span>';
+    if (d.error) return '';
+    if (d.found) {
+      return '<button class="tg-cact" data-card="' + esc(d.session_id) + '" ' +
+        'title="Открыть карточку клиента в новой вкладке">' + ic('card', 14) + 'Карточка' +
+        (d.match === 'username' ? '<span class="tg-cw" title="сшито по нику — сверьте, тот ли человек">по нику</span>' : '') +
+        '</button>';
+    }
+    if (d.can_create) {
+      return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+        'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+        '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
+    }
+    return '';
+  }
+  function convCardPaint(uid) {
+    var host = el('tg-card');
+    if (!host || String(state.inboxSel) !== String(uid)) return;
+    host.innerHTML = convCardHtml(uid);
+    wireConvCard(host, uid);
+  }
+  /* Ссылку на карточку для КОПИРОВАНИЯ строим от боевого адреса (leadUrl), а открываем
+     всегда в своем окружении: из превью ветки прод-ссылка увела бы менеджера в другую
+     CRM, а он ждет ту же, в которой работает. */
+  function openLeadTab(id) {
+    window.open(location.pathname + location.search + '#lead/' + encodeURIComponent(id),
+                '_blank', 'noopener');
+  }
+  function wireConvCard(host, uid) {
+    var open = host.querySelector('[data-card]');
+    if (open) open.addEventListener('click', function () {
+      openLeadTab(open.getAttribute('data-card'));
+    });
+    var mk = host.querySelector('[data-newcard]');
+    if (mk) mk.addEventListener('click', function () {
+      if (mk.disabled) return;
+      mk.disabled = true; mk.innerHTML = ic('plus', 14) + '<span class="tg-cl">Завожу…</span><span class="tg-cls">Завожу…</span>';
+      apiSend('/admin/api/bot/conversations/' + uid + '/lead', 'POST', null, function (r) {
+        state.convLead[uid] = null; convLeadLoad(uid);
+        loadLeads(true);                          // список «Людей» устарел: там теперь новый человек
+        if (r && r.id) openLeadTab(r.id);
+        showToast(r && r.created === false ? 'Карточка уже была — открыл ее' : 'Карточка заведена');
+      }, function () { mk.disabled = false; convCardPaint(uid); showToast('Не получилось завести карточку'); });
+    });
+  }
+
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
     composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
@@ -14119,6 +14185,7 @@
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
         '<span class="tg-ava sm" style="--c:' + cm.c + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
+        '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
         '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
           '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
       '</div>' +
@@ -14136,6 +14203,8 @@
       '</div>';
     state._composerRendering = false;
 
+    var cw = el('tg-card'); if (cw) wireConvCard(cw, c.id);
+    convLeadLoad(c.id);
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });

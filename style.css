@@ -2765,7 +2765,19 @@ button.tr-crumb:hover { color: var(--blue); }
 .tg-st { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
 .tg-st svg { width: 11px; height: 11px; }
 .tg-st.ai { color: var(--blue); } .tg-st.hot { color: var(--amber-ink); } .tg-st.mgr { color: var(--ink-2); }
-.tg-cact { flex: none; }
+/* кнопка «Карточка» в шапке диалога: тихая таблетка рядом с тумблером бота —
+   якорь экрана это переписка, а не кнопки над ней */
+.tg-cwrap { flex: none; display: inline-flex; }
+.tg-cact { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 8px 13px; transition: .15s; }
+.tg-cact:hover { background: #EDEFF3; color: var(--ink); }
+.tg-cact.new { color: var(--blue); background: var(--blue-tint); }
+.tg-cact.new:hover { background: #DCE7FF; }
+.tg-cact.off { opacity: .45; pointer-events: none; }
+.tg-cact[disabled] { opacity: .6; pointer-events: none; }
+.tg-cact .tg-cls { display: none; }   /* короткая подпись — только на телефоне */
+.tg-cact .tg-cw { font-size: 10.5px; font-weight: 600; color: var(--amber-ink); background: var(--amber-soft);
+  border-radius: var(--r-pill); padding: 1px 6px; }
 .tg-thread { flex: 1; overflow-y: auto; min-height: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; background: #F3F5F8; }
 .tg-thread::-webkit-scrollbar { width: 7px; } .tg-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
 .tg-msg { max-width: 74%; display: flex; flex-direction: column; }
@@ -2977,6 +2989,20 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .tg.show-chat .tg-list { display: none; }
   .tg.show-chat .tg-chat { display: flex; }
   .tg-back { display: grid; place-items: center; }
+  /* Шапка чата на телефоне: 390px делят имя и две таблетки, поэтому «Карточка»
+     ужимается до значка, пометка «по нику» уходит (она видна в самой карточке), а
+     подстрочник целиком прячется — канал виден в строке списка, откуда пришли, а
+     состояние бота написано подсказкой над полем ввода. */
+  .tg-chead { gap: 8px; padding: 10px 12px; }
+  .tg-chead .tg-cs { display: none; }
+  /* тумблер бота на телефоне — один кружок: его состояние тут же написано словами
+     в подсказке над полем ввода, а имя человека важнее подписи на кнопке */
+  .tg-chead .ai-toggle { padding: 8px 10px; gap: 0; font-size: 0; }
+  .tg-cact:not(.new) { padding: 8px 10px; gap: 0; font-size: 0; }
+  .tg-cact .tg-cl { display: none; }
+  .tg-cact .tg-cls { display: inline; }
+  .tg-cact svg { width: 15px; height: 15px; }
+  .tg-cact .tg-cw { display: none; }
   /* Разделов больше, чем влезает в ширину телефона: у руководителя их девять.
      Раньше лишние просто обрезались краем плашки — пункт «Продукты» с экрана
      пропадал совсем. Теперь ряд скроллится, а при малом числе разделов кнопки
