@@ -5181,6 +5181,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mi-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
   padding: 11px 13px; border-radius: 12px; background: var(--fill); }
 
+/* Пакет протоколов: три файла с одной планерки проверяются на одном экране.
+   Между разборами — линия и подпись файла, иначе цели из разных встреч
+   читаются как один список и человек теряет, о чем вообще шла речь. */
+.mi-imp { display: flex; flex-direction: column; gap: 26px; }
+/* Воздух вокруг границы намеренно неровный: сверху больше, чем ритм внутри
+   секции, иначе линия между двумя протоколами читается как еще один отступ
+   между целями. Линия — --line-2, тот же вес, что у строк команды: самый
+   бледный --line рядом с серыми плитами заметок просто теряется. */
+.mi-imp + .mi-imp { margin-top: 8px; padding-top: 22px; border-top: 1px solid var(--line-2); }
+/* Шапка файла — родитель секции, а не ее пункт: до содержимого 13px против
+   26px между целями (тот же расчет, что у .dr-h). Отрицательный отступ гасит
+   общий gap колонки. */
+.mi-file { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  margin-bottom: -13px; }
+.mi-file-n { display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 13px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.mi-file-n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-file-n svg { color: var(--ink-3); flex: none; }
+.mi-file-s { font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+
 .mi-goal { display: flex; flex-direction: column; gap: 9px; }
 .mi-g-h { display: flex; align-items: center; gap: 10px; }
 .mi-tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
