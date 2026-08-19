@@ -1836,6 +1836,7 @@
     { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
@@ -2143,6 +2144,9 @@
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
       });
+    } else if (state.page === 'finprograms') {
+      // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -2488,7 +2492,7 @@
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
-                     finmetrics: 'Итоги периода' };
+                     finprograms: 'Программы', finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -2514,6 +2518,17 @@
             finRub(fd.totals.balance, 0) + '</b> — по последней ведомости' +
             (fhand ? ', остаток правился руками по выписке.' : '.')
           : 'Считаю фонд за все время…';
+      }
+      // Программы считаются сквозь периоды и из чеков ЮKassa — период тут не нужен,
+      // поэтому ветка стоит до проверки !per (иначе повисло бы «Загружаю ведомость»).
+      else if (state.page === 'finprograms') {
+        var pg = FIN.programs && FIN.programs !== 'none' ? FIN.programs : null;
+        ph = pg
+          ? 'Выгодна ли программа: доход по каждой тянется сам из чеков ЮKassa, расход — ' +
+            'из P&L. Прибыль это разница, сквозь все периоды. Всего прибыль <b>' +
+            finRub(pg.total.profit, 0) + '</b>' +
+            (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
+          : 'Считаю программы по чекам…';
       }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
@@ -2624,6 +2639,7 @@
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finplan') renderFinPlan(view);
     else if (state.page === 'fincalendar') renderFinCalendar(view);
+    else if (state.page === 'finprograms') renderFinPrograms(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -7911,7 +7927,7 @@
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
-              calendar: null,
+              calendar: null, programs: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -8097,7 +8113,7 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
-    FIN.revplan = null; FIN.calendar = null;
+    FIN.revplan = null; FIN.calendar = null; FIN.programs = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -8120,6 +8136,15 @@
         FIN.calendar = r; FIN.err = '';
         if (curSpace() === 'fin') renderAll();
       }).catch(function (e) { finFail(e, 'calendar'); }).then(done);
+    });
+  }
+  // Программам период не нужен — доход считается сквозь периоды из чеков ЮKassa.
+  function finLoadPrograms() {
+    finBusy('programs', function (done) {
+      api('/admin/api/fin/programs').then(function (r) {
+        FIN.programs = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'programs'); }).then(done);
     });
   }
   function finPeriod() {
@@ -10087,6 +10112,148 @@
     return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
       '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
       '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+  }
+
+  /* Программы: выгодна ли. Доход по каждой тянется сам из позиций чеков ЮKassa (в
+     описании платежа программа часто пустая, в чеке названа), расход берется из P&L
+     программы. Прибыль это разница, сквозь все периоды — программа идет не две недели.
+     В каскад ведомости это НЕ входит: P&L программы уже считает свои налоги и фонды. */
+  function renderFinPrograms(view) {
+    if (!FIN.programs) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPrograms(); return;
+    }
+    if (FIN.programs === 'none') return finErrView(view);
+    var r = FIN.programs, t = r.total || {}, canFix = can('finmodel_edit');
+    var progs = r.programs || [];
+
+    var bar = statBar([
+      { label: 'Доход по программам', value: finRub(t.income, 0),
+        sub: 'из чеков ЮKassa' + (r.since ? ', с ' + finDate(r.since) : '') },
+      { label: 'Расход', value: finRub(t.expense, 0), sub: 'из P&L программ' },
+      { label: 'Прибыль', value: finRub(t.profit, 0),
+        sub: (t.profit >= 0 ? 'доход минус расход' : 'программы в минусе') },
+      { label: 'Общая маржа', value: (t.margin != null ? t.margin + '%' : '—'),
+        sub: 'по всем программам сразу' },
+    ]);
+
+    // На базе без ключей ЮKassa (превью, локально) дохода не будет — говорим прямо,
+    // чтобы нули не читались как «программы ничего не заработали».
+    var note = r.live ? '' : '<div class="card prg-note">' + ic('alert', 14) +
+      '<span>Доход из ЮKassa на этой базе недоступен — нет ключей магазина. Пока экран ' +
+      'открыт не на боевой базе, доход показан нулём.</span></div>';
+
+    var cards = progs.length
+      ? '<div class="prg-list">' + progs.map(function (p) {
+          return finProgCard(p, canFix);
+        }).join('') + '</div>'
+      : '<div class="card"><div class="empty">Программ пока нет.</div></div>';
+
+    view.innerHTML = bar + note + cards;
+
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-prg]'), function (b) {
+        b.addEventListener('click', function () {
+          var id = b.getAttribute('data-prg');
+          progs.forEach(function (p) { if (p.id === id) finProgramForm(p); });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  function finProgCard(p, canFix) {
+    var loss = p.profit < 0;
+    // Зелёный зарезервирован под деньги/успех (маржа, прибыль): «завершена» это
+    // нейтральный статус жизни программы, а не позитив — иначе рядом с красным убытком
+    // встанут противоречивые сигналы. Нейтраль fill/ink-3, «идет» — blue-tint.
+    var stCls = p.status === 'завершена' ? 'cz-off' : 'cz-wait';
+    // Состав дохода: основная и экскурсии — из чего сложилась выручка программы.
+    var parts = [];
+    if (p.income_exc > 0) {
+      parts.push('основная ' + finRub(p.income_base, 0));
+      parts.push('экскурсии ' + finRub(p.income_exc, 0));
+    }
+    parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
+    var sub = parts.join(' · ') + (p.comment ? ' · ' + p.comment : '');
+
+    return '<div class="card prg' + (loss ? ' loss' : '') + '">' +
+      '<div class="prg-head">' +
+        '<span class="prg-name">' + esc(p.name) + '</span>' +
+        '<div class="prg-marg num' + (loss ? ' bad' : ' ok') + '">' +
+          (p.margin != null ? p.margin + '%' : '—') +
+          '<span>' + (loss ? 'убыток' : 'маржа') + '</span></div>' +
+      '</div>' +
+      '<div class="prg-meta">' +
+        '<span class="sev mini ' + stCls + '">' + esc(p.status) + '</span>' +
+        (canFix ? '<button class="prg-pen" data-prg="' + p.id + '" title="Поправить расход или статус">' +
+          ic('pen', 12) + '</button>' : '') +
+      '</div>' +
+      finProgBar(p.income, p.expense) +
+      '<div class="prg-stats">' +
+        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit, 0) + '</span></div>' +
+      '</div>' +
+      '<div class="prg-sub">' + esc(sub) + '</div>' +
+    '</div>';
+  }
+
+  // Полоса «сколько дохода съел расход»: трек это доход, тёмный сегмент слева — расход,
+  // зелёный хвост — прибыль. Расход больше дохода — весь трек красный, это убыток.
+  function finProgBar(income, expense) {
+    if (!(income > 0)) {
+      return '<div class="prg-track empty2">дохода по чекам пока нет</div>';
+    }
+    var loss = expense > income;
+    // Шкала — большая из двух величин. Тёмный сегмент это расход, покрытый доходом;
+    // хвост трека это прибыль (зелёный) или непокрытый убыток (красный).
+    var base = loss ? expense : income;
+    var covered = loss ? income : expense;   // расход, укладывающийся в доход
+    var expPct = Math.max(3, Math.min(100, Math.round(covered / base * 100)));
+    return '<div class="prg-track' + (loss ? ' loss' : '') + '">' +
+      '<div class="prg-exp" style="width:' + expPct + '%"></div></div>' +
+      '<div class="prg-legend">' +
+        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense, 0) + '</span>' +
+        '<span><i class="prg-dot' + (loss ? ' bad' : ' prof') + '"></i>' +
+          (loss ? 'Убыток ' + finRub(income - expense, 0) : 'Прибыль ' + finRub(income - expense, 0)) +
+        '</span>' +
+      '</div>';
+  }
+
+  function finProgramForm(p) {
+    var m = finModal({
+      eyebrow: 'Программа',
+      title: p.name,
+      sub: 'Доход считается сам из чеков ЮKassa, руками его не правят. Правится расход ' +
+        '(из P&L программы), статус и название.',
+      body:
+        finField('Название', '<input id="pg-name" class="al-in" maxlength="120" value="' +
+          esc(p.name) + '">') +
+        '<div class="al-row">' +
+          finField('Расход, ₽ <i>*</i>', '<input id="pg-expense" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (p.expense || 0) + '">') +
+          finField('Статус', '<select id="pg-status" class="al-in">' +
+            [['идет', 'Идет'], ['завершена', 'Завершена']].map(function (s) {
+              return '<option value="' + s[0] + '"' + (p.status === s[0] ? ' selected' : '') +
+                '>' + s[1] + '</option>';
+            }).join('') + '</select>') +
+        '</div>' +
+        finField('Откуда цифра расхода', '<input id="pg-comment" class="al-in" maxlength="300" ' +
+          'value="' + esc(p.comment || '') + '" placeholder="из итогового P&L, с налогами">'),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (!(Number(finVal('pg-expense')) >= 0) || finVal('pg-expense') === '') {
+        m.err.textContent = 'Впишите расход'; return;
+      }
+      if (!finVal('pg-name')) { m.err.textContent = 'Впишите название'; return; }
+      m.close();
+      finDo('/admin/api/fin/programs/' + encodeURIComponent(p.id), 'PATCH', {
+        name: finVal('pg-name'), expense: finVal('pg-expense'),
+        status: el('pg-status').value, comment: finVal('pg-comment'),
+      }, 'Программа поправлена');
+    });
   }
 
   /* Общая отправка правки ведомости: сохранили — забыли все посчитанное и

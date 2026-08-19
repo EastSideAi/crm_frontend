@@ -4337,6 +4337,58 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fbal-v { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap;
   font-variant-numeric: tabular-nums; }
 
+/* Программы: карточки «выгодность». Якорь каждой — полоса «сколько дохода съел
+   расход» и крупная маржа; расход темный (навигационный), прибыль зеленая, убыток
+   красный. Тени не используем — иерархия весом и цветом, как во всей ведомости. */
+.prg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px; margin-bottom: 20px; }
+.prg { padding: 20px 22px; }
+.prg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.prg-name { font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; color: var(--ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 2px; }
+.prg-meta { display: flex; align-items: center; gap: 4px; margin-top: 9px; }
+.prg-meta .sev { margin-left: 0; }
+.prg-pen { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 0; border-radius: 7px; background: var(--fill);
+  color: var(--ink-3); cursor: pointer; transition: color .15s, background .15s; }
+.prg-pen:hover { color: var(--blue); background: var(--blue-tint); }
+.prg-marg { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+  font-size: 26px; font-weight: 800; letter-spacing: -.03em; white-space: nowrap; }
+.prg-marg.ok { color: var(--green-ink); }
+.prg-marg.bad { color: var(--red-ink); }
+.prg-marg span { font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--ink-3);
+  margin-top: 4px; text-transform: none; }
+.prg-track { position: relative; height: 12px; border-radius: 7px; margin-top: 18px;
+  background: var(--green); overflow: hidden; }
+.prg-track.loss { background: var(--red); }
+.prg-exp { height: 100%; border-radius: 7px 0 0 7px; background: var(--navy);
+  transition: width .6s var(--ease); }
+.prg-track.empty2 { background: var(--fill); color: var(--ink-3); font-size: 12px;
+  font-weight: 600; display: flex; align-items: center; padding: 0 12px; height: 34px;
+  border-radius: 10px; }
+.prg-legend { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 11px; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.prg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px;
+  vertical-align: middle; }
+.prg-dot.exp { background: var(--navy); }
+.prg-dot.prof { background: var(--green); }
+.prg-dot.bad { background: var(--red); }
+.prg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px;
+  padding-top: 16px; border-top: 1px solid var(--line); }
+.prg-stat { display: flex; flex-direction: column; gap: 4px; }
+.prg-stat .k { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.prg-stat .v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.prg-stat .v.ok { color: var(--green-ink); }
+.prg-stat .v.bad { color: var(--red-ink); }
+.prg-sub { margin-top: 14px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+.prg-note { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 13px 16px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--amber-ink);
+  background: var(--amber-soft); }
+.prg-note svg { flex: none; color: var(--amber-ink); }
+
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
