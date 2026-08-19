@@ -11315,15 +11315,24 @@
       var prev = i ? (t[meta[i - 1].key] || 0) : 0;
       var conv = i ? mkPct(n, prev) : 100;
       var loss = i ? Math.max(0, prev - n) : 0;
+      /* Шаг бывает шире предыдущего: карточка заводится и без прохождения сценария
+         до конца, человек мог написать в бота напрямую. «124% с шага» и «без потерь»
+         в лестнице читаются как ошибка счета, поэтому у таких шагов показываем долю
+         от верхнего числа и сколько человек пришло мимо сценария. */
+      var extra = i ? Math.max(0, n - prev) : 0;
       var w = top ? Math.round(n / top * 100) : 0;
+      var right = !i ? 'все'
+        : extra ? (top ? mkPct(n, top) + '% от кликов' : 'мимо кликов')
+        : conv + '% с шага';
       return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
         '<div class="lad-nm">' + esc(s.label) + '<small>' + esc(s.hint) + '</small></div>' +
         '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, n ? 4 : 0) + '%"></div></div>' +
         '<div class="lad-n num">' + n + '</div>' +
         '<div class="lad-right">' +
-          '<span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+          '<span class="lad-conv num">' + right + '</span>' +
           (i ? '<span class="lad-drop' + (loss ? '' : ' zero') + ' num">' +
-            (loss ? '− ' + loss + ' здесь' : 'без потерь') + '</span>' : '') +
+            (extra ? '+ ' + extra + ' мимо сценария'
+              : loss ? '− ' + loss + ' здесь' : 'без потерь') + '</span>' : '') +
         '</div></div>';
     }).join('');
   }
@@ -11337,8 +11346,10 @@
       '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
       mkNum(r.clicks) + mkNum(r.entered) +
       mkNum(r.finished, 'hidem') + mkNum(r.leads) + mkNum(r.clients, 'hidem') +
+      /* карточек бывает больше, чем входов в бота: человек мог написать напрямую,
+         без метки и без шага воронки. Точный процент тут врет, честнее «>100%» */
       '<span class="mkd-cv ' + mkConvCls(conv, r.entered) + ' num">' +
-        (r.entered ? conv + '%' : '—') + '</span>' +
+        (r.entered ? (conv > 100 ? '>100%' : conv + '%') : '—') + '</span>' +
     '</div>';
   }
   function mkHead() {
