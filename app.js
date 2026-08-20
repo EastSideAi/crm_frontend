@@ -1780,9 +1780,11 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
-    // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
-    // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
+    // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
+    // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
+    // нет намеренно — решение владельца.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
@@ -2820,7 +2822,13 @@
     // учеником»: работа по одной семье разложена по разным исполнителям и в
     // обычном списке между ее строками стоят чужие задачи.
     stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
-    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
+    // Вкладка живет, только когда тебе реально что-то сдали (или ты сейчас на
+    // ней — иначе приемка последней задачи выкидывала бы на «Сегодня»). Правило
+    // Павла от 2026-08-20: у тьютора приемки нет, он исполнитель, а не
+    // постановщик. Пустая вкладка с нулем — это шум у всех, а не только у него.
+    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни', live: function () {
+      return !!(state.taskSum && state.taskSum.to_accept) || state.taskSeg === 'accept';
+    } },
     // «Вся команда» — не список, а дерево: направление, цель, шаги. Плоская
     // выдача всех задач компании нечитаема в принципе: в ней рядом лежат
     // «позвонить семье Ким» и «перевести школу на новый формат».
@@ -2845,7 +2853,8 @@
   function deptLabel(d) { return DEPTS[d] || ''; }
   function taskSegs() {
     return Object.keys(TASK_SEGS).filter(function (k) {
-      return !TASK_SEGS[k].cap || can(TASK_SEGS[k].cap);
+      if (TASK_SEGS[k].cap && !can(TASK_SEGS[k].cap)) return false;
+      return !TASK_SEGS[k].live || TASK_SEGS[k].live();
     });
   }
   function taskSeg() {
@@ -2992,6 +3001,10 @@
     if (!can('tasks')) return;
     api('/admin/api/tasks/summary').then(function (r) {
       state.taskSum = r || null;
+      // Вкладка «На приемку» зависит от счетчика, а он приходит отдельным
+      // запросом: без перерисовки вкладок она появлялась бы только на следующем
+      // переходе по разделам.
+      if (state.page === 'tasks') renderTopbar();
       if (cb) cb(); else renderSide();
     }).catch(function () {});
   }
@@ -15855,7 +15868,11 @@
     // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
-      return sct.id !== 'pay' || can('finance');
+      if (sct.id === 'pay') return can('finance');
+      // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
+      // пункт, который открывается только отказом, хуже отсутствующего пункта.
+      if (sct.id === 'dialog') return can('inbox');
+      return true;
     }).map(function (sct) {
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
@@ -15942,6 +15959,7 @@
     // Секцию оплат без финансовой роли не открыть даже прямым переключением
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
+    if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
