@@ -750,6 +750,37 @@ a { color: inherit; text-decoration: none; }
 .fcol .lb { font-size: 10.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
 .fcol .vn { font-size: 12px; font-weight: 600; }
 
+/* ════ ПОДАРКИ (раздел gifts) ════
+   Лестница пути — общая с «Путем» (.lad-*), но кликать в подарках некуда: курсор
+   не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
+   (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
+.lad-row.gf-flat { cursor: default; }
+/* Шкала ограничена по ширине: во всю строку она перетягивала внимание с лестницы
+   пути, а якорь на экране один. */
+.gf-row { display: grid; grid-template-columns: 210px minmax(90px, 420px) 54px 1fr;
+  gap: 16px; align-items: center;
+  padding: 0 24px; height: 58px; border-bottom: 1px solid var(--line); }
+.gf-row:last-child { border-bottom: none; }
+.gf-row:hover { background: #FBFBFC; }
+.gf-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.gf-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+/* Шкала тоньше, чем в лестнице пути (10px): на экране один якорь — путь подарка,
+   а список «что берут» читается как второй голос, а не спорит с ним за внимание. */
+.gf-track { height: 6px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.gf-fill { height: 100%; border-radius: 4px; background: var(--blue); min-width: 6px; transition: width .9s var(--ease); }
+.gf-n { font-size: 15px; font-weight: 600; text-align: right; }
+.gf-got { font-size: 12.5px; font-weight: 600; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.gf-got.zero { color: var(--ink-3); font-weight: 500; }
+
+.gf-srcs { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.gf-src { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.gf-src:last-child { border-bottom: none; }
+.gf-src-c { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.gf-src-n { font-size: 14px; font-weight: 700; }
+.gf-grid { grid-template-columns: 1fr 150px 96px; }
+
+
 /* ════ КАНБАН ════ */
 .kb-wrap { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 16px; align-items: flex-start; }
 .kb-wrap::-webkit-scrollbar { height: 8px; }
@@ -2978,6 +3009,24 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .trow.cf-grid { grid-template-columns: minmax(0,1fr) 54px 54px 86px !important; }
   .lad-row { grid-template-columns: 130px 1fr 90px; gap: 10px; padding: 0 14px; }
   .lad-row .lad-n { display: none; }
+  .gf-row { grid-template-columns: 1fr 54px; height: auto; padding: 14px 18px; row-gap: 8px; }
+  .gf-track { display: none; }
+  .gf-got { grid-column: 1 / -1; text-align: left; }
+  /* Общая .trow прибита под три колонки лида с !important — свою сетку задаём тем же
+     весом, иначе имя и причина схлопываются в «не выбрал пода…». */
+  .trow.gf-grid { grid-template-columns: minmax(0, 1fr) 84px !important; height: auto;
+    padding: 12px 18px; row-gap: 2px; }
+  .trow.gf-grid .t-ttl, .trow.gf-grid .t-sub { white-space: normal; overflow: visible; }
+  /* Шкала на телефоне не читается — вместо неё остаются шаг, число и потери. */
+  .lad-row.gf-flat { grid-template-columns: minmax(0, 1fr) 46px; height: auto;
+    padding: 14px 18px; row-gap: 6px; }
+  .lad-row.gf-flat .lad-track { display: none; }
+  .lad-row.gf-flat .lad-nm small { white-space: normal; }
+  .lad-row.gf-flat .lad-right { grid-column: 1 / -1; flex-direction: row; align-items: center;
+    justify-content: flex-start; gap: 8px; }
+  /* В подарках число — главное, проценты вторичны: возвращаем его.
+     В «Пути» наоборот, поэтому правило точечное. */
+  .lad-row.gf-flat .lad-n { display: block; text-align: right; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
