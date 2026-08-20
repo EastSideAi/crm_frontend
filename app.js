@@ -24,7 +24,7 @@
 
   var state = {
     role: 'owner', userName: '', loaded: false,
-    leads: [], page: 'dash', seg: 'queue', viewMode: 'table',
+    leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '', mkDays: 30,
@@ -410,6 +410,10 @@
      не отличало заявку от случайного посетителя. */
   function leadName(l) {
     if (l.name) return l.name;
+    // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
+    // ничего не знаем», хотя знаем ровно то, чем он подписан в мессенджере.
+    var c = (l.contact || '').trim();
+    if (c.charAt(0) === '@') return c;
     return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
   }
   /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
@@ -618,7 +622,9 @@
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return !!l.paid;
       if (seg === 'rejected') return l.crm.status === 'rejected';
-      return true;
+      // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
+      // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
+      return !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -689,13 +695,15 @@
     return arr;
   }
   function counts() {
-    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
-       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    /* «Пользователи» считаются по тому же правилу, что и список: холодные лиды
+       в цифру на вкладке не входят, иначе счетчик спорил бы со строками. Считаем
+       их отдельно (c.cold) — это бейдж раздела «Лиды» в меню. */
     var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0, blank: 0 };
+              anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
-      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      if (isBlankVisit(l)) c.blank++;
+      if (isProspect(l)) { c.cold++; return; }
       c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
@@ -1815,6 +1823,7 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
@@ -1990,7 +1999,9 @@
         // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал
         // «0 лидов · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
         : can('clients')
-          ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' +
+          // «лид» больше не про этот счетчик: холодные живут в разделе «Лиды»,
+          // а здесь те, с кем работает человек.
+          ? c.all + ' ' + plural(c.all, 'человек', 'человека', 'человек') + ' · обновлено ' +
             (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
           : roleInfo().label;
     }
@@ -2288,6 +2299,11 @@
       else phrase = 'Все спокойно: заявки разобраны, рисков нет.';
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
+    }
+    if (state.page === 'prospects') {
+      var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+      html = '<div><h2>Лиды</h2>' +
+        '<div class="verdict" style="margin-top:8px"><span>' + esc(PR_SEGS[prSeg].hint) + '</span></div></div>';
     }
     if (state.page === 'leads') {
       html = '<div><h2>Люди</h2>' +
@@ -2646,6 +2662,7 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -13215,6 +13232,197 @@
   }
 
   /* ── ЛИДЫ — тулбар + тело (таблица/канбан) в одном контейнере ── */
+  /* ══ ЛИДЫ ══════════════════════════════════════════════════════════════════
+     Решение Веры от 20.08.2026: «лиды это проходящие мимо люди, которые что-то
+     хотели; мы знаем канал, и через него бот говорит с ними дальше. Захотят
+     плотнее — станут людьми, с которыми мы работаем».
+
+     Разделение держится на статусе воронки, а не на новом поле в базе: пока
+     человек не оставил заявку и не заполнил анкету, он `visited` и лежит здесь.
+     Заявка, анкета, оплата или кнопка «Беру в работу» переводят его в «Людей» —
+     обратной кнопки нет намеренно, разжаловать человека обратно в прохожие
+     незачем.
+
+     Своей загрузки у раздела нет: это те же карточки из `state.leads`, просто
+     показанные с другого угла. Менеджеру тут не нужны балл и контакт — нужен
+     канал, повод прихода и когда человек последний раз о себе напоминал. */
+  var PR_SEGS = {
+    all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
+    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
+  };
+  var PR_QUIET_DAYS = 14;
+  /* Ярлык канала: бот кладет его в overrides, у заходов с платформы канала нет. */
+  var PR_CHAN = {
+    telegram: { label: 'Телеграм', icon: 'bot' },
+    vk:       { label: 'ВКонтакте', icon: 'vk' },
+    max:      { label: 'Макс',     icon: 'max' },
+    whatsapp: { label: 'WhatsApp', icon: 'wa' },
+  };
+  function isProspect(l) {
+    return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
+  }
+  function prAge(l) {
+    var t = l.last_activity || l.created_at;
+    if (!t) return 9999;
+    return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+  }
+  /* Сколько человек молчит. Словами, а не числом с подписью: «сегодня» и «вчера»
+     читаются мгновенно, а на длинной тишине важен масштаб, а не точный день. */
+  function prSilence(age) {
+    if (age <= 0) return 'сегодня';
+    if (age === 1) return 'вчера';
+    if (age < 14) return age + ' ' + plural(age, 'день', 'дня', 'дней');
+    if (age < 60) return Math.round(age / 7) + ' нед';
+    return Math.round(age / 30) + ' мес';
+  }
+  function prList(seg) {
+    var arr = state.leads.filter(isProspect);
+    if (seg === 'fresh') arr = arr.filter(function (l) { return prAge(l) <= 7; });
+    if (seg === 'quiet') arr = arr.filter(function (l) { return prAge(l) >= PR_QUIET_DAYS; });
+    if (state.q) {
+      arr = arr.filter(function (l) {
+        var hay = ((l.name || '') + ' ' + (l.contact || '') + ' ' + (l.crm.note || '')).toLowerCase();
+        return hay.indexOf(state.q) !== -1;
+      });
+    }
+    return arr.sort(function (a, b) { return prAge(a) - prAge(b); });
+  }
+  function prCounts() {
+    var c = { all: 0, fresh: 0, quiet: 0 };
+    state.leads.forEach(function (l) {
+      if (!isProspect(l)) return;
+      c.all++;
+      var d = prAge(l);
+      if (d <= 7) c.fresh++;
+      if (d >= PR_QUIET_DAYS) c.quiet++;
+    });
+    return c;
+  }
+  /* Канал контакта. У карточки из бота он лежит в overrides (routers/telegram.py),
+     у пустого захода на платформу канала нет вообще — так и говорим. */
+  function prChan(l) {
+    var key = (l.crm.overrides || {}).channel || (l.referrer === 'bot' ? 'telegram' : '');
+    return PR_CHAN[key] || null;
+  }
+  /* Повод прихода. Бот пишет его в заметку («Пришел в бота: grant»), и это
+     единственное, что мы о холодном человеке знаем. */
+  function prWhy(l) {
+    if (l.crm.note) return l.crm.note;
+    if (l.referrer === 'bot') return 'Написал боту';
+    if (l.referrer && l.referrer.indexOf('webinar') === 0) return 'Пришел с эфира';
+    return 'Открыл платформу';
+  }
+  function prTake(id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Беру…'; }
+    apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/take', 'POST', null, function () {
+      var l = findLead(id);
+      /* Двигаем локально ровно то же, что записал сервер: строка уезжает из
+         «Лидов» сразу, без перезагрузки всего списка. */
+      if (l) {
+        l.status = 'manual';
+        if (l.crm.status === 'new') l.crm.status = 'contacted';
+      }
+      renderAll();
+      showToast('В работе — карточка в «Людях»', '', id);
+    }, function () {
+      if (btn) { btn.disabled = false; btn.textContent = 'Беру в работу'; }
+      showToast('Не получилось — проверь сеть');
+    });
+  }
+  function renderProspects(view) {
+    var seg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+    var arr = prList(seg);
+    var body;
+    if (!arr.length) {
+      body = '<div class="pr-empty">' + ic('funnel', 26) +
+        '<div class="pr-et">' + (state.q || seg !== 'all' ? 'Здесь пусто' : 'Лидов пока нет') + '</div>' +
+        '<div class="pr-es">' + (state.q || seg !== 'all'
+          ? 'По этому срезу никого. Попробуй вкладку «Все».'
+          : 'Сюда попадает каждый, кто написал боту или зашел на платформу и ничего не оставил.') +
+        '</div></div>';
+    } else {
+      body = '<div class="trow pr-grid thead">' +
+          '<span class="th pr-hch">Канал</span><span class="th">Кто</span>' +
+          '<span class="th hidem">Зачем приходил</span>' +
+          '<span class="th">Молчит</span><span class="th"></span>' +
+        '</div>' +
+        arr.map(function (l) {
+          var ch = prChan(l);
+          var age = prAge(l);
+          return '<div class="trow pr-grid" data-id="' + l.id + '">' +
+            '<span class="pr-ch' + (ch ? '' : ' none') + '">' +
+              (ch ? ic(ch.icon, 13) + '<span class="pr-cl">' + ch.label + '</span>'
+                  : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
+            '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
+              // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
+              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+                : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
+            '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
+            '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
+              prSilence(age) + '</div>' +
+            '<div class="pr-act"><button class="pr-take" data-stop="1" data-take="' + l.id + '">Беру в работу</button></div>' +
+          '</div>';
+        }).join('');
+    }
+    view.innerHTML = '<div class="card listcard">' + prToolbar(seg) + '<div class="list-body">' + body + '</div></div>';
+    wireProspects(view);
+  }
+  function prToolbar(seg) {
+    var c = prCounts();
+    var useful = Object.keys(PR_SEGS).filter(function (s) {
+      // Срез, который никого не отсекает, — лишняя кнопка: «Новые 18» рядом с
+      // «Все 18» не дает выбора, только шум.
+      return s !== 'all' && c[s] && c[s] !== c.all;
+    });
+    var chips = (useful.length ? ['all'].concat(useful) : []).map(function (s) {
+      return '<button class="qchip' + (seg === s ? ' on' : '') + '" data-prseg="' + s + '">' +
+        PR_SEGS[s].label + '<span class="qn num">' + c[s] + '</span></button>';
+    }).join('');
+    return '<div class="list-tools">' +
+        '<div class="searchwrap' + (state.q ? ' has-val' : '') + '">' + ic('leads', 15) +
+          '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
+          '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
+          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+      '</div>' +
+      // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
+      (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
+  }
+  function wireProspects(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-prseg]'), function (t) {
+      t.addEventListener('click', function () {
+        state.prSeg = t.getAttribute('data-prseg'); saveUi(); renderHead(); renderView();
+      });
+    });
+    var search = el('search'), wrap = search && search.closest('.searchwrap');
+    if (search) {
+      search.value = state.q;
+      search.addEventListener('input', function () {
+        state.q = this.value.trim().toLowerCase();
+        if (wrap) wrap.classList.toggle('has-val', !!this.value);
+        renderView();
+        var f = el('search');
+        if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+      });
+    }
+    var clr = el('s-clear');
+    if (clr) clr.addEventListener('click', function () { state.q = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-take]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        prTake(b.getAttribute('data-take'), b);
+      });
+    });
+    var ids = prList(PR_SEGS[state.prSeg] ? state.prSeg : 'all').map(function (l) { return l.id; });
+    Array.prototype.forEach.call(view.querySelectorAll('.trow[data-id]'), function (tr) {
+      tr.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('[data-stop]')) return;
+        openDrawer(tr.getAttribute('data-id'), ids);
+      });
+    });
+  }
+
   function renderLeads(view) {
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
@@ -13241,23 +13449,23 @@
     }).join('') + '</div>';
   }
 
-  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
-     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
-     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  /* Куда делись холодные. Раньше пустые заходы сворачивались прямо здесь; с
+     появлением раздела «Лиды» (решение Веры 20.08.2026) они уехали туда целиком,
+     и в «Людях» о них остается одна строка со ссылкой — иначе менеджер решит,
+     что трафика нет вовсе. */
   function blankNote() {
-    var n = counts().blank;
+    var n = counts().cold;
     if (!n || state.seg !== 'all') return '';
-    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
     return '<div class="list-foot">' +
       '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
-      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
-        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
-      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+      '<span class="lf-t"><b class="num">' + n + '</b> ' + plural(n, 'человек написал', 'человека написали', 'человек написали') +
+        ' или зашли, но ничего пока не оставили. Они в разделе «Лиды», с ними говорит бот.</span>' +
+      '<button class="lf-btn" id="lf-blank">Открыть</button>' +
     '</div>';
   }
   function attachBlankNote(host) {
     var b = host.querySelector('#lf-blank');
-    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+    if (b) b.addEventListener('click', function () { setPage('prospects'); });
   }
   function fillTable(host) {
     var arr = segLeads(state.seg);

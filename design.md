@@ -149,6 +149,7 @@ CRM — рабочий инструмент команды. Ценности п�
 | Оверлеи | модалка-форма, баг-панель, тост, меню | `design/overlays.html` | `.al-* .bug-* #toast #smenu` |
 | AI и каталог | AI-блоки, диагностика, витрина продуктов | `design/ai.html` | `.ai-hero .diag-* .pchat .rm-ai .of-* .pd-*` |
 | Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .tg-cact .th-* .ibsw .handoff-banner` |
+| Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
 | Поступление | план, задачи, шаблоны | `design/admissions.html` | `.rm-* .tpl-*` |
 | Маркетинг (+ долг) | страница «Маркетинг» | `design/marketing.html` | `.mk-*` |
 | Задачи команды | список задач, карточка задачи, подключение к боту | витрины нет (см. `style.css` «ЗАДАЧИ КОМАНДЫ») | `.tsk-grid .tsk-who .tsk-due .tsk-card .tsk-feed .sev.st-* .tgl-*` |
