@@ -10954,7 +10954,28 @@
     /* Общий чат — второе окно уведомлений: те же события команды падают в группу.
        Личка дергает исполнителя, общий чат делает работу видимой руководителю:
        чужую переписку с ботом не посмотришь, а группу — да. */
-    function groupBlock(g) {
+    /* Кого касается общий чат. Роли, а не люди: тьюторов заводят и меняют часто,
+       а второй список людей рядом с первым неизбежно разъедется. Показываем не
+       весь справочник ролей, а только те, что реально есть в команде — иначе
+       семнадцать чипов подряд читаются как настройка ради настройки. */
+    function groupRoles(g, links) {
+      var picked = g.roles || [];
+      var have = {};
+      (links || []).forEach(function (x) { if (x.role) have[x.role] = 1; });
+      picked.forEach(function (r) { have[r] = 1; });
+      var order = Object.keys(ROLES).filter(function (r) { return have[r]; });
+      if (!order.length) return '';
+      return '<div class="tgg-roles"><div class="tgg-rh">Кого касается</div>' +
+        '<span class="tm-tp tgg-rl">' + order.map(function (r) {
+          var on = picked.indexOf(r) >= 0;
+          return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-gr="' + esc(r) + '" ' +
+            'title="' + esc(on ? 'События этой роли идут в чат' : 'В чат не идут') + '">' +
+            esc(ROLES[r].label) + '</button>';
+        }).join('') + '</span>' +
+        '<div class="tgg-s">Событий и сводки по остальным в этом чате не будет — ни в ветках, ни в общей теме.</div></div>';
+    }
+
+    function groupBlock(g, links) {
       if (!g) return '';
       var on = !!g.chat_id;
       var opts = (g.groups || []).filter(function (x) { return x.chat_id !== g.chat_id; });
@@ -10965,7 +10986,8 @@
               '<span class="tgg-acts">' +
                 '<button class="tgg-b" id="tgg-test">Проверить</button>' +
                 '<button class="tgg-b off" id="tgg-off">Отключить</button></span></div>' +
-            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка по команде. Личные напоминания идут как шли.</div>'
+            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка. Личные напоминания идут как шли.</div>' +
+            groupRoles(g, links)
           : '<div class="tgg-s">Второе окно: те же события в общую группу, чтобы работа была видна всем, а не только исполнителю. ' +
               (g.bot ? 'Создай группу, добавь в нее <b>@' + esc(g.bot) + '</b> и напиши там «/start» — группа появится в списке ниже.'
                      : 'Бот пока не подключен, поэтому сообщения не уйдут даже в выбранную группу.') + '</div>' +
@@ -11029,7 +11051,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp) +
+        '<div class="al-body">' + groupBlock(grp, links) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -11073,6 +11095,30 @@
       });
       var gr = el('tgg-refresh');
       if (gr) gr.addEventListener('click', reopen);
+      /* Роль включают и выключают одним нажатием. Красим сразу, но правдой
+         считаем ответ сервера: не сохранилось — возвращаем чип как был. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gr]'), function (b) {
+        b.addEventListener('click', function () {
+          var role = b.getAttribute('data-gr');
+          var now = Array.prototype.filter.call(
+            ov.querySelectorAll('[data-gr]'), function (x) { return x.classList.contains('on'); })
+            .map(function (x) { return x.getAttribute('data-gr'); });
+          var next = now.indexOf(role) >= 0
+            ? now.filter(function (x) { return x !== role; })
+            : now.concat([role]);
+          b.classList.toggle('on');
+          b.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/roles', 'PUT', { roles: next }, function () {
+            b.disabled = false;
+            showToast(next.indexOf(role) >= 0
+              ? ROLES[role].label + ': события идут в чат'
+              : ROLES[role].label + ': в чат больше не идет');
+          }, function () {
+            b.disabled = false; b.classList.toggle('on');
+            showToast('Не удалось сохранить — попробуйте еще раз');
+          });
+        });
+      });
     }).catch(function () {
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +

@@ -2160,6 +2160,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .tgg-b[disabled] { color: var(--ink-3); }
 .tgg-acts .tgg-b { margin-top: 0; }
 .tgg-b.off { color: var(--ink-3); }
+/* Кого касается чат: подпись, ряд ролей и пояснение. Отбивка сверху больше
+   внутренних отступов ряда — это отдельная мысль, а не продолжение строки о
+   подключении. */
+.tgg-roles { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.tgg-rh { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+          color: var(--ink-3); margin-bottom: 8px; }
+.tgg-rl { display: flex; flex-wrap: wrap; gap: 4px; }
+.tgg-roles .tgg-s { margin-top: 8px; }
 .tgg-b.off:hover { color: var(--red-ink); }
 .tgg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .tgg-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
