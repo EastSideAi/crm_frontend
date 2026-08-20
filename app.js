@@ -27,7 +27,7 @@
     leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '', mkDays: 30,
+    pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -217,6 +217,7 @@
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
       cap: '<path d="M10 4 18 7.5 10 11 2 7.5 10 4z"/><path d="M5.5 9v4c0 1.4 2 2.5 4.5 2.5s4.5-1.1 4.5-2.5V9"/>',
       box: '<path d="M3.5 6.5 10 3l6.5 3.5v7L10 17l-6.5-3.5z"/><path d="M3.5 6.5 10 10l6.5-3.5M10 10v7"/>',
+      gift: '<rect x="3.2" y="8.8" width="13.6" height="8.2" rx="1.6"/><rect x="2.2" y="5.6" width="15.6" height="3.2" rx="1.2"/><path d="M10 5.6v11.4"/><path d="M10 5.6S8.9 2.6 7.1 2.6a1.7 1.7 0 0 0 0 3z"/><path d="M10 5.6s1.1-3 2.9-3a1.7 1.7 0 0 1 0 3z"/>',
       award: '<circle cx="10" cy="8" r="4.5"/><path d="M7.5 11.8 6.5 17l3.5-2 3.5 2-1-5.2"/>',
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
@@ -1835,6 +1836,9 @@
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
+    // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
+    // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
+    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
@@ -2132,6 +2136,19 @@
           state.treeDept = null; state.treeGoal = null; state.tree = null;
           saveUi();
           renderTopbar(); renderHead(); renderView();
+        });
+      });
+    } else if (state.page === 'gifts') {
+      var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
+      tb.innerHTML = '<nav class="tabs">' + gopts.map(function (o) {
+        return '<a class="tab' + ((state.gfDays || 0) === o[0] ? ' on' : '') + '" data-gfd="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.gfDays = parseInt(t.getAttribute('data-gfd'), 10);
+          state._gf = null;            // период сменился — цифры старого больше не наши
+          saveUi();
+          renderTopbar(); renderView();
         });
       });
     } else if (state.page === 'marketing') {
@@ -2660,6 +2677,7 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
@@ -11652,6 +11670,113 @@
       state._mkFForm = { edit: false, code: '', title: '', keywords: '', target: '' };
       mkModal(d);
     });
+  }
+
+
+  /* ── ПОДАРКИ — что берут из бота и где встают ──
+     Данные — лог бота (`/admin/api/gifts/overview`), а не события платформы: в бота
+     человек попадает всегда, а до платформы доходит меньшинство. */
+  var GF_AWAIT = { __slot__: 'ждет окно записи', gift_need: 'не выбрал подарок',
+                   lang_which: 'не выбрал язык' };
+
+  function fetchGifts(cb) {
+    api('/admin/api/gifts/overview?days=' + (state.gfDays || 0)).then(function (r) {
+      state._gf = r; state._gfDays = state.gfDays || 0;
+      if (cb) cb(); else if (state.page === 'gifts') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._gf = 'none'; if (state.page === 'gifts') renderView(); }
+    });
+  }
+
+  function renderGifts(view) {
+    if (!state._gf || state._gfDays !== (state.gfDays || 0)) {
+      view.innerHTML = dashSkeleton();
+      fetchGifts();
+      return;
+    }
+    if (state._gf === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить подарки — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._gf, f = d.funnel || {};
+    var steps = [
+      { label: 'Открыли подарки', hint: 'бот показал меню', n: f.opened || 0 },
+      { label: 'Выбрали подарок', hint: 'нажали кнопку в меню', n: f.chose || 0 },
+      { label: 'Забрали', hint: 'дошли до конца сценария', n: f.got || 0 },
+      { label: 'Записались на разбор', hint: 'выбрали окно с куратором', n: f.booked || 0 }
+    ];
+    var first = steps[0].n;
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.round(s.n / first * 100) : 0;
+      var conv = i ? (steps[i - 1].n ? Math.round(s.n / steps[i - 1].n * 100) : 0) : 100;
+      var lost = i ? Math.max(0, steps[i - 1].n - s.n) : 0;
+      return '<div class="lad-row gf-flat">' +
+        '<div class="lad-nm">' + s.label + '<small>' + s.hint + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right"><span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+        (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+
+    var gifts = (d.gifts || []).slice().sort(function (a, b) { return b.took - a.took; });
+    var maxTook = Math.max.apply(null, [1].concat(gifts.map(function (g) { return g.took; })));
+    var giftRows = gifts.map(function (g) {
+      var w = Math.round(g.took / maxTook * 100);
+      return '<div class="gf-row">' +
+        '<div class="gf-nm">' + esc(g.title) + '<small class="num">' + esc(g.code) + '</small></div>' +
+        '<div class="gf-track"><div class="gf-fill" style="width:' + Math.max(w, g.took ? 4 : 0) + '%"></div></div>' +
+        '<div class="gf-n num">' + g.took + '</div>' +
+        '<div class="gf-got num' + (g.finished ? '' : ' zero') + '">' +
+          (g.took ? (g.finished ? 'забрали ' + g.finished : 'никто не дошел') : 'не берут') + '</div>' +
+      '</div>';
+    }).join('');
+
+    var src = (d.sources || []).filter(function (s) { return s.n; });
+    var srcHtml = src.length ? src.map(function (s) {
+      return '<div class="gf-src"><span class="gf-src-c">' + esc(s.code) + '</span>' +
+        '<span class="gf-src-n num">' + s.n + '</span></div>';
+    }).join('') : '<div class="empty">Меток нет — все пришли напрямую.</div>';
+
+    var stuck = d.stuck || [];
+    var stuckRows = stuck.length ? stuck.map(function (p) {
+      var who = p.name || (p.username ? '@' + p.username : 'Без имени');
+      var what = GF_AWAIT[p.awaiting] || 'не ответил боту';
+      /* Напоминание шлется только по подарочным воронкам (funnels.nudge_loop). Обещать
+         его на выборе окна нельзя: там бот молчит, и чип «бот напомнит» будет враньем. */
+      var nudgeable = p.funnel_code.indexOf('gift') === 0;
+      return '<div class="trow gf-grid">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(who) + '</div>' +
+          '<div class="t-sub">' + esc(what) + ' · ' + esc(p.funnel_code) + '</div></div>' +
+        '<div class="gf-nudge hidem">' + (nudgeable
+          ? (p.nudged ? '<span class="sev n-ok">напомнили</span>'
+                      : '<span class="sev s-new">бот напомнит</span>')
+          : '') + '</div>' +
+        '<div class="t-when num">' + fmtWhen(p.since) + '</div>' +
+      '</div>';
+    }).join('') : '<div class="empty">Никто не завис на выборе.</div>';
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp7" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('gift', 14) + '</span>' +
+        '<div><div class="t">Путь подарка</div><div class="s">от «показали меню» до записи на разбор</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="card sp5" style="padding:22px 24px">' +
+        '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
+        '<div><div class="t">Откуда приходят</div><div class="s">метка ссылки или кодовое слово</div></div></div>' +
+        '<div class="gf-srcs">' + srcHtml + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Что берут</div><div class="s">взяли подарок · дошли до конца сценария</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + giftRows + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px">' +
+          '<span class="ic" style="background:var(--amber-soft); color:var(--amber-ink)">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Стоят на выборе</div><div class="s">' + stuck.length + ' ' +
+            plural(stuck.length, 'человек', 'человека', 'человек') +
+            ' · по подаркам бот напоминает сам через два часа</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + stuckRows + '</div></div>' +
+    '</div>';
   }
 
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах
