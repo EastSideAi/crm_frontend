@@ -1767,7 +1767,10 @@
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
+  // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
+  // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
+  // переносить срок — только суперадмин, иначе просрочка ничего не значит.
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
@@ -3812,6 +3815,94 @@
                            : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
   }
 
+  /* Перенос срока. Отдельный поповер у самой плашки срока, а не форма правки
+     задачи: срок двигают на бегу и по одной штуке, ради одной даты открывать
+     форму со всеми полями — четыре лишних клика и риск задеть соседнее.
+
+     Кто двигает — только суперадмин (cap tasks_due, правило Павла 19.08.2026),
+     поэтому для остальных плашка остается подписью и поповера у нее нет. */
+  function duePop(anchor, task, after) {
+    var host = anchor.parentNode;
+    var open = host.querySelector('.due-pop');
+    if (open) { open.parentNode.removeChild(open); return; }
+
+    // Ближайший понедельник: «давай с новой недели» — самый частый перенос
+    // после «на завтра», и считать его руками в календаре человек не должен.
+    var toMon = (8 - (new Date().getDay() || 7)) % 7 || 7;
+    // Три варианта, а не четыре: в одну строку сегмента влезают ровно они, а
+    // произвольный «через 3 дня» и так набирается полем даты рядом.
+    var quick = [['сегодня', 0], ['завтра', 1], ['понедельник', toMon]];
+    var cur = '';
+    if (task.due_at) {
+      var d = new Date(task.due_at);
+      cur = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    var pop = document.createElement('div');
+    pop.className = 'due-pop';
+    pop.innerHTML =
+      '<div class="tsk-l">' + (task.due_at ? 'Перенести срок' : 'Поставить срок') + '</div>' +
+      // Сегмент быстрых сроков — тот же .due-seg, что в форме постановки: два
+      // разных набора чипов под одну задачу читались бы как разные механики.
+      '<span class="due-seg">' + quick.map(function (q) {
+        return '<button type="button" data-day="' + isoDay(q[1]) + '">' + q[0] + '</button>';
+      }).join('') + '</span>' +
+      '<div class="due-row"><input type="date" class="al-in due-day" value="' + cur + '">' +
+        '<button class="bp sm due-ok">Поставить</button></div>' +
+      (task.due_at ? '<button class="due-off">Снять срок совсем</button>' : '');
+    host.appendChild(pop);
+    // Поповер встает под саму плашку, а не под левый край строки: иначе он
+    // висит непонятно от чего, когда чипы переносятся на вторую строку.
+    pop.style.left = Math.max(0, Math.min(anchor.offsetLeft,
+      host.offsetWidth - pop.offsetWidth - 16)) + 'px';
+
+    var close = function () {
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOut, true);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    // anchor.contains, а не сравнение с самим anchor: клик почти всегда
+    // приходится на иконку или текст внутри кнопки, и поповер закрывался бы
+    // сразу же, не дав нажать ни на что.
+    var onOut = function (e) { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onOut, true);
+
+    var send = function (body, done) {
+      apiSend('/admin/api/tasks/' + task.id, 'PATCH', body, function () {
+        close();
+        state.tasks = null;
+        loadTaskSummary();
+        if (after) after();
+        if (state.page === 'tasks') renderView();
+        showToast(done);
+      }, function (code) {
+        showToast(code === 403 ? 'Срок двигает только суперадмин'
+                               : 'Срок не сохранился, проверь интернет');
+      });
+    };
+    // Срок = конец выбранного дня ПО МОСКВЕ: «до 21 августа» человек читает как
+    // «весь день 21-го мой», а календарь у команды один — московский (по нему
+    // сервер считает просрочку и утренние сводки). Без явного +03:00 у человека
+    // из другого пояса тот же выбор уезжал бы на сутки.
+    var setDay = function (day) {
+      send({ due_at: new Date(day + 'T23:59:59+03:00').toISOString() }, 'Срок перенесен');
+    };
+
+    Array.prototype.forEach.call(pop.querySelectorAll('.due-seg button'), function (b) {
+      b.addEventListener('click', function () { setDay(b.getAttribute('data-day')); });
+    });
+    var day = pop.querySelector('.due-day');
+    pop.querySelector('.due-ok').addEventListener('click', function () {
+      if (!day.value) { day.focus(); return; }
+      setDay(day.value);
+    });
+    day.addEventListener('keydown', function (e) { if (e.key === 'Enter') pop.querySelector('.due-ok').click(); });
+    var off = pop.querySelector('.due-off');
+    if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
+  }
+
   function openTask(id) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -3846,6 +3937,9 @@
       var isAssignee = me != null && me === t.assignee_id;
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
+      // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
+      // назначает, а история должна остаться такой, какой была.
+      var canDue = can('tasks_due') && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -3881,7 +3975,12 @@
         '</div>' +
         '<div class="tsk-meta">' +
           '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
-          '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
+          // Срок кликабелен только у того, кто вправе его двигать: серая кнопка,
+          // которая отвечает отказом, учит тыкать наугад.
+          (canDue
+            ? '<button class="tsk-due tsk-duebtn ' + due.cls + '" id="tk-due">' + ic('cal', 12) +
+              esc(due.text) + chev() + '</button>'
+            : '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>') +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
@@ -3964,6 +4063,11 @@
       var swap = function (fn) { close(); setTimeout(fn, 200); };
       var up = el('tk-up');
       if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var dueBtn = el('tk-due');
+      if (dueBtn) dueBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        duePop(dueBtn, t, function () { api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); }); });
+      });
       var lead = el('tk-lead');
       if (lead && t.session_id) lead.addEventListener('click', function () {
         swap(function () { openDrawer(t.session_id); setModalSection('notes'); });
@@ -4372,6 +4476,10 @@
      ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
      задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
   var MEET_MAX_MB = 2;
+  // Сколько протоколов принимаем за раз. Разбор каждого — отдельный запрос к
+  // модели на полминуты, и десяток файлов человек все равно не вычитает за один
+  // заход: он закроет экран на половине, а заведется первая половина.
+  var MEET_MAX_FILES = 5;
 
   function openMeetingUpload() {
     if (document.querySelector('.al-ov')) return;
@@ -4388,9 +4496,11 @@
         '<div class="al-body">' +
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
-            '<div class="mu-drop-t">Выбери файл или перетащи сюда</div>' +
-            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ</div>' +
-            '<input type="file" id="mu-file" accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+            '<div class="mu-drop-t">Выбери файлы или перетащи сюда</div>' +
+            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ каждый, ' +
+              'до ' + MEET_MAX_FILES + ' за раз</div>' +
+            '<input type="file" id="mu-file" multiple ' +
+              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
           '</div>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
@@ -4418,25 +4528,38 @@
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
     var drop = el('mu-drop'), fileI = el('mu-file'), note = el('mu-note'), go = el('mu-go');
-    var picked = null;   // { name, data }
+    var picked = [];   // [{ name, data }]
     var show = function (t, ask) {
       note.className = 'al-ai-note' + (ask ? ' ask' : '');
       note.textContent = t || '';
     };
     var take = function (list) {
       if (!list || !list.length) return;
-      var f = list[0];
-      if (f.size > MEET_MAX_MB * 1024 * 1024) {
-        show('Файл больше ' + MEET_MAX_MB + ' МБ. Пришли текстом или вырежи лишнее.', true);
-        return;
+      var files = Array.prototype.slice.call(list);
+      var heavy = files.filter(function (f) { return f.size > MEET_MAX_MB * 1024 * 1024; });
+      files = files.filter(function (f) { return f.size <= MEET_MAX_MB * 1024 * 1024; });
+      // Добавляем к уже выбранным: протоколы обычно лежат в разных папках, и
+      // второй заход в диалог не должен стирать первый.
+      var over = 0;
+      if (picked.length + files.length > MEET_MAX_FILES) {
+        over = picked.length + files.length - MEET_MAX_FILES;
+        files = files.slice(0, Math.max(0, MEET_MAX_FILES - picked.length));
       }
-      readFiles([f], function (out) {
-        picked = out[0] || null;
-        if (!picked) { show('Файл не прочитался, попробуй другой', true); return; }
+      readFiles(files, function (out) {
+        var names = picked.map(function (f) { return f.name; });
+        out.forEach(function (f) { if (names.indexOf(f.name) === -1) picked.push(f); });
+        if (!picked.length) { show('Файл не прочитался, попробуй другой', true); return; }
         drop.classList.add('has');
-        drop.querySelector('.mu-drop-t').textContent = picked.name;
+        drop.querySelector('.mu-drop-t').textContent = picked.length === 1
+          ? picked[0].name
+          : picked.length + ' ' + plural(picked.length, 'файл', 'файла', 'файлов') + ': ' +
+            picked.map(function (f) { return f.name; }).join(', ');
         drop.querySelector('.mu-drop-s').textContent = 'Готов к разбору';
-        show('');
+        show(heavy.length
+          ? 'Не взял: ' + heavy.map(function (f) { return f.name; }).join(', ') +
+            ' — больше ' + MEET_MAX_MB + ' МБ'
+          : over ? 'За раз беру не больше ' + MEET_MAX_FILES + ', остальные пришли следующим заходом'
+          : '', !!(heavy.length || over));
       });
     };
     drop.addEventListener('click', function () { fileI.click(); });
@@ -4451,29 +4574,59 @@
 
     go.addEventListener('click', function () {
       var text = (el('mu-text').value || '').trim();
-      if (!picked && text.length < 200) {
+      if (!picked.length && text.length < 200) {
         show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл или вставь текст', true);
         return;
       }
       go.disabled = true; go.classList.add('loading');
-      show('Читаю протокол, это займет полминуты');
-      apiSend('/admin/api/meetings', 'POST',
-        picked ? { name: picked.name, data: picked.data } : { text: text },
-        function (r) {
+      // Файлы разбираем по очереди, а не пачкой в один запрос: каждый протокол
+      // модель читает отдельно, и на общем куске она начинает путать, кто из
+      // какой встречи. Плюс видно, на каком файле мы стоим.
+      var queue = picked.length ? picked.slice() : [{ text: text }];
+      var done = [], failed = [];
+      var step = function (i) {
+        if (i >= queue.length) {
+          if (!done.length) {
+            go.disabled = false; go.classList.remove('loading');
+            show('Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+            return;
+          }
+          if (failed.length) showToast('Не разобрал: ' + failed.join(', '));
           close();
-          openMeetingImport((r && r.import && r.import.id) || 0, r && r.import);
-        },
-        function (err) {
-          go.disabled = false; go.classList.remove('loading');
-          show((err && err.detail) || 'Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
-        });
+          // Экран проверки открываем ПОСЛЕ ухода формы: пока ее оверлей в DOM,
+          // openMeetingImport считает, что поверх уже что-то открыто, и молча
+          // не открывается. Та же пауза, что при переходе между карточками.
+          var ids = done.map(function (d) { return d.id; });
+          var first = done.length === 1 ? done[0] : null;
+          setTimeout(function () { openMeetingImport(ids, first); }, 200);
+          return;
+        }
+        var f = queue[i];
+        show(queue.length > 1
+          ? 'Читаю ' + (i + 1) + ' из ' + queue.length + ': ' + f.name
+          : 'Читаю протокол, это займет полминуты');
+        apiSend('/admin/api/meetings', 'POST',
+          f.data ? { name: f.name, data: f.data } : { text: f.text },
+          function (r) {
+            if (r && r.import) done.push(r.import);
+            step(i + 1);
+          },
+          function () { failed.push(f.name || 'текст'); step(i + 1); });
+      };
+      step(0);
     });
   }
 
   /* Экран проверки. Открывается и по ссылке из бота (#meeting/<id>), поэтому
-     умеет грузить разбор сам, а не только принимать свежий из формы. */
-  function openMeetingImport(id, ready) {
-    if (!id || document.querySelector('.al-ov')) return;
+     умеет грузить разбор сам, а не только принимать свежий из формы.
+
+     Разборов может быть несколько: с одной планерки приносят три протокола, и
+     проверять их по одному значит трижды пройти один и тот же путь. Поэтому
+     экран держит пакет — файлы идут секциями подряд, «Завести» одно на все. */
+  function openMeetingImport(ids, ready) {
+    var list = (Array.isArray(ids) ? ids : String(ids || '').split(','))
+      .map(function (v) { return +v; }).filter(Boolean);
+    if (!list.length || document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card mi-card" role="dialog" aria-modal="true">' +
@@ -4491,7 +4644,7 @@
     var onKey = function (e) { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    try { history.replaceState(null, '', '#meeting/' + id); } catch (e) {}
+    try { history.replaceState(null, '', '#meeting/' + list.join(',')); } catch (e) {}
 
     var card = ov.querySelector('.mi-card');
     // Пересчет счетчика живет здесь, а не внутри draw: обработчик клика вешается
@@ -4499,9 +4652,17 @@
     // второй такой же обработчик отменял бы действие первого.
     var markRef = function () {};
     var wired = false;
-    var draw = function (imp, people, goals) {
-      var gs = imp.goals || [], dec = imp.for_decision || [], st = imp.stats || {};
-      var applied = imp.status === 'applied';
+    var draw = function (imps, people, goals) {
+      var many = imps.length > 1;
+      var applied = imps.every(function (im) { return im.status === 'applied'; });
+      var madeTotal = imps.reduce(function (n, im) { return n + (im.made || 0); }, 0);
+      var st = imps.reduce(function (a, im) {
+        var s = im.stats || {};
+        return {
+          goals: a.goals + (s.goals || 0), steps: a.steps + (s.steps || 0),
+          no_assignee: a.no_assignee + (s.no_assignee || 0), no_due: a.no_due + (s.no_due || 0),
+        };
+      }, { goals: 0, steps: 0, no_assignee: 0, no_due: 0 });
       var whoOpts = function (sel) {
         return '<option value="0">— не назначен —</option>' + people.map(function (p) {
           return '<option value="' + p.id + '"' + (String(sel || '') === String(p.id) ? ' selected' : '') + '>' +
@@ -4554,42 +4715,68 @@
           '</div>' +
         '</div>';
       };
-      var body = gs.map(function (g, gi) {
-        return '<div class="mi-goal" data-g="' + gi + '">' +
-          '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
-          row(g, gi, null) +
-          (g.steps && g.steps.length
-            ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
-            : '<div class="mi-nosteps">Без шагов — цель останется одной строкой</div>') +
-        '</div>';
-      }).join('');
+      // Заметка у всех разборов одна и та же (типовая, вроде «разбор без модели»)
+      // — показываем ее один раз над списком, а не над каждым файлом.
+      var notes = imps.map(function (im) { return im.note || ''; });
+      var common = notes[0] && notes.every(function (n) { return n === notes[0]; }) ? notes[0] : '';
 
-      card.innerHTML =
-        '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Импорт встречи</div><div class="al-title">' +
-            esc(imp.file_name || 'Протокол встречи') + '</div></div>' +
-          '<button class="al-x" id="mi-x" title="Закрыть">' + ic('x', 16) + '</button>' +
-        '</div>' +
-        '<div class="al-sub">' + (applied
-          ? 'Уже заведено: ' + imp.made + ' ' + plural(imp.made, 'задача', 'задачи', 'задач') +
-            '. Повторное нажатие ничего не задвоит — заведется только то, что осталось.'
-          : 'Проверь исполнителей и сроки. В задачник ничего не попадет, пока не нажмешь «Завести».') +
-        '</div>' +
-        '<div class="mi-stat">' +
-          '<span><b>' + (st.goals || 0) + '</b> ' + plural(st.goals || 0, 'цель', 'цели', 'целей') + '</span>' +
-          '<span><b>' + (st.steps || 0) + '</b> ' + plural(st.steps || 0, 'шаг', 'шага', 'шагов') + '</span>' +
-          (st.no_assignee ? '<span class="warn"><b>' + st.no_assignee + '</b> без исполнителя</span>' : '') +
-          (st.no_due ? '<span class="warn"><b>' + st.no_due + '</b> без срока</span>' : '') +
-        '</div>' +
-        '<div class="al-body mi-body">' +
-          (imp.note ? '<div class="mi-note">' + esc(imp.note) + '</div>' : '') +
-          (body || '<div class="empty">В протоколе не нашлось задач.</div>') +
+      var one = function (imp, ii) {
+        var gs = imp.goals || [], dec = imp.for_decision || [], ist = imp.stats || {};
+        var goalsHtml = gs.map(function (g, gi) {
+          return '<div class="mi-goal" data-g="' + gi + '">' +
+            '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
+            row(g, gi, null) +
+            (g.steps && g.steps.length
+              ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
+              : '<div class="mi-nosteps">Без шагов — цель останется одной строкой</div>') +
+          '</div>';
+        }).join('');
+        return '<div class="mi-imp" data-i="' + ii + '" data-id="' + imp.id + '">' +
+          // Шапка файла нужна только в пакете: над единственным протоколом она
+          // повторяла бы заголовок карточки.
+          (many
+            ? '<div class="mi-file"><span class="mi-file-n">' + ic('doc', 13) +
+                // Имя в span: длинное «Протокол планерки отдела продаж 18.08.docx»
+                // должно обрезаться многоточием, а не рваться посреди слова.
+                '<span>' + esc(imp.file_name || 'Протокол встречи') + '</span></span>' +
+              '<span class="mi-file-s">' + (ist.goals || 0) + ' ' +
+                plural(ist.goals || 0, 'цель', 'цели', 'целей') + ', ' + (ist.steps || 0) + ' ' +
+                plural(ist.steps || 0, 'шаг', 'шага', 'шагов') + '</span></div>'
+            : '') +
+          // Заметку разбора печатаем в секции только когда она своя: одинаковая
+          // строка под каждым из пяти файлов — это пять раз один и тот же шум.
+          (imp.note && imp.note !== common ? '<div class="mi-note">' + esc(imp.note) + '</div>' : '') +
+          (goalsHtml || '<div class="empty">В протоколе не нашлось задач.</div>') +
           (dec.length
             ? '<div class="mi-dec"><div class="mi-dec-h">' + ic('note', 13) + 'Не задачи, а вопросы на решение</div>' +
               '<ul>' + dec.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul>' +
               '<div class="mi-dec-s">Их я не завожу: пока нет решения, задача будет висеть без смысла.</div></div>'
             : '') +
+        '</div>';
+      };
+
+      card.innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Импорт встречи</div><div class="al-title">' +
+            (many
+              ? imps.length + ' ' + plural(imps.length, 'протокол', 'протокола', 'протоколов')
+              : esc(imps[0].file_name || 'Протокол встречи')) + '</div></div>' +
+          '<button class="al-x" id="mi-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
+        '<div class="al-sub">' + (applied
+          ? 'Уже заведено: ' + madeTotal + ' ' + plural(madeTotal, 'задача', 'задачи', 'задач') +
+            '. Повторное нажатие ничего не задвоит — заведется только то, что осталось.'
+          : 'Проверь исполнителей и сроки. В задачник ничего не попадет, пока не нажмешь «Завести».') +
+        '</div>' +
+        '<div class="mi-stat">' +
+          '<span><b>' + st.goals + '</b> ' + plural(st.goals, 'цель', 'цели', 'целей') + '</span>' +
+          '<span><b>' + st.steps + '</b> ' + plural(st.steps, 'шаг', 'шага', 'шагов') + '</span>' +
+          (st.no_assignee ? '<span class="warn"><b>' + st.no_assignee + '</b> без исполнителя</span>' : '') +
+          (st.no_due ? '<span class="warn"><b>' + st.no_due + '</b> без срока</span>' : '') +
+        '</div>' +
+        '<div class="al-body mi-body">' +
+          (common ? '<div class="mi-note">' + esc(common) + '</div>' : '') +
+          imps.map(one).join('') + '</div>' +
         '<div class="al-foot mi-foot">' +
           '<span class="mi-count" id="mi-count"></span>' +
           '<button class="al-cancel" id="mi-cancel">Закрыть</button>' +
@@ -4660,8 +4847,8 @@
       }); }
       mark();
 
-      var collect = function () {
-        return Array.prototype.map.call(card.querySelectorAll('.mi-goal'), function (gEl) {
+      var collect = function (impEl) {
+        return Array.prototype.map.call(impEl.querySelectorAll('.mi-goal'), function (gEl) {
           var head = gEl.querySelector(':scope > .mi-item');
           var read = function (itEl) {
             return {
@@ -4682,31 +4869,53 @@
       save.addEventListener('click', function () {
         if (save.disabled) return;
         save.disabled = true; save.classList.add('loading');
-        apiSend('/admin/api/meetings/' + imp.id + '/apply', 'POST', { goals: collect() }, function (r) {
-          state.tasks = null;
-          state.taskGoals = null;
-          loadTaskSummary();
-          var n = ((r && r.goals) || 0) + ((r && r.steps) || 0);
-          showToast(n ? 'Завел ' + n + ' ' + plural(n, 'задачу', 'задачи', 'задач') : 'Новых задач не было');
-          if (r && r.import) draw(r.import, people, goals);
-          if (state.page === 'tasks') renderView();
-        }, function () {
-          save.disabled = false; save.classList.remove('loading');
-          showToast('Не получилось завести, попробуй еще раз');
-        });
+        // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
+        // из трех файлов — это три независимых разбора, и упавший третий не
+        // должен отменять два заведенных.
+        var boxes = Array.prototype.slice.call(card.querySelectorAll('.mi-imp'));
+        var fresh = [], total = 0, broke = false;
+        var step = function (i) {
+          if (i >= boxes.length) {
+            state.tasks = null;
+            state.taskGoals = null;
+            loadTaskSummary();
+            showToast(total
+              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач')
+              : broke ? 'Не получилось завести, попробуй еще раз' : 'Новых задач не было');
+            if (state.page === 'tasks') renderView();
+            if (fresh.length === boxes.length) draw(fresh, people, goals);
+            else { save.disabled = false; save.classList.remove('loading'); }
+            return;
+          }
+          var box = boxes[i];
+          apiSend('/admin/api/meetings/' + box.getAttribute('data-id') + '/apply', 'POST',
+            { goals: collect(box) },
+            function (r) {
+              total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
+              if (r && r.import) fresh.push(r.import);
+              step(i + 1);
+            },
+            function () { broke = true; step(i + 1); });
+        };
+        step(0);
       });
     };
 
-    var start = function (imp) {
+    var start = function (imps) {
       loadTaskPeople(function (people) {
-        loadTaskGoals(function (goals) { draw(imp, people, goals); });
+        loadTaskGoals(function (goals) { draw(imps, people, goals); });
       });
     };
-    if (ready) { start(ready); return; }
-    api('/admin/api/meetings/' + id).then(function (r) {
-      if (r && r.import) start(r.import);
-      else { close(); showToast('Разбор не найден'); }
-    }).catch(function () { close(); showToast('Разбор не открылся'); });
+    if (ready && list.length === 1) { start([ready]); return; }
+    Promise.all(list.map(function (mid) {
+      return api('/admin/api/meetings/' + mid).then(function (r) { return (r && r.import) || null; })
+        .catch(function () { return null; });
+    })).then(function (got) {
+      var ok = got.filter(Boolean);
+      if (!ok.length) { close(); showToast('Разбор не найден'); return; }
+      if (ok.length < list.length) showToast('Часть разборов не открылась, показываю остальные');
+      start(ok);
+    });
   }
 
   /* ── Обучение: ученики по английскому ──────────────────────
@@ -18592,7 +18801,8 @@
     // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
     // тому, кто ведет встречи и заводит их протоколы каждую неделю.
     if (mid === 'new') { openMeetingUpload(); return; }
-    openMeetingImport(+mid);
+    // Через запятую — пакет разборов с одной планерки: #meeting/12,13,14.
+    openMeetingImport(mid);
   }
   function openPageFromHash() {
     var pg = hashPageId();

@@ -2031,7 +2031,32 @@ button.tr-crumb:hover { color: var(--blue); }
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
-.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0; }
+.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0;
+  position: relative; }
+
+/* Перенос срока (только cap tasks_due). Плашка-кнопка отличается от подписи
+   шевроном и ховером: срок остается тем же чипом, а не превращается в контрол
+   ради права его менять. */
+.tsk-duebtn { cursor: pointer; border-radius: var(--r-pill); padding: 3px 9px 3px 8px; margin: -3px 0;
+  transition: background .14s, color .14s; }
+.tsk-duebtn .cdd-ch { width: 11px; height: 11px; color: var(--ink-3); }
+.tsk-duebtn:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tsk-duebtn:hover svg { color: var(--blue); }
+.tsk-duebtn.due-over:hover { background: var(--red-soft); color: var(--red-ink); }
+.tsk-duebtn.due-over:hover svg { color: var(--red-ink); }
+.due-pop { position: absolute; z-index: 30; top: calc(100% + 8px); left: 24px; width: 300px; max-width: calc(100% - 32px);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; animation: rmPop .16s ease; }
+.due-pop > .due-seg { align-self: flex-start; flex-wrap: wrap; }
+.due-pop > .due-seg button:hover { color: var(--blue); }
+.due-row { display: flex; align-items: center; gap: 8px; }
+.due-row .due-day { flex: 1; min-width: 0; }
+/* «Снять срок» — тихое действие последней строкой: оно редкое и необратимое на
+   глаз, кнопкой одного веса с «Поставить» его нажимали бы промахом. */
+.due-off { align-self: flex-start; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  padding: 2px; transition: color .14s; }
+.due-off:hover { color: var(--coral); }
 .tsk-mwho { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); }
 .tsk-mwho svg { color: var(--ink-3); }
@@ -5155,6 +5180,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mi-body { gap: 26px; padding-bottom: 18px; }
 .mi-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
   padding: 11px 13px; border-radius: 12px; background: var(--fill); }
+
+/* Пакет протоколов: три файла с одной планерки проверяются на одном экране.
+   Между разборами — линия и подпись файла, иначе цели из разных встреч
+   читаются как один список и человек теряет, о чем вообще шла речь. */
+.mi-imp { display: flex; flex-direction: column; gap: 26px; }
+/* Воздух вокруг границы намеренно неровный: сверху больше, чем ритм внутри
+   секции, иначе линия между двумя протоколами читается как еще один отступ
+   между целями. Линия — --line-2, тот же вес, что у строк команды: самый
+   бледный --line рядом с серыми плитами заметок просто теряется. */
+.mi-imp + .mi-imp { margin-top: 8px; padding-top: 22px; border-top: 1px solid var(--line-2); }
+/* Шапка файла — родитель секции, а не ее пункт: до содержимого 13px против
+   26px между целями (тот же расчет, что у .dr-h). Отрицательный отступ гасит
+   общий gap колонки. */
+.mi-file { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  margin-bottom: -13px; }
+.mi-file-n { display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 13px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.mi-file-n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-file-n svg { color: var(--ink-3); flex: none; }
+.mi-file-s { font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
 
 .mi-goal { display: flex; flex-direction: column; gap: 9px; }
 .mi-g-h { display: flex; align-items: center; gap: 10px; }
