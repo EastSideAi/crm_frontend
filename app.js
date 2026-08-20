@@ -1835,6 +1835,7 @@
     { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork', space: 'mw' },
     { id: 'mwplan', label: 'Мой план', icon: 'cal', cap: 'mywork', space: 'mw' },
     { id: 'mwacts', label: 'Акты', icon: 'doc', cap: 'mywork', space: 'mw' },
+    { id: 'mwrcp', label: 'Чеки', icon: 'doc', cap: 'mywork', space: 'mw' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
@@ -1910,7 +1911,7 @@
   }
   /* Ждут ли человека его собственные задания и акты. Считает сервер (те же счетчики,
      что и внутри кабинета), экран только показывает точку на кнопке пространства. */
-  function spaceAttention() { return mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwnotif') > 0; }
+  function spaceAttention() { return mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwrcp') + mwBadge('mwnotif') > 0; }
   /* Переключатель показываем, только если человеку доступно больше одного
      пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
   function openSpaces() {
@@ -1976,7 +1977,7 @@
     if (ws) {
       // подпись под логотипом — про то пространство, в котором сейчас работают
       var czn = (CZ.list || []).length;
-      var mwn = mwBadge('mwtasks') + mwBadge('mwacts');
+      var mwn = mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwrcp');
       ws.textContent = space === 'mw'
         // В своем кабинете счетчик лидов не при чем: тут человека касается только то,
         // что ждет лично его.
@@ -2420,12 +2421,15 @@
          а не про открытый экран. */
       var mc = MW.counts;
       var toSign = mc ? (mc.acts_to_sign || 0) : 0;
-      var offered = mc ? Math.max(0, (mc.todo || 0) - toSign) : 0;
+      var rcpTodo = mc ? (mc.receipts_todo || 0) : 0;
+      var offered = mc ? Math.max(0, (mc.todo || 0) - toSign - rcpTodo) : 0;
       var phrase8;
       if (MW.err) phrase8 = esc(MW.err);
       else if (!mc) phrase8 = 'Загружаю вашу работу…';
       else if (toSign) phrase8 = '<b>' + toSign + ' ' + plural(toSign, 'акт ждет', 'акта ждут', 'актов ждут') +
         ' вашей подписи.</b> Пока подписи нет, выплату провести нельзя.';
+      else if (rcpTodo) phrase8 = '<b>' + rcpTodo + ' ' + plural(rcpTodo, 'выплата ждет', 'выплаты ждут', 'выплат ждут') +
+        ' чека.</b> Пробейте чек в «Мой налог» и приложите — без него следующая выплата не пройдет.';
       else if (offered) phrase8 = '<b>' + offered + ' ' + plural(offered, 'новое задание', 'новых задания', 'новых заданий') +
         '</b> ждет вашего решения — принять или отказаться.';
       else if (mc.active) phrase8 = 'В работе <b>' + mc.active + ' ' +
@@ -6496,20 +6500,27 @@
     }
     var why = (i.state !== 'ok' && i.state_why)
       ? '<span class="rcp-why">' + esc(i.state_why) + '</span>' : '';
-    return '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
+    // Основную строку рисуем той же сеткой, что и документы, чтобы колонки совпадали.
+    // «Почему» и кнопки — отдельной строкой под ней: в пятую колонку они не влезают и
+    // наезжают на соседние. Клик по самой строке ведет в задание, кнопки — свои действия.
+    var head = '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
       '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
         '<b>Выплата № ' + esc(i.number) + '</b>' +
-        '<span class="rcp-why">задание № ' + esc(i.task_number) +
+        '<span class="rcp-sub">задание № ' + esc(i.task_number) +
           (i.title ? ' — ' + esc(i.title) : '') + '</span></span>' +
       '<span class="dc-who">' + esc(i.contractor || '—') +
         (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
         (i.inn ? '<span class="dc-inn">' + esc(i.inn) + '</span>' : '') + '</span>' +
       '<span class="dc-when">' + esc(i.paid_at ? czDate(i.paid_at) : '—') + '</span>' +
       '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
-      '<span class="dc-state rcp-state"><span class="ct-chip ' + (RCP_ST[i.state] || 'ct-draft') +
-        '">' + esc(i.state_title) + '</span>' + why +
-        (acts ? '<span class="rcp-act">' + acts + '</span>' : '') + '</span>' +
+      '<span class="dc-state"><span class="ct-chip ' + (RCP_ST[i.state] || 'ct-draft') +
+        '">' + esc(i.state_title) + '</span></span>' +
       '</div>';
+    var foot = (why || acts)
+      ? '<div class="rcp-foot">' + why +
+          (acts ? '<span class="rcp-act">' + acts + '</span>' : '') + '</div>'
+      : '';
+    return '<div class="rcp-item">' + head + foot + '</div>';
   }
 
   function dcLoad(cb) {
@@ -7327,10 +7338,11 @@
   var MW = { sub: 'active', tasks: null, counts: null, err: '',
              openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
              acts: null, actsErr: '', actFilter: 'sign',
+             receipts: null, rcpErr: '',
              home: null, homeErr: '', feed: null, feedErr: '' };
-  var MW_PAGES = ['mywork', 'mwnotif', 'mwtasks', 'mwplan', 'mwacts'];
+  var MW_PAGES = ['mywork', 'mwnotif', 'mwtasks', 'mwplan', 'mwacts', 'mwrcp'];
   var MW_TITLES = { mywork: 'Моя работа', mwnotif: 'Уведомления', mwtasks: 'Задания',
-                    mwplan: 'Мой план', mwacts: 'Акты' };
+                    mwplan: 'Мой план', mwacts: 'Акты', mwrcp: 'Чеки' };
   function mwOn() { return MW_PAGES.indexOf(state.page) !== -1; }
   // Активные и завершенные — так разложены задания у Консоли, на которую мы равняемся
   // (ориентир владельца от 2026-08-06). Группы считает сервер: «активное» это то, что
@@ -7348,8 +7360,11 @@
   function mwBadge(page) {
     var c = MW.counts || {};
     if (page === 'mwnotif') return c.unread || 0;
-    if (page === 'mwtasks') return (c.todo || 0) - (c.acts_to_sign || 0);
+    // todo с сервера = новые задания + акты на подпись + чеки без подтверждения.
+    // На пункте «Задания» показываем только новые задания, остальное — свои пункты.
+    if (page === 'mwtasks') return (c.todo || 0) - (c.acts_to_sign || 0) - (c.receipts_todo || 0);
     if (page === 'mwacts') return c.acts_to_sign || 0;
+    if (page === 'mwrcp') return c.receipts_todo || 0;
     return 0;
   }
 
@@ -7462,6 +7477,13 @@
       MW.acts = r.acts || []; MW.actsErr = ''; mwDone();
     }).catch(function (e) {
       MW.acts = []; MW.actsErr = e.message; mwDone();
+    });
+  }
+  function mwLoadReceipts() {
+    mwGet('/payouts').then(function (r) {
+      MW.receipts = r.rows || []; MW.rcpErr = ''; mwDone();
+    }).catch(function (e) {
+      MW.receipts = []; MW.rcpErr = e.message; mwDone();
     });
   }
   function mwPut(t) { MW.detail[t.id] = t; }
@@ -7582,10 +7604,12 @@
     var soon = (h.soon || []);
     view.innerHTML =
       '<div class="mw-tiles">' +
-        tile('mwtasks', 'Ждут вашего ответа', (c.todo || 0) - (c.acts_to_sign || 0),
+        tile('mwtasks', 'Ждут вашего ответа',
+             (c.todo || 0) - (c.acts_to_sign || 0) - (c.receipts_todo || 0),
              'новые задания') +
         tile('mwtasks', 'В работе', c.active || 0, 'приняли и делаете') +
         tile('mwacts', 'Акты на подпись', c.acts_to_sign || 0, 'без подписи выплаты нет') +
+        tile('mwrcp', 'Ждут чека', c.receipts_todo || 0, 'без чека выплаты не будет') +
         tile('mwnotif', 'Новые уведомления', h.unread || 0, 'что произошло без вас') +
       '</div>' +
       '<div class="mw-tiles">' +
@@ -7716,11 +7740,74 @@
     mwWire(view);
   }
 
+  var MW_RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
+  function mwRcpCard(p) {
+    var need = p.state !== 'ok';
+    var rec = p.receipt;
+    return '<div class="card mw-act">' +
+      '<div class="ct-act">' +
+        '<div class="ct-act-h"><b>Выплата № ' + p.number + '</b>' +
+          '<span class="ct-chip ' + (MW_RCP_ST[p.state] || 'ct-wait') + '">' +
+            esc(p.state_title) + '</span></div>' +
+        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · задание № ' +
+          esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '') +
+          ' · <b>' + ctMoney(p.amount) + ' ₽</b></div>' +
+        (need && p.state_why
+          ? '<div class="ct-why">' + esc(p.state_why) + '</div>' : '') +
+        (rec && rec.verify_status === 'verified'
+          ? '<div class="ct-sg"><div class="ct-sg1"><span class="ct-sg-k">Чек</span>' +
+            '<b>Подтвержден в налоговой</b></div></div>' : '') +
+        '<div class="ct-acts">' +
+          (need
+            ? '<button class="bp sm" data-mwrcp="' + p.payout_id + '">' +
+              (rec ? 'Заменить чек' : 'Приложить чек') + '</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function mwAttachReceipt(pid) {
+    openSheet('Приложить чек', 'Пробейте чек в приложении «Мой налог» и вставьте ссылку на ' +
+      'него. Платформа сверит его с базой налоговой.',
+      [['url', 'line', 'Ссылка на чек', '']],
+      function (v, close) {
+        var url = (v.url || '').trim();
+        if (url.length < 8) return 'Вставьте ссылку на чек';
+        if (MW.busy) return null;
+        MW.busy = true;
+        mwSend('/payouts/' + pid + '/receipt', 'POST', { url: url })
+          .then(function (r) {
+            close();
+            var rec = (r && r.receipt) || {};
+            showToast(rec.verify_status === 'verified' ? 'Чек подтвержден в налоговой'
+              : rec.verify_status === 'pending' ? 'Чек принят, идет сверка'
+              : (rec.verify_message || 'Чек приложен'));
+            MW.receipts = null; MW.counts = null; mwLoadReceipts();
+            mwGet('').then(function (c) { MW.counts = c; renderSide(); }).catch(function () {});
+          })
+          .catch(function (e) { showToast(e.message); })
+          .then(function () { MW.busy = false; });
+        return null;
+      }, null, 'Чек', 'Сверить');
+  }
+  function renderMwReceipts(view) {
+    if (MW.receipts === null) { view.innerHTML = dashSkeleton(); mwLoadReceipts(); return; }
+    if (MW.rcpErr) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.rcpErr) + '</div></div>';
+      return;
+    }
+    var rows = MW.receipts || [];
+    view.innerHTML = !rows.length
+      ? '<div class="card"><div class="empty">Здесь появятся ваши выплаты. После каждой пробейте чек в «Мой налог» и приложите ссылку — без чека следующая выплата не пройдет.</div></div>'
+      : '<div class="pl-grid">' + rows.map(mwRcpCard).join('') + '</div>';
+    mwWire(view);
+  }
+
   function mwView(view) {
     if (state.page === 'mwnotif') return renderMwNotif(view);
     if (state.page === 'mwtasks') return renderMwTasks(view);
     if (state.page === 'mwplan') return renderMwPlan(view);
     if (state.page === 'mwacts') return renderMwActs(view);
+    if (state.page === 'mwrcp') return renderMwReceipts(view);
     return renderMwHome(view);
   }
 
@@ -7755,6 +7842,11 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mwsign]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation(); mwSign(b.getAttribute('data-mwsign'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwrcp]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); mwAttachReceipt(b.getAttribute('data-mwrcp'));
       });
     });
     pageAnim(view);
@@ -7798,7 +7890,7 @@
   }
   /* Шаг по заданию меняет и списки, и цифры на главной, и бейджи в меню — сбрасываем
      все, что могло устареть, а грузит заново только открытый раздел. */
-  function mwStale() { MW.tasks = null; MW.home = null; MW.acts = null; MW.counts = null; }
+  function mwStale() { MW.tasks = null; MW.home = null; MW.acts = null; MW.receipts = null; MW.counts = null; }
   function mwAct(id, to, reason) {
     if (MW.busy) return;
     MW.busy = true;
