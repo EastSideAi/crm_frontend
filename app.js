@@ -24,10 +24,10 @@
 
   var state = {
     role: 'owner', userName: '', loaded: false,
-    leads: [], page: 'dash', seg: 'queue', viewMode: 'table',
+    leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '', mkDays: 30,
+    pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -217,6 +217,7 @@
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
       cap: '<path d="M10 4 18 7.5 10 11 2 7.5 10 4z"/><path d="M5.5 9v4c0 1.4 2 2.5 4.5 2.5s4.5-1.1 4.5-2.5V9"/>',
       box: '<path d="M3.5 6.5 10 3l6.5 3.5v7L10 17l-6.5-3.5z"/><path d="M3.5 6.5 10 10l6.5-3.5M10 10v7"/>',
+      gift: '<rect x="3.2" y="8.8" width="13.6" height="8.2" rx="1.6"/><rect x="2.2" y="5.6" width="15.6" height="3.2" rx="1.2"/><path d="M10 5.6v11.4"/><path d="M10 5.6S8.9 2.6 7.1 2.6a1.7 1.7 0 0 0 0 3z"/><path d="M10 5.6s1.1-3 2.9-3a1.7 1.7 0 0 1 0 3z"/>',
       award: '<circle cx="10" cy="8" r="4.5"/><path d="M7.5 11.8 6.5 17l3.5-2 3.5 2-1-5.2"/>',
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
@@ -410,6 +411,10 @@
      не отличало заявку от случайного посетителя. */
   function leadName(l) {
     if (l.name) return l.name;
+    // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
+    // ничего не знаем», хотя знаем ровно то, чем он подписан в мессенджере.
+    var c = (l.contact || '').trim();
+    if (c.charAt(0) === '@') return c;
     return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
   }
   /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
@@ -618,7 +623,9 @@
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return !!l.paid;
       if (seg === 'rejected') return l.crm.status === 'rejected';
-      return true;
+      // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
+      // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
+      return !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -689,13 +696,15 @@
     return arr;
   }
   function counts() {
-    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
-       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    /* «Пользователи» считаются по тому же правилу, что и список: холодные лиды
+       в цифру на вкладке не входят, иначе счетчик спорил бы со строками. Считаем
+       их отдельно (c.cold) — это бейдж раздела «Лиды» в меню. */
     var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0, blank: 0 };
+              anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
-      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      if (isBlankVisit(l)) c.blank++;
+      if (isProspect(l)) { c.cold++; return; }
       c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
@@ -1817,6 +1826,7 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
@@ -1828,6 +1838,9 @@
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
+    // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
+    // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
+    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
@@ -1992,7 +2005,9 @@
         // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал
         // «0 лидов · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
         : can('clients')
-          ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' +
+          // «лид» больше не про этот счетчик: холодные живут в разделе «Лиды»,
+          // а здесь те, с кем работает человек.
+          ? c.all + ' ' + plural(c.all, 'человек', 'человека', 'человек') + ' · обновлено ' +
             (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
           : roleInfo().label;
     }
@@ -2123,6 +2138,19 @@
           state.treeDept = null; state.treeGoal = null; state.tree = null;
           saveUi();
           renderTopbar(); renderHead(); renderView();
+        });
+      });
+    } else if (state.page === 'gifts') {
+      var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
+      tb.innerHTML = '<nav class="tabs">' + gopts.map(function (o) {
+        return '<a class="tab' + ((state.gfDays || 0) === o[0] ? ' on' : '') + '" data-gfd="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.gfDays = parseInt(t.getAttribute('data-gfd'), 10);
+          state._gf = null;            // период сменился — цифры старого больше не наши
+          saveUi();
+          renderTopbar(); renderView();
         });
       });
     } else if (state.page === 'marketing') {
@@ -2290,6 +2318,11 @@
       else phrase = 'Все спокойно: заявки разобраны, рисков нет.';
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
+    }
+    if (state.page === 'prospects') {
+      var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+      html = '<div><h2>Лиды</h2>' +
+        '<div class="verdict" style="margin-top:8px"><span>' + esc(PR_SEGS[prSeg].hint) + '</span></div></div>';
     }
     if (state.page === 'leads') {
       html = '<div><h2>Люди</h2>' +
@@ -2646,8 +2679,10 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -11650,6 +11685,113 @@
     });
   }
 
+
+  /* ── ПОДАРКИ — что берут из бота и где встают ──
+     Данные — лог бота (`/admin/api/gifts/overview`), а не события платформы: в бота
+     человек попадает всегда, а до платформы доходит меньшинство. */
+  var GF_AWAIT = { __slot__: 'ждет окно записи', gift_need: 'не выбрал подарок',
+                   lang_which: 'не выбрал язык' };
+
+  function fetchGifts(cb) {
+    api('/admin/api/gifts/overview?days=' + (state.gfDays || 0)).then(function (r) {
+      state._gf = r; state._gfDays = state.gfDays || 0;
+      if (cb) cb(); else if (state.page === 'gifts') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._gf = 'none'; if (state.page === 'gifts') renderView(); }
+    });
+  }
+
+  function renderGifts(view) {
+    if (!state._gf || state._gfDays !== (state.gfDays || 0)) {
+      view.innerHTML = dashSkeleton();
+      fetchGifts();
+      return;
+    }
+    if (state._gf === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить подарки — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._gf, f = d.funnel || {};
+    var steps = [
+      { label: 'Открыли подарки', hint: 'бот показал меню', n: f.opened || 0 },
+      { label: 'Выбрали подарок', hint: 'нажали кнопку в меню', n: f.chose || 0 },
+      { label: 'Забрали', hint: 'дошли до конца сценария', n: f.got || 0 },
+      { label: 'Записались на разбор', hint: 'выбрали окно с куратором', n: f.booked || 0 }
+    ];
+    var first = steps[0].n;
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.round(s.n / first * 100) : 0;
+      var conv = i ? (steps[i - 1].n ? Math.round(s.n / steps[i - 1].n * 100) : 0) : 100;
+      var lost = i ? Math.max(0, steps[i - 1].n - s.n) : 0;
+      return '<div class="lad-row gf-flat">' +
+        '<div class="lad-nm">' + s.label + '<small>' + s.hint + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right"><span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+        (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+
+    var gifts = (d.gifts || []).slice().sort(function (a, b) { return b.took - a.took; });
+    var maxTook = Math.max.apply(null, [1].concat(gifts.map(function (g) { return g.took; })));
+    var giftRows = gifts.map(function (g) {
+      var w = Math.round(g.took / maxTook * 100);
+      return '<div class="gf-row">' +
+        '<div class="gf-nm">' + esc(g.title) + '<small class="num">' + esc(g.code) + '</small></div>' +
+        '<div class="gf-track"><div class="gf-fill" style="width:' + Math.max(w, g.took ? 4 : 0) + '%"></div></div>' +
+        '<div class="gf-n num">' + g.took + '</div>' +
+        '<div class="gf-got num' + (g.finished ? '' : ' zero') + '">' +
+          (g.took ? (g.finished ? 'забрали ' + g.finished : 'никто не дошел') : 'не берут') + '</div>' +
+      '</div>';
+    }).join('');
+
+    var src = (d.sources || []).filter(function (s) { return s.n; });
+    var srcHtml = src.length ? src.map(function (s) {
+      return '<div class="gf-src"><span class="gf-src-c">' + esc(s.code) + '</span>' +
+        '<span class="gf-src-n num">' + s.n + '</span></div>';
+    }).join('') : '<div class="empty">Меток нет — все пришли напрямую.</div>';
+
+    var stuck = d.stuck || [];
+    var stuckRows = stuck.length ? stuck.map(function (p) {
+      var who = p.name || (p.username ? '@' + p.username : 'Без имени');
+      var what = GF_AWAIT[p.awaiting] || 'не ответил боту';
+      /* Напоминание шлется только по подарочным воронкам (funnels.nudge_loop). Обещать
+         его на выборе окна нельзя: там бот молчит, и чип «бот напомнит» будет враньем. */
+      var nudgeable = p.funnel_code.indexOf('gift') === 0;
+      return '<div class="trow gf-grid">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(who) + '</div>' +
+          '<div class="t-sub">' + esc(what) + ' · ' + esc(p.funnel_code) + '</div></div>' +
+        '<div class="gf-nudge hidem">' + (nudgeable
+          ? (p.nudged ? '<span class="sev n-ok">напомнили</span>'
+                      : '<span class="sev s-new">бот напомнит</span>')
+          : '') + '</div>' +
+        '<div class="t-when num">' + fmtWhen(p.since) + '</div>' +
+      '</div>';
+    }).join('') : '<div class="empty">Никто не завис на выборе.</div>';
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp7" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('gift', 14) + '</span>' +
+        '<div><div class="t">Путь подарка</div><div class="s">от «показали меню» до записи на разбор</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="card sp5" style="padding:22px 24px">' +
+        '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
+        '<div><div class="t">Откуда приходят</div><div class="s">метка ссылки или кодовое слово</div></div></div>' +
+        '<div class="gf-srcs">' + srcHtml + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Что берут</div><div class="s">взяли подарок · дошли до конца сценария</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + giftRows + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px">' +
+          '<span class="ic" style="background:var(--amber-soft); color:var(--amber-ink)">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Стоят на выборе</div><div class="s">' + stuck.length + ' ' +
+            plural(stuck.length, 'человек', 'человека', 'человек') +
+            ' · по подаркам бот напоминает сам через два часа</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + stuckRows + '</div></div>' +
+    '</div>';
+  }
+
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах
      внутри той же страницы — иначе мелькает). CSS гасит при reduced-motion. */
   /* ── ШАБЛОНЫ пути поступления (мастер-планы → доска «Поступление») ── */
@@ -13228,6 +13370,197 @@
   }
 
   /* ── ЛИДЫ — тулбар + тело (таблица/канбан) в одном контейнере ── */
+  /* ══ ЛИДЫ ══════════════════════════════════════════════════════════════════
+     Решение Веры от 20.08.2026: «лиды это проходящие мимо люди, которые что-то
+     хотели; мы знаем канал, и через него бот говорит с ними дальше. Захотят
+     плотнее — станут людьми, с которыми мы работаем».
+
+     Разделение держится на статусе воронки, а не на новом поле в базе: пока
+     человек не оставил заявку и не заполнил анкету, он `visited` и лежит здесь.
+     Заявка, анкета, оплата или кнопка «Беру в работу» переводят его в «Людей» —
+     обратной кнопки нет намеренно, разжаловать человека обратно в прохожие
+     незачем.
+
+     Своей загрузки у раздела нет: это те же карточки из `state.leads`, просто
+     показанные с другого угла. Менеджеру тут не нужны балл и контакт — нужен
+     канал, повод прихода и когда человек последний раз о себе напоминал. */
+  var PR_SEGS = {
+    all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
+    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
+  };
+  var PR_QUIET_DAYS = 14;
+  /* Ярлык канала: бот кладет его в overrides, у заходов с платформы канала нет. */
+  var PR_CHAN = {
+    telegram: { label: 'Телеграм', icon: 'bot' },
+    vk:       { label: 'ВКонтакте', icon: 'vk' },
+    max:      { label: 'Макс',     icon: 'max' },
+    whatsapp: { label: 'WhatsApp', icon: 'wa' },
+  };
+  function isProspect(l) {
+    return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
+  }
+  function prAge(l) {
+    var t = l.last_activity || l.created_at;
+    if (!t) return 9999;
+    return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+  }
+  /* Сколько человек молчит. Словами, а не числом с подписью: «сегодня» и «вчера»
+     читаются мгновенно, а на длинной тишине важен масштаб, а не точный день. */
+  function prSilence(age) {
+    if (age <= 0) return 'сегодня';
+    if (age === 1) return 'вчера';
+    if (age < 14) return age + ' ' + plural(age, 'день', 'дня', 'дней');
+    if (age < 60) return Math.round(age / 7) + ' нед';
+    return Math.round(age / 30) + ' мес';
+  }
+  function prList(seg) {
+    var arr = state.leads.filter(isProspect);
+    if (seg === 'fresh') arr = arr.filter(function (l) { return prAge(l) <= 7; });
+    if (seg === 'quiet') arr = arr.filter(function (l) { return prAge(l) >= PR_QUIET_DAYS; });
+    if (state.q) {
+      arr = arr.filter(function (l) {
+        var hay = ((l.name || '') + ' ' + (l.contact || '') + ' ' + (l.crm.note || '')).toLowerCase();
+        return hay.indexOf(state.q) !== -1;
+      });
+    }
+    return arr.sort(function (a, b) { return prAge(a) - prAge(b); });
+  }
+  function prCounts() {
+    var c = { all: 0, fresh: 0, quiet: 0 };
+    state.leads.forEach(function (l) {
+      if (!isProspect(l)) return;
+      c.all++;
+      var d = prAge(l);
+      if (d <= 7) c.fresh++;
+      if (d >= PR_QUIET_DAYS) c.quiet++;
+    });
+    return c;
+  }
+  /* Канал контакта. У карточки из бота он лежит в overrides (routers/telegram.py),
+     у пустого захода на платформу канала нет вообще — так и говорим. */
+  function prChan(l) {
+    var key = (l.crm.overrides || {}).channel || (l.referrer === 'bot' ? 'telegram' : '');
+    return PR_CHAN[key] || null;
+  }
+  /* Повод прихода. Бот пишет его в заметку («Пришел в бота: grant»), и это
+     единственное, что мы о холодном человеке знаем. */
+  function prWhy(l) {
+    if (l.crm.note) return l.crm.note;
+    if (l.referrer === 'bot') return 'Написал боту';
+    if (l.referrer && l.referrer.indexOf('webinar') === 0) return 'Пришел с эфира';
+    return 'Открыл платформу';
+  }
+  function prTake(id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Беру…'; }
+    apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/take', 'POST', null, function () {
+      var l = findLead(id);
+      /* Двигаем локально ровно то же, что записал сервер: строка уезжает из
+         «Лидов» сразу, без перезагрузки всего списка. */
+      if (l) {
+        l.status = 'manual';
+        if (l.crm.status === 'new') l.crm.status = 'contacted';
+      }
+      renderAll();
+      showToast('В работе — карточка в «Людях»', '', id);
+    }, function () {
+      if (btn) { btn.disabled = false; btn.textContent = 'Беру в работу'; }
+      showToast('Не получилось — проверь сеть');
+    });
+  }
+  function renderProspects(view) {
+    var seg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+    var arr = prList(seg);
+    var body;
+    if (!arr.length) {
+      body = '<div class="pr-empty">' + ic('funnel', 26) +
+        '<div class="pr-et">' + (state.q || seg !== 'all' ? 'Здесь пусто' : 'Лидов пока нет') + '</div>' +
+        '<div class="pr-es">' + (state.q || seg !== 'all'
+          ? 'По этому срезу никого. Попробуй вкладку «Все».'
+          : 'Сюда попадает каждый, кто написал боту или зашел на платформу и ничего не оставил.') +
+        '</div></div>';
+    } else {
+      body = '<div class="trow pr-grid thead">' +
+          '<span class="th pr-hch">Канал</span><span class="th">Кто</span>' +
+          '<span class="th hidem">Зачем приходил</span>' +
+          '<span class="th">Молчит</span><span class="th"></span>' +
+        '</div>' +
+        arr.map(function (l) {
+          var ch = prChan(l);
+          var age = prAge(l);
+          return '<div class="trow pr-grid" data-id="' + l.id + '">' +
+            '<span class="pr-ch' + (ch ? '' : ' none') + '">' +
+              (ch ? ic(ch.icon, 13) + '<span class="pr-cl">' + ch.label + '</span>'
+                  : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
+            '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
+              // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
+              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+                : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
+            '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
+            '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
+              prSilence(age) + '</div>' +
+            '<div class="pr-act"><button class="pr-take" data-stop="1" data-take="' + l.id + '">Беру в работу</button></div>' +
+          '</div>';
+        }).join('');
+    }
+    view.innerHTML = '<div class="card listcard">' + prToolbar(seg) + '<div class="list-body">' + body + '</div></div>';
+    wireProspects(view);
+  }
+  function prToolbar(seg) {
+    var c = prCounts();
+    var useful = Object.keys(PR_SEGS).filter(function (s) {
+      // Срез, который никого не отсекает, — лишняя кнопка: «Новые 18» рядом с
+      // «Все 18» не дает выбора, только шум.
+      return s !== 'all' && c[s] && c[s] !== c.all;
+    });
+    var chips = (useful.length ? ['all'].concat(useful) : []).map(function (s) {
+      return '<button class="qchip' + (seg === s ? ' on' : '') + '" data-prseg="' + s + '">' +
+        PR_SEGS[s].label + '<span class="qn num">' + c[s] + '</span></button>';
+    }).join('');
+    return '<div class="list-tools">' +
+        '<div class="searchwrap' + (state.q ? ' has-val' : '') + '">' + ic('leads', 15) +
+          '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
+          '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
+          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+      '</div>' +
+      // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
+      (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
+  }
+  function wireProspects(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-prseg]'), function (t) {
+      t.addEventListener('click', function () {
+        state.prSeg = t.getAttribute('data-prseg'); saveUi(); renderHead(); renderView();
+      });
+    });
+    var search = el('search'), wrap = search && search.closest('.searchwrap');
+    if (search) {
+      search.value = state.q;
+      search.addEventListener('input', function () {
+        state.q = this.value.trim().toLowerCase();
+        if (wrap) wrap.classList.toggle('has-val', !!this.value);
+        renderView();
+        var f = el('search');
+        if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+      });
+    }
+    var clr = el('s-clear');
+    if (clr) clr.addEventListener('click', function () { state.q = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-take]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        prTake(b.getAttribute('data-take'), b);
+      });
+    });
+    var ids = prList(PR_SEGS[state.prSeg] ? state.prSeg : 'all').map(function (l) { return l.id; });
+    Array.prototype.forEach.call(view.querySelectorAll('.trow[data-id]'), function (tr) {
+      tr.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('[data-stop]')) return;
+        openDrawer(tr.getAttribute('data-id'), ids);
+      });
+    });
+  }
+
   function renderLeads(view) {
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
@@ -13254,23 +13587,23 @@
     }).join('') + '</div>';
   }
 
-  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
-     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
-     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  /* Куда делись холодные. Раньше пустые заходы сворачивались прямо здесь; с
+     появлением раздела «Лиды» (решение Веры 20.08.2026) они уехали туда целиком,
+     и в «Людях» о них остается одна строка со ссылкой — иначе менеджер решит,
+     что трафика нет вовсе. */
   function blankNote() {
-    var n = counts().blank;
+    var n = counts().cold;
     if (!n || state.seg !== 'all') return '';
-    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
     return '<div class="list-foot">' +
       '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
-      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
-        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
-      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+      '<span class="lf-t"><b class="num">' + n + '</b> ' + plural(n, 'человек написал', 'человека написали', 'человек написали') +
+        ' или зашли, но ничего пока не оставили. Они в разделе «Лиды», с ними говорит бот.</span>' +
+      '<button class="lf-btn" id="lf-blank">Открыть</button>' +
     '</div>';
   }
   function attachBlankNote(host) {
     var b = host.querySelector('#lf-blank');
-    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+    if (b) b.addEventListener('click', function () { setPage('prospects'); });
   }
   function fillTable(host) {
     var arr = segLeads(state.seg);
