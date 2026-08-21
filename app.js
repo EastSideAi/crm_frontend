@@ -16352,6 +16352,11 @@
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'exams') host.innerHTML = buildExams(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
+    // Плашка «это дубль» — над ЛЮБОЙ секцией: работать в дубле нельзя нигде, и
+    // человек, пришедший по ссылке сразу в «Оплаты», обязан это увидеть.
+    var dupN = dupBanner(ctx);
+    if (dupN) host.insertAdjacentHTML('afterbegin', dupN);
+
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
     var side = el('m-side');
@@ -17354,6 +17359,94 @@
     '</div>';
   }
 
+  /* ── ДУБЛИ: похоже, это тот же человек ────────────────────────────────────
+     Один человек заходит к нам несколькими дверями: бот, эфир, анкета. Каждая дверь
+     заводит свою карточку, и в отчете он считается несколько раз. Бэкенд ищет похожие
+     по телефону, телеграму и почте, но НЕ склеивает сам: у нас данные детей, ошибочная
+     склейка двух разных детей потом не разбирается. Решает менеджер, склейка обратима.
+     Склеиваем при этом не «людей», а дела: у мамы свой телефон, у ребенка свой телеграм,
+     это два человека и одна сделка. */
+  var DUP = {};        // id лида -> ответ бэка
+  var DUP_BUSY = {};
+
+  function fetchDups(id, force) {
+    if (DUP_BUSY[id]) return;
+    if (force) delete DUP[id];
+    if (DUP[id]) return;
+    DUP_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/duplicates').then(function (r) {
+      DUP_BUSY[id] = false; DUP[id] = r;
+      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+    }).catch(function () {
+      DUP_BUSY[id] = false; DUP[id] = { duplicates: [] };
+    });
+  }
+
+  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк' };
+  function dupMatch(m) {
+    var v = m.value;
+    if (m.kind === 'tg') v = v.indexOf('un:') === 0 ? '@' + v.slice(3) : 'id ' + v.slice(3);
+    if (m.kind === 'phone') v = '+' + v;
+    return DUP_KIND[m.kind] + ' ' + v;
+  }
+
+  /* Карточка сама помечена дублем — это меняет всю работу с ней, поэтому говорим
+     первой строкой раздела, до «что делать сейчас». */
+  /* Поля склейки живут только в детали карточки: в строке списка их нет, а leadCtx
+     предпочитает строку списка. Поэтому читаем деталь напрямую, иначе после склейки
+     блок «Склеено в это дело» не появится до перезагрузки страницы. */
+  function dupCrm(ctx) { return (ctx.d && ctx.d.crm) || ctx.crm || {}; }
+
+  function dupBanner(ctx) {
+    var crm = dupCrm(ctx);
+    if (!crm.merged_into) return '';
+    return '<div class="dup-note">' + ic('alert', 14) +
+      '<div><b>Это дубль другой карточки</b>' +
+      '<small>работа идет в главной карточке, здесь ничего не ведем</small></div>' +
+      '<button class="dup-b" data-dupopen="' + esc(crm.merged_into) + '">Открыть главную</button>' +
+      '<button class="dup-b" data-unmerge="' + esc(state.drawerId) + '">Расклеить</button></div>';
+  }
+
+  function buildDupes(ctx) {
+    var id = state.drawerId;
+    var crm = dupCrm(ctx);
+    var html = '';
+
+    /* сюда уже склеены другие заходы того же человека */
+    var merged = crm.merged || [];
+    if (merged.length) {
+      html += '<div class="m-sec"><div class="m-sec-h">Склеено в это дело' +
+        '<span class="dup-cnt num">' + merged.length + '</span></div>' +
+        '<div class="dup-list">' + merged.map(function (m) {
+          return '<div class="dup-row"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
+            '<small>' + esc(fmtWhen(m.created_at)) + '</small></div>' +
+            '<button class="dup-b" data-dupopen="' + esc(m.id) + '">Открыть</button>' +
+            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>';
+        }).join('') + '</div></div>';
+    }
+
+    /* подсказка: похожие карточки */
+    var d = DUP[id];
+    if (!d) { fetchDups(id); return html; }
+    var list = (d.duplicates || []).filter(function (x) { return x.id !== crm.merged_into; });
+    if (!list.length) return html;
+
+    html += '<div class="m-sec"><div class="m-sec-h">Похоже, это тот же человек' +
+      '<span class="dup-cnt num">' + list.length + '</span></div>' +
+      '<div class="dup-hint">Совпали личные признаки. Система сама ничего не склеивает: ' +
+        'реши сам, одно это дело или разные люди.</div>' +
+      '<div class="dup-list">' + list.map(function (x) {
+        var why = (x.matched || []).map(dupMatch).join(' · ');
+        return '<div class="dup-row"><div class="dup-nm"><b>' + esc(x.name || 'Без имени') + '</b>' +
+          '<small>' + esc(why) + ' · ' + esc(fmtWhen(x.created_at)) + '</small></div>' +
+          (x.paid ? '<span class="sev s-client">оплата</span>' : '') +
+          '<button class="dup-b" data-dupopen="' + esc(x.id) + '">Открыть</button>' +
+          (x.paid ? '' : '<button class="dup-b primary" data-merge="' + esc(x.id) + '">Это дубль</button>') +
+        '</div>';
+      }).join('') + '</div></div>';
+    return html;
+  }
+
   function buildNow(ctx) {
     var lead = ctx.lead, crm = ctx.crm, base = ctx.base;
     var booking = base.booking;
@@ -17390,6 +17483,9 @@
 
     /* 3. КВАЛИФИКАЦИЯ — квал ли он для маркетинга и подтвердили ли продажи */
     html += buildQual(ctx);
+
+    /* 3а. ДУБЛИ — тот же человек другой дверью */
+    html += buildDupes(ctx);
 
     /* 4. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
@@ -18064,6 +18160,44 @@
     var stHost = el('m-st');
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
+    });
+
+    // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dupopen')); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-merge]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-merge');
+        if (!window.confirm('Пометить ту карточку дублем этой? Она уйдет из списков, данные останутся. Решение обратимо.')) return;
+        b.disabled = true;
+        api('/admin/api/leads/' + id + '/merge', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duplicate: dupId }),
+        }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          showToast('Склеено — в списках останется одна карточка');
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function (e) {
+          b.disabled = false;
+          showToast(e.message === 'HTTP 409'
+            ? 'Так склеить нельзя — по карточке есть оплата'
+            : 'Не склеилось — проверь сеть');
+        });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-unmerge]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-unmerge');
+        b.disabled = true;
+        api('/admin/api/leads/' + dupId + '/unmerge', { method: 'POST' }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          showToast('Расклеено — карточка вернулась в списки');
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function () { b.disabled = false; showToast('Не получилось — проверь сеть'); });
+      });
     });
 
     // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
