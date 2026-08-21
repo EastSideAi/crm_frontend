@@ -4089,7 +4089,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rsk-flag { font-size: 12px; color: var(--ink-2); background: var(--fill);
   border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap; }
 .rsk-flag.more { color: var(--ink-3); }
-.rsk-note { font-size: 12px; color: var(--blue-d); white-space: nowrap; }
+.rsk-note { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
 .rsk-clean { display: inline-flex; align-items: center; gap: 5px;
   font-size: 13px; color: var(--green-ink); }
 .rsk-clean svg { color: var(--green); }

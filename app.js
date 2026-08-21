@@ -2534,7 +2534,7 @@
       else if (RISK.err) phrase9 = esc(RISK.err);
       else if (!rt.risk && !rt.warn) phrase9 = 'Явных признаков трудовых отношений нет. Проверки прошли у всех исполнителей.';
       else phrase9 = (rt.risk ? '<b class="rsk-hot">' + rt.risk + ' ' +
-          plural(rt.risk, 'человек', 'человека', 'человек') + '</b> в зоне риска' : '') +
+          plural(rt.risk, 'исполнитель', 'исполнителя', 'исполнителей') + '</b> в зоне риска' : '') +
         (rt.risk && rt.warn ? ', ' : '') +
         (rt.warn ? '<b>' + rt.warn + '</b> под наблюдением' : '') +
         '. У каждого флага есть причина и действие.';
@@ -6829,7 +6829,7 @@
   }
   function riskOpen(id) {
     // renderAll, а не renderView: вердикт в топбаре разный для обзора и разбора, а его
-    // рисует шапка — renderView её не трогает, и подстрочник остался бы от обзора.
+    // рисует шапка — renderView ее не трогает, и подстрочник остался бы от обзора.
     RISK.open = id; renderAll();
     if (!RISK.detail[id]) {
       api('/admin/api/contractors/' + id + '/risks').then(function (r) {
@@ -6860,22 +6860,22 @@
     if (RISK.open) return renderRiskDetail(view);
     if (RISK.list === null) { view.innerHTML = dashSkeleton(); riskLoad(); return; }
     var list = RISK.list; var t = RISK.totals || {};
+    // Счет («N в зоне риска») живет в подстрочнике-вердикте; алерт не повторяет число,
+    // а несет только действие — иначе одно и то же сказано дважды (правка арт-директора).
     var alert = t.risk
       ? '<div class="dc-alert">' + ic('alert', 18) +
-          '<span><b>' + t.risk + ' ' +
-          plural(t.risk, 'исполнитель', 'исполнителя', 'исполнителей') +
-          '</b> в зоне риска переквалификации. Разберите красные флаги до налоговой ' +
-          'проверки, а не после.</span></div>'
+          '<span>Разберите красные флаги до налоговой проверки, а не после — по ним ' +
+          'отношения выглядят как трудовые.</span></div>'
       : '';
     var body = RISK.err
       ? '<div class="empty">' + esc(RISK.err) + '</div>'
       : (!list.length
-        ? '<div class="empty">Исполнителей пока нет. Риски появятся, когда заведёте людей и начнёте ставить задания и платить.</div>'
+        ? '<div class="empty">Исполнителей пока нет. Риски появятся, когда заведете людей и начнете ставить задания и платить.</div>'
         : list.map(rskRow).join(''));
     view.innerHTML =
       '<div class="card listcard">' + alert +
         '<div class="list-tools">' +
-          '<span class="list-hint">Одиннадцать проверок по каждому исполнителю — тяжёлые сверху. Нажмите на строку, чтобы увидеть причину и что сделать.</span>' +
+          '<span class="list-hint">Одиннадцать проверок по каждому исполнителю — тяжелые сверху. Нажмите на строку, чтобы увидеть причину и что сделать.</span>' +
           '<span class="list-count"><b>' + list.length + '</b> ' +
           plural(list.length, 'исполнитель', 'исполнителя', 'исполнителей') + '</span>' +
         '</div>' +
