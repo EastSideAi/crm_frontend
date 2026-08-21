@@ -6828,7 +6828,9 @@
     });
   }
   function riskOpen(id) {
-    RISK.open = id; renderView();
+    // renderAll, а не renderView: вердикт в топбаре разный для обзора и разбора, а его
+    // рисует шапка — renderView её не трогает, и подстрочник остался бы от обзора.
+    RISK.open = id; renderAll();
     if (!RISK.detail[id]) {
       api('/admin/api/contractors/' + id + '/risks').then(function (r) {
         RISK.detail[id] = r;
@@ -6924,7 +6926,7 @@
         '</div>' +
         '<div class="rsk-checks">' + checks.map(riskCheckCard).join('') + '</div>' +
       '</div>';
-    el('rsk-back').addEventListener('click', function () { RISK.open = null; renderView(); });
+    el('rsk-back').addEventListener('click', function () { RISK.open = null; renderAll(); });
     var oc = el('rsk-card'); if (oc) oc.addEventListener('click', function () { openCz(id); });
   }
 
