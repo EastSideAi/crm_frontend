@@ -144,7 +144,7 @@ CRM — рабочий инструмент команды. Ценности п�
 |---|---|---|---|
 | Каркас | сайдбар, топбар, гриды, мобильный таббар | `design/layout.html` | `.app .side .main .topbar .navi .tabs .grid .card .sec-head .mtabs` |
 | Списки и канбан | таблица лидов, поиск, фильтры, доска | `design/table.html` | `.listcard .trow .th .sev .searchwrap .qchip .vseg .kb-*` |
-| Карточка лида | модалка лида (центрированная) | `design/lead-card.html` | `.mbg .modal .m-head .m-nav .m-sec .m-dlg .m-fold .pipe` |
+| Карточка лида | модалка лида (центрированная) | `design/lead-card.html` | `.mbg .modal .m-head .m-nav .m-sec .m-dlg .m-fold .pipe .ql-* .dup-*` |
 | Контролы | кнопки, инпуты, селекты, сегменты | `design/controls.html` | `.bp .icobtn .ed-input .al-in .dperiod .task-chk` |
 | Чипы и статусы | статус, бейдж, тег, дельта | `design/chips.html` | `.sev .kd .pt-node .uz-tag .bdg .cnt` |
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |
@@ -154,7 +154,7 @@ CRM — рабочий инструмент команды. Ценности п�
 | Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
 | Поступление | план, задачи, шаблоны | `design/admissions.html` | `.rm-* .tpl-*` |
 | Маркетинг (+ долг) | страница «Маркетинг» | `design/marketing.html` | `.mk-*` |
-| Дашборд маркетинга | вкладка «Дашборд» раздела «Маркетинг» | — (рецепты из `dashboard.html`) | `.mkd-* .lad-* .statbar` |
+| Дашборд маркетинга | вкладки «Дашборд» и «Расход» раздела «Маркетинг» | — (рецепты из `dashboard.html`) | `.mkd-* .lad-* .statbar .statbar.five .sp-*` |
 | Подарки | воронка подарков, что берут, кто застрял | витрины нет (см. `style.css` «ПОДАРКИ») | `.gf-*` + общие `.lad-*` |
 | Задачи команды | список задач, карточка задачи, подключение к боту | витрины нет (см. `style.css` «ЗАДАЧИ КОМАНДЫ») | `.tsk-grid .tsk-who .tsk-due .tsk-card .tsk-feed .sev.st-* .tgl-*` |
 | Продуктовый портал | дерево продуктов, тарифы, таблицы сравнения и экономики | витрины нет (см. `style.css` «ПРОДУКТОВЫЙ ПОРТАЛ») | `.po-tree .po-node .po-flag .po-tcard .po-tbl .po-tabs` |
