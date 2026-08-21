@@ -240,6 +240,7 @@
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
       max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
+      inst: '<rect x="3.4" y="3.4" width="13.2" height="13.2" rx="4.2"/><circle cx="10" cy="10" r="3.3"/><path d="M13.7 6.3h.01"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
@@ -1042,7 +1043,8 @@
     if (typeof closeSmenu === 'function') closeSmenu();
     if (document.querySelector('.al-ov')) return;
     var chOpts = [['', 'Канал не указан'], ['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'],
-      ['vk', 'VK'], ['phone', 'Телефон'], ['site', 'Сайт'], ['referral', 'Рекомендация'], ['other', 'Другое']];
+      ['vk', 'VK'], ['instagram', 'Instagram'], ['phone', 'Телефон'], ['site', 'Сайт'],
+      ['referral', 'Рекомендация'], ['other', 'Другое']];
     var stOpts = ACTIVE_STATUSES.concat(['client', 'rejected']).map(function (s) { return [s, CRM[s].label]; });
     var opt = function (o, sel) { return '<option value="' + o[0] + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; };
     var ov = document.createElement('div');
@@ -11224,6 +11226,7 @@
   };
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
+    instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
   };
@@ -13844,6 +13847,7 @@
     vk:       { label: 'ВКонтакте', icon: 'vk' },
     max:      { label: 'Макс',     icon: 'max' },
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
+    instagram: { label: 'Instagram', icon: 'inst' },
   };
   function isProspect(l) {
     return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
@@ -14581,10 +14585,11 @@
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
     max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
+    instagram:{ label: 'Instagram', icon: 'inst', c: '#E1306C' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'instagram', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
