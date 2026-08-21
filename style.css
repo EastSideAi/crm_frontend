@@ -2291,6 +2291,12 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Риски на телефоне: имя и уровень первой строкой, флаги во всю ширину второй —
+     иначе общая .trow прибивает строку под три колонки лида. */
+  .trow.rsk-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
+  .trow.rsk-grid.thead { display: none; }
+  .trow.rsk-grid .rsk-flags { grid-column: 1 / -1; }
   /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
      строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
      число обязано назвать себя само — подпись берется из data-l. */
@@ -4066,9 +4072,63 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
   padding: 7px 14px; border-radius: var(--r-pill); }
 .dc-alert .dc-alert-go:hover { filter: brightness(.95); }
-.rcp-state { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rcp-why { font-size: 11.5px; color: var(--ink-3); }
-.rcp-act { display: inline-flex; gap: 6px; }
+
+/* ── РИСКИ (этап 9): информатор переквалификации ────────────────────────────
+   Обзор — строка списка (.rsk-grid) с уровнем-чипом и флагами; разбор — карточка с
+   одиннадцатью проверками. Уровень красит чип по формуле семантики (§3), тяжесть на
+   разборе дублируется цветной полосой слева (один якорь на строку). Своих цветов нет —
+   только токены и .sev-семейство. */
+.rsk-grid { grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 2fr); }
+.rsk-row { cursor: pointer; }
+.rsk-name { display: flex; align-items: baseline; gap: 8px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.rsk-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.rsk-lv { display: flex; }
+.rsk-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.rsk-flag { font-size: 12px; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap; }
+.rsk-flag.more { color: var(--ink-3); }
+.rsk-note { font-size: 12px; color: var(--blue-d); white-space: nowrap; }
+.rsk-clean { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--green-ink); }
+.rsk-clean svg { color: var(--green); }
+.rsk-hot { color: var(--red-ink); }
+.list-hint { color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+
+.rsk-detail { padding: 0; overflow: hidden; }
+.rsk-d-head { display: flex; align-items: center; gap: 12px;
+  padding: 15px 20px; border-bottom: 1px solid var(--line); }
+.rsk-d-who { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.rsk-d-name { font: 700 19px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.rsk-checks { display: flex; flex-direction: column; }
+.rsk-check { padding: 15px 20px 16px; border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent; }
+.rsk-check:last-child { border-bottom: 0; }
+.rsk-check.lv-risk { border-left-color: var(--red); }
+.rsk-check.lv-warn { border-left-color: var(--amber); }
+.rsk-c-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rsk-c-title { font-weight: 600; color: var(--ink); }
+.rsk-c-reason { color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+.rsk-c-act { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px;
+  color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+.rsk-c-act svg { flex: none; margin-top: 2px; color: var(--blue); }
+.rsk-c-ev { margin-top: 7px; font-size: 12.5px; color: var(--ink-3); }
+.rsk-hits { list-style: none; margin: 9px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px; }
+.rsk-hits li { font-size: 12.5px; color: var(--ink-2); }
+.rsk-hit-w { display: inline-block; margin-right: 5px; padding: 1px 7px; border-radius: 6px;
+  font-weight: 700; color: var(--red-ink); background: var(--red-soft); }
+.rsk-hit-hint { display: block; margin-top: 2px; color: var(--ink-3); }
+
+.rcp-item { border-bottom: 1px solid var(--line); }
+.rcp-item .trow.dc-grid { border-bottom: 0; }
+.rcp-item:last-child { border-bottom: 0; }
+.rcp-sub { color: var(--ink-3); font-size: 12.5px; }
+.rcp-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 14px 12px 40px; }
+.rcp-why { font-size: 12px; color: var(--red-ink); }
+.rcp-act { display: inline-flex; gap: 6px; margin-left: auto; }
 .rcp-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
   font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
   padding: 5px 11px; border-radius: var(--r-pill); }

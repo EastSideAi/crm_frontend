@@ -1841,6 +1841,7 @@
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
+    { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Ввод разложен на три места, а не свален в один экран (правки Романа 17.08.2026,
@@ -2523,6 +2524,23 @@
       html = '<div><h2>Каталог услуг</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('box', 13) + '</span><span>' + phrase5 + '</span></div></div>';
     }
+    if (state.page === 'czrisks') {
+      /* Вердикт отвечает на вопрос, ради которого сюда заходят: к кому идти в первую
+         очередь. Красное — где отношения уже похожи на трудовые, амбер — присмотреться. */
+      var rt = RISK.list ? RISK.totals : null;
+      var phrase9;
+      if (RISK.open) phrase9 = 'Разбор по человеку: одиннадцать проверок, у каждой причина и что сделать.';
+      else if (!RISK.list) phrase9 = 'Считаю риски по исполнителям…';
+      else if (RISK.err) phrase9 = esc(RISK.err);
+      else if (!rt.risk && !rt.warn) phrase9 = 'Явных признаков трудовых отношений нет. Проверки прошли у всех исполнителей.';
+      else phrase9 = (rt.risk ? '<b class="rsk-hot">' + rt.risk + ' ' +
+          plural(rt.risk, 'человек', 'человека', 'человек') + '</b> в зоне риска' : '') +
+        (rt.risk && rt.warn ? ', ' : '') +
+        (rt.warn ? '<b>' + rt.warn + '</b> под наблюдением' : '') +
+        '. У каждого флага есть причина и действие.';
+      html = '<div><h2>Риски</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase9 + '</span></div></div>';
+    }
     if (curSpace() === 'fin') {
       // Вердикт ведомости отвечает на один вопрос: хватает ли денег, чтобы закрыть
       // период. Именно от него зависит, тянуть период дальше или платить.
@@ -2668,6 +2686,7 @@
     else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czpay') renderCzPay(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
+    else if (state.page === 'czrisks') renderCzRisks(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
     else if (state.page === 'finfund') renderFinFund(view);
@@ -6782,6 +6801,133 @@
         '</span>' +
       '</div>';
   }
+  /* ── РИСКИ (этап 9): информатор переквалификации в трудовые отношения ──────
+     Одиннадцать проверок ТЗ 16 по каждому исполнителю. Считает бэкенд
+     (services/contractor_risks), фронт показывает обзор и разбор. Уровень человека
+     поднимают только risk и warn; info — заметка сбоку. */
+  var RISK = { list: null, totals: null, err: '', open: null, detail: {} };
+  var RSK_LV = {
+    risk: { cls: 'ct-bad', label: 'Риск' },
+    warn: { cls: 'ct-check', label: 'Внимание' },
+    info: { cls: 'ct-wait', label: 'К сведению' },
+    ok: { cls: 'ct-ok', label: 'Норма' },
+  };
+  function riskChip(level) {
+    var lv = RSK_LV[level] || RSK_LV.ok;
+    return '<span class="sev ' + lv.cls + '">' + lv.label + '</span>';
+  }
+  function riskLoad() {
+    api('/admin/api/contractor-risks').then(function (r) {
+      RISK.list = r.people || []; RISK.totals = r.totals || {}; RISK.err = '';
+      if (state.page === 'czrisks') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RISK.list = RISK.list || []; RISK.totals = RISK.totals || { risk: 0, warn: 0, info: 0, ok: 0 };
+      RISK.err = 'Не удалось посчитать риски. Обновите страницу.';
+      if (state.page === 'czrisks') renderAll();
+    });
+  }
+  function riskOpen(id) {
+    RISK.open = id; renderView();
+    if (!RISK.detail[id]) {
+      api('/admin/api/contractors/' + id + '/risks').then(function (r) {
+        RISK.detail[id] = r;
+        if (RISK.open === id && state.page === 'czrisks') renderView();
+      }).catch(function () {});
+    }
+  }
+  function rskRow(p) {
+    var fl = p.flags || [];
+    var chips = fl.slice(0, 3).map(function (f) {
+      return '<span class="rsk-flag">' + esc(f) + '</span>';
+    }).join('');
+    var more = fl.length > 3 ? '<span class="rsk-flag more">+' + (fl.length - 3) + '</span>' : '';
+    var note = (p.counts && p.counts.info)
+      ? '<span class="rsk-note">' + p.counts.info + ' к сведению</span>' : '';
+    var right = (chips || note)
+      ? chips + more + note
+      : '<span class="rsk-clean">' + ic('check', 12) + 'Чисто</span>';
+    return '<div class="trow rsk-grid rsk-row" data-rsk="' + esc(p.id) + '">' +
+      '<span class="rsk-name">' + esc(p.full_name) +
+        (p.job ? '<span class="rsk-job">' + esc(p.job) + '</span>' : '') + '</span>' +
+      '<span class="rsk-lv">' + riskChip(p.level) + '</span>' +
+      '<span class="rsk-flags">' + right + '</span>' +
+      '</div>';
+  }
+  function renderCzRisks(view) {
+    if (RISK.open) return renderRiskDetail(view);
+    if (RISK.list === null) { view.innerHTML = dashSkeleton(); riskLoad(); return; }
+    var list = RISK.list; var t = RISK.totals || {};
+    var alert = t.risk
+      ? '<div class="dc-alert">' + ic('alert', 18) +
+          '<span><b>' + t.risk + ' ' +
+          plural(t.risk, 'исполнитель', 'исполнителя', 'исполнителей') +
+          '</b> в зоне риска переквалификации. Разберите красные флаги до налоговой ' +
+          'проверки, а не после.</span></div>'
+      : '';
+    var body = RISK.err
+      ? '<div class="empty">' + esc(RISK.err) + '</div>'
+      : (!list.length
+        ? '<div class="empty">Исполнителей пока нет. Риски появятся, когда заведёте людей и начнёте ставить задания и платить.</div>'
+        : list.map(rskRow).join(''));
+    view.innerHTML =
+      '<div class="card listcard">' + alert +
+        '<div class="list-tools">' +
+          '<span class="list-hint">Одиннадцать проверок по каждому исполнителю — тяжёлые сверху. Нажмите на строку, чтобы увидеть причину и что сделать.</span>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' +
+          plural(list.length, 'исполнитель', 'исполнителя', 'исполнителей') + '</span>' +
+        '</div>' +
+        '<div class="trow rsk-grid thead">' +
+          '<span class="th">Исполнитель</span><span class="th">Уровень</span>' +
+          '<span class="th">Флаги</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rsk]'), function (r) {
+      r.addEventListener('click', function () { riskOpen(r.getAttribute('data-rsk')); });
+    });
+  }
+  function riskCheckCard(ch) {
+    var hits = '';
+    if (ch.hits && ch.hits.length) {
+      hits = '<ul class="rsk-hits">' + ch.hits.map(function (h) {
+        return '<li><span class="rsk-hit-w">' + esc(h.word) + '</span> задание № ' +
+          esc(h.number) + '<span class="rsk-hit-hint">' + esc(h.hint) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
+      '<div class="rsk-c-head">' + riskChip(ch.level) +
+        '<span class="rsk-c-title">' + esc(ch.title) + '</span></div>' +
+      '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
+      (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
+        '</span></div>' : '') +
+      (ch.evidence ? '<div class="rsk-c-ev">' + esc(ch.evidence) + '</div>' : '') +
+      hits +
+      '</div>';
+  }
+  function renderRiskDetail(view) {
+    var id = RISK.open; var d = RISK.detail[id];
+    if (!d) { view.innerHTML = dashSkeleton(); return; }
+    var order = { risk: 0, warn: 1, info: 2, ok: 3 };
+    var checks = (d.checks || []).slice().sort(function (a, b) {
+      return (order[a.level] == null ? 9 : order[a.level]) -
+             (order[b.level] == null ? 9 : order[b.level]);
+    });
+    view.innerHTML =
+      '<div class="card rsk-detail">' +
+        '<div class="rsk-d-head">' +
+          '<button class="bp sm ghost" id="rsk-back">‹ Назад</button>' +
+          '<div class="rsk-d-who"><span class="rsk-d-name">' + esc(d.contractor.full_name) +
+            '</span>' + (d.contractor.job ? '<span class="rsk-job">' + esc(d.contractor.job) +
+            '</span>' : '') + '</div>' +
+          '<span class="rsk-d-lv">' + riskChip(d.level) + '</span>' +
+          '<button class="bp sm ghost" id="rsk-card">Карточка</button>' +
+        '</div>' +
+        '<div class="rsk-checks">' + checks.map(riskCheckCard).join('') + '</div>' +
+      '</div>';
+    el('rsk-back').addEventListener('click', function () { RISK.open = null; renderView(); });
+    var oc = el('rsk-card'); if (oc) oc.addEventListener('click', function () { openCz(id); });
+  }
+
   function renderCzPay(view) {
     if (PY.reg === null) { view.innerHTML = dashSkeleton(); pyLoad(); return; }
     if (PY.tab === 'hist' && PY.hist === null) { pyHist(); }
