@@ -3098,8 +3098,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
-  .statbar { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
-  .stat { padding: 14px 16px; }
+  .statbar, .statbar.five { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  .stat, .statbar.five .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
   .stat + .stat::before { display: none; }
   .sg2 { grid-template-columns: 1fr; }
@@ -3218,7 +3218,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
    ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
 @media (max-width: 480px) {
-  .statbar { grid-template-columns: 1fr; }
+  .statbar, .statbar.five { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
 }
 
@@ -3458,8 +3458,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mkd-sub { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
 .mkd-tbl { border-top: 1px solid var(--line); }
 .mkd-th, .mkd-tr { display: grid; align-items: center; gap: 12px;
-  grid-template-columns: minmax(140px, 1.5fr) repeat(5, minmax(52px, .45fr))
-                         minmax(76px, .6fr) minmax(76px, .6fr) 104px;
+  grid-template-columns: minmax(140px, 1.5fr) repeat(5, minmax(46px, .4fr))
+                         repeat(3, minmax(72px, .55fr)) 92px;
   padding: 0 24px; }
 .mkd-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
 .mkd-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
@@ -3539,13 +3539,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .sp-total { display: none; }
   .mkd-th.sp-tbl, .sp-tbl .mkd-tr {
     grid-template-columns: minmax(110px, 2fr) repeat(2, minmax(56px, .5fr)) 30px; }
-  .mkd-th, .mkd-tr { grid-template-columns: minmax(90px, 1.2fr) repeat(3, minmax(38px, .5fr))
-                       minmax(58px, .6fr) 66px;
+  /* на телефоне остаются пять колонок: кто, сколько людей, сколько из них годных,
+     сколько денег и качество. Клики и цены прячутся — это разбор за столом. */
+  .mkd-th, .mkd-tr { grid-template-columns: minmax(76px, 1.1fr) repeat(2, minmax(32px, .45fr))
+                       minmax(72px, .8fr) 52px;
     gap: 8px; padding: 0 16px; }
+  /* сумма не переносится: «62 000 ₽» в две строки ломает высоту ряда */
+  .mkd-tr .mkd-v { white-space: nowrap; }
   .mkd-th span.hidem, .mkd-tr .hidem { display: none; }
-  /* заголовок последней колонки длинный — пускаем в две строки, а не режем по краю */
+  /* заголовки на телефоне длиннее своих колонок — пускаем в две строки, а не режем */
   .mkd-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
-  .mkd-th span:last-child { font-size: 9.5px; line-height: 1.15; white-space: normal; }
+  .mkd-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
+    min-width: 0; overflow-wrap: anywhere; }
 }
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }

@@ -2216,7 +2216,10 @@
       /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
          период справа. Период нужен на ОБЕИХ вкладках: на «ссылках» по нему считается
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
-      var mkTabs = [['dash', 'Дашборд'], ['spend', 'Расход'], ['links', 'Воронки и ссылки']];
+      /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
+         людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
+      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'],
+                    ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
@@ -11652,13 +11655,6 @@
   }
 
   function mkPct(n, base) { return base ? Math.round(n / base * 100) : 0; }
-  /* конверсия шага: зеленая — держим большинство, красная — теряем больше половины */
-  function mkConvCls(pct, has) {
-    if (!has) return 'none';
-    if (pct >= 50) return 'good';
-    if (pct < 25) return 'weak';
-    return '';
-  }
   function mkNum(n, cls) {
     return '<span class="mkd-v' + (n ? '' : ' zero') + (cls ? ' ' + cls : '') + ' num">' + n + '</span>';
   }
@@ -11700,27 +11696,36 @@
     }).join('');
   }
 
-  /* Строка таблицы: название, пять чисел и конверсия «из бота в карточку».
-     Считаем от входа в бота, а не от клика: по кодовому слову человек приходит вообще
-     без клика (в такой строке входов больше, чем кликов), и процент от кликов там врет. */
+  /* Доля MQL — про качество трафика, а не про работу менеджера: MQL считается сам по
+     анкете. Пороги из sales-metrics.md: ниже 20% значит «трафик не туда», от 40% —
+     источник, в который стоит доливать деньги. */
+  function mkQualCls(pct, has) {
+    if (!has) return 'none';
+    if (pct >= 40) return 'good';
+    if (pct < 20) return 'weak';
+    return '';
+  }
+
+  /* Строка таблицы источников: путь до карточки, качество и деньги. Последняя колонка —
+     доля MQL, а не конверсия «бот в карточку»: решение «лить сюда еще или выключить»
+     принимается по качеству лида, а не по тому, сколько людей завелось в CRM. */
   function mkRow(name, sub, r) {
-    var conv = mkPct(r.leads, r.entered);
+    var q = mkPct(r.mql || 0, r.leads || 0);
     return '<div class="mkd-tr">' +
       '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
-      mkNum(r.clicks) + mkNum(r.entered) +
-      mkNum(r.finished, 'hidem') + mkNum(r.leads) + mkNum(r.clients, 'hidem') +
-      mkRub(r.spend) + mkRub(r.cpl, 'hidem') +
-      /* карточек бывает больше, чем входов в бота: человек мог написать напрямую,
-         без метки и без шага воронки. Точный процент тут врет, честнее «>100%» */
-      '<span class="mkd-cv ' + mkConvCls(conv, r.entered) + ' num">' +
-        (r.entered ? (conv > 100 ? '>100%' : conv + '%') : '—') + '</span>' +
+      mkNum(r.clicks, 'hidem') + mkNum(r.entered, 'hidem') + mkNum(r.leads) + mkNum(r.mql || 0) +
+      mkNum(r.paid || 0, 'hidem') +
+      mkRub(r.spend) + mkRub(r.cpl, 'hidem') + mkRub(r.cac, 'hidem') +
+      '<span class="mkd-cv ' + mkQualCls(q, r.leads) + ' num">' +
+        (r.leads ? q + '%' : '—') + '</span>' +
     '</div>';
   }
   function mkHead() {
-    return '<div class="mkd-th"><span>Название</span><span>Клики</span><span>В боте</span>' +
-      '<span class="hidem">До конца</span><span>Карточки</span>' +
-      '<span class="hidem">Клиенты</span><span>Расход</span><span class="hidem">Цена лида</span>' +
-      '<span>Бот в карточку</span></div>';
+    return '<div class="mkd-th"><span>Название</span><span class="hidem">Клики</span>' +
+      '<span class="hidem">В боте</span><span>Карточки</span><span>MQL</span>' +
+      '<span class="hidem">Оплаты</span><span>Расход</span>' +
+      '<span class="hidem">Цена лида</span><span class="hidem">Цена клиента</span>' +
+      '<span>Доля MQL</span></div>';
   }
 
   /* Деньги в таблице. Расход не внесли — прочерк, а не ноль: ноль читается как
@@ -11741,21 +11746,71 @@
     var webinars = Object.keys(d.events && d.events.webinar || {})
       .reduce(function (n, key) { return n + d.events.webinar[key]; }, 0);
 
-    var bar = statBar([
-      { label: 'Кликов по меткам', value: t.clicks || 0,
-        sub: (d.placements || []).length + ' ' + plural((d.placements || []).length, 'размещение', 'размещения', 'размещений') },
-      { label: 'Зашли в бота', value: t.entered || 0,
-        sub: mkPct(t.entered || 0, t.clicks || 0) + '% от кликов' },
-      { label: 'Дошли до менеджера', value: t.handoff || 0, sub: 'просят живого человека' },
-      { label: 'Стали клиентом', value: t.clients || 0,
-        sub: (t.revenue ? fmtMoney(t.revenue) + ' \u20BD' : 'оплат за период нет') },
-      /* Деньги на трафик вносит человек, поэтому плитка честно говорит, внесены они
-         или нет: пустая цифра тут значит «не заполнили», а не «не тратили». */
-      { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
-        sub: t.spend
-          ? (t.cpl ? 'лид ' + fmtMoney(t.cpl) + ' \u20BD' : 'лидов за период нет')
-          : 'за период не внесен' },
-    ], 'five');
+    /* Источники: та же выгрузка, но взгляд со стороны денег — сколько потратили,
+       что из этого качественный лид и во сколько обошелся клиент. */
+    if (state.mkTab === 'src') {
+      var channels = (d.channels || []).map(function (c) {
+        /* Канал без размещений — это внесенный расход без кода ссылки. «0 размещений»
+           тут читалось бы как поломка, хотя это просто деньги, которые не к чему привязать */
+        var sub = c.placements
+          ? c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений')
+          : 'расход внесен без кода размещения';
+        return mkRow(mkSourceName(c.source), sub, c);
+      }).join('');
+      var places = (d.placements || []).slice(0, 20).map(function (p) {
+        /* код обязателен в подписи: у двух размещений в одном канале одинаковые названия,
+           и без кода их не различить */
+        var sub = [p.code, mkSourceName(p.source), p.medium ? mkMediumName(p.medium) : '', p.note || '']
+          .filter(Boolean).join(' · ');
+        return mkRow(p.title, sub, p);
+      }).join('');
+
+      /* Честный блок: что в этих цифрах не учтено. Без него дашборд врет умолчанием —
+         человек решит, что видит весь маркетинг, а видит только размеченный трафик. */
+      var noSrc = (d.coverage || {}).sessions_without_source || 0;
+      var gaps = [
+        ['Охваты и просмотры в соцсетях', 'Instagram, Telegram, ВКонтакте, YouTube — статистика площадок не подключена. Здесь видно только переходы по нашим меткам.'],
+        ['Заходы на сайт без метки', noSrc ? noSrc + ' ' + plural(noSrc, 'заход', 'захода', 'заходов') + ' за период пришли без источника — в разбивке по каналам их нет' : 'Все заходы за период размечены'],
+        ['Регистрации на эфир формой', webinars ? webinars + ' ' + plural(webinars, 'регистрация', 'регистрации', 'регистраций') + ' — отдельный список, с воронкой бота не связан' : 'За период регистраций формой не было'],
+        ['Расход не привязан к размещению', t.spend_no_code
+          ? fmtMoney(t.spend_no_code) + ' \u20BD внесено на канал целиком, без кода ссылки — в цене лида по размещениям этих денег нет'
+          : 'Весь внесенный расход привязан к кодам размещений'],
+      ].map(function (g) {
+        return '<div class="mkd-gap"><div><b>' + esc(g[0]) + '</b><small>' + esc(g[1]) + '</small></div>' +
+          '<span class="sev n-wait">не в цифрах</span></div>';
+      }).join('');
+
+      var mqlPct = mkPct(t.mql || 0, t.leads || 0);
+      view.innerHTML = '<div class="dash">' + statBar([
+        { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
+          sub: t.spend ? 'за выбранный период' : 'за период не внесен' },
+        { label: 'Карточек', value: t.leads || 0, sub: 'людей в CRM за период' },
+        { label: 'Из них подходят', value: t.mql || 0,
+          sub: t.leads ? mqlPct + '% от карточек' : 'лидов за период нет' },
+        { label: 'Цена лида', value: t.cpl ? fmtMoney(t.cpl) + ' \u20BD' : '—',
+          sub: t.cac ? 'клиент ' + fmtMoney(t.cac) + ' \u20BD' : 'клиента посчитаем с первой оплатой' },
+        { label: 'Окупаемость', value: t.romi != null ? t.romi + '%' : '—',
+          sub: t.revenue ? fmtMoney(t.revenue) + ' \u20BD выручки' : 'оплат за период нет' },
+      ], 'five') + '<div class="grid">' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('mega', 14) + '</span>' +
+          '<div><div class="t">Каналы</div><div class="s">сначала те, куда ушло больше денег</div></div></div>' +
+          (channels ? '<div class="mkd-tbl">' + mkHead() + channels + '</div>'
+            : '<div class="empty">За период переходов по меткам не было.</div>') + '</div>' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">Размещения</div><div class="s">каждая ссылка отдельно, топ-20 по кликам</div></div></div>' +
+          (places ? '<div class="mkd-tbl">' + mkHead() + places + '</div>'
+            : '<div class="empty">Ссылок с переходами за период нет.</div>') + '</div>' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Чего в этих цифрах нет</div>' +
+          '<div class="s">чтобы не считать дашборд полной картиной</div></div></div>' +
+          '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
+      '</div></div>';
+      animBars(view);
+      return;
+    }
 
     /* динамика: столбик = день, синий сверху клики, темный снизу входы в бота */
     var series = (d.series || []).slice(-30);
@@ -11776,36 +11831,22 @@
         '</div><span class="lb">' + lb + '</span></div>';
     }).join('');
 
-    var channels = (d.channels || []).map(function (c) {
-      /* Канал без размещений — это внесенный расход без кода ссылки. «0 размещений»
-         тут читалось бы как поломка, хотя это просто деньги, которые не к чему привязать */
-      var sub = c.placements
-        ? c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений')
-        : 'расход внесен без кода размещения';
-      return mkRow(mkSourceName(c.source), sub, c);
-    }).join('');
-    var places = (d.placements || []).slice(0, 20).map(function (p) {
-      /* код обязателен в подписи: у двух размещений в одном канале одинаковые названия,
-         и без кода их не различить */
-      var sub = [p.code, mkSourceName(p.source), p.medium ? mkMediumName(p.medium) : '', p.note || '']
-        .filter(Boolean).join(' · ');
-      return mkRow(p.title, sub, p);
-    }).join('');
-
-    /* Честный блок: что в этих цифрах не учтено. Без него дашборд врет умолчанием —
-       человек решит, что видит весь маркетинг, а видит только размеченный трафик. */
-    var noSrc = (d.coverage || {}).sessions_without_source || 0;
-    var gaps = [
-      ['Охваты и просмотры в соцсетях', 'Instagram, Telegram, ВКонтакте, YouTube — статистика площадок не подключена. Здесь видно только переходы по нашим меткам.'],
-      ['Заходы на сайт без метки', noSrc ? noSrc + ' ' + plural(noSrc, 'заход', 'захода', 'заходов') + ' за период пришли без источника — в разбивке по каналам их нет' : 'Все заходы за период размечены'],
-      ['Регистрации на эфир формой', webinars ? webinars + ' ' + plural(webinars, 'регистрация', 'регистрации', 'регистраций') + ' — отдельный список, с воронкой бота не связан' : 'За период регистраций формой не было'],
-      ['Расход не привязан к размещению', t.spend_no_code
-        ? fmtMoney(t.spend_no_code) + ' \u20BD внесено на канал целиком, без кода ссылки — в цене лида по размещениям этих денег нет'
-        : 'Весь внесенный расход привязан к кодам размещений'],
-    ].map(function (g) {
-      return '<div class="mkd-gap"><div><b>' + esc(g[0]) + '</b><small>' + esc(g[1]) + '</small></div>' +
-        '<span class="sev n-wait">не в цифрах</span></div>';
-    }).join('');
+    var bar = statBar([
+      { label: 'Кликов по меткам', value: t.clicks || 0,
+        sub: (d.placements || []).length + ' ' + plural((d.placements || []).length, 'размещение', 'размещения', 'размещений') },
+      { label: 'Зашли в бота', value: t.entered || 0,
+        sub: mkPct(t.entered || 0, t.clicks || 0) + '% от кликов' },
+      { label: 'Подходят по анкете', value: t.mql || 0,
+        sub: t.leads ? mkPct(t.mql || 0, t.leads || 0) + '% от карточек' : 'карточек за период нет' },
+      { label: 'Стали клиентом', value: t.clients || 0,
+        sub: (t.revenue ? fmtMoney(t.revenue) + ' \u20BD' : 'оплат за период нет') },
+      /* Деньги на трафик вносит человек, поэтому плитка честно говорит, внесены они
+         или нет: пустая цифра тут значит «не заполнили», а не «не тратили». */
+      { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
+        sub: t.spend
+          ? (t.cpl ? 'лид ' + fmtMoney(t.cpl) + ' \u20BD' : 'лидов за период нет')
+          : 'за период не внесен' },
+    ], 'five');
 
     view.innerHTML = '<div class="dash">' + bar + '<div class="grid">' +
       '<div class="card sp7" style="overflow:hidden">' +
@@ -11820,21 +11861,6 @@
           '<div class="mkd-lg"><span><i style="background:var(--blue)"></i>клики</span>' +
           '<span><i style="background:var(--navy)"></i>зашли в бота</span></div>'
           : '<div class="empty">За период данных нет.</div>') + '</div>' +
-      '<div class="card sp12" style="overflow:hidden">' +
-        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('mega', 14) + '</span>' +
-        '<div><div class="t">Каналы</div><div class="s">где размещаем и что из этого доходит до карточки</div></div></div>' +
-        (channels ? '<div class="mkd-tbl">' + mkHead() + channels + '</div>'
-          : '<div class="empty">За период переходов по меткам не было.</div>') + '</div>' +
-      '<div class="card sp12" style="overflow:hidden">' +
-        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
-        '<div><div class="t">Размещения</div><div class="s">каждая ссылка отдельно, топ-20 по кликам</div></div></div>' +
-        (places ? '<div class="mkd-tbl">' + mkHead() + places + '</div>'
-          : '<div class="empty">Ссылок с переходами за период нет.</div>') + '</div>' +
-      '<div class="card sp12" style="overflow:hidden">' +
-        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('alert', 14) + '</span>' +
-        '<div><div class="t">Чего в этих цифрах нет</div>' +
-        '<div class="s">чтобы не считать дашборд полной картиной</div></div></div>' +
-        '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
     '</div></div>';
     animBars(view);
   }
@@ -12080,7 +12106,7 @@
   }
 
   function renderMarketing(view) {
-    if (state.mkTab === 'dash') { renderMkDash(view); return; }
+    if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
