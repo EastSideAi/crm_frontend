@@ -2191,7 +2191,7 @@
       /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
          период справа. Период нужен на ОБЕИХ вкладках: на «ссылках» по нему считается
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
-      var mkTabs = [['dash', 'Дашборд'], ['links', 'Воронки и ссылки']];
+      var mkTabs = [['dash', 'Дашборд'], ['spend', 'Расход'], ['links', 'Воронки и ссылки']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
@@ -2202,6 +2202,7 @@
       Array.prototype.forEach.call(tb.querySelectorAll('[data-mktab]'), function (t) {
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
+          if (state.mkTab === 'spend') state._mkSpend = null;
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -2209,6 +2210,7 @@
         b.addEventListener('click', function () {
           state.mkDays = parseInt(b.getAttribute('data-mkd'), 10);
           state._mkDash = null;   // цифры за другой период — новый запрос, не фильтр по месту
+          state._mkSpend = null;
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -11635,6 +11637,7 @@
       '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
       mkNum(r.clicks) + mkNum(r.entered) +
       mkNum(r.finished, 'hidem') + mkNum(r.leads) + mkNum(r.clients, 'hidem') +
+      mkRub(r.spend) + mkRub(r.cpl, 'hidem') +
       /* карточек бывает больше, чем входов в бота: человек мог написать напрямую,
          без метки и без шага воронки. Точный процент тут врет, честнее «>100%» */
       '<span class="mkd-cv ' + mkConvCls(conv, r.entered) + ' num">' +
@@ -11644,7 +11647,16 @@
   function mkHead() {
     return '<div class="mkd-th"><span>Название</span><span>Клики</span><span>В боте</span>' +
       '<span class="hidem">До конца</span><span>Карточки</span>' +
-      '<span class="hidem">Клиенты</span><span>Бот в карточку</span></div>';
+      '<span class="hidem">Клиенты</span><span>Расход</span><span class="hidem">Цена лида</span>' +
+      '<span>Бот в карточку</span></div>';
+  }
+
+  /* Деньги в таблице. Расход не внесли — прочерк, а не ноль: ноль читается как
+     «бесплатно», а правда в том, что мы не знаем, сколько потратили. */
+  function mkRub(n, cls) {
+    var has = n != null && n !== 0;
+    return '<span class="mkd-v' + (has ? '' : ' zero') + (cls ? ' ' + cls : '') + ' num">' +
+      (has ? fmtMoney(n) + ' \u20BD' : '—') + '</span>';
   }
 
   function renderMkDash(view) {
@@ -11665,7 +11677,13 @@
       { label: 'Дошли до менеджера', value: t.handoff || 0, sub: 'просят живого человека' },
       { label: 'Стали клиентом', value: t.clients || 0,
         sub: (t.revenue ? fmtMoney(t.revenue) + ' \u20BD' : 'оплат за период нет') },
-    ]);
+      /* Деньги на трафик вносит человек, поэтому плитка честно говорит, внесены они
+         или нет: пустая цифра тут значит «не заполнили», а не «не тратили». */
+      { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
+        sub: t.spend
+          ? (t.cpl ? 'лид ' + fmtMoney(t.cpl) + ' \u20BD' : 'лидов за период нет')
+          : 'за период не внесен' },
+    ], 'five');
 
     /* динамика: столбик = день, синий сверху клики, темный снизу входы в бота */
     var series = (d.series || []).slice(-30);
@@ -11687,8 +11705,12 @@
     }).join('');
 
     var channels = (d.channels || []).map(function (c) {
-      return mkRow(mkSourceName(c.source),
-        c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений'), c);
+      /* Канал без размещений — это внесенный расход без кода ссылки. «0 размещений»
+         тут читалось бы как поломка, хотя это просто деньги, которые не к чему привязать */
+      var sub = c.placements
+        ? c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений')
+        : 'расход внесен без кода размещения';
+      return mkRow(mkSourceName(c.source), sub, c);
     }).join('');
     var places = (d.placements || []).slice(0, 20).map(function (p) {
       /* код обязателен в подписи: у двух размещений в одном канале одинаковые названия,
@@ -11705,7 +11727,9 @@
       ['Охваты и просмотры в соцсетях', 'Instagram, Telegram, ВКонтакте, YouTube — статистика площадок не подключена. Здесь видно только переходы по нашим меткам.'],
       ['Заходы на сайт без метки', noSrc ? noSrc + ' ' + plural(noSrc, 'заход', 'захода', 'заходов') + ' за период пришли без источника — в разбивке по каналам их нет' : 'Все заходы за период размечены'],
       ['Регистрации на эфир формой', webinars ? webinars + ' ' + plural(webinars, 'регистрация', 'регистрации', 'регистраций') + ' — отдельный список, с воронкой бота не связан' : 'За период регистраций формой не было'],
-      ['Расходы на рекламу', 'Пока вводить некуда, поэтому стоимости лида и окупаемости здесь нет.'],
+      ['Расход не привязан к размещению', t.spend_no_code
+        ? fmtMoney(t.spend_no_code) + ' \u20BD внесено на канал целиком, без кода ссылки — в цене лида по размещениям этих денег нет'
+        : 'Весь внесенный расход привязан к кодам размещений'],
     ].map(function (g) {
       return '<div class="mkd-gap"><div><b>' + esc(g[0]) + '</b><small>' + esc(g[1]) + '</small></div>' +
         '<span class="sev n-wait">не в цифрах</span></div>';
@@ -11741,6 +11765,147 @@
         '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
     '</div></div>';
     animBars(view);
+  }
+
+  /* ── РАСХОД НА РЕКЛАМУ ────────────────────────────────────────────────────
+     Цифры вносит человек: единого способа забрать расход из ВК, Директа и Telegram Ads
+     у нас нет. Без расхода не считаются ни цена лида, ни окупаемость, поэтому ввод
+     сделан максимально дешевым: строка полей сверху, внесенное сразу под ней.
+     Код размещения — то же поле, которым помечены переходы: только по нему деньги
+     сходятся с лидами. Без кода расход считается канальным и в цену лида по
+     размещениям не попадает (об этом честно написано на дашборде). */
+  var SP_CHANNELS = [['vk', 'ВКонтакте'], ['direct', 'Яндекс Директ'], ['telegram', 'Telegram Ads'],
+                     ['instagram', 'Instagram'], ['youtube', 'YouTube'],
+                     ['blogger', 'Блогер'], ['other', 'Другое']];
+  function spChannelName(code) {
+    var f = SP_CHANNELS.filter(function (c) { return c[0] === code; })[0];
+    return f ? f[1] : code;
+  }
+
+  function fetchMkSpend() {
+    var days = state.mkDays || 90;
+    state._mkSpendLoad = days;
+    api('/admin/api/marketing/spend?days=' + (days || 3650)).then(function (r) {
+      state._mkSpend = r; state._mkSpendDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._mkSpend = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function spendForm() {
+    var opt = function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; };
+    var today = new Date();
+    var iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') +
+      '-' + String(today.getDate()).padStart(2, '0');
+    return '<div class="sp-form">' +
+      '<label class="al-f"><span class="al-l">День</span>' +
+        '<input id="sp-date" class="al-in" type="date" value="' + iso + '"></label>' +
+      '<label class="al-f"><span class="al-l">Канал</span><span class="al-selwrap">' +
+        '<select id="sp-channel" class="al-sel">' + SP_CHANNELS.map(opt).join('') + '</select></span></label>' +
+      '<label class="al-f"><span class="al-l">Кампания</span>' +
+        '<input id="sp-campaign" class="al-in" placeholder="как называется в кабинете" maxlength="200"></label>' +
+      '<label class="al-f"><span class="al-l">Код размещения</span>' +
+        '<input id="sp-code" class="al-in" placeholder="как в ссылке go" maxlength="64" autocomplete="off"></label>' +
+      '<label class="al-f"><span class="al-l">Показы</span>' +
+        '<input id="sp-shows" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<label class="al-f"><span class="al-l">Клики кабинета</span>' +
+        '<input id="sp-clicks" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<label class="al-f"><span class="al-l">Расход, ₽</span>' +
+        '<input id="sp-rub" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<button class="bp sp-add" id="sp-add">' + ic('plus', 14) + 'Внести</button>' +
+    '</div>';
+  }
+
+  function renderMkSpend(view) {
+    if (state._mkSpendLoad !== (state.mkDays || 90) || !state._mkSpend) {
+      view.innerHTML = dashSkeleton();
+      fetchMkSpend();
+      return;
+    }
+    if (state._mkSpend === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить расход — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._mkSpend;
+    var rows = d.rows || [];
+    var byCh = (d.by_channel || []).map(function (c) {
+      return '<div class="sp-ch"><b>' + esc(spChannelName(c.channel)) + '</b>' +
+        '<span class="num">' + fmtMoney(c.spend) + ' ₽</span></div>';
+    }).join('');
+
+    var list = rows.map(function (r) {
+      var sub = [spChannelName(r.channel), r.campaign, r.source_code ? 'код ' + r.source_code : 'без кода',
+                 r.note].filter(Boolean).join(' · ');
+      return '<div class="mkd-tr">' +
+        '<div class="mkd-nm"><b>' + esc(dayFull(r.on_date)) + '</b><small>' + esc(sub) + '</small></div>' +
+        '<span class="mkd-v' + (r.impressions ? '' : ' zero') + ' hidem num">' +
+          (r.impressions ? fmtMoney(r.impressions) : '—') + '</span>' +
+        '<span class="mkd-v' + (r.clicks ? '' : ' zero') + ' num">' +
+          (r.clicks ? fmtMoney(r.clicks) : '—') + '</span>' +
+        '<span class="mkd-v num">' + fmtMoney(r.spend_rub) + ' ₽</span>' +
+        '<button class="sp-del" data-spdel="' + r.id + '" title="Удалить строку">' + ic('x', 13) + '</button>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      '<div class="card" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Внести расход</div>' +
+        '<div class="s">по дням из кабинета. Тот же день и то же размещение правятся, а не задваиваются</div></div>' +
+        '<span style="flex:1"></span>' +
+        '<span class="sp-total num">' + fmtMoney(d.total || 0) + ' ₽ за период</span></div>' +
+        spendForm() +
+        (byCh ? '<div class="sp-chs">' + byCh + '</div>' : '') +
+      '</div>' +
+      '<div class="card" style="overflow:hidden;margin-top:16px">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">Внесенное</div>' +
+        '<div class="s">свежее сверху; цена лида и окупаемость считаются на вкладке «Дашборд»</div></div></div>' +
+        (list ? '<div class="mkd-tbl sp-tbl"><div class="mkd-th sp-tbl"><span>День</span>' +
+            '<span class="hidem">Показы</span><span>Клики</span><span>Расход</span><span></span></div>' +
+            list + '</div>'
+          : '<div class="empty">За период расход не внесен. Заполни строку выше — и на дашборде появятся цена лида и окупаемость.</div>') +
+      '</div>' +
+    '</div>';
+
+    var add = el('sp-add');
+    if (add) add.addEventListener('click', function () {
+      var body = {
+        on_date: (el('sp-date') || {}).value || '',
+        channel: (el('sp-channel') || {}).value || '',
+        campaign: ((el('sp-campaign') || {}).value || '').trim(),
+        source_code: ((el('sp-code') || {}).value || '').trim().toLowerCase(),
+        impressions: parseInt((el('sp-shows') || {}).value || '0', 10) || 0,
+        clicks: parseInt((el('sp-clicks') || {}).value || '0', 10) || 0,
+        spend_rub: parseInt((el('sp-rub') || {}).value || '0', 10) || 0,
+      };
+      if (!body.on_date) { showToast('Укажи день, за который вносишь расход'); return; }
+      if (!body.spend_rub) { showToast('Расход нулевой — впиши сумму'); return; }
+      add.disabled = true;
+      api('/admin/api/marketing/spend', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function () {
+        state._mkSpend = null; state._mkDash = null;   // цифры изменились, дашборд пересчитать
+        showToast('Расход внесен');
+        renderView();
+      }).catch(function () {
+        add.disabled = false;
+        showToast('Не сохранилось — проверь поля и сеть');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdel]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!window.confirm('Удалить эту строку расхода?')) return;
+        api('/admin/api/marketing/spend/' + b.getAttribute('data-spdel'), { method: 'DELETE' })
+          .then(function () {
+            state._mkSpend = null; state._mkDash = null;
+            renderView();
+          }).catch(function () { showToast('Не удалилось — проверь сеть'); });
+      });
+    });
   }
 
   /* ── Воронка курса в записи ────────────────────────────────────────────────
@@ -11844,6 +12009,7 @@
 
   function renderMarketing(view) {
     if (state.mkTab === 'dash') { renderMkDash(view); return; }
+    if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
        права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
@@ -13289,8 +13455,8 @@
 
   /* ── ОБЗОР ────────────────────────────────────────────── */
   /* спокойная метрика-полоса вместо кричащих плиток */
-  function statBar(items) {
-    return '<div class="card statbar">' + items.map(function (s) {
+  function statBar(items, cls) {
+    return '<div class="card statbar' + (cls ? ' ' + cls : '') + '">' + items.map(function (s) {
       var foot = s.delta
         ? '<span class="kd ' + (s.deltaCls || '') + '">' + s.delta + '</span>'
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');

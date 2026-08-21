@@ -318,6 +318,11 @@ a { color: inherit; text-decoration: none; }
 
 /* ── метрика-полоса (спокойные KPI одной картой) ── */
 .statbar { display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px; }
+/* Пятая плитка появляется там, где к четырем счетчикам добавляются деньги (расход на
+   рекламу в маркетинге). Отдельным модификатором, а не auto-fit: в остальных местах
+   плиток ровно четыре, и «умная» сетка сломала бы их на промежуточных ширинах. */
+.statbar.five { grid-template-columns: repeat(5, 1fr); }
+.statbar.five .stat { padding: 16px 18px; }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
@@ -3410,7 +3415,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mkd-sub { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
 .mkd-tbl { border-top: 1px solid var(--line); }
 .mkd-th, .mkd-tr { display: grid; align-items: center; gap: 12px;
-  grid-template-columns: minmax(150px, 1.7fr) repeat(5, minmax(58px, .5fr)) 118px;
+  grid-template-columns: minmax(140px, 1.5fr) repeat(5, minmax(52px, .45fr))
+                         minmax(76px, .6fr) minmax(76px, .6fr) 104px;
   padding: 0 24px; }
 .mkd-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
 .mkd-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
@@ -3460,8 +3466,38 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mkd-gap b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .mkd-gap small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
   margin-top: 2px; }
+/* ── Расход на рекламу: ввод по дням и внесенное ──
+   Форма строкой, а не модалкой: расход вносят пачкой за неделю, и открывать окно на
+   каждую строку — это шесть лишних кликов. Список внесенного собран на таблице
+   дашборда (.mkd-*), чтобы не заводить третий вид списка. */
+.sp-form { display: grid; gap: 12px; margin-top: 18px; align-items: end;
+  grid-template-columns: 150px 150px minmax(120px, 1fr) minmax(110px, 1fr)
+                         92px 92px 110px auto; }
+.sp-form .al-f { min-width: 0; }
+.sp-form .bp { height: 42px; white-space: nowrap; }
+.sp-total { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.sp-chs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid var(--line); }
+.sp-ch { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 13px;
+  border-radius: var(--r-pill); background: var(--fill); }
+.sp-ch b { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.sp-ch span { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.mkd-th.sp-tbl, .sp-tbl .mkd-tr {
+  grid-template-columns: minmax(150px, 2fr) repeat(3, minmax(70px, .5fr)) 34px; }
+.sp-del { justify-self: end; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; color: var(--ink-3); transition: .15s; }
+.sp-del:hover { color: var(--red); background: var(--red-soft); }
+
 @media (max-width: 900px) {
-  .mkd-th, .mkd-tr { grid-template-columns: minmax(96px, 1.3fr) repeat(3, minmax(40px, .5fr)) 74px;
+  .sp-form { grid-template-columns: 1fr 1fr; }
+  .sp-form .bp { grid-column: 1 / -1; }
+  /* итог за период на телефоне ломает заголовок на три строки; та же сумма видна
+     чипами каналов сразу под формой */
+  .sp-total { display: none; }
+  .mkd-th.sp-tbl, .sp-tbl .mkd-tr {
+    grid-template-columns: minmax(110px, 2fr) repeat(2, minmax(56px, .5fr)) 30px; }
+  .mkd-th, .mkd-tr { grid-template-columns: minmax(90px, 1.2fr) repeat(3, minmax(38px, .5fr))
+                       minmax(58px, .6fr) 66px;
     gap: 8px; padding: 0 16px; }
   .mkd-th span.hidem, .mkd-tr .hidem { display: none; }
   /* заголовок последней колонки длинный — пускаем в две строки, а не режем по краю */
