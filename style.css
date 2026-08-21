@@ -336,7 +336,8 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.green { background: var(--green); }
 .stat .sdot.coral, .stat .sdot.red { background: var(--red); }
 .stat .sdot.amber { background: var(--amber); }
-.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1; }
+.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -2446,6 +2447,12 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Риски на телефоне: имя и уровень первой строкой, флаги во всю ширину второй —
+     иначе общая .trow прибивает строку под три колонки лида. */
+  .trow.rsk-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
+  .trow.rsk-grid.thead { display: none; }
+  .trow.rsk-grid .rsk-flags { grid-column: 1 / -1; }
   /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
      строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
      число обязано назвать себя само — подпись берется из data-l. */
@@ -4360,6 +4367,81 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ct-chip.ct-ok    { color: var(--green-ink); background: var(--green-soft); }
 .ct-chip.ct-paid  { color: #fff;             background: var(--green); }
 .ct-chip.ct-off   { color: var(--ink-3);     background: var(--fill); }
+.ct-chip.ct-bad   { color: var(--red-ink);   background: var(--red-soft); }
+
+/* ── чеки в «Документах»: полоса долга и действия по строке ── */
+.dc-alert { display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+  padding: 12px 16px; border-radius: var(--r-lg); background: var(--red-soft);
+  color: var(--red-ink); }
+.dc-alert .ic { flex: none; color: var(--red); }
+.dc-alert b { font-weight: 700; }
+.dc-alert .dc-alert-go { margin-left: auto; flex: none; border: 0; cursor: pointer;
+  background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
+  padding: 7px 14px; border-radius: var(--r-pill); }
+.dc-alert .dc-alert-go:hover { filter: brightness(.95); }
+
+/* ── РИСКИ (этап 9): информатор переквалификации ────────────────────────────
+   Обзор — строка списка (.rsk-grid) с уровнем-чипом и флагами; разбор — карточка с
+   одиннадцатью проверками. Уровень красит чип по формуле семантики (§3), тяжесть на
+   разборе дублируется цветной полосой слева (один якорь на строку). Своих цветов нет —
+   только токены и .sev-семейство. */
+.rsk-grid { grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 2fr); }
+.rsk-row { cursor: pointer; }
+.rsk-name { display: flex; align-items: baseline; gap: 8px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.rsk-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.rsk-lv { display: flex; }
+.rsk-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.rsk-flag { font-size: 12px; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap; }
+.rsk-flag.more { color: var(--ink-3); }
+.rsk-note { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.rsk-clean { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--green-ink); }
+.rsk-clean svg { color: var(--green); }
+.rsk-hot { color: var(--red-ink); }
+.list-hint { color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+
+.rsk-detail { padding: 0; overflow: hidden; }
+.rsk-d-head { display: flex; align-items: center; gap: 12px;
+  padding: 15px 20px; border-bottom: 1px solid var(--line); }
+.rsk-d-who { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.rsk-d-name { font: 700 19px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.rsk-checks { display: flex; flex-direction: column; }
+.rsk-check { padding: 15px 20px 16px; border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent; }
+.rsk-check:last-child { border-bottom: 0; }
+.rsk-check.lv-risk { border-left-color: var(--red); }
+.rsk-check.lv-warn { border-left-color: var(--amber); }
+.rsk-c-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rsk-c-title { font-weight: 600; color: var(--ink); }
+.rsk-c-reason { color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+.rsk-c-act { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px;
+  color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+.rsk-c-act svg { flex: none; margin-top: 2px; color: var(--blue); }
+.rsk-c-ev { margin-top: 7px; font-size: 12.5px; color: var(--ink-3); }
+.rsk-hits { list-style: none; margin: 9px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px; }
+.rsk-hits li { font-size: 12.5px; color: var(--ink-2); }
+.rsk-hit-w { display: inline-block; margin-right: 5px; padding: 1px 7px; border-radius: 6px;
+  font-weight: 700; color: var(--red-ink); background: var(--red-soft); }
+.rsk-hit-hint { display: block; margin-top: 2px; color: var(--ink-3); }
+
+.rcp-item { border-bottom: 1px solid var(--line); }
+.rcp-item .trow.dc-grid { border-bottom: 0; }
+.rcp-item:last-child { border-bottom: 0; }
+.rcp-sub { color: var(--ink-3); font-size: 12.5px; }
+.rcp-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 14px 12px 40px; }
+.rcp-why { font-size: 12px; color: var(--red-ink); }
+.rcp-act { display: inline-flex; gap: 6px; margin-left: auto; }
+.rcp-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  padding: 5px 11px; border-radius: var(--r-pill); }
+.rcp-a:hover { background: var(--fill); color: var(--ink-1); }
+.rcp-a.p { border-color: var(--blue); color: var(--blue-d); }
+.rcp-a.p:hover { background: var(--blue-tint); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
@@ -4644,6 +4726,126 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Погашенная плитка statBar: остаток счета еще грузится — тихий текст вместо
    числа-героя, чтобы пустой слот не читался как сломанные данные. */
 .stat-idle { font-size: 14px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+
+/* План против факта: анкер экрана «План выручки». Одна полоса вместо голых цифр —
+   видно, сколько из плана уже на счете. Плоско, заливка полосы, без теней. */
+.fpf { margin-bottom: 20px; padding: 22px 26px; }
+.fpf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fpf-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fpf-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fpf-pct { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: .9; color: var(--blue);
+  white-space: nowrap; }
+.fpf-pct span { font-size: 17px; font-weight: 700; margin-left: 2px; }
+.fpf-pct.done, .fpf-pct.over { color: var(--green-ink); }
+.fpf-track { height: 12px; border-radius: 7px; background: var(--fill); margin-top: 18px; overflow: hidden; }
+.fpf-fill { height: 100%; border-radius: 7px; background: var(--blue); transition: width .6s var(--ease); }
+.fpf-fill.done, .fpf-fill.over { background: var(--green); }
+.fpf-legend { display: flex; align-items: center; justify-content: space-between; margin-top: 12px;
+  font-size: 12.5px; color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fpf-legend .fpf-v { color: var(--ink-3); }
+.fpf-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px; }
+.fpf-dot.plan { background: var(--line-2); }
+.fpf-dot.fact { background: var(--blue); }
+.fpf-dot.fact.done, .fpf-dot.fact.over { background: var(--green); }
+.fpf-empty { margin-top: 14px; font-size: 13px; color: var(--ink-3); }
+
+/* Баланс периода в платежном календаре: две полосы на одной шкале, приход против
+   выплат. Приход зеленый, выплаты навигационно-темные (не тревога), знак несет net. */
+.fbal { margin-bottom: 20px; padding: 22px 26px; }
+.fbal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fbal-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fbal-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fbal-net { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1; white-space: nowrap;
+  display: flex; align-items: baseline; gap: 8px; }
+.fbal-net.ok { color: var(--green-ink); }
+.fbal-net.bad { color: var(--red-ink); }
+.fbal-net span { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+.fbal-rows { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.fbal-r { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 16px; }
+.fbal-l { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.fbal-track { height: 12px; border-radius: 7px; background: var(--fill); overflow: hidden; }
+.fbal-fill { height: 100%; border-radius: 7px; transition: width .6s var(--ease); }
+.fbal-fill.inc { background: var(--green); }
+.fbal-fill.out { background: var(--navy); }
+.fbal-v { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+
+/* Программы: карточки «выгодность». Якорь каждой — полоса «сколько дохода съел
+   расход» и крупная маржа; расход темный (навигационный), прибыль зеленая, убыток
+   красный. Тени не используем — иерархия весом и цветом, как во всей ведомости. */
+.prg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px; margin-bottom: 20px; }
+.prg { padding: 20px 22px; }
+.prg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.prg-name { font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; color: var(--ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 2px; }
+.prg-meta { display: flex; align-items: center; gap: 4px; margin-top: 9px; }
+.prg-meta .sev { margin-left: 0; }
+.prg-pen { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 0; border-radius: 7px; background: var(--fill);
+  color: var(--ink-3); cursor: pointer; transition: color .15s, background .15s; }
+.prg-pen:hover { color: var(--blue); background: var(--blue-tint); }
+.prg-marg { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+  font-size: 26px; font-weight: 800; letter-spacing: -.03em; white-space: nowrap; }
+.prg-marg.ok { color: var(--green-ink); }
+.prg-marg.bad { color: var(--red-ink); }
+.prg-marg span { font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--ink-3);
+  margin-top: 4px; text-transform: none; }
+.prg-track { position: relative; height: 12px; border-radius: 7px; margin-top: 18px;
+  background: var(--green); overflow: hidden; }
+.prg-track.loss { background: var(--red); }
+.prg-exp { height: 100%; border-radius: 7px 0 0 7px; background: var(--navy);
+  transition: width .6s var(--ease); }
+.prg-track.empty2 { background: var(--fill); color: var(--ink-3); font-size: 12px;
+  font-weight: 600; display: flex; align-items: center; padding: 0 12px; height: 34px;
+  border-radius: 10px; }
+.prg-legend { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 11px; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.prg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px;
+  vertical-align: middle; }
+.prg-dot.exp { background: var(--navy); }
+.prg-dot.prof { background: var(--green); }
+.prg-dot.bad { background: var(--red); }
+.prg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px;
+  padding-top: 16px; border-top: 1px solid var(--line); }
+.prg-stat { display: flex; flex-direction: column; gap: 4px; }
+.prg-stat .k { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.prg-stat .v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.prg-stat .v.ok { color: var(--green-ink); }
+.prg-stat .v.bad { color: var(--red-ink); }
+.prg-sub { margin-top: 14px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+.prg-note { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 13px 16px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--amber-ink);
+  background: var(--amber-soft); }
+.prg-note svg { flex: none; color: var(--amber-ink); }
+
+/* Панель списка программ: заголовок «Активные N» + кнопка «Добавить программу». */
+.prg-tools { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.prg-th { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.prg-th b { color: var(--ink); font-weight: 700; }
+.prg-tools .qchip.add { margin-left: auto; }
+/* Сезон программы и кнопки управления в мета-ряду карточки. */
+.prg-meta .prg-season { font-size: 11px; font-weight: 600; color: var(--ink-3);
+  font-feature-settings: 'tnum'; white-space: nowrap; }
+.prg-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.prg-act { flex: none; height: 26px; padding: 0 11px; border-radius: 8px; border: 0;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: var(--fill);
+  cursor: pointer; transition: background .15s var(--ease), color .15s var(--ease); }
+.prg-act:hover { color: var(--ink); background: #EDEFF3; }
+/* Архивная карточка — приглушена, но читаема; данные на месте. */
+.prg.arch { opacity: .68; }
+.prg.arch:hover { opacity: 1; }
+.prg-arch { margin-top: 22px; }
+.prg-archh { display: flex; align-items: center; gap: 9px; width: 100%; padding: 11px 2px;
+  border: 0; border-top: 1px solid var(--line); background: none; cursor: pointer;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); }
+.prg-archh svg { color: var(--ink-3); }
+.prg-archh b { color: var(--ink); font-weight: 700; }
+.prg-archcue { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.prg-archlist { margin-top: 4px; }
 
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
