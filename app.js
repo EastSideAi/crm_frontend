@@ -577,13 +577,16 @@
       if (!crm) return crm;
       var n = Object.assign({}, crm);
       CRM_PATCH_FIELDS.forEach(function (k) { if (body[k] !== undefined) n[k] = body[k]; });
+      // квалификация приходит патчем по ключам, а не целиком: мерджим так же, как бэк,
+      // иначе оптимистичная отрисовка на секунду теряет соседние поля
+      if (body.qual) n.qual = Object.assign({}, crm.qual || {}, body.qual);
       return n;
     }
     // 1) применяем локально + мгновенно перерисовываем
     if (lead) lead.crm = merge(lead.crm);
     if (det) { det.crm = merge(det.crm); cacheSet(id, det); }
     renderSide();
-    if (body.status || body.tasks || body.comms) {
+    if (body.status || body.tasks || body.comms || body.qual) {
       var sy = window.pageYOffset, mc = el('m-content'), msc = mc ? mc.scrollTop : 0;
       if (state.page !== 'dash') renderView();
       if (state.drawerId === id) renderDrawer(true);
@@ -641,6 +644,8 @@
   var QUICK = {
     '':            { label: 'Все',              icon: 'rows' },
     hot:           { label: 'Горячие',          icon: 'flame', pred: function (l) { return l.booking && l.crm.status === 'new'; } },
+    mql:           { label: 'Квал-лиды',        icon: 'target', pred: function (l) { return !!(l.crm.mql && l.crm.mql.ok); } },
+    sql:           { label: 'Квал продаж',      icon: 'badge', pred: function (l) { return !!l.crm.sql; } },
     scheduled:     { label: 'Назначен созвон',  icon: 'cal',   pred: function (l) { return l.crm.status === 'call_scheduled'; } },
     nocontact:     { label: 'Без контакта',     icon: 'phone', pred: function (l) { return !((l.booking || {}).contact); } },
     tasks:         { label: 'С задачами',       icon: 'task',  pred: function (l) { return (l.crm.tasks || []).some(function (t) { return !t.done; }); } },
@@ -906,7 +911,7 @@
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
-    var order = ['', 'hot', 'scheduled', 'nocontact', 'tasks', 'attention'];
+    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention'];
     var chips = order.map(function (k) {
       var q = QUICK[k];
       var n = q.pred ? segArr.filter(q.pred).length : total;
@@ -16331,6 +16336,124 @@
     return html;
   }
 
+  /* ── КВАЛИФИКАЦИЯ ЛИДА ────────────────────────────────────────────────────
+     Два разных вопроса, и путать их нельзя. MQL — «стоит ли продажам вообще
+     тратить на него время»: считает система по данным, отвечает маркетинг, это
+     показатель качества трафика. SQL — «сделка возможна»: ставит менеджер после
+     разговора, отвечают продажи. Определения и формулы — sales/docs/sales-metrics.md.
+     Чего нет в анкете (лид пришел из бота), менеджер вносит руками — это ввод
+     недостающих данных, а не оценка: оценку система у него не спрашивает. */
+  var QL_MQL = [
+    ['audience', 'Аудитория', '8-11 класс, выпускник или студент вуза'],
+    ['goal',     'Цель',      'Китай решен или в списке стран'],
+    ['horizon',  'Горизонт',  'подача в ближайшие две волны'],
+    ['reach',    'Контакт',   'есть куда написать или позвонить вне бота'],
+  ];
+  var QL_SQL = [
+    ['decider',  'На связи родитель или он подключен'],
+    ['wave',     'Названа конкретная волна подачи'],
+    ['price',    'Названа вилка цены, не отвалился'],
+    ['feasible', 'Поступление реально в этот срок'],
+  ];
+  var QL_GRADES = [['mid', '8-9 класс'], ['senior', '10-11 класс'], ['student', 'студент вуза'],
+                   ['junior', '5-7 класс'], ['enrolled', 'уже поступил'], ['adult', 'работает']];
+  var QL_GOALS = [['decided', 'решил ехать в Китай'], ['considering', 'присматривается'],
+                  ['other', 'Китая в планах нет']];
+  var QL_REJECT = [
+    ['not_audience', 'Не наша аудитория по классу или возрасту'],
+    ['other_country', 'Другая страна'],
+    ['no_budget', 'Нет бюджета'],
+    ['no_decider', 'Нет решающего: ребенок без родителя'],
+    ['too_early', 'Слишком рано, горизонт больше года'],
+    ['no_contact', 'Не выходит на связь'],
+    ['duplicate', 'Дубль'],
+    ['spam', 'Спам или бот'],
+    ['competitor', 'Конкурент или наблюдатель'],
+    ['other', 'Другое'],
+  ];
+
+  /* Ближайшие четыре волны от сегодня. Зашитый список годов через год врет, поэтому
+     считаем от даты: до марта ближайшая волна весенняя, до сентября — осенняя. */
+  function qlWaves() {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+    var yy = y, mm = 3;
+    if (m > 3) { mm = 9; }
+    if (m > 9) { mm = 3; yy = y + 1; }
+    var out = [];
+    for (var i = 0; i < 4; i++) {
+      out.push([yy + (mm === 3 ? '-03' : '-09'), (mm === 3 ? 'весна ' : 'сентябрь ') + yy]);
+      if (mm === 3) mm = 9; else { mm = 3; yy++; }
+    }
+    return out;
+  }
+  function qlWaveLabel(code) {
+    if (code === 'later') return 'позже';
+    if (!/^20\d{2}-(03|09)$/.test(code || '')) return '';
+    return (code.slice(5) === '03' ? 'весна ' : 'сентябрь ') + code.slice(0, 4);
+  }
+  function qlSelect(field, value, opts, empty, auto) {
+    return '<select class="tm-sel' + (auto ? ' auto' : '') + '" data-qf="' + field + '">' +
+      '<option value="">' + empty + '</option>' +
+      opts.map(function (o) {
+        return '<option value="' + o[0] + '"' + (o[0] === value ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      }).join('') + '</select>';
+  }
+
+  function buildQual(ctx) {
+    var crm = ctx.crm || {};
+    var q = crm.qual || {};
+    var mql = crm.mql || { ok: false, checks: {} };
+    var checks = mql.checks || {};
+
+    var crit = QL_MQL.map(function (c) {
+      var on = !!checks[c[0]];
+      return '<div class="ql-c' + (on ? ' on' : '') + '" title="' + esc(c[2]) + '">' +
+        '<i>' + ic(on ? 'check' : 'x', 9) + '</i><b>' + c[1] + '</b></div>';
+    }).join('');
+
+    // в селекте показываем то, что уже знаем из анкеты (приглушенно), а выбор
+    // менеджера пишем в карточку — он сильнее анкеты
+    var waves = qlWaves();
+    var wave = q.wave || '';
+    if (wave && wave !== 'later' && !waves.some(function (w) { return w[0] === wave; })) {
+      waves = [[wave, qlWaveLabel(wave)]].concat(waves);
+    }
+    var fields = '<div class="ql-fields">' +
+      '<label class="ql-f"><span class="ql-l">Ступень</span>' +
+        qlSelect('grade', q.grade || mql.grade || '', QL_GRADES, 'не знаем', !q.grade && !!mql.grade) + '</label>' +
+      '<label class="ql-f"><span class="ql-l">Цель</span>' +
+        qlSelect('goal', q.goal || mql.goal || '', QL_GOALS, 'не знаем', !q.goal && !!mql.goal) + '</label>' +
+      '<label class="ql-f"><span class="ql-l">Волна подачи</span>' +
+        qlSelect('wave', wave, waves.concat([['later', 'позже']]), 'не названа', false) + '</label>' +
+    '</div>';
+
+    var marks = q.sql || {};
+    var sqlOn = QL_SQL.every(function (c) { return marks[c[0]]; });
+    var sql = QL_SQL.map(function (c) {
+      return '<button class="ql-chk' + (marks[c[0]] ? ' on' : '') + '" data-qchk="' + c[0] + '">' +
+        '<u>' + ic('check', 11) + '</u><span>' + c[1] + '</span></button>';
+    }).join('');
+
+    var rej = '';
+    if (crm.status === 'rejected') {
+      rej = '<div class="ql-rej' + (q.reject_reason ? '' : ' empty') + '">' +
+        '<span class="ql-l">Причина отказа</span>' +
+        qlSelect('reject_reason', q.reject_reason || '', QL_REJECT, 'не указана', false) + '</div>';
+    }
+
+    return '<div class="m-sec ql-sec">' +
+      '<div class="m-sec-h">Квалификация' +
+        '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
+          (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span></div>' +
+      '<div class="ql-crit">' + crit + '</div>' + fields +
+      '<div class="ql-split"><span>Квал продаж</span><i></i>' +
+        '<span class="ql-verd' + (sqlOn ? ' on' : '') + '">' +
+          (sqlOn ? 'Сделка возможна' : 'Подтверждено ' + QL_SQL.filter(function (c) { return marks[c[0]]; }).length + ' из 4') +
+        '</span></div>' +
+      '<div class="ql-sql">' + sql + '</div>' + rej +
+    '</div>';
+  }
+
   function buildNow(ctx) {
     var lead = ctx.lead, crm = ctx.crm, base = ctx.base;
     var booking = base.booking;
@@ -16365,7 +16488,10 @@
       (isRej ? '<div class="rej-banner">' + ic('x', 13) + 'Сейчас в статусе «отказ» — сделка закрыта</div>' : '<div class="pipe">' + pipe + '</div>') +
     '</div>';
 
-    /* 3. КТО ЭТО — редактируемая сводка контактов (компактная) */
+    /* 3. КВАЛИФИКАЦИЯ — квал ли он для маркетинга и подтвердили ли продажи */
+    html += buildQual(ctx);
+
+    /* 4. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Кто это</div>' +
       '<div class="who compact">' + efRow('contact', contact, true) + efRow('email', email, false) + efRow('city', city, false) + '</div></div>';
@@ -17039,6 +17165,27 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
+
+    // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
+    var qlHost = host.querySelector('.ql-sec');
+    if (qlHost) {
+      Array.prototype.forEach.call(qlHost.querySelectorAll('[data-qchk]'), function (b) {
+        b.addEventListener('click', function () {
+          var key = b.getAttribute('data-qchk');
+          var marks = Object.assign({}, (crm.qual || {}).sql || {});
+          if (marks[key]) delete marks[key]; else marks[key] = true;
+          patch(id, { qual: { sql: marks } });
+        });
+      });
+      Array.prototype.forEach.call(qlHost.querySelectorAll('select[data-qf]'), function (sel) {
+        // пустое значение — осознанный сброс: бэк удалит ключ и вернется к анкете
+        sel.addEventListener('change', function () {
+          var body = {};
+          body[sel.getAttribute('data-qf')] = sel.value;
+          patch(id, { qual: body });
+        });
+      });
+    }
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);

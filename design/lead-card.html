@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ИстСайд CRM — Карточка лида</title>
-<!-- Карточка лида. Когда берем: открытие любого лида — ЦЕНТРИРОВАННАЯ модалка .modal (исторически «drawer»), большая рабочая поверхность поверх списка. Классы: .mbg .modal .m-head .m-ava .m-name .m-sub .m-navfloat .m-arrow .m-pulse .m-body .m-nav .m-ni .m-content .m-foot .m-sec .m-sec-h .now-do .who .ed-field .main-hero .pipe .pstep .msg. Живой код: style.css:615. Правила: один объект = одна карточка, не плодить вложенные модалки; вторичное — инлайн-редактированием или секцией; секции строго через .m-sec-h, новый блок = новая секция, не «карточка в карточке»; цвета ролей в чате фиксированы (серый входящий / синий бот / зеленый менеджер). -->
+<!-- Карточка лида. Когда берем: открытие любого лида — ЦЕНТРИРОВАННАЯ модалка .modal (исторически «drawer»), большая рабочая поверхность поверх списка. Классы: .mbg .modal .m-head .m-ava .m-name .m-sub .m-navfloat .m-arrow .m-pulse .m-body .m-nav .m-ni .m-content .m-foot .m-sec .m-sec-h .now-do .who .ed-field .main-hero .pipe .pstep .msg .ql-sec .ql-crit .ql-c .ql-fields .ql-split .ql-sql .ql-chk .ql-rej. Живой код: style.css:615. Правила: один объект = одна карточка, не плодить вложенные модалки; вторичное — инлайн-редактированием или секцией; секции строго через .m-sec-h, новый блок = новая секция, не «карточка в карточке»; цвета ролей в чате фиксированы (серый входящий / синий бот / зеленый менеджер). -->
 <link rel="stylesheet" href="../style.css" />
 <style>
   body { background:#E5E7EC; padding:0; }
@@ -222,6 +222,36 @@
       </div>
     </div>
     <div class="sc-note">Текущий шаг <b>.cur</b> заливается синим; когда клиент дошел до конца — <b>.cur.s-client</b> зеленый. Пройденные <b>.past</b> — синяя точка, будущие <b>.next</b> — тусклые.</div>
+  </div>
+
+
+  <!-- ── КВАЛИФИКАЦИЯ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.ql-crit / .ql-fields / .ql-sql — вердикт системы (MQL) и галочки менеджера (SQL)</div>
+    <div class="sc-panel">
+      <div class="m-sec ql-sec" style="margin-top:0">
+        <div class="m-sec-h">Квалификация<span class="ql-verd on">Квал-лид маркетинга</span></div>
+        <div class="ql-crit">
+          <div class="ql-c on"><i><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></i><b>Аудитория</b></div>
+          <div class="ql-c on"><i><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></i><b>Цель</b></div>
+          <div class="ql-c"><i><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l8 8M14 6l-8 8"/></svg></i><b>Горизонт</b></div>
+          <div class="ql-c on"><i><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></i><b>Контакт</b></div>
+        </div>
+        <div class="ql-fields">
+          <label class="ql-f"><span class="ql-l">Ступень</span><select class="tm-sel auto"><option>10-11 класс</option></select></label>
+          <label class="ql-f"><span class="ql-l">Цель</span><select class="tm-sel"><option>решил ехать в Китай</option></select></label>
+          <label class="ql-f"><span class="ql-l">Волна подачи</span><select class="tm-sel"><option>не названа</option></select></label>
+        </div>
+        <div class="ql-split"><span>Квал продаж</span><i></i><span class="ql-verd">Подтверждено 2 из 4</span></div>
+        <div class="ql-sql">
+          <button class="ql-chk on"><u><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></u><span>На связи родитель или он подключен</span></button>
+          <button class="ql-chk on"><u><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></u><span>Названа конкретная волна подачи</span></button>
+          <button class="ql-chk"><u><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></u><span>Названа вилка цены, не отвалился</span></button>
+          <button class="ql-chk"><u><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 10.5l3.5 3.5 7.5-8"/></svg></u><span>Поступление реально в этот срок</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="sc-note">Верх читают, низ трогают: <b>MQL</b> считает система по данным (руками не ставится), <b>SQL</b> ставит менеджер после разговора. Непройденный критерий серый, а не красный: это факт, а не авария. Селекты — существующий <b>.tm-sel</b>; <b>.auto</b> значит «значение из анкеты, менеджер его не подтверждал». Причина отказа (<b>.ql-rej</b>) появляется только в статусе «отказ» и подсвечивается амбером, пока не выбрана.</div>
   </div>
 
 </div>

@@ -983,6 +983,58 @@ a { color: inherit; text-decoration: none; }
   background: var(--fill); border-radius: 13px; padding: 14px 16px; }
 .rej-banner svg { color: var(--ink-3); }
 
+/* ════ КВАЛИФИКАЦИЯ ЛИДА ════
+   Одна секция, два уровня, и плотность у них разная намеренно: сверху вердикт
+   системы (MQL) — его читают, а не трогают; снизу галочки менеджера (SQL) — их
+   трогают. Ничего красного: непройденный критерий это факт, а не авария. */
+.ql-verd { margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; text-transform: none; letter-spacing: 0;
+  color: var(--ink-3); background: var(--fill); border-radius: var(--r-pill); padding: 5px 12px; }
+.ql-verd.on { color: var(--green-ink); background: var(--green-soft); }
+.ql-crit { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.ql-c { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px 13px;
+  border-radius: 13px; background: var(--fill); }
+.ql-c i { flex: none; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  background: #DEE2EA; color: #fff; }
+.ql-c i svg { width: 9px; height: 9px; }
+.ql-c.on i { background: var(--green); }
+.ql-c b { min-width: 0; font-size: 11.5px; font-weight: 600; color: var(--ink-3); line-height: 1.2; }
+.ql-c.on b { color: var(--ink-2); }
+/* поля, которых нет в анкете: менеджер вносит их сам — это ввод данных, не оценка */
+.ql-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 14px; }
+.ql-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ql-l { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.ql-f .tm-sel { width: 100%; min-width: 0; }
+.ql-f .tm-sel.auto { color: var(--ink-2); font-weight: 500; }
+/* граница между вердиктом системы и работой менеджера */
+.ql-split { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
+.ql-split span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.ql-split i { flex: 1; height: 1px; background: var(--line); }
+/* вердикт — не микролейбл: у двух вердиктов секции один вид, капсом они не пишутся */
+.ql-split .ql-verd { text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+.ql-sql { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.ql-chk { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px 13px;
+  border-radius: 13px; background: var(--fill); cursor: pointer; transition: .15s; }
+.ql-chk:hover { background: #EDEFF3; }
+.ql-chk u { flex: none; width: 19px; height: 19px; border-radius: 6px; display: grid; place-items: center;
+  border: 1.5px solid #C5CCDA; background: #fff; color: transparent; transition: .15s; }
+.ql-chk u svg { width: 11px; height: 11px; }
+.ql-chk:hover u { border-color: var(--blue); }
+.ql-chk.on u { background: var(--blue); border-color: var(--blue); color: #fff; }
+.ql-chk span { font-size: 12.5px; font-weight: 600; color: var(--ink-3); line-height: 1.3; }
+.ql-chk.on span { color: var(--ink); }
+.ql-rej { display: flex; align-items: center; gap: 11px; margin-top: 12px; padding: 12px 14px;
+  border-radius: 13px; background: var(--fill); }
+.ql-rej .ql-l { flex: none; }
+.ql-rej .tm-sel { flex: 1; min-width: 0; }
+.ql-rej.empty .tm-sel { box-shadow: inset 0 0 0 1.5px var(--amber); }
+@media (max-width: 560px) {
+  .ql-crit { grid-template-columns: repeat(2, 1fr); }
+  /* галочки продаж на телефоне в одну колонку: в двух текст ломается на три строки */
+  .ql-sql, .ql-fields { grid-template-columns: 1fr; }
+  .ql-rej { flex-direction: column; align-items: stretch; gap: 8px; }
+}
+
 /* ════ ПУТЬ И ИСПОЛЬЗОВАНИЕ ════ */
 .uz { display: flex; flex-direction: column; gap: 15px; margin-top: 2px; }
 
