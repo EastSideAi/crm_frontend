@@ -8,13 +8,36 @@
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
   // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
-  // из-за рубежа (зона .рф резолвится не везде — публичный DNS Google не разрешает
-  // api.истсайд.рф). С зеркала ходим в api.eastside.study, иначе CRM открывается, но
-  // ни один запрос не проходит.
+  // из-за рубежа. С зеркала по умолчанию ходим в api.eastside.study.
+  var API_RU = 'https://api.xn--80aikf2bag.xn--p1ai';
+  var API_INT = 'https://api.eastside.study';
+  var API_LS = 'eastside_crm_api';
   var API = window.EASTSIDE_API_BASE
-    || (/(^|\.)eastside\.study$/.test(location.hostname)
-        ? 'https://api.eastside.study'
-        : 'https://api.xn--80aikf2bag.xn--p1ai');
+    || lsGet(API_LS)
+    || (/(^|\.)eastside\.study$/.test(location.hostname) ? API_INT : API_RU);
+
+  /* Один сервер отвечает на обоих адресах, но у людей открывается то один, то другой:
+     зона .рф резолвится не у каждого провайдера и не через любой VPN. Симптом всегда
+     один — CRM грузится (страница статическая), а запросы падают в «Сеть недоступна»
+     (Риана, 21.08.2026). Поэтому на отказ соединения — не на ответ сервера с ошибкой,
+     а именно на отказ — пробуем второй адрес и, если он ответил, запоминаем его для
+     этого устройства. Ручной перенастройки от человека это не требует. */
+  function xfetch(path, opts) {
+    return fetch(API + path, opts).catch(function (err) {
+      var alt = API === API_RU ? API_INT : API_RU;
+      if (window.EASTSIDE_API_BASE || alt === API) throw err;
+      return fetch(alt + path, opts).then(function (r) {
+        API = alt;
+        try { localStorage.setItem(API_LS, alt); } catch (e) { /* приватный режим */ }
+        return r;
+      });
+    });
+  }
+
+  function lsGet(k) {
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+  }
+
   var KEY_LS = 'eastside_crm_key';
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
@@ -515,7 +538,7 @@
   function api(path, opts) {
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
       /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
          на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
          отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
@@ -1509,7 +1532,7 @@
       var login = li.value.trim(), pass = pi.value;
       if (!login || !pass) { fail('Введи логин и пароль'); return; }
       el('lg-go').textContent = 'Входим…';
-      fetch(API + '/admin/api/login', {
+      xfetch('/admin/api/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: login, password: pass }),
       }).then(function (r) {
@@ -1594,7 +1617,7 @@
       var email = el('rs-email').value.trim();
       if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
       btn.textContent = 'Отправляем…'; btn.disabled = true;
-      fetch(API + '/admin/api/password/reset/request', {
+      xfetch('/admin/api/password/reset/request', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email }),
       }).then(function (r) {
@@ -1618,7 +1641,7 @@
       if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
       if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
       btn.textContent = 'Сохраняем…'; btn.disabled = true;
-      fetch(API + '/admin/api/password/reset/confirm', {
+      xfetch('/admin/api/password/reset/confirm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
       }).then(function (r) {
@@ -2782,7 +2805,7 @@
      фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
   function czSend(path, method, body) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -7484,7 +7507,7 @@
      фразой («учетка не связана с карточкой»), и показать надо именно ее. */
   function mwGet(path) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + '/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
+    return xfetch('/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.ok) return j;
@@ -11235,7 +11258,7 @@
   }
   function mkRequest(path, method, body) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -15238,7 +15261,7 @@
   var RM_DOC_LINK_CACHE = {};
   function resolveDocLink(docId, cb) {
     if (RM_DOC_LINK_CACHE[docId]) { cb(RM_DOC_LINK_CACHE[docId]); return; }
-    fetch(API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -18040,7 +18063,7 @@
       if (les) body.lessons = les;
       schBtn.disabled = true;
       out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
-      fetch(API + '/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+      xfetch('/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
@@ -19067,7 +19090,7 @@
   function boot() {
     if (!getKey()) { renderLogin(); return; }
     // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
-    fetch(API + '/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
+    xfetch('/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
       if (!r.ok) throw new Error(String(r.status));
       return r.json();
     }).then(function (me) {
