@@ -2583,6 +2583,22 @@ button.tr-crumb:hover { color: var(--blue); }
 .diag-vh { font-size: 17px; font-weight: 700; letter-spacing: -.02em; margin-top: 9px; line-height: 1.32; }
 .diag-vs { font-size: 13px; color: var(--ink-2); margin-top: 7px; line-height: 1.55; }
 
+/* Балла нет в шапке «Главного»: тихая кнопка вместо пустоты — ведет в «Диагностику»,
+   где сказано, что с расчетом. */
+.mh-nodiag { font-size: 12.5px; font-weight: 600; color: var(--ink-2); background: var(--fill);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 7px 13px; transition: .15s; }
+.mh-nodiag:hover { background: #fff; color: var(--ink); }
+
+/* Разбора еще нет: состояние расчета вместо пустого места. Отдельный тон у отказа —
+   «считается» и «упало» требуют от менеджера разных действий (см. app.js diagStateCard). */
+.diag-wait { border: 1px solid var(--line-2); border-radius: 18px; padding: 22px 24px;
+  background: var(--fill); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.diag-wait b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.diag-wait span { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.diag-wait .bp { margin-top: 10px; }
+.diag-wait.bad { background: var(--red-soft); border-color: #F5C9CB; }
+.diag-wait.bad b { color: var(--red-ink); }
+
 /* метрики-чипы */
 .diag-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .dmetric { background: var(--fill); border-radius: 14px; padding: 14px 16px; }
