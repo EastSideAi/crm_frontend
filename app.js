@@ -1778,8 +1778,9 @@
     curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
-    // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal'] },
+    // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
+    // (ведет всю финансовую работу); ведомость на просмотр, правки нет.
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'contractors', 'finmodel'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
