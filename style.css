@@ -751,6 +751,37 @@ a { color: inherit; text-decoration: none; }
 .fcol .lb { font-size: 10.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
 .fcol .vn { font-size: 12px; font-weight: 600; }
 
+/* ════ ПОДАРКИ (раздел gifts) ════
+   Лестница пути — общая с «Путем» (.lad-*), но кликать в подарках некуда: курсор
+   не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
+   (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
+.lad-row.gf-flat { cursor: default; }
+/* Шкала ограничена по ширине: во всю строку она перетягивала внимание с лестницы
+   пути, а якорь на экране один. */
+.gf-row { display: grid; grid-template-columns: 210px minmax(90px, 420px) 54px 1fr;
+  gap: 16px; align-items: center;
+  padding: 0 24px; height: 58px; border-bottom: 1px solid var(--line); }
+.gf-row:last-child { border-bottom: none; }
+.gf-row:hover { background: #FBFBFC; }
+.gf-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.gf-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+/* Шкала тоньше, чем в лестнице пути (10px): на экране один якорь — путь подарка,
+   а список «что берут» читается как второй голос, а не спорит с ним за внимание. */
+.gf-track { height: 6px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.gf-fill { height: 100%; border-radius: 4px; background: var(--blue); min-width: 6px; transition: width .9s var(--ease); }
+.gf-n { font-size: 15px; font-weight: 600; text-align: right; }
+.gf-got { font-size: 12.5px; font-weight: 600; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.gf-got.zero { color: var(--ink-3); font-weight: 500; }
+
+.gf-srcs { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.gf-src { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 2px; border-bottom: 1px solid var(--line); }
+.gf-src:last-child { border-bottom: none; }
+.gf-src-c { font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.gf-src-n { font-size: 14px; font-weight: 700; }
+.gf-grid { grid-template-columns: 1fr 150px 96px; }
+
+
 /* ════ КАНБАН ════ */
 .kb-wrap { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 16px; align-items: flex-start; }
 .kb-wrap::-webkit-scrollbar { height: 8px; }
@@ -2032,7 +2063,32 @@ button.tr-crumb:hover { color: var(--blue); }
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
-.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0; }
+.tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0;
+  position: relative; }
+
+/* Перенос срока (только cap tasks_due). Плашка-кнопка отличается от подписи
+   шевроном и ховером: срок остается тем же чипом, а не превращается в контрол
+   ради права его менять. */
+.tsk-duebtn { cursor: pointer; border-radius: var(--r-pill); padding: 3px 9px 3px 8px; margin: -3px 0;
+  transition: background .14s, color .14s; }
+.tsk-duebtn .cdd-ch { width: 11px; height: 11px; color: var(--ink-3); }
+.tsk-duebtn:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tsk-duebtn:hover svg { color: var(--blue); }
+.tsk-duebtn.due-over:hover { background: var(--red-soft); color: var(--red-ink); }
+.tsk-duebtn.due-over:hover svg { color: var(--red-ink); }
+.due-pop { position: absolute; z-index: 30; top: calc(100% + 8px); left: 24px; width: 300px; max-width: calc(100% - 32px);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; animation: rmPop .16s ease; }
+.due-pop > .due-seg { align-self: flex-start; flex-wrap: wrap; }
+.due-pop > .due-seg button:hover { color: var(--blue); }
+.due-row { display: flex; align-items: center; gap: 8px; }
+.due-row .due-day { flex: 1; min-width: 0; }
+/* «Снять срок» — тихое действие последней строкой: оно редкое и необратимое на
+   глаз, кнопкой одного веса с «Поставить» его нажимали бы промахом. */
+.due-off { align-self: flex-start; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  padding: 2px; transition: color .14s; }
+.due-off:hover { color: var(--coral); }
 .tsk-mwho { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); }
 .tsk-mwho svg { color: var(--ink-3); }
@@ -2105,6 +2161,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .tgg-b[disabled] { color: var(--ink-3); }
 .tgg-acts .tgg-b { margin-top: 0; }
 .tgg-b.off { color: var(--ink-3); }
+/* Кого касается чат: подпись, ряд ролей и пояснение. Отбивка сверху больше
+   внутренних отступов ряда — это отдельная мысль, а не продолжение строки о
+   подключении. */
+.tgg-roles { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.tgg-rh { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+          color: var(--ink-3); margin-bottom: 8px; }
+.tgg-rl { display: flex; flex-wrap: wrap; gap: 4px; }
+.tgg-roles .tgg-s { margin-top: 8px; }
 .tgg-b.off:hover { color: var(--red-ink); }
 .tgg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .tgg-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
@@ -2772,7 +2836,19 @@ button.tr-crumb:hover { color: var(--blue); }
 .tg-st { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
 .tg-st svg { width: 11px; height: 11px; }
 .tg-st.ai { color: var(--blue); } .tg-st.hot { color: var(--amber-ink); } .tg-st.mgr { color: var(--ink-2); }
-.tg-cact { flex: none; }
+/* кнопка «Карточка» в шапке диалога: тихая таблетка рядом с тумблером бота —
+   якорь экрана это переписка, а не кнопки над ней */
+.tg-cwrap { flex: none; display: inline-flex; }
+.tg-cact { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 8px 13px; transition: .15s; }
+.tg-cact:hover { background: #EDEFF3; color: var(--ink); }
+.tg-cact.new { color: var(--blue); background: var(--blue-tint); }
+.tg-cact.new:hover { background: #DCE7FF; }
+.tg-cact.off { opacity: .45; pointer-events: none; }
+.tg-cact[disabled] { opacity: .6; pointer-events: none; }
+.tg-cact .tg-cls { display: none; }   /* короткая подпись — только на телефоне */
+.tg-cact .tg-cw { font-size: 10.5px; font-weight: 600; color: var(--amber-ink); background: var(--amber-soft);
+  border-radius: var(--r-pill); padding: 1px 6px; }
 .tg-thread { flex: 1; overflow-y: auto; min-height: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; background: #F3F5F8; }
 .tg-thread::-webkit-scrollbar { width: 7px; } .tg-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
 .tg-msg { max-width: 74%; display: flex; flex-direction: column; }
@@ -2944,10 +3020,35 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
+  /* на телефоне ряд воронки ломается на две строки: сверху название, число и
+     конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
+     без главной цифры, а длинное название вылезало из фиксированной высоты */
+  .lad-row { grid-template-columns: 1fr auto auto; gap: 8px 10px; padding: 11px 14px;
+    height: auto; min-height: 62px; }
+  .lad-row .lad-nm { grid-column: 1; grid-row: 1; }
+  .lad-row .lad-n { grid-column: 2; grid-row: 1; }
+  .lad-row .lad-right { grid-column: 3; grid-row: 1; }
+  .lad-row .lad-track { grid-column: 1 / -1; grid-row: 2; }
   /* на телефоне у воронки курса остаются источник, заходы, покупки и деньги */
   .trow.cf-grid { grid-template-columns: minmax(0,1fr) 54px 54px 86px !important; }
-  .lad-row { grid-template-columns: 130px 1fr 90px; gap: 10px; padding: 0 14px; }
-  .lad-row .lad-n { display: none; }
+  .gf-row { grid-template-columns: 1fr 54px; height: auto; padding: 14px 18px; row-gap: 8px; }
+  .gf-track { display: none; }
+  .gf-got { grid-column: 1 / -1; text-align: left; }
+  /* Общая .trow прибита под три колонки лида с !important — свою сетку задаём тем же
+     весом, иначе имя и причина схлопываются в «не выбрал пода…». */
+  .trow.gf-grid { grid-template-columns: minmax(0, 1fr) 84px !important; height: auto;
+    padding: 12px 18px; row-gap: 2px; }
+  .trow.gf-grid .t-ttl, .trow.gf-grid .t-sub { white-space: normal; overflow: visible; }
+  /* Шкала на телефоне не читается — вместо неё остаются шаг, число и потери. */
+  .lad-row.gf-flat { grid-template-columns: minmax(0, 1fr) 46px; height: auto;
+    padding: 14px 18px; row-gap: 6px; }
+  .lad-row.gf-flat .lad-track { display: none; }
+  .lad-row.gf-flat .lad-nm small { white-space: normal; }
+  .lad-row.gf-flat .lad-right { grid-column: 1 / -1; flex-direction: row; align-items: center;
+    justify-content: flex-start; gap: 8px; }
+  /* В подарках число — главное, проценты вторичны: возвращаем его.
+     В «Пути» наоборот, поэтому правило точечное. */
+  .lad-row.gf-flat .lad-n { display: block; text-align: right; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
@@ -2984,6 +3085,20 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .tg.show-chat .tg-list { display: none; }
   .tg.show-chat .tg-chat { display: flex; }
   .tg-back { display: grid; place-items: center; }
+  /* Шапка чата на телефоне: 390px делят имя и две таблетки, поэтому «Карточка»
+     ужимается до значка, пометка «по нику» уходит (она видна в самой карточке), а
+     подстрочник целиком прячется — канал виден в строке списка, откуда пришли, а
+     состояние бота написано подсказкой над полем ввода. */
+  .tg-chead { gap: 8px; padding: 10px 12px; }
+  .tg-chead .tg-cs { display: none; }
+  /* тумблер бота на телефоне — один кружок: его состояние тут же написано словами
+     в подсказке над полем ввода, а имя человека важнее подписи на кнопке */
+  .tg-chead .ai-toggle { padding: 8px 10px; gap: 0; font-size: 0; }
+  .tg-cact:not(.new) { padding: 8px 10px; gap: 0; font-size: 0; }
+  .tg-cact .tg-cl { display: none; }
+  .tg-cact .tg-cls { display: inline; }
+  .tg-cact svg { width: 15px; height: 15px; }
+  .tg-cact .tg-cw { display: none; }
   /* Разделов больше, чем влезает в ширину телефона: у руководителя их девять.
      Раньше лишние просто обрезались краем плашки — пункт «Продукты» с экрана
      пропадал совсем. Теперь ряд скроллится, а при малом числе разделов кнопки
@@ -3243,7 +3358,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-logic-badge.ok { color: var(--green-ink); background: var(--green-soft); }
 .mk-logic-badge.wait { color: var(--amber-ink); background: var(--amber-soft); }
 .mk-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
-  padding: 2px 6px; border-radius: 7px; background: var(--blue-soft); color: var(--blue);
+  padding: 2px 6px; border-radius: 7px; background: var(--blue-tint); color: var(--blue);
   font-size: 10px; font-weight: 800; letter-spacing: .2px; }
 .mk-field-grid { display: grid; grid-template-columns: 1fr 180px; gap: 10px; }
 .mk-field-grid .mk-qblock + .mk-qblock { margin: 0; padding: 0; border: 0; }
@@ -3252,6 +3367,70 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-qblock + .mk-qblock { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-code-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .3px; }
+/* ── Дашборд маркетинга: сквозная воронка, каналы, размещения ──
+   Отдельная вкладка раздела «Маркетинг». Строки таблиц собраны на общем рецепте
+   ховер-строки с левой полоской, чтобы не заводить третий вид списка в CRM. */
+.mkd-sub { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
+.mkd-tbl { border-top: 1px solid var(--line); }
+.mkd-th, .mkd-tr { display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(150px, 1.7fr) repeat(5, minmax(58px, .5fr)) 118px;
+  padding: 0 24px; }
+.mkd-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
+.mkd-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.mkd-th span:first-child { text-align: left; }
+.mkd-tr { height: 54px; border-bottom: 1px solid var(--line); position: relative;
+  transition: background .14s var(--ease); }
+.mkd-tr:last-child { border-bottom: none; }
+.mkd-tr:hover { background: #FBFBFC; }
+.mkd-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.mkd-tr:hover::before { opacity: 1; }
+.mkd-nm { min-width: 0; }
+.mkd-nm b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-v { text-align: right; font-size: 14px; font-weight: 600; color: var(--ink); }
+.mkd-v.zero { color: var(--ink-3); font-weight: 500; }
+.mkd-cv { text-align: right; font-size: 12.5px; font-weight: 700; }
+.mkd-cv.good { color: var(--green-ink); }
+.mkd-cv.weak { color: var(--red-ink); }
+.mkd-cv.none { color: var(--ink-3); font-weight: 500; }
+/* столбики динамики по дням: два тонких столбика на день рядом, не друг на друге —
+   так видно и объем трафика, и сколько из него дошло до бота */
+.mkd-card { display: flex; flex-direction: column; }
+.mkd-days { display: flex; align-items: stretch; gap: 5px; flex: 1; min-height: 168px;
+  padding: 6px 0 0; border-bottom: 1px solid var(--line); }
+.mkd-day { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: flex-end; align-items: center; gap: 7px; }
+.mkd-day .st { width: 100%; display: flex; align-items: flex-end; justify-content: center;
+  gap: 2px; flex: 1; }
+.mkd-day .b1, .mkd-day .b2 { flex: 1; max-width: 9px; border-radius: 3px 3px 0 0;
+  transition: height .9s var(--ease); }
+.mkd-day .b1 { background: var(--blue); }
+.mkd-day .b2 { background: var(--navy); }
+.mkd-day .lb { height: 12px; font-size: 9.5px; font-weight: 600; color: var(--ink-3);
+  white-space: nowrap; }
+.mkd-lg { display: flex; gap: 14px; margin-top: 12px; }
+.mkd-lg span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-2); }
+.mkd-lg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+/* честный список того, чего в цифрах пока нет */
+.mkd-gap { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  padding: 13px 24px; border-bottom: 1px solid var(--line); }
+.mkd-gap:last-child { border-bottom: none; }
+.mkd-gap b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.mkd-gap small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+@media (max-width: 900px) {
+  .mkd-th, .mkd-tr { grid-template-columns: minmax(96px, 1.3fr) repeat(3, minmax(40px, .5fr)) 74px;
+    gap: 8px; padding: 0 16px; }
+  .mkd-th span.hidem, .mkd-tr .hidem { display: none; }
+  /* заголовок последней колонки длинный — пускаем в две строки, а не режем по краю */
+  .mkd-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+  .mkd-th span:last-child { font-size: 9.5px; line-height: 1.15; white-space: normal; }
+}
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
@@ -5332,6 +5511,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mi-note { font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
   padding: 11px 13px; border-radius: 12px; background: var(--fill); }
 
+/* Пакет протоколов: три файла с одной планерки проверяются на одном экране.
+   Между разборами — линия и подпись файла, иначе цели из разных встреч
+   читаются как один список и человек теряет, о чем вообще шла речь. */
+.mi-imp { display: flex; flex-direction: column; gap: 26px; }
+/* Воздух вокруг границы намеренно неровный: сверху больше, чем ритм внутри
+   секции, иначе линия между двумя протоколами читается как еще один отступ
+   между целями. Линия — --line-2, тот же вес, что у строк команды: самый
+   бледный --line рядом с серыми плитами заметок просто теряется. */
+.mi-imp + .mi-imp { margin-top: 8px; padding-top: 22px; border-top: 1px solid var(--line-2); }
+/* Шапка файла — родитель секции, а не ее пункт: до содержимого 13px против
+   26px между целями (тот же расчет, что у .dr-h). Отрицательный отступ гасит
+   общий gap колонки. */
+.mi-file { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+  margin-bottom: -13px; }
+.mi-file-n { display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  font-size: 13px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.mi-file-n span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mi-file-n svg { color: var(--ink-3); flex: none; }
+.mi-file-s { font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+
 .mi-goal { display: flex; flex-direction: column; gap: 9px; }
 .mi-g-h { display: flex; align-items: center; gap: 10px; }
 .mi-tag { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
@@ -5407,4 +5606,51 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mi-steps .mi-line .mi-title { min-height: 56px; }
   .mi-steps { margin-left: 8px; padding-left: 10px; }
   .mi-nosteps { margin-left: 18px; }
+}
+
+/* ── ЛИДЫ: холодные контакты, с которыми пока говорит бот ──────────────────
+   Решение Веры 20.08.2026 — свой раздел рядом с «Людьми». Строка отвечает на
+   три вопроса: через какой канал пришел, зачем приходил, давно ли молчит.
+   Компоненты те же, что в «Людях» (.trow, .t-cell, .list-tools) — новая тут
+   только сетка колонок и пилюля канала. */
+.pr-grid { grid-template-columns: 132px 1.5fr 1.2fr 104px 132px; }
+.pr-ch { display: inline-flex; align-items: center; gap: 7px; align-self: center;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border-radius: var(--r-pill); padding: 5px 11px; }
+.pr-ch svg { width: 13px; height: 13px; color: var(--blue); }
+.pr-ch.none { color: var(--ink-3); }
+.pr-ch.none svg { color: var(--ink-3); }
+.pr-why { align-self: center; font-size: 12.5px; color: var(--ink-2); line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Тишина — слова («вчера», «3 дня»), а не число: выравниваем по левому краю,
+   как обычный текст. Табличные цифры все равно нужны — «11 дней» и «3 дня» не
+   должны плясать по ширине. */
+.pr-age { align-self: center; font-size: 12.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+.pr-age.cold { color: var(--amber-ink); }
+.pr-act { align-self: center; justify-self: end; }
+/* Кнопка есть в каждой строке, но по умолчанию тихая: восемнадцать одинаковых
+   заполненных пилюль справа перетягивают экран на себя, а главное здесь — кто
+   пришел и давно ли молчит. Наводишь на строку — кнопка проявляется. */
+.pr-take { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3);
+  background: transparent; border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 7px 13px; cursor: pointer; transition: .15s; white-space: nowrap; }
+.pr-grid:hover .pr-take { color: var(--ink); background: var(--fill); border-color: transparent; }
+.pr-take:hover, .pr-grid:hover .pr-take:hover,
+.pr-take:focus-visible { color: #fff; background: var(--navy); border-color: var(--navy); }
+.pr-take:disabled { opacity: .5; cursor: default; }
+.pr-empty { padding: 64px 24px; text-align: center; color: var(--ink-3); }
+.pr-empty svg { width: 26px; height: 26px; color: var(--line-2); }
+.pr-et { margin-top: 14px; font: 700 15px 'Manrope', sans-serif; color: var(--ink);
+  letter-spacing: -.01em; }
+.pr-es { margin: 6px auto 0; max-width: 380px; font-size: 13px; line-height: 1.5;
+  color: var(--ink-2); }
+/* На телефоне .trow задает свою сетку с !important — перебиваем ею же, иначе
+   строка лида разъедется на чужие три колонки. Канал и повод уходят: на узком
+   экране важнее, кто это и давно ли молчит. */
+@media (max-width: 960px) {
+  .trow.pr-grid { grid-template-columns: 1fr 78px 108px !important; }
+  .pr-take { color: var(--ink); background: var(--fill); border-color: transparent; }
+  .pr-grid .pr-ch, .pr-grid .pr-hch { display: none; }
+  .pr-take { padding: 7px 10px; }
 }
