@@ -17985,7 +17985,13 @@
       '<div class="mh-st">' + sevPill(lead || { crm: crm, booking: booking }) +
         (booking && booking.slot ? '<span class="mh-slot">' + ic('cal', 12) + esc(booking.slot) + '</span>' : '') + '</div>' +
       (tone ? '<div class="mh-score"><b class="num" style="color:' + tone.c + '">' + score + '<small>/100</small></b>' +
-        '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>' : '') +
+        '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>'
+            // Балла нет — говорим почему. Молчащий прочерк менеджер читает как
+            // «человек ничего не проходил», а расчет мог просто упасть.
+            : (d ? '<button class="mh-nodiag" data-goto="ai">' +
+                   ((d.stage_status || {}).diagnostics === 'running' ? 'Балл считается'
+                     : (d.stage_status || {}).diagnostics === 'error' ? 'Балл не посчитался'
+                     : 'Балла нет') + '</button>' : '')) +
     '</div>';
 
     /* анкета абитуриента */
@@ -18949,6 +18955,39 @@
     var stHost = el('m-st');
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
+    });
+
+    // «Пересчитать» в разделе «Диагностика»: расчет мог упасть или быть убит
+    // деплоем, и ждать добивщика на бэке менеджеру незачем — человек на связи сейчас.
+    var rrn = el('diag-rerun');
+    if (rrn) rrn.addEventListener('click', function () {
+      rrn.disabled = true;
+      rrn.textContent = 'Считаем…';
+      apiSend('/admin/api/leads/' + id + '/diagnostics/rerun', 'POST', null, function () {
+        showToast('Считаем разбор — обычно меньше минуты');
+        // Ручка отвечает сразу, результат приходит позже: перечитываем карточку,
+        // пока расчет не дойдет до конца. Через полторы минуты сдаемся — дальше
+        // человек нажмет еще раз, а брошенное подберет добивщик на бэке.
+        var tries = 0;
+        (function waitDiag() {
+          if (++tries > 18) return;
+          setTimeout(function () {
+            if (state.drawerId !== id) return;
+            refreshDetail(id, function (fresh) {
+              var ready = fresh && fresh.diagnostics && fresh.diagnostics.score != null;
+              var st = fresh && (fresh.stage_status || {}).diagnostics;
+              if (state.drawerId === id && state.modalSection === 'ai' && (ready || st === 'error')) {
+                renderModalContent();
+              } else if (!ready) waitDiag();
+            });
+          }, 5000);
+        })();
+      }, function (code) {
+        rrn.disabled = false;
+        rrn.textContent = 'Пересчитать';
+        showToast(code === 409 ? 'Считать нечего: анкеты нет или разбор уже готов'
+                               : 'Не получилось запустить расчет');
+      });
     });
 
     // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
@@ -20081,12 +20120,39 @@
       (hr ? '<div class="qa-wrap">' + inner + '</div>' : inner) + '</div>';
   }
 
+  /* Состояние расчета разбора. Пустая диагностика бывает четырех разных видов, и
+     менеджеру они означают разное: «человек анкету не заполнял» (говорить не о чем),
+     «считается прямо сейчас» (подождать), «упало» (пересчитать). Раньше все четыре
+     выглядели одинаково — пустым местом, и прочерк читался как «клиент ничего не
+     делал» (вопрос Павла 21.08.2026 по лиду 8e2ebb50). */
+  function diagStateCard(d) {
+    var st = (d.stage_status || {}).diagnostics || null;
+    var hasAnswers = d.answers && Object.keys(d.answers).length > 0;
+    if (!hasAnswers) {
+      return '<div class="diag-wait"><b>Анкету не заполнял</b>' +
+        '<span>Разбор считается по анкете с платформы — пока ее нет, считать нечего.</span></div>';
+    }
+    var txt = st === 'running'
+      ? { t: 'Разбор считается', s: 'Обычно занимает меньше минуты. Обновите карточку через пару минут.' }
+      : st === 'error'
+        ? { t: 'Расчет не завершился', s: 'Система пересчитает сама в течение получаса. Нужно быстрее — нажмите кнопку.' }
+        : { t: 'Разбора пока нет', s: 'Анкета есть, а расчет по ней не дошел до результата.' };
+    return '<div class="diag-wait' + (st === 'error' ? ' bad' : '') + '">' +
+      '<b>' + txt.t + '</b><span>' + txt.s + '</span>' +
+      '<button class="bp sm" id="diag-rerun">Пересчитать</button></div>';
+  }
+
   function buildAiSections(d) {
     var diag = d.diagnostics || {};
     var plan = d.roadmap || {};
     var answers = d.answers || {};
     var html = '<div class="m-ctitle">Диагностика</div>' +
       '<div class="m-csub">Что AI показал человеку на платформе — с этим заходить на созвон.</div>';
+
+    // Разбора нет — вместо пустого экрана говорим, что с ним происходит.
+    if (diag.score == null && !(diag.verdict && (diag.verdict.headline || diag.verdict.text))) {
+      return html + diagStateCard(d);
+    }
 
     var v = diag.verdict || {};
     var score = diag.score;
