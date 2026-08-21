@@ -150,10 +150,12 @@ CRM — рабочий инструмент команды. Ценности п�
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |
 | Оверлеи | модалка-форма, баг-панель, тост, меню | `design/overlays.html` | `.al-* .bug-* #toast #smenu` |
 | AI и каталог | AI-блоки, диагностика, витрина продуктов | `design/ai.html` | `.ai-hero .diag-* .pchat .rm-ai .of-* .pd-*` |
-| Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .th-* .ibsw .handoff-banner` |
+| Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .tg-cact .th-* .ibsw .handoff-banner` |
+| Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
 | Поступление | план, задачи, шаблоны | `design/admissions.html` | `.rm-* .tpl-*` |
 | Маркетинг (+ долг) | страница «Маркетинг» | `design/marketing.html` | `.mk-*` |
 | Дашборд маркетинга | вкладка «Дашборд» раздела «Маркетинг» | — (рецепты из `dashboard.html`) | `.mkd-* .lad-* .statbar` |
+| Подарки | воронка подарков, что берут, кто застрял | витрины нет (см. `style.css` «ПОДАРКИ») | `.gf-*` + общие `.lad-*` |
 | Задачи команды | список задач, карточка задачи, подключение к боту | витрины нет (см. `style.css` «ЗАДАЧИ КОМАНДЫ») | `.tsk-grid .tsk-who .tsk-due .tsk-card .tsk-feed .sev.st-* .tgl-*` |
 | Продуктовый портал | дерево продуктов, тарифы, таблицы сравнения и экономики | витрины нет (см. `style.css` «ПРОДУКТОВЫЙ ПОРТАЛ») | `.po-tree .po-node .po-flag .po-tcard .po-tbl .po-tabs` |
 
