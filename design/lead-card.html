@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ИстСайд CRM — Карточка лида</title>
-<!-- Карточка лида. Когда берем: открытие любого лида — ЦЕНТРИРОВАННАЯ модалка .modal (исторически «drawer»), большая рабочая поверхность поверх списка. Классы: .mbg .modal .m-head .m-ava .m-name .m-sub .m-navfloat .m-arrow .m-pulse .m-body .m-nav .m-ni .m-content .m-foot .m-sec .m-sec-h .now-do .who .ed-field .main-hero .pipe .pstep .msg .own .own-p .own-t .own-sp .own-wait .ql-sec .ql-crit .ql-c .ql-fields .ql-split .ql-sql .ql-chk .ql-rej .dup-note .dup-hint .dup-list .dup-row .dup-b. Живой код: style.css:615. Правила: один объект = одна карточка, не плодить вложенные модалки; вторичное — инлайн-редактированием или секцией; секции строго через .m-sec-h, новый блок = новая секция, не «карточка в карточке»; цвета ролей в чате фиксированы (серый входящий / синий бот / зеленый менеджер). -->
+<!-- Карточка лида. Когда берем: открытие любого лида — ЦЕНТРИРОВАННАЯ модалка .modal (исторически «drawer»), большая рабочая поверхность поверх списка. Классы: .mbg .modal .m-head .m-ava .m-name .m-sub .m-navfloat .m-arrow .m-pulse .m-body .m-nav .m-ni .m-content .m-foot .m-sec .m-sec-h .now-do .who .ed-field .main-hero .pipe .pstep .msg .own .own-p .own-t .own-sp .own-wait .ql-sec .ql-crit .ql-c .ql-fields .ql-split .ql-sql .ql-chk .ql-rej .dup-note .dup-hint .dup-list .dup-row .dup-b .note-foot .nt-box .nt-h .nt-act. Живой код: style.css:615. Правила: один объект = одна карточка, не плодить вложенные модалки; вторичное — инлайн-редактированием или секцией; секции строго через .m-sec-h, новый блок = новая секция, не «карточка в карточке»; цвета ролей в чате фиксированы (серый входящий / синий бот / зеленый менеджер). -->
 <link rel="stylesheet" href="../style.css" />
 <style>
   body { background:#E5E7EC; padding:0; }
@@ -248,6 +248,52 @@
       </div>
     </div>
     <div class="sc-note">Скорость — единственный цвет в строке: <b>.own-sp.fast</b> до 15 минут (ориентир рынка), <b>.mid</b> до часа, <b>.slow</b> дальше. Пока не ответили, <b>.own-wait.late</b> амбером считает ожидание. Строка тихая: якорь секции — херо «что делать сейчас», спорить с ним ей нельзя.</div>
+  </div>
+
+  <!-- ── РАЗБОР ЗАМЕТКИ В ЗАДАЧИ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.nt-box — что мы пообещали клиенту, разложенное в задачи. Предложение, не действие</div>
+    <div class="sc-panel">
+      <div class="m-sec" style="margin-top:0">
+        <div class="m-sec-h">Заметка</div>
+        <textarea class="note-ta">ЧТО МЫ ПООБЕЩАЛИ
+1. Прислать запись консультации и подробный план шагов.
+2. Список платформ для тренировки Duolingo.</textarea>
+        <div class="note-foot">
+          <button class="bp sm ghost"><svg width="13" height="13" viewBox="0 0 20 20"><path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor"/></svg>Разобрать в задачи</button>
+          <div class="note-state">сохранено</div>
+        </div>
+        <div class="nt-box">
+          <div class="nt-h"><svg width="13" height="13" viewBox="0 0 20 20"><path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor"/></svg>Нашел 2 обещания. Проверь и поставь</div>
+          <div class="mi-note">Обещания без срока поставил на завтра</div>
+          <div class="mi-item">
+            <div class="mi-line">
+              <textarea class="al-in mi-title" rows="1">Прислать Эмилии запись консультации и план шагов</textarea>
+              <button class="mi-skip"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l8 8M14 6l-8 8"/></svg></button>
+            </div>
+            <div class="mi-row">
+              <span class="al-selwrap mi-who"><select class="al-sel sm"><option selected>Вера Продажина</option></select></span>
+              <input type="date" class="al-in sm mi-due" value="2026-08-25">
+            </div>
+          </div>
+          <div class="mi-item off">
+            <div class="mi-line">
+              <textarea class="al-in mi-title" rows="1">Собрать список платформ для тренировки Duolingo</textarea>
+              <button class="mi-skip"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg></button>
+            </div>
+            <div class="mi-row">
+              <span class="al-selwrap mi-who"><select class="al-sel sm"><option selected>Марк Шевченко</option></select></span>
+              <input type="date" class="al-in sm mi-due" value="2026-08-26">
+            </div>
+          </div>
+          <div class="nt-act">
+            <button class="bp sm"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 5v10M5 10h10"/></svg>Поставить задачи</button>
+            <button class="bp sm ghost">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sc-note">Строку не изобретаем: это <b>.mi-*</b> импорта встречи, потому что экран одинаковый по смыслу. Отличий два: заголовок в кегле шага (13px/500), иначе десять строк читаются как десять целей, и оправа <b>.nt-box</b> на <b>--fill</b> — предложенное не должно выглядеть как сохраненное. Снятый пункт гаснет до .4 и зачеркивается (<b>.mi-item.off</b>).</div>
   </div>
 
   <!-- ── КВАЛИФИКАЦИЯ ── -->

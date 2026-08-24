@@ -1389,6 +1389,26 @@ a { color: inherit; text-decoration: none; }
 .note-ta::placeholder { color: var(--ink-3); }
 .note-ta:focus { background: #fff; border-color: #DCE7FF; box-shadow: inset 0 0 0 1px #DCE7FF; }
 .note-state { font-size: 11px; color: var(--ink-3); margin-top: 6px; min-height: 14px; }
+/* Разбор заметки в задачи. Кнопка и состояние автосохранения стоят в одной
+   строке: обе относятся к заметке, и второй ряд ради них — пустой воздух. */
+.note-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.note-foot .note-state { margin-top: 0; }
+/* Список предложений — тот же рецепт, что у импорта встречи (.mi-*): своя
+   оправа только затем, чтобы отделить предложенное от сохраненного. */
+.nt-box { margin-top: 12px; padding: 12px 14px 14px; background: var(--fill);
+  border: 1px solid var(--line); border-radius: var(--r-lg); }
+.nt-h { display: flex; align-items: center; gap: 6px; font: 700 10.5px 'Manrope', sans-serif;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+.nt-h svg { color: var(--blue); }
+/* Здесь это задачи, а не цели: заголовок берем в рецепте шага (.mi-steps),
+   иначе десять строк по 15px/700 читаются как десять целей. */
+.nt-box .mi-title { font-size: 13px; font-weight: 500; letter-spacing: 0; line-height: 1.4;
+  padding: 9px 12px; border-radius: 10px; background: #fff; }
+.nt-box .mi-title:hover { background: #fff; box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
+.nt-box .mi-item + .mi-item { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.nt-box .mi-skip { background: #fff; }
+.nt-box .mi-skip:hover { background: #ECEEF1; }
+.nt-act { display: flex; gap: 8px; margin-top: 12px; }
 
 /* раздел «Написать» — уведомления клиенту через бота */
 .ntf-mode { display: inline-flex; gap: 3px; padding: 4px; border-radius: 11px; background: var(--fill); margin-bottom: 10px; }
