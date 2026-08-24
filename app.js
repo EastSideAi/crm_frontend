@@ -1491,6 +1491,8 @@
           '</div>' +
           '<button class="bp" id="lg-go">Войти</button>' +
           '<div class="gate-err" id="lg-err">' + esc(err || '') + '</div>' +
+          '<div class="lg-or"><span>или</span></div>' +
+          '<button class="bp ghost" id="lg-tg" type="button">' + ic('send', 15) + 'Войти через телеграм</button>' +
           '<button class="gate-link" id="lg-forgot" type="button">Забыли пароль?</button>' +
         '</div>' +
       '</div></div>';
@@ -1527,6 +1529,111 @@
     pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
     el('lg-forgot').addEventListener('click', function () { renderReset(); });
+    el('lg-tg').addEventListener('click', function () { renderTgLogin(); });
+  }
+
+  /* ── вход через телеграм ──────────────────────────────────
+     Пароль от CRM человек не помнит, телеграм у него в руке. Браузер показывает
+     код, бот задач его подтверждает — тот же приём, что вход на телевизоре.
+     Ссылкой из бота это не заменить: ссылка открылась бы на телефоне, а работать
+     человек идет за компьютер. */
+  function renderTgLogin() {
+    document.body.classList.remove('dock-open');
+    var stop = false, req = null, left = 0, tick = null;
+
+    function shell(inner) {
+      root.innerHTML =
+        '<div id="gate"><div class="gate-split">' +
+          '<div class="gate-brand">' +
+            '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+            '<div class="gb-mid">' +
+              '<div class="gb-h">Вход без пароля</div>' +
+              '<div class="gb-s">Подтвердите вход в боте задач — том самом, который присылает вам сводку по утрам.</div>' +
+            '</div>' +
+            '<div class="gb-foot">' + ic('shield', 12) + 'код живет пять минут и один вход' + '</div>' +
+          '</div>' +
+          '<div class="gate-card">' + inner + '</div>' +
+        '</div></div>';
+    }
+
+    function back(msg) {
+      stop = true; clearInterval(tick);
+      renderLogin(msg || '');
+    }
+
+    function waiting(j) {
+      req = j;
+      left = j.expires_in || 300;
+      shell(
+        '<h1>Код для входа</h1>' +
+        '<p>Отправьте этот код боту задач сообщением в телеграме.</p>' +
+        '<div class="tgl-code"><b id="tgl-num">' + esc(j.code) + '</b>' +
+          '<button class="tgl-copy" id="tgl-copy" type="button" title="Скопировать">' + ic('copy', 14) + '</button></div>' +
+        '<div class="tgl-hint">Код набирают руками: так вы точно подтверждаете свой вход, а не чужой.</div>' +
+        '<div class="tgl-wait"><i></i><i></i><i></i><span id="tgl-left">Ждем подтверждения</span></div>' +
+        '<div class="gate-err" id="tgl-err"></div>' +
+        '<button class="gate-link" id="tgl-back" type="button">Войти логином и паролем</button>');
+      el('tgl-back').addEventListener('click', function () { back(); });
+      el('tgl-copy').addEventListener('click', function (e) {
+        copyText((j.code || '').replace(/\D/g, ''), e.currentTarget);
+      });
+      tick = setInterval(function () {
+        left -= 1;
+        if (left <= 0) { clearInterval(tick); return; }
+        var m = Math.floor(left / 60), sec = left % 60;
+        el('tgl-left').textContent = 'Ждем подтверждения · ' + m + ':' + (sec < 10 ? '0' : '') + sec;
+      }, 1000);
+      poll();
+    }
+
+    /* Код умер (истек или его отклонили). Показываем причину и путь дальше: без
+       кнопки «новый код» человек упирается в тупик и уходит искать пароль. */
+    function fail(msg, again) {
+      clearInterval(tick);
+      var e = el('tgl-err');
+      if (!e) return;
+      e.textContent = msg; e.style.display = 'block';
+      var w = document.querySelector('.tgl-wait'); if (w) w.style.display = 'none';
+      var box = document.querySelector('.tgl-code'); if (box) box.classList.add('dead');
+      if (!again || el('tgl-again')) return;
+      var b = document.createElement('button');
+      b.className = 'bp'; b.id = 'tgl-again'; b.type = 'button'; b.textContent = 'Новый код';
+      e.parentNode.insertBefore(b, e.nextSibling);
+      b.addEventListener('click', function () { stop = true; renderTgLogin(); });
+    }
+
+    /* Спрашиваем раз в две секунды: чаще незачем, человек все равно тянется за
+       телефоном, реже — вход выглядит подвисшим. */
+    function poll() {
+      if (stop || !req) return;
+      fetch(API + '/admin/api/login/tg/poll', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: req.request_id, secret: req.secret }),
+      }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (stop) return;
+        if (!j) { setTimeout(poll, 3000); return; }
+        if (j.status === 'approved') {
+          clearInterval(tick);
+          localStorage.setItem(KEY_LS, j.token);
+          state.role = j.role; state.userName = j.name || '';
+          boot();
+          return;
+        }
+        if (j.status === 'denied') { fail('Вход отклонен в телеграме.', true); return; }
+        if (j.status === 'expired') { fail('Код больше не действует.', true); return; }
+        setTimeout(poll, 2000);
+      }).catch(function () { if (!stop) setTimeout(poll, 3000); });
+    }
+
+    shell('<h1>Готовим код…</h1><p>Секунду.</p>');
+    fetch(API + '/admin/api/login/tg/start', { method: 'POST' })
+      .then(function (r) {
+        if (r.status === 429) { back('Слишком много попыток входа. Попробуйте через час или войдите паролем.'); return null; }
+        if (!r.ok) { back('Вход через телеграм сейчас недоступен, войдите паролем.'); return null; }
+        return r.json();
+      })
+      .then(function (j) { if (j) waiting(j); })
+      .catch(function () { back('Сеть недоступна'); });
   }
 
   /* ── восстановление пароля ────────────────────────────── */
