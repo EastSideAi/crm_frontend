@@ -318,6 +318,11 @@ a { color: inherit; text-decoration: none; }
 
 /* ── метрика-полоса (спокойные KPI одной картой) ── */
 .statbar { display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px; }
+/* Пятая плитка появляется там, где к четырем счетчикам добавляются деньги (расход на
+   рекламу в маркетинге). Отдельным модификатором, а не auto-fit: в остальных местах
+   плиток ровно четыре, и «умная» сетка сломала бы их на промежуточных ширинах. */
+.statbar.five { grid-template-columns: repeat(5, 1fr); }
+.statbar.five .stat { padding: 16px 18px; }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
@@ -331,7 +336,8 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.green { background: var(--green); }
 .stat .sdot.coral, .stat .sdot.red { background: var(--red); }
 .stat .sdot.amber { background: var(--amber); }
-.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1; }
+.stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -997,6 +1003,33 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 8px 14px; }
 .slotchip svg { color: var(--blue); }
 
+/* кто ведет карточку и первое касание — строка над воронкой.
+   Тихая: серая заливка, вторичная кнопка. Якорь секции — херо «что делать», и
+   спорить с ним этой строке нельзя. Цветом здесь говорит только скорость ответа. */
+.own { display: flex; align-items: center; gap: 14px; margin-top: 16px; padding: 10px 14px;
+  border-radius: 13px; background: var(--fill); }
+.own-p { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.own-p .tm-sel { max-width: 200px; }
+.own-t { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.own-t .ql-l { flex: none; }
+.own-when { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+/* скорость первого ответа: ориентир 15 минут, после часа это уже потеря */
+.own-sp { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: var(--r-pill); }
+.own-sp.fast { background: var(--green-soft); color: var(--green-ink); }
+.own-sp.mid { background: var(--amber-soft); color: var(--amber-ink); }
+.own-sp.slow { background: var(--red-soft); color: var(--red-ink); }
+.own-wait { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.own-wait.late { color: var(--amber-ink); }
+.own-go svg { color: var(--blue); }
+.own-go:disabled { opacity: .55; }
+@media (max-width: 560px) {
+  .own { flex-wrap: wrap; gap: 10px; }
+  .own-p { width: 100%; }
+  .own-p .tm-sel { flex: 1; max-width: none; }
+  .own-t { width: 100%; margin-left: 0; }
+  .own-t .own-go { margin-left: auto; }
+}
+
 /* степпер воронки */
 .stage-sec { margin-top: 30px; }
 .dr-rej { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-3);
@@ -1019,6 +1052,93 @@ a { color: inherit; text-decoration: none; }
 .rej-banner { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--ink-2);
   background: var(--fill); border-radius: 13px; padding: 14px 16px; }
 .rej-banner svg { color: var(--ink-3); }
+
+/* ════ КВАЛИФИКАЦИЯ ЛИДА ════
+   Одна секция, два уровня, и плотность у них разная намеренно: сверху вердикт
+   системы (MQL) — его читают, а не трогают; снизу галочки менеджера (SQL) — их
+   трогают. Ничего красного: непройденный критерий это факт, а не авария. */
+.ql-verd { margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; text-transform: none; letter-spacing: 0;
+  color: var(--ink-3); background: var(--fill); border-radius: var(--r-pill); padding: 5px 12px; }
+.ql-verd.on { color: var(--green-ink); background: var(--green-soft); }
+.ql-crit { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.ql-c { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px 13px;
+  border-radius: 13px; background: var(--fill); }
+.ql-c i { flex: none; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
+  background: #DEE2EA; color: #fff; }
+.ql-c i svg { width: 9px; height: 9px; }
+.ql-c.on i { background: var(--green); }
+.ql-c b { min-width: 0; font-size: 11.5px; font-weight: 600; color: var(--ink-3); line-height: 1.2; }
+.ql-c.on b { color: var(--ink-2); }
+/* поля, которых нет в анкете: менеджер вносит их сам — это ввод данных, не оценка */
+.ql-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 14px; }
+.ql-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ql-l { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.ql-f .tm-sel { width: 100%; min-width: 0; }
+.ql-f .tm-sel.auto { color: var(--ink-2); font-weight: 500; }
+/* граница между вердиктом системы и работой менеджера */
+.ql-split { display: flex; align-items: center; gap: 12px; margin: 20px 0 12px; }
+.ql-split span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.ql-split i { flex: 1; height: 1px; background: var(--line); }
+/* вердикт — не микролейбл: у двух вердиктов секции один вид, капсом они не пишутся */
+.ql-split .ql-verd { text-transform: none; letter-spacing: 0; font-size: 11.5px; }
+.ql-sql { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.ql-chk { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px 13px;
+  border-radius: 13px; background: var(--fill); cursor: pointer; transition: .15s; }
+.ql-chk:hover { background: #EDEFF3; }
+.ql-chk u { flex: none; width: 19px; height: 19px; border-radius: 6px; display: grid; place-items: center;
+  border: 1.5px solid #C5CCDA; background: #fff; color: transparent; transition: .15s; }
+.ql-chk u svg { width: 11px; height: 11px; }
+.ql-chk:hover u { border-color: var(--blue); }
+.ql-chk.on u { background: var(--blue); border-color: var(--blue); color: #fff; }
+.ql-chk span { font-size: 12.5px; font-weight: 600; color: var(--ink-3); line-height: 1.3; }
+.ql-chk.on span { color: var(--ink); }
+.ql-rej { display: flex; align-items: center; gap: 11px; margin-top: 12px; padding: 12px 14px;
+  border-radius: 13px; background: var(--fill); }
+.ql-rej .ql-l { flex: none; }
+.ql-rej .tm-sel { flex: 1; min-width: 0; }
+.ql-rej.empty .tm-sel { box-shadow: inset 0 0 0 1.5px var(--amber); }
+@media (max-width: 560px) {
+  .ql-crit { grid-template-columns: repeat(2, 1fr); }
+  /* галочки продаж на телефоне в одну колонку: в двух текст ломается на три строки */
+  .ql-sql, .ql-fields { grid-template-columns: 1fr; }
+  .ql-rej { flex-direction: column; align-items: stretch; gap: 8px; }
+}
+
+/* ════ ДУБЛИ: похоже, это тот же человек ════
+   Подсказка, а не приговор: система нашла совпадение, решает менеджер. Поэтому тут нет
+   ни красного, ни автодействия — амбер на «карточка помечена дублем» (это состояние,
+   которое меняет работу) и обычные строки со списком кандидатов. */
+.dup-note { display: flex; align-items: center; gap: 11px; margin-bottom: 16px;
+  padding: 13px 15px; border-radius: 14px; background: var(--amber-soft); }
+.dup-note svg { flex: none; color: var(--amber-ink); }
+.dup-note > div { flex: 1; min-width: 0; }
+.dup-note b { display: block; font-size: 13px; font-weight: 700; color: var(--amber-ink); }
+.dup-note small { display: block; font-size: 11.5px; color: #7A6438; margin-top: 2px; }
+.dup-hint { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin: -6px 0 12px; }
+.dup-cnt { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ink-2);
+  background: var(--fill); border-radius: var(--r-pill); padding: 3px 9px; }
+.dup-list { background: var(--fill); border-radius: 15px; padding: 2px 15px; }
+.dup-row { display: flex; align-items: center; gap: 10px; padding: 12px 0;
+  border-bottom: 1px solid var(--line); }
+.dup-row:last-child { border-bottom: none; }
+.dup-nm { flex: 1; min-width: 0; }
+.dup-nm b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-nm small { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dup-b { flex: none; font: 600 12px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border-radius: 10px; padding: 8px 12px; transition: .15s; }
+.dup-b:hover { background: #EDEFF3; color: var(--ink); }
+.dup-b.primary { color: #fff; background: var(--blue); }
+.dup-b.primary:hover { background: var(--blue-d); }
+.dup-b:disabled { opacity: .5; cursor: default; }
+@media (max-width: 560px) {
+  .dup-row { flex-wrap: wrap; }
+  .dup-nm { flex-basis: 100%; }
+  .dup-note { flex-wrap: wrap; }
+  .dup-note > div { flex-basis: calc(100% - 30px); }
+}
 
 /* ════ ПУТЬ И ИСПОЛЬЗОВАНИЕ ════ */
 .uz { display: flex; flex-direction: column; gap: 15px; margin-top: 2px; }
@@ -2160,6 +2280,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .tgg-b[disabled] { color: var(--ink-3); }
 .tgg-acts .tgg-b { margin-top: 0; }
 .tgg-b.off { color: var(--ink-3); }
+/* Кого касается чат: подпись, ряд ролей и пояснение. Отбивка сверху больше
+   внутренних отступов ряда — это отдельная мысль, а не продолжение строки о
+   подключении. */
+.tgg-roles { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.tgg-rh { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+          color: var(--ink-3); margin-bottom: 8px; }
+.tgg-rl { display: flex; flex-wrap: wrap; gap: 4px; }
+.tgg-roles .tgg-s { margin-top: 8px; }
 .tgg-b.off:hover { color: var(--red-ink); }
 .tgg-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .tgg-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
@@ -2346,6 +2474,12 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Риски на телефоне: имя и уровень первой строкой, флаги во всю ширину второй —
+     иначе общая .trow прибивает строку под три колонки лида. */
+  .trow.rsk-grid { grid-template-columns: minmax(0,1fr) auto !important;
+    gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
+  .trow.rsk-grid.thead { display: none; }
+  .trow.rsk-grid .rsk-flags { grid-column: 1 / -1; }
   /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
      строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
      число обязано назвать себя само — подпись берется из data-l. */
@@ -2475,6 +2609,22 @@ button.tr-crumb:hover { color: var(--blue); }
 .diag-vlabel svg { color: currentColor; }
 .diag-vh { font-size: 17px; font-weight: 700; letter-spacing: -.02em; margin-top: 9px; line-height: 1.32; }
 .diag-vs { font-size: 13px; color: var(--ink-2); margin-top: 7px; line-height: 1.55; }
+
+/* Балла нет в шапке «Главного»: тихая кнопка вместо пустоты — ведет в «Диагностику»,
+   где сказано, что с расчетом. */
+.mh-nodiag { font-size: 12.5px; font-weight: 600; color: var(--ink-2); background: var(--fill);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 7px 13px; transition: .15s; }
+.mh-nodiag:hover { background: #fff; color: var(--ink); }
+
+/* Разбора еще нет: состояние расчета вместо пустого места. Отдельный тон у отказа —
+   «считается» и «упало» требуют от менеджера разных действий (см. app.js diagStateCard). */
+.diag-wait { border: 1px solid var(--line-2); border-radius: 18px; padding: 22px 24px;
+  background: var(--fill); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.diag-wait b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.diag-wait span { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.diag-wait .bp { margin-top: 10px; }
+.diag-wait.bad { background: var(--red-soft); border-color: #F5C9CB; }
+.diag-wait.bad b { color: var(--red-ink); }
 
 /* метрики-чипы */
 .diag-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -3027,17 +3177,24 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
-  .statbar { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
-  .stat { padding: 14px 16px; }
+  .statbar, .statbar.five { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  .stat, .statbar.five .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
   .stat + .stat::before { display: none; }
   .sg2 { grid-template-columns: 1fr; }
   .trow { grid-template-columns: 100px 1fr 80px !important; gap: 10px; padding: 0 14px; }
   .trow .hidem { display: none; }
+  /* на телефоне ряд воронки ломается на две строки: сверху название, число и
+     конверсия, снизу полоса во всю ширину. Раньше число прятали, и ряд оставался
+     без главной цифры, а длинное название вылезало из фиксированной высоты */
+  .lad-row { grid-template-columns: 1fr auto auto; gap: 8px 10px; padding: 11px 14px;
+    height: auto; min-height: 62px; }
+  .lad-row .lad-nm { grid-column: 1; grid-row: 1; }
+  .lad-row .lad-n { grid-column: 2; grid-row: 1; }
+  .lad-row .lad-right { grid-column: 3; grid-row: 1; }
+  .lad-row .lad-track { grid-column: 1 / -1; grid-row: 2; }
   /* на телефоне у воронки курса остаются источник, заходы, покупки и деньги */
   .trow.cf-grid { grid-template-columns: minmax(0,1fr) 54px 54px 86px !important; }
-  .lad-row { grid-template-columns: 130px 1fr 90px; gap: 10px; padding: 0 14px; }
-  .lad-row .lad-n { display: none; }
   .gf-row { grid-template-columns: 1fr 54px; height: auto; padding: 14px 18px; row-gap: 8px; }
   .gf-track { display: none; }
   .gf-got { grid-column: 1 / -1; text-align: left; }
@@ -3140,7 +3297,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
    ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
 @media (max-width: 480px) {
-  .statbar { grid-template-columns: 1fr; }
+  .statbar, .statbar.five { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
 }
 
@@ -3365,7 +3522,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-logic-badge.ok { color: var(--green-ink); background: var(--green-soft); }
 .mk-logic-badge.wait { color: var(--amber-ink); background: var(--amber-soft); }
 .mk-kind { display: inline-flex; align-items: center; justify-content: center; min-width: 32px;
-  padding: 2px 6px; border-radius: 7px; background: var(--blue-soft); color: var(--blue);
+  padding: 2px 6px; border-radius: 7px; background: var(--blue-tint); color: var(--blue);
   font-size: 10px; font-weight: 800; letter-spacing: .2px; }
 .mk-field-grid { display: grid; grid-template-columns: 1fr 180px; gap: 10px; }
 .mk-field-grid .mk-qblock + .mk-qblock { margin: 0; padding: 0; border: 0; }
@@ -3374,6 +3531,106 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-qblock + .mk-qblock { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-code-row { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mk-lbl { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .3px; }
+/* ── Дашборд маркетинга: сквозная воронка, каналы, размещения ──
+   Отдельная вкладка раздела «Маркетинг». Строки таблиц собраны на общем рецепте
+   ховер-строки с левой полоской, чтобы не заводить третий вид списка в CRM. */
+.mkd-sub { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
+.mkd-tbl { border-top: 1px solid var(--line); }
+.mkd-th, .mkd-tr { display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(140px, 1.5fr) repeat(5, minmax(46px, .4fr))
+                         repeat(3, minmax(72px, .55fr)) 92px;
+  padding: 0 24px; }
+.mkd-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
+.mkd-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.mkd-th span:first-child { text-align: left; }
+.mkd-tr { height: 54px; border-bottom: 1px solid var(--line); position: relative;
+  transition: background .14s var(--ease); }
+.mkd-tr:last-child { border-bottom: none; }
+.mkd-tr:hover { background: #FBFBFC; }
+.mkd-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.mkd-tr:hover::before { opacity: 1; }
+.mkd-nm { min-width: 0; }
+.mkd-nm b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkd-v { text-align: right; font-size: 14px; font-weight: 600; color: var(--ink); }
+.mkd-v.zero { color: var(--ink-3); font-weight: 500; }
+.mkd-cv { text-align: right; font-size: 12.5px; font-weight: 700; }
+.mkd-cv.good { color: var(--green-ink); }
+.mkd-cv.weak { color: var(--red-ink); }
+.mkd-cv.none { color: var(--ink-3); font-weight: 500; }
+/* столбики динамики по дням: два тонких столбика на день рядом, не друг на друге —
+   так видно и объем трафика, и сколько из него дошло до бота */
+.mkd-card { display: flex; flex-direction: column; }
+.mkd-days { display: flex; align-items: stretch; gap: 5px; flex: 1; min-height: 168px;
+  padding: 6px 0 0; border-bottom: 1px solid var(--line); }
+.mkd-day { flex: 1; min-width: 0; display: flex; flex-direction: column;
+  justify-content: flex-end; align-items: center; gap: 7px; }
+.mkd-day .st { width: 100%; display: flex; align-items: flex-end; justify-content: center;
+  gap: 2px; flex: 1; }
+.mkd-day .b1, .mkd-day .b2 { flex: 1; max-width: 9px; border-radius: 3px 3px 0 0;
+  transition: height .9s var(--ease); }
+.mkd-day .b1 { background: var(--blue); }
+.mkd-day .b2 { background: var(--navy); }
+.mkd-day .lb { height: 12px; font-size: 9.5px; font-weight: 600; color: var(--ink-3);
+  white-space: nowrap; }
+.mkd-lg { display: flex; gap: 14px; margin-top: 12px; }
+.mkd-lg span { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-2); }
+.mkd-lg i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+/* честный список того, чего в цифрах пока нет */
+.mkd-gap { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  padding: 13px 24px; border-bottom: 1px solid var(--line); }
+.mkd-gap:last-child { border-bottom: none; }
+.mkd-gap b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.mkd-gap small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; }
+/* ── Расход на рекламу: ввод по дням и внесенное ──
+   Форма строкой, а не модалкой: расход вносят пачкой за неделю, и открывать окно на
+   каждую строку — это шесть лишних кликов. Список внесенного собран на таблице
+   дашборда (.mkd-*), чтобы не заводить третий вид списка. */
+.sp-form { display: grid; gap: 12px; margin-top: 18px; align-items: end;
+  grid-template-columns: 150px 150px minmax(120px, 1fr) minmax(110px, 1fr)
+                         92px 92px 110px auto; }
+.sp-form .al-f { min-width: 0; }
+.sp-form .bp { height: 42px; white-space: nowrap; }
+.sp-total { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
+.sp-chs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid var(--line); }
+.sp-ch { display: inline-flex; align-items: baseline; gap: 8px; padding: 7px 13px;
+  border-radius: var(--r-pill); background: var(--fill); }
+.sp-ch b { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.sp-ch span { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.mkd-th.sp-tbl, .sp-tbl .mkd-tr {
+  grid-template-columns: minmax(150px, 2fr) repeat(3, minmax(70px, .5fr)) 34px; }
+.sp-del { justify-self: end; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; color: var(--ink-3); transition: .15s; }
+.sp-del:hover { color: var(--red); background: var(--red-soft); }
+
+@media (max-width: 900px) {
+  .sp-form { grid-template-columns: 1fr 1fr; }
+  .sp-form .bp { grid-column: 1 / -1; }
+  /* итог за период на телефоне ломает заголовок на три строки; та же сумма видна
+     чипами каналов сразу под формой */
+  .sp-total { display: none; }
+  .mkd-th.sp-tbl, .sp-tbl .mkd-tr {
+    grid-template-columns: minmax(110px, 2fr) repeat(2, minmax(56px, .5fr)) 30px; }
+  /* на телефоне остаются пять колонок: кто, сколько людей, сколько из них годных,
+     сколько денег и качество. Клики и цены прячутся — это разбор за столом. */
+  .mkd-th, .mkd-tr { grid-template-columns: minmax(76px, 1.1fr) repeat(2, minmax(32px, .45fr))
+                       minmax(72px, .8fr) 52px;
+    gap: 8px; padding: 0 16px; }
+  /* сумма не переносится: «62 000 ₽» в две строки ломает высоту ряда */
+  .mkd-tr .mkd-v { white-space: nowrap; }
+  .mkd-th span.hidem, .mkd-tr .hidem { display: none; }
+  /* заголовки на телефоне длиннее своих колонок — пускаем в две строки, а не режем */
+  .mkd-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+  .mkd-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
+    min-width: 0; overflow-wrap: anywhere; }
+}
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
@@ -4182,6 +4439,81 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ct-chip.ct-ok    { color: var(--green-ink); background: var(--green-soft); }
 .ct-chip.ct-paid  { color: #fff;             background: var(--green); }
 .ct-chip.ct-off   { color: var(--ink-3);     background: var(--fill); }
+.ct-chip.ct-bad   { color: var(--red-ink);   background: var(--red-soft); }
+
+/* ── чеки в «Документах»: полоса долга и действия по строке ── */
+.dc-alert { display: flex; align-items: center; gap: 12px; margin: 0 0 14px;
+  padding: 12px 16px; border-radius: var(--r-lg); background: var(--red-soft);
+  color: var(--red-ink); }
+.dc-alert .ic { flex: none; color: var(--red); }
+.dc-alert b { font-weight: 700; }
+.dc-alert .dc-alert-go { margin-left: auto; flex: none; border: 0; cursor: pointer;
+  background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
+  padding: 7px 14px; border-radius: var(--r-pill); }
+.dc-alert .dc-alert-go:hover { filter: brightness(.95); }
+
+/* ── РИСКИ (этап 9): информатор переквалификации ────────────────────────────
+   Обзор — строка списка (.rsk-grid) с уровнем-чипом и флагами; разбор — карточка с
+   одиннадцатью проверками. Уровень красит чип по формуле семантики (§3), тяжесть на
+   разборе дублируется цветной полосой слева (один якорь на строку). Своих цветов нет —
+   только токены и .sev-семейство. */
+.rsk-grid { grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 2fr); }
+.rsk-row { cursor: pointer; }
+.rsk-name { display: flex; align-items: baseline; gap: 8px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.rsk-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.rsk-lv { display: flex; }
+.rsk-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.rsk-flag { font-size: 12px; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 3px 10px; white-space: nowrap; }
+.rsk-flag.more { color: var(--ink-3); }
+.rsk-note { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.rsk-clean { display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--green-ink); }
+.rsk-clean svg { color: var(--green); }
+.rsk-hot { color: var(--red-ink); }
+.list-hint { color: var(--ink-2); font-size: 13px; line-height: 1.45; }
+
+.rsk-detail { padding: 0; overflow: hidden; }
+.rsk-d-head { display: flex; align-items: center; gap: 12px;
+  padding: 15px 20px; border-bottom: 1px solid var(--line); }
+.rsk-d-who { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.rsk-d-name { font: 700 19px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
+.rsk-checks { display: flex; flex-direction: column; }
+.rsk-check { padding: 15px 20px 16px; border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent; }
+.rsk-check:last-child { border-bottom: 0; }
+.rsk-check.lv-risk { border-left-color: var(--red); }
+.rsk-check.lv-warn { border-left-color: var(--amber); }
+.rsk-c-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rsk-c-title { font-weight: 600; color: var(--ink); }
+.rsk-c-reason { color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
+.rsk-c-act { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px;
+  color: var(--ink); font-size: 13.5px; line-height: 1.45; }
+.rsk-c-act svg { flex: none; margin-top: 2px; color: var(--blue); }
+.rsk-c-ev { margin-top: 7px; font-size: 12.5px; color: var(--ink-3); }
+.rsk-hits { list-style: none; margin: 9px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 6px; }
+.rsk-hits li { font-size: 12.5px; color: var(--ink-2); }
+.rsk-hit-w { display: inline-block; margin-right: 5px; padding: 1px 7px; border-radius: 6px;
+  font-weight: 700; color: var(--red-ink); background: var(--red-soft); }
+.rsk-hit-hint { display: block; margin-top: 2px; color: var(--ink-3); }
+
+.rcp-item { border-bottom: 1px solid var(--line); }
+.rcp-item .trow.dc-grid { border-bottom: 0; }
+.rcp-item:last-child { border-bottom: 0; }
+.rcp-sub { color: var(--ink-3); font-size: 12.5px; }
+.rcp-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 14px 12px 40px; }
+.rcp-why { font-size: 12px; color: var(--red-ink); }
+.rcp-act { display: inline-flex; gap: 6px; margin-left: auto; }
+.rcp-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-2);
+  padding: 5px 11px; border-radius: var(--r-pill); }
+.rcp-a:hover { background: var(--fill); color: var(--ink-1); }
+.rcp-a.p { border-color: var(--blue); color: var(--blue-d); }
+.rcp-a.p:hover { background: var(--blue-tint); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
@@ -4466,6 +4798,126 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Погашенная плитка statBar: остаток счета еще грузится — тихий текст вместо
    числа-героя, чтобы пустой слот не читался как сломанные данные. */
 .stat-idle { font-size: 14px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+
+/* План против факта: анкер экрана «План выручки». Одна полоса вместо голых цифр —
+   видно, сколько из плана уже на счете. Плоско, заливка полосы, без теней. */
+.fpf { margin-bottom: 20px; padding: 22px 26px; }
+.fpf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fpf-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fpf-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fpf-pct { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: .9; color: var(--blue);
+  white-space: nowrap; }
+.fpf-pct span { font-size: 17px; font-weight: 700; margin-left: 2px; }
+.fpf-pct.done, .fpf-pct.over { color: var(--green-ink); }
+.fpf-track { height: 12px; border-radius: 7px; background: var(--fill); margin-top: 18px; overflow: hidden; }
+.fpf-fill { height: 100%; border-radius: 7px; background: var(--blue); transition: width .6s var(--ease); }
+.fpf-fill.done, .fpf-fill.over { background: var(--green); }
+.fpf-legend { display: flex; align-items: center; justify-content: space-between; margin-top: 12px;
+  font-size: 12.5px; color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.fpf-legend .fpf-v { color: var(--ink-3); }
+.fpf-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px; }
+.fpf-dot.plan { background: var(--line-2); }
+.fpf-dot.fact { background: var(--blue); }
+.fpf-dot.fact.done, .fpf-dot.fact.over { background: var(--green); }
+.fpf-empty { margin-top: 14px; font-size: 13px; color: var(--ink-3); }
+
+/* Баланс периода в платежном календаре: две полосы на одной шкале, приход против
+   выплат. Приход зеленый, выплаты навигационно-темные (не тревога), знак несет net. */
+.fbal { margin-bottom: 20px; padding: 22px 26px; }
+.fbal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.fbal-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.fbal-head .s { margin-top: 3px; font-size: 12.5px; color: var(--ink-3); }
+.fbal-net { font-size: 26px; font-weight: 800; letter-spacing: -.02em; line-height: 1; white-space: nowrap;
+  display: flex; align-items: baseline; gap: 8px; }
+.fbal-net.ok { color: var(--green-ink); }
+.fbal-net.bad { color: var(--red-ink); }
+.fbal-net span { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+.fbal-rows { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.fbal-r { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 16px; }
+.fbal-l { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.fbal-track { height: 12px; border-radius: 7px; background: var(--fill); overflow: hidden; }
+.fbal-fill { height: 100%; border-radius: 7px; transition: width .6s var(--ease); }
+.fbal-fill.inc { background: var(--green); }
+.fbal-fill.out { background: var(--navy); }
+.fbal-v { font-size: 13.5px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+
+/* Программы: карточки «выгодность». Якорь каждой — полоса «сколько дохода съел
+   расход» и крупная маржа; расход темный (навигационный), прибыль зеленая, убыток
+   красный. Тени не используем — иерархия весом и цветом, как во всей ведомости. */
+.prg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px; margin-bottom: 20px; }
+.prg { padding: 20px 22px; }
+.prg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.prg-name { font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; color: var(--ink);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-top: 2px; }
+.prg-meta { display: flex; align-items: center; gap: 4px; margin-top: 9px; }
+.prg-meta .sev { margin-left: 0; }
+.prg-pen { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 0; border-radius: 7px; background: var(--fill);
+  color: var(--ink-3); cursor: pointer; transition: color .15s, background .15s; }
+.prg-pen:hover { color: var(--blue); background: var(--blue-tint); }
+.prg-marg { flex: none; display: flex; flex-direction: column; align-items: flex-end; line-height: 1;
+  font-size: 26px; font-weight: 800; letter-spacing: -.03em; white-space: nowrap; }
+.prg-marg.ok { color: var(--green-ink); }
+.prg-marg.bad { color: var(--red-ink); }
+.prg-marg span { font-size: 11px; font-weight: 600; letter-spacing: 0; color: var(--ink-3);
+  margin-top: 4px; text-transform: none; }
+.prg-track { position: relative; height: 12px; border-radius: 7px; margin-top: 18px;
+  background: var(--green); overflow: hidden; }
+.prg-track.loss { background: var(--red); }
+.prg-exp { height: 100%; border-radius: 7px 0 0 7px; background: var(--navy);
+  transition: width .6s var(--ease); }
+.prg-track.empty2 { background: var(--fill); color: var(--ink-3); font-size: 12px;
+  font-weight: 600; display: flex; align-items: center; padding: 0 12px; height: 34px;
+  border-radius: 10px; }
+.prg-legend { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 11px; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; }
+.prg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 3px; margin-right: 7px;
+  vertical-align: middle; }
+.prg-dot.exp { background: var(--navy); }
+.prg-dot.prof { background: var(--green); }
+.prg-dot.bad { background: var(--red); }
+.prg-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px;
+  padding-top: 16px; border-top: 1px solid var(--line); }
+.prg-stat { display: flex; flex-direction: column; gap: 4px; }
+.prg-stat .k { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+.prg-stat .v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; color: var(--ink);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.prg-stat .v.ok { color: var(--green-ink); }
+.prg-stat .v.bad { color: var(--red-ink); }
+.prg-sub { margin-top: 14px; font-size: 11.5px; line-height: 1.5; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+.prg-note { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 13px 16px;
+  font-size: 12.5px; font-weight: 600; line-height: 1.45; color: var(--amber-ink);
+  background: var(--amber-soft); }
+.prg-note svg { flex: none; color: var(--amber-ink); }
+
+/* Панель списка программ: заголовок «Активные N» + кнопка «Добавить программу». */
+.prg-tools { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.prg-th { font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.prg-th b { color: var(--ink); font-weight: 700; }
+.prg-tools .qchip.add { margin-left: auto; }
+/* Сезон программы и кнопки управления в мета-ряду карточки. */
+.prg-meta .prg-season { font-size: 11px; font-weight: 600; color: var(--ink-3);
+  font-feature-settings: 'tnum'; white-space: nowrap; }
+.prg-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.prg-act { flex: none; height: 26px; padding: 0 11px; border-radius: 8px; border: 0;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: var(--fill);
+  cursor: pointer; transition: background .15s var(--ease), color .15s var(--ease); }
+.prg-act:hover { color: var(--ink); background: #EDEFF3; }
+/* Архивная карточка — приглушена, но читаема; данные на месте. */
+.prg.arch { opacity: .68; }
+.prg.arch:hover { opacity: 1; }
+.prg-arch { margin-top: 22px; }
+.prg-archh { display: flex; align-items: center; gap: 9px; width: 100%; padding: 11px 2px;
+  border: 0; border-top: 1px solid var(--line); background: none; cursor: pointer;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); }
+.prg-archh svg { color: var(--ink-3); }
+.prg-archh b { color: var(--ink); font-weight: 700; }
+.prg-archcue { margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.prg-archlist { margin-top: 4px; }
 
 .fin-funds { margin-top: 12px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
