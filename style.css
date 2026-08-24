@@ -2193,6 +2193,99 @@ button.tr-crumb:hover { color: var(--blue); }
   color: var(--ink-3); flex: none; }
 .brd-more { font-weight: 700; color: var(--ink-2); }
 
+/* ── План на период и отчет за него ──────────────────────────────────────────
+   Экран ритуала, а не еще один список: сверху две плашки сдачи, под ними то,
+   что в план не разложено, и только потом сами задачи. Плашка сдачи — мини-
+   карточка на серой заливке, как и все мини-карточки CRM: ни тени, ни рамки,
+   глубина заливкой. Кнопка стоит только там, где сдача еще нужна, поэтому на
+   экране всегда ровно один призыв к действию, а не два одинаковых. */
+.rh-body { padding-top: 4px; }
+.rh-plates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 24px 4px; }
+.rh-p { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px 15px;
+  border-radius: 14px; background: var(--fill); }
+/* Пропущенный срок — единственное красное на экране. Полоской слева, а не
+   заливкой всей плашки: это состояние одной строки работы, а не авария. */
+.rh-p.miss { box-shadow: inset 3px 0 0 var(--red); }
+.rh-ph { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.rh-l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.rh-ph .sev { margin-left: auto; }
+.rh-n { font-size: 32px; font-weight: 700; line-height: 1.05; letter-spacing: -.03em; color: var(--ink); }
+.rh-s { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.rh-said { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px;
+  font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.rh-said svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.rh-pf { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.rh-due { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.rh-pf .bp, .rh-pf .qchip { margin-left: auto; }
+.rh-hint { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+/* Тихая кнопка на серой плашке: у .qchip заливка ровно того же серого, и на
+   --fill он растворяется в фоне до состояния «просто текст». Белый с тонкой
+   рамкой — тот же тихий уровень, но кнопка снова видна как кнопка. */
+.rh-p .qchip, .rh-loose .qchip { background: #fff; border-color: var(--line); }
+.rh-p .qchip:hover, .rh-loose .qchip:hover { background: #F0F2F6; }
+/* Состояния сдачи — своя семья рядом с .sev.st-*: словари не смешиваем. */
+.sev.rh-miss { color: var(--red-ink);   background: var(--red-soft); }
+.sev.rh-late { color: var(--amber-ink); background: var(--amber-soft); }
+
+/* Цели без шагов в периоде: то, ради чего экран и нужен. Стоят выше списка
+   задач — «чего я не запланировал» важнее, чем «что я делаю». */
+.rh-loose { margin: 16px 24px 4px; border-radius: 14px; background: var(--fill); padding: 4px 16px 8px; }
+.rh-lh { display: flex; align-items: center; gap: 8px; padding: 13px 0 9px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.rh-lh svg { color: var(--amber); }
+.rh-lh .cnt { margin-left: auto; }
+.rh-lr { display: flex; align-items: center; gap: 12px; padding: 10px 0;
+  border-top: 1px solid var(--line); cursor: pointer; }
+.rh-lt { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rh-add { flex: none; }
+.rh-list { margin-top: 12px; border-top: 1px solid var(--line); }
+/* В своем плане колонки исполнителя нет — он один и тот же в каждой строке. */
+.rh-list .trow.tsk-grid { grid-template-columns: minmax(0,1fr) 150px 116px; }
+
+/* Срез руководителя: кто сдал, кто нет. Две колонки состояния и два числа. */
+.rh-grid { grid-template-columns: minmax(180px, 380px) 190px 190px minmax(90px,1fr) minmax(90px,1fr); }
+.rh-grid .th:nth-child(n+4), .rh-grid .brd-n { text-align: right; }
+/* Переключатель «Мой / Команда» — тот же сегмент .vseg, но с текстом вместо
+   иконок: 36px под иконку обрезают слово. */
+.rh-who button { width: auto; padding: 0 14px; font: 600 12.5px 'Manrope', sans-serif; }
+.rh-c { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* Строка человека под числами — во всю ширину, как отчет дня в табло: рядом с
+   чипом она обрезается до трех слов, а читают ее целиком. */
+.trow.rh-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.rh-note { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px;
+  margin-top: 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.rh-note svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.rh-note b { font-weight: 700; color: var(--ink-3); }
+
+/* Согласованные сроки. Настройка команды, поэтому лежит на экране команды, а
+   не в отдельном разделе: правило и его исполнение видны рядом. */
+.rh-sched { padding: 16px 24px 20px; border-top: 1px solid var(--line); }
+.rh-shh { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 12px; }
+.rh-sr { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 10px 0;
+  border-top: 1px solid var(--line); }
+/* Выключенный период гасим целиком: правила у него остаются, но спрашивать по
+   ним никого не будут, и на экране это должно читаться сразу. */
+.rh-sr.off { opacity: .55; }
+.rh-sp { min-width: 76px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+/* Тумблер периода: включенный — синим тинтом, а не темной пилюлей .qchip.on.
+   Три навы подряд в правом краю таблицы весят больше, чем сами сроки. */
+.rh-onoff { margin-left: auto; }
+.rh-onoff.on { background: var(--blue-tint); color: var(--blue); border-color: transparent; }
+.rh-onoff.on:hover { background: #DCE6FF; color: var(--blue-d); }
+.rh-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+/* Поля в строке — по содержимому, а не во всю ширину: у .al-in width 100%, и
+   без этого каждый селект уезжает на свою строку. */
+.rh-sr .al-in { width: auto; }
+.rh-t { width: 92px; }
+.rh-d { width: 152px; }
+.rh-sf { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.rh-sf .rh-hint { margin-left: 0; }
+.rh-sf .bp { margin-left: auto; }
+
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
 .tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
@@ -2504,6 +2597,23 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.brd-grid .brd-n { text-align: left; display: flex; flex-direction: column-reverse; gap: 2px; }
   .trow.brd-grid .brd-n::before { content: attr(data-l); font-size: 10.5px; font-weight: 700;
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  /* План на телефоне: плашки в колонку, а срез команды — имя во всю строку и
+     состояния под ним. Шапка скрыта, поэтому каждая клетка называет себя сама. */
+  .rh-plates { grid-template-columns: 1fr; padding: 14px 16px 2px; }
+  .rh-loose { margin: 14px 16px 2px; }
+  .rh-sched { padding: 14px 16px 18px; }
+  .trow.rh-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    gap: 10px 12px; height: auto; padding: 14px 16px; align-items: start; }
+  .trow.rh-grid.thead { display: none; }
+  .trow.rh-grid .brd-who { grid-column: 1 / -1; }
+  /* Подпись сверху, значение под ней: у клетки состояния внутри два элемента
+     (чип и строка человека), и переворачивать их порядок, как у голого числа
+     в табло, нельзя — строка уехала бы вперед чипа. */
+  .trow.rh-grid .rh-c, .trow.rh-grid .brd-n { display: flex; flex-direction: column;
+    align-items: flex-start; gap: 4px; text-align: left; }
+  .trow.rh-grid .rh-c::before, .trow.rh-grid .brd-n::before { content: attr(data-l);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
   /* Дерево на телефоне: у направления числа уходят под название и называют
