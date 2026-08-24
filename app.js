@@ -8,13 +8,36 @@
   // из любого браузера. Старый Railway-домен умер при переезде. Переопределяется
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
   // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
-  // из-за рубежа (зона .рф резолвится не везде — публичный DNS Google не разрешает
-  // api.истсайд.рф). С зеркала ходим в api.eastside.study, иначе CRM открывается, но
-  // ни один запрос не проходит.
+  // из-за рубежа. С зеркала по умолчанию ходим в api.eastside.study.
+  var API_RU = 'https://api.xn--80aikf2bag.xn--p1ai';
+  var API_INT = 'https://api.eastside.study';
+  var API_LS = 'eastside_crm_api';
   var API = window.EASTSIDE_API_BASE
-    || (/(^|\.)eastside\.study$/.test(location.hostname)
-        ? 'https://api.eastside.study'
-        : 'https://api.xn--80aikf2bag.xn--p1ai');
+    || lsGet(API_LS)
+    || (/(^|\.)eastside\.study$/.test(location.hostname) ? API_INT : API_RU);
+
+  /* Один сервер отвечает на обоих адресах, но у людей открывается то один, то другой:
+     зона .рф резолвится не у каждого провайдера и не через любой VPN. Симптом всегда
+     один — CRM грузится (страница статическая), а запросы падают в «Сеть недоступна»
+     (Риана, 21.08.2026). Поэтому на отказ соединения — не на ответ сервера с ошибкой,
+     а именно на отказ — пробуем второй адрес и, если он ответил, запоминаем его для
+     этого устройства. Ручной перенастройки от человека это не требует. */
+  function xfetch(path, opts) {
+    return fetch(API + path, opts).catch(function (err) {
+      var alt = API === API_RU ? API_INT : API_RU;
+      if (window.EASTSIDE_API_BASE || alt === API) throw err;
+      return fetch(alt + path, opts).then(function (r) {
+        API = alt;
+        try { localStorage.setItem(API_LS, alt); } catch (e) { /* приватный режим */ }
+        return r;
+      });
+    });
+  }
+
+  function lsGet(k) {
+    try { return localStorage.getItem(k); } catch (e) { return null; }
+  }
+
   var KEY_LS = 'eastside_crm_key';
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
@@ -24,16 +47,19 @@
 
   var state = {
     role: 'owner', userName: '', loaded: false,
-    leads: [], page: 'dash', seg: 'queue', viewMode: 'table',
+    leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '',
+    pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
+    mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
     drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
     composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
+    leadConv: {},       // переписка бота, сведенная с карточкой лида: { session_id: ответ | 'load' }
+    convLead: {},       // обратный ход: карточка лида по диалогу бота { user_id: ответ | 'load' }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, planBlock: {}, assignees: null,
@@ -56,7 +82,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -64,6 +90,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
+        mkTab: state.mkTab, mkDays: state.mkDays,
         boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
       }));
     } catch (e) {}
@@ -104,7 +131,23 @@
     tg_nudge_sent: 'бот напомнил о записи',
     magnet_registered: 'забрал бесплатный мини-курс',
     magnet_progress: 'мини-курс: прогресс',
+    course_paid: 'оплатил курс',
+    course_access_granted: 'открыт доступ к курсу',
+    course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    // Раньше эти события показывались в ленте сырым английским именем: человек читал
+    // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
+    lead_created_bot: 'написал боту',
+    lead_created_manual: 'заведен в CRM вручную',
+    lead_name_bot: 'бот узнал имя',
+    dormant_no_anketa_sent: 'бот напомнил про анкету',
+    geo: 'определен город',
+    det_test_started: 'начал тест по английскому',
+    webinar_registered: 'записался на вебинар',
+    webinar_comment: 'написал в чате вебинара',
+    call_reminder_sent: 'напомнили о созвоне',
+    offer_paid: 'оплатил счет',
+    hsk_signup: 'записался на HSK',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -112,10 +155,17 @@
     if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
     if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
     if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'course_paid' || e.type === 'course_access_granted' || e.type === 'course_access_closed') {
+      if (p.title) label += ' «' + p.title + '»';
+      if (p.by) label += ' — ' + p.by;
+    }
     if (e.type === 'magnet_progress') {
       label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
+    if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
+    if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -127,7 +177,10 @@
   }
   var COMM_KINDS = { call: 'звонок', msg: 'написал', meet: 'встреча' };
   var UNI_TYPE = { dream: 'мечта', solid: 'надежный', safe: 'запасной' };
+  /* Класс считается из года окончания и потому идет вторым: спрашиваем мы именно год
+     окончания школы, он не устаревает каждый сентябрь (решение владельца 21.08). */
   var SNAPSHOT = [
+    ['finish_year', 'Заканчивает школу'], ['birth_date', 'Дата рождения'],
     ['grade', 'Класс'], ['target_year', 'Год поступления'], ['program', 'Программа'],
     ['study_language', 'Язык учебы'], ['gpa', 'Средний балл'], ['english_level', 'Английский'],
     ['english_certificate', 'Сертификат'], ['chinese_level', 'Китайский'], ['hsk', 'HSK'],
@@ -188,11 +241,13 @@
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
       max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
+      inst: '<rect x="3.4" y="3.4" width="13.2" height="13.2" rx="4.2"/><circle cx="10" cy="10" r="3.3"/><path d="M13.7 6.3h.01"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
       cap: '<path d="M10 4 18 7.5 10 11 2 7.5 10 4z"/><path d="M5.5 9v4c0 1.4 2 2.5 4.5 2.5s4.5-1.1 4.5-2.5V9"/>',
       box: '<path d="M3.5 6.5 10 3l6.5 3.5v7L10 17l-6.5-3.5z"/><path d="M3.5 6.5 10 10l6.5-3.5M10 10v7"/>',
+      gift: '<rect x="3.2" y="8.8" width="13.6" height="8.2" rx="1.6"/><rect x="2.2" y="5.6" width="15.6" height="3.2" rx="1.2"/><path d="M10 5.6v11.4"/><path d="M10 5.6S8.9 2.6 7.1 2.6a1.7 1.7 0 0 0 0 3z"/><path d="M10 5.6s1.1-3 2.9-3a1.7 1.7 0 0 1 0 3z"/>',
       award: '<circle cx="10" cy="8" r="4.5"/><path d="M7.5 11.8 6.5 17l3.5-2 3.5 2-1-5.2"/>',
       mega: '<path d="M4 8.5 14 4.5v9L4 11.5z"/><path d="M4 8.5H3a1.5 1.5 0 0 0 0 4.5h1M6.5 12.5l1 3.5"/>',
       handshake: '<path d="M10 6 7.5 4.5 3 7v5l2 1.5M10 6l2.5-1.5L17 7v5l-2 1.5"/><path d="M10 6 7.5 8.5a1.3 1.3 0 0 0 1.8 1.8L10.5 9l2 2a1.3 1.3 0 0 0 1.8-1.8L13 8"/>',
@@ -386,6 +441,10 @@
      не отличало заявку от случайного посетителя. */
   function leadName(l) {
     if (l.name) return l.name;
+    // Ник — тоже имя: «Заход без анкеты» при живом @nick читалось как «мы про него
+    // ничего не знаем», хотя знаем ровно то, чем он подписан в мессенджере.
+    var c = (l.contact || '').trim();
+    if (c.charAt(0) === '@') return c;
     return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
   }
   /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
@@ -486,7 +545,7 @@
   function api(path, opts) {
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
       /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
          на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
          отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
@@ -589,6 +648,15 @@
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
+  /* Точечно обновить crm-поля карточки в списке и в детали. Нужен ручкам, которые
+     не ходят через PATCH (ответственный, первое касание): без этого отметка есть на
+     сервере, а на экране появляется только после перезагрузки. */
+  function crmSet(id, upd) {
+    var lead = findLead(id), det = state.details[id];
+    if (lead) lead.crm = Object.assign({}, lead.crm, upd);
+    if (det) { det.crm = Object.assign({}, det.crm, upd); cacheSet(id, det); }
+  }
+
   /* НОН-БЛОКИНГ: меняем локально и рисуем сразу, бэкенд синхроним в фоне.
      При ошибке — откат + тост. Никаких ожиданий ответа ради анимации. */
   var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides', 'curator_id'];
@@ -600,13 +668,16 @@
       if (!crm) return crm;
       var n = Object.assign({}, crm);
       CRM_PATCH_FIELDS.forEach(function (k) { if (body[k] !== undefined) n[k] = body[k]; });
+      // квалификация приходит патчем по ключам, а не целиком: мерджим так же, как бэк,
+      // иначе оптимистичная отрисовка на секунду теряет соседние поля
+      if (body.qual) n.qual = Object.assign({}, crm.qual || {}, body.qual);
       return n;
     }
     // 1) применяем локально + мгновенно перерисовываем
     if (lead) lead.crm = merge(lead.crm);
     if (det) { det.crm = merge(det.crm); cacheSet(id, det); }
     renderSide();
-    if (body.status || body.tasks || body.comms) {
+    if (body.status || body.tasks || body.comms || body.qual) {
       var sy = window.pageYOffset, mc = el('m-content'), msc = mc ? mc.scrollTop : 0;
       if (state.page !== 'dash') renderView();
       if (state.drawerId === id) renderDrawer(true);
@@ -642,7 +713,9 @@
       if (seg === 'queue') return inQueue(l);
       if (seg === 'clients') return !!l.paid;
       if (seg === 'rejected') return l.crm.status === 'rejected';
-      return true;
+      // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
+      // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
+      return !isProspect(l);
     });
   }
   var PERIODS = { today: 1, week: 7, month: 30 };
@@ -664,6 +737,8 @@
   var QUICK = {
     '':            { label: 'Все',              icon: 'rows' },
     hot:           { label: 'Горячие',          icon: 'flame', pred: function (l) { return l.booking && l.crm.status === 'new'; } },
+    mql:           { label: 'Квал-лиды',        icon: 'target', pred: function (l) { return !!(l.crm.mql && l.crm.mql.ok); } },
+    sql:           { label: 'Квал продаж',      icon: 'badge', pred: function (l) { return !!l.crm.sql; } },
     scheduled:     { label: 'Назначен созвон',  icon: 'cal',   pred: function (l) { return l.crm.status === 'call_scheduled'; } },
     nocontact:     { label: 'Без контакта',     icon: 'phone', pred: function (l) { return !((l.booking || {}).contact); } },
     tasks:         { label: 'С задачами',       icon: 'task',  pred: function (l) { return (l.crm.tasks || []).some(function (t) { return !t.done; }); } },
@@ -713,13 +788,15 @@
     return arr;
   }
   function counts() {
-    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
-       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    /* «Пользователи» считаются по тому же правилу, что и список: холодные лиды
+       в цифру на вкладке не входят, иначе счетчик спорил бы со строками. Считаем
+       их отдельно (c.cold) — это бейдж раздела «Лиды» в меню. */
     var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0, blank: 0 };
+              anketa: 0, booked: 0, blank: 0, cold: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
-      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      if (isBlankVisit(l)) c.blank++;
+      if (isProspect(l)) { c.cold++; return; }
       c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
@@ -929,7 +1006,7 @@
     var total = segArr.length;
     var shown = segLeads(state.seg).length;
 
-    var order = ['', 'hot', 'scheduled', 'nocontact', 'tasks', 'attention'];
+    var order = ['', 'hot', 'mql', 'sql', 'scheduled', 'nocontact', 'tasks', 'attention'];
     var chips = order.map(function (k) {
       var q = QUICK[k];
       var n = q.pred ? segArr.filter(q.pred).length : total;
@@ -1024,7 +1101,8 @@
     if (typeof closeSmenu === 'function') closeSmenu();
     if (document.querySelector('.al-ov')) return;
     var chOpts = [['', 'Канал не указан'], ['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'],
-      ['vk', 'VK'], ['phone', 'Телефон'], ['site', 'Сайт'], ['referral', 'Рекомендация'], ['other', 'Другое']];
+      ['vk', 'VK'], ['instagram', 'Instagram'], ['phone', 'Телефон'], ['site', 'Сайт'],
+      ['referral', 'Рекомендация'], ['other', 'Другое']];
     var stOpts = ACTIVE_STATUSES.concat(['client', 'rejected']).map(function (s) { return [s, CRM[s].label]; });
     var opt = function (o, sel) { return '<option value="' + o[0] + '"' + (o[0] === sel ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; };
     var ov = document.createElement('div');
@@ -1524,7 +1602,7 @@
       var login = li.value.trim(), pass = pi.value;
       if (!login || !pass) { fail('Введи логин и пароль'); return; }
       el('lg-go').textContent = 'Входим…';
-      fetch(API + '/admin/api/login', {
+      xfetch('/admin/api/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: login, password: pass }),
       }).then(function (r) {
@@ -1609,7 +1687,7 @@
       var email = el('rs-email').value.trim();
       if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
       btn.textContent = 'Отправляем…'; btn.disabled = true;
-      fetch(API + '/admin/api/password/reset/request', {
+      xfetch('/admin/api/password/reset/request', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email }),
       }).then(function (r) {
@@ -1633,7 +1711,7 @@
       if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
       if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
       btn.textContent = 'Сохраняем…'; btn.disabled = true;
-      fetch(API + '/admin/api/password/reset/confirm', {
+      xfetch('/admin/api/password/reset/confirm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
       }).then(function (r) {
@@ -1783,7 +1861,10 @@
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
+  // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
+  // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
+  // переносить срок — только суперадмин, иначе просрочка ничего не значит.
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
@@ -1792,19 +1873,28 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
-    // Тьютор сопровождает учеников и отвечает им: без карточек и диалогов он входил
-    // в пустую CRM. Денег (cap finance) у него нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'portal'] },
+    // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
+    // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
+    // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
+    // нет намеренно — решение владельца.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
+    // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
+    // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
+    // не видит маркетинг, а «Руководитель» — это заодно зарплаты команды и документы
+    // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
     curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
-    // Денег у него нет намеренно: собирать и контролировать — не то же, что платить.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи всей команды',  caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal'] },
+    // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
+    // (ведет всю финансовую работу); ведомостью управляет, поэтому есть и правка
+    // (finmodel_edit): экраны ввода Доходы и листы работают только с ней.
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'contractors', 'finmodel', 'finmodel_edit'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
@@ -1836,6 +1926,7 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
@@ -1847,6 +1938,9 @@
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
+    // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
+    // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
+    { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
@@ -1860,11 +1954,13 @@
     { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork', space: 'mw' },
     { id: 'mwplan', label: 'Мой план', icon: 'cal', cap: 'mywork', space: 'mw' },
     { id: 'mwacts', label: 'Акты', icon: 'doc', cap: 'mywork', space: 'mw' },
+    { id: 'mwrcp', label: 'Чеки', icon: 'doc', cap: 'mywork', space: 'mw' },
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
+    { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Ввод разложен на три места, а не свален в один экран (правки Романа 17.08.2026,
@@ -1872,6 +1968,10 @@
        расходы блоками отдельно. Человек приходит вносить что-то одно — и должен сразу
        попадать туда, а не искать нужную вкладку в общей куче. */
     { id: 'finincome', label: 'Доходы', icon: 'card', cap: 'finmodel', space: 'fin' },
+    /* План выручки — прогноз (новые продажи и дебиторка), платежный календарь сводит
+       ожидаемый приход с плановым расходом. Раздел старого сайта, вернули 18.08.2026. */
+    { id: 'finplan', label: 'План выручки', icon: 'target', cap: 'finmodel', space: 'fin' },
+    { id: 'fincalendar', label: 'Платежный календарь', icon: 'cal', cap: 'finmodel', space: 'fin' },
     /* Свой расчетный лист открывается и тому, у кого нет права смотреть ведомость
        целиком: правило владельца от 11.08.2026 — править только свое. У такого
        человека это единственный раздел «Финансов». */
@@ -1881,6 +1981,7 @@
     { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
@@ -1930,7 +2031,7 @@
   }
   /* Ждут ли человека его собственные задания и акты. Считает сервер (те же счетчики,
      что и внутри кабинета), экран только показывает точку на кнопке пространства. */
-  function spaceAttention() { return mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwnotif') > 0; }
+  function spaceAttention() { return mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwrcp') + mwBadge('mwnotif') > 0; }
   /* Переключатель показываем, только если человеку доступно больше одного
      пространства: у кого нет доступа к самозанятым, CRM не меняется вообще. */
   function openSpaces() {
@@ -1996,7 +2097,7 @@
     if (ws) {
       // подпись под логотипом — про то пространство, в котором сейчас работают
       var czn = (CZ.list || []).length;
-      var mwn = mwBadge('mwtasks') + mwBadge('mwacts');
+      var mwn = mwBadge('mwtasks') + mwBadge('mwacts') + mwBadge('mwrcp');
       ws.textContent = space === 'mw'
         // В своем кабинете счетчик лидов не при чем: тут человека касается только то,
         // что ждет лично его.
@@ -2007,7 +2108,9 @@
         // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал
         // «0 лидов · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
         : can('clients')
-          ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' +
+          // «лид» больше не про этот счетчик: холодные живут в разделе «Лиды»,
+          // а здесь те, с кем работает человек.
+          ? c.all + ' ' + plural(c.all, 'человек', 'человека', 'человек') + ' · обновлено ' +
             (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
           : roleInfo().label;
     }
@@ -2140,6 +2243,19 @@
           renderTopbar(); renderHead(); renderView();
         });
       });
+    } else if (state.page === 'gifts') {
+      var gopts = [[0, 'За все время'], [30, '30 дней'], [7, '7 дней'], [1, 'Сегодня']];
+      tb.innerHTML = '<nav class="tabs">' + gopts.map(function (o) {
+        return '<a class="tab' + ((state.gfDays || 0) === o[0] ? ' on' : '') + '" data-gfd="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>';
+      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
+        t.addEventListener('click', function () {
+          state.gfDays = parseInt(t.getAttribute('data-gfd'), 10);
+          state._gf = null;            // период сменился — цифры старого больше не наши
+          saveUi();
+          renderTopbar(); renderView();
+        });
+      });
     } else if (state.page === 'path') {
     } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
@@ -2162,6 +2278,36 @@
           state.finPeriod = t.getAttribute('data-fper');
           fetchFinance(true, function () { if (state.page === 'finance') renderView(); });
           renderTopbar(); renderHead(); renderView();
+        });
+      });
+    } else if (state.page === 'marketing') {
+      /* две задачи на одной странице: смотреть цифры и заводить ссылки. Вкладка слева,
+         период справа. Период нужен на ОБЕИХ вкладках: на «ссылках» по нему считается
+         воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
+      /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
+         людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
+      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'],
+                    ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
+      var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
+      tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
+        return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
+      }).join('') + '</nav>' +
+        '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
+          return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
+        }).join('') + '</div>';
+      Array.prototype.forEach.call(tb.querySelectorAll('[data-mktab]'), function (t) {
+        t.addEventListener('click', function () {
+          state.mkTab = t.getAttribute('data-mktab');
+          if (state.mkTab === 'spend') state._mkSpend = null;
+          saveUi(); renderTopbar(); renderView();
+        });
+      });
+      Array.prototype.forEach.call(tb.querySelectorAll('#mk-period button'), function (b) {
+        b.addEventListener('click', function () {
+          state.mkDays = parseInt(b.getAttribute('data-mkd'), 10);
+          state._mkDash = null;   // цифры за другой период — новый запрос, не фильтр по месту
+          state._mkSpend = null;
+          saveUi(); renderTopbar(); renderView();
         });
       });
     } else if (state.page === 'finpnl') {
@@ -2188,9 +2334,13 @@
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
       });
+    } else if (state.page === 'finprograms') {
+      // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
+               state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
@@ -2291,6 +2441,11 @@
       else phrase = 'Все спокойно: заявки разобраны, рисков нет.';
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
+    }
+    if (state.page === 'prospects') {
+      var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+      html = '<div><h2>Лиды</h2>' +
+        '<div class="verdict" style="margin-top:8px"><span>' + esc(PR_SEGS[prSeg].hint) + '</span></div></div>';
     }
     if (state.page === 'leads') {
       html = '<div><h2>Люди</h2>' +
@@ -2423,12 +2578,15 @@
          а не про открытый экран. */
       var mc = MW.counts;
       var toSign = mc ? (mc.acts_to_sign || 0) : 0;
-      var offered = mc ? Math.max(0, (mc.todo || 0) - toSign) : 0;
+      var rcpTodo = mc ? (mc.receipts_todo || 0) : 0;
+      var offered = mc ? Math.max(0, (mc.todo || 0) - toSign - rcpTodo) : 0;
       var phrase8;
       if (MW.err) phrase8 = esc(MW.err);
       else if (!mc) phrase8 = 'Загружаю вашу работу…';
       else if (toSign) phrase8 = '<b>' + toSign + ' ' + plural(toSign, 'акт ждет', 'акта ждут', 'актов ждут') +
         ' вашей подписи.</b> Пока подписи нет, выплату провести нельзя.';
+      else if (rcpTodo) phrase8 = '<b>' + rcpTodo + ' ' + plural(rcpTodo, 'выплата ждет', 'выплаты ждут', 'выплат ждут') +
+        ' чека.</b> Пробейте чек в «Мой налог» и приложите — без него следующая выплата не пройдет.';
       else if (offered) phrase8 = '<b>' + offered + ' ' + plural(offered, 'новое задание', 'новых задания', 'новых заданий') +
         '</b> ждет вашего решения — принять или отказаться.';
       else if (mc.active) phrase8 = 'В работе <b>' + mc.active + ' ' +
@@ -2522,6 +2680,23 @@
       html = '<div><h2>Каталог услуг</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('box', 13) + '</span><span>' + phrase5 + '</span></div></div>';
     }
+    if (state.page === 'czrisks') {
+      /* Вердикт отвечает на вопрос, ради которого сюда заходят: к кому идти в первую
+         очередь. Красное — где отношения уже похожи на трудовые, амбер — присмотреться. */
+      var rt = RISK.list ? RISK.totals : null;
+      var phrase9;
+      if (RISK.open) phrase9 = 'Разбор по человеку: одиннадцать проверок, у каждой причина и что сделать.';
+      else if (!RISK.list) phrase9 = 'Считаю риски по исполнителям…';
+      else if (RISK.err) phrase9 = esc(RISK.err);
+      else if (!rt.risk && !rt.warn) phrase9 = 'Явных признаков трудовых отношений нет. Проверки прошли у всех исполнителей.';
+      else phrase9 = (rt.risk ? '<b class="rsk-hot">' + rt.risk + ' ' +
+          plural(rt.risk, 'исполнитель', 'исполнителя', 'исполнителей') + '</b> в зоне риска' : '') +
+        (rt.risk && rt.warn ? ', ' : '') +
+        (rt.warn ? '<b>' + rt.warn + '</b> под наблюдением' : '') +
+        '. У каждого флага есть причина и действие.';
+      html = '<div><h2>Риски</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('shield', 13) + '</span><span>' + phrase9 + '</span></div></div>';
+    }
     if (curSpace() === 'fin') {
       // Вердикт ведомости отвечает на один вопрос: хватает ли денег, чтобы закрыть
       // период. Именно от него зависит, тянуть период дальше или платить.
@@ -2531,7 +2706,8 @@
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
-                     finmetrics: 'Итоги периода' };
+                     finplan: 'План выручки', fincalendar: 'Платежный календарь',
+                     finprograms: 'Программы', finmetrics: 'Итоги периода' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -2557,6 +2733,17 @@
             finRub(fd.totals.balance, 0) + '</b> — по последней ведомости' +
             (fhand ? ', остаток правился руками по выписке.' : '.')
           : 'Считаю фонд за все время…';
+      }
+      // Программы считаются сквозь периоды и из чеков ЮKassa — период тут не нужен,
+      // поэтому ветка стоит до проверки !per (иначе повисло бы «Загружаю ведомость»).
+      else if (state.page === 'finprograms') {
+        var pg = FIN.programs && FIN.programs !== 'none' ? FIN.programs : null;
+        ph = pg
+          ? 'Выгодна ли программа: доход по каждой тянется сам из чеков ЮKassa, расход — ' +
+            'из P&L. Прибыль это разница, сквозь все периоды. Всего прибыль <b>' +
+            finRub(pg.total.profit, 0) + '</b>' +
+            (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
+          : 'Считаю программы по чекам…';
       }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
@@ -2590,6 +2777,14 @@
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
           : 'Все ведомости одной лентой: доходы, расходы и переводы, новое сверху. У каждой строки видно свою ведомость.';
+      } else if (state.page === 'finplan') {
+        ph = 'Прогноз выручки по ведомости <b>' + esc(per.name) + '</b>: новые продажи и ' +
+          'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
+          'сравнивает план с тем, что уже пришло.';
+      } else if (state.page === 'fincalendar') {
+        ph = 'Хватит ли денег: ожидаемый приход из плана выручки против плановых выплат ' +
+          'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
+          'часть уйдет по обязательствам.';
       } else {
         ph = 'Регулярные списания и обязательства. Остаток долга едет в следующий период, пока не погашен.';
       }
@@ -2638,8 +2833,10 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -2647,6 +2844,7 @@
     else if (state.page === 'czplans') renderCzPlans(view);
     else if (state.page === 'czpay') renderCzPay(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
+    else if (state.page === 'czrisks') renderCzRisks(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
     else if (state.page === 'finfund') renderFinFund(view);
@@ -2657,6 +2855,9 @@
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finplan') renderFinPlan(view);
+    else if (state.page === 'fincalendar') renderFinCalendar(view);
+    else if (state.page === 'finprograms') renderFinPrograms(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
@@ -2737,7 +2938,7 @@
      фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
   function czSend(path, method, body) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -2777,7 +2978,13 @@
     // учеником»: работа по одной семье разложена по разным исполнителям и в
     // обычном списке между ее строками стоят чужие задачи.
     stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
-    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни' },
+    // Вкладка живет, только когда тебе реально что-то сдали (или ты сейчас на
+    // ней — иначе приемка последней задачи выкидывала бы на «Сегодня»). Правило
+    // Павла от 2026-08-20: у тьютора приемки нет, он исполнитель, а не
+    // постановщик. Пустая вкладка с нулем — это шум у всех, а не только у него.
+    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни', live: function () {
+      return !!(state.taskSum && state.taskSum.to_accept) || state.taskSeg === 'accept';
+    } },
     // «Вся команда» — не список, а дерево: направление, цель, шаги. Плоская
     // выдача всех задач компании нечитаема в принципе: в ней рядом лежат
     // «позвонить семье Ким» и «перевести школу на новый формат».
@@ -2802,7 +3009,8 @@
   function deptLabel(d) { return DEPTS[d] || ''; }
   function taskSegs() {
     return Object.keys(TASK_SEGS).filter(function (k) {
-      return !TASK_SEGS[k].cap || can(TASK_SEGS[k].cap);
+      if (TASK_SEGS[k].cap && !can(TASK_SEGS[k].cap)) return false;
+      return !TASK_SEGS[k].live || TASK_SEGS[k].live();
     });
   }
   function taskSeg() {
@@ -2949,6 +3157,10 @@
     if (!can('tasks')) return;
     api('/admin/api/tasks/summary').then(function (r) {
       state.taskSum = r || null;
+      // Вкладка «На приемку» зависит от счетчика, а он приходит отдельным
+      // запросом: без перерисовки вкладок она появлялась бы только на следующем
+      // переходе по разделам.
+      if (state.page === 'tasks') renderTopbar();
       if (cb) cb(); else renderSide();
     }).catch(function () {});
   }
@@ -3790,6 +4002,94 @@
                            : (n / 1024 / 1024).toFixed(1).replace('.0', '') + ' МБ';
   }
 
+  /* Перенос срока. Отдельный поповер у самой плашки срока, а не форма правки
+     задачи: срок двигают на бегу и по одной штуке, ради одной даты открывать
+     форму со всеми полями — четыре лишних клика и риск задеть соседнее.
+
+     Кто двигает — только суперадмин (cap tasks_due, правило Павла 19.08.2026),
+     поэтому для остальных плашка остается подписью и поповера у нее нет. */
+  function duePop(anchor, task, after) {
+    var host = anchor.parentNode;
+    var open = host.querySelector('.due-pop');
+    if (open) { open.parentNode.removeChild(open); return; }
+
+    // Ближайший понедельник: «давай с новой недели» — самый частый перенос
+    // после «на завтра», и считать его руками в календаре человек не должен.
+    var toMon = (8 - (new Date().getDay() || 7)) % 7 || 7;
+    // Три варианта, а не четыре: в одну строку сегмента влезают ровно они, а
+    // произвольный «через 3 дня» и так набирается полем даты рядом.
+    var quick = [['сегодня', 0], ['завтра', 1], ['понедельник', toMon]];
+    var cur = '';
+    if (task.due_at) {
+      var d = new Date(task.due_at);
+      cur = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    }
+
+    var pop = document.createElement('div');
+    pop.className = 'due-pop';
+    pop.innerHTML =
+      '<div class="tsk-l">' + (task.due_at ? 'Перенести срок' : 'Поставить срок') + '</div>' +
+      // Сегмент быстрых сроков — тот же .due-seg, что в форме постановки: два
+      // разных набора чипов под одну задачу читались бы как разные механики.
+      '<span class="due-seg">' + quick.map(function (q) {
+        return '<button type="button" data-day="' + isoDay(q[1]) + '">' + q[0] + '</button>';
+      }).join('') + '</span>' +
+      '<div class="due-row"><input type="date" class="al-in due-day" value="' + cur + '">' +
+        '<button class="bp sm due-ok">Поставить</button></div>' +
+      (task.due_at ? '<button class="due-off">Снять срок совсем</button>' : '');
+    host.appendChild(pop);
+    // Поповер встает под саму плашку, а не под левый край строки: иначе он
+    // висит непонятно от чего, когда чипы переносятся на вторую строку.
+    pop.style.left = Math.max(0, Math.min(anchor.offsetLeft,
+      host.offsetWidth - pop.offsetWidth - 16)) + 'px';
+
+    var close = function () {
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOut, true);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    // anchor.contains, а не сравнение с самим anchor: клик почти всегда
+    // приходится на иконку или текст внутри кнопки, и поповер закрывался бы
+    // сразу же, не дав нажать ни на что.
+    var onOut = function (e) { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onOut, true);
+
+    var send = function (body, done) {
+      apiSend('/admin/api/tasks/' + task.id, 'PATCH', body, function () {
+        close();
+        state.tasks = null;
+        loadTaskSummary();
+        if (after) after();
+        if (state.page === 'tasks') renderView();
+        showToast(done);
+      }, function (code) {
+        showToast(code === 403 ? 'Срок двигает только суперадмин'
+                               : 'Срок не сохранился, проверь интернет');
+      });
+    };
+    // Срок = конец выбранного дня ПО МОСКВЕ: «до 21 августа» человек читает как
+    // «весь день 21-го мой», а календарь у команды один — московский (по нему
+    // сервер считает просрочку и утренние сводки). Без явного +03:00 у человека
+    // из другого пояса тот же выбор уезжал бы на сутки.
+    var setDay = function (day) {
+      send({ due_at: new Date(day + 'T23:59:59+03:00').toISOString() }, 'Срок перенесен');
+    };
+
+    Array.prototype.forEach.call(pop.querySelectorAll('.due-seg button'), function (b) {
+      b.addEventListener('click', function () { setDay(b.getAttribute('data-day')); });
+    });
+    var day = pop.querySelector('.due-day');
+    pop.querySelector('.due-ok').addEventListener('click', function () {
+      if (!day.value) { day.focus(); return; }
+      setDay(day.value);
+    });
+    day.addEventListener('keydown', function (e) { if (e.key === 'Enter') pop.querySelector('.due-ok').click(); });
+    var off = pop.querySelector('.due-off');
+    if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
+  }
+
   function openTask(id) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -3824,6 +4124,9 @@
       var isAssignee = me != null && me === t.assignee_id;
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
+      // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
+      // назначает, а история должна остаться такой, какой была.
+      var canDue = can('tasks_due') && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -3859,7 +4162,12 @@
         '</div>' +
         '<div class="tsk-meta">' +
           '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
-          '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>' +
+          // Срок кликабелен только у того, кто вправе его двигать: серая кнопка,
+          // которая отвечает отказом, учит тыкать наугад.
+          (canDue
+            ? '<button class="tsk-due tsk-duebtn ' + due.cls + '" id="tk-due">' + ic('cal', 12) +
+              esc(due.text) + chev() + '</button>'
+            : '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>') +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
@@ -3942,6 +4250,11 @@
       var swap = function (fn) { close(); setTimeout(fn, 200); };
       var up = el('tk-up');
       if (up) up.addEventListener('click', function () { swap(function () { openTask(t.parent_id); }); });
+      var dueBtn = el('tk-due');
+      if (dueBtn) dueBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        duePop(dueBtn, t, function () { api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); }); });
+      });
       var lead = el('tk-lead');
       if (lead && t.session_id) lead.addEventListener('click', function () {
         swap(function () { openDrawer(t.session_id); setModalSection('notes'); });
@@ -4350,6 +4663,10 @@
      ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
      задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
   var MEET_MAX_MB = 2;
+  // Сколько протоколов принимаем за раз. Разбор каждого — отдельный запрос к
+  // модели на полминуты, и десяток файлов человек все равно не вычитает за один
+  // заход: он закроет экран на половине, а заведется первая половина.
+  var MEET_MAX_FILES = 5;
 
   function openMeetingUpload() {
     if (document.querySelector('.al-ov')) return;
@@ -4366,9 +4683,11 @@
         '<div class="al-body">' +
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
-            '<div class="mu-drop-t">Выбери файл или перетащи сюда</div>' +
-            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ</div>' +
-            '<input type="file" id="mu-file" accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+            '<div class="mu-drop-t">Выбери файлы или перетащи сюда</div>' +
+            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ каждый, ' +
+              'до ' + MEET_MAX_FILES + ' за раз</div>' +
+            '<input type="file" id="mu-file" multiple ' +
+              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
           '</div>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
@@ -4396,25 +4715,38 @@
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
 
     var drop = el('mu-drop'), fileI = el('mu-file'), note = el('mu-note'), go = el('mu-go');
-    var picked = null;   // { name, data }
+    var picked = [];   // [{ name, data }]
     var show = function (t, ask) {
       note.className = 'al-ai-note' + (ask ? ' ask' : '');
       note.textContent = t || '';
     };
     var take = function (list) {
       if (!list || !list.length) return;
-      var f = list[0];
-      if (f.size > MEET_MAX_MB * 1024 * 1024) {
-        show('Файл больше ' + MEET_MAX_MB + ' МБ. Пришли текстом или вырежи лишнее.', true);
-        return;
+      var files = Array.prototype.slice.call(list);
+      var heavy = files.filter(function (f) { return f.size > MEET_MAX_MB * 1024 * 1024; });
+      files = files.filter(function (f) { return f.size <= MEET_MAX_MB * 1024 * 1024; });
+      // Добавляем к уже выбранным: протоколы обычно лежат в разных папках, и
+      // второй заход в диалог не должен стирать первый.
+      var over = 0;
+      if (picked.length + files.length > MEET_MAX_FILES) {
+        over = picked.length + files.length - MEET_MAX_FILES;
+        files = files.slice(0, Math.max(0, MEET_MAX_FILES - picked.length));
       }
-      readFiles([f], function (out) {
-        picked = out[0] || null;
-        if (!picked) { show('Файл не прочитался, попробуй другой', true); return; }
+      readFiles(files, function (out) {
+        var names = picked.map(function (f) { return f.name; });
+        out.forEach(function (f) { if (names.indexOf(f.name) === -1) picked.push(f); });
+        if (!picked.length) { show('Файл не прочитался, попробуй другой', true); return; }
         drop.classList.add('has');
-        drop.querySelector('.mu-drop-t').textContent = picked.name;
+        drop.querySelector('.mu-drop-t').textContent = picked.length === 1
+          ? picked[0].name
+          : picked.length + ' ' + plural(picked.length, 'файл', 'файла', 'файлов') + ': ' +
+            picked.map(function (f) { return f.name; }).join(', ');
         drop.querySelector('.mu-drop-s').textContent = 'Готов к разбору';
-        show('');
+        show(heavy.length
+          ? 'Не взял: ' + heavy.map(function (f) { return f.name; }).join(', ') +
+            ' — больше ' + MEET_MAX_MB + ' МБ'
+          : over ? 'За раз беру не больше ' + MEET_MAX_FILES + ', остальные пришли следующим заходом'
+          : '', !!(heavy.length || over));
       });
     };
     drop.addEventListener('click', function () { fileI.click(); });
@@ -4429,29 +4761,59 @@
 
     go.addEventListener('click', function () {
       var text = (el('mu-text').value || '').trim();
-      if (!picked && text.length < 200) {
+      if (!picked.length && text.length < 200) {
         show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл или вставь текст', true);
         return;
       }
       go.disabled = true; go.classList.add('loading');
-      show('Читаю протокол, это займет полминуты');
-      apiSend('/admin/api/meetings', 'POST',
-        picked ? { name: picked.name, data: picked.data } : { text: text },
-        function (r) {
+      // Файлы разбираем по очереди, а не пачкой в один запрос: каждый протокол
+      // модель читает отдельно, и на общем куске она начинает путать, кто из
+      // какой встречи. Плюс видно, на каком файле мы стоим.
+      var queue = picked.length ? picked.slice() : [{ text: text }];
+      var done = [], failed = [];
+      var step = function (i) {
+        if (i >= queue.length) {
+          if (!done.length) {
+            go.disabled = false; go.classList.remove('loading');
+            show('Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+            return;
+          }
+          if (failed.length) showToast('Не разобрал: ' + failed.join(', '));
           close();
-          openMeetingImport((r && r.import && r.import.id) || 0, r && r.import);
-        },
-        function (err) {
-          go.disabled = false; go.classList.remove('loading');
-          show((err && err.detail) || 'Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
-        });
+          // Экран проверки открываем ПОСЛЕ ухода формы: пока ее оверлей в DOM,
+          // openMeetingImport считает, что поверх уже что-то открыто, и молча
+          // не открывается. Та же пауза, что при переходе между карточками.
+          var ids = done.map(function (d) { return d.id; });
+          var first = done.length === 1 ? done[0] : null;
+          setTimeout(function () { openMeetingImport(ids, first); }, 200);
+          return;
+        }
+        var f = queue[i];
+        show(queue.length > 1
+          ? 'Читаю ' + (i + 1) + ' из ' + queue.length + ': ' + f.name
+          : 'Читаю протокол, это займет полминуты');
+        apiSend('/admin/api/meetings', 'POST',
+          f.data ? { name: f.name, data: f.data } : { text: f.text },
+          function (r) {
+            if (r && r.import) done.push(r.import);
+            step(i + 1);
+          },
+          function () { failed.push(f.name || 'текст'); step(i + 1); });
+      };
+      step(0);
     });
   }
 
   /* Экран проверки. Открывается и по ссылке из бота (#meeting/<id>), поэтому
-     умеет грузить разбор сам, а не только принимать свежий из формы. */
-  function openMeetingImport(id, ready) {
-    if (!id || document.querySelector('.al-ov')) return;
+     умеет грузить разбор сам, а не только принимать свежий из формы.
+
+     Разборов может быть несколько: с одной планерки приносят три протокола, и
+     проверять их по одному значит трижды пройти один и тот же путь. Поэтому
+     экран держит пакет — файлы идут секциями подряд, «Завести» одно на все. */
+  function openMeetingImport(ids, ready) {
+    var list = (Array.isArray(ids) ? ids : String(ids || '').split(','))
+      .map(function (v) { return +v; }).filter(Boolean);
+    if (!list.length || document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML = '<div class="al-card mi-card" role="dialog" aria-modal="true">' +
@@ -4469,7 +4831,7 @@
     var onKey = function (e) { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    try { history.replaceState(null, '', '#meeting/' + id); } catch (e) {}
+    try { history.replaceState(null, '', '#meeting/' + list.join(',')); } catch (e) {}
 
     var card = ov.querySelector('.mi-card');
     // Пересчет счетчика живет здесь, а не внутри draw: обработчик клика вешается
@@ -4477,9 +4839,17 @@
     // второй такой же обработчик отменял бы действие первого.
     var markRef = function () {};
     var wired = false;
-    var draw = function (imp, people, goals) {
-      var gs = imp.goals || [], dec = imp.for_decision || [], st = imp.stats || {};
-      var applied = imp.status === 'applied';
+    var draw = function (imps, people, goals) {
+      var many = imps.length > 1;
+      var applied = imps.every(function (im) { return im.status === 'applied'; });
+      var madeTotal = imps.reduce(function (n, im) { return n + (im.made || 0); }, 0);
+      var st = imps.reduce(function (a, im) {
+        var s = im.stats || {};
+        return {
+          goals: a.goals + (s.goals || 0), steps: a.steps + (s.steps || 0),
+          no_assignee: a.no_assignee + (s.no_assignee || 0), no_due: a.no_due + (s.no_due || 0),
+        };
+      }, { goals: 0, steps: 0, no_assignee: 0, no_due: 0 });
       var whoOpts = function (sel) {
         return '<option value="0">— не назначен —</option>' + people.map(function (p) {
           return '<option value="' + p.id + '"' + (String(sel || '') === String(p.id) ? ' selected' : '') + '>' +
@@ -4532,42 +4902,68 @@
           '</div>' +
         '</div>';
       };
-      var body = gs.map(function (g, gi) {
-        return '<div class="mi-goal" data-g="' + gi + '">' +
-          '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
-          row(g, gi, null) +
-          (g.steps && g.steps.length
-            ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
-            : '<div class="mi-nosteps">Без шагов — цель останется одной строкой</div>') +
-        '</div>';
-      }).join('');
+      // Заметка у всех разборов одна и та же (типовая, вроде «разбор без модели»)
+      // — показываем ее один раз над списком, а не над каждым файлом.
+      var notes = imps.map(function (im) { return im.note || ''; });
+      var common = notes[0] && notes.every(function (n) { return n === notes[0]; }) ? notes[0] : '';
 
-      card.innerHTML =
-        '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Импорт встречи</div><div class="al-title">' +
-            esc(imp.file_name || 'Протокол встречи') + '</div></div>' +
-          '<button class="al-x" id="mi-x" title="Закрыть">' + ic('x', 16) + '</button>' +
-        '</div>' +
-        '<div class="al-sub">' + (applied
-          ? 'Уже заведено: ' + imp.made + ' ' + plural(imp.made, 'задача', 'задачи', 'задач') +
-            '. Повторное нажатие ничего не задвоит — заведется только то, что осталось.'
-          : 'Проверь исполнителей и сроки. В задачник ничего не попадет, пока не нажмешь «Завести».') +
-        '</div>' +
-        '<div class="mi-stat">' +
-          '<span><b>' + (st.goals || 0) + '</b> ' + plural(st.goals || 0, 'цель', 'цели', 'целей') + '</span>' +
-          '<span><b>' + (st.steps || 0) + '</b> ' + plural(st.steps || 0, 'шаг', 'шага', 'шагов') + '</span>' +
-          (st.no_assignee ? '<span class="warn"><b>' + st.no_assignee + '</b> без исполнителя</span>' : '') +
-          (st.no_due ? '<span class="warn"><b>' + st.no_due + '</b> без срока</span>' : '') +
-        '</div>' +
-        '<div class="al-body mi-body">' +
-          (imp.note ? '<div class="mi-note">' + esc(imp.note) + '</div>' : '') +
-          (body || '<div class="empty">В протоколе не нашлось задач.</div>') +
+      var one = function (imp, ii) {
+        var gs = imp.goals || [], dec = imp.for_decision || [], ist = imp.stats || {};
+        var goalsHtml = gs.map(function (g, gi) {
+          return '<div class="mi-goal" data-g="' + gi + '">' +
+            '<div class="mi-g-h"><span class="mi-tag">Цель</span></div>' +
+            row(g, gi, null) +
+            (g.steps && g.steps.length
+              ? '<div class="mi-steps">' + g.steps.map(function (s, si) { return row(s, gi, si); }).join('') + '</div>'
+              : '<div class="mi-nosteps">Без шагов — цель останется одной строкой</div>') +
+          '</div>';
+        }).join('');
+        return '<div class="mi-imp" data-i="' + ii + '" data-id="' + imp.id + '">' +
+          // Шапка файла нужна только в пакете: над единственным протоколом она
+          // повторяла бы заголовок карточки.
+          (many
+            ? '<div class="mi-file"><span class="mi-file-n">' + ic('doc', 13) +
+                // Имя в span: длинное «Протокол планерки отдела продаж 18.08.docx»
+                // должно обрезаться многоточием, а не рваться посреди слова.
+                '<span>' + esc(imp.file_name || 'Протокол встречи') + '</span></span>' +
+              '<span class="mi-file-s">' + (ist.goals || 0) + ' ' +
+                plural(ist.goals || 0, 'цель', 'цели', 'целей') + ', ' + (ist.steps || 0) + ' ' +
+                plural(ist.steps || 0, 'шаг', 'шага', 'шагов') + '</span></div>'
+            : '') +
+          // Заметку разбора печатаем в секции только когда она своя: одинаковая
+          // строка под каждым из пяти файлов — это пять раз один и тот же шум.
+          (imp.note && imp.note !== common ? '<div class="mi-note">' + esc(imp.note) + '</div>' : '') +
+          (goalsHtml || '<div class="empty">В протоколе не нашлось задач.</div>') +
           (dec.length
             ? '<div class="mi-dec"><div class="mi-dec-h">' + ic('note', 13) + 'Не задачи, а вопросы на решение</div>' +
               '<ul>' + dec.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul>' +
               '<div class="mi-dec-s">Их я не завожу: пока нет решения, задача будет висеть без смысла.</div></div>'
             : '') +
+        '</div>';
+      };
+
+      card.innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Импорт встречи</div><div class="al-title">' +
+            (many
+              ? imps.length + ' ' + plural(imps.length, 'протокол', 'протокола', 'протоколов')
+              : esc(imps[0].file_name || 'Протокол встречи')) + '</div></div>' +
+          '<button class="al-x" id="mi-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
+        '<div class="al-sub">' + (applied
+          ? 'Уже заведено: ' + madeTotal + ' ' + plural(madeTotal, 'задача', 'задачи', 'задач') +
+            '. Повторное нажатие ничего не задвоит — заведется только то, что осталось.'
+          : 'Проверь исполнителей и сроки. В задачник ничего не попадет, пока не нажмешь «Завести».') +
+        '</div>' +
+        '<div class="mi-stat">' +
+          '<span><b>' + st.goals + '</b> ' + plural(st.goals, 'цель', 'цели', 'целей') + '</span>' +
+          '<span><b>' + st.steps + '</b> ' + plural(st.steps, 'шаг', 'шага', 'шагов') + '</span>' +
+          (st.no_assignee ? '<span class="warn"><b>' + st.no_assignee + '</b> без исполнителя</span>' : '') +
+          (st.no_due ? '<span class="warn"><b>' + st.no_due + '</b> без срока</span>' : '') +
+        '</div>' +
+        '<div class="al-body mi-body">' +
+          (common ? '<div class="mi-note">' + esc(common) + '</div>' : '') +
+          imps.map(one).join('') + '</div>' +
         '<div class="al-foot mi-foot">' +
           '<span class="mi-count" id="mi-count"></span>' +
           '<button class="al-cancel" id="mi-cancel">Закрыть</button>' +
@@ -4638,8 +5034,8 @@
       }); }
       mark();
 
-      var collect = function () {
-        return Array.prototype.map.call(card.querySelectorAll('.mi-goal'), function (gEl) {
+      var collect = function (impEl) {
+        return Array.prototype.map.call(impEl.querySelectorAll('.mi-goal'), function (gEl) {
           var head = gEl.querySelector(':scope > .mi-item');
           var read = function (itEl) {
             return {
@@ -4660,31 +5056,53 @@
       save.addEventListener('click', function () {
         if (save.disabled) return;
         save.disabled = true; save.classList.add('loading');
-        apiSend('/admin/api/meetings/' + imp.id + '/apply', 'POST', { goals: collect() }, function (r) {
-          state.tasks = null;
-          state.taskGoals = null;
-          loadTaskSummary();
-          var n = ((r && r.goals) || 0) + ((r && r.steps) || 0);
-          showToast(n ? 'Завел ' + n + ' ' + plural(n, 'задачу', 'задачи', 'задач') : 'Новых задач не было');
-          if (r && r.import) draw(r.import, people, goals);
-          if (state.page === 'tasks') renderView();
-        }, function () {
-          save.disabled = false; save.classList.remove('loading');
-          showToast('Не получилось завести, попробуй еще раз');
-        });
+        // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
+        // из трех файлов — это три независимых разбора, и упавший третий не
+        // должен отменять два заведенных.
+        var boxes = Array.prototype.slice.call(card.querySelectorAll('.mi-imp'));
+        var fresh = [], total = 0, broke = false;
+        var step = function (i) {
+          if (i >= boxes.length) {
+            state.tasks = null;
+            state.taskGoals = null;
+            loadTaskSummary();
+            showToast(total
+              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач')
+              : broke ? 'Не получилось завести, попробуй еще раз' : 'Новых задач не было');
+            if (state.page === 'tasks') renderView();
+            if (fresh.length === boxes.length) draw(fresh, people, goals);
+            else { save.disabled = false; save.classList.remove('loading'); }
+            return;
+          }
+          var box = boxes[i];
+          apiSend('/admin/api/meetings/' + box.getAttribute('data-id') + '/apply', 'POST',
+            { goals: collect(box) },
+            function (r) {
+              total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
+              if (r && r.import) fresh.push(r.import);
+              step(i + 1);
+            },
+            function () { broke = true; step(i + 1); });
+        };
+        step(0);
       });
     };
 
-    var start = function (imp) {
+    var start = function (imps) {
       loadTaskPeople(function (people) {
-        loadTaskGoals(function (goals) { draw(imp, people, goals); });
+        loadTaskGoals(function (goals) { draw(imps, people, goals); });
       });
     };
-    if (ready) { start(ready); return; }
-    api('/admin/api/meetings/' + id).then(function (r) {
-      if (r && r.import) start(r.import);
-      else { close(); showToast('Разбор не найден'); }
-    }).catch(function () { close(); showToast('Разбор не открылся'); });
+    if (ready && list.length === 1) { start([ready]); return; }
+    Promise.all(list.map(function (mid) {
+      return api('/admin/api/meetings/' + mid).then(function (r) { return (r && r.import) || null; })
+        .catch(function () { return null; });
+    })).then(function (got) {
+      var ok = got.filter(Boolean);
+      if (!ok.length) { close(); showToast('Разбор не найден'); return; }
+      if (ok.length < list.length) showToast('Часть разборов не открылась, показываю остальные');
+      start(ok);
+    });
   }
 
   /* ── Обучение: ученики по английскому ──────────────────────
@@ -6394,12 +6812,110 @@
      Акт открывается печатной формой в новой вкладке: этот документ печатают и
      отправляют, а не рассматривают в интерфейсе CRM. */
   var DC = { items: null, err: '', q: '', kind: 'all', archived: false, _t: null };
-  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['contract', 'Договоры'],
+  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['receipt', 'Чеки'],
+                  ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
+  // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
+  // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
+  var RCP = { items: null, stats: null };
+  var RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
                 signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off',
                 none: 'ct-draft', sent: 'ct-wait' };
   var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc' };
+
+  function rcpLoad(cb) {
+    api('/admin/api/contractor-receipts').then(function (r) {
+      RCP.items = r.items || []; RCP.stats = r.stats || {};
+      if (state.page === 'czdocs') renderAll();
+      if (cb) cb();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RCP.items = RCP.items || []; RCP.stats = RCP.stats || {};
+      if (state.page === 'czdocs') renderAll();
+    });
+  }
+
+  // Чеки грузим целиком и фильтруем на месте: их немного (по одному на выплату), а
+  // поиск в разделе один на оба списка.
+  function rcpFiltered() {
+    var q = (DC.q || '').trim().toLowerCase();
+    var list = RCP.items || [];
+    if (!q) return list;
+    return list.filter(function (i) {
+      return (i.contractor || '').toLowerCase().indexOf(q) >= 0 ||
+        (i.inn || '').indexOf(q) >= 0 ||
+        String(i.number).indexOf(q) >= 0 ||
+        String(i.task_number).indexOf(q) >= 0;
+    });
+  }
+
+  function rcpAttach(pid) {
+    openSheet('Приложить чек', 'Вставьте ссылку на чек из «Мой налог». Платформа сверит ' +
+      'его с базой ФНС по ИНН, сумме и дате.',
+      [['url', 'line', 'Ссылка на чек', '']],
+      function (v, close) {
+        var url = (v.url || '').trim();
+        if (url.length < 8) return 'Вставьте ссылку на чек';
+        apiSend('/admin/api/contractor-payouts/' + pid + '/receipt', 'POST', { url: url },
+          function (r) {
+            close();
+            var rec = r.receipt || {};
+            showToast(rec.verify_status === 'verified' ? 'Чек подтвержден в ФНС'
+              : rec.verify_status === 'pending' ? 'Чек на сверке с ФНС'
+              : (rec.verify_message || 'Чек приложен'));
+            RCP.items = null; rcpLoad();
+          },
+          function () { el('sh-err').textContent = 'Не удалось приложить чек — проверьте ссылку'; });
+        return;
+      }, null, 'Чек', 'Сверить');
+  }
+
+  function rcpAction(path, okMsg) {
+    apiSend(path, 'POST', null, function () {
+      if (okMsg) showToast(okMsg);
+      RCP.items = null; rcpLoad();
+    });
+  }
+
+  function rcpRow(i) {
+    var demo = RCP.stats && RCP.stats.demo;
+    var rec = i.receipt;
+    var acts = '';
+    if (i.state !== 'ok') {
+      acts += '<button class="rcp-a p" data-rcp-attach="' + esc(i.payout_id) + '">' +
+        (rec ? 'Заменить чек' : 'Приложить чек') + '</button>';
+    }
+    if (rec) {
+      acts += '<button class="rcp-a" data-rcp-recheck="' + esc(rec.id) + '">Перепроверить</button>';
+      if (demo && i.state !== 'ok') {
+        acts += '<button class="rcp-a" data-rcp-demo="' + esc(rec.id) + '">Отметить (демо)</button>';
+      }
+    }
+    var why = (i.state !== 'ok' && i.state_why)
+      ? '<span class="rcp-why">' + esc(i.state_why) + '</span>' : '';
+    // Основную строку рисуем той же сеткой, что и документы, чтобы колонки совпадали.
+    // «Почему» и кнопки — отдельной строкой под ней: в пятую колонку они не влезают и
+    // наезжают на соседние. Клик по самой строке ведет в задание, кнопки — свои действия.
+    var head = '<div class="trow dc-grid" data-rcp-task="' + esc(i.task_id) + '">' +
+      '<span class="dc-main"><span class="dc-ic">' + ic('doc', 14) + '</span>' +
+        '<b>Выплата № ' + esc(i.number) + '</b>' +
+        '<span class="rcp-sub">задание № ' + esc(i.task_number) +
+          (i.title ? ' — ' + esc(i.title) : '') + '</span></span>' +
+      '<span class="dc-who">' + esc(i.contractor || '—') +
+        (i.contractor_archived ? '<span class="dc-off">убран</span>' : '') +
+        (i.inn ? '<span class="dc-inn">' + esc(i.inn) + '</span>' : '') + '</span>' +
+      '<span class="dc-when">' + esc(i.paid_at ? czDate(i.paid_at) : '—') + '</span>' +
+      '<span class="dc-sum">' + (i.amount ? '<b>' + ctMoney(i.amount) + ' ₽</b>' : '—') + '</span>' +
+      '<span class="dc-state"><span class="ct-chip ' + (RCP_ST[i.state] || 'ct-draft') +
+        '">' + esc(i.state_title) + '</span></span>' +
+      '</div>';
+    var foot = (why || acts)
+      ? '<div class="rcp-foot">' + why +
+          (acts ? '<span class="rcp-act">' + acts + '</span>' : '') + '</div>'
+      : '';
+    return '<div class="rcp-item">' + head + foot + '</div>';
+  }
 
   function dcLoad(cb) {
     var p = '/admin/api/contractor-documents?kind=' + encodeURIComponent(DC.kind) +
@@ -6437,42 +6953,71 @@
   }
 
   function renderCzDocs(view) {
-    if (DC.items === null) { view.innerHTML = dashSkeleton(); dcLoad(); return; }
-    var list = DC.items;
+    var isRcp = DC.kind === 'receipt';
+    // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
+    if (RCP.items === null) rcpLoad();
+    if (isRcp) {
+      if (RCP.items === null) { view.innerHTML = dashSkeleton(); return; }
+    } else if (DC.items === null) {
+      view.innerHTML = dashSkeleton(); dcLoad(); return;
+    }
+
+    var list = isRcp ? rcpFiltered() : DC.items;
     var chips = DC_KINDS.map(function (k) {
-      return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') + '" data-dkind="' +
-        k[0] + '">' + k[1] + '</button>';
+      var n = (k[0] === 'receipt' && RCP.stats && RCP.stats.debt)
+        ? ' <span class="qn">' + RCP.stats.debt + '</span>' : '';
+      return '<button class="qchip' + (DC.kind === k[0] ? ' on' : '') +
+        (k[0] === 'receipt' && RCP.stats && RCP.stats.debt ? ' hot' : '') +
+        '" data-dkind="' + k[0] + '">' + k[1] + n + '</button>';
     }).join('') +
       // Здесь фильтр работает иначе, чем в «Заданиях»: по умолчанию видно ВСЕ, включая
       // документы убранных, — раздел хранит первичку для налоговой, и прятать из него
       // нечего. Кнопка сужает список до убранных, когда ищут конкретного человека.
-      '<button class="qchip q-arch' + (DC.archived ? ' on' : '') + '" data-dcarch="1">' +
-        ic('box', 12) + 'Убранные</button>';
-    var body = DC.err
+      (isRcp ? '' : '<button class="qchip q-arch' + (DC.archived ? ' on' : '') +
+        '" data-dcarch="1">' + ic('box', 12) + 'Убранные</button>');
+
+    // Полоса долга по чекам — главный ответ раздела на «по кому не хватает чека».
+    // Показываем на всех вкладках, кроме самой вкладки чеков (там и так все видно).
+    var debtN = (RCP.stats && RCP.stats.debt) || 0;
+    var alert = (!isRcp && debtN)
+      ? '<div class="dc-alert">' + ic('warn', 18) +
+          '<span><b>' + debtN + ' ' + plural(debtN, 'выплата', 'выплаты', 'выплат') +
+          '</b> без подтвержденного чека. Пока чек не приложат, следующая выплата этим ' +
+          'людям не пройдет.</span>' +
+          '<button class="dc-alert-go" id="dc-to-rcp">Показать</button></div>'
+      : '';
+
+    var body = (!isRcp && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
         ? '<div class="empty">' + (DC.q
-            ? 'По запросу «' + esc(DC.q) + '» документов не нашли.'
+            ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
+            : isRcp
+            ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
             : DC.archived
             ? 'Здесь пусто. Тут лежат документы тех, кого убрали из работы — подписанное не удаляется.'
             : 'Документов пока нет. Акт появляется здесь сам, как только вы сформируете его по принятому заданию.') + '</div>'
-        : list.map(dcRow).join(''));
+        : (isRcp ? list.map(rcpRow) : list.map(dcRow)).join(''));
+
+    var noun = isRcp
+      ? plural(list.length, 'чек', 'чека', 'чеков')
+      : plural(list.length, 'документ', 'документа', 'документов');
 
     view.innerHTML =
-      '<div class="card listcard">' +
+      '<div class="card listcard">' + alert +
         '<div class="list-tools">' +
           '<div class="searchwrap' + (DC.q ? ' has-val' : '') + '">' + ic('search', 16) +
             '<input class="search" id="dc-q" placeholder="Поиск по фамилии, ИНН, телефону или названию" value="' + esc(DC.q) + '">' +
             (DC.q ? '<button class="s-clear" id="dc-qx">' + ic('x', 13) + '</button>' : '') +
           '</div>' +
-          '<span class="list-count"><b>' + list.length + '</b> ' +
-            plural(list.length, 'документ', 'документа', 'документов') + '</span>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
         '</div>' +
         '<div class="list-quick">' + chips + '</div>' +
         '<div class="trow dc-grid thead">' +
-          '<span class="th">Документ</span><span class="th">Исполнитель</span>' +
+          '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+          '<span class="th">Исполнитель</span>' +
           '<span class="th">Дата</span><span class="th">Сумма</span>' +
-          '<span class="th">Состояние</span>' +
+          '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
         '</div>' + body +
       '</div>';
 
@@ -6509,6 +7054,33 @@
         }
         openCz(r.getAttribute('data-dc'));
       });
+    });
+    // Чеки: полоса долга ведет на вкладку чеков; кнопки в строке не открывают задание.
+    var toRcp = el('dc-to-rcp');
+    if (toRcp) toRcp.addEventListener('click', function () {
+      DC.kind = 'receipt'; renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-attach]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); rcpAttach(b.getAttribute('data-rcp-attach'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-recheck]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        rcpAction('/admin/api/contractor-receipts/' + b.getAttribute('data-rcp-recheck') +
+          '/recheck', 'Перепроверили чек');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-demo]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        rcpAction('/admin/api/contractor-receipts/' + b.getAttribute('data-rcp-demo') +
+          '/demo-verify', 'Чек отмечен подтвержденным (демо)');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp-task]'), function (r) {
+      r.addEventListener('click', function () { openCt(r.getAttribute('data-rcp-task')); });
     });
     pageAnim(view);
   }
@@ -6604,6 +7176,135 @@
         '</span>' +
       '</div>';
   }
+  /* ── РИСКИ (этап 9): информатор переквалификации в трудовые отношения ──────
+     Одиннадцать проверок ТЗ 16 по каждому исполнителю. Считает бэкенд
+     (services/contractor_risks), фронт показывает обзор и разбор. Уровень человека
+     поднимают только risk и warn; info — заметка сбоку. */
+  var RISK = { list: null, totals: null, err: '', open: null, detail: {} };
+  var RSK_LV = {
+    risk: { cls: 'ct-bad', label: 'Риск' },
+    warn: { cls: 'ct-check', label: 'Внимание' },
+    info: { cls: 'ct-wait', label: 'К сведению' },
+    ok: { cls: 'ct-ok', label: 'Норма' },
+  };
+  function riskChip(level) {
+    var lv = RSK_LV[level] || RSK_LV.ok;
+    return '<span class="sev ' + lv.cls + '">' + lv.label + '</span>';
+  }
+  function riskLoad() {
+    api('/admin/api/contractor-risks').then(function (r) {
+      RISK.list = r.people || []; RISK.totals = r.totals || {}; RISK.err = '';
+      if (state.page === 'czrisks') renderAll();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      RISK.list = RISK.list || []; RISK.totals = RISK.totals || { risk: 0, warn: 0, info: 0, ok: 0 };
+      RISK.err = 'Не удалось посчитать риски. Обновите страницу.';
+      if (state.page === 'czrisks') renderAll();
+    });
+  }
+  function riskOpen(id) {
+    // renderAll, а не renderView: вердикт в топбаре разный для обзора и разбора, а его
+    // рисует шапка — renderView ее не трогает, и подстрочник остался бы от обзора.
+    RISK.open = id; renderAll();
+    if (!RISK.detail[id]) {
+      api('/admin/api/contractors/' + id + '/risks').then(function (r) {
+        RISK.detail[id] = r;
+        if (RISK.open === id && state.page === 'czrisks') renderView();
+      }).catch(function () {});
+    }
+  }
+  function rskRow(p) {
+    var fl = p.flags || [];
+    var chips = fl.slice(0, 3).map(function (f) {
+      return '<span class="rsk-flag">' + esc(f) + '</span>';
+    }).join('');
+    var more = fl.length > 3 ? '<span class="rsk-flag more">+' + (fl.length - 3) + '</span>' : '';
+    var note = (p.counts && p.counts.info)
+      ? '<span class="rsk-note">' + p.counts.info + ' к сведению</span>' : '';
+    var right = (chips || note)
+      ? chips + more + note
+      : '<span class="rsk-clean">' + ic('check', 12) + 'Чисто</span>';
+    return '<div class="trow rsk-grid rsk-row" data-rsk="' + esc(p.id) + '">' +
+      '<span class="rsk-name">' + esc(p.full_name) +
+        (p.job ? '<span class="rsk-job">' + esc(p.job) + '</span>' : '') + '</span>' +
+      '<span class="rsk-lv">' + riskChip(p.level) + '</span>' +
+      '<span class="rsk-flags">' + right + '</span>' +
+      '</div>';
+  }
+  function renderCzRisks(view) {
+    if (RISK.open) return renderRiskDetail(view);
+    if (RISK.list === null) { view.innerHTML = dashSkeleton(); riskLoad(); return; }
+    var list = RISK.list; var t = RISK.totals || {};
+    // Счет («N в зоне риска») живет в подстрочнике-вердикте; алерт не повторяет число,
+    // а несет только действие — иначе одно и то же сказано дважды (правка арт-директора).
+    var alert = t.risk
+      ? '<div class="dc-alert">' + ic('alert', 18) +
+          '<span>Разберите красные флаги до налоговой проверки, а не после — по ним ' +
+          'отношения выглядят как трудовые.</span></div>'
+      : '';
+    var body = RISK.err
+      ? '<div class="empty">' + esc(RISK.err) + '</div>'
+      : (!list.length
+        ? '<div class="empty">Исполнителей пока нет. Риски появятся, когда заведете людей и начнете ставить задания и платить.</div>'
+        : list.map(rskRow).join(''));
+    view.innerHTML =
+      '<div class="card listcard">' + alert +
+        '<div class="list-tools">' +
+          '<span class="list-hint">Одиннадцать проверок по каждому исполнителю — тяжелые сверху. Нажмите на строку, чтобы увидеть причину и что сделать.</span>' +
+          '<span class="list-count"><b>' + list.length + '</b> ' +
+          plural(list.length, 'исполнитель', 'исполнителя', 'исполнителей') + '</span>' +
+        '</div>' +
+        '<div class="trow rsk-grid thead">' +
+          '<span class="th">Исполнитель</span><span class="th">Уровень</span>' +
+          '<span class="th">Флаги</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rsk]'), function (r) {
+      r.addEventListener('click', function () { riskOpen(r.getAttribute('data-rsk')); });
+    });
+  }
+  function riskCheckCard(ch) {
+    var hits = '';
+    if (ch.hits && ch.hits.length) {
+      hits = '<ul class="rsk-hits">' + ch.hits.map(function (h) {
+        return '<li><span class="rsk-hit-w">' + esc(h.word) + '</span> задание № ' +
+          esc(h.number) + '<span class="rsk-hit-hint">' + esc(h.hint) + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
+      '<div class="rsk-c-head">' + riskChip(ch.level) +
+        '<span class="rsk-c-title">' + esc(ch.title) + '</span></div>' +
+      '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
+      (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
+        '</span></div>' : '') +
+      (ch.evidence ? '<div class="rsk-c-ev">' + esc(ch.evidence) + '</div>' : '') +
+      hits +
+      '</div>';
+  }
+  function renderRiskDetail(view) {
+    var id = RISK.open; var d = RISK.detail[id];
+    if (!d) { view.innerHTML = dashSkeleton(); return; }
+    var order = { risk: 0, warn: 1, info: 2, ok: 3 };
+    var checks = (d.checks || []).slice().sort(function (a, b) {
+      return (order[a.level] == null ? 9 : order[a.level]) -
+             (order[b.level] == null ? 9 : order[b.level]);
+    });
+    view.innerHTML =
+      '<div class="card rsk-detail">' +
+        '<div class="rsk-d-head">' +
+          '<button class="bp sm ghost" id="rsk-back">‹ Назад</button>' +
+          '<div class="rsk-d-who"><span class="rsk-d-name">' + esc(d.contractor.full_name) +
+            '</span>' + (d.contractor.job ? '<span class="rsk-job">' + esc(d.contractor.job) +
+            '</span>' : '') + '</div>' +
+          '<span class="rsk-d-lv">' + riskChip(d.level) + '</span>' +
+          '<button class="bp sm ghost" id="rsk-card">Карточка</button>' +
+        '</div>' +
+        '<div class="rsk-checks">' + checks.map(riskCheckCard).join('') + '</div>' +
+      '</div>';
+    el('rsk-back').addEventListener('click', function () { RISK.open = null; renderAll(); });
+    var oc = el('rsk-card'); if (oc) oc.addEventListener('click', function () { openCz(id); });
+  }
+
   function renderCzPay(view) {
     if (PY.reg === null) { view.innerHTML = dashSkeleton(); pyLoad(); return; }
     if (PY.tab === 'hist' && PY.hist === null) { pyHist(); }
@@ -7160,10 +7861,11 @@
   var MW = { sub: 'active', tasks: null, counts: null, err: '',
              openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
              acts: null, actsErr: '', actFilter: 'sign',
+             receipts: null, rcpErr: '',
              home: null, homeErr: '', feed: null, feedErr: '' };
-  var MW_PAGES = ['mywork', 'mwnotif', 'mwtasks', 'mwplan', 'mwacts'];
+  var MW_PAGES = ['mywork', 'mwnotif', 'mwtasks', 'mwplan', 'mwacts', 'mwrcp'];
   var MW_TITLES = { mywork: 'Моя работа', mwnotif: 'Уведомления', mwtasks: 'Задания',
-                    mwplan: 'Мой план', mwacts: 'Акты' };
+                    mwplan: 'Мой план', mwacts: 'Акты', mwrcp: 'Чеки' };
   function mwOn() { return MW_PAGES.indexOf(state.page) !== -1; }
   // Активные и завершенные — так разложены задания у Консоли, на которую мы равняемся
   // (ориентир владельца от 2026-08-06). Группы считает сервер: «активное» это то, что
@@ -7181,8 +7883,11 @@
   function mwBadge(page) {
     var c = MW.counts || {};
     if (page === 'mwnotif') return c.unread || 0;
-    if (page === 'mwtasks') return (c.todo || 0) - (c.acts_to_sign || 0);
+    // todo с сервера = новые задания + акты на подпись + чеки без подтверждения.
+    // На пункте «Задания» показываем только новые задания, остальное — свои пункты.
+    if (page === 'mwtasks') return (c.todo || 0) - (c.acts_to_sign || 0) - (c.receipts_todo || 0);
     if (page === 'mwacts') return c.acts_to_sign || 0;
+    if (page === 'mwrcp') return c.receipts_todo || 0;
     return 0;
   }
 
@@ -7222,7 +7927,7 @@
      фразой («учетка не связана с карточкой»), и показать надо именно ее. */
   function mwGet(path) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + '/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
+    return xfetch('/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.ok) return j;
@@ -7295,6 +8000,13 @@
       MW.acts = r.acts || []; MW.actsErr = ''; mwDone();
     }).catch(function (e) {
       MW.acts = []; MW.actsErr = e.message; mwDone();
+    });
+  }
+  function mwLoadReceipts() {
+    mwGet('/payouts').then(function (r) {
+      MW.receipts = r.rows || []; MW.rcpErr = ''; mwDone();
+    }).catch(function (e) {
+      MW.receipts = []; MW.rcpErr = e.message; mwDone();
     });
   }
   function mwPut(t) { MW.detail[t.id] = t; }
@@ -7415,10 +8127,12 @@
     var soon = (h.soon || []);
     view.innerHTML =
       '<div class="mw-tiles">' +
-        tile('mwtasks', 'Ждут вашего ответа', (c.todo || 0) - (c.acts_to_sign || 0),
+        tile('mwtasks', 'Ждут вашего ответа',
+             (c.todo || 0) - (c.acts_to_sign || 0) - (c.receipts_todo || 0),
              'новые задания') +
         tile('mwtasks', 'В работе', c.active || 0, 'приняли и делаете') +
         tile('mwacts', 'Акты на подпись', c.acts_to_sign || 0, 'без подписи выплаты нет') +
+        tile('mwrcp', 'Ждут чека', c.receipts_todo || 0, 'без чека выплаты не будет') +
         tile('mwnotif', 'Новые уведомления', h.unread || 0, 'что произошло без вас') +
       '</div>' +
       '<div class="mw-tiles">' +
@@ -7549,11 +8263,74 @@
     mwWire(view);
   }
 
+  var MW_RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
+  function mwRcpCard(p) {
+    var need = p.state !== 'ok';
+    var rec = p.receipt;
+    return '<div class="card mw-act">' +
+      '<div class="ct-act">' +
+        '<div class="ct-act-h"><b>Выплата № ' + p.number + '</b>' +
+          '<span class="ct-chip ' + (MW_RCP_ST[p.state] || 'ct-wait') + '">' +
+            esc(p.state_title) + '</span></div>' +
+        '<div class="ct-act-m">от ' + esc(czDate(p.paid_at)) + ' · задание № ' +
+          esc(p.task_number) + (p.title ? ' — ' + esc(p.title) : '') +
+          ' · <b>' + ctMoney(p.amount) + ' ₽</b></div>' +
+        (need && p.state_why
+          ? '<div class="ct-why">' + esc(p.state_why) + '</div>' : '') +
+        (rec && rec.verify_status === 'verified'
+          ? '<div class="ct-sg"><div class="ct-sg1"><span class="ct-sg-k">Чек</span>' +
+            '<b>Подтвержден в налоговой</b></div></div>' : '') +
+        '<div class="ct-acts">' +
+          (need
+            ? '<button class="bp sm" data-mwrcp="' + p.payout_id + '">' +
+              (rec ? 'Заменить чек' : 'Приложить чек') + '</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function mwAttachReceipt(pid) {
+    openSheet('Приложить чек', 'Пробейте чек в приложении «Мой налог» и вставьте ссылку на ' +
+      'него. Платформа сверит его с базой налоговой.',
+      [['url', 'line', 'Ссылка на чек', '']],
+      function (v, close) {
+        var url = (v.url || '').trim();
+        if (url.length < 8) return 'Вставьте ссылку на чек';
+        if (MW.busy) return null;
+        MW.busy = true;
+        mwSend('/payouts/' + pid + '/receipt', 'POST', { url: url })
+          .then(function (r) {
+            close();
+            var rec = (r && r.receipt) || {};
+            showToast(rec.verify_status === 'verified' ? 'Чек подтвержден в налоговой'
+              : rec.verify_status === 'pending' ? 'Чек принят, идет сверка'
+              : (rec.verify_message || 'Чек приложен'));
+            MW.receipts = null; MW.counts = null; mwLoadReceipts();
+            mwGet('').then(function (c) { MW.counts = c; renderSide(); }).catch(function () {});
+          })
+          .catch(function (e) { showToast(e.message); })
+          .then(function () { MW.busy = false; });
+        return null;
+      }, null, 'Чек', 'Сверить');
+  }
+  function renderMwReceipts(view) {
+    if (MW.receipts === null) { view.innerHTML = dashSkeleton(); mwLoadReceipts(); return; }
+    if (MW.rcpErr) {
+      view.innerHTML = '<div class="card"><div class="empty">' + esc(MW.rcpErr) + '</div></div>';
+      return;
+    }
+    var rows = MW.receipts || [];
+    view.innerHTML = !rows.length
+      ? '<div class="card"><div class="empty">Здесь появятся ваши выплаты. После каждой пробейте чек в «Мой налог» и приложите ссылку — без чека следующая выплата не пройдет.</div></div>'
+      : '<div class="pl-grid">' + rows.map(mwRcpCard).join('') + '</div>';
+    mwWire(view);
+  }
+
   function mwView(view) {
     if (state.page === 'mwnotif') return renderMwNotif(view);
     if (state.page === 'mwtasks') return renderMwTasks(view);
     if (state.page === 'mwplan') return renderMwPlan(view);
     if (state.page === 'mwacts') return renderMwActs(view);
+    if (state.page === 'mwrcp') return renderMwReceipts(view);
     return renderMwHome(view);
   }
 
@@ -7588,6 +8365,11 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mwsign]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation(); mwSign(b.getAttribute('data-mwsign'));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mwrcp]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); mwAttachReceipt(b.getAttribute('data-mwrcp'));
       });
     });
     pageAnim(view);
@@ -7631,7 +8413,7 @@
   }
   /* Шаг по заданию меняет и списки, и цифры на главной, и бейджи в меню — сбрасываем
      все, что могло устареть, а грузит заново только открытый раздел. */
-  function mwStale() { MW.tasks = null; MW.home = null; MW.acts = null; MW.counts = null; }
+  function mwStale() { MW.tasks = null; MW.home = null; MW.acts = null; MW.receipts = null; MW.counts = null; }
   function mwAct(id, to, reason) {
     if (MW.busy) return;
     MW.busy = true;
@@ -7943,7 +8725,8 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
-              lines: null, pnlp: null, form: 'доход', lineBusy: false,
+              lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
+              calendar: null, programs: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -8129,7 +8912,39 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
+    FIN.revplan = null; FIN.calendar = null; FIN.programs = null;
     if (!keepPeriods) FIN.periods = null;
+  }
+
+  function finLoadRevPlan() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadRevPlan(); });
+    finBusy('revplan', function (done) {
+      api('/admin/api/fin/revenue-plan' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.revplan = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'revplan'); }).then(done);
+    });
+  }
+
+  function finLoadCalendar() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadCalendar(); });
+    finBusy('calendar', function (done) {
+      api('/admin/api/fin/calendar' + finQ()).then(function (r) {
+        if (finStale(r)) return;
+        FIN.calendar = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'calendar'); }).then(done);
+    });
+  }
+  // Программам период не нужен — доход считается сквозь периоды из чеков ЮKassa.
+  function finLoadPrograms() {
+    finBusy('programs', function (done) {
+      api('/admin/api/fin/programs').then(function (r) {
+        FIN.programs = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'programs'); }).then(done);
+    });
   }
   function finPeriod() {
     var l = FIN.periods || [];
@@ -9119,10 +9934,10 @@
     }
     if (FIN.lines === 'none') return finErrView(view);
     var L = FIN.lines, meta = finFormMeta(L.form), items = L.items || [];
-    var fact = 0, plan = 0;
+    var fact = 0, plan = 0, factN = 0, biggest = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
-      else if (i.included) fact += i.amount;
+      else if (i.included) { fact += i.amount; factN += 1; if (i.amount > biggest) biggest = i.amount; }
     });
 
     // Чипы — только когда форм больше одной (расчетные листы). У доходов форма одна,
@@ -9162,7 +9977,22 @@
     // «добавить лист» (пункт 4 Романа). И называет, что именно добавит.
     var addBtn = canFix ? '<button class="qchip add" id="fe-add">' + ic('plus', 12) +
       (FIN_ADD_LABEL[FIN.form] || 'Добавить') + '</button>' : '';
-    view.innerHTML =
+    // Анкер-плитки: у экрана был только список, из-за чего он читался беднее соседних.
+    // Доходы и листы фондов меряем «пришло/списано», расчетные листы — факт против плана.
+    var isIncome = (page === 'finincome');
+    var avg = factN ? Math.round(fact / factN) : 0;
+    var statTiles = isIncome ? [
+      { label: 'Пришло на счет', value: finRub(fact, 0), sub: 'зачислено по факту' },
+      { label: 'Записей', value: String(items.length), sub: 'строк дохода' },
+      { label: 'Средний доход', value: finRub(avg, 0), sub: 'в среднем на строку' },
+      { label: 'Крупнейший', value: finRub(biggest, 0), sub: 'самая большая сумма' },
+    ] : [
+      { label: 'Списано по факту', value: finRub(fact, 0), sub: 'уже ушло со счета' },
+      { label: 'В плане', value: finRub(plan, 0), sub: 'намечено, не списано' },
+      { label: 'Строк', value: String(items.length), sub: 'записей в листе' },
+      { label: 'Средняя строка', value: finRub(avg, 0), sub: 'по факту' },
+    ];
+    view.innerHTML = statBar(statTiles) +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
@@ -9812,6 +10642,508 @@
     pageAnim(view);
   }
 
+  /* ── План выручки и платежный календарь ────────────────────────────────────
+     Раздел старого сайта, которого не было в базе (perenos.md §1.3, §1.7). План
+     выручки — прогноз ожидаемых поступлений (новые продажи + дебиторка). Платежный
+     календарь сводит этот приход с плановым расходом периода. В каскад и отчисления
+     план не входит: это ожидание, а не факт. */
+
+  // Статус строки — та же семья чипов .sev, что во всем модуле (cz-*/ct-*/st-*):
+  // ожидание синим, получено зеленым, отменено серым. Отдельного стиля не заводим.
+  var RP_STATUS = { 'ожидается': 'cz-wait', 'получено': 'cz-ok', 'отменено': 'cz-off' };
+
+  function renderFinPlan(view) {
+    if (!FIN.revplan) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadRevPlan(); return;
+    }
+    if (FIN.revplan === 'none') return finErrView(view);
+    var r = FIN.revplan, canFix = can('finmodel_edit'), t = r.totals || {};
+    var items = r.items || [];
+    var sales = items.filter(function (x) { return x.kind === 'продажа'; });
+    var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
+    var planFact = t.planned_revenue > 0
+      ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
+      : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
+
+    var bar = statBar([
+      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
+        sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
+      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
+        sub: receiv.length + ' ' + plural(receiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+      { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
+        sub: 'продажи и дебиторка' },
+      { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
+    ]);
+
+    view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
+      '<div class="grid">' +
+      '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
+        'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
+      '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
+        'кто уже должен и за что — ожидаемые поступления по долгам клиентов') + '</div>' +
+    '</div>';
+
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpadd]'), function (b) {
+        b.addEventListener('click', function () {
+          finRevForm(null, b.getAttribute('data-rpadd'));
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rp]'), function (n) {
+        n.addEventListener('click', function () {
+          var id = n.getAttribute('data-rp');
+          items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  // План против факта: одна полоса вместо голых цифр. Анкер экрана — сразу видно,
+  // сколько из запланированного уже на счёте, и перевыполнен план или нет.
+  function finPlanFactCard(planned, fact) {
+    var head = '<div class="fpf-head"><div class="t">План против факта</div>' +
+      '<div class="s">сколько из запланированной выручки уже пришло на счет</div></div>';
+    if (!(planned > 0)) {
+      return '<div class="card fpf"><div class="fpf-top">' + head + '</div>' +
+        '<div class="fpf-empty">' + (fact > 0
+          ? 'Факт есть, а плана нет. Заведи ожидаемые продажи и дебиторку, чтобы ' +
+            'сравнить план с тем, что уже пришло.'
+          : 'Ни плана, ни факта по этой ведомости пока нет.') + '</div></div>';
+    }
+    var pct = Math.round(fact / planned * 100);
+    var over = fact > planned;
+    var fillPct = Math.max(2, Math.min(100, Math.round(fact / planned * 100)));
+    var cls = over ? 'over' : (pct >= 100 ? 'done' : 'go');
+    var verdict = over
+      ? 'план перевыполнен на ' + (pct - 100) + '%'
+      : pct + '% плана уже на счете';
+    return '<div class="card fpf">' +
+      '<div class="fpf-top">' + head +
+        '<div class="fpf-pct num ' + cls + '">' + pct + '<span>%</span></div></div>' +
+      '<div class="fpf-track"><div class="fpf-fill ' + cls + '" style="width:' + fillPct + '%"></div></div>' +
+      '<div class="fpf-legend">' +
+        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned, 0) + '</span>' +
+        '<span class="fpf-v">' + esc(verdict) + '</span>' +
+        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact, 0) + '</span>' +
+      '</div></div>';
+  }
+
+  function finRevCard(title, kind, rows, canFix, sub) {
+    var body = rows.map(function (x) {
+      var st = RP_STATUS[x.status] || 'cz-wait';
+      var muted = x.status !== 'ожидается';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '', x.comment]
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') + (canFix ? ' click' : '') +
+        '" data-rp="' + x.id + '">' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
+          '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
+          '<span class="fl-sub">' + (line || '—') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
+    return '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' +
+        ic(kind === 'продажа' ? 'card' : 'clock', 14) + '</span>' +
+        '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(sub) + '</div></div>' +
+        (canFix ? '<button class="qchip add" data-rpadd="' + kind + '">' + ic('plus', 12) +
+          'Добавить</button>' : '') + '</div>' +
+      (body || '<div class="empty">Пока пусто. ' +
+        (canFix ? 'Добавьте строку кнопкой выше.' : 'Строк нет.') + '</div>') +
+    '</div>';
+  }
+
+  function finRevForm(row, kind) {
+    var isNew = !row;
+    var o = row || { kind: kind || 'продажа', client: '', item: '', amount: '',
+                     status: 'ожидается', due_on: '', comment: '' };
+    var isSale = (o.kind === 'продажа');
+    var m = finModal({
+      eyebrow: 'План выручки',
+      title: isNew ? (isSale ? 'Новая продажа' : 'Строка дебиторки') : (o.client || 'Строка'),
+      sub: isSale
+        ? 'Ожидаемая продажа: кого закрываем, на какой продукт и сумму. В факт дохода это не идет — только в план.'
+        : 'Клиент уже должен: за что и сколько ждем получить. Это ожидание, не факт.',
+      del: isNew ? '' : 'Удалить',
+      body:
+        '<div class="al-row">' +
+          finField(isSale ? 'Клиент / источник' : 'Кто должен',
+            '<input id="rp-client" class="al-in" maxlength="200" value="' + esc(o.client) +
+            '" placeholder="' + (isSale ? 'Семья Ли' : 'Семья Ван') + '">') +
+          finField('Сумма, ₽ <i>*</i>', '<input id="rp-amount" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (o.amount || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField(isSale ? 'Продукт / направление' : 'Основание',
+            '<input id="rp-item" class="al-in" maxlength="200" value="' + esc(o.item) +
+            '" placeholder="' + (isSale ? 'Харбин базовый' : 'второй взнос') + '">') +
+          finField('Срок', '<input id="rp-due" class="al-in" type="date" value="' +
+            esc(o.due_on || '') + '">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Статус', '<select id="rp-status" class="al-in">' +
+            ['ожидается', 'получено', 'отменено'].map(function (s) {
+              return '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' +
+                s.charAt(0).toUpperCase() + s.slice(1) + '</option>';
+            }).join('') + '</select>') +
+          finField('Комментарий', '<input id="rp-comment" class="al-in" maxlength="1000" value="' +
+            esc(o.comment || '') + '">') +
+        '</div>',
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (!(Number(finVal('rp-amount')) >= 0) || finVal('rp-amount') === '') {
+        m.err.textContent = 'Впишите сумму'; return;
+      }
+      if (!finVal('rp-client') && !finVal('rp-item')) {
+        m.err.textContent = 'Впишите клиента или продукт'; return;
+      }
+      m.close();
+      finDo('/admin/api/fin/revenue-plan', 'POST', {
+        id: isNew ? null : o.id, period_id: FIN.id, kind: o.kind,
+        client: finVal('rp-client'), item: finVal('rp-item'), amount: finVal('rp-amount'),
+        status: el('rp-status').value, due_on: finVal('rp-due') || null,
+        comment: finVal('rp-comment'),
+      }, isNew ? 'Строка добавлена' : 'Строка поправлена');
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Удалить строку?', 'Строка плана выручки исчезнет. На факт дохода это не влияет.',
+        'Удалить', function () {
+          finDo('/admin/api/fin/revenue-plan?id=' + encodeURIComponent(o.id), 'DELETE',
+                null, 'Строка удалена');
+        });
+    });
+  }
+
+  function renderFinCalendar(view) {
+    if (!FIN.calendar) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
+    }
+    if (FIN.calendar === 'none') return finErrView(view);
+    var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
+    // Остаток на р/с берем из ведомости. Ее не открывали — подтягиваем сами (finBusy
+    // не даст дублю), чтобы четвертая плитка показала живой остаток, а не пустой прочерк.
+    var cash = null;
+    if (FIN.sheet && FIN.sheet !== 'none') {
+      (FIN.sheet.accounts || []).forEach(function (a) { if (a.id === 'vtb') cash = a.live; });
+    } else if (FIN.sheet === null) {
+      finLoadSheet();
+    }
+    var after = cash === null ? null : cash + c.net;
+
+    var bar = statBar([
+      { label: 'Ждем получить', value: finRub(inc.total, 0),
+        sub: 'новые продажи и дебиторка' },
+      { label: 'Должны выплатить', value: finRub(out.total, 0),
+        sub: 'плановые расходы, фонды, кредиты' },
+      { label: 'Прогноз движения', value: finRub(c.net, 0),
+        sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
+      cash === null
+        // Остаток еще грузится или ведомости нет: плитку гасим (тихий текст вместо
+        // числа-героя), чтобы пустой прочерк не читался как сломанные данные.
+        ? { label: 'После нагрузки', value: '<span class="stat-idle">считаю остаток…</span>',
+            sub: 'остаток из «Ведомости»' }
+        : { label: 'После нагрузки', value: finRub(after, 0),
+            sub: after < 0 ? 'приход не покрывает выплаты' : 'если план сойдется' },
+    ]);
+
+    var incRows = finCalRows([
+      ['Новые продажи', inc.sales], ['Дебиторка', inc.receivables],
+    ], inc.total, 'Итого ждем получить');
+    var outRows = finCalRows([
+      ['Плановые прямые расходы', out.direct], ['Отчисления в фонды', out.funds],
+      ['Платежи по кредитам и долгам', out.debts],
+    ], out.total, 'Итого к выплате');
+
+    view.innerHTML = bar + finCashBalanceCard(inc.total || 0, out.total || 0, c.net || 0) +
+      '<div class="grid">' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
+          '<div><div class="t">Ожидаем получить</div>' +
+          '<div class="s">из плана выручки — что должно прийти в этом периоде</div></div></div>' +
+        incRows + '</div></div>' +
+      '<div class="sp6"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('box', 14) + '</span>' +
+          '<div><div class="t">Плановые выплаты</div>' +
+          '<div class="s">плановые строки этой ведомости: расходы, фонды, кредиты</div></div></div>' +
+        outRows + '</div></div>' +
+    '</div>' +
+    '<div class="card"><div class="fin-note ' + (c.net >= 0 ? 'calm' : 'warn') + '">' +
+      'Прогноз считается по плановым строкам ведомости и плану выручки. Остаток на счете не равен ' +
+      'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
+      'чтобы прогноз был точнее.</div></div>';
+    pageAnim(view);
+  }
+
+  // Приход против выплат: две полосы на одной шкале — сразу видно, перекрывает ли
+  // ожидаемый приход плановые выплаты. Анкер платежного календаря.
+  function finCashBalanceCard(income, outflow, net) {
+    var scale = Math.max(income, outflow, 1);
+    var incW = Math.max(income > 0 ? 3 : 0, Math.round(income / scale * 100));
+    var outW = Math.max(outflow > 0 ? 3 : 0, Math.round(outflow / scale * 100));
+    var ok = net >= 0;
+    return '<div class="card fbal">' +
+      '<div class="fbal-head"><div><div class="t">Хватает ли на период</div>' +
+        '<div class="s">ожидаемый приход против плановых выплат</div></div>' +
+        '<div class="fbal-net num ' + (ok ? 'ok' : 'bad') + '">' +
+          (ok ? '+' : '') + finRub(net, 0) +
+          '<span>' + (ok ? 'остается' : 'не хватает') + '</span></div></div>' +
+      '<div class="fbal-rows">' +
+        '<div class="fbal-r"><span class="fbal-l">Приход</span>' +
+          '<div class="fbal-track"><div class="fbal-fill inc" style="width:' + incW + '%"></div></div>' +
+          '<span class="fbal-v num">' + finRub(income, 0) + '</span></div>' +
+        '<div class="fbal-r"><span class="fbal-l">Выплаты</span>' +
+          '<div class="fbal-track"><div class="fbal-fill out" style="width:' + outW + '%"></div></div>' +
+          '<span class="fbal-v num">' + finRub(outflow, 0) + '</span></div>' +
+      '</div></div>';
+  }
+
+  function finCalRows(rows, total, totalLabel) {
+    var body = rows.map(function (p) {
+      return '<div class="fl-row fl-2 cal-row"><div class="fl-main">' +
+        '<span class="fl-name">' + esc(p[0]) + '</span></div>' +
+        '<div class="fl-v num">' + finRub(p[1] || 0, 0) + '</div></div>';
+    }).join('');
+    return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
+      '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
+      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+  }
+
+  /* Программы: выгодна ли. Доход по каждой тянется сам из позиций чеков ЮKassa (в
+     описании платежа программа часто пустая, в чеке названа), расход берется из P&L
+     программы. Прибыль это разница, сквозь все периоды — программа идет не две недели.
+     В каскад ведомости это НЕ входит: P&L программы уже считает свои налоги и фонды. */
+  function renderFinPrograms(view) {
+    if (!FIN.programs) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPrograms(); return;
+    }
+    if (FIN.programs === 'none') return finErrView(view);
+    var r = FIN.programs, t = r.total || {}, canFix = can('finmodel_edit');
+    var progs = r.programs || [];
+
+    var bar = statBar([
+      { label: 'Доход по программам', value: finRub(t.income, 0),
+        sub: 'из чеков ЮKassa' + (r.since ? ', с ' + finDate(r.since) : '') },
+      { label: 'Расход', value: finRub(t.expense, 0), sub: 'из P&L программ' },
+      { label: 'Прибыль', value: finRub(t.profit, 0),
+        sub: (t.profit >= 0 ? 'доход минус расход' : 'программы в минусе') },
+      { label: 'Общая маржа', value: (t.margin != null ? t.margin + '%' : '—'),
+        sub: 'по всем программам сразу' },
+    ]);
+
+    // На базе без ключей ЮKassa (превью, локально) дохода не будет — говорим прямо,
+    // чтобы нули не читались как «программы ничего не заработали».
+    var note = r.live ? '' : '<div class="card prg-note">' + ic('alert', 14) +
+      '<span>Доход из ЮKassa на этой базе недоступен — нет ключей магазина. Пока экран ' +
+      'открыт не на боевой базе, доход показан нулём.</span></div>';
+
+    var active = progs.filter(function (p) { return !p.archived; });
+    var arch = progs.filter(function (p) { return p.archived; });
+
+    // Панель списка: слева заголовок со счётом активных, справа «Добавить программу».
+    var addBtn = canFix ? '<button class="qchip add" id="prg-add">' + ic('plus', 12) +
+      'Добавить программу</button>' : '';
+    var tools = '<div class="prg-tools"><span class="prg-th">Активные ' +
+      '<b>' + active.length + '</b></span>' + addBtn + '</div>';
+
+    var cards = active.length
+      ? '<div class="prg-list">' + active.map(function (p) {
+          return finProgCard(p, canFix);
+        }).join('') + '</div>'
+      : '<div class="card"><div class="empty">Программ пока нет.' +
+        (canFix ? ' Нажмите «Добавить программу».' : '') + '</div></div>';
+
+    // Архив — свёрнут, разворачивается кликом. Прошлые сезоны с цифрами, но не в глазах
+    // и не в итоге сверху. Убирает и достаёт из архива сам финансист.
+    var archBlock = arch.length
+      ? '<div class="prg-arch"><button class="prg-archh" id="prg-archh" aria-expanded="false">' +
+          ic('box', 14) + 'Архив <b>' + arch.length + '</b>' +
+          '<span class="prg-archcue">показать</span></button>' +
+        '<div class="prg-list prg-archlist" id="prg-archlist" hidden>' +
+          arch.map(function (p) { return finProgCard(p, canFix); }).join('') + '</div></div>'
+      : '';
+
+    view.innerHTML = bar + note + tools + cards + archBlock;
+
+    var byId = function (id) { return progs.filter(function (p) { return p.id === id; })[0]; };
+    if (canFix) {
+      var add = el('prg-add');
+      if (add) add.addEventListener('click', function () { finProgramForm(null); });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-prg]'), function (b) {
+        b.addEventListener('click', function () {
+          var p = byId(b.getAttribute('data-prg')); if (p) finProgramForm(p);
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-arch]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/programs/' + encodeURIComponent(b.getAttribute('data-arch')),
+            'PATCH', { archived: true }, 'Убрал в архив');
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-unarch]'), function (b) {
+        b.addEventListener('click', function () {
+          finDo('/admin/api/fin/programs/' + encodeURIComponent(b.getAttribute('data-unarch')),
+            'PATCH', { archived: false }, 'Вернул из архива');
+        });
+      });
+    }
+    var ah = el('prg-archh');
+    if (ah) ah.addEventListener('click', function () {
+      var list = el('prg-archlist'); if (!list) return;
+      var open = list.hidden;
+      list.hidden = !open;
+      ah.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var cue = ah.querySelector('.prg-archcue');
+      if (cue) cue.textContent = open ? 'скрыть' : 'показать';
+    });
+    pageAnim(view);
+  }
+
+  function finProgCard(p, canFix) {
+    var loss = p.profit < 0;
+    // Зелёный зарезервирован под деньги/успех (маржа, прибыль): «завершена» это
+    // нейтральный статус жизни программы, а не позитив — иначе рядом с красным убытком
+    // встанут противоречивые сигналы. Нейтраль fill/ink-3, «идет» — blue-tint.
+    var stCls = p.status === 'завершена' ? 'cz-off' : 'cz-wait';
+    // Состав дохода: основная и экскурсии — из чего сложилась выручка программы.
+    var parts = [];
+    if (p.income_exc > 0) {
+      parts.push('основная ' + finRub(p.income_base, 0));
+      parts.push('экскурсии ' + finRub(p.income_exc, 0));
+    }
+    parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
+    if (p.count_excursions === false) parts.push('экскурсии мимо компании');
+    var sub = parts.join(' · ') + (p.comment ? ' · ' + p.comment : '');
+    // Сезон программы — по нему доход отделяется от повторов в другие годы.
+    var season = p.since
+      ? finDate(p.since) + (p.until ? ' – ' + finDate(p.until) : ' – идёт')
+      : '';
+
+    // Управление: активной — правка и «в архив»; архивной — только «вернуть».
+    var acts = !canFix ? '' : (p.archived
+      ? '<button class="prg-act" data-unarch="' + p.id + '">Вернуть</button>'
+      : '<button class="prg-pen" data-prg="' + p.id + '" title="Поправить программу">' +
+          ic('pen', 12) + '</button>' +
+        '<button class="prg-pen" data-arch="' + p.id + '" title="Убрать в архив">' +
+          ic('box', 12) + '</button>');
+
+    return '<div class="card prg' + (loss ? ' loss' : '') + (p.archived ? ' arch' : '') + '">' +
+      '<div class="prg-head">' +
+        '<span class="prg-name">' + esc(p.name) + '</span>' +
+        '<div class="prg-marg num' + (loss ? ' bad' : ' ok') + '">' +
+          (p.margin != null ? p.margin + '%' : '—') +
+          '<span>' + (loss ? 'убыток' : 'маржа') + '</span></div>' +
+      '</div>' +
+      '<div class="prg-meta">' +
+        '<span class="sev mini ' + stCls + '">' + esc(p.status) + '</span>' +
+        (season ? '<span class="prg-season">' + esc(season) + '</span>' : '') +
+        (acts ? '<span class="prg-acts">' + acts + '</span>' : '') +
+      '</div>' +
+      finProgBar(p.income, p.expense) +
+      '<div class="prg-stats">' +
+        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit, 0) + '</span></div>' +
+      '</div>' +
+      '<div class="prg-sub">' + esc(sub) + '</div>' +
+    '</div>';
+  }
+
+  // Полоса «сколько дохода съел расход»: трек это доход, тёмный сегмент слева — расход,
+  // зелёный хвост — прибыль. Расход больше дохода — весь трек красный, это убыток.
+  function finProgBar(income, expense) {
+    if (!(income > 0)) {
+      return '<div class="prg-track empty2">дохода по чекам пока нет</div>';
+    }
+    var loss = expense > income;
+    // Шкала — большая из двух величин. Тёмный сегмент это расход, покрытый доходом;
+    // хвост трека это прибыль (зелёный) или непокрытый убыток (красный).
+    var base = loss ? expense : income;
+    var covered = loss ? income : expense;   // расход, укладывающийся в доход
+    var expPct = Math.max(3, Math.min(100, Math.round(covered / base * 100)));
+    return '<div class="prg-track' + (loss ? ' loss' : '') + '">' +
+      '<div class="prg-exp" style="width:' + expPct + '%"></div></div>' +
+      '<div class="prg-legend">' +
+        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense, 0) + '</span>' +
+        '<span><i class="prg-dot' + (loss ? ' bad' : ' prof') + '"></i>' +
+          (loss ? 'Убыток ' + finRub(income - expense, 0) : 'Прибыль ' + finRub(income - expense, 0)) +
+        '</span>' +
+      '</div>';
+  }
+
+  function finProgramForm(p) {
+    var isNew = !p;
+    p = p || { name: '', match_key: '', status: 'идет', expense: '', comment: '',
+               since: '', until: '', count_excursions: true };
+    var m = finModal({
+      eyebrow: 'Программа',
+      title: isNew ? 'Новая программа' : esc(p.name),
+      sub: isNew
+        ? 'Доход подтянется сам из чеков ЮKassa по слову и датам сезона. Расход впишешь из ' +
+          'P&L программы — прибыль система посчитает.'
+        : 'Доход считается сам из чеков ЮKassa, руками его не правят. Правятся название, ' +
+          'слово поиска, расход, статус и даты сезона.',
+      body:
+        finField('Название', '<input id="pg-name" class="al-in" maxlength="120" value="' +
+          esc(p.name) + '" placeholder="Харбин лето 2027">') +
+        finField('Слово в чеке <i>*</i>', '<input id="pg-key" class="al-in" maxlength="120" ' +
+          'value="' + esc(p.match_key || '') + '" placeholder="харбин">' +
+          '<div class="al-hint">По этому слову доход находится в чеке ЮKassa. Обычно город: ' +
+          'Харбин, Шанхай. Регистр не важен.</div>') +
+        '<div class="al-row">' +
+          finField('Расход, ₽ <i>*</i>', '<input id="pg-expense" class="al-in" type="number" ' +
+            'min="0" step="0.01" value="' + (p.expense || 0) + '">') +
+          finField('Статус', '<select id="pg-status" class="al-in">' +
+            [['идет', 'Идет'], ['завершена', 'Завершена']].map(function (s) {
+              return '<option value="' + s[0] + '"' + (p.status === s[0] ? ' selected' : '') +
+                '>' + s[1] + '</option>';
+            }).join('') + '</select>') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Начало сезона', '<input id="pg-start" class="al-in" type="date" value="' +
+            esc(p.since || '') + '">') +
+          finField('Конец сезона', '<input id="pg-end" class="al-in" type="date" value="' +
+            esc(p.until || '') + '">') +
+        '</div>' +
+        '<div class="al-hint pg-datehint">Даты нужны, чтобы платежи одного города за разные ' +
+        'годы не смешались. Конец пустой — сезон ещё идёт.</div>' +
+        finField('Откуда цифра расхода', '<input id="pg-comment" class="al-in" maxlength="300" ' +
+          'value="' + esc(p.comment || '') + '" placeholder="из итогового P&L, с налогами">') +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="pg-exc"' +
+          (p.count_excursions === false ? '' : ' checked') + '>' +
+          '<span>Экскурсии идут в доход программы. Снимите, если экскурсии оплачивались ' +
+          'мимо компании — тогда они не попадут в выручку (как у Шанхая)</span></label>',
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      if (!finVal('pg-name')) { m.err.textContent = 'Впишите название'; return; }
+      if (!finVal('pg-key')) { m.err.textContent = 'Впишите слово для поиска в чеке'; return; }
+      if (!(Number(finVal('pg-expense')) >= 0) || finVal('pg-expense') === '') {
+        m.err.textContent = 'Впишите расход'; return;
+      }
+      var s = finVal('pg-start'), e = finVal('pg-end');
+      if (s && e && e < s) { m.err.textContent = 'Конец сезона раньше начала'; return; }
+      m.close();
+      var body = {
+        name: finVal('pg-name'), match_key: finVal('pg-key'),
+        expense: finVal('pg-expense'), status: el('pg-status').value,
+        comment: finVal('pg-comment'), count_excursions: el('pg-exc').checked,
+        season_start: s || null, season_end: e || null,
+      };
+      if (isNew) {
+        finDo('/admin/api/fin/programs', 'POST', body, 'Программа заведена');
+      } else {
+        finDo('/admin/api/fin/programs/' + encodeURIComponent(p.id), 'PATCH', body,
+          'Программа поправлена');
+      }
+    });
+  }
+
   /* Общая отправка правки ведомости: сохранили — забыли все посчитанное и
      пересобрали экран. Полумеры тут опасны: одна строка меняет и каскад, и фонды. */
   function finDo(path, method, body, okText, after) {
@@ -10452,7 +11784,28 @@
     /* Общий чат — второе окно уведомлений: те же события команды падают в группу.
        Личка дергает исполнителя, общий чат делает работу видимой руководителю:
        чужую переписку с ботом не посмотришь, а группу — да. */
-    function groupBlock(g) {
+    /* Кого касается общий чат. Роли, а не люди: тьюторов заводят и меняют часто,
+       а второй список людей рядом с первым неизбежно разъедется. Показываем не
+       весь справочник ролей, а только те, что реально есть в команде — иначе
+       семнадцать чипов подряд читаются как настройка ради настройки. */
+    function groupRoles(g, links) {
+      var picked = g.roles || [];
+      var have = {};
+      (links || []).forEach(function (x) { if (x.role) have[x.role] = 1; });
+      picked.forEach(function (r) { have[r] = 1; });
+      var order = Object.keys(ROLES).filter(function (r) { return have[r]; });
+      if (!order.length) return '';
+      return '<div class="tgg-roles"><div class="tgg-rh">Кого касается</div>' +
+        '<span class="tm-tp tgg-rl">' + order.map(function (r) {
+          var on = picked.indexOf(r) >= 0;
+          return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-gr="' + esc(r) + '" ' +
+            'title="' + esc(on ? 'События этой роли идут в чат' : 'В чат не идут') + '">' +
+            esc(ROLES[r].label) + '</button>';
+        }).join('') + '</span>' +
+        '<div class="tgg-s">Событий и сводки по остальным в этом чате не будет — ни в ветках, ни в общей теме.</div></div>';
+    }
+
+    function groupBlock(g, links) {
       if (!g) return '';
       var on = !!g.chat_id;
       var opts = (g.groups || []).filter(function (x) { return x.chat_id !== g.chat_id; });
@@ -10463,7 +11816,8 @@
               '<span class="tgg-acts">' +
                 '<button class="tgg-b" id="tgg-test">Проверить</button>' +
                 '<button class="tgg-b off" id="tgg-off">Отключить</button></span></div>' +
-            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка по команде. Личные напоминания идут как шли.</div>'
+            '<div class="tgg-s">В группу падают новые задачи, сдача на приемку, приемка и утренняя сводка. Личные напоминания идут как шли.</div>' +
+            groupRoles(g, links)
           : '<div class="tgg-s">Второе окно: те же события в общую группу, чтобы работа была видна всем, а не только исполнителю. ' +
               (g.bot ? 'Создай группу, добавь в нее <b>@' + esc(g.bot) + '</b> и напиши там «/start» — группа появится в списке ниже.'
                      : 'Бот пока не подключен, поэтому сообщения не уйдут даже в выбранную группу.') + '</div>' +
@@ -10527,7 +11881,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp) +
+        '<div class="al-body">' + groupBlock(grp, links) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -10571,6 +11925,30 @@
       });
       var gr = el('tgg-refresh');
       if (gr) gr.addEventListener('click', reopen);
+      /* Роль включают и выключают одним нажатием. Красим сразу, но правдой
+         считаем ответ сервера: не сохранилось — возвращаем чип как был. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gr]'), function (b) {
+        b.addEventListener('click', function () {
+          var role = b.getAttribute('data-gr');
+          var now = Array.prototype.filter.call(
+            ov.querySelectorAll('[data-gr]'), function (x) { return x.classList.contains('on'); })
+            .map(function (x) { return x.getAttribute('data-gr'); });
+          var next = now.indexOf(role) >= 0
+            ? now.filter(function (x) { return x !== role; })
+            : now.concat([role]);
+          b.classList.toggle('on');
+          b.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/roles', 'PUT', { roles: next }, function () {
+            b.disabled = false;
+            showToast(next.indexOf(role) >= 0
+              ? ROLES[role].label + ': события идут в чат'
+              : ROLES[role].label + ': в чат больше не идет');
+          }, function () {
+            b.disabled = false; b.classList.toggle('on');
+            showToast('Не удалось сохранить — попробуйте еще раз');
+          });
+        });
+      });
     }).catch(function () {
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head"><div><div class="al-title">Не получилось</div></div>' +
@@ -10629,6 +12007,7 @@
   };
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
+    instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
   };
@@ -10641,6 +12020,10 @@
   }
   function mkSourceName(source) {
     return MK_SOURCE_NAMES[source] || source || 'Другое';
+  }
+  function mkMediumName(medium) {
+    for (var i = 0; i < MK_MEDIUMS.length; i++) if (MK_MEDIUMS[i].utm === medium) return MK_MEDIUMS[i].label;
+    return medium || '';
   }
   function mkChips(code, kinds) {
     return '<span class="mk-chips" data-code="' + esc(code) + '">' +
@@ -10687,7 +12070,7 @@
   }
   function mkRequest(path, method, body) {
     var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -11029,14 +12412,491 @@
     });
   }
 
-  function renderMarketing(view) {
-    if (!state._mk) {
+  /* ── Дашборд маркетинга ──────────────────────────────────────────────
+     Отвечает на один вопрос: где мы теряем людей между размещением и деньгами.
+     Все числа приходят с сервера одной ручкой за выбранный период; здесь только
+     раскладка. Ничего не досчитываем в браузере — иначе цифра в CRM и цифра в
+     базе разъедутся, и верить будет нечему. */
+  function fetchMkDash() {
+    var days = state.mkDays;
+    api('/admin/api/marketing/dashboard?days=' + days).then(function (r) {
+      /* пока ходили, могли переключить период — ответ от старого запроса не кладем */
+      if (state.mkDays !== days) return;
+      state._mkDash = r || 'none';
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (state.mkDays !== days) return;
+      state._mkDash = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function mkPct(n, base) { return base ? Math.round(n / base * 100) : 0; }
+  function mkNum(n, cls) {
+    return '<span class="mkd-v' + (n ? '' : ' zero') + (cls ? ' ' + cls : '') + ' num">' + n + '</span>';
+  }
+
+  function mkStageLadder(t, meta) {
+    var top = t[meta[0].key] || 0;
+    /* худший шаг — где потеряли больше всего людей в штуках, а не в процентах:
+       80% отвала от двух человек это не проблема, а 30% от сотни — проблема */
+    var worst = -1, worstLoss = 0;
+    meta.forEach(function (s, i) {
+      if (!i) return;
+      var loss = (t[meta[i - 1].key] || 0) - (t[s.key] || 0);
+      if (loss > worstLoss) { worstLoss = loss; worst = i; }
+    });
+    return meta.map(function (s, i) {
+      var n = t[s.key] || 0;
+      var prev = i ? (t[meta[i - 1].key] || 0) : 0;
+      var conv = i ? mkPct(n, prev) : 100;
+      var loss = i ? Math.max(0, prev - n) : 0;
+      /* Шаг бывает шире предыдущего: карточка заводится и без прохождения сценария
+         до конца, человек мог написать в бота напрямую. «124% с шага» и «без потерь»
+         в лестнице читаются как ошибка счета, поэтому у таких шагов показываем долю
+         от верхнего числа и сколько человек пришло мимо сценария. */
+      var extra = i ? Math.max(0, n - prev) : 0;
+      var w = top ? Math.round(n / top * 100) : 0;
+      var right = !i ? 'все'
+        : extra ? (top ? mkPct(n, top) + '% от кликов' : 'мимо кликов')
+        : conv + '% с шага';
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.label) + '<small>' + esc(s.hint) + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + n + '</div>' +
+        '<div class="lad-right">' +
+          '<span class="lad-conv num">' + right + '</span>' +
+          (i ? '<span class="lad-drop' + (loss ? '' : ' zero') + ' num">' +
+            (extra ? '+ ' + extra + ' мимо сценария'
+              : loss ? '− ' + loss + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  /* Доля MQL — про качество трафика, а не про работу менеджера: MQL считается сам по
+     анкете. Пороги из sales-metrics.md: ниже 20% значит «трафик не туда», от 40% —
+     источник, в который стоит доливать деньги. */
+  function mkQualCls(pct, has) {
+    if (!has) return 'none';
+    if (pct >= 40) return 'good';
+    if (pct < 20) return 'weak';
+    return '';
+  }
+
+  /* Строка таблицы источников: путь до карточки, качество и деньги. Последняя колонка —
+     доля MQL, а не конверсия «бот в карточку»: решение «лить сюда еще или выключить»
+     принимается по качеству лида, а не по тому, сколько людей завелось в CRM. */
+  function mkRow(name, sub, r) {
+    var q = mkPct(r.mql || 0, r.leads || 0);
+    return '<div class="mkd-tr">' +
+      '<div class="mkd-nm"><b>' + esc(name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
+      mkNum(r.clicks, 'hidem') + mkNum(r.entered, 'hidem') + mkNum(r.leads) + mkNum(r.mql || 0) +
+      mkNum(r.paid || 0, 'hidem') +
+      mkRub(r.spend) + mkRub(r.cpl, 'hidem') + mkRub(r.cac, 'hidem') +
+      '<span class="mkd-cv ' + mkQualCls(q, r.leads) + ' num">' +
+        (r.leads ? q + '%' : '—') + '</span>' +
+    '</div>';
+  }
+  function mkHead() {
+    return '<div class="mkd-th"><span>Название</span><span class="hidem">Клики</span>' +
+      '<span class="hidem">В боте</span><span>Карточки</span><span>MQL</span>' +
+      '<span class="hidem">Оплаты</span><span>Расход</span>' +
+      '<span class="hidem">Цена лида</span><span class="hidem">Цена клиента</span>' +
+      '<span>Доля MQL</span></div>';
+  }
+
+  /* Деньги в таблице. Расход не внесли — прочерк, а не ноль: ноль читается как
+     «бесплатно», а правда в том, что мы не знаем, сколько потратили. */
+  function mkRub(n, cls) {
+    var has = n != null && n !== 0;
+    return '<span class="mkd-v' + (has ? '' : ' zero') + (cls ? ' ' + cls : '') + ' num">' +
+      (has ? fmtMoney(n) + ' \u20BD' : '—') + '</span>';
+  }
+
+  function renderMkDash(view) {
+    if (!state._mkDash) { view.innerHTML = dashSkeleton(); fetchMkDash(); return; }
+    if (state._mkDash === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._mkDash, t = d.total || {}, meta = d.stage_meta || [];
+    var webinars = Object.keys(d.events && d.events.webinar || {})
+      .reduce(function (n, key) { return n + d.events.webinar[key]; }, 0);
+
+    /* Источники: та же выгрузка, но взгляд со стороны денег — сколько потратили,
+       что из этого качественный лид и во сколько обошелся клиент. */
+    if (state.mkTab === 'src') {
+      var channels = (d.channels || []).map(function (c) {
+        /* Канал без размещений — это внесенный расход без кода ссылки. «0 размещений»
+           тут читалось бы как поломка, хотя это просто деньги, которые не к чему привязать */
+        var sub = c.placements
+          ? c.placements + ' ' + plural(c.placements, 'размещение', 'размещения', 'размещений')
+          : 'расход внесен без кода размещения';
+        return mkRow(mkSourceName(c.source), sub, c);
+      }).join('');
+      var places = (d.placements || []).slice(0, 20).map(function (p) {
+        /* код обязателен в подписи: у двух размещений в одном канале одинаковые названия,
+           и без кода их не различить */
+        var sub = [p.code, mkSourceName(p.source), p.medium ? mkMediumName(p.medium) : '', p.note || '']
+          .filter(Boolean).join(' · ');
+        return mkRow(p.title, sub, p);
+      }).join('');
+
+      /* Честный блок: что в этих цифрах не учтено. Без него дашборд врет умолчанием —
+         человек решит, что видит весь маркетинг, а видит только размеченный трафик. */
+      var noSrc = (d.coverage || {}).sessions_without_source || 0;
+      var gaps = [
+        ['Охваты и просмотры в соцсетях', 'Instagram, Telegram, ВКонтакте, YouTube — статистика площадок не подключена. Здесь видно только переходы по нашим меткам.'],
+        ['Заходы на сайт без метки', noSrc ? noSrc + ' ' + plural(noSrc, 'заход', 'захода', 'заходов') + ' за период пришли без источника — в разбивке по каналам их нет' : 'Все заходы за период размечены'],
+        ['Регистрации на эфир формой', webinars ? webinars + ' ' + plural(webinars, 'регистрация', 'регистрации', 'регистраций') + ' — отдельный список, с воронкой бота не связан' : 'За период регистраций формой не было'],
+        ['Расход не привязан к размещению', t.spend_no_code
+          ? fmtMoney(t.spend_no_code) + ' \u20BD внесено на канал целиком, без кода ссылки — в цене лида по размещениям этих денег нет'
+          : 'Весь внесенный расход привязан к кодам размещений'],
+      ].map(function (g) {
+        return '<div class="mkd-gap"><div><b>' + esc(g[0]) + '</b><small>' + esc(g[1]) + '</small></div>' +
+          '<span class="sev n-wait">не в цифрах</span></div>';
+      }).join('');
+
+      var mqlPct = mkPct(t.mql || 0, t.leads || 0);
+      view.innerHTML = '<div class="dash">' + statBar([
+        { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
+          sub: t.spend ? 'за выбранный период' : 'за период не внесен' },
+        { label: 'Карточек', value: t.leads || 0, sub: 'людей в CRM за период' },
+        { label: 'Из них подходят', value: t.mql || 0,
+          sub: t.leads ? mqlPct + '% от карточек' : 'лидов за период нет' },
+        { label: 'Цена лида', value: t.cpl ? fmtMoney(t.cpl) + ' \u20BD' : '—',
+          sub: t.cac ? 'клиент ' + fmtMoney(t.cac) + ' \u20BD' : 'клиента посчитаем с первой оплатой' },
+        { label: 'Окупаемость', value: t.romi != null ? t.romi + '%' : '—',
+          sub: t.revenue ? fmtMoney(t.revenue) + ' \u20BD выручки' : 'оплат за период нет' },
+      ], 'five') + '<div class="grid">' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('mega', 14) + '</span>' +
+          '<div><div class="t">Каналы</div><div class="s">сначала те, куда ушло больше денег</div></div></div>' +
+          (channels ? '<div class="mkd-tbl">' + mkHead() + channels + '</div>'
+            : '<div class="empty">За период переходов по меткам не было.</div>') + '</div>' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+          '<div><div class="t">Размещения</div><div class="s">каждая ссылка отдельно, топ-20 по кликам</div></div></div>' +
+          (places ? '<div class="mkd-tbl">' + mkHead() + places + '</div>'
+            : '<div class="empty">Ссылок с переходами за период нет.</div>') + '</div>' +
+        '<div class="card sp12" style="overflow:hidden">' +
+          '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Чего в этих цифрах нет</div>' +
+          '<div class="s">чтобы не считать дашборд полной картиной</div></div></div>' +
+          '<div style="border-top:1px solid var(--line)">' + gaps + '</div></div>' +
+      '</div></div>';
+      animBars(view);
+      return;
+    }
+
+    /* динамика: столбик = день, синий сверху клики, темный снизу входы в бота */
+    var series = (d.series || []).slice(-30);
+    var maxDay = Math.max(1, series.reduce(function (m, s) { return Math.max(m, s.clicks, s.entered); }, 0));
+    /* подпись не у каждого столбика: 30 дат в узкой карточке склеиваются в кашу */
+    var lbEvery = series.length > 20 ? 7 : (series.length > 10 ? 3 : 1);
+    var days = series.map(function (s, i) {
+      var last = i === series.length - 1;
+      /* последняя дата важнее регулярной сетки: если они рядом, регулярную гасим */
+      var lb = (last || (i % lbEvery === 0 && series.length - 1 - i > 2))
+        ? s.day.slice(8) + '.' + s.day.slice(5, 7) : '';
+      /* пустой день — плоская линия у основания, а не столбик-обманка */
+      function h(v) { return v ? Math.max(4, Math.round(v / maxDay * 100)) : 0; }
+      return '<div class="mkd-day" title="' + s.day + ': кликов ' + s.clicks + ', зашли в бота ' + s.entered + '">' +
+        '<div class="st">' +
+          '<div class="b1" style="height:' + h(s.clicks) + '%"></div>' +
+          '<div class="b2" style="height:' + h(s.entered) + '%"></div>' +
+        '</div><span class="lb">' + lb + '</span></div>';
+    }).join('');
+
+    var bar = statBar([
+      { label: 'Кликов по меткам', value: t.clicks || 0,
+        sub: (d.placements || []).length + ' ' + plural((d.placements || []).length, 'размещение', 'размещения', 'размещений') },
+      { label: 'Зашли в бота', value: t.entered || 0,
+        sub: mkPct(t.entered || 0, t.clicks || 0) + '% от кликов' },
+      { label: 'Подходят по анкете', value: t.mql || 0,
+        sub: t.leads ? mkPct(t.mql || 0, t.leads || 0) + '% от карточек' : 'карточек за период нет' },
+      { label: 'Стали клиентом', value: t.clients || 0,
+        sub: (t.revenue ? fmtMoney(t.revenue) + ' \u20BD' : 'оплат за период нет') },
+      /* Деньги на трафик вносит человек, поэтому плитка честно говорит, внесены они
+         или нет: пустая цифра тут значит «не заполнили», а не «не тратили». */
+      { label: 'Расход на рекламу', value: t.spend ? fmtMoney(t.spend) + ' \u20BD' : '—',
+        sub: t.spend
+          ? (t.cpl ? 'лид ' + fmtMoney(t.cpl) + ' \u20BD' : 'лидов за период нет')
+          : 'за период не внесен' },
+    ], 'five');
+
+    view.innerHTML = '<div class="dash">' + bar + '<div class="grid">' +
+      '<div class="card sp7" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">От клика до оплаты</div>' +
+        '<div class="s">красная полоса — где теряем больше всего людей</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
+      '<div class="card mkd-card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('bolt', 14) + '</span>' +
+        '<div><div class="t">По дням</div><div class="s">клики и входы в бота</div></div></div>' +
+        (series.length ? '<div class="mkd-days">' + days + '</div>' +
+          '<div class="mkd-lg"><span><i style="background:var(--blue)"></i>клики</span>' +
+          '<span><i style="background:var(--navy)"></i>зашли в бота</span></div>'
+          : '<div class="empty">За период данных нет.</div>') + '</div>' +
+    '</div></div>';
+    animBars(view);
+  }
+
+  /* ── РАСХОД НА РЕКЛАМУ ────────────────────────────────────────────────────
+     Цифры вносит человек: единого способа забрать расход из ВК, Директа и Telegram Ads
+     у нас нет. Без расхода не считаются ни цена лида, ни окупаемость, поэтому ввод
+     сделан максимально дешевым: строка полей сверху, внесенное сразу под ней.
+     Код размещения — то же поле, которым помечены переходы: только по нему деньги
+     сходятся с лидами. Без кода расход считается канальным и в цену лида по
+     размещениям не попадает (об этом честно написано на дашборде). */
+  var SP_CHANNELS = [['vk', 'ВКонтакте'], ['direct', 'Яндекс Директ'], ['telegram', 'Telegram Ads'],
+                     ['instagram', 'Instagram'], ['youtube', 'YouTube'],
+                     ['blogger', 'Блогер'], ['other', 'Другое']];
+  function spChannelName(code) {
+    var f = SP_CHANNELS.filter(function (c) { return c[0] === code; })[0];
+    return f ? f[1] : code;
+  }
+
+  function fetchMkSpend() {
+    var days = state.mkDays || 90;
+    state._mkSpendLoad = days;
+    api('/admin/api/marketing/spend?days=' + (days || 3650)).then(function (r) {
+      state._mkSpend = r; state._mkSpendDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._mkSpend = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function spendForm() {
+    var opt = function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; };
+    var today = new Date();
+    var iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') +
+      '-' + String(today.getDate()).padStart(2, '0');
+    return '<div class="sp-form">' +
+      '<label class="al-f"><span class="al-l">День</span>' +
+        '<input id="sp-date" class="al-in" type="date" value="' + iso + '"></label>' +
+      '<label class="al-f"><span class="al-l">Канал</span><span class="al-selwrap">' +
+        '<select id="sp-channel" class="al-sel">' + SP_CHANNELS.map(opt).join('') + '</select></span></label>' +
+      '<label class="al-f"><span class="al-l">Кампания</span>' +
+        '<input id="sp-campaign" class="al-in" placeholder="как называется в кабинете" maxlength="200"></label>' +
+      '<label class="al-f"><span class="al-l">Код размещения</span>' +
+        '<input id="sp-code" class="al-in" placeholder="как в ссылке go" maxlength="64" autocomplete="off"></label>' +
+      '<label class="al-f"><span class="al-l">Показы</span>' +
+        '<input id="sp-shows" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<label class="al-f"><span class="al-l">Клики кабинета</span>' +
+        '<input id="sp-clicks" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<label class="al-f"><span class="al-l">Расход, ₽</span>' +
+        '<input id="sp-rub" class="al-in num" type="number" min="0" placeholder="0"></label>' +
+      '<button class="bp sp-add" id="sp-add">' + ic('plus', 14) + 'Внести</button>' +
+    '</div>';
+  }
+
+  function renderMkSpend(view) {
+    if (state._mkSpendLoad !== (state.mkDays || 90) || !state._mkSpend) {
       view.innerHTML = dashSkeleton();
+      fetchMkSpend();
+      return;
+    }
+    if (state._mkSpend === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить расход — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._mkSpend;
+    var rows = d.rows || [];
+    var byCh = (d.by_channel || []).map(function (c) {
+      return '<div class="sp-ch"><b>' + esc(spChannelName(c.channel)) + '</b>' +
+        '<span class="num">' + fmtMoney(c.spend) + ' ₽</span></div>';
+    }).join('');
+
+    var list = rows.map(function (r) {
+      var sub = [spChannelName(r.channel), r.campaign, r.source_code ? 'код ' + r.source_code : 'без кода',
+                 r.note].filter(Boolean).join(' · ');
+      return '<div class="mkd-tr">' +
+        '<div class="mkd-nm"><b>' + esc(dayFull(r.on_date)) + '</b><small>' + esc(sub) + '</small></div>' +
+        '<span class="mkd-v' + (r.impressions ? '' : ' zero') + ' hidem num">' +
+          (r.impressions ? fmtMoney(r.impressions) : '—') + '</span>' +
+        '<span class="mkd-v' + (r.clicks ? '' : ' zero') + ' num">' +
+          (r.clicks ? fmtMoney(r.clicks) : '—') + '</span>' +
+        '<span class="mkd-v num">' + fmtMoney(r.spend_rub) + ' ₽</span>' +
+        '<button class="sp-del" data-spdel="' + r.id + '" title="Удалить строку">' + ic('x', 13) + '</button>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      '<div class="card" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Внести расход</div>' +
+        '<div class="s">по дням из кабинета. Тот же день и то же размещение правятся, а не задваиваются</div></div>' +
+        '<span style="flex:1"></span>' +
+        '<span class="sp-total num">' + fmtMoney(d.total || 0) + ' ₽ за период</span></div>' +
+        spendForm() +
+        (byCh ? '<div class="sp-chs">' + byCh + '</div>' : '') +
+      '</div>' +
+      '<div class="card" style="overflow:hidden;margin-top:16px">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">Внесенное</div>' +
+        '<div class="s">свежее сверху; цена лида и окупаемость считаются на вкладке «Дашборд»</div></div></div>' +
+        (list ? '<div class="mkd-tbl sp-tbl"><div class="mkd-th sp-tbl"><span>День</span>' +
+            '<span class="hidem">Показы</span><span>Клики</span><span>Расход</span><span></span></div>' +
+            list + '</div>'
+          : '<div class="empty">За период расход не внесен. Заполни строку выше — и на дашборде появятся цена лида и окупаемость.</div>') +
+      '</div>' +
+    '</div>';
+
+    var add = el('sp-add');
+    if (add) add.addEventListener('click', function () {
+      var body = {
+        on_date: (el('sp-date') || {}).value || '',
+        channel: (el('sp-channel') || {}).value || '',
+        campaign: ((el('sp-campaign') || {}).value || '').trim(),
+        source_code: ((el('sp-code') || {}).value || '').trim().toLowerCase(),
+        impressions: parseInt((el('sp-shows') || {}).value || '0', 10) || 0,
+        clicks: parseInt((el('sp-clicks') || {}).value || '0', 10) || 0,
+        spend_rub: parseInt((el('sp-rub') || {}).value || '0', 10) || 0,
+      };
+      if (!body.on_date) { showToast('Укажи день, за который вносишь расход'); return; }
+      if (!body.spend_rub) { showToast('Расход нулевой — впиши сумму'); return; }
+      add.disabled = true;
+      api('/admin/api/marketing/spend', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function () {
+        state._mkSpend = null; state._mkDash = null;   // цифры изменились, дашборд пересчитать
+        showToast('Расход внесен');
+        renderView();
+      }).catch(function () {
+        add.disabled = false;
+        showToast('Не сохранилось — проверь поля и сеть');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdel]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!window.confirm('Удалить эту строку расхода?')) return;
+        api('/admin/api/marketing/spend/' + b.getAttribute('data-spdel'), { method: 'DELETE' })
+          .then(function () {
+            state._mkSpend = null; state._mkDash = null;
+            renderView();
+          }).catch(function () { showToast('Не удалилось — проверь сеть'); });
+      });
+    });
+  }
+
+  /* ── Воронка курса в записи ────────────────────────────────────────────────
+     Курс продают со страницы, мимо бота, поэтому в воронках выше его не видно
+     вовсе. Шаги до оплаты считает сама страница (routers/course.py), оплаты —
+     покупатели: человек в одном браузере учитывается один раз, перезагрузка
+     ничего не добавляет. */
+  function cfDays() { return state.mkDays || 30; }
+
+  function fetchCourseFunnel() {
+    var days = cfDays();
+    state._cfLoad = days;
+    api('/admin/api/course/funnel?days=' + days).then(function (r) {
+      state._cf = r; state._cfDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') {
+        state._cf = 'none'; state._cfDays = days;
+        if (state.page === 'marketing') renderView();
+      }
+    });
+  }
+
+  function courseFunnelCard() {
+    var d = state._cf;
+    var head = '<div class="sec-head" style="padding:20px 24px 16px">' +
+      '<span class="ic">' + ic('cap', 14) + '</span>' +
+      '<div><div class="t">Курс «Живой китайский»</div>' +
+      '<div class="s">путь покупателя со страницы курса</div></div>' +
+      (d && d !== 'none' && d.revenue
+        ? '<span style="flex:1"></span><div class="lad-n num">' + fmtMoney(d.revenue) + ' ₽</div>' : '') +
+      '</div>';
+
+    if (!d) return '<div class="card">' + head + '<div class="empty">Считаю…</div></div>';
+    if (d === 'none') {
+      return '<div class="card">' + head +
+        '<div class="empty">Не удалось загрузить воронку курса — проверь сеть или доступ.</div></div>';
+    }
+
+    var steps = d.steps || [];
+    var first = steps.length ? steps[0].n : 0;
+    if (!first && !(steps[steps.length - 1] || {}).n) {
+      return '<div class="card">' + head +
+        '<div class="empty">За этот период на странице курса никого не было.</div></div>';
+    }
+
+    /* худший шаг — где теряем больше всего людей в долях, а не в штуках */
+    var worst = -1, worstConv = 101;
+    steps.forEach(function (s, i) {
+      if (!i || !steps[i - 1].n) return;
+      var c = Math.round(s.n / steps[i - 1].n * 100);
+      if (c <= 100 && c < worstConv) { worstConv = c; worst = i; }
+    });
+
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.min(100, Math.round(s.n / first * 100)) : 0;
+      var prev = i ? steps[i - 1].n : 0;
+      var conv = i ? (prev ? Math.round(s.n / prev * 100) : 0) : 100;
+      var lost = i ? Math.max(0, prev - s.n) : 0;
+      /* Оплат может оказаться больше, чем дошедших до оплаты: доступ к курсу
+         открывают и руками из карточки лида, а такой человек по странице не шёл.
+         Считать это конверсией 2125% нельзя — говорим, что произошло. */
+      var over = i && conv > 100;
+      return '<div class="lad-row' + (i === worst ? ' worst' : '') + '">' +
+        '<div class="lad-nm">' + esc(s.title) + '</div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right">' +
+        (over ? '' : '<span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+          (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' +
+            (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '')) +
+        '</div></div>';
+    }).join('');
+    /* Сноска нужна ровно тогда, когда цифры на первый взгляд не сходятся. */
+    var overPaid = steps.length > 1 &&
+      steps[steps.length - 1].n > steps[steps.length - 2].n;
+    var note = overPaid
+      ? '<div class="cf-note">Оплативших больше, чем дошедших до оплаты: часть доступов ' +
+        'открывают руками из карточки в CRM, и эти люди по странице не шли.</div>' : '';
+
+    var srcs = (d.sources || []).filter(function (s) { return s.landing || s.paid; });
+    var srows = srcs.map(function (s) {
+      return '<div class="trow cf-grid">' +
+        '<div class="t-cell"><div class="t-ttl' + (s.source ? '' : ' anon') + '">' +
+          esc(s.source || 'без метки') + '</div></div>' +
+        '<div class="num">' + s.landing + '</div>' +
+        '<div class="num hidem">' + s.free_open + '</div>' +
+        '<div class="num hidem">' + s.checkout + '</div>' +
+        '<div class="num">' + s.paid + '</div>' +
+        '<div class="num">' + (s.revenue ? fmtMoney(s.revenue) + ' ₽' : '—') + '</div></div>';
+    }).join('');
+    var sources = srows
+      ? '<div class="trow cf-grid thead"><span class="th">Источник</span><span class="th">Зашли</span>' +
+        '<span class="th hidem">Пробный</span><span class="th hidem">На оплату</span>' +
+        '<span class="th">Купили</span><span class="th">Деньги</span></div>' + srows
+      : '';
+
+    return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
+      '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+  }
+
+  function renderMarketing(view) {
+    if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
+    if (state.mkTab === 'spend') { renderMkSpend(view); return; }
+    if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
+    /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
+       права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
+    if (!state._mk) {
+      view.innerHTML = courseFunnelCard() + dashSkeleton();
       fetchMk();
       return;
     }
     if (state._mk === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить маркетинг — проверь сеть или доступ.</div></div>';
+      view.innerHTML = courseFunnelCard() +
+        '<div class="card"><div class="empty">Не удалось загрузить воронки бота — проверь сеть или доступ.</div></div>';
       return;
     }
     var d = state._mk;
@@ -11059,7 +12919,7 @@
         '<div class="mk-st num" title="вошло · дошли до менеджера">' + entered + ' · ' + ho + '</div></div>';
     }).join('');
 
-    view.innerHTML =
+    view.innerHTML = courseFunnelCard() +
       '<div class="card" style="padding:22px 24px"><div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронки</div><div class="s">создавай воронку и ссылки здесь; шаги диалога меняет только агент песочницы</div></div>' +
         '<span style="flex:1"></span><button class="mk-btn primary" id="mk-newf">' + ic('plus', 12) + 'Воронка</button></div>' +
@@ -11078,6 +12938,113 @@
       state._mkFForm = { edit: false, code: '', title: '', keywords: '', target: '' };
       mkModal(d);
     });
+  }
+
+
+  /* ── ПОДАРКИ — что берут из бота и где встают ──
+     Данные — лог бота (`/admin/api/gifts/overview`), а не события платформы: в бота
+     человек попадает всегда, а до платформы доходит меньшинство. */
+  var GF_AWAIT = { __slot__: 'ждет окно записи', gift_need: 'не выбрал подарок',
+                   lang_which: 'не выбрал язык' };
+
+  function fetchGifts(cb) {
+    api('/admin/api/gifts/overview?days=' + (state.gfDays || 0)).then(function (r) {
+      state._gf = r; state._gfDays = state.gfDays || 0;
+      if (cb) cb(); else if (state.page === 'gifts') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._gf = 'none'; if (state.page === 'gifts') renderView(); }
+    });
+  }
+
+  function renderGifts(view) {
+    if (!state._gf || state._gfDays !== (state.gfDays || 0)) {
+      view.innerHTML = dashSkeleton();
+      fetchGifts();
+      return;
+    }
+    if (state._gf === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить подарки — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._gf, f = d.funnel || {};
+    var steps = [
+      { label: 'Открыли подарки', hint: 'бот показал меню', n: f.opened || 0 },
+      { label: 'Выбрали подарок', hint: 'нажали кнопку в меню', n: f.chose || 0 },
+      { label: 'Забрали', hint: 'дошли до конца сценария', n: f.got || 0 },
+      { label: 'Записались на разбор', hint: 'выбрали окно с куратором', n: f.booked || 0 }
+    ];
+    var first = steps[0].n;
+    var ladder = steps.map(function (s, i) {
+      var w = first ? Math.round(s.n / first * 100) : 0;
+      var conv = i ? (steps[i - 1].n ? Math.round(s.n / steps[i - 1].n * 100) : 0) : 100;
+      var lost = i ? Math.max(0, steps[i - 1].n - s.n) : 0;
+      return '<div class="lad-row gf-flat">' +
+        '<div class="lad-nm">' + s.label + '<small>' + s.hint + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right"><span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+        (i ? '<span class="lad-drop' + (lost ? '' : ' zero') + ' num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+
+    var gifts = (d.gifts || []).slice().sort(function (a, b) { return b.took - a.took; });
+    var maxTook = Math.max.apply(null, [1].concat(gifts.map(function (g) { return g.took; })));
+    var giftRows = gifts.map(function (g) {
+      var w = Math.round(g.took / maxTook * 100);
+      return '<div class="gf-row">' +
+        '<div class="gf-nm">' + esc(g.title) + '<small class="num">' + esc(g.code) + '</small></div>' +
+        '<div class="gf-track"><div class="gf-fill" style="width:' + Math.max(w, g.took ? 4 : 0) + '%"></div></div>' +
+        '<div class="gf-n num">' + g.took + '</div>' +
+        '<div class="gf-got num' + (g.finished ? '' : ' zero') + '">' +
+          (g.took ? (g.finished ? 'забрали ' + g.finished : 'никто не дошел') : 'не берут') + '</div>' +
+      '</div>';
+    }).join('');
+
+    var src = (d.sources || []).filter(function (s) { return s.n; });
+    var srcHtml = src.length ? src.map(function (s) {
+      return '<div class="gf-src"><span class="gf-src-c">' + esc(s.code) + '</span>' +
+        '<span class="gf-src-n num">' + s.n + '</span></div>';
+    }).join('') : '<div class="empty">Меток нет — все пришли напрямую.</div>';
+
+    var stuck = d.stuck || [];
+    var stuckRows = stuck.length ? stuck.map(function (p) {
+      var who = p.name || (p.username ? '@' + p.username : 'Без имени');
+      var what = GF_AWAIT[p.awaiting] || 'не ответил боту';
+      /* Напоминание шлется только по подарочным воронкам (funnels.nudge_loop). Обещать
+         его на выборе окна нельзя: там бот молчит, и чип «бот напомнит» будет враньем. */
+      var nudgeable = p.funnel_code.indexOf('gift') === 0;
+      return '<div class="trow gf-grid">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(who) + '</div>' +
+          '<div class="t-sub">' + esc(what) + ' · ' + esc(p.funnel_code) + '</div></div>' +
+        '<div class="gf-nudge hidem">' + (nudgeable
+          ? (p.nudged ? '<span class="sev n-ok">напомнили</span>'
+                      : '<span class="sev s-new">бот напомнит</span>')
+          : '') + '</div>' +
+        '<div class="t-when num">' + fmtWhen(p.since) + '</div>' +
+      '</div>';
+    }).join('') : '<div class="empty">Никто не завис на выборе.</div>';
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp7" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('gift', 14) + '</span>' +
+        '<div><div class="t">Путь подарка</div><div class="s">от «показали меню» до записи на разбор</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="card sp5" style="padding:22px 24px">' +
+        '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
+        '<div><div class="t">Откуда приходят</div><div class="s">метка ссылки или кодовое слово</div></div></div>' +
+        '<div class="gf-srcs">' + srcHtml + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('box', 14) + '</span>' +
+        '<div><div class="t">Что берут</div><div class="s">взяли подарок · дошли до конца сценария</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + giftRows + '</div></div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px">' +
+          '<span class="ic" style="background:var(--amber-soft); color:var(--amber-ink)">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Стоят на выборе</div><div class="s">' + stuck.length + ' ' +
+            plural(stuck.length, 'человек', 'человека', 'человек') +
+            ' · по подаркам бот напоминает сам через два часа</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + stuckRows + '</div></div>' +
+    '</div>';
   }
 
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах
@@ -12387,8 +14354,8 @@
 
   /* ── ОБЗОР ────────────────────────────────────────────── */
   /* спокойная метрика-полоса вместо кричащих плиток */
-  function statBar(items) {
-    return '<div class="card statbar">' + items.map(function (s) {
+  function statBar(items, cls) {
+    return '<div class="card statbar' + (cls ? ' ' + cls : '') + '">' + items.map(function (s) {
       var foot = s.delta
         ? '<span class="kd ' + (s.deltaCls || '') + '">' + s.delta + '</span>'
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
@@ -12681,6 +14648,198 @@
   }
 
   /* ── ЛИДЫ — тулбар + тело (таблица/канбан) в одном контейнере ── */
+  /* ══ ЛИДЫ ══════════════════════════════════════════════════════════════════
+     Решение Веры от 20.08.2026: «лиды это проходящие мимо люди, которые что-то
+     хотели; мы знаем канал, и через него бот говорит с ними дальше. Захотят
+     плотнее — станут людьми, с которыми мы работаем».
+
+     Разделение держится на статусе воронки, а не на новом поле в базе: пока
+     человек не оставил заявку и не заполнил анкету, он `visited` и лежит здесь.
+     Заявка, анкета, оплата или кнопка «Беру в работу» переводят его в «Людей» —
+     обратной кнопки нет намеренно, разжаловать человека обратно в прохожие
+     незачем.
+
+     Своей загрузки у раздела нет: это те же карточки из `state.leads`, просто
+     показанные с другого угла. Менеджеру тут не нужны балл и контакт — нужен
+     канал, повод прихода и когда человек последний раз о себе напоминал. */
+  var PR_SEGS = {
+    all:   { label: 'Все',   hint: 'все, кто с нами связался, но еще ничего не оставил' },
+    fresh: { label: 'Новые', hint: 'пришли за последнюю неделю — с ними разговор еще теплый' },
+    quiet: { label: 'Молчат', hint: 'больше двух недель тишины — нужен повод написать снова' },
+  };
+  var PR_QUIET_DAYS = 14;
+  /* Ярлык канала: бот кладет его в overrides, у заходов с платформы канала нет. */
+  var PR_CHAN = {
+    telegram: { label: 'Телеграм', icon: 'bot' },
+    vk:       { label: 'ВКонтакте', icon: 'vk' },
+    max:      { label: 'Макс',     icon: 'max' },
+    whatsapp: { label: 'WhatsApp', icon: 'wa' },
+    instagram: { label: 'Instagram', icon: 'inst' },
+  };
+  function isProspect(l) {
+    return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
+  }
+  function prAge(l) {
+    var t = l.last_activity || l.created_at;
+    if (!t) return 9999;
+    return Math.floor((Date.now() - new Date(t).getTime()) / 86400000);
+  }
+  /* Сколько человек молчит. Словами, а не числом с подписью: «сегодня» и «вчера»
+     читаются мгновенно, а на длинной тишине важен масштаб, а не точный день. */
+  function prSilence(age) {
+    if (age <= 0) return 'сегодня';
+    if (age === 1) return 'вчера';
+    if (age < 14) return age + ' ' + plural(age, 'день', 'дня', 'дней');
+    if (age < 60) return Math.round(age / 7) + ' нед';
+    return Math.round(age / 30) + ' мес';
+  }
+  function prList(seg) {
+    var arr = state.leads.filter(isProspect);
+    if (seg === 'fresh') arr = arr.filter(function (l) { return prAge(l) <= 7; });
+    if (seg === 'quiet') arr = arr.filter(function (l) { return prAge(l) >= PR_QUIET_DAYS; });
+    if (state.q) {
+      arr = arr.filter(function (l) {
+        var hay = ((l.name || '') + ' ' + (l.contact || '') + ' ' + (l.crm.note || '')).toLowerCase();
+        return hay.indexOf(state.q) !== -1;
+      });
+    }
+    return arr.sort(function (a, b) { return prAge(a) - prAge(b); });
+  }
+  function prCounts() {
+    var c = { all: 0, fresh: 0, quiet: 0 };
+    state.leads.forEach(function (l) {
+      if (!isProspect(l)) return;
+      c.all++;
+      var d = prAge(l);
+      if (d <= 7) c.fresh++;
+      if (d >= PR_QUIET_DAYS) c.quiet++;
+    });
+    return c;
+  }
+  /* Канал контакта. У карточки из бота он лежит в overrides (routers/telegram.py),
+     у пустого захода на платформу канала нет вообще — так и говорим. */
+  function prChan(l) {
+    var key = (l.crm.overrides || {}).channel || (l.referrer === 'bot' ? 'telegram' : '');
+    return PR_CHAN[key] || null;
+  }
+  /* Повод прихода. Бот пишет его в заметку («Пришел в бота: grant»), и это
+     единственное, что мы о холодном человеке знаем. */
+  function prWhy(l) {
+    if (l.crm.note) return l.crm.note;
+    if (l.referrer === 'bot') return 'Написал боту';
+    if (l.referrer && l.referrer.indexOf('webinar') === 0) return 'Пришел с эфира';
+    return 'Открыл платформу';
+  }
+  function prTake(id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Беру…'; }
+    apiSend('/admin/api/leads/' + encodeURIComponent(id) + '/take', 'POST', null, function () {
+      var l = findLead(id);
+      /* Двигаем локально ровно то же, что записал сервер: строка уезжает из
+         «Лидов» сразу, без перезагрузки всего списка. */
+      if (l) {
+        l.status = 'manual';
+        if (l.crm.status === 'new') l.crm.status = 'contacted';
+      }
+      renderAll();
+      showToast('В работе — карточка в «Людях»', '', id);
+    }, function () {
+      if (btn) { btn.disabled = false; btn.textContent = 'Беру в работу'; }
+      showToast('Не получилось — проверь сеть');
+    });
+  }
+  function renderProspects(view) {
+    var seg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
+    var arr = prList(seg);
+    var body;
+    if (!arr.length) {
+      body = '<div class="pr-empty">' + ic('funnel', 26) +
+        '<div class="pr-et">' + (state.q || seg !== 'all' ? 'Здесь пусто' : 'Лидов пока нет') + '</div>' +
+        '<div class="pr-es">' + (state.q || seg !== 'all'
+          ? 'По этому срезу никого. Попробуй вкладку «Все».'
+          : 'Сюда попадает каждый, кто написал боту или зашел на платформу и ничего не оставил.') +
+        '</div></div>';
+    } else {
+      body = '<div class="trow pr-grid thead">' +
+          '<span class="th pr-hch">Канал</span><span class="th">Кто</span>' +
+          '<span class="th hidem">Зачем приходил</span>' +
+          '<span class="th">Молчит</span><span class="th"></span>' +
+        '</div>' +
+        arr.map(function (l) {
+          var ch = prChan(l);
+          var age = prAge(l);
+          return '<div class="trow pr-grid" data-id="' + l.id + '">' +
+            '<span class="pr-ch' + (ch ? '' : ' none') + '">' +
+              (ch ? ic(ch.icon, 13) + '<span class="pr-cl">' + ch.label + '</span>'
+                  : ic('globe', 13) + '<span class="pr-cl">Платформа</span>') + '</span>' +
+            '<div class="t-cell"><div class="t-ttl' + (l.name ? '' : ' anon') + '">' + esc(leadName(l)) + '</div>' +
+              // Ник уже стоит в заголовке, если имени нет, — второй раз его не пишем.
+              '<div class="t-sub">' + (l.contact && l.contact !== leadName(l) ? esc(l.contact)
+                : l.contact ? 'имени не назвал' : 'контакта нет') + '</div></div>' +
+            '<div class="pr-why hidem">' + esc(prWhy(l)) + '</div>' +
+            '<div class="pr-age num' + (age >= PR_QUIET_DAYS ? ' cold' : '') + '">' +
+              prSilence(age) + '</div>' +
+            '<div class="pr-act"><button class="pr-take" data-stop="1" data-take="' + l.id + '">Беру в работу</button></div>' +
+          '</div>';
+        }).join('');
+    }
+    view.innerHTML = '<div class="card listcard">' + prToolbar(seg) + '<div class="list-body">' + body + '</div></div>';
+    wireProspects(view);
+  }
+  function prToolbar(seg) {
+    var c = prCounts();
+    var useful = Object.keys(PR_SEGS).filter(function (s) {
+      // Срез, который никого не отсекает, — лишняя кнопка: «Новые 18» рядом с
+      // «Все 18» не дает выбора, только шум.
+      return s !== 'all' && c[s] && c[s] !== c.all;
+    });
+    var chips = (useful.length ? ['all'].concat(useful) : []).map(function (s) {
+      return '<button class="qchip' + (seg === s ? ' on' : '') + '" data-prseg="' + s + '">' +
+        PR_SEGS[s].label + '<span class="qn num">' + c[s] + '</span></button>';
+    }).join('');
+    return '<div class="list-tools">' +
+        '<div class="searchwrap' + (state.q ? ' has-val' : '') + '">' + ic('leads', 15) +
+          '<input id="search" class="search" type="search" placeholder="Имя, контакт или повод прихода" autocomplete="off">' +
+          '<button class="s-clear" id="s-clear" title="Очистить">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count num">' + '<b>' + c.all + '</b> ' +
+          plural(c.all, 'лид', 'лида', 'лидов') + '</span>' +
+      '</div>' +
+      // Один-единственный чип «Все» выбора не дает — тогда полосы срезов нет вовсе.
+      (chips.replace(/\s/g, '') ? '<div class="list-quick">' + chips + '</div>' : '');
+  }
+  function wireProspects(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-prseg]'), function (t) {
+      t.addEventListener('click', function () {
+        state.prSeg = t.getAttribute('data-prseg'); saveUi(); renderHead(); renderView();
+      });
+    });
+    var search = el('search'), wrap = search && search.closest('.searchwrap');
+    if (search) {
+      search.value = state.q;
+      search.addEventListener('input', function () {
+        state.q = this.value.trim().toLowerCase();
+        if (wrap) wrap.classList.toggle('has-val', !!this.value);
+        renderView();
+        var f = el('search');
+        if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+      });
+    }
+    var clr = el('s-clear');
+    if (clr) clr.addEventListener('click', function () { state.q = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-take]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        prTake(b.getAttribute('data-take'), b);
+      });
+    });
+    var ids = prList(PR_SEGS[state.prSeg] ? state.prSeg : 'all').map(function (l) { return l.id; });
+    Array.prototype.forEach.call(view.querySelectorAll('.trow[data-id]'), function (tr) {
+      tr.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('[data-stop]')) return;
+        openDrawer(tr.getAttribute('data-id'), ids);
+      });
+    });
+  }
+
   function renderLeads(view) {
     view.innerHTML = '<div class="card listcard">' + leadsToolbar() + '<div class="list-body" id="list-body"></div></div>';
     attachToolbarHandlers();
@@ -12707,23 +14866,23 @@
     }).join('') + '</div>';
   }
 
-  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
-     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
-     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  /* Куда делись холодные. Раньше пустые заходы сворачивались прямо здесь; с
+     появлением раздела «Лиды» (решение Веры 20.08.2026) они уехали туда целиком,
+     и в «Людях» о них остается одна строка со ссылкой — иначе менеджер решит,
+     что трафика нет вовсе. */
   function blankNote() {
-    var n = counts().blank;
+    var n = counts().cold;
     if (!n || state.seg !== 'all') return '';
-    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
     return '<div class="list-foot">' +
       '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
-      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
-        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
-      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+      '<span class="lf-t"><b class="num">' + n + '</b> ' + plural(n, 'человек написал', 'человека написали', 'человек написали') +
+        ' или зашли, но ничего пока не оставили. Они в разделе «Лиды», с ними говорит бот.</span>' +
+      '<button class="lf-btn" id="lf-blank">Открыть</button>' +
     '</div>';
   }
   function attachBlankNote(host) {
     var b = host.querySelector('#lf-blank');
-    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+    if (b) b.addEventListener('click', function () { setPage('prospects'); });
   }
   function fillTable(host) {
     var arr = segLeads(state.seg);
@@ -13253,10 +15412,11 @@
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
     max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
+    instagram:{ label: 'Instagram', icon: 'inst', c: '#E1306C' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'instagram', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -13751,6 +15911,71 @@
     renderInboxChat(list);
   }
 
+  /* ── Карточка клиента из диалога ──────────────────────────────────────────
+     Менеджер отвечает человеку и одновременно смотрит его карточку, поэтому она
+     открывается в НОВОЙ вкладке: диалог остается на месте, вместе с недописанным
+     ответом. Сшивает бэкенд теми же ключами, что и в обратную сторону (см.
+     buildDialog), и говорит, чем сшил: по нику бывает мимо.
+     Карточки может не быть вовсе — боту пишет кто угодно, а заводит ее кодовое
+     слово. Тогда та же кнопка ее и заводит: искать человека руками в «Людях», чтобы
+     убедиться, что его там нет, — не работа. */
+  function convLeadLoad(uid) {
+    if (state.convLead[uid]) return;
+    state.convLead[uid] = 'load';
+    api('/admin/api/bot/conversations/' + uid + '/lead').then(function (r) {
+      state.convLead[uid] = r || {};
+    }).catch(function () {
+      state.convLead[uid] = { error: true };   // не нашли из-за сети — кнопки лучше не показывать
+    }).then(function () { convCardPaint(uid); });
+  }
+  function convCardHtml(uid) {
+    var d = state.convLead[uid];
+    if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Карточка</span>';
+    if (d.error) return '';
+    if (d.found) {
+      return '<button class="tg-cact" data-card="' + esc(d.session_id) + '" ' +
+        'title="Открыть карточку клиента в новой вкладке">' + ic('card', 14) + 'Карточка' +
+        (d.match === 'username' ? '<span class="tg-cw" title="сшито по нику — сверьте, тот ли человек">по нику</span>' : '') +
+        '</button>';
+    }
+    if (d.can_create) {
+      return '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+        'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+        '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>';
+    }
+    return '';
+  }
+  function convCardPaint(uid) {
+    var host = el('tg-card');
+    if (!host || String(state.inboxSel) !== String(uid)) return;
+    host.innerHTML = convCardHtml(uid);
+    wireConvCard(host, uid);
+  }
+  /* Ссылку на карточку для КОПИРОВАНИЯ строим от боевого адреса (leadUrl), а открываем
+     всегда в своем окружении: из превью ветки прод-ссылка увела бы менеджера в другую
+     CRM, а он ждет ту же, в которой работает. */
+  function openLeadTab(id) {
+    window.open(location.pathname + location.search + '#lead/' + encodeURIComponent(id),
+                '_blank', 'noopener');
+  }
+  function wireConvCard(host, uid) {
+    var open = host.querySelector('[data-card]');
+    if (open) open.addEventListener('click', function () {
+      openLeadTab(open.getAttribute('data-card'));
+    });
+    var mk = host.querySelector('[data-newcard]');
+    if (mk) mk.addEventListener('click', function () {
+      if (mk.disabled) return;
+      mk.disabled = true; mk.innerHTML = ic('plus', 14) + '<span class="tg-cl">Завожу…</span><span class="tg-cls">Завожу…</span>';
+      apiSend('/admin/api/bot/conversations/' + uid + '/lead', 'POST', null, function (r) {
+        state.convLead[uid] = null; convLeadLoad(uid);
+        loadLeads(true);                          // список «Людей» устарел: там теперь новый человек
+        if (r && r.id) openLeadTab(r.id);
+        showToast(r && r.created === false ? 'Карточка уже была — открыл ее' : 'Карточка заведена');
+      }, function () { mk.disabled = false; convCardPaint(uid); showToast('Не получилось завести карточку'); });
+    });
+  }
+
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
     composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
@@ -13795,6 +16020,7 @@
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
         '<span class="tg-ava sm" style="--c:' + cm.c + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
+        '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
         '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
           '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
       '</div>' +
@@ -13812,6 +16038,8 @@
       '</div>';
     state._composerRendering = false;
 
+    var cw = el('tg-card'); if (cw) wireConvCard(cw, c.id);
+    convLeadLoad(c.id);
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
@@ -13849,39 +16077,82 @@
     });
   }
 
-  /* ── РАЗДЕЛ «Диалог» в карточке лида (демо) ── */
+  /* ── РАЗДЕЛ «Диалог» в карточке лида ──
+     Та же переписка, что в «Диалогах», только рядом с человеком. Связи «карточка ↔
+     диалог бота» в базе нет: карточка живет в анкетах, переписка — в таблицах бота, и
+     заводятся они порознь. Сводит их бэкенд (по телеграму, аккаунту платформы и нику) и
+     говорит, чем именно сшил, — по нику бывает мимо, менеджер должен это видеть.
+     Отправка идет той же ручкой, что из «Диалогов»: вторая копия отправки разъехалась бы
+     с первой, а клиент получил бы два разных поведения бота. */
+  function leadConvLoad(id) {
+    if (state.leadConv[id]) return;
+    state.leadConv[id] = 'load';
+    api('/admin/api/leads/' + id + '/conversation').then(function (r) {
+      state.leadConv[id] = r || { conversations: [], messages: [] };
+    }).catch(function (e) {
+      state.leadConv[id] = { conversations: [], messages: [], error: (e && e.message) || 'err' };
+    }).then(function () {
+      if (state.drawerId === id && state.modalSection === 'dialog') renderModalContent();
+    });
+  }
+  function leadConvMsgs(d) {
+    return (d.messages || []).map(function (m) {
+      var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
+      return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
+    });
+  }
   function buildDialog(ctx) {
-    var l = ctx.lead || ctx.base;
-    var dlg = getDialog(l.crm ? l : ctx.base);
-    var aiOn = dlg.ai_on;
-    var thread = dlg.messages.map(function (m) {
-      var side = m.from === 'client' ? 'in' : 'out';
-      var tag = m.from === 'bot' ? '<span class="msg-by ai">' + ic('bot', 11) + 'AI-бот</span>'
-        : m.from === 'manager' ? '<span class="msg-by hum">' + ic('hand', 11) + 'Менеджер</span>' : '';
-      return '<div class="msg ' + side + (m.from === 'manager' ? ' mgr' : '') + '">' +
-        (tag ? '<div class="msg-h">' + tag + '</div>' : '') +
-        '<div class="msg-b">' + esc(m.text) + '</div><div class="msg-t num">' + fmtWhen(m.at) + '</div></div>';
-    }).join('');
-    if (dlg.handed) thread += '<div class="msg-sys">' + ic('hand', 12) + 'Диалог передан менеджеру</div>';
+    var id = ctx.id;
+    var d = state.leadConv[id];
+    if (!d) { leadConvLoad(id); d = 'load'; }
+    var head = '<div class="m-ctitle">Диалог</div>' +
+      '<div class="m-csub">Переписка человека с ботом — та же, что в разделе «Диалоги». ' +
+        'Ответите отсюда — сообщение уйдет ему тем же каналом, а бот в этом диалоге замолчит.</div>';
 
-    var handoffBanner = (dlg.handoff_req && !dlg.handed)
-      ? '<div class="handoff-banner">' + ic('hand', 14) + '<div><b>Клиент просит менеджера</b><span>бот продолжает отвечать. Возьми диалог, когда готов.</span></div></div>' : '';
+    if (d === 'load') {
+      return head + '<div class="m-dlg"><div class="m-dlg-thread">' + buildThread(null) + '</div></div>' +
+        buildNotifyFold(id);
+    }
+    if (d.error === '403') {
+      return head + '<div class="field-empty">Переписка клиентов доступна тем, у кого открыт раздел «Диалоги».</div>';
+    }
+    if (d.error) {
+      return head + '<div class="field-empty">Не удалось загрузить переписку — бот сейчас недоступен.</div>' +
+        buildNotifyFold(id);
+    }
+    var c = (d.conversations || [])[0];
+    if (!c) {
+      return head + '<div class="m-dlg-none">' + ic('chat', 22) +
+        '<div><b>Переписки с ботом нет</b>' +
+        '<span>Этот человек боту не писал, либо писал с другого аккаунта: сводим по телеграму, ' +
+        'аккаунту платформы и нику. Появится ник или телеграм в контактах — диалог подтянется сюда сам.</span></div></div>' +
+        buildNotifyFold(id);
+    }
+    var aiOn = c.ai_enabled !== false;
+    var st = c.handoff_requested ? '<span class="tg-tag wait">' + ic('hand', 10) + 'просит менеджера</span>'
+      : aiOn ? '<span class="tg-tag ai">' + ic('bot', 10) + 'бот отвечает</span>'
+      : '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведет менеджер') + '</span>';
+    var more = (d.conversations || []).length > 1
+      ? '<div class="m-dlg-more">Есть еще ' + ((d.conversations || []).length - 1) + ' ' +
+        plural((d.conversations || []).length - 1, 'диалог', 'диалога', 'диалогов') +
+        ' этого человека в других каналах — они в разделе «Диалоги».</div>' : '';
+    var matched = c.match === 'username'
+      ? '<div class="m-dlg-by">' + ic('alert', 11) + 'сведено по нику ' + esc('@' + (c.username || '')) +
+        ' — если ник чужой, скажите, отвяжем</div>' : '';
 
-    return '<div class="m-ctitle">Диалог</div>' +
-      '<div class="m-csub">Как человек общается с ботом. Канал, история, расход AI. Демо — оживёт с подключением бота.</div>' +
-      handoffBanner +
-      '<div class="dlg-bar">' +
-        '<div class="dlg-ch">' + chBadge(dlg.channel) + '</div>' +
-        (aiOn
-          ? '<div class="dlg-acts"><button class="ai-toggle on" id="dlg-ai"><span class="ait-dot"></span>AI ведёт диалог</button>' +
-            '<button class="bp sm" id="dlg-take">' + ic('hand', 13) + 'Взять диалог</button></div>'
-          : '<div class="dlg-acts"><button class="ai-toggle" id="dlg-ai"><span class="ait-dot"></span>AI выключен</button>' +
-            '<button class="bp ghost sm" id="dlg-return">' + ic('bot', 13) + 'Вернуть AI</button></div>') +
-      '</div>' +
-      '<div class="dlg-thread">' + thread + '</div>' +
-      '<div class="dlg-cost"><div class="dc-cell"><div class="dc-v num">' + dlg.msgs + '</div><div class="dc-l">сообщений</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num">' + fmtMoney(dlg.tokens) + '</div><div class="dc-l">токенов AI</div></div>' +
-        '<div class="dc-cell"><div class="dc-v num" style="color:var(--amber-ink)">' + dlg.cost_rub + ' ₽</div><div class="dc-l">расход на диалог</div></div></div>';
+    return head +
+      '<div class="m-dlg">' +
+        '<div class="m-dlg-h">' + chBadge(c.channel) + st +
+          '<button class="bp ghost sm" id="dlg-open">' + ic('chat', 13) + 'Открыть в «Диалогах»</button></div>' +
+        matched +
+        '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
+        '<div class="m-dlg-compose">' +
+          '<textarea id="dlg-in" rows="1" placeholder="' +
+            (aiOn ? 'Ответить — вы перехватите диалог у бота' : 'Ответить клиенту') + '"></textarea>' +
+          '<button class="tg-send" id="dlg-send" title="Отправить (Enter)">' + ic('send', 16) + '</button>' +
+        '</div>' +
+      '</div>' + more +
+      buildNotifyFold(id);
   }
 
   /* ── СТРАНИЦА «Аналитика бота» (owner) — api с фоллбэком на демо ── */
@@ -13991,12 +16262,13 @@
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
+    { id: 'exams',     label: 'Экзамены',    icon: 'award' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
-    { id: 'notify', label: 'Написать',   icon: 'send' },
+    { id: 'dialog', label: 'Диалог',     icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
 
@@ -14200,7 +16472,7 @@
   var RM_DOC_LINK_CACHE = {};
   function resolveDocLink(docId, cb) {
     if (RM_DOC_LINK_CACHE[docId]) { cb(RM_DOC_LINK_CACHE[docId]); return; }
-    fetch(API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -14892,12 +17164,19 @@
     // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
-      return sct.id !== 'pay' || can('finance');
+      if (sct.id === 'pay') return can('finance');
+      // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
+      // пункт, который открывается только отказом, хуже отсутствующего пункта.
+      if (sct.id === 'dialog') return can('inbox');
+      return true;
     }).map(function (sct) {
       var extra = '';
       if (sct.id === 'now' && risks.length) extra = '<span class="dotw"></span>';
       else if (sct.id === 'admission') { var rv = rmReviewCount(id); if (rv) extra = '<span class="cnt num warn">' + rv + '</span>'; }
       else if (sct.id === 'det' && lead && lead.det && lead.det.overall != null) extra = '<span class="cnt num">' + lead.det.overall + '</span>';
+      // Курс открыт — зеленая точка на разделе. Без нее «он у нас учится китайскому»
+      // видно только внутри вкладки, куда без повода не заходят.
+      else if (sct.id === 'course' && lead && lead.course && lead.course.has_access) extra = '<span class="doto"></span>';
       else if (sct.id === 'notes' && openTasks) extra = '<span class="cnt num">' + openTasks + '</span>';
       else if (sct.id === 'docs' && d && d.docs && d.docs.length) extra = '<span class="cnt num">' + d.docs.length + '</span>';
       else if (sct.id === 'pay' && d && d.payments && d.payments.length) extra = '<span class="cnt num">' + d.payments.length + '</span>';
@@ -14976,6 +17255,7 @@
     // Секцию оплат без финансовой роли не открыть даже прямым переключением
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
+    if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
@@ -14984,11 +17264,16 @@
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
-    else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
     else if (s === 'course') host.innerHTML = buildCourseSection(id);
+    else if (s === 'exams') host.innerHTML = buildExams(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
+    // Плашка «это дубль» — над ЛЮБОЙ секцией: работать в дубле нельзя нигде, и
+    // человек, пришедший по ссылке сразу в «Оплаты», обязан это увидеть.
+    var dupN = dupBanner(ctx);
+    if (dupN) host.insertAdjacentHTML('afterbegin', dupN);
+
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
     var side = el('m-side');
@@ -15055,7 +17340,8 @@
     DET_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/det').then(function (r) {
       DET_BUSY[id] = false; DET[id] = r;
-      if (state.drawerId === id && state.modalSection === 'det') renderModalContent();
+      // блок DET читают две вкладки — «Английский» и сводка «Экзамены»
+      if (state.drawerId === id && (state.modalSection === 'det' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       DET_BUSY[id] = false;
       if (e.message !== '403') { DET[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -15111,6 +17397,49 @@
   /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
      один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
      полоска по дням и распределение по навыкам, без таблиц. */
+  /* ── Блок «Интенсив DET» в разделе «Английский» ──
+     Интенсив живет отдельным приложением: там свои ученики и свои уроки, связи с
+     карточкой нет. Бэкенд сводит людей по телефону, нику и почте и говорит, чем сшил
+     (`match`); контакта в карточке может не быть вовсе — тогда связывает менеджер
+     кнопкой, и его слово сильнее автоматики. Блок показываем ВСЕГДА: «не нашли» —
+     это тоже ответ, и за ним есть действие. */
+  var INT_MATCH = {
+    manual: 'связал менеджер вручную',
+    login:  'по входу в интенсив — телеграм или почта',
+    phone:  'по телефону из карточки',
+    nick:   'по телеграм-нику из карточки',
+    email:  'по почте из карточки',
+  };
+  function detIntensive(it) {
+    var head = '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>';
+    if (!it) {
+      return head + '<div class="field-empty">Интенсив сейчас недоступен — его страница живет ' +
+        'отдельным приложением.</div></div>';
+    }
+    if (!it.found) {
+      return head +
+        '<div class="int-none">Этого человека на интенсиве не нашли. Ищем по телефону, ' +
+        'телеграм-нику и почте из карточки — если контакта тут нет, найдите его в списке сами.</div>' +
+        '<div class="int-find"><button class="bp ghost sm" id="int-find">' + ic('search', 13) +
+          'Найти на интенсиве</button></div>' +
+        '<div id="int-list"></div></div>';
+    }
+    return head +
+      '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
+      ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
+      (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
+      (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Доступ к интенсиву</div>' +
+          '<div class="det-sw-s">' + esc(it.name || '') +
+            (it.contact ? ' · ' + esc(it.contact) : '') +
+            '. Открытый доступ у оплатившего снять нельзя.</div></div>' +
+        '<button type="button" class="pd-sw' + (it.has_access ? ' on' : '') + '" id="int-sw">' +
+          '<span class="pd-sw-l">' + (it.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="det-sw-by">' + esc(INT_MATCH[it.match] || 'сведено автоматически') +
+        ' · <button class="int-unlink" id="int-unlink">это не он</button></div></div>';
+  }
   function detPractice(pr, opts) {
     if (!pr.total) return '';
     opts = opts || {};
@@ -15329,20 +17658,128 @@
 
     var practice = detPractice(b.practice || {});
 
-    var it = b.intensive;
-    var intensive = it
-      ? '<div class="m-sec"><div class="m-sec-h">Интенсив DET</div>' +
-        '<div class="det-pr">' + (it.has_access ? 'доступ открыт' : 'доступа нет') +
-        ' · сдано ' + it.lessons_done + ' ' + plural(it.lessons_done, 'урок', 'урока', 'уроков') +
-        (it.avg_pct != null ? ' · в среднем ' + it.avg_pct + '%' : '') +
-        (it.last_at ? ' · последний ' + esc(fmtWhen(it.last_at)) : '') + '</div>' +
-        '<div class="det-sw-by">свели по телефону — интенсив живет отдельным приложением</div></div>'
-      : '';
+    var intensive = detIntensive(b.intensive);
 
     return head + hero +
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
         '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
       access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Экзамены»: DET, HSK и CSCA в одном месте ──
+     Просьба Веры 18.08.2026: экзамены разбросаны по вкладкам языков, а вопрос у
+     менеджера один — «что человек вообще сдавал». Раздел не заводит новых данных: это
+     сводка тех же трех блоков, каждый со ссылкой в свою вкладку. CSCA (экзамен для
+     поступления: математика, физика, химия) своей вкладки не имеет и живет целиком тут. */
+  var CSCA = {}, CSCA_BUSY = {};
+  var CSCA_SUBJ = [['mathematics', 'Математика'], ['physics', 'Физика'], ['chemistry', 'Химия']];
+  function loadCsca(id, force) {
+    if (CSCA_BUSY[id]) return;
+    if (force) delete CSCA[id];
+    CSCA_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+      CSCA_BUSY[id] = false; CSCA[id] = r;
+      if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+    }).catch(function (e) {
+      CSCA_BUSY[id] = false;
+      if (e.message !== '403') { CSCA[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function examCard(opts) {
+    /* Одна строка экзамена: крупное число слева — это ответ на «сдавал или нет».
+       Кнопка ведет в свою вкладку, а не дублирует ее содержимое: две копии управления
+       разъедутся, а менеджеру тут нужен факт, а не настройки. */
+    return '<div class="ex-card' + (opts.value == null ? ' empty' : '') + '">' +
+      '<div class="ex-v num">' + (opts.value == null ? '—' : esc(String(opts.value))) +
+        (opts.unit && opts.value != null ? '<small>' + esc(opts.unit) + '</small>' : '') + '</div>' +
+      '<div class="ex-b"><div class="ex-t">' + esc(opts.title) + '</div>' +
+        '<div class="ex-m">' + opts.sub + '</div></div>' +
+      (opts.go ? '<button class="bp ghost sm" data-exgo="' + opts.go + '">Открыть</button>' : '') +
+      '</div>';
+  }
+
+  function buildExams(id) {
+    var head = '<div class="m-ctitle">Экзамены</div>' +
+      '<div class="m-csub">Все проверки уровня в одном месте: английский DET, китайский HSK ' +
+      'и пробный CSCA — экзамен, который сдают при поступлении в вуз.</div>';
+
+    var d = DET[id]; if (!d) loadDet(id);
+    var h = HSK[id]; if (!h) loadHsk(id);
+    var c = CSCA[id]; if (!c) loadCsca(id);
+
+    // DET
+    var det;
+    if (!d || d === 'none') {
+      det = examCard({ title: 'Английский · DET', value: null,
+        sub: d === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var dl = d.latest;
+      det = examCard({
+        title: 'Английский · DET', value: dl ? dl.overall : null, unit: ' из 160', go: 'det',
+        sub: dl
+          ? esc(DET_KIND[dl.kind] || dl.kind || 'тест') + ' · ' + esc(fmtWhen(dl.finished_at || dl.started_at)) +
+            (d.delta ? ' · к прошлому ' + detDelta(d.delta) : '') +
+            '<span class="ex-note">' + esc(detVerdict(dl.overall).t) + '</span>'
+          : 'тест еще не проходил' + (d.invite ? ' — ссылка выдана' : ' — ссылку можно создать во вкладке «Английский»'),
+      });
+    }
+
+    // HSK
+    var hsk;
+    if (!h || h === 'none') {
+      hsk = examCard({ title: 'Китайский · HSK', value: null,
+        sub: h === 'none' ? 'не загрузилось — обновите страницу' : 'загружаю…' });
+    } else {
+      var hl = h.latest;
+      hsk = examCard({
+        title: 'Китайский · HSK', value: hl ? hl.pct : null, unit: '%', go: 'course',
+        sub: hl
+          ? esc(hl.level || '') + ' · ' + hl.correct + ' из ' + hl.total + ' · ' + esc(fmtWhen(hl.at)) +
+            (h.delta ? ' · к прошлому ' + detDelta(h.delta) : '')
+          : 'пробный тест еще не проходил',
+      });
+    }
+
+    // CSCA — свои предметы, свой список попыток
+    var csca;
+    if (!c || c === 'none') {
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления</div>' +
+        '<div class="field-empty">' + (c === 'none' ? 'Не удалось загрузить.' : 'Загружаю…') + '</div></div>';
+    } else {
+      var at = c.attempts || [];
+      var best = {};
+      at.forEach(function (a) {
+        if (a.score_pct == null) return;
+        if (best[a.subject] == null || a.score_pct > best[a.subject]) best[a.subject] = a.score_pct;
+      });
+      var board = '<div class="pay-board">' + CSCA_SUBJ.map(function (s) {
+        var v = best[s[0]];
+        return '<div class="pay-cell' + (v == null ? ' muted' : '') + '">' +
+          '<div class="pc-l">' + s[1] + '</div>' +
+          '<div class="pc-v num">' + (v == null ? '—' : v + '%') + '</div></div>';
+      }).join('') + '</div>';
+      var rows = at.length
+        ? at.slice(0, 12).map(function (a) {
+            return '<div class="det-row" style="cursor:default">' +
+              '<span class="det-row-v num">' + (a.score_pct == null ? '—' : a.score_pct +
+                '<small style="font-size:.55em;opacity:.6">%</small>') + '</span>' +
+              '<div class="det-row-b"><div class="det-row-t">' + esc(a.subject_name || a.subject) +
+                ' <span class="sev s-new">уровень ' + esc(String(a.difficulty)) + '</span></div>' +
+                '<div class="det-row-m">' + esc(fmtWhen(a.submitted_at)) +
+                  ' · ответов ' + a.answered + ' из ' + a.total +
+                  (a.correct != null ? ' · верных ' + a.correct : '') + '</div></div></div>';
+          }).join('')
+        : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
+          'дает лендинг экзамена, результат придет сюда сам.</div>';
+      csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
+        '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
+        'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
+        board + '<div class="det-prl">' + rows + '</div></div>';
+    }
+
+    return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
   }
 
   /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
@@ -15440,7 +17877,7 @@
     HSK_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/hsk').then(function (r) {
       HSK_BUSY[id] = false; HSK[id] = r;
-      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+      if (state.drawerId === id && (state.modalSection === 'course' || state.modalSection === 'exams')) renderModalContent();
     }).catch(function (e) {
       HSK_BUSY[id] = false;
       if (e.message !== '403') { HSK[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
@@ -15676,7 +18113,13 @@
       '<div class="mh-st">' + sevPill(lead || { crm: crm, booking: booking }) +
         (booking && booking.slot ? '<span class="mh-slot">' + ic('cal', 12) + esc(booking.slot) + '</span>' : '') + '</div>' +
       (tone ? '<div class="mh-score"><b class="num" style="color:' + tone.c + '">' + score + '<small>/100</small></b>' +
-        '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>' : '') +
+        '<span style="color:' + tone.c + '">' + esc(tone.label) + '</span></div>'
+            // Балла нет — говорим почему. Молчащий прочерк менеджер читает как
+            // «человек ничего не проходил», а расчет мог просто упасть.
+            : (d ? '<button class="mh-nodiag" data-goto="ai">' +
+                   ((d.stage_status || {}).diagnostics === 'running' ? 'Балл считается'
+                     : (d.stage_status || {}).diagnostics === 'error' ? 'Балл не посчитался'
+                     : 'Балла нет') + '</button>' : '')) +
     '</div>';
 
     /* анкета абитуриента */
@@ -15691,6 +18134,20 @@
            : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>');
     html += '<div class="m-sec"><div class="m-sec-h">Анкета абитуриента</div>' + profInner + '</div>';
 
+    /* что у человека открыто из наших продуктов — сразу на «Главном».
+       Раньше это жило только на своей вкладке, и менеджер, открыв карточку клиента,
+       который у нас учится, честно не видел, что он у нас учится. */
+    var crs = lead && lead.course;
+    if (crs) {
+      var crsVal = crs.has_access
+        ? (crs.until ? 'открыт до ' + dayFull(crs.until) : 'открыт бессрочно')
+        : (crs.until ? 'доступ кончился ' + dayFull(crs.until) : 'доступ закрыт');
+      html += '<div class="m-sec"><div class="m-sec-h">Учится у нас</div><div class="ab">' +
+        '<div class="r"><span class="k">Живой китайский</span><span class="v">' + esc(crsVal) + '</span></div>' +
+        (crs.since ? '<div class="r"><span class="k">С какого дня</span><span class="v">' + esc(dayFull(crs.since)) + '</span></div>' : '') +
+      '</div></div>';
+    }
+
     /* контакты (редактируемые) */
     var contact = ov(ctx, 'contact'), email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Контакты</div><div class="who">' +
@@ -15704,6 +18161,286 @@
         (booking.channel ? '<div class="r"><span class="k">Канал</span><span class="v">' + esc(booking.channel) + '</span></div>' : '') +
       '</div></div>';
     }
+    return html;
+  }
+
+  /* ── КВАЛИФИКАЦИЯ ЛИДА ────────────────────────────────────────────────────
+     Два разных вопроса, и путать их нельзя. MQL — «стоит ли продажам вообще
+     тратить на него время»: считает система по данным, отвечает маркетинг, это
+     показатель качества трафика. SQL — «сделка возможна»: ставит менеджер после
+     разговора, отвечают продажи. Определения и формулы — sales/docs/sales-metrics.md.
+     Чего нет в анкете (лид пришел из бота), менеджер вносит руками — это ввод
+     недостающих данных, а не оценка: оценку система у него не спрашивает. */
+  var QL_MQL = [
+    ['audience', 'Аудитория', '8-11 класс, выпускник или студент вуза'],
+    ['goal',     'Цель',      'Китай решен или в списке стран'],
+    ['horizon',  'Горизонт',  'подача в ближайшие две волны'],
+    ['reach',    'Контакт',   'есть куда написать или позвонить вне бота'],
+  ];
+  var QL_SQL = [
+    ['decider',  'На связи родитель или он подключен'],
+    ['wave',     'Названа конкретная волна подачи'],
+    ['price',    'Названа вилка цены, не отвалился'],
+    ['feasible', 'Поступление реально в этот срок'],
+  ];
+  var QL_GRADES = [['mid', '8-9 класс'], ['senior', '10-11 класс'], ['student', 'студент вуза'],
+                   ['junior', '5-7 класс'], ['enrolled', 'уже поступил'], ['adult', 'работает']];
+  var QL_GOALS = [['decided', 'решил ехать в Китай'], ['considering', 'присматривается'],
+                  ['other', 'Китая в планах нет']];
+  var QL_REJECT = [
+    ['not_audience', 'Не наша аудитория по классу или возрасту'],
+    ['other_country', 'Другая страна'],
+    ['no_budget', 'Нет бюджета'],
+    ['no_decider', 'Нет решающего: ребенок без родителя'],
+    ['too_early', 'Слишком рано, горизонт больше года'],
+    ['no_contact', 'Не выходит на связь'],
+    ['duplicate', 'Дубль'],
+    ['spam', 'Спам или бот'],
+    ['competitor', 'Конкурент или наблюдатель'],
+    ['other', 'Другое'],
+  ];
+
+  /* Ближайшие четыре волны от сегодня. Зашитый список годов через год врет, поэтому
+     считаем от даты: до марта ближайшая волна весенняя, до сентября — осенняя. */
+  function qlWaves() {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
+    var yy = y, mm = 3;
+    if (m > 3) { mm = 9; }
+    if (m > 9) { mm = 3; yy = y + 1; }
+    var out = [];
+    for (var i = 0; i < 4; i++) {
+      out.push([yy + (mm === 3 ? '-03' : '-09'), (mm === 3 ? 'весна ' : 'сентябрь ') + yy]);
+      if (mm === 3) mm = 9; else { mm = 3; yy++; }
+    }
+    return out;
+  }
+  function qlWaveLabel(code) {
+    if (code === 'later') return 'позже';
+    if (!/^20\d{2}-(03|09)$/.test(code || '')) return '';
+    return (code.slice(5) === '03' ? 'весна ' : 'сентябрь ') + code.slice(0, 4);
+  }
+  function qlSelect(field, value, opts, empty, auto) {
+    return '<select class="tm-sel' + (auto ? ' auto' : '') + '" data-qf="' + field + '">' +
+      '<option value="">' + empty + '</option>' +
+      opts.map(function (o) {
+        return '<option value="' + o[0] + '"' + (o[0] === value ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      }).join('') + '</select>';
+  }
+
+  /* ── КТО ВЕДЕТ И ПЕРВОЕ КАСАНИЕ ───────────────────────────────────────────
+     Две отметки продаж (бэкенд: миграция 099). Ответственный отвечает на вопрос
+     «с кого спросить», отметка касания — на вопрос «за сколько мы ответили».
+     Второе важнее: родитель пишет не только нам, и сделку чаще получает тот, кто
+     ответил первым. Поэтому пока не связались, строка показывает не пустоту, а
+     сколько человек уже ждет, и после 15 минут делает это амбером.
+     Блок стоит выше воронки и квалификации: и то и другое — про «кто он», а это
+     про «чей он и успели ли мы». */
+  var OWN_PEOPLE = null, OWN_BUSY = false;
+
+  function fetchAssignees(cb) {
+    if (OWN_PEOPLE) { if (cb) cb(OWN_PEOPLE); return; }
+    if (OWN_BUSY) return;
+    OWN_BUSY = true;
+    api('/admin/api/leads/assignees').then(function (r) {
+      OWN_BUSY = false; OWN_PEOPLE = r.people || [];
+      if (cb) cb(OWN_PEOPLE);
+    }).catch(function () { OWN_BUSY = false; });
+  }
+
+  /* Минуты в человеческое. Без секунд и без «0 мин»: точность здесь не нужна,
+     нужен масштаб — минуты, часы или дни. */
+  function fmtMins(m) {
+    if (m == null) return '';
+    if (m < 1) return 'меньше минуты';
+    if (m < 60) return m + ' ' + plural(m, 'минуту', 'минуты', 'минут');
+    var h = Math.round(m / 60);
+    if (h < 24) return h + ' ' + plural(h, 'час', 'часа', 'часов');
+    var d = Math.round(h / 24);
+    return d + ' ' + plural(d, 'день', 'дня', 'дней');
+  }
+
+  /* Ориентир по рынку — ответ в течение 15 минут (docs/sales-metrics.md).
+     Дальше час — уже плохо, но еще спасаемо; сутки — потеря. */
+  function ownSev(m) { return m <= 15 ? 'fast' : (m <= 60 ? 'mid' : 'slow'); }
+
+  function buildOwn(ctx) {
+    var crm = ctx.crm || {}, base = ctx.base;
+    var own = crm.owner || null;
+    var people = OWN_PEOPLE || (own ? [{ id: own.id, name: own.name }] : []);
+    var opts = people.map(function (u) {
+      var nm = u.name || u.login || ('#' + u.id);
+      return '<option value="' + u.id + '"' + (own && own.id === u.id ? ' selected' : '') + '>' +
+        esc(nm) + '</option>';
+    }).join('');
+
+    var right;
+    if (crm.first_touch_at) {
+      var m = crm.reply_min == null ? 0 : crm.reply_min;
+      right = '<div class="own-t">' +
+        '<span class="ql-l">Первый ответ</span>' +
+        '<span class="own-sp ' + ownSev(m) + '">за ' + fmtMins(m) + '</span>' +
+        '<span class="own-when">' + fmtWhen(crm.first_touch_at) + '</span>' +
+      '</div>';
+    } else {
+      var waited = base && base.created_at
+        ? Math.max(0, Math.round((Date.now() - new Date(base.created_at).getTime()) / 60000))
+        : null;
+      right = '<div class="own-t">' +
+        (waited == null ? '' :
+          '<span class="own-wait' + (waited > 15 ? ' late' : '') + '">ждет ' + fmtMins(waited) + '</span>') +
+        '<button class="bp ghost sm own-go" data-touch="1">' + ic('phone', 13) + 'Связался</button>' +
+      '</div>';
+    }
+
+    return '<div class="own">' +
+      '<div class="own-p"><span class="ql-l">Ведет</span>' +
+        '<select class="tm-sel" data-owner="1">' +
+          '<option value="">не назначен</option>' + opts +
+        '</select></div>' +
+      right +
+    '</div>';
+  }
+
+  function buildQual(ctx) {
+    var crm = ctx.crm || {};
+    var q = crm.qual || {};
+    var mql = crm.mql || { ok: false, checks: {} };
+    var checks = mql.checks || {};
+
+    var crit = QL_MQL.map(function (c) {
+      var on = !!checks[c[0]];
+      return '<div class="ql-c' + (on ? ' on' : '') + '" title="' + esc(c[2]) + '">' +
+        '<i>' + ic(on ? 'check' : 'x', 9) + '</i><b>' + c[1] + '</b></div>';
+    }).join('');
+
+    // в селекте показываем то, что уже знаем из анкеты (приглушенно), а выбор
+    // менеджера пишем в карточку — он сильнее анкеты
+    var waves = qlWaves();
+    var wave = q.wave || '';
+    if (wave && wave !== 'later' && !waves.some(function (w) { return w[0] === wave; })) {
+      waves = [[wave, qlWaveLabel(wave)]].concat(waves);
+    }
+    var fields = '<div class="ql-fields">' +
+      '<label class="ql-f"><span class="ql-l">Ступень</span>' +
+        qlSelect('grade', q.grade || mql.grade || '', QL_GRADES, 'не знаем', !q.grade && !!mql.grade) + '</label>' +
+      '<label class="ql-f"><span class="ql-l">Цель</span>' +
+        qlSelect('goal', q.goal || mql.goal || '', QL_GOALS, 'не знаем', !q.goal && !!mql.goal) + '</label>' +
+      '<label class="ql-f"><span class="ql-l">Волна подачи</span>' +
+        qlSelect('wave', wave, waves.concat([['later', 'позже']]), 'не названа', false) + '</label>' +
+    '</div>';
+
+    var marks = q.sql || {};
+    var sqlOn = QL_SQL.every(function (c) { return marks[c[0]]; });
+    var sql = QL_SQL.map(function (c) {
+      return '<button class="ql-chk' + (marks[c[0]] ? ' on' : '') + '" data-qchk="' + c[0] + '">' +
+        '<u>' + ic('check', 11) + '</u><span>' + c[1] + '</span></button>';
+    }).join('');
+
+    var rej = '';
+    if (crm.status === 'rejected') {
+      rej = '<div class="ql-rej' + (q.reject_reason ? '' : ' empty') + '">' +
+        '<span class="ql-l">Причина отказа</span>' +
+        qlSelect('reject_reason', q.reject_reason || '', QL_REJECT, 'не указана', false) + '</div>';
+    }
+
+    return '<div class="m-sec ql-sec">' +
+      '<div class="m-sec-h">Квалификация' +
+        '<span class="ql-verd' + (mql.ok ? ' on' : '') + '">' +
+          (mql.ok ? 'Квал-лид маркетинга' : 'Пока не квал') + '</span></div>' +
+      '<div class="ql-crit">' + crit + '</div>' + fields +
+      '<div class="ql-split"><span>Квал продаж</span><i></i>' +
+        '<span class="ql-verd' + (sqlOn ? ' on' : '') + '">' +
+          (sqlOn ? 'Сделка возможна' : 'Подтверждено ' + QL_SQL.filter(function (c) { return marks[c[0]]; }).length + ' из 4') +
+        '</span></div>' +
+      '<div class="ql-sql">' + sql + '</div>' + rej +
+    '</div>';
+  }
+
+  /* ── ДУБЛИ: похоже, это тот же человек ────────────────────────────────────
+     Один человек заходит к нам несколькими дверями: бот, эфир, анкета. Каждая дверь
+     заводит свою карточку, и в отчете он считается несколько раз. Бэкенд ищет похожие
+     по телефону, телеграму и почте, но НЕ склеивает сам: у нас данные детей, ошибочная
+     склейка двух разных детей потом не разбирается. Решает менеджер, склейка обратима.
+     Склеиваем при этом не «людей», а дела: у мамы свой телефон, у ребенка свой телеграм,
+     это два человека и одна сделка. */
+  var DUP = {};        // id лида -> ответ бэка
+  var DUP_BUSY = {};
+
+  function fetchDups(id, force) {
+    if (DUP_BUSY[id]) return;
+    if (force) delete DUP[id];
+    if (DUP[id]) return;
+    DUP_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/duplicates').then(function (r) {
+      DUP_BUSY[id] = false; DUP[id] = r;
+      if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+    }).catch(function () {
+      DUP_BUSY[id] = false; DUP[id] = { duplicates: [] };
+    });
+  }
+
+  var DUP_KIND = { phone: 'телефон', email: 'почта', tg: 'телеграм', vk: 'вк' };
+  function dupMatch(m) {
+    var v = m.value;
+    if (m.kind === 'tg') v = v.indexOf('un:') === 0 ? '@' + v.slice(3) : 'id ' + v.slice(3);
+    if (m.kind === 'phone') v = '+' + v;
+    return DUP_KIND[m.kind] + ' ' + v;
+  }
+
+  /* Карточка сама помечена дублем — это меняет всю работу с ней, поэтому говорим
+     первой строкой раздела, до «что делать сейчас». */
+  /* Поля склейки живут только в детали карточки: в строке списка их нет, а leadCtx
+     предпочитает строку списка. Поэтому читаем деталь напрямую, иначе после склейки
+     блок «Склеено в это дело» не появится до перезагрузки страницы. */
+  function dupCrm(ctx) { return (ctx.d && ctx.d.crm) || ctx.crm || {}; }
+
+  function dupBanner(ctx) {
+    var crm = dupCrm(ctx);
+    if (!crm.merged_into) return '';
+    return '<div class="dup-note">' + ic('alert', 14) +
+      '<div><b>Это дубль другой карточки</b>' +
+      '<small>работа идет в главной карточке, здесь ничего не ведем</small></div>' +
+      '<button class="dup-b" data-dupopen="' + esc(crm.merged_into) + '">Открыть главную</button>' +
+      '<button class="dup-b" data-unmerge="' + esc(state.drawerId) + '">Расклеить</button></div>';
+  }
+
+  function buildDupes(ctx) {
+    var id = state.drawerId;
+    var crm = dupCrm(ctx);
+    var html = '';
+
+    /* сюда уже склеены другие заходы того же человека */
+    var merged = crm.merged || [];
+    if (merged.length) {
+      html += '<div class="m-sec"><div class="m-sec-h">Склеено в это дело' +
+        '<span class="dup-cnt num">' + merged.length + '</span></div>' +
+        '<div class="dup-list">' + merged.map(function (m) {
+          return '<div class="dup-row"><div class="dup-nm"><b>' + esc(m.name || 'Без имени') + '</b>' +
+            '<small>' + esc(fmtWhen(m.created_at)) + '</small></div>' +
+            '<button class="dup-b" data-dupopen="' + esc(m.id) + '">Открыть</button>' +
+            '<button class="dup-b" data-unmerge="' + esc(m.id) + '">Расклеить</button></div>';
+        }).join('') + '</div></div>';
+    }
+
+    /* подсказка: похожие карточки */
+    var d = DUP[id];
+    if (!d) { fetchDups(id); return html; }
+    var list = (d.duplicates || []).filter(function (x) { return x.id !== crm.merged_into; });
+    if (!list.length) return html;
+
+    html += '<div class="m-sec"><div class="m-sec-h">Похоже, это тот же человек' +
+      '<span class="dup-cnt num">' + list.length + '</span></div>' +
+      '<div class="dup-hint">Совпали личные признаки. Система сама ничего не склеивает: ' +
+        'реши сам, одно это дело или разные люди.</div>' +
+      '<div class="dup-list">' + list.map(function (x) {
+        var why = (x.matched || []).map(dupMatch).join(' · ');
+        return '<div class="dup-row"><div class="dup-nm"><b>' + esc(x.name || 'Без имени') + '</b>' +
+          '<small>' + esc(why) + ' · ' + esc(fmtWhen(x.created_at)) + '</small></div>' +
+          (x.paid ? '<span class="sev s-client">оплата</span>' : '') +
+          '<button class="dup-b" data-dupopen="' + esc(x.id) + '">Открыть</button>' +
+          (x.paid ? '' : '<button class="dup-b primary" data-merge="' + esc(x.id) + '">Это дубль</button>') +
+        '</div>';
+      }).join('') + '</div></div>';
     return html;
   }
 
@@ -15725,6 +18462,9 @@
     if (booking && booking.slot) {
       html += '<div class="slotchip">' + ic('cal', 13) + 'Разбор назначен: ' + esc(booking.slot) + '</div>';
     }
+
+    /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
+    html += buildOwn(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -15755,7 +18495,13 @@
         : ic('clock', 12) + 'Пока никого — плана семье такому клиенту не опубликовать.') +
       '</div></div>';
 
-    /* 3. КТО ЭТО — редактируемая сводка контактов (компактная) */
+    /* 3. КВАЛИФИКАЦИЯ — квал ли он для маркетинга и подтвердили ли продажи */
+    html += buildQual(ctx);
+
+    /* 3а. ДУБЛИ — тот же человек другой дверью */
+    html += buildDupes(ctx);
+
+    /* 4. КТО ЭТО — редактируемая сводка контактов (компактная) */
     var email = ov(ctx, 'email'), city = ov(ctx, 'city');
     html += '<div class="m-sec"><div class="m-sec-h">Кто это</div>' +
       '<div class="who compact">' + efRow('contact', contact, true) + efRow('email', email, false) + efRow('city', city, false) + '</div></div>';
@@ -16149,24 +18895,30 @@
     refunded: { label: 'возврат',   sev: 'rejected' },
   };
 
-  /* ── РАЗДЕЛ «Написать» — отправить уведомление клиенту через бота + история отправок ── */
-  function buildNotifySection(ctx) {
-    var id = ctx.id;
-    return '<div class="m-ctitle">Написать клиенту</div>' +
-      '<div class="m-csub">Сообщение уходит клиенту в его канал через бота. AI-режим — опиши суть, бот сформулирует сам (по тону куратора и истории переписки); Текст — отправится как есть.</div>' +
-      '<div class="m-sec">' +
-        '<div class="m-sec-h">Новое сообщение</div>' +
-        '<div class="ntf-mode" id="ntf-mode">' +
-          '<button data-m="event" class="on">AI сформулирует</button>' +
-          '<button data-m="text">Готовый текст</button>' +
+  /* ── «Попросить бота написать» — второй блок раздела «Диалог» ──
+     Это не ответ в переписке, а уведомление: менеджер описывает суть, бот формулирует
+     сам и шлет клиенту. Отдельным разделом это жило рядом с «Диалогом» и делило один
+     вопрос («написать человеку») на два экрана, поэтому свернуто сюда. */
+  function buildNotifyFold(id) {
+    return '<details class="m-fold">' +
+      '<summary><span class="pm-t">Попросить бота написать</span>' +
+        '<span class="pm-h">напоминание или новость — бот сформулирует и отправит</span>' +
+        ic('go', 13) + '</summary>' +
+      '<div class="m-fold__body">' +
+        '<div class="m-sec">' +
+          '<div class="m-sec-h">Новое сообщение</div>' +
+          '<div class="ntf-mode" id="ntf-mode">' +
+            '<button data-m="event" class="on">AI сформулирует</button>' +
+            '<button data-m="text">Готовый текст</button>' +
+          '</div>' +
+          '<textarea class="note-ta" id="ntf-input" placeholder="Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
+          '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
+          '<span class="ntf-state" id="ntf-state"></span></div>' +
         '</div>' +
-        '<textarea class="note-ta" id="ntf-input" placeholder="Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести, если неудобно»"></textarea>' +
-        '<div class="ntf-act"><button class="bp sm" id="ntf-send">' + ic('send', 13) + 'Отправить</button>' +
-        '<span class="ntf-state" id="ntf-state"></span></div>' +
-      '</div>' +
-      '<div class="m-sec"><div class="m-sec-h">История отправок' +
-        '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div id="ntf-log"></div></div>';
+        '<div class="m-sec"><div class="m-sec-h">История отправок' +
+          '<span class="hr" id="ntf-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+          '<div id="ntf-log"></div></div>' +
+      '</div></details>';
   }
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
   function buildPaySection(ctx) {
@@ -16339,6 +19091,46 @@
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
     });
 
+    /* интенсив DET: доступ, ручная связка и список учеников для нее */
+    var it = b.intensive || {};
+    var isw = el('int-sw');
+    if (isw) isw.addEventListener('click', function () {
+      post('/admin/api/intensive/students/' + it.student_id + '/access', { open: !it.has_access },
+           it.has_access ? 'Доступ к интенсиву закрыт' : 'Доступ к интенсиву открыт');
+    });
+    var iun = el('int-unlink');
+    if (iun) iun.addEventListener('click', function () {
+      post('/admin/api/leads/' + id + '/intensive/link', { student_id: null }, 'Связка снята');
+    });
+    var ifind = el('int-find');
+    if (ifind) ifind.addEventListener('click', function () {
+      var host2 = el('int-list'); if (!host2) return;
+      ifind.disabled = true;
+      host2.innerHTML = '<span class="shim" style="display:block;width:70%;height:12px;border-radius:6px"></span>';
+      api('/admin/api/intensive/students?limit=200').then(function (r) {
+        var items = (r && r.items) || [];
+        host2.innerHTML = items.length
+          ? '<div class="int-rows">' + items.map(function (s) {
+              return '<div class="int-row"><div class="int-b"><div class="int-n">' + esc(s.name || 'Без имени') +
+                '</div><div class="int-m">' + esc(s.contact || '') +
+                ' · ' + (s.has_access ? 'доступ открыт' : 'доступа нет') +
+                ' · уроков ' + (s.results_n || 0) + '</div></div>' +
+                '<button class="bp ghost sm" data-link="' + esc(s.id) + '">Это он</button></div>';
+            }).join('') + '</div>'
+          : '<div class="field-empty">На интенсиве пока никто не зарегистрирован.</div>';
+        Array.prototype.forEach.call(host2.querySelectorAll('[data-link]'), function (btn) {
+          btn.addEventListener('click', function () {
+            post('/admin/api/leads/' + id + '/intensive/link',
+                 { student_id: btn.getAttribute('data-link') }, 'Связали с учеником интенсива');
+          });
+        });
+      }).catch(function (e) {
+        ifind.disabled = false;
+        host2.innerHTML = '<div class="field-empty">Список не загрузился' +
+          (e && e.message === '403' ? '' : ' — попробуйте еще раз') + '.</div>';
+      });
+    });
+
     var tsel = el('det-teacher');
     if (tsel) {
       // Список преподавателей грузим один раз на сессию и перерисовываем поле.
@@ -16392,11 +19184,145 @@
       });
     });
 
+    // «Пересчитать» в разделе «Диагностика»: расчет мог упасть или быть убит
+    // деплоем, и ждать добивщика на бэке менеджеру незачем — человек на связи сейчас.
+    var rrn = el('diag-rerun');
+    if (rrn) rrn.addEventListener('click', function () {
+      rrn.disabled = true;
+      rrn.textContent = 'Считаем…';
+      apiSend('/admin/api/leads/' + id + '/diagnostics/rerun', 'POST', null, function () {
+        showToast('Считаем разбор — обычно меньше минуты');
+        // Ручка отвечает сразу, результат приходит позже: перечитываем карточку,
+        // пока расчет не дойдет до конца. Через полторы минуты сдаемся — дальше
+        // человек нажмет еще раз, а брошенное подберет добивщик на бэке.
+        var tries = 0;
+        (function waitDiag() {
+          if (++tries > 18) return;
+          setTimeout(function () {
+            if (state.drawerId !== id) return;
+            refreshDetail(id, function (fresh) {
+              var ready = fresh && fresh.diagnostics && fresh.diagnostics.score != null;
+              var st = fresh && (fresh.stage_status || {}).diagnostics;
+              if (state.drawerId === id && state.modalSection === 'ai' && (ready || st === 'error')) {
+                renderModalContent();
+              } else if (!ready) waitDiag();
+            });
+          }, 5000);
+        })();
+      }, function (code) {
+        rrn.disabled = false;
+        rrn.textContent = 'Пересчитать';
+        showToast(code === 409 ? 'Считать нечего: анкеты нет или разбор уже готов'
+                               : 'Не получилось запустить расчет');
+      });
+    });
+
+    // ── ДУБЛИ: открыть похожую карточку, склеить, расклеить ──
+    Array.prototype.forEach.call(host.querySelectorAll('[data-dupopen]'), function (b) {
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-dupopen')); });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-merge]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-merge');
+        if (!window.confirm('Пометить ту карточку дублем этой? Она уйдет из списков, данные останутся. Решение обратимо.')) return;
+        b.disabled = true;
+        api('/admin/api/leads/' + id + '/merge', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ duplicate: dupId }),
+        }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          showToast('Склеено — в списках останется одна карточка');
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function (e) {
+          b.disabled = false;
+          showToast(e.message === 'HTTP 409'
+            ? 'Так склеить нельзя — по карточке есть оплата'
+            : 'Не склеилось — проверь сеть');
+        });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-unmerge]'), function (b) {
+      b.addEventListener('click', function () {
+        var dupId = b.getAttribute('data-unmerge');
+        b.disabled = true;
+        api('/admin/api/leads/' + dupId + '/unmerge', { method: 'POST' }).then(function () {
+          delete DUP[id]; delete state.details[id]; delete state.details[dupId];
+          showToast('Расклеено — карточка вернулась в списки');
+          refreshDetail(id, function () { if (state.drawerId === id) renderDrawer(true); });
+          loadLeads();
+        }).catch(function () { b.disabled = false; showToast('Не получилось — проверь сеть'); });
+      });
+    });
+
+    // ── КТО ВЕДЕТ И ПЕРВОЕ КАСАНИЕ ──
+    var ownHost = host.querySelector('.own');
+    if (ownHost) {
+      // список сотрудников тянем один раз на сессию и перерисовываем секцию,
+      // иначе в селекте виден только уже назначенный человек
+      if (!OWN_PEOPLE) fetchAssignees(function () {
+        if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+      });
+      var ownSel = ownHost.querySelector('select[data-owner]');
+      if (ownSel) ownSel.addEventListener('change', function () {
+        var val = ownSel.value ? parseInt(ownSel.value, 10) : null;
+        ownSel.disabled = true;
+        apiSend('/admin/api/leads/' + id + '/owner', 'POST', { owner_id: val }, function (r) {
+          crmSet(id, { owner: r.owner });
+          showToast(r.owner ? 'Ведет ' + r.owner.name : 'Ответственный снят');
+          if (state.drawerId === id) renderDrawer(true);
+          renderView();
+        }, function () { ownSel.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+      var touchBtn = ownHost.querySelector('[data-touch]');
+      if (touchBtn) touchBtn.addEventListener('click', function () {
+        touchBtn.disabled = true;
+        apiSend('/admin/api/leads/' + id + '/touch', 'POST', null, function (r) {
+          var upd = { first_touch_at: r.first_touch_at, reply_min: r.reply_min };
+          // отметка касания двигает статус с «новый» на «связались» — так же, как на бэке
+          var cur = (findLead(id) || {}).crm || {};
+          if (cur.status === 'new') upd.status = 'contacted';
+          crmSet(id, upd);
+          showToast(r.marked ? 'Отметил: связались за ' + fmtMins(r.reply_min) : 'Касание уже было отмечено');
+          if (state.drawerId === id) renderDrawer(true);
+          renderView();
+        }, function () { touchBtn.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+    }
+
+    // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
+    var qlHost = host.querySelector('.ql-sec');
+    if (qlHost) {
+      Array.prototype.forEach.call(qlHost.querySelectorAll('[data-qchk]'), function (b) {
+        b.addEventListener('click', function () {
+          var key = b.getAttribute('data-qchk');
+          var marks = Object.assign({}, (crm.qual || {}).sql || {});
+          if (marks[key]) delete marks[key]; else marks[key] = true;
+          patch(id, { qual: { sql: marks } });
+        });
+      });
+      Array.prototype.forEach.call(qlHost.querySelectorAll('select[data-qf]'), function (sel) {
+        // пустое значение — осознанный сброс: бэк удалит ключ и вернется к анкете
+        sel.addEventListener('change', function () {
+          var body = {};
+          body[sel.getAttribute('data-qf')] = sel.value;
+          patch(id, { qual: body });
+        });
+      });
+    }
+
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);
 
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
+
+    // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
+    Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {
+      b.addEventListener('click', function () { setModalSection(b.getAttribute('data-exgo')); });
+    });
+    var exr = el('ex-refresh');
+    if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
@@ -16827,7 +19753,7 @@
       if (les) body.lessons = les;
       schBtn.disabled = true;
       out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
-      fetch(API + '/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+      xfetch('/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
@@ -16899,21 +19825,47 @@
     Array.prototype.forEach.call(host.querySelectorAll('.qa-fold .m-sec-h'), function (h) {
       h.addEventListener('click', function () { h.parentNode.classList.toggle('open'); });
     });
-    // переключатель AI в диалоге (демо — храним локально) + взять/вернуть
-    function setDlgAi(on) {
-      state.dialogAi[id] = on;
-      var dlg = getDialog(ctx.lead || ctx.base);
-      if (on) dlg.handoff_req = false;
+    // раздел «Диалог»: ответ клиенту и переход в «Диалоги»
+    var dconv = state.leadConv[id];
+    var dcv = (dconv && dconv !== 'load' && (dconv.conversations || [])[0]) || null;
+    var dOpen = el('dlg-open');
+    if (dOpen && dcv) dOpen.addEventListener('click', function () {
+      closeDrawer(); state.inboxMode = 'bot'; state.inboxSel = dcv.user_id;
+      setPage('inbox'); loadBotData(function () { renderAll(); });
+    });
+    var dIn = el('dlg-in'), dSend = el('dlg-send');
+    function dlgSend() {
+      if (!dIn || !dcv) return;
+      var t = dIn.value.trim(); if (!t) { dIn.focus(); return; }
+      dIn.value = '';
+      // рисуем сразу, доставку проверяем ответом: менеджер не должен ждать бота,
+      // но и «отправлено» без доставки писать нельзя — не ушло, пузырь помечается
+      var tmp = { role: 'assistant', sender: 'manager', text: t, at: new Date().toISOString() };
+      dconv.messages = (dconv.messages || []).concat([tmp]);
+      dcv.ai_enabled = false;   // ответил менеджер — бот в этом диалоге замолкает (так же на бэке)
       renderModalContent();
-      showToast(on ? 'AI снова ведёт диалог' : 'Диалог за тобой — AI выключен');
+      api('/admin/api/bot/conversations/' + dcv.user_id + '/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }),
+      }).then(function (res) {
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Не доставлено: ' + res.reason) : 'Сообщение не доставлено клиенту');
+          if (state.modalSection === 'dialog') renderModalContent();
+        }
+      }).catch(function () {
+        dconv.messages = (dconv.messages || []).filter(function (m) { return m !== tmp; });
+        showToast('Сообщение не отправлено — проверьте связь с ботом');
+        if (state.modalSection === 'dialog') renderModalContent();
+      });
     }
-    var aiT = el('dlg-ai');
-    if (aiT) aiT.addEventListener('click', function () { setDlgAi(!getDialog(ctx.lead || ctx.base).ai_on); });
-    var tk = el('dlg-take'); if (tk) tk.addEventListener('click', function () { setDlgAi(false); });
-    var rt = el('dlg-return'); if (rt) rt.addEventListener('click', function () { setDlgAi(true); });
+    if (dSend) dSend.addEventListener('click', dlgSend);
+    if (dIn) dIn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
+    });
+    var dTh = el('dlg-thread'); if (dTh) dTh.scrollTop = dTh.scrollHeight;
 
     // раздел «Написать»: режим/отправка/история
-    if (state.modalSection === 'notify') {
+    if (state.modalSection === 'dialog') {
       var ntfMode = 'event';
       var modeBar = el('ntf-mode');
       if (modeBar) Array.prototype.forEach.call(modeBar.children, function (b) {
@@ -16922,7 +19874,7 @@
           Array.prototype.forEach.call(modeBar.children, function (x) { x.classList.toggle('on', x === b); });
           var inp = el('ntf-input');
           if (inp) inp.placeholder = ntfMode === 'event'
-            ? 'Опиши, что написать — например: «напомни о созвоне завтра, предложи перенести»'
+            ? 'Опишите, что написать — например: «напомни о созвоне завтра, предложи перенести»'
             : 'Готовый текст сообщения — отправится как есть';
         });
       });
@@ -17444,12 +20396,39 @@
       (hr ? '<div class="qa-wrap">' + inner + '</div>' : inner) + '</div>';
   }
 
+  /* Состояние расчета разбора. Пустая диагностика бывает четырех разных видов, и
+     менеджеру они означают разное: «человек анкету не заполнял» (говорить не о чем),
+     «считается прямо сейчас» (подождать), «упало» (пересчитать). Раньше все четыре
+     выглядели одинаково — пустым местом, и прочерк читался как «клиент ничего не
+     делал» (вопрос Павла 21.08.2026 по лиду 8e2ebb50). */
+  function diagStateCard(d) {
+    var st = (d.stage_status || {}).diagnostics || null;
+    var hasAnswers = d.answers && Object.keys(d.answers).length > 0;
+    if (!hasAnswers) {
+      return '<div class="diag-wait"><b>Анкету не заполнял</b>' +
+        '<span>Разбор считается по анкете с платформы — пока ее нет, считать нечего.</span></div>';
+    }
+    var txt = st === 'running'
+      ? { t: 'Разбор считается', s: 'Обычно занимает меньше минуты. Обновите карточку через пару минут.' }
+      : st === 'error'
+        ? { t: 'Расчет не завершился', s: 'Система пересчитает сама в течение получаса. Нужно быстрее — нажмите кнопку.' }
+        : { t: 'Разбора пока нет', s: 'Анкета есть, а расчет по ней не дошел до результата.' };
+    return '<div class="diag-wait' + (st === 'error' ? ' bad' : '') + '">' +
+      '<b>' + txt.t + '</b><span>' + txt.s + '</span>' +
+      '<button class="bp sm" id="diag-rerun">Пересчитать</button></div>';
+  }
+
   function buildAiSections(d) {
     var diag = d.diagnostics || {};
     var plan = d.roadmap || {};
     var answers = d.answers || {};
     var html = '<div class="m-ctitle">Диагностика</div>' +
       '<div class="m-csub">Что AI показал человеку на платформе — с этим заходить на созвон.</div>';
+
+    // Разбора нет — вместо пустого экрана говорим, что с ним происходит.
+    if (diag.score == null && !(diag.verdict && (diag.verdict.headline || diag.verdict.text))) {
+      return html + diagStateCard(d);
+    }
 
     var v = diag.verdict || {};
     var score = diag.score;
@@ -17751,7 +20730,8 @@
     // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
     // тому, кто ведет встречи и заводит их протоколы каждую неделю.
     if (mid === 'new') { openMeetingUpload(); return; }
-    openMeetingImport(+mid);
+    // Через запятую — пакет разборов с одной планерки: #meeting/12,13,14.
+    openMeetingImport(mid);
   }
   function openPageFromHash() {
     var pg = hashPageId();
@@ -17827,7 +20807,7 @@
   function boot() {
     if (!getKey()) { renderLogin(); return; }
     // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
-    fetch(API + '/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
+    xfetch('/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
       if (!r.ok) throw new Error(String(r.status));
       return r.json();
     }).then(function (me) {
