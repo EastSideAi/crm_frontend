@@ -2837,6 +2837,35 @@ button.tr-crumb:hover { color: var(--blue); }
   font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); padding: 6px 8px;
   border-radius: 8px; transition: color .14s, background .14s; }
 .gate-link:hover { color: var(--blue); background: var(--blue-tint); }
+/* Разделитель между паролем и телеграмом: линия сквозь слово, без рамок и коробок. */
+.lg-or { display: flex; align-items: center; gap: 12px; margin: 18px 0 12px; }
+.lg-or::before, .lg-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.lg-or span { font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  text-transform: lowercase; }
+.gate-card .bp.ghost { margin-top: 0; }
+/* КОД ВХОДА — единственный якорь экрана: крупные табличные цифры, все остальное тише. */
+.tgl-code { position: relative; display: flex; align-items: center; justify-content: center;
+  background: var(--fill); border-radius: 14px; padding: 18px 16px; margin-bottom: 14px; }
+.tgl-code b { font: 800 34px/1 'Manrope', sans-serif; letter-spacing: .04em;
+  font-variant-numeric: tabular-nums; color: var(--ink); }
+/* Мертвый код гасим, чтобы человек не пытался отправить его еще раз. */
+.tgl-code.dead b { color: var(--ink-3); }
+.tgl-code.dead .tgl-copy { display: none; }
+.tgl-copy { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); width: auto;
+  color: var(--ink-3); padding: 8px; border-radius: 9px; transition: .14s; }
+.tgl-copy:hover { color: var(--blue); background: var(--blue-tint); }
+.tgl-hint { font-size: 12px; color: var(--ink-3); line-height: 1.5; margin-bottom: 16px; }
+/* Ожидание — три точки, которые дышат по очереди: экран не выглядит замершим. */
+.tgl-wait { display: flex; align-items: center; justify-content: center; gap: 6px;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3); }
+.tgl-wait i { width: 5px; height: 5px; border-radius: 50%; background: var(--blue);
+  opacity: .3; animation: tglDot 1.2s var(--ease) infinite; }
+.tgl-wait i:nth-child(2) { animation-delay: .16s; }
+.tgl-wait i:nth-child(3) { animation-delay: .32s; }
+.tgl-wait span { margin-left: 6px; font-variant-numeric: tabular-nums; }
+@keyframes tglDot { 0%, 100% { opacity: .25; transform: translateY(0); }
+                    40% { opacity: 1; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .tgl-wait i { animation: none; } }
 @media (max-width: 760px) {
   .gate-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .gate-brand { padding: 32px 28px 28px; }
