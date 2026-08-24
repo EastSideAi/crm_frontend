@@ -599,6 +599,15 @@
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
+  /* Точечно обновить crm-поля карточки в списке и в детали. Нужен ручкам, которые
+     не ходят через PATCH (ответственный, первое касание): без этого отметка есть на
+     сервере, а на экране появляется только после перезагрузки. */
+  function crmSet(id, upd) {
+    var lead = findLead(id), det = state.details[id];
+    if (lead) lead.crm = Object.assign({}, lead.crm, upd);
+    if (det) { det.crm = Object.assign({}, det.crm, upd); cacheSet(id, det); }
+  }
+
   /* НОН-БЛОКИНГ: меняем локально и рисуем сразу, бэкенд синхроним в фоне.
      При ошибке — откат + тост. Никаких ожиданий ответа ради анимации. */
   var CRM_PATCH_FIELDS = ['status', 'note', 'tasks', 'comms', 'overrides'];
@@ -18130,6 +18139,80 @@
       }).join('') + '</select>';
   }
 
+  /* ── КТО ВЕДЕТ И ПЕРВОЕ КАСАНИЕ ───────────────────────────────────────────
+     Две отметки продаж (бэкенд: миграция 099). Ответственный отвечает на вопрос
+     «с кого спросить», отметка касания — на вопрос «за сколько мы ответили».
+     Второе важнее: родитель пишет не только нам, и сделку чаще получает тот, кто
+     ответил первым. Поэтому пока не связались, строка показывает не пустоту, а
+     сколько человек уже ждет, и после 15 минут делает это амбером.
+     Блок стоит выше воронки и квалификации: и то и другое — про «кто он», а это
+     про «чей он и успели ли мы». */
+  var OWN_PEOPLE = null, OWN_BUSY = false;
+
+  function fetchAssignees(cb) {
+    if (OWN_PEOPLE) { if (cb) cb(OWN_PEOPLE); return; }
+    if (OWN_BUSY) return;
+    OWN_BUSY = true;
+    api('/admin/api/leads/assignees').then(function (r) {
+      OWN_BUSY = false; OWN_PEOPLE = r.people || [];
+      if (cb) cb(OWN_PEOPLE);
+    }).catch(function () { OWN_BUSY = false; });
+  }
+
+  /* Минуты в человеческое. Без секунд и без «0 мин»: точность здесь не нужна,
+     нужен масштаб — минуты, часы или дни. */
+  function fmtMins(m) {
+    if (m == null) return '';
+    if (m < 1) return 'меньше минуты';
+    if (m < 60) return m + ' ' + plural(m, 'минуту', 'минуты', 'минут');
+    var h = Math.round(m / 60);
+    if (h < 24) return h + ' ' + plural(h, 'час', 'часа', 'часов');
+    var d = Math.round(h / 24);
+    return d + ' ' + plural(d, 'день', 'дня', 'дней');
+  }
+
+  /* Ориентир по рынку — ответ в течение 15 минут (docs/sales-metrics.md).
+     Дальше час — уже плохо, но еще спасаемо; сутки — потеря. */
+  function ownSev(m) { return m <= 15 ? 'fast' : (m <= 60 ? 'mid' : 'slow'); }
+
+  function buildOwn(ctx) {
+    var crm = ctx.crm || {}, base = ctx.base;
+    var own = crm.owner || null;
+    var people = OWN_PEOPLE || (own ? [{ id: own.id, name: own.name }] : []);
+    var opts = people.map(function (u) {
+      var nm = u.name || u.login || ('#' + u.id);
+      return '<option value="' + u.id + '"' + (own && own.id === u.id ? ' selected' : '') + '>' +
+        esc(nm) + '</option>';
+    }).join('');
+
+    var right;
+    if (crm.first_touch_at) {
+      var m = crm.reply_min == null ? 0 : crm.reply_min;
+      right = '<div class="own-t">' +
+        '<span class="ql-l">Первый ответ</span>' +
+        '<span class="own-sp ' + ownSev(m) + '">за ' + fmtMins(m) + '</span>' +
+        '<span class="own-when">' + fmtWhen(crm.first_touch_at) + '</span>' +
+      '</div>';
+    } else {
+      var waited = base && base.created_at
+        ? Math.max(0, Math.round((Date.now() - new Date(base.created_at).getTime()) / 60000))
+        : null;
+      right = '<div class="own-t">' +
+        (waited == null ? '' :
+          '<span class="own-wait' + (waited > 15 ? ' late' : '') + '">ждет ' + fmtMins(waited) + '</span>') +
+        '<button class="bp ghost sm own-go" data-touch="1">' + ic('phone', 13) + 'Связался</button>' +
+      '</div>';
+    }
+
+    return '<div class="own">' +
+      '<div class="own-p"><span class="ql-l">Ведет</span>' +
+        '<select class="tm-sel" data-owner="1">' +
+          '<option value="">не назначен</option>' + opts +
+        '</select></div>' +
+      right +
+    '</div>';
+  }
+
   function buildQual(ctx) {
     var crm = ctx.crm || {};
     var q = crm.qual || {};
@@ -18291,6 +18374,9 @@
     if (booking && booking.slot) {
       html += '<div class="slotchip">' + ic('cal', 13) + 'Разбор назначен: ' + esc(booking.slot) + '</div>';
     }
+
+    /* 1а. ЧЕЙ ЭТО ЧЕЛОВЕК И УСПЕЛИ ЛИ МЫ ОТВЕТИТЬ */
+    html += buildOwn(ctx);
 
     /* 2. СТАДИЯ — степпер воронки (поднят выше: это главное действие на экране) */
     var flow = ['new', 'contacted', 'call_scheduled', 'call_done', 'offer_sent', 'client'];
@@ -19058,6 +19144,41 @@
         }).catch(function () { b.disabled = false; showToast('Не получилось — проверь сеть'); });
       });
     });
+
+    // ── КТО ВЕДЕТ И ПЕРВОЕ КАСАНИЕ ──
+    var ownHost = host.querySelector('.own');
+    if (ownHost) {
+      // список сотрудников тянем один раз на сессию и перерисовываем секцию,
+      // иначе в селекте виден только уже назначенный человек
+      if (!OWN_PEOPLE) fetchAssignees(function () {
+        if (state.drawerId === id && state.modalSection === 'now') renderModalContent();
+      });
+      var ownSel = ownHost.querySelector('select[data-owner]');
+      if (ownSel) ownSel.addEventListener('change', function () {
+        var val = ownSel.value ? parseInt(ownSel.value, 10) : null;
+        ownSel.disabled = true;
+        apiSend('/admin/api/leads/' + id + '/owner', 'POST', { owner_id: val }, function (r) {
+          crmSet(id, { owner: r.owner });
+          showToast(r.owner ? 'Ведет ' + r.owner.name : 'Ответственный снят');
+          if (state.drawerId === id) renderDrawer(true);
+          renderView();
+        }, function () { ownSel.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+      var touchBtn = ownHost.querySelector('[data-touch]');
+      if (touchBtn) touchBtn.addEventListener('click', function () {
+        touchBtn.disabled = true;
+        apiSend('/admin/api/leads/' + id + '/touch', 'POST', null, function (r) {
+          var upd = { first_touch_at: r.first_touch_at, reply_min: r.reply_min };
+          // отметка касания двигает статус с «новый» на «связались» — так же, как на бэке
+          var cur = (findLead(id) || {}).crm || {};
+          if (cur.status === 'new') upd.status = 'contacted';
+          crmSet(id, upd);
+          showToast(r.marked ? 'Отметил: связались за ' + fmtMins(r.reply_min) : 'Касание уже было отмечено');
+          if (state.drawerId === id) renderDrawer(true);
+          renderView();
+        }, function () { touchBtn.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+    }
 
     // ── КВАЛИФИКАЦИЯ: галочки продаж и поля, которых не было в анкете ──
     var qlHost = host.querySelector('.ql-sec');
