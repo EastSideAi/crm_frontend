@@ -4164,6 +4164,32 @@
     if (el('rh-now')) el('rh-now').addEventListener('click', function () { reload(function () { state.rhythmShift = 0; }); });
   }
 
+  /* Короткое объяснение на самом экране. Инструкция, которую надо искать в чате,
+     не работает: человек приходит сюда раз в неделю и каждый раз заново гадает,
+     что от него хотят. Показываем, пока не скроют, и запоминаем это в браузере —
+     на сервер такое не носим, это личная привычка, а не настройка команды. */
+  var RH_HOW_LS = 'eastside_crm_rh_how';
+
+  function rhHow() {
+    if (lsGet(RH_HOW_LS)) return '';
+    return '<div class="rh-how" id="rh-how">' +
+      '<div class="rh-hh">' + ic('spark', 14) + '<span>Как это работает</span>' +
+        '<button class="rh-hx" id="rh-how-x" title="Скрыть">' + ic('x', 14) + '</button></div>' +
+      '<ol class="rh-hl">' +
+        '<li>План на период — это твои задачи со сроком внутри него. Отдельно писать план не нужно: поставь задачи и нажми «Сдать план».</li>' +
+        '<li>Отчет система считает сама: что принято, что осталось, что просрочено. От тебя — строка о том, что мешало.</li>' +
+        '<li>Цель, у которой в периоде нет ни одного шага, показана отдельно. Это работа, которую никто не запланировал.</li>' +
+      '</ol></div>';
+  }
+
+  /* День внутри периода — чтобы задача, поставленная отсюда, сразу попала в план.
+     Идет ли период сейчас, решаем по времени сервера: у браузера свой пояс, и в
+     полночь по Москве он промахнулся бы на сутки. */
+  function rhDay(r) {
+    var live = r.now >= r.from && r.now < r.to;
+    return (live ? r.now : r.from).slice(0, 10);
+  }
+
   function renderRhythm(view) {
     if (can('tasks_all') && state.rhythmWho === 'team') { renderRhythmTeam(view); return; }
     if (state.rhythm === null) { view.innerHTML = dashSkeleton(); loadRhythm(); return; }
@@ -4201,17 +4227,29 @@
     }).join('');
 
     view.innerHTML = '<div class="card listcard">' + rhTools(r) +
-      '<div class="list-body rh-body">' +
+      '<div class="list-body rh-body">' + rhHow() +
         '<div class="rh-plates">' + rhPlate('plan', r) + rhPlate('report', r) + '</div>' +
         loose +
         (rows
           ? '<div class="rh-list"><div class="trow tsk-grid mine thead"><span class="th">Задача</span>' +
               '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows + '</div>'
-          : '<div class="empty">На этот период задач со сроком нет. План — это задачи со сроком: ' +
-            'поставь их, и они появятся здесь.</div>') +
+          // Пустой план упирался в текст: человеку говорили «поставь задачи», а
+          // ставить их надо было уходя на другую вкладку. Кнопка ставит задачу
+          // сразу со сроком внутри периода — тогда она и попадает в план.
+          : '<div class="empty rh-empty"><span>На этот период задач со сроком нет. ' +
+            'План — это задачи со сроком: поставь их, и они появятся здесь.</span>' +
+            '<button class="bp sm" id="rh-add">' + ic('plus', 14) + 'Поставить задачу</button></div>') +
       '</div></div>';
 
     rhWire(view);
+    if (el('rh-how-x')) el('rh-how-x').addEventListener('click', function () {
+      try { localStorage.setItem(RH_HOW_LS, '1'); } catch (e) { /* приватный режим */ }
+      var box = el('rh-how');
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+    });
+    if (el('rh-add')) el('rh-add').addEventListener('click', function () {
+      openNewTask({ due: rhDay(r), assignee_id: r.me });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-give]'), function (b) {
       b.addEventListener('click', function () { rhGive(b.getAttribute('data-give')); });
     });
