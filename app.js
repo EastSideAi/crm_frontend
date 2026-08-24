@@ -21303,10 +21303,29 @@
     // Через запятую — пакет разборов с одной планерки: #meeting/12,13,14.
     openMeetingImport(mid);
   }
+  /* Раздел из адреса, а у задач — сразу нужная вкладка: #page/tasks/plan. Вкладка
+     запоминается у каждого своя, поэтому голая ссылка на раздел приводила бы человека
+     туда, где он был в прошлый раз, — для ссылки в инструкции команде это бесполезно. */
+  function hashPageParts() {
+    var raw = hashPageId(), i = raw.indexOf('/');
+    return i === -1 ? [raw, ''] : [raw.slice(0, i), raw.slice(i + 1)];
+  }
   function openPageFromHash() {
-    var pg = hashPageId();
+    var parts = hashPageParts(), pg = parts[0], seg = parts[1];
     if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
+    var moved = pg === 'tasks' && applyTaskSeg(seg);
     setPage(pg);
+    // страница уже была открыта — setPage выходит сразу, вкладку перерисовываем сами
+    if (moved && state.page === 'tasks') { renderTopbar(); renderHead(); renderView(); }
+  }
+  /* Вкладку из ссылки ставим, только если она этому человеку доступна: ссылку из
+     общего чата откроет и тот, у кого нет прав на «Всю команду». */
+  function applyTaskSeg(seg) {
+    if (!seg || !TASK_SEGS[seg] || seg === state.taskSeg) return false;
+    if (TASK_SEGS[seg].cap && !can(TASK_SEGS[seg].cap)) return false;
+    state.taskSeg = seg;
+    state.tasks = null;
+    return true;
   }
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
@@ -21324,9 +21343,9 @@
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
-    var hp = hashRouteId('page');
-    for (var i = 0; hp && i < NAV_ALL.length; i++) {
-      if (NAV_ALL[i].id === hp && can(NAV_ALL[i].cap)) { state.page = hp; break; }
+    var hp = hashPageParts();
+    for (var i = 0; hp[0] && i < NAV_ALL.length; i++) {
+      if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyTaskSeg(hp[1]); break; }
     }
     renderShell();
     /* Список людей и переписку тянем только тем, у кого есть на них права: у
