@@ -144,7 +144,7 @@ CRM — рабочий инструмент команды. Ценности п�
 |---|---|---|---|
 | Каркас | сайдбар, топбар, гриды, мобильный таббар | `design/layout.html` | `.app .side .main .topbar .navi .tabs .grid .card .sec-head .mtabs` |
 | Списки и канбан | таблица лидов, поиск, фильтры, доска | `design/table.html` | `.listcard .trow .th .sev .searchwrap .qchip .vseg .kb-*` |
-| Карточка лида | модалка лида (центрированная) | `design/lead-card.html` | `.mbg .modal .m-head .m-nav .m-sec .m-dlg .m-fold .pipe .ql-* .dup-*` |
+| Карточка лида | модалка лида (центрированная) | `design/lead-card.html` | `.mbg .modal .m-head .m-nav .m-sec .m-dlg .m-fold .pipe .own-* .ql-* .dup-*` |
 | Контролы | кнопки, инпуты, селекты, сегменты | `design/controls.html` | `.bp .icobtn .ed-input .al-in .dperiod .task-chk` |
 | Чипы и статусы | статус, бейдж, тег, дельта | `design/chips.html` | `.sev .kd .pt-node .uz-tag .bdg .cnt` |
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |

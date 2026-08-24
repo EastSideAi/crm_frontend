@@ -1003,6 +1003,33 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--r-pill); padding: 8px 14px; }
 .slotchip svg { color: var(--blue); }
 
+/* кто ведет карточку и первое касание — строка над воронкой.
+   Тихая: серая заливка, вторичная кнопка. Якорь секции — херо «что делать», и
+   спорить с ним этой строке нельзя. Цветом здесь говорит только скорость ответа. */
+.own { display: flex; align-items: center; gap: 14px; margin-top: 16px; padding: 10px 14px;
+  border-radius: 13px; background: var(--fill); }
+.own-p { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.own-p .tm-sel { max-width: 200px; }
+.own-t { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.own-t .ql-l { flex: none; }
+.own-when { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+/* скорость первого ответа: ориентир 15 минут, после часа это уже потеря */
+.own-sp { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: var(--r-pill); }
+.own-sp.fast { background: var(--green-soft); color: var(--green-ink); }
+.own-sp.mid { background: var(--amber-soft); color: var(--amber-ink); }
+.own-sp.slow { background: var(--red-soft); color: var(--red-ink); }
+.own-wait { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.own-wait.late { color: var(--amber-ink); }
+.own-go svg { color: var(--blue); }
+.own-go:disabled { opacity: .55; }
+@media (max-width: 560px) {
+  .own { flex-wrap: wrap; gap: 10px; }
+  .own-p { width: 100%; }
+  .own-p .tm-sel { flex: 1; max-width: none; }
+  .own-t { width: 100%; margin-left: 0; }
+  .own-t .own-go { margin-left: auto; }
+}
+
 /* степпер воронки */
 .stage-sec { margin-top: 30px; }
 .dr-rej { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--ink-3);
