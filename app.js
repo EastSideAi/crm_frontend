@@ -1650,7 +1650,7 @@
        телефоном, реже — вход выглядит подвисшим. */
     function poll() {
       if (stop || !req) return;
-      fetch(API + '/admin/api/login/tg/poll', {
+      xfetch('/admin/api/login/tg/poll', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ request_id: req.request_id, secret: req.secret }),
       }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -1670,7 +1670,7 @@
     }
 
     shell('<h1>Готовим код…</h1><p>Секунду.</p>');
-    fetch(API + '/admin/api/login/tg/start', { method: 'POST' })
+    xfetch('/admin/api/login/tg/start', { method: 'POST' })
       .then(function (r) {
         if (r.status === 429) { back('Слишком много попыток входа. Попробуйте через час или войдите паролем.'); return null; }
         if (!r.ok) { back('Вход через телеграм сейчас недоступен, войдите паролем.'); return null; }
