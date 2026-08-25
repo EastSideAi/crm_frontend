@@ -18557,6 +18557,7 @@
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      practiceTermRow('det', acc) +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
       detTeacherRow(b.teacher) +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
@@ -18789,6 +18790,34 @@
     });
   }
 
+
+  /* Срок доступа к тренажеру и кнопки открытия на время.
+     Деньги приходят и мимо кнопки в тренажере: переводом, по счету, другим тарифом или
+     платежом, который не сшился с карточкой. Раньше менеджеру оставалось «открыть
+     навсегда», и платный доступ незаметно раздавался бесплатно. */
+  function practiceTermRow(pfx, acc) {
+    var until = acc.practice_until;
+    /* У срока доступа время не важно, важен день: «до 24 сентября» читается сразу,
+       «24.09 10:13» заставляет вглядываться. Год показываем, только когда он не этот:
+       годовой доступ иначе выглядит как «до 25 августа», то есть как сегодня. */
+    var day = '';
+    if (until) {
+      var du = new Date(until);
+      var opts = { day: 'numeric', month: 'long' };
+      if (du.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+      day = du.toLocaleDateString('ru-RU', opts);
+    }
+    var state = !acc.practice_open
+      ? 'Сейчас закрыт'
+      : (until ? 'Открыт до ' + esc(day) : 'Открыт бессрочно');
+    return '<div class="det-term">' +
+      '<div class="det-term-s">' + state + (acc.paid && until ? ' · оплачен' : '') + '</div>' +
+      '<div class="det-term-b">' +
+        '<button type="button" class="bp ghost sm" id="' + pfx + '-term-30">+ месяц</button>' +
+        '<button type="button" class="bp ghost sm" id="' + pfx + '-term-365">+ год</button>' +
+      '</div></div>';
+  }
+
   function hskAttemptRow(a) {
     var col = a.pct >= 85 ? 's-client' : a.pct >= 65 ? 's-new' : a.pct >= 45 ? 's-wait' : 's-rejected';
     return '<div class="det-row" style="cursor:default">' +
@@ -18827,6 +18856,7 @@
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="hsk-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыт' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      practiceTermRow('hsk', acc) +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) +
         (acc.updated_at ? ' · ' + esc(fmtWhen(acc.updated_at)) : '') + '</div>' : '');
 
@@ -18942,6 +18972,12 @@
     if (hpr) hpr.addEventListener('click', function () {
       var on = ((HSK[id] || {}).access || {}).practice_open;
       hskAccess({ practice_open: !on }, on ? 'Тренажёр закрыт' : 'Тренажёр открыт');
+    });
+    [30, 365].forEach(function (d) {
+      var b30 = el('hsk-term-' + d);
+      if (b30) b30.addEventListener('click', function () {
+        hskAccess({ practice_days: d }, d === 30 ? 'Открыт на месяц' : 'Открыт на год');
+      });
     });
 
     // Копирование ссылок — данные в HSK[id].invite (test_url / trainer_url).
@@ -19980,6 +20016,13 @@
     if (sp) sp.addEventListener('click', function () {
       post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
+    });
+    [30, 365].forEach(function (d) {
+      var bt = el('det-term-' + d);
+      if (bt) bt.addEventListener('click', function () {
+        post('/admin/api/leads/' + id + '/det/access', { practice_days: d },
+             d === 30 ? 'Открыты на месяц' : 'Открыты на год');
+      });
     });
 
     /* интенсив DET: доступ, ручная связка и список учеников для нее */

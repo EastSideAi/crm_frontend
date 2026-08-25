@@ -4508,6 +4508,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-sw-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .det-sw-s { margin-top: 4px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 .det-sw-by { font-size: 11.5px; color: var(--ink-3); padding-bottom: 4px; }
+/* Срок доступа к тренажеру: состояние словами слева, продление кнопками справа. */
+.det-term { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0; border-top: 1px solid var(--line); }
+.det-term-s { flex: 1; min-width: 160px; font-size: 12.5px; color: var(--ink-2); }
+.det-term-b { display: flex; gap: 8px; }
 .det-linkh { margin-top: 20px; }
 .det-link { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .det-url { flex: 1; font-size: 12.5px; color: var(--ink-2); }
