@@ -3197,6 +3197,35 @@ button.tr-crumb:hover { color: var(--blue); }
 .tg-cact .tg-cls { display: none; }   /* короткая подпись — только на телефоне */
 .tg-cact .tg-cw { font-size: 10.5px; font-weight: 600; color: var(--amber-ink); background: var(--amber-soft);
   border-radius: var(--r-pill); padding: 1px 6px; }
+/* «Привязать ученика» — соседка «Карточки», та же тихая таблетка. Привязанный
+   ученик светится зеленым: это не действие, а подтвержденное состояние, и читать
+   его надо не читая — по нему видно, будет бот говорить про занятия или молчать. */
+.tg-cact.sch.on { color: var(--ink); }
+.tg-cact.sch.on .sch-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+/* Выбор ученика. Живет в общем .modal, но с размером под задачу: там одно поле и
+   короткий список, а полотно 1020x86vh для этого пустое. Отсюда .modal.pick —
+   новый размер общего окна, а не свое окно. */
+.modal.pick { width: 560px; height: auto; max-height: 76vh; }
+.sl-wrap { display: flex; flex-direction: column; gap: 12px; padding: 26px 26px 22px; min-height: 0; }
+.sl-h { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.sl-sub { font-size: 13px; line-height: 1.5; color: var(--ink-2); max-width: 46ch; }
+.sl-cur { display: flex; flex-wrap: wrap; gap: 6px; }
+.sl-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600;
+  color: var(--green-ink); background: var(--green-soft); border-radius: var(--r-pill); padding: 5px 6px 5px 12px; }
+.sl-x { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  color: var(--green-ink); opacity: .55; transition: .15s; }
+.sl-x:hover { opacity: 1; background: rgba(14,124,63,.12); }
+.sl-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; margin: 0 -8px; padding: 0 8px; }
+/* Строка списка — без рамок: разделяет воздух и вес имени, а не линии вокруг каждой */
+.sl-row { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+  border-radius: 10px; padding: 9px 11px; transition: background .12s; }
+.sl-row:hover { background: var(--fill); }
+.sl-nm { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.sl-t { font-size: 12px; color: var(--ink-3); margin-right: auto; }
+.sl-ok { font-size: 11px; font-weight: 700; color: var(--green-ink); }
+.sl-row.on .sl-nm { color: var(--green-ink); }
+.sl-empty { font-size: 13px; line-height: 1.5; color: var(--ink-2); padding: 14px 11px; }
 .tg-thread { flex: 1; overflow-y: auto; min-height: 0; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; background: #F3F5F8; }
 .tg-thread::-webkit-scrollbar { width: 7px; } .tg-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
 .tg-msg { max-width: 74%; display: flex; flex-direction: column; }
@@ -3442,7 +3471,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   /* тумблер бота на телефоне — один кружок: его состояние тут же написано словами
      в подсказке над полем ввода, а имя человека важнее подписи на кнопке */
   .tg-chead .ai-toggle { padding: 8px 10px; gap: 0; font-size: 0; }
-  .tg-cact:not(.new) { padding: 8px 10px; gap: 0; font-size: 0; }
+  /* «Ученик» на телефоне остается со словом, как «Завести карточку»: у «Карточки»
+     иконка говорит сама за себя, а точка привязки — нет. */
+  .tg-cact:not(.new):not(.sch) { padding: 8px 10px; gap: 0; font-size: 0; }
+  .tg-cact.sch { padding: 8px 11px; gap: 6px; font-size: 12.5px; }
   .tg-cact .tg-cl { display: none; }
   .tg-cact .tg-cls { display: inline; }
   .tg-cact svg { width: 15px; height: 15px; }
