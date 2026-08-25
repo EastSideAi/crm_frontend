@@ -2075,10 +2075,6 @@
        чужая работа и своя собственная лежали в одном меню вперемешку, и кабинет там
        терялся. У кого есть только кабинет, переключателя не видно вовсе — для него
        это по-прежнему единственное меню. */
-    /* Обучение сотрудника. Последним в списке и с cap dash: это не ежедневный
-       раздел, но открыт всем, у кого вообще есть CRM. Пока курс не пройден, в
-       меню горит счетчик оставшихся шагов — иначе обучение не открывает никто. */
-    { id: 'guide', label: 'Как работать', icon: 'compass', cap: 'dash' },
     { id: 'mywork', label: 'Главная', icon: 'dash', cap: 'mywork', space: 'mw' },
     { id: 'mwnotif', label: 'Уведомления', icon: 'bell', cap: 'mywork', space: 'mw' },
     { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork', space: 'mw' },
@@ -2216,8 +2212,6 @@
         else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
           extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
-        else if (it.id === 'guide' && guideLeft())
-          extra = '<span class="cnt num" title="шагов осталось">' + guideLeft() + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -2328,10 +2322,15 @@
     saveUi();
     renderAll();
     if (p === 'finance') fetchFinance(false, function () { if (state.page === 'finance') { renderHead(); renderView(); } });
-    if (p === 'tasks') { state.tasks = null; loadTaskSummary(); }
-    // Заходим в обучение — открываем первый непройденный шаг, а не тот, на котором
-    // человек закрыл вкладку неделю назад.
-    if (p === 'guide') { state.guideStep = null; guideLoad(); }
+    if (p === 'tasks') {
+      state.tasks = null; loadTaskSummary();
+      /* Обучение живет внутри «Задач» и встречает того, кто его не прошел
+         (решение Павла от 25.08.2026: отдельный пункт меню перегружал левую
+         колонку). Открываем первый непройденный шаг, а не тот, на котором
+         человек закрыл вкладку неделю назад. */
+      state.guideStep = null;
+      guideLoad();
+    }
     window.scrollTo(0, 0);
     var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
@@ -2368,6 +2367,8 @@
       }).join('') + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
+          // Ткнул во вкладку — значит пришел за задачами: обучение уступает.
+          state.guideOn = false; state.guideSkip = true;
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
           state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
@@ -2692,8 +2693,22 @@
       // читается как ошибка системы.
       if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
         '</b>. Сними чип с именем, чтобы вернуться ко всей команде.';
-      html = '<div><h2>Задачи</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>';
+      /* Обучение открывается в этом же разделе (решение Павла от 25.08.2026), и
+         шапка честно говорит, где человек находится: иначе он видит курс под
+         заголовком «Задачи» и не понимает, куда делся список. Выход и повторный
+         заход живут тут же, рядом с заголовком, а не внутри самой карточки. */
+      var gleft = guideLeft();
+      html = state.guideOn
+        ? '<div><h2>Как здесь работать</h2>' +
+            '<div class="verdict"><span class="vspark">' + ic('compass', 13) + '</span><span>' +
+            'Пятнадцать минут один раз. Пройдете до конца — этот раздел дальше будет открываться задачами.' +
+            '</span></div></div>' +
+            '<button class="qchip gd-btn gd-skip" id="tsk-guide-skip">' + ic('go', 13) + '<span>Пропустить, к задачам</span></button>'
+        : '<div><h2>Задачи</h2>' +
+            '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>' +
+            '<button class="qchip gd-btn" id="tsk-guide" title="Обучение по системе">' + ic('compass', 13) +
+              '<span>Обучение по системе</span>' +
+              (gleft ? '<i class="gd-btn-n num">' + gleft + '</i>' : '') + '</button>';
     }
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
@@ -2949,6 +2964,20 @@
         '</div>';
     }
     ch.innerHTML = html;
+    var gb = el('tsk-guide');
+    if (gb) gb.addEventListener('click', function () {
+      state.guideOn = true; state.guideStep = null; state.guideSkip = false;
+      guideLoad(); renderHead(); renderView();
+    });
+    var gs = el('tsk-guide-skip');
+    if (gs) gs.addEventListener('click', guideExit);
+  }
+  /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
+     срочной задачей, а не отказался учиться навсегда. */
+  function guideExit() {
+    state.guideOn = false; state.guideSkip = true;
+    if (state.tasks === null) loadTasks();
+    renderHead(); renderView(); renderSide();
   }
   function plural(n, one, few, many) {
     var m10 = n % 10, m100 = n % 100;
@@ -2994,7 +3023,6 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
-    else if (state.page === 'guide') renderGuide(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
@@ -3213,10 +3241,17 @@
     },
   };
 
+  /* Курс не пройден — он встречает человека в «Задачах», с какого бы адреса тот ни
+     открыл CRM (обычный вход, ссылка #page/tasks, возврат из бота). Поэтому решение
+     принимается здесь, в загрузке состояния, а не в переходе по меню: переход
+     случается не всегда, а состояние приезжает всегда. */
   function guideLoad(cb) {
     api('/admin/api/guide').then(function (r) {
-      state.guide = r; if (cb) cb(r);
+      state.guide = r;
+      if (r && !r.finished && !state.guideSkip && state.guideOn == null) state.guideOn = true;
       renderSide();
+      if (cb) { cb(r); return; }
+      if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () { state.guide = null; if (cb) cb(null); });
   }
   /* Сколько шагов осталось — для точки в меню. Пока курс не пройден, человек должен
@@ -3297,7 +3332,7 @@
           '<div class="gd-fin-a"><button class="bp" id="gd-go">Перейти к задачам</button>' +
           '<button class="al-cancel" id="gd-again">' + ic('refresh', 12) + 'Пройти заново</button></div>' +
         '</div>';
-      el('gd-go').addEventListener('click', function () { setPage('tasks'); });
+      el('gd-go').addEventListener('click', guideExit);
       el('gd-again').addEventListener('click', function () {
         apiSend('/admin/api/guide/reset', 'POST', null, function (r) {
           state.guide = r; state.guideStep = 0; renderGuide(view); renderSide();
@@ -3784,6 +3819,8 @@
   }
 
   function renderTasks(view) {
+    // Первый заход в «Задачи» встречает обучением, дальше — обычный список.
+    if (state.guideOn) { renderGuide(view); return; }
     if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
     if (TASK_SEGS[taskSeg()].view === 'rhythm') { renderRhythm(view); return; }
     if (state.tasks === null) {
