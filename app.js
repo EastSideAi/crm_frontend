@@ -3186,6 +3186,48 @@
     return { text: d.getDate() + ' ' + MONTHS_RU[d.getMonth()], cls: '' };
   }
 
+  /* Свое дело: и исполнитель, и постановщик — я. Такое закрывается галочкой в
+     один клик и переносится на завтра без спроса; чужую задачу ни то, ни другое
+     не берет — там срок двигает только тот, кому это положено (cap tasks_due),
+     а закрывает постановщик приемкой. */
+  function isOwnTask(t) {
+    return !!(t && state.taskMe && t.assignee_id === state.taskMe &&
+              t.author_id === state.taskMe &&
+              t.status !== 'done' && t.status !== 'cancel');
+  }
+
+  /* Закрыть свое дело. Строка гаснет сразу, не дожидаясь ответа: отметить десять
+     дел подряд с перерисовкой на каждое невозможно. Не сохранилось — вернем как
+     было и скажем. */
+  function taskDone(id, btn) {
+    var row = btn.closest ? btn.closest('.trow') : null;
+    if (row) row.classList.add('done');
+    apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
+      state.tasks = null;
+      loadTaskSummary();
+      setTimeout(renderView, 420);
+    }, function () {
+      if (row) row.classList.remove('done');
+      showToast('Не отметилось — проверь сеть');
+    });
+  }
+
+  /* Перенести свое дело на завтра. Тот же конец дня по Москве, что и везде в
+     задачнике: «до завтра» это весь завтрашний день. */
+  function taskMoveTomorrow(id, btn) {
+    btn.disabled = true;
+    apiSend('/admin/api/tasks/' + id, 'PATCH',
+            { due_at: new Date(isoDay(1) + 'T23:59:59').toISOString() }, function () {
+      state.tasks = null;
+      loadTaskSummary();
+      renderView();
+      showToast('Перенес на завтра');
+    }, function () {
+      btn.disabled = false;
+      showToast('Не перенеслось — проверь сеть');
+    });
+  }
+
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
     if (seg.view === 'board') { loadBoard(cb); return; }
@@ -3366,17 +3408,27 @@
       // Подпись под названием отвечает на «откуда эта задача»: цель важнее
       // постановщика — шаг «собрать документы» без цели читается как обрывок.
       var sub = [];
-      if (t.author_name) sub.push('поставил ' + t.author_name);
-      else if (showWho) sub.push('без постановщика');
+      // Свое дело подписи «поставил» не требует: постановщик — я сам, и строка
+      // личного плана должна читаться как строка списка дел, а не как поручение.
+      if (t.author_name && !isOwnTask(t)) sub.push('поставил ' + t.author_name);
+      else if (showWho && !t.author_name) sub.push('без постановщика');
       if (t.client_name) sub.push(t.client_name);
       var steps = t.steps_total
         ? '<div class="tsk-prog">' +
             '<span class="tsk-prog-b"><i style="width:' + Math.round(t.steps_done / t.steps_total * 100) + '%"></i></span>' +
             '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span></div>'
         : '';
+      // Свое дело — то, где я и исполнитель, и постановщик: сдавать его некому,
+      // поэтому оно закрывается галочкой в один клик, а не цепочкой «сдал →
+      // принял». Чужую задачу так закрыть нельзя, это правило держит сервер.
+      var own = isOwnTask(t);
       return '<div class="trow tsk-grid' + (showWho ? '' : ' mine') + (steps ? ' has-prog' : '') +
-        (t.parent_title ? ' has-goal' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
-        '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+        (t.parent_title ? ' has-goal' : '') + (t.overdue ? ' r-crit' : '') +
+        (own ? ' own' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="t-cell">' + (own
+          ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>'
+          : '') +
+        '<div class="t-ttl">' + esc(t.title) + '</div>' +
           // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
           // постановщиком: задача без цели просто дело, с целью — шаг к
           // результату, и это первое, что должно читаться в списке.
@@ -3385,10 +3437,14 @@
               ic('target', 11) + esc(t.parent_title) + '</button>'
             : '') +
           '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' + steps + '</div>' +
-        '<div class="tsk-who">' + (t.assignee_name
-          ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
-          : '<span class="tsk-nobody">не назначена</span>') + '</div>' +
-        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        (showWho
+          ? '<div class="tsk-who">' + (t.assignee_name
+              ? '<span class="tsk-av">' + esc(initials(t.assignee_name)) + '</span><span>' + esc(t.assignee_name) + '</span>'
+              : '<span class="tsk-nobody">не назначена</span>') + '</div>'
+          : '') +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) +
+          (own ? '<button class="tsk-move" data-move="' + t.id + '" title="Перенести на завтра">' +
+            ic('go', 12) + 'завтра</button>' : '') + '</div>' +
         '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
       '</div>';
     }).join('');
@@ -3416,16 +3472,25 @@
         '<span class="list-count"><b>' + list.length + '</b> ' + (seg === 'goals'
           ? plural(list.length, 'цель', 'цели', 'целей')
           : plural(list.length, 'задача', 'задачи', 'задач')) + '</span>' +
-        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+        // На «Сегодня» первичное действие — собрать свой день, а не поручить
+        // работу другому: человек пришел сюда смотреть, что на нем самом.
+        (seg === 'today'
+          ? '<button class="bp sm" id="tsk-day">' + ic('mic', 14) + 'Мой день</button>' +
+            '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>'
+          : '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>') +
       '</div>' + depts +
       '<div class="list-body">' +
         (list.length
-          ? '<div class="trow tsk-grid thead"><span class="th">Задача</span><span class="th">Исполнитель</span>' +
+          // На своих вкладках колонки «Исполнитель» нет вовсе: там в каждой
+          // строке стояло бы собственное имя человека.
+          ? '<div class="trow tsk-grid thead' + (showWho ? '' : ' mine') + '"><span class="th">Задача</span>' +
+            (showWho ? '<span class="th">Исполнитель</span>' : '') +
             '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows
           : '<div class="empty">' + esc(emptyTasksText(seg)) + '</div>') +
       '</div></div>';
 
     el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    if (el('tsk-day')) el('tsk-day').addEventListener('click', openDayPlan);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
       state.taskQ = qi.value;
@@ -3449,6 +3514,20 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+    // Галочка и перенос — на своих делах. Строка под ними не должна открываться:
+    // человек отмечает список, а не заходит в каждую карточку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-done]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        taskDone(+b.getAttribute('data-done'), b);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-move]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        taskMoveTomorrow(+b.getAttribute('data-move'), b);
+      });
     });
     // Пометка цели открывает саму цель, а не задачу, в строке которой стоит.
     Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
@@ -4975,6 +5054,224 @@
   /* Постановка. Три поля обязательны по смыслу: кому, к какому сроку и что
      считается сделанным. Без последнего задача сдается «как понял» и возвращается
      по кругу — это ровно та боль, из-за которой модуль и появился. */
+  /* ── Мой день ───────────────────────────────────────────────────────────────
+     Второй сценарий задачника, не похожий на первый. В «Новой задаче» человек
+     поручает работу другому: главный вопрос там «кому», и на одну задачу уходит
+     форма из семи полей. Здесь он составляет список себе — утром надиктовывает
+     день целиком, днем дописывает, вечером отмечает сделанное. Поэтому нет ни
+     исполнителя, ни критерия приемки: ставит и принимает один и тот же человек
+     (просьба Веры 25.08.2026: «я никому задачи не ставлю на день»). */
+
+  var DP_WHEN = { day: 'сегодня', tomorrow: 'завтра', week: 'на неделе' };
+
+  function dpRow(it, i) {
+    return '<label class="dp-row" data-i="' + i + '">' +
+      '<input type="checkbox" class="dp-chk" checked>' +
+      '<span class="dp-mark">' + ic('check', 12) + '</span>' +
+      '<input class="dp-in" value="' + esc(it.title) + '" maxlength="200">' +
+      '<span class="dp-when">' + esc(DP_WHEN[it.when] || DP_WHEN.day) + '</span>' +
+    '</label>';
+  }
+
+  function openDayPlan() {
+    if (document.querySelector('.al-ov')) return;
+    var canRecord = !!(window.MediaRecorder && navigator.mediaDevices &&
+                       navigator.mediaDevices.getUserMedia);
+    var items = [];
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Задачи</div><div class="al-title">Мой день</div></div>' +
+          '<button class="al-x" id="dp-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + (canRecord
+          ? 'Скажите все дела подряд, как рассказали бы коллеге. Я разложу их по пунктам, вы проверите и заведете.'
+          : 'Напишите дела подряд, одной фразой. Я разложу их по пунктам, вы проверите и заведете.') + '</div>' +
+        '<div class="al-body">' +
+          '<div class="al-ai" id="dp-ai">' +
+            '<div class="al-ai-h">' + ic('spark', 13) + 'Дела на день</div>' +
+            '<textarea id="dp-text" class="al-in al-ta" rows="3" maxlength="2000" ' +
+              'placeholder="Например: созвон с Марком в 12, доделать оферту для семьи Ким, вечером посмотреть отчет по рекламе"></textarea>' +
+            '<div class="al-ai-row">' +
+              (canRecord
+                ? '<button type="button" class="al-mic" id="dp-mic">' +
+                    '<span class="al-mic-dot"></span>' + ic('mic', 14) +
+                    '<span id="dp-miclab">Продиктовать</span></button>'
+                : '') +
+              '<button type="button" class="bp' + (canRecord ? ' ghost' : '') + ' sm" id="dp-go">' +
+                ic('spark', 13) + 'Разобрать</button>' +
+              '<span class="al-ai-note" id="dp-note"></span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="dp-list" id="dp-list" hidden></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="dp-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="dp-save" disabled>' + ic('plus', 14) + 'Завести дела</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      try { ov.dispatchEvent(new Event('al-close')); } catch (e) { /* старый браузер */ }
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('dp-x').addEventListener('click', close);
+    el('dp-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var note = el('dp-note'), list = el('dp-list'), save = el('dp-save'), text = el('dp-text');
+    var say = function (msg, ask) {
+      note.className = 'al-ai-note' + (ask ? ' ask' : '');
+      note.textContent = msg || '';
+    };
+    var count = function () {
+      var n = list.querySelectorAll('.dp-chk:checked').length;
+      save.disabled = !n;
+      save.innerHTML = ic('plus', 14) + (n ? 'Завести ' + n + ' ' + plural(n, 'дело', 'дела', 'дел') : 'Завести дела');
+    };
+    var show = function (r) {
+      items = (r && r.items) || [];
+      if (!items.length) {
+        list.hidden = true;
+        return say((r && r.note) || 'Дел в этой фразе не нашел, скажите еще раз', true);
+      }
+      list.hidden = false;
+      list.innerHTML = '<div class="dp-h">Проверьте список. Лишнее снимите галочкой, слово можно поправить.</div>' +
+        items.map(dpRow).join('');
+      Array.prototype.forEach.call(list.querySelectorAll('.dp-chk'), function (c) {
+        c.addEventListener('change', count);
+      });
+      say((r && r.note) || '');
+      count();
+    };
+
+    el('dp-go').addEventListener('click', function () {
+      var t = (text.value || '').trim();
+      if (t.length < 5) { text.focus(); return; }
+      say('Разбираю...');
+      apiSend('/admin/api/tasks/day-plan', 'POST', { text: t }, show, function () {
+        say('Помощник не ответил, попробуйте еще раз', true);
+      });
+    });
+
+    if (el('dp-mic')) {
+      wireMic(ov, el('dp-mic'), el('dp-miclab'), say, function (blob, done) {
+        var fr = new FileReader();
+        fr.onerror = function () { done('Запись не прочиталась, попробуйте еще раз'); };
+        fr.onload = function () {
+          apiSend('/admin/api/tasks/day-plan', 'POST', { data: String(fr.result) }, function (r) {
+            done();
+            if (r && r.text) text.value = r.text;
+            show(r);
+          }, function (code) {
+            done(code === 413 ? 'Запись длинновата, скажите короче'
+                 : code === 503 ? 'Не разобрал запись, скажите еще раз или наберите текстом'
+                 : code === 422 ? 'Слишком коротко, скажите чуть дольше'
+                 : 'Запись не дошла, проверьте сеть');
+          });
+        };
+        fr.readAsDataURL(blob);
+      });
+    }
+
+    save.addEventListener('click', function () {
+      var picked = [];
+      Array.prototype.forEach.call(list.querySelectorAll('.dp-row'), function (row) {
+        if (!row.querySelector('.dp-chk').checked) return;
+        var i = +row.getAttribute('data-i');
+        var title = (row.querySelector('.dp-in').value || '').trim();
+        if (!title) return;
+        picked.push({ title: title, details: items[i].details || '', due_date: items[i].due_date });
+      });
+      if (!picked.length) return;
+      save.disabled = true; save.classList.add('loading');
+      apiSend('/admin/api/tasks/day-plan/apply', 'POST', { items: picked }, function (r) {
+        close();
+        var n = (r && r.made) || picked.length;
+        showToast('Завел ' + n + ' ' + plural(n, 'дело', 'дела', 'дел'));
+        state.tasks = null;
+        loadTaskSummary();
+        renderView();
+      }, function () {
+        save.disabled = false; save.classList.remove('loading');
+        say('Не сохранилось, проверьте сеть', true);
+      });
+    });
+
+    setTimeout(function () { text.focus(); }, 30);
+  }
+
+  /* Запись голоса на кнопке. Одна и та же механика нужна в двух местах — в форме
+     задачи и в плане дня, — поэтому живет отдельно: браузер держит дорожку
+     микрофона открытой, пока ее не остановили, и повторять это дважды опасно.
+     onBlob(blob, done) отправляет запись; done(сообщение) возвращает кнопку в
+     покой. */
+  function wireMic(ov, mic, lab, say, onBlob) {
+    var rec = null, chunks = [], stream = null, tick = null, t0 = 0;
+    var MAX_SEC = 120;
+    var stopTracks = function () {
+      if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+      if (tick) { clearInterval(tick); tick = null; }
+    };
+    var idle = function (msg) {
+      mic.classList.remove('rec', 'busy');
+      mic.disabled = false;
+      lab.textContent = 'Продиктовать';
+      if (msg) say(msg, true);
+    };
+    var send = function (blob) {
+      if (!blob || blob.size < 1200) return idle('Ничего не записалось, скажите чуть дольше');
+      mic.classList.remove('rec');
+      mic.classList.add('busy');
+      mic.disabled = true;
+      lab.textContent = 'Слушаю...';
+      say('Разбираю запись...');
+      onBlob(blob, idle);
+    };
+    mic.addEventListener('click', function () {
+      if (mic.classList.contains('busy')) return;
+      if (rec && rec.state === 'recording') { rec.stop(); return; }
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
+        stream = st; chunks = [];
+        try { rec = new MediaRecorder(st); } catch (e) { rec = null; }
+        if (!rec) { stopTracks(); return idle('Браузер не умеет писать звук, наберите текстом'); }
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function () {
+          var type = (chunks[0] && chunks[0].type) || 'audio/webm';
+          var blob = chunks.length ? new Blob(chunks, { type: type }) : null;
+          stopTracks();
+          send(blob);
+        };
+        rec.start();
+        t0 = Date.now();
+        mic.classList.add('rec');
+        say('Говорите так, как сказали бы коллеге. Нажмите еще раз, когда закончите.');
+        lab.textContent = 'Стоп 0:00';
+        tick = setInterval(function () {
+          var sec = Math.round((Date.now() - t0) / 1000);
+          lab.textContent = 'Стоп ' + Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+          if (sec >= MAX_SEC && rec && rec.state !== 'inactive') rec.stop();
+        }, 500);
+      }).catch(function () {
+        idle('Браузер не дал доступ к микрофону, разрешите его в адресной строке');
+      });
+    });
+    ov.addEventListener('al-close', function () {
+      if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* уже стоит */ } }
+      stopTracks();
+    });
+  }
+
   function openNewTask(preset) {
     if (document.querySelector('.al-ov')) return;
     preset = preset || {};
@@ -5196,97 +5493,31 @@
       /* Диктовка. Браузер пишет webm/opus, сервер переводит его в wav и слушает
          моделью, потом разбирает тем же кодом, что и набранную фразу. Расшифровка
          возвращается в поле: человек видит, что именно услышали, и правит словом,
-         а не переделывает всю карточку. */
+         а не переделывает всю карточку. Механика записи общая с планом дня. */
       var mic = el('nt-mic');
       if (mic) {
-        var micLab = el('nt-miclab');
-        var rec = null, chunks = [], stream = null, tick = null, t0 = 0;
-        // Дольше двух минут никто задачу не диктует, а ffmpeg на сервере все
-        // равно режет по трем: лучше остановиться самим и показать текст.
-        var MAX_SEC = 120;
-        var setLab = function (t) { micLab.textContent = t; };
-        var stopTracks = function () {
-          if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-          if (tick) { clearInterval(tick); tick = null; }
+        var micSay = function (msg, ask) {
+          aiNote.className = 'al-ai-note' + (ask ? ' ask' : '');
+          aiNote.textContent = msg || '';
         };
-        var idle = function (note, ask) {
-          mic.classList.remove('rec', 'busy');
-          mic.disabled = false;
-          setLab('Продиктовать');
-          if (note) {
-            aiNote.className = 'al-ai-note' + (ask ? ' ask' : '');
-            aiNote.textContent = note;
-          }
-        };
-        var send = function (blob) {
-          if (!blob || blob.size < 1200) {   // тап по кнопке вместо фразы
-            return idle('Ничего не записалось, скажите чуть дольше', true);
-          }
-          mic.classList.remove('rec');
-          mic.classList.add('busy');
-          mic.disabled = true;
-          setLab('Слушаю...');
-          aiNote.className = 'al-ai-note';
-          aiNote.textContent = 'Разбираю запись...';
+        wireMic(ov, mic, el('nt-miclab'), micSay, function (blob, done) {
           var fr = new FileReader();
-          fr.onerror = function () { idle('Запись не прочиталась, попробуйте еще раз', true); };
+          fr.onerror = function () { done('Запись не прочиталась, попробуйте еще раз'); };
           fr.onload = function () {
             apiSend('/admin/api/tasks/voice', 'POST',
                     { data: String(fr.result), goal: isGoal }, function (r) {
-              idle();
+              done();
               if (r && r.text) aiText.value = r.text;
               if (r && r.draft && r.draft.title) applyDraft(r);
-              else {
-                aiNote.className = 'al-ai-note ask';
-                aiNote.textContent = (r && r.note) || 'Записал, проверьте поля';
-              }
+              else micSay((r && r.note) || 'Записал, проверьте поля', true);
             }, function (code) {
-              idle(code === 413 ? 'Запись длинновата, скажите короче'
+              done(code === 413 ? 'Запись длинновата, скажите короче'
                    : code === 503 ? 'Не разобрал запись, скажите еще раз или наберите текстом'
-                   : 'Запись не дошла, проверьте сеть', true);
+                   : code === 422 ? 'Слишком коротко, скажите чуть дольше'
+                   : 'Запись не дошла, проверьте сеть');
             });
           };
           fr.readAsDataURL(blob);
-        };
-        var start = function () {
-          navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
-            stream = st;
-            chunks = [];
-            try { rec = new MediaRecorder(st); } catch (e) { rec = null; }
-            if (!rec) { stopTracks(); return idle('Браузер не умеет писать звук, наберите текстом', true); }
-            rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-            rec.onstop = function () {
-              var type = (chunks[0] && chunks[0].type) || 'audio/webm';
-              var blob = chunks.length ? new Blob(chunks, { type: type }) : null;
-              stopTracks();
-              send(blob);
-            };
-            rec.start();
-            t0 = Date.now();
-            mic.classList.add('rec');
-            aiNote.className = 'al-ai-note';
-            aiNote.textContent = 'Говорите так, как сказали бы коллеге. Нажмите еще раз, когда закончите.';
-            setLab('Стоп 0:00');
-            tick = setInterval(function () {
-              var sec = Math.round((Date.now() - t0) / 1000);
-              setLab('Стоп ' + Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2));
-              if (sec >= MAX_SEC && rec && rec.state !== 'inactive') rec.stop();
-            }, 500);
-          }).catch(function () {
-            // Запрет микрофона — единственный случай, когда человек должен что-то
-            // сделать сам, поэтому говорим прямо, где это чинится.
-            idle('Браузер не дал доступ к микрофону, разрешите его в адресной строке', true);
-          });
-        };
-        mic.addEventListener('click', function () {
-          if (mic.classList.contains('busy')) return;
-          if (rec && rec.state === 'recording') { rec.stop(); return; }
-          start();
-        });
-        // Закрыли форму на записи — микрофон должен погаснуть вместе с ней.
-        ov.addEventListener('al-close', function () {
-          if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* уже стоит */ } }
-          stopTracks();
         });
       }
 
@@ -18326,6 +18557,7 @@
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      practiceTermRow('det', acc) +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
       detTeacherRow(b.teacher) +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
@@ -18558,6 +18790,34 @@
     });
   }
 
+
+  /* Срок доступа к тренажеру и кнопки открытия на время.
+     Деньги приходят и мимо кнопки в тренажере: переводом, по счету, другим тарифом или
+     платежом, который не сшился с карточкой. Раньше менеджеру оставалось «открыть
+     навсегда», и платный доступ незаметно раздавался бесплатно. */
+  function practiceTermRow(pfx, acc) {
+    var until = acc.practice_until;
+    /* У срока доступа время не важно, важен день: «до 24 сентября» читается сразу,
+       «24.09 10:13» заставляет вглядываться. Год показываем, только когда он не этот:
+       годовой доступ иначе выглядит как «до 25 августа», то есть как сегодня. */
+    var day = '';
+    if (until) {
+      var du = new Date(until);
+      var opts = { day: 'numeric', month: 'long' };
+      if (du.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+      day = du.toLocaleDateString('ru-RU', opts);
+    }
+    var state = !acc.practice_open
+      ? 'Сейчас закрыт'
+      : (until ? 'Открыт до ' + esc(day) : 'Открыт бессрочно');
+    return '<div class="det-term">' +
+      '<div class="det-term-s">' + state + (acc.paid && until ? ' · оплачен' : '') + '</div>' +
+      '<div class="det-term-b">' +
+        '<button type="button" class="bp ghost sm" id="' + pfx + '-term-30">+ месяц</button>' +
+        '<button type="button" class="bp ghost sm" id="' + pfx + '-term-365">+ год</button>' +
+      '</div></div>';
+  }
+
   function hskAttemptRow(a) {
     var col = a.pct >= 85 ? 's-client' : a.pct >= 65 ? 's-new' : a.pct >= 45 ? 's-wait' : 's-rejected';
     return '<div class="det-row" style="cursor:default">' +
@@ -18596,6 +18856,7 @@
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="hsk-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыт' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      practiceTermRow('hsk', acc) +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) +
         (acc.updated_at ? ' · ' + esc(fmtWhen(acc.updated_at)) : '') + '</div>' : '');
 
@@ -18711,6 +18972,12 @@
     if (hpr) hpr.addEventListener('click', function () {
       var on = ((HSK[id] || {}).access || {}).practice_open;
       hskAccess({ practice_open: !on }, on ? 'Тренажёр закрыт' : 'Тренажёр открыт');
+    });
+    [30, 365].forEach(function (d) {
+      var b30 = el('hsk-term-' + d);
+      if (b30) b30.addEventListener('click', function () {
+        hskAccess({ practice_days: d }, d === 30 ? 'Открыт на месяц' : 'Открыт на год');
+      });
     });
 
     // Копирование ссылок — данные в HSK[id].invite (test_url / trainer_url).
@@ -19749,6 +20016,13 @@
     if (sp) sp.addEventListener('click', function () {
       post('/admin/api/leads/' + id + '/det/access', { practice_open: !acc.practice_open },
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
+    });
+    [30, 365].forEach(function (d) {
+      var bt = el('det-term-' + d);
+      if (bt) bt.addEventListener('click', function () {
+        post('/admin/api/leads/' + id + '/det/access', { practice_days: d },
+             d === 30 ? 'Открыты на месяц' : 'Открыты на год');
+      });
     });
 
     /* интенсив DET: доступ, ручная связка и список учеников для нее */

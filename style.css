@@ -516,6 +516,8 @@ a { color: inherit; text-decoration: none; }
 .lr-grid { grid-template-columns: 138px 1.4fr 130px 170px 110px 30px; }
 .dl-grid { grid-template-columns: 1.4fr 190px 110px 30px; }
 .tsk-grid { grid-template-columns: minmax(0,1.7fr) 178px 150px 116px; }
+/* Свои задачи: колонки исполнителя нет — в каждой строке стояло бы свое же имя. */
+.tsk-grid.mine { grid-template-columns: minmax(0,1.7fr) 150px 116px; }
 /* воронка курса в записи на «Маркетинге»: источник, шаги, деньги */
 .cf-grid { grid-template-columns: minmax(0,1.4fr) 74px 92px 106px 84px 116px; }
 .cf-grid .num { text-align: right; }
@@ -2072,6 +2074,48 @@ a { color: inherit; text-decoration: none; }
 .tsk-goal:hover { background: var(--blue-tint); color: var(--blue); }
 .tsk-goal:hover svg { color: var(--blue); }
 
+/* Свое дело в списке: галочка слева и тихий перенос на завтра справа. Оба
+   действия появляются только там, где человек и исполнитель, и постановщик —
+   в чужой задаче отметка «сделано» это приемка, и одним кликом ее не ставят. */
+.trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.trow.tsk-grid.own .t-ttl,
+.trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
+.tsk-chk { width: 20px; height: 20px; flex: none; margin-top: 1px; border-radius: 50%;
+  border: 1.5px solid #C5CCDA; background: #fff; display: grid; place-items: center;
+  color: transparent; cursor: pointer; transition: .15s var(--ease); }
+.tsk-chk:hover { border-color: var(--blue); color: var(--blue); }
+.tsk-chk svg { width: 11px; height: 11px; }
+.trow.tsk-grid.done { opacity: .45; }
+.trow.tsk-grid.done .t-ttl { text-decoration: line-through; color: var(--ink-3); }
+.trow.tsk-grid.done .tsk-chk { background: var(--blue); border-color: var(--blue); color: #fff; }
+.tsk-move { display: none; align-items: center; gap: 4px; margin-left: 8px;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); background: var(--fill);
+  border: 0; border-radius: var(--r-pill); padding: 3px 9px 3px 7px; cursor: pointer;
+  transition: .14s var(--ease); }
+.tsk-move svg { flex: none; }
+.trow.tsk-grid.own:hover .tsk-move { display: inline-flex; }
+.tsk-move:hover { background: var(--blue-tint); color: var(--blue); }
+
+/* ── Мой день ────────────────────────────────────────────────────────────────
+   Список дел на проверку после диктовки. Строка тут не карточка и не поле формы:
+   галочка, текст и срок в одну линию, потому что человек пробегает список
+   глазами и снимает лишнее, а не заполняет анкету. */
+.dp-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+.dp-h { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); margin-bottom: 2px; }
+.dp-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 8px;
+  border-radius: 11px; background: var(--fill); cursor: pointer; transition: background .14s var(--ease); }
+.dp-row:hover { background: #EFF1F6; }
+.dp-chk { position: absolute; opacity: 0; pointer-events: none; }
+.dp-mark { width: 19px; height: 19px; flex: none; border-radius: 50%; background: #fff;
+  box-shadow: inset 0 0 0 1.5px #C5CCDA; display: grid; place-items: center;
+  color: transparent; transition: .14s var(--ease); }
+.dp-chk:checked + .dp-mark { background: var(--blue); box-shadow: none; color: #fff; }
+.dp-in { flex: 1; min-width: 0; font: 600 13.5px 'Manrope', sans-serif; color: var(--ink);
+  background: transparent; border: 0; border-radius: 8px; padding: 3px 6px; }
+.dp-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue); outline: none; }
+.dp-chk:not(:checked) ~ .dp-in { color: var(--ink-3); text-decoration: line-through; }
+.dp-when { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+
 /* ── Срез «Цели» ─────────────────────────────────────────────────────────────
    Цели по направлениям: заголовок отдела, под ним его цели с процентом. */
 .gl-sec { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
@@ -2595,6 +2639,8 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.tsk-grid .t-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
   .trow.tsk-grid.mine .tsk-who { display: none; }
+  /* Ховера на телефоне нет: перенос своего дела виден сразу, иначе его там нет. */
+  .trow.tsk-grid.own .tsk-move { display: inline-flex; }
   /* Риски на телефоне: имя и уровень первой строкой, флаги во всю ширину второй —
      иначе общая .trow прибивает строку под три колонки лида. */
   .trow.rsk-grid { grid-template-columns: minmax(0,1fr) auto !important;
@@ -4462,6 +4508,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .det-sw-t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .det-sw-s { margin-top: 4px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 .det-sw-by { font-size: 11.5px; color: var(--ink-3); padding-bottom: 4px; }
+/* Срок доступа к тренажеру: состояние словами слева, продление кнопками справа. */
+.det-term { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0; border-top: 1px solid var(--line); }
+.det-term-s { flex: 1; min-width: 160px; font-size: 12.5px; color: var(--ink-2); }
+.det-term-b { display: flex; gap: 8px; }
 .det-linkh { margin-top: 20px; }
 .det-link { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
 .det-url { flex: 1; font-size: 12.5px; color: var(--ink-2); }
