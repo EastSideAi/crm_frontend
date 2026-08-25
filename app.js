@@ -60,6 +60,8 @@
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     leadConv: {},       // переписка бота, сведенная с карточкой лида: { session_id: ответ | 'load' }
     convLead: {},       // обратный ход: карточка лида по диалогу бота { user_id: ответ | 'load' }
+    convSchool: {},     // чей это чат на странице учета уроков { user_id: {links:[…]} | 'load' }
+    schoolPick: null,   // открытый выбор ученика: { uid, q, list, busy }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, planBlock: {}, assignees: null,
@@ -16881,6 +16883,184 @@
     });
   }
 
+  /* ── чей это чат на странице учета уроков ──────────────────────────────────
+     Бот отвечает семье про расписание и остаток уроков ТОЛЬКО там, где менеджер
+     подтвердил ученика. Сам он по имени из переписки никого не ищет: это данные
+     ребенка, и «когда занятие у Кости Иванищева» тогда сработало бы у любого,
+     кто это имя напишет. Отсюда и кнопка: подтверждает человек, один раз. */
+  function convSchoolLoad(uid) {
+    if (state.convSchool[uid]) return;
+    state.convSchool[uid] = 'load';
+    api('/admin/api/bot/conversations/' + uid + '/school').then(function (r) {
+      state.convSchool[uid] = r || { links: [] };
+    }).catch(function () {
+      state.convSchool[uid] = { error: true };   // сеть легла — кнопку лучше не показывать
+    }).then(function () { convSchoolPaint(uid); });
+  }
+  function schoolLinkName(l) {
+    // Имя тянется из школьной базы; ее может не быть (превью) — тогда честно id
+    return l.name || l.student_id;
+  }
+  function convSchoolHtml(uid) {
+    var d = state.convSchool[uid];
+    if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Ученик</span>';
+    if (d.error) return '';
+    var links = d.links || [];
+    if (!links.length) {
+      return '<button class="tg-cact sch" data-school="' + esc(uid) + '" ' +
+        'title="Подтвердить, чей это чат — тогда бот сможет говорить про занятия и оплату">' +
+        ic('plus', 14) + '<span class="tg-cl">Привязать ученика</span><span class="tg-cls">Ученик</span></button>';
+    }
+    var first = schoolLinkName(links[0]);
+    // Привязано — состояние, а не действие: точка вместо заливки. Заливка спорила бы
+    // за внимание с синим тумблером бота, который стоит рядом и важнее.
+    return '<button class="tg-cact sch on" data-school="' + esc(uid) + '" ' +
+      'title="Бот видит занятия и оплату этого ученика — нажми, чтобы поменять">' +
+      '<span class="sch-dot"></span><span class="tg-cl">' + esc(first) +
+      (links.length > 1 ? ' +' + (links.length - 1) : '') + '</span>' +
+      '<span class="tg-cls">Ученик</span></button>';
+  }
+  function convSchoolPaint(uid) {
+    var host = el('tg-school');
+    if (!host || String(state.inboxSel) !== String(uid)) return;
+    host.innerHTML = convSchoolHtml(uid);
+    wireConvSchool(host, uid);
+  }
+  function wireConvSchool(host, uid) {
+    var b = host.querySelector('[data-school]');
+    if (b) b.addEventListener('click', function () { openSchoolPick(uid); });
+  }
+
+  function openSchoolPick(uid) {
+    state.schoolPick = { uid: uid, q: '', list: null, busy: false };
+    el('mbg').classList.add('open');
+    el('modal').classList.add('open', 'pick');
+    document.body.style.overflow = 'hidden';
+    renderSchoolPick();
+    schoolPickSearch('');
+  }
+  function closeSchoolPick() {
+    state.schoolPick = null;
+    el('mbg').classList.remove('open');
+    el('modal').classList.remove('open', 'pick');
+    document.body.style.overflow = '';
+  }
+  /* Поиск с задержкой: менеджер набирает фамилию по буквам, и слать запрос на каждую —
+     это пять лишних ходов до базы ради одного результата. */
+  var _schQ = null;
+  function schoolPickSearch(q) {
+    var P = state.schoolPick; if (!P) return;
+    P.q = q;
+    clearTimeout(_schQ);
+    _schQ = setTimeout(function () {
+      var mine = P.q;
+      api('/admin/api/bot/school/students?q=' + encodeURIComponent(mine)).then(function (r) {
+        if (!state.schoolPick || state.schoolPick.q !== mine) return;   // пришел ответ на устаревший запрос
+        state.schoolPick.list = (r && r.students) || [];
+        renderSchoolPickList();
+      }).catch(function () {
+        if (!state.schoolPick) return;
+        state.schoolPick.list = [];
+        renderSchoolPickList('Не получилось получить список учеников.');
+      });
+    }, 220);
+  }
+  function schoolPickRows(err) {
+    var P = state.schoolPick; if (!P) return '';
+    if (err) return '<div class="sl-empty">' + esc(err) + '</div>';
+    if (P.list === null) return '<div class="sl-empty">Ищем…</div>';
+    if (!P.list.length) {
+      return '<div class="sl-empty">' + (P.q
+        ? 'Никого не нашли. Проверь написание — фамилию можно набрать частями.'
+        : 'Список учеников пуст. Похоже, страница учета уроков к этой базе не подключена.') + '</div>';
+    }
+    var cur = {};
+    var d = state.convSchool[P.uid];
+    ((d && d.links) || []).forEach(function (l) { cur[l.student_id] = 1; });
+    return P.list.map(function (s) {
+      var on = !!cur[s.id];
+      return '<button class="sl-row' + (on ? ' on' : '') + '" data-sid="' + esc(s.id) + '">' +
+        '<span class="sl-nm">' + esc(s.name || s.id) + '</span>' +
+        '<span class="sl-t">' + esc(s.teacher || 'без преподавателя') + '</span>' +
+        (on ? '<span class="sl-ok">привязан</span>' : '') +
+        '</button>';
+    }).join('');
+  }
+  function renderSchoolPickList(err) {
+    var host = el('sl-list'); if (!host) return;
+    host.innerHTML = schoolPickRows(err);
+    wireSchoolPickRows(host);
+  }
+  function wireSchoolPickRows(host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-sid]'), function (b) {
+      b.addEventListener('click', function () { schoolLinkSet(b.getAttribute('data-sid')); });
+    });
+  }
+  function renderSchoolPick() {
+    var modal = el('modal'), P = state.schoolPick;
+    if (!modal || !P) return;
+    var d = state.convSchool[P.uid];
+    var links = (d && d.links) || [];
+    var curHtml = links.length
+      ? '<div class="sl-cur">' + links.map(function (l) {
+          return '<span class="sl-chip">' + esc(schoolLinkName(l)) +
+            '<button class="sl-x" data-drop="' + esc(l.student_id) + '" title="Снять связь">' + ic('x', 11) + '</button></span>';
+        }).join('') + '</div>'
+      : '';
+    modal.innerHTML =
+      '<div class="m-navfloat"><button class="m-arrow" id="sl-x-close">' + ic('x', 14) + '</button></div>' +
+      '<div class="sl-wrap">' +
+        '<div class="sl-h">Чей это чат</div>' +
+        '<div class="sl-sub">Бот заговорит про расписание и оплату только выбранной семьи. ' +
+          'Сам он по имени из переписки никого не ищет.</div>' +
+        curHtml +
+        '<input class="mk-inp" id="sl-q" placeholder="Фамилия или имя ученика" autocomplete="off">' +
+        '<div class="sl-list" id="sl-list">' + schoolPickRows() + '</div>' +
+      '</div>';
+    el('sl-x-close').addEventListener('click', closeSchoolPick);
+    Array.prototype.forEach.call(modal.querySelectorAll('[data-drop]'), function (b) {
+      b.addEventListener('click', function () { schoolLinkDrop(b.getAttribute('data-drop')); });
+    });
+    var q = el('sl-q');
+    if (q) {
+      q.value = P.q || '';
+      q.addEventListener('input', function () { schoolPickSearch(q.value); });
+      q.focus();
+    }
+    wireSchoolPickRows(el('sl-list'));
+  }
+  function schoolLinkSet(sid) {
+    var P = state.schoolPick; if (!P || P.busy) return;
+    P.busy = true;
+    apiSend('/admin/api/bot/conversations/' + P.uid + '/school', 'POST',
+      { student_id: sid, relation: 'parent' },
+      function () {
+        var uid = P.uid;
+        P.busy = false;
+        state.convSchool[uid] = null; convSchoolLoad(uid);
+        closeSchoolPick();
+        showToast('Готово — бот видит занятия этого ученика');
+      },
+      function () { P.busy = false; showToast('Не привязалось — попробуй еще раз'); });
+  }
+  function schoolLinkDrop(sid) {
+    var P = state.schoolPick; if (!P || P.busy) return;
+    P.busy = true;
+    apiSend('/admin/api/bot/conversations/' + P.uid + '/school/' + encodeURIComponent(sid), 'DELETE', null,
+      function () {
+        var uid = P.uid;
+        P.busy = false;
+        state.convSchool[uid] = null;
+        api('/admin/api/bot/conversations/' + uid + '/school').then(function (r) {
+          state.convSchool[uid] = r || { links: [] };
+          convSchoolPaint(uid);
+          if (state.schoolPick) renderSchoolPick();
+        }).catch(function () {});
+        showToast('Связь снята — бот про занятия снова молчит');
+      },
+      function () { P.busy = false; showToast('Не получилось снять связь'); });
+  }
+
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
     composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
@@ -16926,6 +17106,7 @@
         '<span class="tg-ava sm" style="--c:' + cm.c + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
         '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
+        '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
         '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
           '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
       '</div>' +
@@ -16944,7 +17125,9 @@
     state._composerRendering = false;
 
     var cw = el('tg-card'); if (cw) wireConvCard(cw, c.id);
+    var sw = el('tg-school'); if (sw) wireConvSchool(sw, c.id);
     convLeadLoad(c.id);
+    convSchoolLoad(c.id);
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
