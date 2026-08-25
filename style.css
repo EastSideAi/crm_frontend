@@ -5230,6 +5230,21 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
 
+/* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
+   документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
+.fsp-inf { padding: 0; overflow: hidden; }
+.fsp-c-sum { margin-left: auto; font: 700 13px 'Manrope', sans-serif; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.fsp-ok { display: flex; gap: 10px; align-items: center; padding: 15px 18px;
+  color: var(--green-ink); font-size: 13.5px; }
+.fsp-ok svg { color: var(--green); flex: none; }
+.fsp-doc { display: inline-flex; align-items: center; gap: 4px;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--green-ink);
+  max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fsp-doc svg { color: var(--green); flex: none; }
+.fsp-add { color: var(--ink-2); }
+.fsp-add svg { opacity: .8; }
+
 /* Прямые расходы: у блока свой заголовок с итогом и своей кнопкой, между блоками
    воздух больше, чем внутри — блоки читаются как отдельные направления. */
 .fd-block { margin-bottom: 14px; }

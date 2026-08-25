@@ -2097,6 +2097,10 @@
     { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
+    /* Расходы одним экраном с тремя состояниями (запланирован → проведен →
+       подтвержден) и информатором проблем: где расход не закрыт документом и где
+       на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
+    { id: 'finspend', label: 'Расходы', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
@@ -2460,7 +2464,7 @@
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
-               state.page === 'finmetrics') {
+               state.page === 'finspend' || state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
       tb.innerHTML = pers2.length
@@ -2993,6 +2997,7 @@
     else if (state.page === 'finincome') renderFinIncome(view);
     else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'findirect') renderFinDirect(view);
+    else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finplan') renderFinPlan(view);
@@ -9633,7 +9638,7 @@
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
-              calendar: null, programs: null,
+              calendar: null, programs: null, spend: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -9819,7 +9824,7 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
-    FIN.revplan = null; FIN.calendar = null; FIN.programs = null;
+    FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -11027,6 +11032,166 @@
       });
     }
     pageAnim(view);
+  }
+
+  /* ── РАСХОДЫ: три состояния и информатор ────────────────────────────────────
+     Расход живет по стадиям: запланирован → проведен → подтвержден. Ценность в
+     разрывах между ними — проведен без документа (дыра перед налоговой),
+     запланирован без денег на счете (кассовый разрыв). Состояние и проблемы считает
+     бэкенд (services/fin_spend.py), фронт показывает. */
+  function finLoadSpend() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadSpend(); });
+    finBusy('spend', function (done) {
+      api('/admin/api/fin/spend' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.spend = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'spend'); }).then(done);
+    });
+  }
+  var SPEND_STATE = {
+    'запланирован': { cls: '', label: 'план' },
+    'проведен': { cls: ' wait', label: 'проведен' },
+    'подтвержден': { cls: ' ok', label: 'подтвержден' },
+  };
+  function spendStateChip(st) {
+    var s = SPEND_STATE[st] || SPEND_STATE['запланирован'];
+    return '<span class="fst' + s.cls + '">' + s.label + '</span>';
+  }
+  /* Строки-улики проверки. Формат hits свой у каждой: у «нет документа» — сам расход,
+     у кассового разрыва — счет и нехватка, у дубля — сколько раз повторился. */
+  function spendHits(ch) {
+    var hits = ch.hits || [];
+    if (!hits.length) return '';
+    var li = hits.map(function (h) {
+      if (ch.key === 'cash_gap') {
+        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned, 0) +
+          ', свободно ' + finRub(h.available, 0) +
+          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short, 0) + '</span></li>';
+      }
+      if (ch.key === 'dup') {
+        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+          ' · ' + finDate(h.date) +
+          '<span class="rsk-hit-hint">' + h.count + ' раза</span></li>';
+      }
+      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+        ' · ' + finDate(h.date) + '</li>';
+    }).join('');
+    return '<ul class="rsk-hits">' + li + '</ul>';
+  }
+  function spendCheckCard(ch) {
+    return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
+      '<div class="rsk-c-head">' + riskChip(ch.level) +
+        '<span class="rsk-c-title">' + esc(ch.title) + '</span>' +
+        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount, 0) + '</span>' : '') +
+      '</div>' +
+      '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
+      (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
+        '</span></div>' : '') +
+      spendHits(ch) +
+      '</div>';
+  }
+  function renderFinSpend(view) {
+    if (!FIN.spend) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSpend(); return;
+    }
+    if (FIN.spend === 'none') return finErrView(view);
+    var S = FIN.spend, sum = S.summary || {}, checks = S.checks || [], arts = S.articles || [];
+    var canFix = can('finmodel_edit');
+    function fa(s) { return (sum[s] && sum[s].amount) || 0; }
+    function fc(s) { return (sum[s] && sum[s].count) || 0; }
+
+    var bar = statBar([
+      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден'), 0),
+        sub: 'ушло по расходам' },
+      { label: 'Подтверждено', value: finRub(fa('подтвержден'), 0),
+        sub: fc('подтвержден') + ' закрыто документом' },
+      { label: 'Без документа', value: finRub(fa('проведен'), 0),
+        sub: fc('проведен') + ' закрыть нечем' },
+      { label: 'Запланировано', value: finRub(fa('запланирован'), 0),
+        sub: 'намечено, еще не ушло' },
+    ]);
+
+    var inf;
+    if (checks.length) {
+      inf = '<div class="card fsp-inf">' +
+        '<div class="sec-head"><span class="ic">' + ic('shield', 14) + '</span>' +
+          '<div><div class="t">Информатор расходов</div>' +
+          '<div class="s">' + checks.length + ' ' +
+          plural(checks.length, 'проблема', 'проблемы', 'проблем') +
+          ', тяжелые сверху</div></div></div>' +
+        '<div class="rsk-checks">' + checks.map(spendCheckCard).join('') + '</div></div>';
+    } else if (arts.length) {
+      inf = '<div class="card fsp-ok"><span>' + ic('check', 16) + '</span>' +
+        '<div>Проблем нет. Все проведенные расходы закрыты документами, на плановое ' +
+        'денег хватает.</div></div>';
+    } else {
+      inf = '';
+    }
+
+    var cards = arts.map(function (a) {
+      var rows = a.items.map(function (it) {
+        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
+          .filter(Boolean).map(esc).join(' · ');
+        var act = '';
+        if (it.state === 'подтвержден' && it.doc) {
+          act = '<span class="fsp-doc" title="' + esc(it.doc.name) + '">' +
+            ic('check', 11) + esc(it.doc.name) + '</span>';
+        } else if (it.state === 'проведен' && canFix) {
+          act = '<button class="qchip fsp-add" data-spdoc="' + esc(it.id) + '">' +
+            ic('plus', 11) + 'документ</button>';
+        }
+        return '<div class="trow fin-grid fe-grid">' +
+          '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+          '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+          '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
+        '</div>';
+      }).join('');
+      var tots = 'план ' + finRub(a['запланирован'], 0) + ' · факт ' +
+        finRub(a['проведен'] + a['подтвержден'], 0);
+      return '<div class="card listcard fd-block">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(a.label) + '</div>' +
+          '<div class="s">' + tots + '</div></div></div>' +
+        (rows || '<div class="empty">В этой статье пусто.</div>') +
+        '</div>';
+    }).join('');
+
+    if (!arts.length) {
+      cards = '<div class="card"><div class="empty">Расходов в этом периоде пока нет. ' +
+        'Заводятся они на «Прямых расходах» и в «Расчетных листах», а выплаты ' +
+        'самозанятым падают сюда сами.</div></div>';
+    }
+
+    view.innerHTML = bar + inf + cards;
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdoc]'), function (b) {
+      b.addEventListener('click', function () { spendDocForm(b.getAttribute('data-spdoc')); });
+    });
+    pageAnim(view);
+  }
+  /* Приложить документ к расходу — расход становится «подтвержден». Файл пока не
+     грузим, цепляем название и ссылку: полноценная загрузка артефактов придет с
+     ботом расходов, который и будет их приносить. */
+  function spendDocForm(id) {
+    var m = finModal({
+      eyebrow: 'Расход', title: 'Приложить документ', ok: 'Приложить',
+      body: finField('Название документа',
+              '<input id="sp-name" class="al-in" maxlength="200" ' +
+              'placeholder="Чек, квитанция, счет, накладная">') +
+            finField('Ссылка, если есть',
+              '<input id="sp-link" class="al-in" maxlength="500" placeholder="https://...">'),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      var name = finVal('sp-name');
+      if (!name) { m.err.textContent = 'Впишите название документа.'; return; }
+      m.close();
+      finDo('/admin/api/fin/operation/' + id + '/doc', 'POST',
+        { name: name, link: finVal('sp-link') }, 'Документ приложен, расход подтвержден.');
+    });
   }
 
   /* Дата новой строки — сегодня, но только если сегодня внутри ведомости. Иначе
