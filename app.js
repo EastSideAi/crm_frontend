@@ -3204,6 +3204,13 @@
               t.status !== 'done' && t.status !== 'cancel');
   }
 
+  /* Я ли поставил эту задачу. Снимать приемку вправе постановщик — тот же, кто
+     принимал; остальным (кроме tasks_all) кнопка не показывается, чтобы не
+     учить тыкать наугад и получать 403. */
+  function isAuthorOf(t) {
+    return !!(t && state.taskMe && t.author_id === state.taskMe);
+  }
+
   /* Закрыть свое дело. Строка гаснет сразу, не дожидаясь ответа: отметить десять
      дел подряд с перерисовкой на каждое невозможно. Не сохранилось — вернем как
      было и скажем. */
@@ -3954,12 +3961,20 @@
 
     var cards = groups.map(function (g) {
       var rows = g.tasks.map(function (t) {
+        // Снять с готово прямо в отчете: разбирают период списком, и ради одной
+        // ошибочно принятой задачи открывать карточку незачем. Отмененную не
+        // трогаем — она не «сделана», ее возвращать некуда.
+        var canUndo = t.status === 'done' && (can('tasks_all') || isAuthorOf(t));
         return '<div class="dn-t" data-tid="' + t.id + '">' +
           '<span class="dn-tick">' + ic('check', 12) + '</span>' +
           '<div class="dn-tt">' + impMark(t) + esc(t.title) +
             (t.client_name ? '<span class="dn-cl">' + esc(t.client_name) + '</span>' : '') + '</div>' +
           '<div class="dn-who">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
           '<div class="dn-when">' + esc(dayLabel(t.closed_at)) + '</div>' +
+          (canUndo
+            ? '<button class="dn-undo" data-undo="' + t.id + '" title="Снять с готово">' +
+              ic('refresh', 12) + 'вернуть</button>'
+            : '<span class="dn-undo-gap"></span>') +
         '</div>';
       }).join('');
 
@@ -4022,6 +4037,25 @@
     if (el('dn-now')) el('dn-now').addEventListener('click', function () { reload(function () { state.doneShift = 0; }); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
+    });
+    // Возврат из отчета: строка под кнопкой открываться не должна, иначе клик
+    // «вернуть» заодно открывает карточку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-undo]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        b.disabled = true;
+        apiSend('/admin/api/tasks/' + b.getAttribute('data-undo') + '/status', 'POST',
+          { status: 'return', text: 'снята с готово' }, function () {
+            state.tasks = null;
+            loadTaskSummary();
+            renderView();
+            showToast('Задача снова в работе');
+          }, function (code) {
+            b.disabled = false;
+            showToast(code === 403 ? 'Снять с готово может только тот, кто принимал'
+                                   : 'Не получилось вернуть задачу');
+          });
+      });
     });
   }
 
@@ -4864,6 +4898,13 @@
       // отменяет приемку как явление — а ее у команды как раз и не было.
       if (boss && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
       if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
+      // Приемку иногда отменяют: приняли по ошибке или вскрылось, что работа
+      // не доделана. Снятие идет тем же путем, что обычный возврат — с
+      // причиной в ленте и уведомлением исполнителю, а не молча.
+      if (boss && t.status === 'done') acts.push(['return', 'Снять с готово', 'al-cancel']);
+      // Обратно в «готово» возвращается то, что уже сдавали: правило «принимаем
+      // только сданное» снятие приемки не отменяет.
+      if (boss && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
       var feed = events.map(function (e) {
         return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
@@ -4950,8 +4991,12 @@
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
             '</div>') +
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
-          '<div class="tsk-ret" id="tk-ret" hidden><b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.' +
-            '<button type="button" id="tk-retx">не возвращать</button></div>' +
+          '<div class="tsk-ret" id="tk-ret" hidden>' +
+            (t.status === 'done'
+              ? '<b>Снимаем с готово.</b> Напиши, что не так — исполнитель увидит это в задаче.'
+              : '<b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.') +
+            '<button type="button" id="tk-retx">' +
+              (t.status === 'done' ? 'не снимать' : 'не возвращать') + '</button></div>' +
           // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
           // это событие, и текст «что сделано» с файлом должны уехать вместе,
           // иначе постановщик принимает на слово.

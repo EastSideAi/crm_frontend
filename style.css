@@ -2195,7 +2195,7 @@ button.tr-crumb:hover { color: var(--blue); }
   font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--green-ink); }
 .dn-gh .tsk-prog { margin-top: 0; }
-.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px; align-items: center;
+.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px 78px; align-items: center;
   gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); cursor: pointer;
   transition: background .14s var(--ease); }
 .dn-t:hover { background: #FBFBFC; }
@@ -3122,12 +3122,29 @@ button.tsk-mimp { cursor: pointer; }
 .eis-td { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
 .eis-empty { font-size: 12px; color: var(--ink-3); padding: 10px 0 10px; }
 
+/* Снять с готово прямо в отчете периода: действие тихое и появляется на
+   ховере строки — разбирают отчет глазами, а не кнопками. Место под кнопку
+   держится всегда (.dn-undo-gap), иначе строки без нее едут по сетке. */
+.dn-undo-gap { display: block; }
+.dn-undo { display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
+  opacity: 0; transition: opacity .14s var(--ease), color .14s var(--ease), border-color .14s var(--ease); }
+.dn-undo svg { width: 12px; height: 12px; }
+.dn-t:hover .dn-undo { opacity: 1; }
+.dn-undo:hover { color: var(--ink); border-color: var(--ink-3); }
+.dn-undo:focus-visible { opacity: 1; }
+
 /* Телефон. Блок стоит ПОСЛЕ базовых правил выше намеренно: у мобильного
    переопределения та же специфичность, и, стоя раньше, оно проигрывало бы. */
 @media (max-width: 760px) {
   /* Матрица — колонкой: два квадранта в ряд на 390px превращают названия задач
      в два слова с многоточием. */
   .eis { grid-template-columns: minmax(0,1fr); gap: 10px; padding: 12px 14px 14px; }
+  /* Ховера на телефоне нет: «вернуть» стоит видимой под датой, иначе до нее не
+     добраться вовсе. Пустую ячейку в двухколоночной строке не держим. */
+  .dn-undo { grid-column: 2; opacity: 1; justify-self: start; }
+  .dn-undo-gap { display: none; }
 }
 
 /* ════ ФИНАНСЫ ════ */
