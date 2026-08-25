@@ -62,13 +62,17 @@
     convLead: {},       // обратный ход: карточка лида по диалогу бота { user_id: ответ | 'load' }
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
-    planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
+    planStatus: {}, planBlock: {}, assignees: null,
+    _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
+    // ритм: план на период и отчет за него; свой и, у руководителя, срез по команде
+    rhythm: null, rhythmTeam: null, rhythmSched: null,
+    rhythmPeriod: 'week', rhythmShift: 0, rhythmWho: 'me',
     // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
     donePeriod: 'week', doneShift: 0, donePeriodLabel: '', doneGoals: [],
     // дерево «Вся команда»: где мы сейчас (null = уровень направлений)
@@ -81,7 +85,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'rhythmPeriod', 'rhythmWho', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
   } catch (e) {}
   function saveUi() {
@@ -91,6 +95,7 @@
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays,
         boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
+        rhythmPeriod: state.rhythmPeriod, rhythmWho: state.rhythmWho,
       }));
     } catch (e) {}
   }
@@ -557,7 +562,17 @@
           throw new Error('403');
         });
       }
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      /* Тело ошибки отдаем вызывающему: на 409 сервер объясняет, ЧТО именно мешает
+         (нет ответственного, у задач нет сроков) — без этого человек видит только
+         «не сохранилось» и не знает, что чинить. */
+      if (!r.ok) {
+        return r.json().catch(function () { return null; }).then(function (j) {
+          var err = new Error('HTTP ' + r.status);
+          err.status = r.status;
+          err.body = j;
+          throw err;
+        });
+      }
       return r.json();
     });
   }
@@ -574,6 +589,47 @@
       var cbs = state.inflight[id] || []; delete state.inflight[id];
       if (e.message !== '403') cbs.forEach(function (f) { f(null); });
     });
+  }
+  /* Кто может быть исполнителем задачи в плане клиента. Список короткий и меняется
+     редко — тянем один раз за сессию, иначе каждая карточка дергала бы сервер ради
+     одной выпадашки. Имя не fetchAssignees: так называется загрузчик блока «Ведет»
+     (он кладет людей в OWN_PEOPLE), и две одноименные функции в одном файле молча
+     ломали бы ту, что объявлена выше. */
+  function fetchPeople(cb) {
+    if (state.assignees) { if (cb) cb(state.assignees); return; }
+    if (state._assigneesInflight) { state._assigneesInflight.push(cb); return; }
+    state._assigneesInflight = [cb];
+    api('/admin/api/leads/assignees').then(function (r) {
+      state.assignees = (r && r.people) || [];
+      var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
+      cbs.forEach(function (f) { if (f) f(state.assignees); });
+    }).catch(function () {
+      state.assignees = [];
+      var cbs = state._assigneesInflight || []; state._assigneesInflight = null;
+      cbs.forEach(function (f) { if (f) f([]); });
+    });
+  }
+  function personName(uid) {
+    if (!uid) return '';
+    var list = state.assignees || [];
+    for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(uid)) return list[i].name || '';
+    return '';
+  }
+  /* <option>-ы сотрудников; empty — подпись пустого значения */
+  function personOptions(sel, empty) {
+    var list = state.assignees || [];
+    var out = '<option value="">' + esc(empty) + '</option>';
+    var known = false;
+    for (var i = 0; i < list.length; i++) {
+      var u = list[i];
+      var on = String(u.id) === String(sel || '');
+      if (on) known = true;
+      out += '<option value="' + u.id + '"' + (on ? ' selected' : '') + '>' + esc(u.name || ('#' + u.id)) + '</option>';
+    }
+    // ответственный мог быть отключен (уволен) — не молчим об этом, иначе поле
+    // выглядит пустым и человек думает, что ответственного не назначали
+    if (sel && !known) out += '<option value="' + esc(sel) + '" selected>сотрудник отключен</option>';
+    return out;
   }
   function warm(id) {
     if (state.details[id] || state.inflight[id]) return;
@@ -2543,6 +2599,27 @@
           plural(bt.done, 'задача', 'задачи', 'задач') + '.';
         else tphr = 'За этот период команда еще ничего не закрыла.';
       }
+      // На «Плане» сводка — про сдачу, а не про открытые задачи: экран отвечает
+      // на «сдал ли я то, что должен», и шапка обязана говорить о том же.
+      if (TASK_SEGS[taskSeg()].view === 'rhythm') {
+        var rhTeam = can('tasks_all') && state.rhythmWho === 'team';
+        var rq = rhTeam ? state.rhythmTeam : state.rhythm;
+        if (!rq || rq === 'none') tphr = 'Смотрю, что с планом.';
+        else if (rhTeam) {
+          var noPlan = rq.left.plan, noRep = rq.left.report;
+          tphr = (noPlan || noRep)
+            ? 'Не сдали план — <b>' + noPlan + '</b>, отчет — <b>' + noRep + '</b>. Они сверху списка.'
+            : 'План и отчет за этот период сдали все.';
+        } else {
+          var bad = ['plan', 'report'].filter(function (kk) { return rq[kk].state === 'miss'; });
+          tphr = bad.length
+            ? '<b>Срок прошел:</b> ' + (bad.length === 2 ? 'план и отчет не сданы'
+                : (bad[0] === 'plan' ? 'план не сдан' : 'отчет не сдан')) + '. Сдать можно и сейчас.'
+            : (rq.plan.given && rq.report.given
+                ? 'За этот период сдано все. План — это задачи со сроком, отчет числа считает сам.'
+                : 'План — это задачи со сроком в периоде. Разложи цели по шагам и сдай план.');
+        }
+      }
       // На «Целях» сводка про движение, а не про мои открытые задачи.
       if (TASK_SEGS[taskSeg()].view === 'goals') {
         var gls = Array.isArray(state.tasks) ? state.tasks : [];
@@ -3027,6 +3104,10 @@
   };
   var TASK_SEGS = {
     today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
+    // «План» — не еще один список задач, а ритуал: сдать план на период и
+    // отчет по нему в согласованный срок. Стоит вторым, потому что читается
+    // раньше работы: сначала во что я целюсь на период, потом что делаю сегодня.
+    plan:   { label: 'План',        view: 'rhythm', scope: 'my',     hint: 'план на день, неделю и месяц и отчет по нему' },
     // Цели идут сразу за «Сегодня» намеренно: сегодняшняя задача без цели —
     // просто дело, а с целью — шаг к результату. Порядок вкладок и есть ответ
     // на вопрос «зачем я это делаю» (решение Павла от 14.08.2026).
@@ -3255,6 +3336,7 @@
 
   function renderTasks(view) {
     if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
+    if (TASK_SEGS[taskSeg()].view === 'rhythm') { renderRhythm(view); return; }
     if (state.tasks === null) {
       view.innerHTML = dashSkeleton();
       loadTasks();
@@ -3923,6 +4005,421 @@
       return a.label < b.label ? -1 : 1;
     });
   }
+
+  /* ── План на период и отчет за него («План») ────────────────────────────────
+     Задачи, цели и сроки в CRM были и раньше, а вот момента «вот мой план на
+     неделю» и «вот что из него вышло» не было: спросить «ты обещал» не с чего.
+     Этот экран — про сам ритуал сдачи, а не про новый список работы.
+
+     План периода тут НЕ отдельный текст, а задачи со сроком внутри периода.
+     Второй план рядом с задачником разошелся бы с работой за неделю, и дальше
+     непонятно, по какому из двух человек живет. Кнопка «Сдать план» — подпись
+     под тем, что уже стоит в задачах.
+
+     Отчет числа считает сам (принято, осталось, просрочено, сколько раз двигали
+     сроки), у человека спрашивается только то, чего в данных нет: что мешало.
+     Тот же довод, что у вечернего вопроса бота: отчет, написанный руками
+     целиком, либо не пишут, либо пишут художественно.
+
+     Декомпозиция месяц → неделя → день едет на сроках, а не на вложенности: у
+     задач глубина ровно одна, цель → шаг. Поэтому блок «не разложено» — главное,
+     что этот экран ловит: цель, у которой в периоде нет ни одного шага, и есть
+     план, не подкрепленный ничем. */
+  var RH_PERIODS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц']];
+  var RH_ON = { day: 'на день', week: 'на неделю', month: 'на месяц' };
+  var RH_FOR = { day: 'за день', week: 'за неделю', month: 'за месяц' };
+  /* Состояния сдачи — своя семья чипов рядом с .sev.st-* задач: словари не
+     смешиваем, чтобы «сдан» и «принята» не начали значить одно и то же.
+     Красное тут ровно одно — не сданное в срок; ожидание нейтральное, потому
+     что до срока это норма, а не повод для тревоги. */
+  var RH_ST = {
+    wait: { label: 'ждем',          cls: 'st-wait' },
+    miss: { label: 'не сдан',       cls: 'rh-miss' },
+    done: { label: 'сдан',          cls: 'st-done' },
+    late: { label: 'с опозданием',  cls: 'rh-late' },
+  };
+  var RH_WDAY = [['1', 'понедельник'], ['2', 'вторник'], ['3', 'среда'], ['4', 'четверг'],
+                 ['5', 'пятница'], ['6', 'суббота'], ['7', 'воскресенье']];
+
+  function rhPeriod() { return state.rhythmPeriod || 'week'; }
+
+  function loadRhythm(cb) {
+    api('/admin/api/rhythm?period=' + rhPeriod() + '&shift=' + state.rhythmShift)
+      .then(function (r) {
+        state.rhythm = r || 'none';
+        if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.rhythm = 'none';
+        if (state.page === 'tasks') renderView();
+      });
+  }
+
+  function loadRhythmTeam() {
+    api('/admin/api/rhythm/team?period=' + rhPeriod() + '&shift=' + state.rhythmShift)
+      .then(function (r) {
+        state.rhythmTeam = r || 'none';
+        if (state.page === 'tasks') { renderHead(); renderView(); }
+      }).catch(function () {
+        state.rhythmTeam = 'none';
+        if (state.page === 'tasks') renderView();
+      });
+  }
+
+  function loadRhSched(cb) {
+    if (state.rhythmSched) { cb(state.rhythmSched); return; }
+    api('/admin/api/rhythm/schedule').then(function (r) {
+      state.rhythmSched = (r && r.schedule) || null;
+      cb(state.rhythmSched);
+    }).catch(function () { cb(null); });
+  }
+
+
+  function rhChip(state_) {
+    var s = RH_ST[state_] || RH_ST.wait;
+    return '<span class="sev ' + s.cls + '">' + s.label + '</span>';
+  }
+
+  /* Плашка сдачи. Кнопка стоит только там, где сдача еще нужна: если сдано и то
+     и другое, экран молчит и не требует внимания — это и есть норма. */
+  function rhPlate(kind, r) {
+    var d = r[kind] || {};
+    var given = d.given;
+    var title = (kind === 'plan' ? 'План ' + RH_ON[r.period] : 'Отчет ' + RH_FOR[r.period]);
+    var f = r.facts || {};
+    var body;
+    if (kind === 'plan') {
+      var loose = (r.loose_goals || []).length;
+      body = '<div class="rh-n num">' + f.plan + '</div>' +
+        '<div class="rh-s">' + plural(f.plan, 'задача со сроком', 'задачи со сроком', 'задач со сроком') +
+          ' в этом периоде' +
+          (loose ? ', и ' + loose + ' ' + plural(loose, 'цель', 'цели', 'целей') + ' без единого шага' : '') +
+        '</div>';
+    } else {
+      var rest = [];
+      if (f.left) rest.push('осталось ' + f.left);
+      if (f.overdue) rest.push('просрочено ' + f.overdue);
+      if (f.moved) rest.push('сроки двигали ' + f.moved + ' ' + plural(f.moved, 'раз', 'раза', 'раз'));
+      body = '<div class="rh-n num">' + f.done + '</div>' +
+        '<div class="rh-s">' + plural(f.done, 'задача принята', 'задачи принято', 'задач принято') +
+          (rest.length ? ' · ' + rest.join(' · ') : '') + '</div>';
+    }
+    var can = kind === 'plan' ? true : d.can_give;
+    // Зовет ровно одна кнопка на экране: две одинаково синие рядом — это «все
+    // важно», то есть ничего. План сдают раньше отчета, поэтому пока он не
+    // сдан, очередь его; сдан — очередь отчета.
+    var first = kind === (r.plan.given ? 'report' : 'plan');
+    var btn = given
+      ? '<button class="qchip rh-again" data-give="' + kind + '">Дополнить</button>'
+      : (can
+          ? '<button class="' + (first ? 'bp sm' : 'qchip') + '" data-give="' + kind + '">' +
+              (kind === 'plan' ? 'Сдать план' : 'Сдать отчет') + '</button>'
+          : '<span class="rh-hint">период еще не начался</span>');
+    var said = given && given.text
+      ? '<div class="rh-said">' + ic('chat', 12) + '<span>' + esc(given.text) + '</span></div>' : '';
+
+    return '<div class="rh-p' + (given ? ' given' : '') + (d.state === 'miss' ? ' miss' : '') + '">' +
+      '<div class="rh-ph"><span class="rh-l">' + esc(title) + '</span>' + rhChip(d.state) + '</div>' +
+      body + said +
+      '<div class="rh-pf"><span class="rh-due">' + esc(d.due_text || '') + '</span>' + btn + '</div>' +
+    '</div>';
+  }
+
+  function rhTools(r) {
+    var who = can('tasks_all')
+      ? '<div class="vseg rh-who">' +
+          '<button class="' + (state.rhythmWho === 'me' ? 'on' : '') + '" data-rw="me">Мой</button>' +
+          '<button class="' + (state.rhythmWho === 'team' ? 'on' : '') + '" data-rw="team">Команда</button>' +
+        '</div>'
+      : '';
+    return '<div class="list-tools brd-tools">' +
+      '<div class="dperiod" id="rh-per">' + RH_PERIODS.map(function (o) {
+        return '<button class="' + (rhPeriod() === o[0] ? 'on' : '') + '" data-rp="' + o[0] + '">' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" id="rh-prev" title="Предыдущий период">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc((r && r.label) || '') + '</span>' +
+        '<button class="icobtn sm brd-arrow" id="rh-next" title="Следующий период">' + ic('go', 15) + '</button>' +
+        (state.rhythmShift ? '<button class="qchip" id="rh-now">Сейчас</button>' : '') +
+      '</div>' + who +
+    '</div>';
+  }
+
+  function rhWire(view) {
+    function reload(fn) {
+      fn();
+      state.rhythm = null; state.rhythmTeam = null;
+      saveUi(); renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rp]'), function (b) {
+      b.addEventListener('click', function () {
+        reload(function () { state.rhythmPeriod = b.getAttribute('data-rp'); state.rhythmShift = 0; });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rw]'), function (b) {
+      b.addEventListener('click', function () {
+        state.rhythmWho = b.getAttribute('data-rw'); saveUi(); renderView();
+      });
+    });
+    el('rh-prev').addEventListener('click', function () { reload(function () { state.rhythmShift -= 1; }); });
+    el('rh-next').addEventListener('click', function () { reload(function () { state.rhythmShift += 1; }); });
+    if (el('rh-now')) el('rh-now').addEventListener('click', function () { reload(function () { state.rhythmShift = 0; }); });
+  }
+
+  function renderRhythm(view) {
+    if (can('tasks_all') && state.rhythmWho === 'team') { renderRhythmTeam(view); return; }
+    if (state.rhythm === null) { view.innerHTML = dashSkeleton(); loadRhythm(); return; }
+    if (state.rhythm === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить план. Обнови страницу.</div></div>';
+      return;
+    }
+    var r = state.rhythm;
+
+    // Цели без шагов в периоде. Блок стоит ВЫШЕ списка задач намеренно: список
+    // отвечает «что я буду делать», а этот блок — «чего я не запланировал», и
+    // второй вопрос важнее, ради него человек сюда и пришел.
+    var loose = (r.loose_goals || []).length
+      ? '<div class="rh-loose"><div class="rh-lh">' + ic('target', 13) +
+          '<span>Цели без шагов в этом периоде</span><span class="cnt num">' + r.loose_goals.length + '</span></div>' +
+        r.loose_goals.map(function (g) {
+          return '<div class="rh-lr" data-tid="' + g.id + '"><span class="rh-lt">' + esc(g.title) + '</span>' +
+            '<button class="qchip rh-add" data-parent="' + g.id + '">' + ic('plus', 12) + 'Шаг</button></div>';
+        }).join('') + '</div>'
+      : '';
+
+    var rows = (r.tasks || []).map(function (t) {
+      var st = TASK_ST[t.status] || TASK_ST.wait;
+      var due = dueLabel(t);
+      return '<div class="trow tsk-grid mine' + (t.parent_title ? ' has-goal' : '') +
+        (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(t.title) + '</div>' +
+          (t.parent_title
+            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' +
+              ic('target', 11) + esc(t.parent_title) + '</button>' : '') +
+        '</div>' +
+        '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
+        '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+      '</div>';
+    }).join('');
+
+    view.innerHTML = '<div class="card listcard">' + rhTools(r) +
+      '<div class="list-body rh-body">' +
+        '<div class="rh-plates">' + rhPlate('plan', r) + rhPlate('report', r) + '</div>' +
+        loose +
+        (rows
+          ? '<div class="rh-list"><div class="trow tsk-grid mine thead"><span class="th">Задача</span>' +
+              '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows + '</div>'
+          : '<div class="empty">На этот период задач со сроком нет. План — это задачи со сроком: ' +
+            'поставь их, и они появятся здесь.</div>') +
+      '</div></div>';
+
+    rhWire(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-give]'), function (b) {
+      b.addEventListener('click', function () { rhGive(b.getAttribute('data-give')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-parent]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openNewTask({ parent_id: +b.getAttribute('data-parent') });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); openTask(+b.getAttribute('data-goalid'));
+      });
+    });
+  }
+
+  /* Сдача. Числа в отчет человек не вписывает — их считает сервер на момент
+     нажатия; поле ровно одно, и оно про то, чего в данных нет. */
+  function rhGive(kind) {
+    var r = state.rhythm;
+    if (!r || r === 'none') return;
+    var given = (r[kind] || {}).given;
+    var f = r.facts || {};
+    var isPlan = kind === 'plan';
+    var sub = isPlan
+      ? 'В план идут ' + f.plan + ' ' + plural(f.plan, 'задача', 'задачи', 'задач') +
+        ' со сроком в этом периоде. Строка ниже — то, что к ним стоит добавить словами.'
+      : 'Принято ' + f.done + ', осталось ' + f.left + ', просрочено ' + f.overdue +
+        '. Эти числа посчитаны, писать их не надо.';
+    openSheet(
+      (isPlan ? 'План ' + RH_ON[r.period] : 'Отчет ' + RH_FOR[r.period]) + ' — ' + r.label,
+      sub,
+      [['t', 'text', isPlan ? 'Что важно в этом периоде' : 'Что мешало и что переношу',
+        (given && given.text) || '']],
+      function (v, close) {
+        api('/admin/api/rhythm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ period: r.period, kind: kind, shift: r.shift, text: v.t || '' }),
+        }).then(function () {
+          close();
+          showToast(isPlan ? 'План сдан' : 'Отчет сдан');
+          state.rhythm = null; state.rhythmTeam = null;
+          renderView();
+        }).catch(function (e) {
+          el('sh-err').textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить';
+        });
+        return '';
+      },
+      null, 'План и отчет', isPlan ? 'Сдать план' : 'Сдать отчет');
+  }
+
+  /* Срез руководителя: кто сдал, кто нет. Колонок ровно четыре — рейтинга людей
+     тут нет по той же причине, что и в табло «По людям». */
+  function renderRhythmTeam(view) {
+    if (state.rhythmTeam === null) { view.innerHTML = dashSkeleton(); loadRhythmTeam(); return; }
+    if (state.rhythmTeam === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать срез. Обнови страницу.</div></div>';
+      return;
+    }
+    var b = state.rhythmTeam;
+    var head = '<div class="trow rh-grid thead"><span class="th">Сотрудник</span>' +
+      '<span class="th">План</span><span class="th">Отчет</span>' +
+      '<span class="th">Задач в плане</span><span class="th">Принято</span></div>';
+    var rows = (b.people || []).map(function (p) {
+      function cell(kind) {
+        return '<div class="rh-c" data-l="' + (kind === 'plan' ? 'План' : 'Отчет') + '">' +
+          rhChip((p[kind] || {}).state) + '</div>';
+      }
+      // Слова человека — строкой под числами, во всю ширину, как отчет дня в
+      // табло: в клетке рядом с чипом они обрезаются до «Держу фоку…», а это
+      // ровно то место, ради которого руководитель сюда и смотрит.
+      var said = ['plan', 'report'].filter(function (kk) { return (p[kk] || {}).text; })
+        .map(function (kk) {
+          return '<div class="rh-note">' + ic('chat', 13) +
+            '<span><b>' + (kk === 'plan' ? 'План' : 'Отчет') + ':</b> ' + esc(p[kk].text) + '</span></div>';
+        }).join('');
+      return '<div class="trow rh-grid' + (p.plan.state === 'miss' || p.report.state === 'miss' ? ' r-crit' : '') +
+        (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
+        cell('plan') + cell('report') +
+        '<span class="brd-n num' + (p.plan_count ? '' : ' zero') + '" data-l="Задач в плане">' + p.plan_count + '</span>' +
+        '<span class="brd-n num' + (p.done ? ' ok' : ' zero') + '" data-l="Принято">' + p.done + '</span>' +
+        said +
+      '</div>';
+    }).join('');
+
+    // Кто без задач — именами под таблицей: у них вопрос не «почему не сдал», а
+    // «почему на человека ничего не поставлено», и это одна строка, не двадцать.
+    var IDLE_SHOWN = 8;
+    var idleAll = b.idle || [];
+    var idle = idleAll.length
+      ? '<div class="brd-idle"><span class="brd-il">Ни одной задачи на период</span>' +
+        esc(idleAll.slice(0, IDLE_SHOWN).join(', ')) +
+        (idleAll.length > IDLE_SHOWN
+          ? ' <span class="brd-more num">и еще ' + (idleAll.length - IDLE_SHOWN) + '</span>' : '') +
+        '</div>'
+      : '';
+
+    view.innerHTML = '<div class="card listcard">' + rhTools(b) +
+      '<div class="list-body">' +
+        (rows ? head + rows : '<div class="empty">В этом периоде задач нет ни у кого.</div>') +
+      '</div>' + idle +
+      // Кому сроки менять нельзя — говорим их строкой. Кому можно — они и так
+      // стоят в полях ниже, и вторая копия рядом только спорит сама с собой.
+      (can('team') ? '<div class="rh-sched" id="rh-sched"></div>'
+        : '<div class="brd-note">Сроки: план ' + esc(b.plan_due_text || '') +
+          ', отчет ' + esc(b.report_due_text || '') + '.' +
+          (b.on ? '' : ' Этот период сейчас выключен — напоминания по нему не идут.') + '</div>') +
+    '</div>';
+
+    rhWire(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (row) {
+      row.addEventListener('click', function () {
+        var uid = +row.getAttribute('data-uid');
+        var who = (b.people || []).filter(function (x) { return x.id === uid; })[0];
+        state.taskWho = { id: uid, name: who ? who.name : '' };
+        state.taskSeg = 'team'; state.tasks = null;
+        saveUi(); renderTopbar(); renderHead(); renderView();
+      });
+    });
+    if (el('rh-sched')) loadRhSched(function (s) { if (el('rh-sched')) renderRhSched(s); });
+  }
+
+  /* Согласованные сроки. Это договоренность команды, а не настройка разработчика,
+     поэтому живет на экране, а не в коде. Правит тот же, кто ведет состав
+     команды: сроки сдачи — часть рабочего договора, а не личное удобство. */
+  function renderRhSched(s) {
+    var box = el('rh-sched');
+    if (!box) return;
+    if (!s) { box.innerHTML = '<div class="rh-shh">Сроки сдачи не загрузились.</div>'; return; }
+
+    /* Время выбором, а не полем <input type="time">: оно рисуется по локали
+       браузера, и у половины команды срок выглядел бы как «05:00 PM». Шаг в
+       полчаса — сроку сдачи точнее не нужно. */
+    function timeIn(period, kind) {
+      var cur = s[period][kind + '_at'];
+      var opts = '';
+      for (var h = 6; h <= 22; h++) {
+        for (var m = 0; m < 60; m += 30) {
+          var v = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+          opts += '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + v + '</option>';
+        }
+      }
+      // Час, выставленный не из этого набора (правили руками), не теряем.
+      if (opts.indexOf('value="' + cur + '"') === -1) {
+        opts = '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' + opts;
+      }
+      return '<select class="al-in sm rh-t" data-f="' + period + '.' + kind + '_at">' + opts + '</select>';
+    }
+    function dayIn(period, kind) {
+      if (period === 'day') return '';
+      var cur = String(s[period][kind + '_day']);
+      var opts = period === 'week'
+        ? RH_WDAY
+        : [['0', 'последний день']].concat([1, 2, 3, 5, 10, 15, 20, 25].map(function (n) {
+            return [String(n), n + ' число'];
+          }));
+      return '<select class="al-in sm rh-d" data-f="' + period + '.' + kind + '_day">' +
+        opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+        }).join('') + '</select>';
+    }
+    box.innerHTML = '<div class="rh-shh">Сроки сдачи</div>' +
+      RH_PERIODS.map(function (o) {
+        var p = o[0];
+        return '<div class="rh-sr' + (s[p].on ? '' : ' off') + '">' +
+          '<span class="rh-sp">' + o[1] + '</span>' +
+          '<span class="rh-sl">план</span>' + dayIn(p, 'plan') + timeIn(p, 'plan') +
+          '<span class="rh-sl">отчет</span>' + dayIn(p, 'report') + timeIn(p, 'report') +
+          '<button class="qchip rh-onoff' + (s[p].on ? ' on' : '') + '" data-on="' + p + '">' +
+            (s[p].on ? 'включен' : 'выключен') + '</button>' +
+        '</div>';
+      }).join('') +
+      '<div class="rh-sf"><span class="rh-hint">Бот напомнит за час до срока и один раз после. ' +
+        'Выключенный период не спрашивают вовсе.</span>' +
+        '<button class="bp sm" id="rh-save">Сохранить сроки</button></div>';
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-on]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = b.getAttribute('data-on');
+        s[p].on = !s[p].on;
+        renderRhSched(s);
+      });
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-f]'), function (i) {
+      i.addEventListener('change', function () {
+        var parts = i.getAttribute('data-f').split('.');
+        s[parts[0]][parts[1]] = parts[1].indexOf('_day') > 0 ? +i.value : i.value;
+      });
+    });
+    el('rh-save').addEventListener('click', function () {
+      api('/admin/api/rhythm/schedule', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedule: s }),
+      }).then(function (r) {
+        state.rhythmSched = (r && r.schedule) || s;
+        state.rhythmTeam = null; state.rhythm = null;
+        showToast('Сроки сохранены');
+        renderView();
+      }).catch(function () { showToast('Не удалось сохранить сроки'); });
+    });
+  }
+
 
   function renderStudentTasks(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
@@ -14021,7 +14518,23 @@
           '<button class="bp ghost sm" id="rm-pub-btn">' + (pub ? 'Снять публикацию' : 'Опубликовать') + '</button>' +
         '</div>' +
       '</div>' +
+      planBlockBanner(id) +
       aiReasonBlock(id);
+  }
+
+  /* Почему план не ушел семье. Показываем не «ошибку», а список того, что чинить:
+     нет ответственного — одна строка, нет сроков — перечень конкретных задач. */
+  function planBlockBanner(id) {
+    var b = state.planBlock[id];
+    if (!b) return '';
+    var list = (b.tasks || []).slice(0, 8).map(function (t) {
+      return '<li>' + esc(t.title || 'задача без названия') + '</li>';
+    }).join('');
+    var more = (b.tasks || []).length > 8 ? '<li>+ еще ' + ((b.tasks || []).length - 8) + '</li>' : '';
+    return '<div class="rm-block">' +
+      '<div class="rm-block-h">' + ic('clock', 13) + esc(b.message || 'План публиковать рано.') + '</div>' +
+      (list ? '<ul class="rm-block-l">' + list + more + '</ul>' : '') +
+    '</div>';
   }
 
   /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
@@ -14372,10 +14885,17 @@
       .then(function (r) {
         // Правда — ответ сервера, не локальный флип: кэш не разъезжается с бэком.
         state.planStatus[id] = { published: !!(r && r.published) };
+        state.planBlock[id] = null;
         showToast(state.planStatus[id].published ? 'План опубликован ученику' : 'Публикация снята');
         rerender();
       })
       .catch(function (e) {
+        // 409 — не сбой сети, а осмысленный отказ: показываем причину и не трогаем статус
+        if (e && e.status === 409) {
+          state.planBlock[id] = (e.body && e.body.detail) || { message: 'План пока публиковать нельзя.' };
+          rerender();
+          return;
+        }
         if (e && e.message !== '403') showToast('Не сохранилось — проверь сеть');
         ensurePlanStatus(id, true); // пересинхронизировать реальный статус с бэка
         rerender();
@@ -16945,6 +17465,19 @@
     var detail = '';
     if (open) {
       var d = '';
+      /* Кто делает и когда. Срок раньше задавался только в момент создания задачи, а
+         исполнителя не было вовсе — поэтому у большинства наших задач срока нет до сих
+         пор. Здесь и то и другое правится в раскрытой задаче. */
+      d += '<div class="rm-dsec"><div class="rm-dh">Кто делает и когда</div>' +
+        '<div class="rm-assign">' +
+          (isClient ? '' : '<span class="al-selwrap"><select class="al-sel rm-a-who">' +
+            personOptions(t.assignee, 'Отвечает ответственный за клиента') + '</select></span>') +
+          '<input type="date" class="rm-a-due" value="' + esc(t.due || '') + '" aria-label="Срок">' +
+        '</div>' +
+        (isClient ? '' : '<div class="rm-ahint">' + (t.due
+          ? 'По этому сроку и спросим.'
+          : 'Без срока задача не считается просроченной — и план не опубликуется.') + '</div>') +
+      '</div>';
       if (t.need) d += '<div class="rm-dsec"><div class="rm-dh">Описание — его видит ученик</div><div class="rm-need">' + esc(t.need) + '</div></div>';
       // пошаговая инструкция и совет — то, что ученик видит в попапе задачи
       var steps = String(t.how_to || '').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -17097,6 +17630,9 @@
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
+    // список сотрудников нужен доске плана (исполнитель задачи) — тянем на
+    // открытии карточки, а не в каждой секции
+    if (!state.assignees) fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
     if (!state.details[id]) fetchDetail(id, function (got) {
       if (state.drawerId !== id) return;
       if (got) renderDrawer(true);
@@ -19181,7 +19717,6 @@
     if (stHost) Array.prototype.forEach.call(stHost.querySelectorAll('[data-s]'), function (b) {
       b.addEventListener('click', function () { var s = b.getAttribute('data-s'); if (s !== crm.status) patch(id, { status: s }); });
     });
-
     // «Пересчитать» в разделе «Диагностика»: расчет мог упасть или быть убит
     // деплоем, и ждать добивщика на бэке менеджеру незачем — человек на связи сейчас.
     var rrn = el('diag-rerun');
@@ -19411,6 +19946,20 @@
               });
             });
           }
+        });
+        // кто делает задачу и когда — пустой исполнитель значит «отвечает куратор клиента»
+        var aWho = tEl.querySelector('.rm-a-who');
+        if (aWho) aWho.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) {
+            if (aWho.value) t.assignee = Number(aWho.value); else delete t.assignee;
+            return t;
+          });
+        });
+        var aDue = tEl.querySelector('.rm-a-due');
+        if (aDue) aDue.addEventListener('change', function (e) {
+          e.stopPropagation();
+          rmUpd(tid, function (t) { t.due = aDue.value || ''; return t; });
         });
         // тип ответа ученика (file/text/both/none) — сохраняется сразу
         Array.prototype.forEach.call(tEl.querySelectorAll('.rm-submit-seg .rm-sub-t'), function (sb) {
