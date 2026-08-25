@@ -152,6 +152,7 @@
     call_reminder_sent: 'напомнили о созвоне',
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
+    hsk_contact: 'оставил телефон после теста HSK',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -219,6 +220,8 @@
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
       spark: '<path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor" stroke="none"/>',
+      mic: '<rect x="7.4" y="2.4" width="5.2" height="9.2" rx="2.6"/><path d="M4.6 9.4a5.4 5.4 0 0 0 10.8 0"/><path d="M10 14.8v2.8"/>',
+      stopsq: '<rect x="5.4" y="5.4" width="9.2" height="9.2" rx="2.2" fill="currentColor" stroke="none"/>',
       copy: '<rect x="7" y="7" width="9.5" height="9.5" rx="2"/><path d="M13 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/>',
       kanban: '<rect x="3" y="3" width="4.2" height="14" rx="1.4"/><rect x="8.4" y="3" width="4.2" height="9" rx="1.4"/><rect x="13.8" y="3" width="4.2" height="6" rx="1.4"/>',
       rows: '<path d="M3 5.5h14M3 10h14M3 14.5h9"/>',
@@ -4985,6 +4988,11 @@
       // иерархии (она верхний уровень и к ней цепляют шаги), поэтому спрашиваем
       // мы в этих двух случаях разное.
       var isGoal = !!preset.goal;
+      // Микрофон показываем, только если браузер реально умеет писать звук:
+      // нужен https и MediaRecorder. Не умеет — форма остается прежней, без
+      // мертвой кнопки, по которой ничего не происходит.
+      var canRecord = !!(window.MediaRecorder && navigator.mediaDevices &&
+                         navigator.mediaDevices.getUserMedia);
       // Направление по умолчанию — то, что открыто фильтром: ставят задачу обычно
       // там же, где на нее смотрели.
       var dept0 = preset.dept || state.taskDept || '';
@@ -5036,14 +5044,25 @@
             // получилось, до того как задача уйдет.
             '<div class="al-ai" id="nt-ai">' +
               '<div class="al-ai-h">' + ic('spark', 13) +
-                (isGoal ? 'Опиши цель словами, я разложу по полям'
-                        : 'Опиши задачу словами, я разложу по полям') + '</div>' +
+                (canRecord
+                  ? (isGoal ? 'Продиктуйте цель или напишите словами'
+                            : 'Продиктуйте задачу или напишите словами')
+                  : (isGoal ? 'Опиши цель словами, я разложу по полям'
+                            : 'Опиши задачу словами, я разложу по полям')) + '</div>' +
               '<textarea id="nt-aitext" class="al-in al-ta" rows="3" maxlength="2000" placeholder="' +
                 (isGoal ? 'Например: к сентябрю набрать 30 учеников, ведет Лиана, это по продажам'
                         : 'Например: Маше сегодня позвонить трем семьям из вчерашних заявок, итог в карточку') +
                 '"></textarea>' +
               '<div class="al-ai-row">' +
-                '<button type="button" class="bp sm" id="nt-aigo">' + ic('spark', 13) + 'Разобрать</button>' +
+                // Голос — первое действие, а не добавка сбоку: задачу ставят на
+                // ходу, и печатать ее целиком в этот момент некому.
+                (canRecord
+                  ? '<button type="button" class="al-mic" id="nt-mic">' +
+                      '<span class="al-mic-dot"></span>' + ic('mic', 14) +
+                      '<span id="nt-miclab">Продиктовать</span></button>'
+                  : '') +
+                '<button type="button" class="bp' + (canRecord ? ' ghost' : '') + ' sm" id="nt-aigo">' +
+                  ic('spark', 13) + 'Разобрать</button>' +
                 '<span class="al-ai-note" id="nt-ainote"></span>' +
               '</div>' +
             '</div>' +
@@ -5099,6 +5118,9 @@
       var closed = false;
       var close = function () {
         if (closed) return; closed = true;
+        // Закрытие формы должно гасить микрофон: браузер держит индикатор записи,
+        // пока дорожку не остановили, даже если окна на экране уже нет.
+        try { ov.dispatchEvent(new Event('al-close')); } catch (e) { /* старый браузер */ }
         ov.classList.remove('show');
         document.removeEventListener('keydown', onKey);
         setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
@@ -5170,6 +5192,103 @@
           aiNote.textContent = 'Помощник не ответил, заполни поля руками';
         });
       });
+
+      /* Диктовка. Браузер пишет webm/opus, сервер переводит его в wav и слушает
+         моделью, потом разбирает тем же кодом, что и набранную фразу. Расшифровка
+         возвращается в поле: человек видит, что именно услышали, и правит словом,
+         а не переделывает всю карточку. */
+      var mic = el('nt-mic');
+      if (mic) {
+        var micLab = el('nt-miclab');
+        var rec = null, chunks = [], stream = null, tick = null, t0 = 0;
+        // Дольше двух минут никто задачу не диктует, а ffmpeg на сервере все
+        // равно режет по трем: лучше остановиться самим и показать текст.
+        var MAX_SEC = 120;
+        var setLab = function (t) { micLab.textContent = t; };
+        var stopTracks = function () {
+          if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+          if (tick) { clearInterval(tick); tick = null; }
+        };
+        var idle = function (note, ask) {
+          mic.classList.remove('rec', 'busy');
+          mic.disabled = false;
+          setLab('Продиктовать');
+          if (note) {
+            aiNote.className = 'al-ai-note' + (ask ? ' ask' : '');
+            aiNote.textContent = note;
+          }
+        };
+        var send = function (blob) {
+          if (!blob || blob.size < 1200) {   // тап по кнопке вместо фразы
+            return idle('Ничего не записалось, скажите чуть дольше', true);
+          }
+          mic.classList.remove('rec');
+          mic.classList.add('busy');
+          mic.disabled = true;
+          setLab('Слушаю...');
+          aiNote.className = 'al-ai-note';
+          aiNote.textContent = 'Разбираю запись...';
+          var fr = new FileReader();
+          fr.onerror = function () { idle('Запись не прочиталась, попробуйте еще раз', true); };
+          fr.onload = function () {
+            apiSend('/admin/api/tasks/voice', 'POST',
+                    { data: String(fr.result), goal: isGoal }, function (r) {
+              idle();
+              if (r && r.text) aiText.value = r.text;
+              if (r && r.draft && r.draft.title) applyDraft(r);
+              else {
+                aiNote.className = 'al-ai-note ask';
+                aiNote.textContent = (r && r.note) || 'Записал, проверьте поля';
+              }
+            }, function (code) {
+              idle(code === 413 ? 'Запись длинновата, скажите короче'
+                   : code === 503 ? 'Не разобрал запись, скажите еще раз или наберите текстом'
+                   : 'Запись не дошла, проверьте сеть', true);
+            });
+          };
+          fr.readAsDataURL(blob);
+        };
+        var start = function () {
+          navigator.mediaDevices.getUserMedia({ audio: true }).then(function (st) {
+            stream = st;
+            chunks = [];
+            try { rec = new MediaRecorder(st); } catch (e) { rec = null; }
+            if (!rec) { stopTracks(); return idle('Браузер не умеет писать звук, наберите текстом', true); }
+            rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+            rec.onstop = function () {
+              var type = (chunks[0] && chunks[0].type) || 'audio/webm';
+              var blob = chunks.length ? new Blob(chunks, { type: type }) : null;
+              stopTracks();
+              send(blob);
+            };
+            rec.start();
+            t0 = Date.now();
+            mic.classList.add('rec');
+            aiNote.className = 'al-ai-note';
+            aiNote.textContent = 'Говорите так, как сказали бы коллеге. Нажмите еще раз, когда закончите.';
+            setLab('Стоп 0:00');
+            tick = setInterval(function () {
+              var sec = Math.round((Date.now() - t0) / 1000);
+              setLab('Стоп ' + Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2));
+              if (sec >= MAX_SEC && rec && rec.state !== 'inactive') rec.stop();
+            }, 500);
+          }).catch(function () {
+            // Запрет микрофона — единственный случай, когда человек должен что-то
+            // сделать сам, поэтому говорим прямо, где это чинится.
+            idle('Браузер не дал доступ к микрофону, разрешите его в адресной строке', true);
+          });
+        };
+        mic.addEventListener('click', function () {
+          if (mic.classList.contains('busy')) return;
+          if (rec && rec.state === 'recording') { rec.stop(); return; }
+          start();
+        });
+        // Закрыли форму на записи — микрофон должен погаснуть вместе с ней.
+        ov.addEventListener('al-close', function () {
+          if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* уже стоит */ } }
+          stopTracks();
+        });
+      }
 
       var save = el('nt-save');
       save.addEventListener('click', function () {

@@ -1941,6 +1941,25 @@ a { color: inherit; text-decoration: none; }
 .al-ai-row .bp.loading { opacity: .6; pointer-events: none; }
 .al-ai-note { font-size: 11.5px; line-height: 1.4; color: var(--ink-2); }
 .al-ai-note.ask { color: var(--navy); font-weight: 600; }
+/* Микрофон — главное действие блока: задачу чаще диктуют на ходу, чем печатают.
+   Пока идет запись, кнопка сама становится счетчиком и красной точкой: другого
+   признака, что тебя слышат, у человека нет. */
+.al-mic { display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 36px; padding: 0 15px; border: 0; border-radius: var(--r-pill);
+  font: 700 12.5px 'Manrope', sans-serif; color: #fff; background: var(--navy);
+  cursor: pointer; transition: background .15s var(--ease), transform .12s var(--ease); }
+.al-mic:hover { background: #142138; }
+.al-mic:active { transform: scale(.98); }
+.al-mic svg { color: currentColor; }
+.al-mic-dot { display: none; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+.al-mic.rec { background: var(--red); font-feature-settings: 'tnum'; }
+.al-mic.rec:hover { background: var(--red-ink); }
+.al-mic.rec svg { display: none; }
+.al-mic.rec .al-mic-dot { display: block; animation: micPulse 1.1s var(--ease) infinite; }
+.al-mic.busy { background: var(--ink-3); pointer-events: none; }
+@keyframes micPulse { 0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.72); } }
+@media (prefers-reduced-motion: reduce) { .al-mic.rec .al-mic-dot { animation: none; } }
 .al-selwrap { position: relative; display: block; }
 .al-sel { width: 100%; appearance: none; -webkit-appearance: none; font: 500 14px 'Manrope', sans-serif;
   color: var(--ink); background: var(--fill); border: 0; border-radius: 11px; padding: 11px 34px 11px 13px;
