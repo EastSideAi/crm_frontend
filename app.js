@@ -278,6 +278,7 @@
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
       tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
       pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
+      compass: '<circle cx="10" cy="10" r="7.2"/><path d="M12.8 7.2 8.9 8.9 7.2 12.8l3.9-1.7 1.7-3.9z" fill="currentColor" stroke="none"/>',
       lock: '<rect x="4" y="8.5" width="12" height="8.5" rx="2.2"/><path d="M7 8.5V6.4a3 3 0 0 1 6 0v2.1"/>',
     };
     var s = size || 18;
@@ -2074,6 +2075,10 @@
        чужая работа и своя собственная лежали в одном меню вперемешку, и кабинет там
        терялся. У кого есть только кабинет, переключателя не видно вовсе — для него
        это по-прежнему единственное меню. */
+    /* Обучение сотрудника. Последним в списке и с cap dash: это не ежедневный
+       раздел, но открыт всем, у кого вообще есть CRM. Пока курс не пройден, в
+       меню горит счетчик оставшихся шагов — иначе обучение не открывает никто. */
+    { id: 'guide', label: 'Как работать', icon: 'compass', cap: 'dash' },
     { id: 'mywork', label: 'Главная', icon: 'dash', cap: 'mywork', space: 'mw' },
     { id: 'mwnotif', label: 'Уведомления', icon: 'bell', cap: 'mywork', space: 'mw' },
     { id: 'mwtasks', label: 'Задания', icon: 'task', cap: 'mywork', space: 'mw' },
@@ -2211,6 +2216,8 @@
         else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
           extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
+        else if (it.id === 'guide' && guideLeft())
+          extra = '<span class="cnt num" title="шагов осталось">' + guideLeft() + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
@@ -2322,6 +2329,9 @@
     renderAll();
     if (p === 'finance') fetchFinance(false, function () { if (state.page === 'finance') { renderHead(); renderView(); } });
     if (p === 'tasks') { state.tasks = null; loadTaskSummary(); }
+    // Заходим в обучение — открываем первый непройденный шаг, а не тот, на котором
+    // человек закрыл вкладку неделю назад.
+    if (p === 'guide') { state.guideStep = null; guideLoad(); }
     window.scrollTo(0, 0);
     var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
@@ -2984,6 +2994,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
+    else if (state.page === 'guide') renderGuide(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
@@ -3025,6 +3036,362 @@
       '<div class="stub-t">' + (page === 'path' ? 'Путь по платформе' : 'Воронка по клиентам') + '</div>' +
       '<div class="stub-s">Считается по карточкам клиентов, а твоей роли они закрыты — поэтому цифр тут нет. ' +
       'Нужен доступ, скажи руководителю.</div></div>';
+  }
+
+  /* ── КАК РАБОТАТЬ (обучение сотрудника) ────────────────────────────────────
+     Курс живет внутри системы, а не в документе: команда нетехническая, и до сих
+     пор «как тут работать» объясняли голосовыми. Один шаг на экран, слева
+     маршрут, прогресс лежит на сервере (routers/crm_guide.py) — человек начинает
+     с компьютера и продолжает с телефона.
+
+     Какие шаги показывать, решает сервер: набор зависит от доступов роли, и
+     собирать его на фронте значило бы держать вторую копию правила. Здесь только
+     тексты и картинки: это верстка, серверу она не нужна.
+
+     Картинки — схемы, а не скриншоты. На настоящих экранах CRM видны фамилии
+     детей, а обучение открыто всей команде, включая подрядчиков. */
+
+  /* Схема окна CRM. Не скриншот и не скелетон: маркеры с цифрами показывают места,
+     а легенда под схемой называет их словами. Абстрактный «макет из плашек» тут уже
+     пробовали — он читается как загрузка, а не как объяснение.
+
+     nav — индекс пункта меню, который подсвечен (−1 если подсветка не нужна),
+     label — подпись к нему, marks — [[x, y, «что это»], ...] нумерованные точки. */
+  function gdWin(nav, label, marks) {
+    var items = '';
+    for (var i = 0; i < 5; i++) {
+      var on = i === nav;
+      items += '<rect x="13" y="' + (38 + i * 15) + '" width="58" height="10" rx="3.5" ' +
+        'class="' + (on ? 'gw-on' : 'gw-it') + '"/>';
+    }
+    var rows = '';
+    var w = [206, 176, 196, 150];
+    for (var j = 0; j < 4; j++) {
+      rows += '<rect x="98" y="' + (46 + j * 20) + '" width="' + w[j] + '" height="12" rx="4" ' +
+        'class="' + (j === 1 ? 'gw-row-on' : 'gw-row') + '"/>';
+    }
+    var dots = (marks || []).map(function (m, i) {
+      return '<circle cx="' + m[0] + '" cy="' + m[1] + '" r="8" class="gw-dot"/>' +
+        '<text x="' + m[0] + '" y="' + (m[1] + 3.4) + '" class="gw-dn">' + (i + 1) + '</text>';
+    }).join('');
+    var legend = (marks || []).length
+      ? '<div class="gd-leg">' + marks.map(function (m, i) {
+          return '<span><i>' + (i + 1) + '</i>' + esc(m[2]) + '</span>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="gd-art"><svg viewBox="0 0 320 132" role="img" aria-label="Схема экрана CRM">' +
+      '<rect x="1" y="1" width="318" height="130" rx="12" class="gw-app"/>' +
+      '<path d="M84 1v130" class="gw-div"/>' +
+      '<rect x="13" y="13" width="30" height="9" rx="4.5" class="gw-logo"/>' +
+      '<circle cx="304" cy="19" r="7" class="gw-ava"/>' +
+      '<path d="M98 15h120" class="gw-top"/>' +
+      items + rows +
+      (nav >= 0 ? '<path d="M76 ' + (43 + nav * 15) + ' h14" class="gw-ptr"/>' +
+        '<text x="94" y="' + (46 + nav * 15) + '" class="gw-lb">' + esc(label || '') + '</text>' : '') +
+      dots +
+      '</svg>' + legend + '</div>';
+  }
+
+  var GD = {
+    start: {
+      lead: 'CRM — это общий рабочий стол команды. Тут лежит все, что мы знаем про учеников и заявки, ' +
+        'и тут же стоят задачи. Правило одно: если работа не записана здесь, ее как будто не было.',
+      art: function () { return gdWin(-1, '', [[42, 68, 'меню разделов'], [196, 66, 'то, что вы открыли'], [304, 19, 'ваш профиль и выход']]); },
+      dos: [
+        'Слева — меню. Это разделы: задачи, люди, ученики. У каждого свой набор, вам открыто только то, что нужно для вашей работы.',
+        'В центре — то, что вы открыли. Сверху — поиск и ваш профиль.',
+        'Ничего сломать нельзя. Все, что вы меняете, записывается в историю с вашим именем, а удалять важное система просто не дает.',
+      ],
+      tip: 'Заблудились — жмите первый пункт меню. Это всегда возврат к началу.',
+    },
+    login: {
+      lead: 'CRM открывается в браузере, ставить ничего не нужно. Логин и пароль личные: под чужими заходить нельзя, ' +
+        'иначе в истории будет чужое имя.',
+      dos: [
+        'Адрес: crm.истсайд.рф. Сохраните его в закладки на компьютере и на телефон на главный экран.',
+        'Если страница пишет «сеть недоступна» — откройте запасной адрес crm.eastside.study. Это та же система, просто другой адрес.',
+        'Забыли пароль — на экране входа «Забыли пароль». Придет код на вашу рабочую почту. Никто другой пароль вам не поменяет.',
+      ],
+      tip: 'Телефон работает так же, как компьютер: те же разделы, просто уже. Ничего отдельного ставить не надо.',
+    },
+    notify: {
+      lead: 'Задачи, заявки и напоминания приходят в мессенджер. Пока вы не нажали боту «Начать», он не может вам написать — ' +
+        'это правило самого телеграма, а не наша настройка. Поэтому шаг делаем прямо сейчас.',
+      dos: [
+        'Выберите мессенджер ниже.',
+        'Нажмите «Открыть» — откроется бот с вашей личной ссылкой.',
+        'В боте нажмите «Начать». Вернитесь сюда: галочка появится сама.',
+      ],
+      tip: 'Ссылка личная, как пароль. Не пересылайте ее коллегам — уведомления уйдут не тому.',
+      live: 'notify',
+    },
+    tasks: {
+      lead: 'Задача — это работа с исполнителем, сроком и понятным «что считается сделанным». ' +
+        'Ваши задачи лежат в разделе «Задачи», и туда же приходит все, что вам поручают.',
+      art: function () { return gdWin(1, 'Задачи', []); },
+      dos: [
+        'Вкладка «Сегодня» — то, что нужно сделать сегодня. С нее и начинайте день.',
+        'Открыли задачу — нажмите «Взял в работу». Так руководитель видит, что она не висит.',
+        'Сделали — «Сдать». Задачу принимает тот, кто ее поставил, и до приемки она не считается сделанной.',
+        'Что-то мешает — не молчите: напишите комментарий в задаче или поставьте «Заблокирована» с причиной.',
+      ],
+      tip: 'Задачу себе может поставить и сам человек. Если о чем-то договорились в чате — заведите задачу, иначе она потеряется.',
+    },
+    prio: {
+      lead: 'В задачах два разных вопроса: когда это нужно и насколько это важно. ' +
+        'Срочность система считает сама по сроку, а важность отмечаете вы.',
+      art: function () {
+        return '<div class="gd-art gd-art-eis"><div class="gd-eis">' +
+          '<div class="gd-eq gd-eq-a"><b>Срочно и важно</b><span>делать сейчас</span></div>' +
+          '<div class="gd-eq"><b>Важно, не срочно</b><span>выделить время</span></div>' +
+          '<div class="gd-eq"><b>Срочно, не важно</b><span>быстро или передать</span></div>' +
+          '<div class="gd-eq"><b>Ни то, ни другое</b><span>кандидат на «не делать»</span></div>' +
+          '</div></div>';
+      },
+      dos: [
+        'Срок сегодня или раньше — задача считается срочной. Сама, отмечать не надо.',
+        'Важная — та, от которой зависит результат: ученик, деньги, обещание клиенту. Отмечайте молнией в карточке или галочкой при постановке.',
+        'На вкладке «Все мои» есть вид «Матрица» — те же задачи, разложенные по четырем квадратам.',
+        'Начинайте с квадрата «Срочно и важно». Если он пустой — берите из «Важно, не срочно», это и есть работа на результат.',
+      ],
+      tip: 'Если важным помечено все, важного нет. Держите в этом квадрате две-три задачи, не двадцать.',
+    },
+    day: {
+      lead: 'Каждый день одинаковый и короткий ритуал. Пятнадцать минут в сумме, зато никто ничего не теряет.',
+      art: function () { return gdWin(1, 'Задачи', []); },
+      dos: [
+        'Утром бот пришлет список на день. Откройте «Сегодня» и посмотрите, что горит.',
+        'Взяли задачу в работу — отметьте это, чтобы не спрашивали «ты делаешь или нет».',
+        'Сделали — сдайте сразу, а не в конце недели. Приемка тоже занимает время.',
+        'Вечером бот спросит, как день. Ответьте одной строкой: это и есть отчет, отдельных таблиц не нужно.',
+      ],
+      tip: 'Не успеваете к сроку — перенесите его заранее и напишите причину. Молчаливая просрочка хуже переноса.',
+    },
+    students: {
+      lead: 'Раздел «Обучение» — ваши ученики: кто на каком этапе, что сдал, где застрял. ' +
+        'Это карточки живых детей, поэтому работает правило: смотрим только своих и не пересылаем данные наружу.',
+      art: function () { return gdWin(3, 'Обучение', []); },
+      dos: [
+        'Откройте карточку ученика — внутри его путь, занятия и задачи по нему.',
+        'Все договоренности с семьей записывайте в карточку, а не в личный чат. Уйдете в отпуск — заменяющий увидит.',
+        'Задачу по ученику ставьте из его карточки: она свяжется с ним и попадет в общую картину.',
+      ],
+      tip: 'Данные детей нельзя выносить в личные переписки и таблицы. Это не бюрократия, за это штрафуют компанию.',
+    },
+    clients: {
+      lead: 'Раздел «Люди» — все, кто к нам обратился. Карточка человека это его история: откуда пришел, ' +
+        'что спрашивал, что решили, что дальше.',
+      art: function () { return gdWin(2, 'Люди', []); },
+      dos: [
+        'Взяли человека в работу — нажмите «Беру». Тогда видно, что он не ничей.',
+        'После каждого разговора — короткая запись в карточке: о чем договорились и когда следующий шаг.',
+        'Следующий шаг оформляйте задачей со сроком. Без нее человек забывается через два дня.',
+      ],
+      tip: 'Пустая карточка без ответственного — это потерянный клиент. Половина заявок теряется именно так.',
+    },
+    inbox: {
+      lead: 'Раздел «Диалоги» — переписки клиентов с ботом и обсуждения внутри команды. Сюда попадает человек, ' +
+        'который попросил живого специалиста.',
+      art: function () { return gdWin(2, 'Диалоги', []); },
+      dos: [
+        'Красная отметка — человек ждет ответа. Это главное, на что смотрят в этом разделе.',
+        'Ответили — отметка снимается сама.',
+        'Долгие вопросы не решайте в переписке: заведите задачу, иначе договоренность останется в чате.',
+      ],
+      tip: 'Скорость ответа мы считаем. Первые пятнадцать минут решают, останется человек с нами или уйдет.',
+    },
+    team: {
+      lead: 'У вас есть доступ к задачам всей команды. Это не слежка, а ответ на два вопроса: ' +
+        'кто чем занят и где встало.',
+      art: function () { return gdWin(1, 'Задачи', []); },
+      dos: [
+        'Вкладка «Команда» — задачи по людям. Пустая строка у человека значит, что работа не заведена, а не что ее нет.',
+        'Вкладка «Готово» — что сделано за период. Оттуда же можно снять задачу с готово, если приняли ошибочно.',
+        'Просрочка красным. Разбирайте ее раз в неделю, иначе задачник превращается в кладбище.',
+      ],
+      tip: 'Переносить чужие сроки может только руководитель. Так просрочка остается честной.',
+    },
+  };
+
+  function guideLoad(cb) {
+    api('/admin/api/guide').then(function (r) {
+      state.guide = r; if (cb) cb(r);
+      renderSide();
+    }).catch(function () { state.guide = null; if (cb) cb(null); });
+  }
+  /* Сколько шагов осталось — для точки в меню. Пока курс не пройден, человек должен
+     видеть его из любого раздела, иначе обучение начинают ровно ноль раз. */
+  function guideLeft() {
+    var g = state.guide;
+    return g ? Math.max(0, (g.total || 0) - (g.done || 0)) : 0;
+  }
+
+  function renderGuide(view) {
+    if (!state.guide) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return guideLoad(function () { if (state.page === 'guide') renderGuide(view); });
+    }
+    var g = state.guide, steps = g.steps || [];
+    if (!steps.length) {
+      view.innerHTML = '<div class="card"><div class="empty">Обучение недоступно: у вашей учетки нет разделов.</div></div>';
+      return;
+    }
+    // Открытый шаг: первый непройденный, если человек не выбрал другой сам.
+    if (state.guideStep == null) {
+      var first = 0;
+      for (var i = 0; i < steps.length; i++) if (!steps[i].done) { first = i; break; }
+      if (g.finished) first = -1;   // прошел целиком — показываем финал, а не последний шаг
+      state.guideStep = first;
+    }
+    var idx = state.guideStep;
+    var route = '<div class="gd-side">' +
+      '<div class="gd-cap">Обучение</div>' +
+      '<div class="gd-prog"><div class="gd-bar"><i style="width:' +
+        Math.round((g.done / Math.max(1, g.total)) * 100) + '%"></i></div>' +
+        '<div class="gd-prog-n"><b class="num">' + g.done + '</b> из <b class="num">' + g.total + '</b></div></div>' +
+      '<nav class="gd-route">' + steps.map(function (s, i) {
+        return '<button class="gd-r' + (i === idx ? ' on' : '') + (s.done ? ' done' : '') + '" data-i="' + i + '">' +
+          '<i class="gd-n">' + (s.done ? ic('check', 11) : (i + 1)) + '</i>' + esc(s.title) + '</button>';
+      }).join('') + '</nav>' +
+      (g.done ? '<button class="gd-reset" id="gd-reset">' + ic('refresh', 12) + 'Пройти заново</button>' : '') +
+      '</div>';
+
+    view.innerHTML = '<div class="gd">' + route + '<section class="gd-main" id="gd-main"></section></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.gd-r'), function (b) {
+      b.addEventListener('click', function () {
+        state.guideStep = parseInt(b.getAttribute('data-i'), 10);
+        renderGuide(view);
+      });
+    });
+    /* На телефоне маршрут — горизонтальная лента, и открытый шаг легко оказывается
+       за краем. Подводим его сами, как это делает таббар: scrollIntoView тут нельзя,
+       он дергает всю страницу. */
+    var rt = view.querySelector('.gd-route'), onR = view.querySelector('.gd-r.on');
+    if (rt && onR && rt.scrollWidth > rt.clientWidth) {
+      rt.scrollLeft = Math.max(0, onR.offsetLeft - (rt.clientWidth - onR.offsetWidth) / 2);
+    }
+    var rs = el('gd-reset');
+    if (rs) rs.addEventListener('click', function () {
+      apiSend('/admin/api/guide/reset', 'POST', null, function (r) {
+        state.guide = r; state.guideStep = 0;
+        showToast('Обучение сброшено — можно пройти заново');
+        renderGuide(view); renderSide();
+      });
+    });
+    gdBody(view, idx);
+  }
+
+  /* Тело шага. Отдельной функцией, потому что перерисовывается само по себе:
+     живой блок уведомлений обновляется, не трогая маршрут слева. */
+  function gdBody(view, idx) {
+    var box = el('gd-main');
+    if (!box) return;
+    var g = state.guide, steps = g.steps || [];
+    if (idx < 0 || idx >= steps.length) {
+      box.innerHTML =
+        '<div class="gd-fin">' +
+          '<div class="gd-fin-ic">' + ic('check', 26) + '</div>' +
+          '<h2 class="gd-t">Готово, обучение пройдено</h2>' +
+          '<p class="gd-lead">Дальше все просто: утром смотрите «Сегодня», работу отмечайте в задачах, ' +
+            'договоренности пишите в карточки. Забудете что-то — вернитесь сюда, курс никуда не денется.</p>' +
+          '<div class="gd-fin-a"><button class="bp" id="gd-go">Перейти к задачам</button>' +
+          '<button class="al-cancel" id="gd-again">' + ic('refresh', 12) + 'Пройти заново</button></div>' +
+        '</div>';
+      el('gd-go').addEventListener('click', function () { setPage('tasks'); });
+      el('gd-again').addEventListener('click', function () {
+        apiSend('/admin/api/guide/reset', 'POST', null, function (r) {
+          state.guide = r; state.guideStep = 0; renderGuide(view); renderSide();
+        });
+      });
+      return;
+    }
+    var s = steps[idx], c = GD[s.id] || { lead: '', dos: [], art: function () { return ''; } };
+    var last = idx === steps.length - 1;
+    box.innerHTML =
+      '<article class="gd-step">' +
+        '<div class="gd-eyebrow">Шаг ' + (idx + 1) + ' из ' + steps.length + (s.done ? ' · пройден' : '') + '</div>' +
+        '<h2 class="gd-t">' + esc(s.title) + '</h2>' +
+        '<p class="gd-lead">' + esc(c.lead) + '</p>' +
+        (c.art ? c.art() : '') +
+        (c.dos && c.dos.length
+          ? '<ol class="gd-do">' + c.dos.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ol>'
+          : '') +
+        (c.live === 'notify' ? '<div class="gd-live" id="gd-live"></div>' : '') +
+        (c.tip ? '<div class="gd-tip">' + ic('spark', 13) + '<span>' + esc(c.tip) + '</span></div>' : '') +
+      '</article>' +
+      '<div class="gd-foot">' +
+        (idx > 0 ? '<button class="al-cancel" id="gd-prev">Назад</button>' : '<span></span>') +
+        '<button class="bp" id="gd-next">' + (last ? 'Все, я готов работать' : 'Понятно, дальше') + '</button>' +
+      '</div>';
+    var pv = el('gd-prev');
+    if (pv) pv.addEventListener('click', function () { state.guideStep = idx - 1; renderGuide(view); });
+    el('gd-next').addEventListener('click', function () {
+      apiSend('/admin/api/guide/step/' + s.id, 'POST', null, function (r) {
+        state.guide = r;
+        state.guideStep = last ? -1 : idx + 1;
+        renderGuide(view); renderSide();
+      });
+    });
+    if (c.live === 'notify') gdNotify();
+  }
+
+  /* Живой блок «подключите себе бота» внутри шага. Логика та же, что в окне
+     «Куда вам писать» (openNotifyPrefs): выбрал канал — нажал у бота «Начать».
+     Дублируем не код, а место: в обучении человек делает это первый раз в жизни,
+     и отправлять его за настройкой в другое окно значит потерять половину людей. */
+  function gdNotify() {
+    var box = el('gd-live');
+    if (!box) return;
+    box.innerHTML = '<div class="np-skel shim"></div>';
+    var draw = function (st) {
+      var ch = (st && st.channel) || 'off';
+      var linked = (st && st.linked) || {}, links = (st && st.links) || {};
+      var chans = notifyChans(ch);
+      var need = chans.filter(function (c) { return !linked[c]; });
+      var status = !chans.length
+        ? '<div class="gd-st gd-st-off">' + ic('bell', 13) + 'Пока вам не пишут никуда. Выберите мессенджер выше.</div>'
+        : !need.length
+          ? '<div class="gd-st gd-st-ok">' + ic('check', 13) + 'Подключено. Уведомления идут в ' +
+              esc(chans.map(function (c) { return notifyMeta(c).label; }).join(' и ')) + '.</div>'
+          : '<div class="gd-st gd-st-wait">' + ic('clock', 13) + 'Осталось нажать «Начать» у бота — до этого сообщения не дойдут.</div>';
+      var acts = need.map(function (c) {
+        var m = notifyMeta(c);
+        return links[c]
+          ? '<a class="bp gd-open" href="' + esc(links[c]) + '" target="_blank" rel="noopener">' +
+              ic('ext', 14) + 'Открыть ' + esc(m.label) + '</a>'
+          : '<span class="gd-hint">Ссылка появится, когда админ подключит бота ' + esc(m.label) + '.</span>';
+      }).join('');
+      box.innerHTML =
+        '<div class="gd-live-t">Ваш мессенджер</div>' +
+        '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (x) {
+          return '<button data-ch="' + x.id + '"' + (x.id === ch ? ' class="on"' : '') + '>' +
+            ic(x.icon, 13) + esc(x.label) + '</button>';
+        }).join('') + '</div>' +
+        status + (acts ? '<div class="gd-live-a">' + acts +
+          '<button class="al-cancel" id="gd-recheck">' + ic('refresh', 12) + 'Я нажал, проверить</button></div>' : '');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ch]'), function (b) {
+        b.addEventListener('click', function () {
+          var next = b.getAttribute('data-ch');
+          if (next === ch) return;
+          box.classList.add('np-wait');
+          apiSend('/admin/api/me/notify', 'PUT', { channel: next }, function (r) {
+            box.classList.remove('np-wait'); draw(r);
+          });
+        });
+      });
+      var rc = el('gd-recheck');
+      if (rc) rc.addEventListener('click', function () {
+        api('/admin/api/me/notify').then(function (r) {
+          draw(r);
+          showToast(notifyChans((r && r.channel) || 'off').every(function (c) { return (r.linked || {})[c]; })
+            ? 'Готово, бот вас узнал' : 'Пока нет — нажмите у бота «Начать»');
+        }).catch(function () { showToast('Не удалось проверить — попробуйте еще раз'); });
+      });
+    };
+    api('/admin/api/me/notify').then(draw).catch(function () {
+      box.innerHTML = '<div class="gd-hint">Не удалось открыть настройки уведомлений. ' +
+        'Если вы вошли по общей ссылке, зайдите под своим логином — уведомления личные.</div>';
+    });
   }
 
   function renderStub(view) {
@@ -12713,6 +13080,8 @@
       '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
       '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
+      '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
+        ic('compass', 13) + '<span>Обучение всем</span></button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
@@ -12757,6 +13126,34 @@
     });
     var tgb = el('tm-tg');
     if (tgb) tgb.addEventListener('click', openBotLinks);
+    /* «Обучение всем» — задача каждому, кто заведен раньше курса. Новым она приходит
+       вместе с учеткой, эта кнопка нужна ровно один раз, но команде из двадцати
+       человек прилетят уведомления, поэтому спрашиваем второй раз прямо на кнопке:
+       ради одного действия заводить модалку незачем. */
+    var gdb = el('tm-guide');
+    if (gdb) gdb.addEventListener('click', function () {
+      if (!gdb.classList.contains('on')) {
+        gdb.classList.add('on');
+        gdb.querySelector('span').textContent = 'Точно? Нажмите еще раз';
+        setTimeout(function () {
+          if (!gdb.parentNode) return;
+          gdb.classList.remove('on');
+          gdb.querySelector('span').textContent = 'Обучение всем';
+        }, 5000);
+        return;
+      }
+      gdb.disabled = true;
+      apiSend('/admin/api/guide/assign', 'POST', {}, function (r) {
+        gdb.disabled = false; gdb.classList.remove('on');
+        gdb.querySelector('span').textContent = 'Обучение всем';
+        showToast(r && r.created
+          ? 'Задача на обучение поставлена: ' + r.created + ' ' + plural(r.created, 'человеку', 'людям', 'людям')
+          : 'Задача уже стоит у всех, кому нужна');
+      }, function () {
+        gdb.disabled = false;
+        showToast('Не удалось поставить — попробуйте еще раз');
+      });
+    });
     var shb = el('tm-shared');
     if (shb) shb.addEventListener('click', function () {
       var next = !(state._teamShared !== false);
@@ -22041,6 +22438,8 @@
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // счетчик задач нужен бейджу в меню сразу, до открытия раздела
     loadTaskSummary();
+    // и прогресс обучения — пока курс не пройден, счетчик шагов висит в меню
+    guideLoad();
     if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
     else if (hashPageId()) openPageFromHash();

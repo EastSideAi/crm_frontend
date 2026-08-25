@@ -6169,3 +6169,157 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pr-grid .pr-ch, .pr-grid .pr-hch { display: none; }
   .pr-take { padding: 7px 10px; }
 }
+
+/* ════ КАК РАБОТАТЬ — обучение сотрудника ════════════════════════════════════
+   Один шаг на экран, слева маршрут. Экран читают один раз в жизни и потом
+   изредка перечитывают, поэтому здесь плотность уступает ясности: строка текста
+   шире обычной админской, воздуха между блоками больше. Это единственное место
+   CRM, где так, и это осознанно.
+
+   Картинки шага — схемы окна (см. gdWin в app.js), а не скриншоты: на настоящих
+   экранах видны фамилии детей, а курс открыт всей команде. Цвета схем — те же
+   токены, что у интерфейса, чтобы человек узнавал то, что видит вокруг. */
+.gd { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 20px; align-items: start; }
+.gd-side { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  padding: 18px 14px 14px; position: sticky; top: 14px; }
+.gd-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding: 0 8px; }
+.gd-prog { padding: 12px 8px 14px; }
+.gd-bar { height: 6px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
+.gd-bar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--blue);
+  transition: width .9s var(--ease); }
+.gd-prog-n { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.gd-prog-n b { color: var(--ink); font-weight: 700; }
+.gd-route { display: flex; flex-direction: column; gap: 2px; }
+.gd-r { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 8px;
+  border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink-2);
+  text-align: left; transition: .12s var(--ease); }
+.gd-r:hover { background: var(--fill); color: var(--ink); }
+.gd-r.on { background: var(--blue-tint); color: var(--blue); font-weight: 600; }
+.gd-n { display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 21px; height: 21px; border-radius: 50%; background: var(--fill); color: var(--ink-3);
+  font-size: 11px; font-weight: 700; }
+.gd-r.on .gd-n { background: var(--blue); color: #fff; }
+.gd-r.done .gd-n { background: var(--green-soft); color: var(--green-ink); }
+.gd-r.done { color: var(--ink); }
+.gd-reset { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 12px;
+  padding: 10px 8px; border-top: 1px solid var(--line); font-size: 12.5px; font-weight: 500;
+  color: var(--ink-3); transition: .12s; }
+.gd-reset:hover { color: var(--blue); }
+
+.gd-main { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  overflow: hidden; }
+.gd-step { padding: 30px 34px 26px; max-width: 720px; }
+.gd-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.gd-t { margin: 10px 0 0; font-size: 27px; font-weight: 700; letter-spacing: -.03em;
+  line-height: 1.2; text-wrap: balance; }
+.gd-lead { margin: 12px 0 0; font-size: 15.5px; line-height: 1.62; color: var(--ink-2); }
+
+/* Схема окна CRM. Рамка — не декор: она отделяет «нарисованное» от настоящего
+   интерфейса вокруг, иначе человек пробует нажать на картинку. */
+.gd-art { margin: 22px 0 0; padding: 16px; background: var(--fill); border: 1px solid var(--line);
+  border-radius: 14px; max-width: 520px; }
+.gd-art svg { display: block; width: 100%; height: auto; }
+.gw-app { fill: var(--card); stroke: var(--line-2); }
+.gw-side { fill: var(--fill); stroke: none; }
+.gw-logo { fill: var(--ink-3); opacity: .45; }
+.gw-it { fill: #E4E6EC; }
+.gw-on { fill: var(--blue-tint); stroke: var(--blue); stroke-width: 1.2; }
+.gw-row { fill: var(--fill); }
+.gw-row-on { fill: var(--blue-tint); }
+.gw-ptr { stroke: var(--blue); stroke-width: 1.1; stroke-dasharray: 3 3; }
+.gw-lb { fill: var(--blue); font: 700 9px 'Manrope', sans-serif; letter-spacing: .02em; }
+.gw-div { stroke: var(--line-2); stroke-width: 1; }
+.gw-top { stroke: var(--line); stroke-width: 6; stroke-linecap: round; }
+.gw-ava { fill: var(--navy); }
+.gw-dot { fill: var(--blue); }
+.gw-dn { fill: #fff; font: 700 9px 'Manrope', sans-serif; text-anchor: middle; }
+/* Легенда схемы: цифра на картинке и слово под ней — иначе схема остается
+   красивым набором плашек, из которого человек ничего не узнает. */
+.gd-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
+.gd-leg span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 500; color: var(--ink-2); }
+.gd-leg i { display: inline-flex; align-items: center; justify-content: center; width: 17px;
+  height: 17px; border-radius: 50%; background: var(--blue); color: #fff; font-style: normal;
+  font-size: 10px; font-weight: 700; }
+
+/* Матрица в шаге про важность — та же сетка, что на настоящем экране задач. */
+.gd-art-eis { padding: 14px; }
+.gd-eis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gd-eq { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 13px; }
+.gd-eq b { display: block; font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
+.gd-eq span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+.gd-eq-a { background: var(--amber-soft); border-color: #EFDCBB; }
+.gd-eq-a b { color: var(--amber-ink); }
+.gd-eq-a span { color: var(--amber-ink); opacity: .8; }
+
+.gd-do { margin: 22px 0 0; padding: 0; list-style: none; counter-reset: gd; }
+.gd-do li { counter-increment: gd; position: relative; padding: 0 0 0 34px; font-size: 14.5px;
+  line-height: 1.6; color: var(--ink); }
+.gd-do li + li { margin-top: 14px; }
+.gd-do li::before { content: counter(gd); position: absolute; left: 0; top: 1px;
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--blue-tint); color: var(--blue);
+  font-size: 11.5px; font-weight: 700; }
+
+.gd-tip { display: flex; align-items: flex-start; gap: 9px; margin: 24px 0 0; padding: 14px 16px;
+  background: var(--blue-tint); border: 1px solid #DCE7FF; border-radius: 14px;
+  font-size: 13.5px; line-height: 1.55; color: var(--navy); }
+.gd-tip svg { flex: none; margin-top: 2px; color: var(--blue); }
+
+/* Живой блок шага «Уведомления»: настройка делается здесь, а не в другом окне. */
+.gd-live { margin: 24px 0 0; padding: 16px; border: 1px solid var(--line-2); border-radius: 14px; }
+.gd-live.np-wait { opacity: .55; pointer-events: none; }
+.gd-live-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 10px; }
+.gd-live .np-seg { margin-bottom: 12px; }
+.gd-st { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  font-size: 13px; font-weight: 500; }
+.gd-st-ok { background: var(--green-soft); color: var(--green-ink); }
+.gd-st-wait { background: var(--amber-soft); color: var(--amber-ink); }
+.gd-st-off { background: var(--fill); color: var(--ink-2); }
+.gd-live-a { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gd-hint { font-size: 12.5px; color: var(--ink-3); }
+
+/* Футер липкий: шаг бывает длиннее экрана, и кнопка «дальше», уехавшая под сгиб,
+   каждый раз стоит человеку лишней прокрутки. */
+.gd-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 34px; border-top: 1px solid var(--line); background: var(--card);
+  position: sticky; bottom: 0; border-radius: 0 0 var(--r-xl) var(--r-xl); }
+
+.gd-fin { padding: 44px 34px 40px; text-align: center; max-width: 620px; margin: 0 auto; }
+.gd-fin-ic { display: inline-flex; align-items: center; justify-content: center; width: 60px;
+  height: 60px; border-radius: 50%; background: var(--green-soft); color: var(--green-ink);
+  margin-bottom: 18px; }
+.gd-fin .gd-lead { margin-top: 12px; }
+.gd-fin-a { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+/* .al-cancel родом из модалок и не рассчитан на иконку — иначе значок и подпись
+   встают в две строки. */
+.gd-fin-a .al-cancel, .gd-live-a .al-cancel { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Телефон: маршрут уезжает наверх лентой — вертикальный список из девяти пунктов
+   на 390px съедал бы первый экран целиком, и до самого шага человек не долистывал.
+   Правила идут ПОСЛЕ базовых: специфичность та же, побеждает порядок. */
+@media (max-width: 900px) {
+  .gd { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .gd-side { position: static; padding: 14px; }
+  .gd-route { flex-direction: row; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .gd-route::-webkit-scrollbar { display: none; }
+  .gd-r { width: auto; flex: none; max-width: 190px; padding: 8px 12px 8px 8px; border-radius: 999px;
+    background: var(--fill); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gd-reset { margin-top: 10px; }
+  .gd-step { padding: 22px 18px 20px; }
+  .gd-t { font-size: 23px; }
+  .gd-lead { font-size: 14.5px; }
+  .gd-art { padding: 12px; }
+  .gd-eis { grid-template-columns: 1fr; }
+  .gd-do li { font-size: 14px; padding-left: 30px; }
+  /* Липкая полоса кнопок поднимается над таббаром телефона: он висит поверх и
+     иначе закрывает «Понятно, дальше» ровно в тот момент, когда его надо нажать. */
+  .gd-foot { padding: 14px 18px; bottom: 86px; }
+  .gd-foot .bp { flex: 1; }
+  .gd-fin { padding: 34px 18px 30px; }
+}
