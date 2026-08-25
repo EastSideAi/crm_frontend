@@ -70,6 +70,8 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
+    // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
+    taskMatrix: false,
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
     // ритм: план на период и отчет за него; свой и, у руководителя, срез по команде
@@ -89,6 +91,9 @@
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
     ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'boardPeriod', 'donePeriod', 'rhythmPeriod', 'rhythmWho', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
+    // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
+    // молча превратился бы в дефолт.
+    state.taskMatrix = !!savedUi.taskMatrix;
   } catch (e) {}
   function saveUi() {
     try {
@@ -98,6 +103,7 @@
         mkTab: state.mkTab, mkDays: state.mkDays,
         boardPeriod: state.boardPeriod, donePeriod: state.donePeriod,
         rhythmPeriod: state.rhythmPeriod, rhythmWho: state.rhythmWho,
+        taskMatrix: state.taskMatrix,
       }));
     } catch (e) {}
   }
@@ -3380,6 +3386,29 @@
     }).catch(function () { cb([]); });
   }
 
+  /* ── Матрица Эйзенхауэра ──────────────────────────────────────────────────
+     Две оси: важность и срочность. Важность человек ставит руками (галочка при
+     постановке), срочность считает сервер по сроку — «сегодня или раньше», поле
+     `urgent`. Спрашивать срочность отдельно значило бы завести второй срок,
+     который разойдется с настоящим за неделю.
+
+     Квадранты названы делом, а не номером: «Сделать сейчас» понятнее, чем
+     «квадрант I», и не требует помнить методику. */
+  var EIS = [
+    ['iu', 'Срочно и важно',     'делать сейчас, до всего остального'],
+    ['i',  'Важно, не срочно',   'здесь растет результат, выдели на это время'],
+    ['u',  'Срочно, не важно',   'сделать быстро или передать'],
+    ['n',  'Не срочно и не важно', 'кандидаты на «не делать вовсе»'],
+  ];
+  function taskQuad(t) {
+    return t.important ? (t.urgent ? 'iu' : 'i') : (t.urgent ? 'u' : 'n');
+  }
+  // Молния у важной задачи. Красным не помечаем: единственное красное на экране
+  // задач — просрочка (design.md §7), иначе два разных сигнала спорят за глаз.
+  function impMark(t) {
+    return t.important ? '<span class="tsk-imp" title="Важная">' + ic('bolt', 11) + '</span>' : '';
+  }
+
   function renderTasks(view) {
     if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
     if (TASK_SEGS[taskSeg()].view === 'rhythm') { renderRhythm(view); return; }
@@ -3404,7 +3433,7 @@
     });
     var showWho = TASK_SEGS[seg].scope !== 'my';
 
-    var rows = list.map(function (t) {
+    var rowOf = function (t) {
       var st = TASK_ST[t.status] || TASK_ST.wait;
       var due = dueLabel(t);
       // Подпись под названием отвечает на «откуда эта задача»: цель важнее
@@ -3430,7 +3459,7 @@
         '<div class="t-cell">' + (own
           ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>'
           : '') +
-        '<div class="t-ttl">' + esc(t.title) + '</div>' +
+        '<div class="t-ttl">' + impMark(t) + esc(t.title) + '</div>' +
           // Цель — отдельной пометкой, а не строкой мелким текстом рядом с
           // постановщиком: задача без цели просто дело, с целью — шаг к
           // результату, и это первое, что должно читаться в списке.
@@ -3449,7 +3478,49 @@
             ic('go', 12) + 'завтра</button>' : '') + '</div>' +
         '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
       '</div>';
-    }).join('');
+    };
+    var rows = list.map(rowOf).join('');
+
+    /* «Сегодня» разложено на две части: сначала важное, потом все остальное.
+       Отдельным блоком наверху эти же задачи не показываем — они бы задвоились,
+       а список дня должен читаться сверху вниз одним проходом. */
+    function sect(title, hint, items) {
+      return '<div class="tsk-band"><span class="tsk-band-t">' + esc(title) + '</span>' +
+        (hint ? '<span class="tsk-band-h">' + esc(hint) + '</span>' : '') +
+        '<span class="tsk-band-n num">' + items.length + '</span></div>' +
+        items.map(rowOf).join('');
+    }
+    var hot = list.filter(function (t) { return taskQuad(t) === 'iu'; });
+    if (seg === 'today' && hot.length && hot.length < list.length) {
+      var calm = list.filter(function (t) { return taskQuad(t) !== 'iu'; });
+      rows = sect('Срочно и важно', 'делать сейчас', hot) +
+             sect('Остальное на сегодня', '', calm);
+    }
+
+    // Матрица — второй вид «Всех моих»: тот же пул задач, разложенный по двум
+    // осям. На «Сегодня» и «Неделе» она бессмысленна — там по определению почти
+    // все срочное, и половина квадрантов всегда пустая. «Вся команда» — дерево
+    // по направлениям, до этого места отрисовка туда не доходит.
+    var canMatrix = seg === 'mine';
+    if (canMatrix && state.taskMatrix) {
+      rows = '<div class="eis">' + EIS.map(function (o) {
+        var items = list.filter(function (t) { return taskQuad(t) === o[0]; });
+        return '<div class="eis-q eis-q-' + o[0] + '">' +
+          '<div class="eis-h"><span class="eis-t">' + esc(o[1]) + '</span>' +
+            '<span class="eis-n num">' + items.length + '</span></div>' +
+          '<div class="eis-hint">' + esc(o[2]) + '</div>' +
+          (items.length
+            ? '<div class="eis-body">' + items.map(function (t) {
+                var due = dueLabel(t);
+                return '<div class="eis-t-row' + (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+                  '<span class="eis-tt">' + esc(t.title) + '</span>' +
+                  '<span class="eis-td ' + due.cls + '">' + esc(due.text) + '</span>' +
+                '</div>';
+              }).join('') + '</div>'
+            : '<div class="eis-empty">пусто</div>') +
+        '</div>';
+      }).join('') + '</div>';
+    }
 
     // Направления показываем тем, кто видит чужие задачи: у тьютора все задачи в
     // одном направлении, и шесть чипов над коротким списком — чистый шум.
@@ -3480,19 +3551,34 @@
           ? '<button class="bp sm" id="tsk-day">' + ic('mic', 14) + 'Мой день</button>' +
             '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>'
           : '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>') +
+        // Список или матрица — один и тот же набор задач под двумя углами.
+        (canMatrix
+          ? '<div class="vseg tsk-vseg">' +
+              '<button class="' + (state.taskMatrix ? '' : 'on') + '" data-tv="list" title="Списком">' + ic('rows', 15) + '</button>' +
+              '<button class="' + (state.taskMatrix ? 'on' : '') + '" data-tv="eis" title="Матрица: срочно и важно">' + ic('kanban', 15) + '</button>' +
+            '</div>'
+          : '') +
       '</div>' + depts +
       '<div class="list-body">' +
         (list.length
           // На своих вкладках колонки «Исполнитель» нет вовсе: там в каждой
-          // строке стояло бы собственное имя человека.
-          ? '<div class="trow tsk-grid thead' + (showWho ? '' : ' mine') + '"><span class="th">Задача</span>' +
-            (showWho ? '<span class="th">Исполнитель</span>' : '') +
-            '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows
+          // строке стояло бы собственное имя человека. В матрице шапки нет
+          // вовсе — там не таблица.
+          ? ((canMatrix && state.taskMatrix) ? rows
+              : '<div class="trow tsk-grid thead' + (showWho ? '' : ' mine') + '"><span class="th">Задача</span>' +
+                (showWho ? '<span class="th">Исполнитель</span>' : '') +
+                '<span class="th">Срок</span><span class="th">Статус</span></div>' + rows)
           : '<div class="empty">' + esc(emptyTasksText(seg)) + '</div>') +
       '</div></div>';
 
     el('tsk-new').addEventListener('click', function () { openNewTask(); });
     if (el('tsk-day')) el('tsk-day').addEventListener('click', openDayPlan);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tv]'), function (b) {
+      b.addEventListener('click', function () {
+        state.taskMatrix = b.getAttribute('data-tv') === 'eis';
+        saveUi(); renderView();
+      });
+    });
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
       state.taskQ = qi.value;
@@ -3870,7 +3956,7 @@
       var rows = g.tasks.map(function (t) {
         return '<div class="dn-t" data-tid="' + t.id + '">' +
           '<span class="dn-tick">' + ic('check', 12) + '</span>' +
-          '<div class="dn-tt">' + esc(t.title) +
+          '<div class="dn-tt">' + impMark(t) + esc(t.title) +
             (t.client_name ? '<span class="dn-cl">' + esc(t.client_name) + '</span>' : '') + '</div>' +
           '<div class="dn-who">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
           '<div class="dn-when">' + esc(dayLabel(t.closed_at)) + '</div>' +
@@ -4605,7 +4691,7 @@
      Одна лента: смены статуса, переназначения, сдвиги срока и реплики людей
      вперемешку по времени. Спор «когда перенесли срок» решается этой лентой. */
   var EVENT_IC = { created: 'plus', status: 'check', comment: 'chat', assign: 'leads',
-                   due: 'cal', remind: 'bell', result: 'doc' };
+                   due: 'cal', remind: 'bell', result: 'doc', flag: 'bolt' };
 
   /* Артефакт результата: до 8 МБ на файл и не больше пяти — те же границы держит
      сервер (MAX_FILE_BYTES в staff_tasks.py). Читаем файл в base64 прямо в
@@ -4807,6 +4893,13 @@
             ? '<button class="tsk-due tsk-duebtn ' + due.cls + '" id="tk-due">' + ic('cal', 12) +
               esc(due.text) + chev() + '</button>'
             : '<span class="tsk-due ' + due.cls + '">' + ic('cal', 12) + esc(due.text) + '</span>') +
+          // Важность рядом со сроком: две оси матрицы должны читаться вместе,
+          // иначе «важно» превращается в скрытую настройку, о которой помнит
+          // только тот, кто ее поставил.
+          ((isAssignee || boss)
+            ? '<button class="tsk-mimp' + (t.important ? ' on' : '') + '" id="tk-imp">' +
+              ic('bolt', 12) + (t.important ? 'важная' : 'обычная') + '</button>'
+            : (t.important ? '<span class="tsk-mimp on">' + ic('bolt', 12) + 'важная</span>' : '')) +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
@@ -5031,6 +5124,21 @@
       };
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+
+      var impB = el('tk-imp');
+      if (impB) impB.addEventListener('click', function () {
+        var to = !t.important;
+        impB.disabled = true;
+        apiSend('/admin/api/tasks/' + id, 'PATCH', { important: to }, function () {
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          if (state.page === 'tasks') renderView();
+          showToast(to ? 'Задача помечена важной' : 'Важность снята');
+        }, function () {
+          impB.disabled = false;
+          showToast('Не получилось поменять важность');
+        });
+      });
 
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
@@ -5387,6 +5495,15 @@
               }).join('') + '</span>' +
               '<input id="nt-due" class="al-in" type="date" value="' +
                 esc(preset.due || isoDay(isGoal ? 30 : 1)) + '"></div>' +
+            // Важность — вторая ось матрицы, поэтому стоит вплотную к сроку:
+            // человек в один момент решает «когда» и «насколько это вообще
+            // стоит делать». Спрашиваем одним переключателем: шкала приоритета
+            // из пяти делений через месяц вся состоит из четверок и пятерок.
+            '<div class="al-f nt-impf">' +
+              '<button type="button" class="qchip nt-imp" id="nt-imp">' + ic('bolt', 13) +
+                (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
+              '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
+            '</div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -5445,6 +5562,9 @@
       });
       dueI.addEventListener('change', markWhen);
       markWhen();
+
+      var impB = el('nt-imp');
+      impB.addEventListener('click', function () { impB.classList.toggle('on'); });
 
       // Выбрали цель — направление больше не спрашиваем: шаг наследует его от цели
       // (это же правило держит сервер, см. _resolve_parent). В режиме цели этого
@@ -5543,6 +5663,7 @@
           dept: goal ? null : (el('nt-dept').value || ''),
           parent_id: goal ? +goal : null,
           is_goal: isGoal,
+          important: impB.classList.contains('on'),
         }, function (r) {
           close();
           state.tasks = null;

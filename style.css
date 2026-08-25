@@ -3060,6 +3060,76 @@ button.tr-crumb:hover { color: var(--blue); }
   .gate-card > * { max-width: none; }
 }
 
+/* ── Матрица Эйзенхауэра: важность как второй признак задачи ─────────────────
+   Важность помечается амбером по формуле §3.2 (soft-фон + ink-текст), а не
+   красным: красное на экране задач одно — просрочка, и второй сигнал того же
+   веса свел бы оба на нет. */
+.tsk-imp { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
+  color: var(--amber-ink); vertical-align: -1px; }
+.tsk-imp svg { width: 11px; height: 11px; }
+
+/* Полоса-разделитель внутри списка дня: «Срочно и важно» и все остальное.
+   Отдельным блоком наверху те же задачи не выносим — они задваивались бы. */
+.tsk-band { display: flex; align-items: baseline; gap: 9px; padding: 14px 16px 7px;
+  border-top: 1px solid var(--line); }
+.list-body > .tsk-band:first-child { border-top: 0; padding-top: 10px; }
+.tsk-band-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); }
+.tsk-band-h { font-size: 11.5px; color: var(--ink-3); }
+.tsk-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+
+/* Тумблер важности в карточке — рядом со сроком: две оси решаются вместе. */
+.tsk-mimp { display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 3px 10px 3px 8px;
+  transition: background .14s var(--ease), color .14s var(--ease), border-color .14s var(--ease); }
+.tsk-mimp svg { width: 12px; height: 12px; color: var(--ink-3); }
+.tsk-mimp:hover { color: var(--ink-2); border-color: var(--ink-3); }
+.tsk-mimp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.tsk-mimp.on svg { color: var(--amber-ink); }
+button.tsk-mimp { cursor: pointer; }
+
+/* Чип важности в форме постановки. Это тот же .qchip, только «включенное»
+   состояние амберное, а не navy: включенный фильтр и помеченная важной задача —
+   разные вещи, и цвет их разводит. */
+.nt-impf { flex-direction: column; align-items: flex-start; gap: 7px; }
+.qchip.nt-imp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.qchip.nt-imp.on svg { color: var(--amber-ink); }
+
+/* Сама матрица: четыре квадранта 2×2. Рамок между ними нет — разделяет
+   заливка, как у всех мини-карточек CRM. Акцент один: срочное и важное. */
+.eis { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px;
+  padding: 14px 16px 16px; align-items: start; }
+.eis-q { background: var(--fill); border-radius: var(--r-lg); padding: 13px 14px 6px;
+  display: flex; flex-direction: column; min-width: 0; }
+.eis-q.eis-q-iu { background: var(--amber-soft); }
+.eis-h { display: flex; align-items: baseline; gap: 8px; }
+.eis-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); }
+.eis-q-iu .eis-t { color: var(--amber-ink); }
+.eis-n { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+.eis-q-iu .eis-n { color: var(--amber-ink); }
+.eis-hint { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.eis-q-iu .eis-hint { color: var(--amber-ink); opacity: .72; }
+.eis-body { margin-top: 10px; display: flex; flex-direction: column; }
+.eis-t-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 0;
+  border-top: 1px solid rgba(15,19,32,.06); cursor: pointer; min-width: 0;
+  transition: color .14s var(--ease); }
+.eis-body > .eis-t-row:first-child { border-top: 0; }
+.eis-t-row:hover .eis-tt { color: var(--blue); }
+.eis-tt { font-size: 13px; color: var(--ink); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.eis-td { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.eis-empty { font-size: 12px; color: var(--ink-3); padding: 10px 0 10px; }
+
+/* Телефон. Блок стоит ПОСЛЕ базовых правил выше намеренно: у мобильного
+   переопределения та же специфичность, и, стоя раньше, оно проигрывало бы. */
+@media (max-width: 760px) {
+  /* Матрица — колонкой: два квадранта в ряд на 390px превращают названия задач
+     в два слова с многоточием. */
+  .eis { grid-template-columns: minmax(0,1fr); gap: 10px; padding: 12px 14px 14px; }
+}
+
 /* ════ ФИНАНСЫ ════ */
 .fin-money { color: var(--ink-2); font-weight: 500; }
 .fin-money b { color: var(--ink); font-weight: 700; }
