@@ -159,6 +159,7 @@ CRM — рабочий инструмент команды. Ценности п�
 | Чипы и статусы | статус, бейдж, тег, дельта | `design/chips.html` | `.sev .kd .pt-node .uz-tag .bdg .cnt` |
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |
 | Оверлеи | модалка-форма, баг-панель, тост, меню | `design/overlays.html` | `.al-* .bug-* #toast #smenu` |
+| Диктовка | микрофон в блоке помощника (форма задачи) | витрины нет (см. `style.css` «Помощник в форме постановки») | `.al-mic .al-mic-dot .al-mic.rec .al-mic.busy` |
 | AI и каталог | AI-блоки, диагностика, витрина продуктов | `design/ai.html` | `.ai-hero .diag-* .pchat .rm-ai .of-* .pd-*` |
 | Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .tg-cact .th-* .ibsw .handoff-banner` |
 | Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
