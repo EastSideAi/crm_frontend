@@ -2097,6 +2097,10 @@
     { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
+    /* Расходы одним экраном с тремя состояниями (запланирован → проведен →
+       подтвержден) и информатором проблем: где расход не закрыт документом и где
+       на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
+    { id: 'finspend', label: 'Расходы', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finfund', label: 'Фонды', icon: 'wallet', cap: 'finmodel', space: 'fin' },
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
@@ -2460,7 +2464,7 @@
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
-               state.page === 'finmetrics') {
+               state.page === 'finspend' || state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       var pers2 = (FIN.periods || []).slice(0, 8);
       tb.innerHTML = pers2.length
@@ -2846,6 +2850,7 @@
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
+                     finspend: 'Расходы',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finmetrics: 'Итоги периода' };
       var ph;
@@ -2913,6 +2918,10 @@
       } else if (state.page === 'findirect') {
         ph = 'Расходы с расчетного счета по направлениям за ведомость <b>' + esc(per.name) +
           '</b>. Строки из расчетных листов попадают в свой блок сами — видно, что откуда.';
+      } else if (state.page === 'finspend') {
+        ph = 'Расходы ведомости <b>' + esc(per.name) + '</b> по стадиям: запланирован → ' +
+          'проведен → подтвержден. Информатор показывает, где расход не закрыт документом ' +
+          'и где на счете не хватает на плановое.';
       } else if (state.page === 'finops') {
         ph = FIN.opsScope === 'period'
           ? 'Все, что внесено в ведомость <b>' + esc(per.name) + '</b>: доходы, расходы и переводы между счетами.'
@@ -2993,6 +3002,7 @@
     else if (state.page === 'finincome') renderFinIncome(view);
     else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'findirect') renderFinDirect(view);
+    else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finplan') renderFinPlan(view);
@@ -9633,7 +9643,7 @@
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
-              calendar: null, programs: null,
+              calendar: null, programs: null, spend: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -9819,7 +9829,7 @@
   function finForget(keepPeriods) {
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
-    FIN.revplan = null; FIN.calendar = null; FIN.programs = null;
+    FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -11027,6 +11037,166 @@
       });
     }
     pageAnim(view);
+  }
+
+  /* ── РАСХОДЫ: три состояния и информатор ────────────────────────────────────
+     Расход живет по стадиям: запланирован → проведен → подтвержден. Ценность в
+     разрывах между ними — проведен без документа (дыра перед налоговой),
+     запланирован без денег на счете (кассовый разрыв). Состояние и проблемы считает
+     бэкенд (services/fin_spend.py), фронт показывает. */
+  function finLoadSpend() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadSpend(); });
+    finBusy('spend', function (done) {
+      api('/admin/api/fin/spend' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.spend = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'spend'); }).then(done);
+    });
+  }
+  var SPEND_STATE = {
+    'запланирован': { cls: ' plan', label: 'план' },
+    'проведен': { cls: ' wait', label: 'проведен' },
+    'подтвержден': { cls: ' ok', label: 'подтвержден' },
+  };
+  function spendStateChip(st) {
+    var s = SPEND_STATE[st] || SPEND_STATE['запланирован'];
+    return '<span class="fst' + s.cls + '">' + s.label + '</span>';
+  }
+  /* Строки-улики проверки. Формат hits свой у каждой: у «нет документа» — сам расход,
+     у кассового разрыва — счет и нехватка, у дубля — сколько раз повторился. */
+  function spendHits(ch) {
+    var hits = ch.hits || [];
+    if (!hits.length) return '';
+    var li = hits.map(function (h) {
+      if (ch.key === 'cash_gap') {
+        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned, 0) +
+          ', свободно ' + finRub(h.available, 0) +
+          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short, 0) + '</span></li>';
+      }
+      if (ch.key === 'dup') {
+        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+          ' · ' + finDate(h.date) +
+          '<span class="rsk-hit-hint">' + h.count + ' раза</span></li>';
+      }
+      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+        ' · ' + finDate(h.date) + '</li>';
+    }).join('');
+    return '<ul class="rsk-hits">' + li + '</ul>';
+  }
+  function spendCheckCard(ch) {
+    return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
+      '<div class="rsk-c-head">' + riskChip(ch.level) +
+        '<span class="rsk-c-title">' + esc(ch.title) + '</span>' +
+        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount, 0) + '</span>' : '') +
+      '</div>' +
+      '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
+      (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
+        '</span></div>' : '') +
+      spendHits(ch) +
+      '</div>';
+  }
+  function renderFinSpend(view) {
+    if (!FIN.spend) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSpend(); return;
+    }
+    if (FIN.spend === 'none') return finErrView(view);
+    var S = FIN.spend, sum = S.summary || {}, checks = S.checks || [], arts = S.articles || [];
+    var canFix = can('finmodel_edit');
+    function fa(s) { return (sum[s] && sum[s].amount) || 0; }
+    function fc(s) { return (sum[s] && sum[s].count) || 0; }
+
+    var bar = statBar([
+      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден'), 0),
+        sub: 'ушло по расходам' },
+      { label: 'Подтверждено', value: finRub(fa('подтвержден'), 0),
+        sub: fc('подтвержден') + ' закрыто документом' },
+      { label: 'Без документа', value: finRub(fa('проведен'), 0),
+        sub: fc('проведен') + ' закрыть нечем' },
+      { label: 'Запланировано', value: finRub(fa('запланирован'), 0),
+        sub: 'намечено, еще не ушло' },
+    ]);
+
+    var inf;
+    if (checks.length) {
+      inf = '<div class="card fsp-inf">' +
+        '<div class="sec-head"><span class="ic">' + ic('shield', 14) + '</span>' +
+          '<div><div class="t">Информатор расходов</div>' +
+          '<div class="s">' + checks.length + ' ' +
+          plural(checks.length, 'проблема', 'проблемы', 'проблем') +
+          ', тяжелые сверху</div></div></div>' +
+        '<div class="rsk-checks">' + checks.map(spendCheckCard).join('') + '</div></div>';
+    } else if (arts.length) {
+      inf = '<div class="card fsp-ok"><span>' + ic('check', 16) + '</span>' +
+        '<div>Проблем нет. Все проведенные расходы закрыты документами, на плановое ' +
+        'денег хватает.</div></div>';
+    } else {
+      inf = '';
+    }
+
+    var cards = arts.map(function (a) {
+      var rows = a.items.map(function (it) {
+        var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
+          .filter(Boolean).map(esc).join(' · ');
+        var act = '';
+        if (it.state === 'подтвержден' && it.doc) {
+          act = '<span class="fsp-doc" title="' + esc(it.doc.name) + '">' +
+            ic('check', 11) + esc(it.doc.name) + '</span>';
+        } else if (it.state === 'проведен' && canFix) {
+          act = '<button class="qchip fsp-add" data-spdoc="' + esc(it.id) + '">' +
+            ic('plus', 11) + 'документ</button>';
+        }
+        return '<div class="trow fin-grid fe-grid">' +
+          '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+          '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+          '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
+        '</div>';
+      }).join('');
+      var tots = 'план ' + finRub(a['запланирован'], 0) + ' · факт ' +
+        finRub(a['проведен'] + a['подтвержден'], 0);
+      return '<div class="card listcard fd-block">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+          '<div><div class="t">' + esc(a.label) + '</div>' +
+          '<div class="s">' + tots + '</div></div></div>' +
+        (rows || '<div class="empty">В этой статье пусто.</div>') +
+        '</div>';
+    }).join('');
+
+    if (!arts.length) {
+      cards = '<div class="card"><div class="empty">Расходов в этом периоде пока нет. ' +
+        'Заводятся они на «Прямых расходах» и в «Расчетных листах», а выплаты ' +
+        'самозанятым падают сюда сами.</div></div>';
+    }
+
+    view.innerHTML = bar + inf + cards;
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spdoc]'), function (b) {
+      b.addEventListener('click', function () { spendDocForm(b.getAttribute('data-spdoc')); });
+    });
+    pageAnim(view);
+  }
+  /* Приложить документ к расходу — расход становится «подтвержден». Файл пока не
+     грузим, цепляем название и ссылку: полноценная загрузка артефактов придет с
+     ботом расходов, который и будет их приносить. */
+  function spendDocForm(id) {
+    var m = finModal({
+      eyebrow: 'Расход', title: 'Приложить документ', ok: 'Приложить',
+      body: finField('Название документа',
+              '<input id="sp-name" class="al-in" maxlength="200" ' +
+              'placeholder="Чек, квитанция, счет, накладная">') +
+            finField('Ссылка, если есть',
+              '<input id="sp-link" class="al-in" maxlength="500" placeholder="https://...">'),
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      var name = finVal('sp-name');
+      if (!name) { m.err.textContent = 'Впишите название документа.'; return; }
+      m.close();
+      finDo('/admin/api/fin/operation/' + id + '/doc', 'POST',
+        { name: name, link: finVal('sp-link') }, 'Документ приложен, расход подтвержден.');
+    });
   }
 
   /* Дата новой строки — сегодня, но только если сегодня внутри ведомости. Иначе
@@ -19938,6 +20108,101 @@
       '<span class="sev ' + st.cls + '">' + st.label + '</span></div>';
   }
 
+  /* Разбор заметки в задачи: модель предлагает, ставит человек. Рецепт тот же,
+     что у импорта встречи (.mi-*) — второй экран подтверждения в продукте не нужен,
+     а список обещаний устроен так же: снял лишнее, поправил кому и к какому сроку. */
+  function renderNoteTasks(host, id, items, note, people, ctx) {
+    if (!items.length) {
+      host.innerHTML = '<div class="mi-note">В заметке не нашлось того, что мы пообещали сделать.</div>';
+      return;
+    }
+    var whoOpts = function (sel) {
+      return '<option value="">без исполнителя</option>' + people.map(function (p) {
+        return '<option value="' + p.id + '"' + (p.id === sel ? ' selected' : '') + '>' +
+          esc(p.name || p.login) + '</option>';
+      }).join('');
+    };
+    host.innerHTML = '<div class="nt-box">' +
+      '<div class="nt-h">' + ic('spark', 13) + 'Нашел ' + items.length + ' ' +
+        plural(items.length, 'обещание', 'обещания', 'обещаний') +
+        '. Проверь и поставь</div>' +
+      (note ? '<div class="mi-note">' + esc(note) + '</div>' : '') +
+      items.map(function (it, i) {
+        return '<div class="mi-item" data-i="' + i + '">' +
+          '<div class="mi-line">' +
+            '<textarea class="al-in mi-title" rows="1" maxlength="200">' + esc(it.title || '') + '</textarea>' +
+            '<button type="button" class="mi-skip" title="Не заводить">' + ic('x', 14) + '</button>' +
+          '</div>' +
+          '<div class="mi-row">' +
+            '<span class="al-selwrap mi-who"><select class="al-sel sm">' + whoOpts(it.assignee_id) + '</select></span>' +
+            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '">' +
+          '</div>' +
+        '</div>';
+      }).join('') +
+      '<div class="nt-act"><button class="bp sm" id="m-note-make">' + ic('plus', 13) + 'Поставить задачи</button>' +
+        '<button class="bp sm ghost" id="m-note-drop">Отмена</button></div></div>';
+
+    // Высота названий по тексту — формулировку надо видеть целиком, как в импорте.
+    var grow = function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; };
+    Array.prototype.forEach.call(host.querySelectorAll('.mi-title'), grow);
+    host.addEventListener('input', function (e) {
+      if (e.target.classList && e.target.classList.contains('mi-title')) grow(e.target);
+    });
+    host.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.mi-skip');
+      if (!btn) return;
+      var item = btn.closest('.mi-item');
+      var off = !item.classList.contains('off');
+      item.classList.toggle('off', off);
+      btn.innerHTML = ic(off ? 'plus' : 'x', 14);
+      btn.title = off ? 'Вернуть' : 'Не заводить';
+    });
+
+    var makeBtn = el('m-note-make'), dropBtn = el('m-note-drop');
+    if (dropBtn) dropBtn.addEventListener('click', function () { host.innerHTML = ''; });
+    if (makeBtn) makeBtn.addEventListener('click', function () {
+      if (makeBtn.disabled) return;
+      var rows = Array.prototype.filter.call(host.querySelectorAll('.mi-item'), function (r) {
+        return !r.classList.contains('off') && (r.querySelector('.mi-title').value || '').trim();
+      });
+      if (!rows.length) { showToast('Нечего ставить: все пункты сняты'); return; }
+      makeBtn.disabled = true; makeBtn.classList.add('loading');
+      var made = 0, broke = false;
+      // По одной и по очереди: упавшая третья не должна отменять две заведенные.
+      var step = function (i) {
+        if (i >= rows.length) {
+          makeBtn.classList.remove('loading');
+          host.innerHTML = '';
+          state.tasks = null;
+          loadTaskSummary();
+          loadCardTasks(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+          refreshDetail(id);
+          showToast(made
+            ? 'Поставил ' + made + ' ' + plural(made, 'задачу', 'задачи', 'задач')
+            : 'Не получилось поставить, попробуй еще раз');
+          if (broke && made) showToast('Часть задач не встала, проверь список');
+          return;
+        }
+        var r = rows[i], src = items[+r.getAttribute('data-i')] || {};
+        var who = +(r.querySelector('.mi-who select').value || 0);
+        apiSend('/admin/api/tasks', 'POST', {
+          title: (r.querySelector('.mi-title').value || '').trim(),
+          details: src.details || '',
+          result_expect: src.result_expect || '',
+          assignee_id: who || null,
+          due_at: r.querySelector('.mi-due').value ? r.querySelector('.mi-due').value + 'T18:00:00+03:00' : null,
+          dept: src.dept || '',
+          session_id: id,
+          source: 'ai',
+        }, function () { made += 1; step(i + 1); },
+           function () { broke = true; step(i + 1); });
+      };
+      step(0);
+    });
+  }
+
   function buildNotesSection(ctx) {
     var crm = ctx.crm;
     var loaded = state.cardTasks[ctx.id];
@@ -19961,7 +20226,10 @@
       '<div class="m-csub">Веди клиента: о чем договорились, что обещал, какой следующий шаг.</div>' +
       '<div class="m-sec"><div class="m-sec-h">Заметка</div>' +
         '<textarea class="note-ta" id="m-note" placeholder="О чем договорились, что обещали, нюансы">' + esc(crm.note || '') + '</textarea>' +
-        '<div class="note-state" id="m-notestate"></div></div>' +
+        '<div class="note-foot">' +
+          '<button class="bp sm ghost" id="m-note-parse">' + ic('spark', 13) + 'Разобрать в задачи</button>' +
+          '<div class="note-state" id="m-notestate"></div></div>' +
+        '<div id="m-note-parsed"></div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Задачи по ученику</div>' +
         '<div id="m-tasks">' + body + '</div>' +
         '<button class="bp sm ct-add" id="m-task-add">' + ic('plus', 13) + 'Поставить задачу</button>' +
@@ -20626,6 +20894,28 @@
         openTask(tid);
       });
     });
+    // разбор заметки в задачи: модель предлагает, ставит человек
+    var parseBtn = el('m-note-parse'), parsedHost = el('m-note-parsed');
+    if (parseBtn && parsedHost) parseBtn.addEventListener('click', function () {
+      var text = (note && note.value || '').trim();
+      if (text.length < 10) { showToast('В заметке нечего разбирать'); return; }
+      parseBtn.disabled = true;
+      parsedHost.innerHTML = '<div class="ct-skel shim"></div><div class="ct-skel shim"></div>';
+      loadTaskPeople(function (people) {
+        apiSend('/admin/api/leads/' + id + '/tasks/from-note', 'POST', { text: text },
+          function (r) {
+            parseBtn.disabled = false;
+            renderNoteTasks(parsedHost, id, (r && r.tasks) || [], r && r.note, people, ctx);
+          },
+          function (code) {
+            parseBtn.disabled = false;
+            parsedHost.innerHTML = '';
+            showToast(code === 503 ? 'Помощник не отвечает, заведи задачи руками'
+                                  : 'Не удалось разобрать заметку');
+          });
+      });
+    });
+
     var addBtn = el('m-task-add');
     if (addBtn) addBtn.addEventListener('click', function () {
       var lead = findLead(id);
