@@ -576,6 +576,23 @@ a { color: inherit; text-decoration: none; }
 .sec-head .bp.tm-new { margin-left: auto; }
 .sec-head .cnt + .bp.tm-new { margin-left: 14px; }
 
+/* руководитель в строке — вторичный выбор рядом с ролью: тише роли, уже, без своего
+   фона в покое, чтобы главным в строке оставались имя и роль */
+.tm-mgr { flex: none; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  background: transparent; border: 1px solid var(--line-2); border-radius: 10px;
+  padding: 8px 11px; outline: none; cursor: pointer; min-width: 150px; }
+.tm-mgr:hover { border-color: #DCE7FF; color: var(--ink); }
+.tm-mgr:focus { background: #fff; border-color: var(--blue); color: var(--ink); }
+/* метки у имени: самозанятый и «вся команда». Плотные пилюли, «вся команда» —
+   переключатель (кнопка), поэтому в состоянии on несёт акцентный синий */
+.tm-tags { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+.tm-tag { font: 600 10.5px 'Manrope', sans-serif; letter-spacing: .02em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: var(--r-pill); border: 1px solid transparent; line-height: 1.5; }
+.tm-tag.smz { background: var(--green-soft); color: var(--green-ink); }
+button.tm-tag.ft { cursor: pointer; background: var(--fill); color: var(--ink-3); border-color: var(--line-2); }
+button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink); }
+.tm-tag.ft.on { background: var(--blue-tint); color: var(--blue-d); border-color: transparent; }
+
 /* темы уведомлений: за что этот человек отвечает. Чипы, а не селект с галочками —
    раскладка команды должна читаться одним взглядом по всему списку, без раскрытия */
 .tm-tp { flex: none; display: inline-flex; gap: 4px; padding: 3px; background: var(--fill);
