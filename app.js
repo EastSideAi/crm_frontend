@@ -3341,7 +3341,10 @@
       return;
     }
     var s = steps[idx], c = GD[s.id] || { lead: '', dos: [], art: function () { return ''; } };
-    var last = idx === steps.length - 1;
+    /* «Последний» — не последний в списке, а последний НЕПРОЙДЕННЫЙ. Человек может
+       начать с середины (пришел по кнопке освежить один шаг), и упереться в
+       «Готово, обучение пройдено» с четырьмя пустыми кружками слева он не должен. */
+    var last = steps.every(function (x) { return x.done || x.id === s.id; });
     box.innerHTML =
       '<article class="gd-step">' +
         '<div class="gd-eyebrow">Шаг ' + (idx + 1) + ' из ' + steps.length + (s.done ? ' · пройден' : '') + '</div>' +
@@ -3363,7 +3366,16 @@
     el('gd-next').addEventListener('click', function () {
       apiSend('/admin/api/guide/step/' + s.id, 'POST', null, function (r) {
         state.guide = r;
-        state.guideStep = last ? -1 : idx + 1;
+        var next = -1;
+        if (!r.finished) {
+          // Дальше по порядку, а если дальше уже все пройдено — к первому пропуску.
+          next = idx + 1 < r.steps.length ? idx + 1 : 0;
+          for (var i = next; i < r.steps.length; i++) if (!r.steps[i].done) { next = i; break; }
+          if (r.steps[next] && r.steps[next].done) {
+            for (var j = 0; j < r.steps.length; j++) if (!r.steps[j].done) { next = j; break; }
+          }
+        }
+        state.guideStep = next;
         renderGuide(view); renderSide();
       });
     });
