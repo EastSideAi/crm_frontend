@@ -12681,9 +12681,12 @@
         ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       /* Руководитель (дерево подчинения) и «видит всю команду» — из модели «Команда».
+         Руководитель идёт отдельной строкой под именем, а не в общем ряду: ряд и так
+         плотный (темы, почта, роль), и второй селект в нём выдавливал роль за край.
          full_team ставит только верхняя роль: это доступ ко всей работе компании. */
       var mgr = lock ? '' :
-        '<select class="tm-mgr" data-uid="' + u.id + '" title="Руководитель">' + mgrOpts(u.manager_id, u.id) + '</select>';
+        '<div class="tm-mgrline"><span class="tm-mgrlbl">руководитель</span>' +
+        '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></div>';
       var chips = '';
       if (u.is_contractor) chips += '<span class="tm-tag smz">самозанятый</span>';
       if (iAmTop) chips += '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') +
@@ -12693,11 +12696,11 @@
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
             (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
-          '<div class="tm-l">' + tmLine(u) + '</div></div>' +
+          '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
         tmTopicChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
-        mgr + sel + '</div>';
+        sel + '</div>';
     }).join('');
 
     /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
