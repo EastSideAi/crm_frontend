@@ -2537,14 +2537,27 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-body { padding: 0; }
 .stu { padding: 16px 18px 14px; border-top: 1px solid var(--line); }
 .stu:first-child { border-top: none; }
-.stu-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-/* Имя ученика — переход в его карточку, поэтому кнопка, а не текст. */
-.stu-n { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
+/* Строка ученика свернута: имя, этап, кто ведет и счетчики. Раскрывается кликом —
+   на 1000 учеников развернуть всем задачи сразу нельзя. Вся шапка и есть кнопка. */
+.stu-h { width: 100%; display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  text-align: left; background: none; padding: 2px 0; transition: .12s; }
+.stu-chev { color: var(--ink-3); display: inline-flex; transition: transform .18s var(--ease); }
+.stu-chev.on { transform: rotate(90deg); }
+.stu-h:hover .stu-n { color: var(--blue); }
+.stu-n { font-size: 15.5px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
   transition: .12s; }
-.stu-n:hover { color: var(--blue); }
 .stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
-.stu-cs { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* Кто ведет ученика — аватары исполнителей его открытых задач: отвечает на «не
+   видно, на кого поставлено» прямо в свернутой строке. */
+.stu-av-row { margin-left: auto; display: inline-flex; align-items: center; }
+.stu-av-row .stu-av + .stu-av { margin-left: -6px; }
+.stu-av { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid;
+  place-items: center; font: 700 9.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); box-shadow: 0 0 0 2px #fff; }
+.stu-av.more { background: #E7EAF0; color: var(--ink-3); }
+.stu-av.none { background: var(--amber-soft); color: var(--amber-ink); }
+.stu-cs { display: flex; align-items: center; gap: 10px; }
 .stu-c { font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .stu-c.over { color: var(--red-ink); }
 /* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
@@ -2557,7 +2570,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-note span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; }
 .stu-g { margin-top: 12px; }
-.stu-gl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+.stu-gl { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); margin-bottom: 4px; }
 /* Работа, которую никто не взял, — состояние «внимание», а не поломка: красный
    в этом экране занят просрочкой. */
@@ -2573,17 +2586,27 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-td.due-none { color: var(--ink-3); font-weight: 500; }
 .stu-td.due-now { color: var(--amber-ink); }
 .stu-td.due-over { color: var(--red-ink); }
-/* Подсказки плана — не задачи: они не кликаются и написаны тише, иначе экран
-   работы команды превращается в пересказ плана ученика. */
-.stu-plan { margin-top: 11px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.stu-pl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--ink-3); }
-.stu-pt { font-size: 12px; color: var(--ink-2); background: var(--fill);
-  border-radius: var(--r-pill); padding: 4px 10px; }
-.stu-add { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+/* Раскрытая часть: воздух сверху отделяет ее от свернутой шапки. */
+.stu-body-in { margin-top: 4px; animation: stu-open .18s var(--ease); }
+@keyframes stu-open { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+.stu-acts { margin-top: 12px; display: flex; align-items: center; gap: 16px; }
+.stu-add, .stu-open { display: inline-flex; align-items: center; gap: 6px;
   font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--blue); transition: .15s; }
+.stu-open { color: var(--ink-3); }
 .stu-add:hover { color: var(--blue-d); }
+.stu-open:hover { color: var(--ink); }
+
+/* Тулбар среза: переключатель мои/все (системный сегмент .pay-seg), фильтр по
+   исполнителю, чип просрочки. */
+.stu-tools { flex-wrap: wrap; gap: 8px 10px; }
+.stu-whowrap { flex: none; }
+.stu-more { display: block; width: calc(100% - 36px); margin: 8px 18px 4px;
+  padding: 10px; text-align: center; border-radius: 10px; background: var(--fill);
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); transition: .14s; }
+.stu-more:hover { background: #EDEFF3; color: var(--ink); }
+.stu-trunc { padding: 8px 18px 14px; font-size: 12px; color: var(--ink-3); }
 
 /* ── Задачи в карточке ученика ───────────────────────────────────────────────
    Тот же контур задач, вид покороче: в карточке важнее «кто и когда», а вести

@@ -3676,7 +3676,7 @@
       // работа есть на нем; внутри ученика в обоих случаях видна работа всей
       // команды, иначе экран не отвечает на свой же вопрос.
       state.tasksLoading = true;
-      api('/admin/api/tasks/students?scope=' + (can('tasks_all') ? 'all' : 'my')).then(function (r) {
+      api('/admin/api/tasks/students?scope=' + stuScopeNow() + '&limit=200').then(function (r) {
         state.tasksLoading = false;
         state.tasks = (r && r.students) || [];
         state.taskMe = r ? r.me : null;
@@ -4619,9 +4619,17 @@
      именно так: что здесь на тьюторе, а что на администраторе. «Без
      исполнителя» идет первым блоком — это не мелочь оформления, а работа,
      которую никто не взял, и увидеть ее надо раньше остального. */
-  function studentGroups(s) {
+  // Кто вообще ведет всех учеников — только те, у кого есть открытая работа, а не
+  // рядовой при tasks_all видит только своих. Дефолт — «мои»: полная база на 1000
+  // учеников экран не должна открывать сама.
+  function stuScopeNow() {
+    if (!can('tasks_all')) return 'my';
+    return state.stuScope === 'all' ? 'all' : 'my';
+  }
+
+  function studentGroups(s, tasks) {
     var by = {};
-    (s.tasks || []).forEach(function (t) {
+    (tasks || s.tasks || []).forEach(function (t) {
       var key = t.assignee_id ? (t.assignee_role || 'other') : '';
       if (!by[key]) {
         by[key] = { key: key, tasks: [],
@@ -5050,88 +5058,192 @@
   }
 
 
+  var STU_PAGE = 25;   // сколько учеников показываем до «показать еще»
+
+  // Кто ведет ученика — уникальные исполнители его открытых задач. Отвечает на
+  // «не видно, на кого поставлено»: аватары прямо в свернутой строке.
+  function stuLeads(tasks) {
+    var seen = {}, out = [], nobody = false;
+    (tasks || []).forEach(function (t) {
+      if (!t.assignee_id) { nobody = true; return; }
+      if (seen[t.assignee_id]) return;
+      seen[t.assignee_id] = 1;
+      out.push({ id: t.assignee_id, name: t.assignee_name || ('#' + t.assignee_id) });
+    });
+    return { people: out, nobody: nobody };
+  }
+
   function renderStudentTasks(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
-    var list = (state.tasks || []).filter(function (s) {
+    var over = !!state.stuOver;
+    var who = state.stuWho || '';
+    var show = state.stuShow || STU_PAGE;
+    var all = (state.tasks || []);
+
+    function taskMatch(t) {
+      if (over && !t.overdue) return false;
+      if (who && String(t.assignee_id || '') !== String(who)) return false;
+      return true;
+    }
+    function searchHit(s) {
       if (!q) return true;
       var hay = s.client_name + ' ' + (s.stage || '') + ' ' + (s.tasks || []).map(function (t) {
         return t.title + ' ' + (t.assignee_name || '');
       }).join(' ');
       return hay.toLowerCase().indexOf(q) !== -1;
+    }
+
+    var list = all.filter(function (s) {
+      if (!searchHit(s)) return false;
+      s._ft = (s.tasks || []).filter(taskMatch);
+      if ((over || who) && s._ft.length === 0) return false;
+      return true;
     });
 
-    var cards = list.map(function (s) {
-      var groups = studentGroups(s).map(function (g) {
-        var rows = g.tasks.map(function (t) {
-          var st = TASK_ST[t.status] || TASK_ST.wait;
-          var due = dueLabel(t);
-          return '<div class="stu-t' + (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
-            '<div class="stu-tt">' + esc(t.title) + '</div>' +
-            '<div class="stu-tw">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
-            '<div class="stu-td ' + due.cls + '">' + esc(due.text) + '</div>' +
-            '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
-          '</div>';
-        }).join('');
-        return '<div class="stu-g' + (g.key ? '' : ' nobody') + '">' +
-          '<div class="stu-gl">' + esc(g.label) + '</div>' + rows + '</div>';
+    // Кем можно отфильтровать — реальные исполнители по загруженным ученикам.
+    var whoOpts = {};
+    all.forEach(function (s) {
+      (s.tasks || []).forEach(function (t) {
+        if (t.assignee_id) whoOpts[t.assignee_id] = t.assignee_name || ('#' + t.assignee_id);
+      });
+    });
+    var whoList = Object.keys(whoOpts).map(function (id) { return { id: id, name: whoOpts[id] }; })
+      .sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+
+    var shown = list.slice(0, show);
+    var cards = shown.map(function (s) {
+      var ft = s._ft || (s.tasks || []);
+      var opened = !!(state.stuOpen && state.stuOpen[s.session_id]);
+      var oCount = (over || who) ? ft.filter(function (t) { return t.overdue; }).length : s.overdue;
+      var openCount = (over || who) ? ft.length : s.open;
+
+      var counters = (oCount ? '<span class="stu-c over num">' + oCount + ' ' + plural(oCount, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+        '<span class="stu-c num">' + openCount + ' ' + plural(openCount, 'задача', 'задачи', 'задач') + '</span>';
+
+      var lead = stuLeads(ft);
+      var avs = lead.people.slice(0, 3).map(function (p) {
+        return '<span class="stu-av" title="' + esc(p.name) + '">' + esc(initials(p.name)) + '</span>';
       }).join('');
+      if (lead.people.length > 3) avs += '<span class="stu-av more">+' + (lead.people.length - 3) + '</span>';
+      if (lead.nobody) avs += '<span class="stu-av none" title="есть задачи без исполнителя">?</span>';
 
-      var counters = (s.overdue ? '<span class="stu-c over num">' + s.overdue + ' ' + plural(s.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
-        '<span class="stu-c num">' + s.open + ' ' + plural(s.open, 'задача', 'задачи', 'задач') + '</span>';
+      var head = '<button class="stu-h" data-exp="' + esc(s.session_id) + '" aria-expanded="' + opened + '">' +
+        '<span class="stu-chev' + (opened ? ' on' : '') + '">' + ic('go', 14) + '</span>' +
+        '<span class="stu-n">' + esc(s.client_name) + '</span>' +
+        (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
+          (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
+        '<span class="stu-av-row">' + avs + '</span>' +
+        '<span class="stu-cs">' + counters + '</span>' +
+      '</button>';
 
-      return '<div class="stu">' +
-        '<div class="stu-h">' +
-          '<button class="stu-n" data-sid="' + esc(s.session_id) + '">' + esc(s.client_name) + '</button>' +
-          (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
-            (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
-          '<span class="stu-cs">' + counters + '</span>' +
-        '</div>' +
-        (s.note ? '<div class="stu-note"><span>' + esc(s.note) + '</span></div>' : '') +
-        groups +
-        (s.plan_tasks && s.plan_tasks.length
-          ? '<div class="stu-plan"><span class="stu-pl">по плану на этом этапе</span>' +
-            s.plan_tasks.map(function (p) { return '<span class="stu-pt">' + esc(p.title) + '</span>'; }).join('') +
-            '</div>'
-          : '') +
-        '<button class="stu-add" data-add="' + esc(s.session_id) + '">' + ic('plus', 13) + 'Поставить задачу по ученику</button>' +
-      '</div>';
+      var body = '';
+      if (opened) {
+        var groups = studentGroups(s, ft).map(function (g) {
+          var rows = g.tasks.map(function (t) {
+            var st = TASK_ST[t.status] || TASK_ST.wait;
+            var due = dueLabel(t);
+            return '<div class="stu-t' + (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+              '<div class="stu-tt">' + esc(t.title) + '</div>' +
+              '<div class="stu-tw">' + (t.assignee_name ? esc(t.assignee_name) : '—') + '</div>' +
+              '<div class="stu-td ' + due.cls + '">' + esc(due.text) + '</div>' +
+              '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+            '</div>';
+          }).join('');
+          return '<div class="stu-g' + (g.key ? '' : ' nobody') + '">' +
+            '<div class="stu-gl">' + esc(g.label) + '</div>' + rows + '</div>';
+        }).join('');
+        body = '<div class="stu-body-in">' +
+          (s.note ? '<div class="stu-note"><span>' + esc(s.note) + '</span></div>' : '') +
+          groups +
+          '<div class="stu-acts">' +
+            '<button class="stu-open" data-sid="' + esc(s.session_id) + '">' + ic('cap', 13) + 'Открыть карточку</button>' +
+            '<button class="stu-add" data-add="' + esc(s.session_id) + '">' + ic('plus', 13) + 'Поставить задачу</button>' +
+          '</div>' +
+        '</div>';
+      }
+      return '<div class="stu' + (opened ? ' open' : '') + '">' + head + body + '</div>';
     }).join('');
 
+    var truncated = all.length >= 200;
+    var scopeToggle = can('tasks_all')
+      ? '<div class="pay-seg stu-scope">' +
+          '<button class="' + (stuScopeNow() === 'my' ? 'on' : '') + '" data-scope="my">Мои</button>' +
+          '<button class="' + (stuScopeNow() === 'all' ? 'on' : '') + '" data-scope="all">Все</button>' +
+        '</div>'
+      : '';
+    var whoSel = whoList.length
+      ? '<span class="al-selwrap stu-whowrap"><select class="al-sel" id="stu-who"><option value="">Кто ведет: любой</option>' +
+          whoList.map(function (p) {
+            return '<option value="' + esc(p.id) + '"' + (String(who) === String(p.id) ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+          }).join('') + '</select></span>'
+      : '';
+
     view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools">' +
+      '<div class="list-tools stu-tools">' +
         '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Ученик, задача, человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        scopeToggle + whoSel +
+        '<button class="qchip stu-over' + (over ? ' on' : '') + '" id="stu-over">' + ic('clock', 13) + 'Просроченные</button>' +
         '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'ученик', 'ученика', 'учеников') + '</span>' +
         '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
       '</div>' +
       '<div class="list-body stu-body">' +
         (list.length ? cards
-          : '<div class="empty">' + (q ? 'Никого не нашлось по этому запросу.'
-              : 'Задач по ученикам нет. Поставь задачу и укажи в ней ученика — она появится здесь.') + '</div>') +
+          : '<div class="empty">' + (q || over || who ? 'Ничего не нашлось под фильтры.'
+              : (stuScopeNow() === 'my'
+                  ? 'По твоим ученикам открытых задач нет. Смотри всех кнопкой «Все» или поставь задачу.'
+                  : 'Задач по ученикам нет. Поставь задачу и укажи в ней ученика — она появится здесь.')) + '</div>') +
+        (list.length > show ? '<button class="stu-more" id="stu-more">Показать еще ' +
+            Math.min(STU_PAGE, list.length - show) + ' из ' + (list.length - show) + '</button>' : '') +
+        (truncated ? '<div class="stu-trunc">Показаны первые 200 учеников. Сузь поиском или фильтром, если нужного нет.</div>' : '') +
       '</div></div>';
 
     el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
-      state.taskQ = qi.value;
+      state.taskQ = qi.value; state.stuShow = STU_PAGE;
       var pos = qi.selectionStart;
       renderView();
       var again = el('tsk-q');
       if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
     el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    var ov = el('stu-over');
+    if (ov) ov.addEventListener('click', function () { state.stuOver = !over; state.stuShow = STU_PAGE; renderView(); });
+    var ws = el('stu-who');
+    if (ws) ws.addEventListener('change', function () { state.stuWho = ws.value; state.stuShow = STU_PAGE; renderView(); });
+    var more = el('stu-more');
+    if (more) more.addEventListener('click', function () { state.stuShow = show + STU_PAGE; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-scope]'), function (b) {
+      b.addEventListener('click', function () {
+        var sc = b.getAttribute('data-scope');
+        if (stuScopeNow() === sc) return;
+        state.stuScope = sc; state.stuShow = STU_PAGE; state.tasks = null;
+        loadTasks(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-exp]'), function (h) {
+      h.addEventListener('click', function (e) {
+        if (e.target.closest('[data-sid],[data-add]')) return;
+        var sid = h.getAttribute('data-exp');
+        if (!state.stuOpen) state.stuOpen = {};
+        state.stuOpen[sid] = !state.stuOpen[sid];
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (r) {
       r.addEventListener('click', function () { openTask(+r.getAttribute('data-tid')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sid]'), function (b) {
-      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-sid')); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); openDrawer(b.getAttribute('data-sid')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-add]'), function (b) {
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
         var sid = b.getAttribute('data-add');
-        var who = (state.tasks || []).filter(function (s) { return s.session_id === sid; })[0];
-        openNewTask({ session_id: sid, client_name: who && who.client_name,
+        var who2 = (state.tasks || []).filter(function (s) { return s.session_id === sid; })[0];
+        openNewTask({ session_id: sid, client_name: who2 && who2.client_name,
                       after: function () { state.tasks = null; renderView(); } });
       });
     });
