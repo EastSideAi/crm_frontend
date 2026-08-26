@@ -12640,6 +12640,7 @@
         state._team = (r && r.users) || [];
         state._teamTopics = (r && r.topics) || [];
         state._teamShared = !r || r.shared_chat !== false;
+        state._teamHier = !!(r && r.hierarchy_scope);
         if (state.page === 'team') renderView();
       }).catch(function () { state._team = 'none'; if (state.page === 'team') renderView(); });
       return;
@@ -12657,6 +12658,18 @@
         return '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>';
       }).join('');
     }
+    /* Выбор руководителя: только активные и не сам человек. Отключённого в
+       начальники не поставишь, себя — тоже (бэкенд отвечает 409). */
+    function mgrOpts(cur, selfId) {
+      var list = (state._team || []).filter(function (x) {
+        return x.active !== false && String(x.id) !== String(selfId);
+      });
+      return '<option value="0"' + (cur ? '' : ' selected') + '>— без руководителя —</option>' +
+        list.map(function (x) {
+          return '<option value="' + x.id + '"' + (String(cur) === String(x.id) ? ' selected' : '') +
+            '>' + esc(x.name || x.login) + '</option>';
+        }).join('');
+    }
     var rows = state._team.map(function (u) {
       var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
       /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
@@ -12667,9 +12680,23 @@
       var sel = lock
         ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
+      /* Руководитель (дерево подчинения) и «видит всю команду» — из модели «Команда».
+         Руководитель идёт отдельной строкой под именем, а не в общем ряду: ряд и так
+         плотный (темы, почта, роль), и второй селект в нём выдавливал роль за край.
+         full_team ставит только верхняя роль: это доступ ко всей работе компании. */
+      var mgr = lock ? '' :
+        '<div class="tm-mgrline"><span class="tm-mgrlbl">руководитель</span>' +
+        '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></div>';
+      var chips = '';
+      if (u.is_contractor) chips += '<span class="tm-tag smz">самозанятый</span>';
+      if (iAmTop) chips += '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') +
+        '" data-uid="' + u.id + '" title="Видит задачи всей команды, а не только своей ветки">' +
+        (u.full_team ? 'вся команда' : 'своя ветка') + '</button>';
+      else if (u.full_team) chips += '<span class="tm-tag ft on">вся команда</span>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
-        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div>' +
-          '<div class="tm-l">' + tmLine(u) + '</div></div>' +
+        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
+            (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
+          '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
         tmTopicChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
@@ -12712,14 +12739,33 @@
         '<span class="pd-sw-l">' + (sharedOn ? 'Включена' : 'Выключена') + '</span>' +
         '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>';
 
+    /* Контроль по иерархии: руководитель видит задачи только своих людей вниз по
+       дереву. Переключатель отдельный от простановки дерева намеренно — сначала
+       расставляют руководителей и «вся команда», потом включают, иначе половина
+       команды на минуту ослепла бы. Ставит только верхняя роль. */
+    var hierOn = state._teamHier === true;
+    var hierHtml = iAmTop ? '<div class="m-sec tm-nsec"><div class="m-sec-h">Контроль по иерархии</div>' +
+      '<div class="tm-hint">Руководитель видит задачи только своих людей вниз по дереву — задания, план, ' +
+        'приемку. Управлению отметь «вся команда», чтобы видели всех. Пока выключено — те, у кого есть ' +
+        'доступ к задачам команды, видят всех, как раньше.</div>' +
+      '<div class="det-sw-row tm-shared">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Руководитель видит только своих</div>' +
+          '<div class="det-sw-s">' + (hierOn
+            ? 'Включено — задачи команды сузились по дереву подчинения.'
+            : 'Выключено — видимость задач как раньше, вся команда целиком.') + '</div></div>' +
+        '<button type="button" class="pd-sw' + (hierOn ? ' on' : '') + '" id="tm-hier">' +
+          '<span class="pd-sw-l">' + (hierOn ? 'Включена' : 'Выключена') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
-      '<div class="s">роль определяет доступ к разделам, темы — кому придет уведомление о клиенте</div></div>' +
+      '<div class="s">роль определяет доступ к разделам, руководитель — кто кого контролирует, темы — уведомления о клиенте</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
       '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
       '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
+      hierHtml +
       '<div class="m-sec tm-nsec"><div class="m-sec-h">Уведомления команды</div>' +
         '<div class="tm-hint">Клиент пишет боту и просит человека — уведомление уходит тем, ' +
           'за кем закреплена тема разговора. Мессенджер каждый выбирает сам: профиль → «Уведомления».</div>' +
@@ -12730,6 +12776,46 @@
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
         if (u) u.role = sel.value;
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
+      });
+    });
+    /* Руководитель: 0 — снять. Сервер стережёт цикл и себя-в-начальники (409). */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-mgr'), function (sel) {
+      sel.addEventListener('change', function () {
+        var uid = sel.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = parseInt(sel.value, 10) || 0;
+        var prev = u ? u.manager_id : null;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { manager_id: val }, function (r) {
+          if (u) u.manager_id = (r && r.user) ? r.user.manager_id : (val || null);
+          showToast(val ? 'Руководитель назначен' : 'Руководитель снят');
+        }, function () {
+          if (u) sel.value = String(prev || 0);
+          showToast('Не получилось — так руководитель зациклится');
+        });
+      });
+    });
+    /* «Вся команда» — только верхняя роль (кнопка есть лишь у iAmTop). Красим сразу,
+       правдой считаем ответ сервера: не сохранилось — возвращаем как было. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-tag.ft'), function (b) {
+      if (b.tagName !== 'BUTTON') return;
+      b.addEventListener('click', function () {
+        var uid = b.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var next = !u.full_team;
+        u.full_team = next;
+        b.classList.toggle('on', next);
+        b.textContent = next ? 'вся команда' : 'своя ветка';
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { full_team: next }, function () {
+          b.disabled = false;
+          showToast(next ? (u.name || u.login) + ' видит всю команду' : (u.name || u.login) + ' видит только свою ветку');
+        }, function () {
+          b.disabled = false; u.full_team = !next;
+          b.classList.toggle('on', !next);
+          b.textContent = !next ? 'вся команда' : 'своя ветка';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
       });
     });
     /* Тема закрепляется одним нажатием. Локально красим сразу, но правдой считаем ответ
@@ -12771,6 +12857,19 @@
         showToast(next ? 'Копии уходят в общий чат' : 'Общий чат отключен');
       }, function () {
         shb.disabled = false;
+        showToast('Не удалось сохранить — попробуйте еще раз');
+      });
+    });
+    var hib = el('tm-hier');
+    if (hib) hib.addEventListener('click', function () {
+      var next = !(state._teamHier === true);
+      hib.disabled = true;
+      apiSend('/admin/api/team/hierarchy', 'PUT', { on: next }, function () {
+        state._teamHier = next;
+        renderView();
+        showToast(next ? 'Руководители видят только своих' : 'Видимость задач вернулась ко всей команде');
+      }, function () {
+        hib.disabled = false;
         showToast('Не удалось сохранить — попробуйте еще раз');
       });
     });
