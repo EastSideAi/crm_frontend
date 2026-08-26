@@ -3672,7 +3672,10 @@
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
     if (seg.view === 'board') { loadBoard(cb); return; }
-    if (seg.view === 'tree') { loadTree(cb); return; }
+    // «Вся команда» — дерево направлений. Но если выбран человек (пришли из «По
+    // людям»), показываем не дерево, а его плоский список задач: вопрос был «над
+    // чем он работает», ответ на него — список, а не сводка по направлениям.
+    if (seg.view === 'tree' && !state.taskWho) { loadTree(cb); return; }
     if (seg.view === 'students') {
       // Руководителю нужны все ученики компании, рядовому — те, по которым
       // работа есть на нем; внутри ученика в обоих случаях видна работа всей
@@ -3703,8 +3706,10 @@
     // не видно ни движения, ни того, что успели за неделю.
     var per = seg.view === 'done'
       ? '&period=' + state.donePeriod + '&shift=' + state.doneShift : '';
+    // Дерево с выбранным человеком грузим как обычный открытый список по нему.
+    var apiView = (seg.view === 'tree') ? 'open' : seg.view;
     state.tasksLoading = true;
-    api('/admin/api/tasks?view=' + seg.view + '&scope=' + scope + per +
+    api('/admin/api/tasks?view=' + apiView + '&scope=' + scope + per +
         (state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : '') +
         (state.taskWho && scope === 'all' ? '&assignee=' + state.taskWho.id : '')).then(function (r) {
       state.tasksLoading = false;
@@ -3859,7 +3864,7 @@
     var seg = taskSeg();
     if (TASK_SEGS[seg].view === 'students') { renderStudentTasks(view); return; }
     if (TASK_SEGS[seg].view === 'done') { renderDone(view); return; }
-    if (TASK_SEGS[seg].view === 'tree') { renderTree(view); return; }
+    if (TASK_SEGS[seg].view === 'tree' && !state.taskWho) { renderTree(view); return; }
     if (TASK_SEGS[seg].view === 'goals') { renderGoals(view); return; }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = state.tasks.filter(function (t) {
