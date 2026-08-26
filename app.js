@@ -2067,6 +2067,7 @@
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
+    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
@@ -3028,6 +3029,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'gifts') renderGifts(view);
+    else if (state.page === 'social') renderSocial(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
@@ -12321,6 +12323,7 @@
     var items = r.items || [];
     var sales = items.filter(function (x) { return x.kind === 'продажа'; });
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
+    var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
@@ -12329,7 +12332,8 @@
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
         sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
-        sub: receiv.length + ' ' + plural(receiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+        sub: (receiv.length + autoReceiv.length) + ' ' +
+          plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
       { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
         sub: 'продажи и дебиторка' },
       { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
@@ -12340,7 +12344,7 @@
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
         'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
-        'кто уже должен и за что — ожидаемые поступления по долгам клиентов') + '</div>' +
+        'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>';
 
     if (canFix) {
@@ -12356,6 +12360,14 @@
         });
       });
     }
+    // Строка дебиторки из рассрочки ведёт в карточку клиента (новая вкладка, чтобы не
+    // терять ведомость). Доступна всем, кто видит план, а не только с правом правки.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 
@@ -12389,7 +12401,7 @@
       '</div></div>';
   }
 
-  function finRevCard(title, kind, rows, canFix, sub) {
+  function finRevCard(title, kind, rows, canFix, sub, autoRows) {
     var body = rows.map(function (x) {
       var st = RP_STATUS[x.status] || 'cz-wait';
       var muted = x.status !== 'ожидается';
@@ -12402,13 +12414,28 @@
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
     }).join('');
+    // Дебиторка из рассрочки: строки собираются сами из графиков заказов, руками их не
+    // правят — клик ведёт в карточку клиента, а не в форму. Просроченный взнос помечен.
+    var todayIso = '';
+    try { todayIso = new Date().toISOString().slice(0, 10); } catch (e) { todayIso = ''; }
+    var autoBody = (autoRows || []).map(function (x) {
+      var over = x.due_on && todayIso && x.due_on < todayIso;
+      var chip = over ? '<span class="sev mini cz-bad">просрочен</span>'
+                      : '<span class="sev mini cz-wait">рассрочка</span>';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
+          '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
     return '<div class="card listcard">' +
       '<div class="list-tools sec-head"><span class="ic">' +
         ic(kind === 'продажа' ? 'card' : 'clock', 14) + '</span>' +
         '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(sub) + '</div></div>' +
         (canFix ? '<button class="qchip add" data-rpadd="' + kind + '">' + ic('plus', 12) +
           'Добавить</button>' : '') + '</div>' +
-      (body || '<div class="empty">Пока пусто. ' +
+      ((body + autoBody) || '<div class="empty">Пока пусто. ' +
         (canFix ? 'Добавьте строку кнопкой выше.' : 'Строк нет.') + '</div>') +
     '</div>';
   }
@@ -14833,6 +14860,166 @@
             ' · по подаркам бот напоминает сам через два часа</div></div></div>' +
         '<div style="border-top:1px solid var(--line)">' + stuckRows + '</div></div>' +
     '</div>';
+  }
+
+  /* ── Соцстатистика (ВК + YouTube) — /admin/api/social/overview ── */
+  function socialQ() {
+    if (!state._socialQ) state._socialQ = { platform: 'all', period: '14' };
+    return state._socialQ;
+  }
+  function socialRange(q) {
+    var to = new Date(), from = new Date();
+    if (q.period === 'all') from = new Date(2000, 0, 1);
+    else from.setDate(to.getDate() - parseInt(q.period, 10));
+    function iso(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+    return { from: iso(from), to: iso(to) };
+  }
+  function snum(n) { return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+  function strunc(s, n) { s = (s || '').trim(); if (!s) return '—'; return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s; }
+  function periodLabel(q) { return { '14': 'за 2 недели', '30': 'за месяц', '90': 'за 90 дней', all: 'за всё время' }[q.period] || 'за период'; }
+  var SOC_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  var SOC_FCOLORS = ['#2F6BFF', '#18A957', '#E0922F', '#8B5CF6', '#EC4899', '#14B8A6'];
+  function platBadge(p) {
+    var m = { vk: ['ВК', '#2787F5'], youtube: ['YT', '#FF3B30'], telegram: ['TG', '#229ED9'], instagram: ['IG', '#E1306C'] }, x = m[p] || ['', '#888'];
+    return '<span class="soc-badge" style="background:' + x[1] + '">' + x[0] + '</span>';
+  }
+  var SOC_TTL = 5 * 60 * 1000;  // кэш ненадолго — чтобы не грузить одно и то же постоянно
+  function socialKey(q) { return q.platform + '|' + q.period; }
+  function fetchSocial(force) {
+    var q = socialQ(), key = socialKey(q);
+    state._socialCache = state._socialCache || {};
+    var c = state._socialCache[key];
+    if (!force && c && (Date.now() - c.ts) < SOC_TTL) { state._social = c.data; state._socialAt = c.ts; return; }
+    if (state._socialLoading) return;
+    state._socialLoading = true;
+    var r = socialRange(q);
+    api('/admin/api/social/overview?platform=' + q.platform + '&from=' + r.from + '&to=' + r.to)
+      .then(function (d) {
+        state._socialCache[key] = { data: d, ts: Date.now() };
+        state._socialLoading = false;
+        if (socialKey(socialQ()) !== key) return;  // фильтр уже сменился — не перетираем текущий вид
+        state._social = d; state._socialAt = Date.now();
+        if (state.page === 'social') renderView();
+      })
+      .catch(function (e) { if (String(e).indexOf('403') === -1) state._social = 'none'; state._socialLoading = false; if (state.page === 'social') renderView(); });
+  }
+  function linkHost(u) { try { return (u.split('//')[1] || u).split('/')[0].replace(/^www\./, ''); } catch (e) { return 'ссылка'; } }
+  function socialFilters(q) {
+    function seg(kind, key, opts) {
+      return '<div class="soc-seg" data-seg="' + kind + '">' + opts.map(function (o) {
+        return '<button class="' + (String(q[key]) === String(o.v) ? 'on' : '') + '" data-v="' + o.v + '">' + o.l + '</button>';
+      }).join('') + '</div>';
+    }
+    return '<div class="soc-filters">' +
+      seg('plat', 'platform', [{ v: 'all', l: 'Все' }, { v: 'vk', l: 'ВКонтакте' }, { v: 'youtube', l: 'YouTube' }, { v: 'telegram', l: 'Telegram' }, { v: 'instagram', l: 'Instagram' }]) +
+      seg('period', 'period', [{ v: '14', l: '2 недели' }, { v: '30', l: 'Месяц' }, { v: '90', l: '90 дней' }, { v: 'all', l: 'Всё' }]) +
+      '</div>';
+  }
+  function bindSocialFilters(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('.soc-seg'), function (segEl) {
+      var kind = segEl.getAttribute('data-seg');
+      Array.prototype.forEach.call(segEl.querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () {
+          if (kind === 'plat') socialQ().platform = b.getAttribute('data-v');
+          else socialQ().period = b.getAttribute('data-v');
+          state._social = null; state._socialLoading = false; renderView();
+        });
+      });
+    });
+    var rf = view.querySelector('#soc-refresh');
+    if (rf) rf.addEventListener('click', function () { fetchSocial(true); renderView(); });
+  }
+  function socialTable(posts) {
+    if (!posts || !posts.length) return '';
+    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Длит', 'Куда вела'];
+    var rows = posts.slice().reverse().map(function (p) {
+      var d = (p.published_at || '').slice(0, 10).split('-').reverse().join('.');
+      return '<tr>' +
+        '<td>' + platBadge(p.platform) + '</td>' +
+        '<td class="num">' + d + '</td>' +
+        '<td class="soc-th"><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(strunc(p.title, 84)) + '</a></td>' +
+        '<td>' + esc(p.format || '—') + '</td>' +
+        '<td class="num">' + snum(p.views) + '</td>' +
+        '<td class="num">' + (p.reach_viral != null ? snum(p.reach_viral) : '—') + '</td>' +
+        '<td class="num">' + (p.likes != null ? p.likes : '—') + '</td>' +
+        '<td class="num">' + (p.comments != null ? p.comments : 0) + '</td>' +
+        '<td class="num">' + (p.reposts != null ? p.reposts : '—') + '</td>' +
+        '<td class="num">' + (p.link_clicks != null ? p.link_clicks : '—') + '</td>' +
+        '<td class="num">' + (p.saves != null ? snum(p.saves) : '—') + '</td>' +
+        '<td class="num">' + (p.duration_sec != null ? (Math.floor(p.duration_sec / 60) + ':' + ('0' + (p.duration_sec % 60)).slice(-2)) : '—') + '</td>' +
+        '<td>' + (p.link_url ? '<a href="' + esc(p.link_url) + '" target="_blank" rel="noopener" class="soc-out">' + esc(linkHost(p.link_url)) + ' ↗</a>' : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<div class="card soc-tblwrap" style="padding:18px 20px;margin-top:14px"><div class="sec-head"><span class="ic">' + ic('leads', 14) + '</span><div><div class="t">Посты и ролики</div><div class="s">свежие сверху · клик по теме — открыть</div></div></div>' +
+      '<div class="soc-scroll"><table class="soc-tbl"><thead><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
+  }
+  function renderSocial(view) {
+    var q = socialQ();
+    if (!state._social) fetchSocial();  // кеш свежий → подставит синхронно, иначе запустит запрос
+    if (!state._social) {
+      view.innerHTML = socialFilters(q) + dashSkeleton();
+      bindSocialFilters(view);
+      return;
+    }
+    if (state._social === 'none') {
+      view.innerHTML = socialFilters(q) + '<div class="card"><div class="empty">Не удалось загрузить соцстатистику — проверь доступ или сеть.</div></div>';
+      bindSocialFilters(view);
+      return;
+    }
+    var d = state._social, k = d.kpis;
+    var bar = statBar([
+      { label: 'Просмотры', value: snum(k.views), sub: k.posts_count + ' ' + plural(k.posts_count, 'пост', 'поста', 'постов') },
+      { label: 'Реакции', value: snum(k.reactions), sub: k.comments + ' комм · ' + k.reposts + ' репостов' },
+      { label: 'Подписчики', value: snum(k.subscribers), sub: 'сейчас · ' + (k.subscribers_delta >= 0 ? '+' : '') + k.subscribers_delta + ' ' + periodLabel(q) },
+      { label: 'Средний охват', value: k.avg_reach != null ? snum(k.avg_reach) : '—', sub: 'ВК, на пост' },
+    ]);
+    var fparts = d.by_format.slice(0, 6);
+    var ftotal = fparts.reduce(function (s, f) { return s + f.views; }, 0) || 1;
+    var facc = 0;
+    var fgrad = fparts.length ? fparts.map(function (f, i) {
+      var from = facc / ftotal * 100; facc += f.views; var to = facc / ftotal * 100;
+      return SOC_FCOLORS[i % SOC_FCOLORS.length] + ' ' + from + '% ' + to + '%';
+    }).join(', ') : '#E3E5EB 0% 100%';
+    var fleg = fparts.length ? fparts.map(function (f, i) {
+      return '<div class="r"><span class="dd2" style="background:' + SOC_FCOLORS[i % SOC_FCOLORS.length] + '"></span>' +
+        '<span class="dnm">' + esc(f.format) + '</span>' +
+        '<span class="dcount num">' + snum(f.views) + '</span>' +
+        '<span class="dpc num">' + Math.round(f.views / ftotal * 100) + '%</span></div>';
+    }).join('') : '<div class="empty">Нет постов за период.</div>';
+    var fmtCard = '<div class="card sp5" style="padding:22px 26px"><div class="sec-head"><span class="ic">' + ic('pie', 14) + '</span><div><div class="t">Форматы</div><div class="s">просмотры по типу контента</div></div></div>' +
+      '<div class="distr-body"><div class="dwrap"><div class="dpie" style="background:conic-gradient(' + fgrad + ')"></div>' +
+      '<div class="dctr"><div><div class="dn num">' + snum(ftotal) + '</div><div class="ds">просмотров</div></div></div></div>' +
+      '<div class="dleg">' + fleg + '</div></div></div>';
+    var tmax = (d.top_posts[0] && d.top_posts[0].views) || 1;
+    var topRows = d.top_posts.map(function (p) {
+      return '<a class="cvc-row cvc-link" href="' + esc(p.url) + '" target="_blank" rel="noopener"><div class="cvc-nm" style="white-space:normal">' + platBadge(p.platform) + esc(strunc(p.title, 56)) + '</div>' +
+        '<div class="cvc-track"><div class="cvc-fill" style="width:' + Math.max(Math.round((p.views || 0) / tmax * 100), 5) + '%"></div></div>' +
+        '<div class="cvc-c num">' + snum(p.views) + '</div><div class="cvc-p num">❤' + (p.likes || 0) + '</div></a>';
+    }).join('') || '<div class="empty">Нет постов за период.</div>';
+    var topCard = '<div class="card sp7" style="padding:22px 26px"><div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span><div><div class="t">Топ публикаций</div><div class="s">по просмотрам за период</div></div></div><div class="cvc-rows" style="margin-top:12px">' + topRows + '</div></div>';
+    var byMonth = {};
+    d.posts.forEach(function (p) {
+      var m = (p.published_at || '').slice(0, 7); if (!m) return;
+      var b = byMonth[m] || (byMonth[m] = { m: m, views: 0 }); b.views += p.views || 0;
+    });
+    var months = Object.keys(byMonth).sort().map(function (kk) { return byMonth[kk]; });
+    var mmax = Math.max.apply(null, [1].concat(months.map(function (x) { return x.views; })));
+    var dynBars = months.map(function (x) {
+      var h = Math.max(Math.round(x.views / mmax * 100), x.views ? 3 : 0);
+      var lbl = SOC_MONTHS[parseInt(x.m.slice(5, 7), 10) - 1] + ' ' + x.m.slice(2, 4);
+      return '<div class="soc-bar"><div class="soc-bar-v num">' + snum(x.views) + '</div>' +
+        '<div class="soc-bar-col"><div class="soc-bar-fill" style="height:' + h + '%"></div></div>' +
+        '<div class="soc-bar-x">' + lbl + '</div></div>';
+    }).join('');
+    var dynCard = '<div class="card" style="padding:22px 26px;margin-top:14px"><div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span><div><div class="t">Динамика просмотров</div><div class="s">сумма просмотров по месяцу публикации</div></div></div>' +
+      '<div class="soc-bars">' + (dynBars || '<div class="empty">Нет данных за период.</div>') + '</div></div>';
+    var uAt = state._socialAt ? new Date(state._socialAt) : null;
+    var uStr = uAt ? ('обновлено ' + ('0' + uAt.getHours()).slice(-2) + ':' + ('0' + uAt.getMinutes()).slice(-2)) : '';
+    var caption = '<div class="soc-caption">Показано: <b>' + esc(periodLabel(q)) + '</b> · ' +
+      (q.platform === 'vk' ? 'ВКонтакте' : q.platform === 'youtube' ? 'YouTube' : q.platform === 'telegram' ? 'Telegram' : q.platform === 'instagram' ? 'Instagram' : 'все площадки') +
+      (uStr ? ' · ' + uStr : '') + ' <button class="soc-refresh" id="soc-refresh">↻ обновить</button></div>';
+    view.innerHTML = socialFilters(q) + caption + '<div class="dash">' + bar + '<div class="grid">' + fmtCard + topCard + '</div>' + dynCard + socialTable(d.posts) + '</div>';
+    bindSocialFilters(view);
   }
 
   /* мягкое появление контента ТОЛЬКО при смене страницы (не на фильтрах/сегментах

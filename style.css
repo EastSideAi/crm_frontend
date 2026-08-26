@@ -716,6 +716,36 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .cvc-p { font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
 .cvc-row.weak .cvc-p { color: var(--coral); font-weight: 600; }
 
+/* ── Соцстатистика ── */
+.soc-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.soc-seg { display: inline-flex; background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 3px; }
+.soc-seg button { border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: var(--r-pill); cursor: pointer; transition: all .15s var(--ease); }
+.soc-seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+.soc-badge { display: inline-block; min-width: 22px; text-align: center; color: #fff; font-size: 10px; font-weight: 800; border-radius: 5px; padding: 1px 5px; margin-right: 7px; vertical-align: middle; }
+.cvc-link { text-decoration: none; color: inherit; display: flex; }
+.cvc-link:hover .cvc-nm { color: var(--blue); }
+.soc-tblwrap .soc-scroll { overflow-x: auto; margin-top: 12px; }
+.soc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.soc-tbl th { text-align: left; color: var(--ink-3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; padding: 6px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+.soc-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; color: var(--ink); }
+.soc-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.soc-tbl td.soc-th { white-space: normal; max-width: 340px; }
+.soc-tbl td.soc-th a { color: var(--ink); text-decoration: none; }
+.soc-tbl td.soc-th a:hover { color: var(--blue); text-decoration: underline; }
+.soc-tbl tbody tr:hover { background: var(--fill); }
+.soc-caption { font-size: 13px; color: var(--ink-2); margin: -2px 0 14px 2px; }
+.soc-caption b { color: var(--ink); font-weight: 600; }
+.soc-bars { display: flex; align-items: flex-end; gap: 14px; height: 168px; margin-top: 16px; overflow-x: auto; padding: 4px 2px 0; }
+.soc-bar { flex: 1 0 auto; min-width: 44px; max-width: 90px; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.soc-bar-v { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.soc-bar-col { flex: 1; width: 100%; max-width: 56px; display: flex; align-items: flex-end; }
+.soc-bar-fill { width: 100%; background: linear-gradient(180deg, var(--blue), var(--blue-d)); border-radius: 7px 7px 3px 3px; min-height: 3px; transition: height .8s var(--ease); }
+.soc-bar-x { font-size: 11px; color: var(--ink-3); margin-top: 8px; white-space: nowrap; }
+.soc-refresh { border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: var(--r-pill); cursor: pointer; margin-left: 6px; }
+.soc-refresh:hover { color: var(--blue); border-color: var(--blue); }
+.soc-out { color: var(--ink-2); text-decoration: none; font-size: 12px; white-space: nowrap; }
+.soc-out:hover { color: var(--blue); text-decoration: underline; }
+
 /* донат (распределение) */
 .distr-body { display: flex; align-items: center; gap: 30px; margin-top: 16px; }
 .dwrap { position: relative; width: 158px; height: 158px; flex: none; }
