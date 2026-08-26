@@ -2590,7 +2590,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-cs { display: flex; align-items: center; gap: 10px; }
 .stu-c { font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .stu-c.over { color: var(--red-ink); }
-/* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
+/* Заметка тьютора — контекст, а не содержание экрана: две строки и тише всего
    остального. Полностью она читается в карточке ученика. */
 .stu-note { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
   background: var(--fill); border-radius: 10px; padding: 8px 11px; }
@@ -4085,7 +4085,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rm-ai-dots i:nth-child(2) { animation-delay: .16s; }
 .rm-ai-dots i:nth-child(3) { animation-delay: .32s; }
 
-/* ── «Как AI собрал этот план»: логика решения для куратора ──────────────── */
+/* ── «Как AI собрал этот план»: логика решения для тьютора ──────────────── */
 .rm-why { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-2); }
 .rm-why-h { display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
   font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -.012em; }
@@ -4143,7 +4143,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .pchat-m.me { align-items: flex-end; }
 @keyframes pchat-m-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 /* Реплика помощника — якорь панели: она без рамки и крупнее отчёта, потому что её
-   читают, а отчёт сверяют. Реплика куратора — плотная синяя пилюля. */
+   читают, а отчёт сверяют. Реплика тьютора — плотная синяя пилюля. */
 .pchat-b { font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pchat-m.me .pchat-b { padding: 10px 14px; border-radius: 15px; border-bottom-right-radius: 6px;
   background: var(--blue); color: #fff; max-width: 88%; font-size: 13.5px; }
@@ -4266,7 +4266,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
 
 .of-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
-/* Карточка витрины = то, что редактирует куратор, и одновременно превью для родителя.
+/* Карточка витрины = то, что редактирует тьютор, и одновременно превью для родителя.
    Поля без рамок-коробок: подчеркнутая строка читается как сам текст, а не как форма. */
 .of-card { position: relative; padding: 16px 18px 14px; border-radius: var(--r-lg);
   border: 1px solid var(--line); background: var(--card);
