@@ -11741,6 +11741,7 @@
     var items = r.items || [];
     var sales = items.filter(function (x) { return x.kind === 'продажа'; });
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
+    var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
@@ -11749,7 +11750,8 @@
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
         sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
-        sub: receiv.length + ' ' + plural(receiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
+        sub: (receiv.length + autoReceiv.length) + ' ' +
+          plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
       { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
         sub: 'продажи и дебиторка' },
       { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
@@ -11760,7 +11762,7 @@
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
         'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
-        'кто уже должен и за что — ожидаемые поступления по долгам клиентов') + '</div>' +
+        'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>';
 
     if (canFix) {
@@ -11776,6 +11778,14 @@
         });
       });
     }
+    // Строка дебиторки из рассрочки ведёт в карточку клиента (новая вкладка, чтобы не
+    // терять ведомость). Доступна всем, кто видит план, а не только с правом правки.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 
@@ -11809,7 +11819,7 @@
       '</div></div>';
   }
 
-  function finRevCard(title, kind, rows, canFix, sub) {
+  function finRevCard(title, kind, rows, canFix, sub, autoRows) {
     var body = rows.map(function (x) {
       var st = RP_STATUS[x.status] || 'cz-wait';
       var muted = x.status !== 'ожидается';
@@ -11822,13 +11832,28 @@
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
     }).join('');
+    // Дебиторка из рассрочки: строки собираются сами из графиков заказов, руками их не
+    // правят — клик ведёт в карточку клиента, а не в форму. Просроченный взнос помечен.
+    var todayIso = '';
+    try { todayIso = new Date().toISOString().slice(0, 10); } catch (e) { todayIso = ''; }
+    var autoBody = (autoRows || []).map(function (x) {
+      var over = x.due_on && todayIso && x.due_on < todayIso;
+      var chip = over ? '<span class="sev mini cz-bad">просрочен</span>'
+                      : '<span class="sev mini cz-wait">рассрочка</span>';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+        .filter(Boolean).map(esc).join(' · ');
+      return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
+          '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
     return '<div class="card listcard">' +
       '<div class="list-tools sec-head"><span class="ic">' +
         ic(kind === 'продажа' ? 'card' : 'clock', 14) + '</span>' +
         '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(sub) + '</div></div>' +
         (canFix ? '<button class="qchip add" data-rpadd="' + kind + '">' + ic('plus', 12) +
           'Добавить</button>' : '') + '</div>' +
-      (body || '<div class="empty">Пока пусто. ' +
+      ((body + autoBody) || '<div class="empty">Пока пусто. ' +
         (canFix ? 'Добавьте строку кнопкой выше.' : 'Строк нет.') + '</div>') +
     '</div>';
   }
