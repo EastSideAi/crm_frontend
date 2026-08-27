@@ -16853,6 +16853,7 @@
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
+    { id: 'apply',     label: 'Подача',       icon: 'send' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'exams',     label: 'Экзамены',    icon: 'award' },
@@ -17853,6 +17854,7 @@
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
+    else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
     else if (s === 'path') host.innerHTML = buildPathSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
@@ -17875,6 +17877,7 @@
     if (mdl) mdl.classList.toggle('pchat-open', hasSidePanel());
     attachContentHandlers(id, ctx);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
+    if (s === 'apply') wireApplySection(id);
     if (s === 'offers' && ctx.d) {
       wireOffersSection(id);
       // чат витрины всегда открыт рядом — как чат плана у доски
@@ -17887,6 +17890,7 @@
   function skeletonSection(kind) {
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
+                 apply: ['Подача', 'Поднимаю заявки в вузы'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
@@ -19465,6 +19469,218 @@
         '<div class="dz-ic">' + ic('dl', 18) + '</div>' +
         '<div><b>Выбери файл</b> или перетащи сюда</div></div>' +
       '<div class="linkrow"><input id="m-link" placeholder="…или вставь ссылку на документ"><button class="bp sm" id="m-link-add">' + ic('plus', 13) + 'Добавить</button></div>';
+  }
+
+
+  /* ════ ПОДАЧА — заявки в вузы (модуль подачи, backend routers/applications.py) ════
+     Отличие от «Поступления»: там план и задачи семьи, здесь одна сущность — заявка
+     в конкретный вуз. У нее свой дедлайн (единственный срок, который нельзя
+     перенести), свой пакет документов и доступ к личному кабинету на портале вуза.
+     Все, что тут делает менеджер, видно семье в кабинете лентой событий — поэтому
+     статус двигаем осознанно, а не «чтобы было». */
+  var APPS = {}, APPS_BUSY = {};
+
+  var AP_STATUS = [
+    { k: 'draft',      t: 'черновик' },
+    { k: 'collecting', t: 'собираем' },
+    { k: 'check',      t: 'проверка' },
+    { k: 'ready',      t: 'готово' },
+    { k: 'submitted',  t: 'отправлено' },
+    { k: 'offer',      t: 'приглашение' },
+    { k: 'rejected',   t: 'отказ' },
+  ];
+  // Состояние документа по кругу: клик по строке ведет его от «ждем» до «собрано».
+  // Отдельных кнопок нет намеренно — в пакете десяток строк, и три кнопки на каждой
+  // превращают экран в панель управления вместо чек-листа.
+  var AP_NEXT = { todo: 'doing', doing: 'done', done: 'rejected', rejected: 'todo' };
+  var AP_REQ = { todo: ['ждем', ''], doing: ['в работе', 'go'],
+                 done: ['собрано', 'ok'], rejected: ['поправить', 'no'] };
+
+  function loadApps(id, force) {
+    if (APPS_BUSY[id]) return;
+    if (force) delete APPS[id];
+    APPS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/applications').then(function (r) {
+      APPS_BUSY[id] = false; APPS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'apply') renderModalContent();
+    }).catch(function (e) {
+      APPS_BUSY[id] = false;
+      if (e.message !== '403') { APPS[id] = { applications: [], failed: true }; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function apDeadline(a) {
+    if (!a.deadline) return '<span class="ap-dl none">срок не задан</span>';
+    var left = Math.round((new Date(a.deadline + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+    var closed = a.status === 'submitted' || a.status === 'offer' || a.status === 'rejected';
+    var cls = closed ? 'done' : (left < 0 ? 'over' : (left <= 14 ? 'soon' : ''));
+    var tail = closed ? '' : (left < 0 ? ' · срок прошел' : ' · ' + left + ' дн.');
+    return '<span class="ap-dl ' + cls + '">' + fmtDay(a.deadline) + tail + '</span>';
+  }
+  function fmtDay(iso) {
+    var p = String(iso).slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : String(iso);
+  }
+
+  function buildApplySection(ctx) {
+    var id = ctx.id;
+    var box = APPS[id];
+    if (!box) { loadApps(id); return skeletonSection('apply'); }
+    var list = box.applications || [];
+    var vault = box.vault !== false;
+
+    var cards = list.map(function (a) {
+      var steps = AP_STATUS.map(function (s) {
+        return '<button class="ap-step' + (s.k === a.status ? ' on' : '') + '" data-apst="' + a.id + '" data-st="' + s.k + '">' + s.t + '</button>';
+      }).join('');
+      var reqs = (a.requirements || []).map(function (r) {
+        var st = AP_REQ[r.state] || AP_REQ.todo;
+        return '<button class="ap-req" data-apreq="' + a.id + '" data-key="' + esc(r.key) + '" data-state="' + esc(r.state || 'todo') + '">' +
+          '<span class="ap-req__t">' + esc(r.title || r.key) + (r.required ? '' : ' <i>по запросу вуза</i>') + '</span>' +
+          '<span class="ap-req__s ' + st[1] + '">' + st[0] + '</span></button>';
+      }).join('');
+      var done = (a.progress && a.progress.done) || 0, total = (a.progress && a.progress.total) || 0;
+      return '<div class="ap-card" data-apid="' + a.id + '">' +
+        '<div class="ap-card__h">' +
+          '<div class="ap-card__b"><div class="ap-uni">' + esc(a.uniName) + '</div>' +
+            '<div class="ap-sub">' + esc([a.programName, a.intake].filter(Boolean).join(' · ') || 'программа не указана') + '</div></div>' +
+          apDeadline(a) +
+        '</div>' +
+        '<div class="ap-steps">' + steps + '</div>' +
+        '<div class="ap-pack"><span>Пакет</span><b>' + done + ' из ' + total + '</b>' +
+          '<span class="ap-bar"><i style="width:' + (total ? Math.round(done / total * 100) : 0) + '%"></i></span></div>' +
+        '<div class="ap-reqs">' + reqs + '</div>' +
+        '<div class="ap-grid">' +
+          '<label>Дедлайн<input type="date" data-apfield="deadline" data-apid="' + a.id + '" value="' + esc(a.deadline || '') + '"></label>' +
+          '<label>Номер заявки<input data-apfield="app_number" data-apid="' + a.id + '" value="' + esc(a.appNumber || '') + '" placeholder="как на портале"></label>' +
+          '<label>Портал<input data-apfield="portal_url" data-apid="' + a.id + '" value="' + esc(a.portalUrl || '') + '" placeholder="ссылка на кабинет вуза"></label>' +
+          '<label>Логин<input data-apfield="portal_login" data-apid="' + a.id + '" value="' + esc(a.portalLogin || '') + '" placeholder="логин семьи"></label>' +
+        '</div>' +
+        '<div class="ap-sec-row">' +
+          (a.hasSecret
+            ? '<button class="bp ghost sm" data-apshow="' + a.id + '">' + ic('lock', 13) + 'Показать пароль</button>'
+            : '<span class="ap-hint">' + (vault ? 'пароль от портала не сохранен' : 'сейф паролей не настроен: ключ portal_vault_key') + '</span>') +
+          (vault ? '<input class="ap-pass" data-appass="' + a.id + '" type="password" placeholder="новый пароль портала" autocomplete="new-password">' +
+            '<button class="bp sm" data-apsave="' + a.id + '">Сохранить</button>' : '') +
+        '</div>' +
+        '<div class="ap-shown" data-apshown="' + a.id + '"></div>' +
+      '</div>';
+    }).join('');
+
+    return '<div class="m-ctitle">Подача</div>' +
+      '<div class="m-csub">Заявки в вузы: пакет документов, дедлайн и доступ к кабинету на портале. ' +
+        'Все, что тут меняется, семья видит в кабинете лентой.</div>' +
+      (list.length ? cards : '<div class="ap-empty">Заявок нет. Заведите первую, когда вуз выбран.</div>') +
+      '<details class="m-fold ap-new"><summary><span class="pm-t">Новая заявка</span>' +
+        '<span class="pm-h">вуз, программа, дедлайн</span>' + ic('go', 13) + '</summary>' +
+        '<div class="m-fold__body"><div class="ap-grid">' +
+          '<label>Вуз<input id="ap-n-uni" placeholder="Shanghai University"></label>' +
+          '<label>Программа<input id="ap-n-prog" placeholder="Civil Engineering"></label>' +
+          '<label>Набор<input id="ap-n-intake" placeholder="2027 осень"></label>' +
+          '<label>Дедлайн<input id="ap-n-dl" type="date"></label>' +
+          '<label>Портал<input id="ap-n-url" placeholder="ссылка на кабинет вуза"></label>' +
+          '<label>Логин<input id="ap-n-login" placeholder="логин семьи"></label>' +
+        '</div>' +
+        '<button class="bp" id="ap-n-add">' + ic('plus', 13) + 'Завести заявку</button></div></details>';
+  }
+
+  function wireApplySection(id) {
+    var host = el('m-content');
+    if (!host) return;
+
+    function patch(appId, body, done) {
+      api('/admin/api/applications/' + appId, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function () { loadApps(id, true); if (done) done(); })
+        .catch(function () { showToast('Не сохранилось, попробуй еще раз'); });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-apst]'), function (b) {
+      b.addEventListener('click', function () {
+        var st = b.getAttribute('data-st');
+        // Отправку и ответ вуза семья увидит сообщением — спрашиваем, не промах ли это.
+        if ((st === 'submitted' || st === 'offer' || st === 'rejected')
+            && !confirm('Семья получит сообщение об этом. Продолжаем?')) return;
+        api('/admin/api/applications/' + b.getAttribute('data-apst') + '/status', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: st }),
+        }).then(function () { loadApps(id, true); })
+          .catch(function () { showToast('Статус не сменился'); });
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-apreq]'), function (b) {
+      b.addEventListener('click', function () {
+        var next = AP_NEXT[b.getAttribute('data-state')] || 'doing';
+        api('/admin/api/applications/' + b.getAttribute('data-apreq') + '/requirements', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'set', key: b.getAttribute('data-key'), state: next }),
+        }).then(function () { loadApps(id, true); })
+          .catch(function () { showToast('Не отметилось'); });
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-apfield]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var body = {};
+        body[inp.getAttribute('data-apfield')] = inp.value || null;
+        patch(inp.getAttribute('data-apid'), body);
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-apsave]'), function (b) {
+      b.addEventListener('click', function () {
+        var appId = b.getAttribute('data-apsave');
+        var inp = host.querySelector('[data-appass="' + appId + '"]');
+        var val = inp && inp.value.trim();
+        if (!val) { showToast('Введи пароль'); return; }
+        api('/admin/api/applications/' + appId + '/secret', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: val }),
+        }).then(function () { inp.value = ''; showToast('Доступ сохранен в сейф'); loadApps(id, true); })
+          .catch(function (e) {
+            showToast(e && e.status === 503 ? 'Сейф паролей не настроен — открытым не храним' : 'Не сохранилось');
+          });
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-apshow]'), function (b) {
+      b.addEventListener('click', function () {
+        var appId = b.getAttribute('data-apshow');
+        api('/admin/api/applications/' + appId + '/secret/reveal', { method: 'POST' })
+          .then(function (r) {
+            var box = host.querySelector('[data-apshown="' + appId + '"]');
+            if (!box) return;
+            // Показ уходит в след заявки: у портала один аккаунт на семью, и за ним
+            // лежат ее паспорт и диплом.
+            box.innerHTML = '<div class="ap-cred">' + esc(r.login || '') + ' · ' + esc(r.password || '') +
+              '<span>показ записан в ленту заявки</span></div>';
+          })
+          .catch(function () { showToast('Пароля нет или сейф не настроен'); });
+      });
+    });
+
+    var add = el('ap-n-add');
+    if (add) {
+      add.addEventListener('click', function () {
+        var uni = (el('ap-n-uni').value || '').trim();
+        if (!uni) { showToast('Без вуза заявку не завести'); return; }
+        add.disabled = true;
+        api('/admin/api/leads/' + id + '/applications', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uni_name: uni,
+            program_name: (el('ap-n-prog').value || '').trim() || null,
+            intake: (el('ap-n-intake').value || '').trim() || null,
+            deadline: el('ap-n-dl').value || null,
+            portal_url: (el('ap-n-url').value || '').trim() || null,
+            portal_login: (el('ap-n-login').value || '').trim() || null,
+          }),
+        }).then(function () { showToast('Заявка заведена'); loadApps(id, true); })
+          .catch(function () { add.disabled = false; showToast('Не получилось завести заявку'); });
+      });
+    }
   }
 
   /* ── РАЗДЕЛ «Оплаты» — ручной учёт ── */

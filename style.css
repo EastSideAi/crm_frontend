@@ -6000,3 +6000,73 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pr-grid .pr-ch, .pr-grid .pr-hch { display: none; }
   .pr-take { padding: 7px 10px; }
 }
+
+/* ── Секция «Подача»: заявки в вузы (buildApplySection) ──────────────────────
+   Плоско и плотно, как везде в CRM: белая карточка с бордером, чипы по формуле
+   -soft/-ink, ни теней, ни стекла. Чек-лист документов — строки-кнопки: одно
+   нажатие ведет документ от «ждем» к «собрано», отдельных контролов на каждую
+   строку нет, иначе пакет из десяти позиций превращается в панель управления. */
+.ap-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  padding: 16px 18px; margin-bottom: 14px; }
+.ap-card__h { display: flex; align-items: flex-start; gap: 14px; }
+.ap-card__b { flex: 1 1 auto; min-width: 0; }
+.ap-uni { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.ap-card .ap-sub { margin-top: 3px; font-size: 12.5px; color: var(--ink-2); }
+.ap-dl { flex: 0 0 auto; font-size: 12px; font-weight: 600; padding: 5px 10px;
+  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-2); }
+.ap-dl.soon { background: var(--amber-soft); color: var(--amber-ink); }
+.ap-dl.over { background: var(--red-soft); color: var(--red-ink); }
+.ap-dl.done { background: var(--green-soft); color: var(--green-ink); }
+.ap-dl.none { background: transparent; color: var(--ink-3); }
+
+.ap-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.ap-step { font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); cursor: pointer;
+  transition: color .12s cubic-bezier(.22,1,.36,1), background .12s cubic-bezier(.22,1,.36,1),
+    border-color .12s cubic-bezier(.22,1,.36,1); }
+.ap-step:hover { color: var(--blue); border-color: var(--blue); }
+.ap-step.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+.ap-pack { display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  font-size: 12.5px; color: var(--ink-2); }
+.ap-pack b { color: var(--ink); font-weight: 700; }
+.ap-bar { flex: 1 1 auto; height: 5px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
+.ap-bar i { display: block; height: 100%; background: var(--blue); transition: width .9s cubic-bezier(.22,1,.36,1); }
+
+.ap-reqs { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.ap-req { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); background: #fff;
+  cursor: pointer; font: inherit; transition: background .12s cubic-bezier(.22,1,.36,1); }
+.ap-req:last-child { border-bottom: 0; }
+.ap-req:hover { background: #FBFBFC; }
+.ap-req__t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink); }
+.ap-req__t i { font-style: normal; color: var(--ink-3); }
+.ap-req__s { flex: 0 0 auto; font-size: 11.5px; font-weight: 600; padding: 4px 9px;
+  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-3); }
+.ap-req__s.ok { background: var(--green-soft); color: var(--green-ink); }
+.ap-req__s.go { background: var(--blue-tint); color: var(--blue); }
+.ap-req__s.no { background: var(--red-soft); color: var(--red-ink); }
+
+.ap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.ap-grid label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ap-grid input { display: block; width: 100%; margin-top: 5px; padding: 8px 11px;
+  border: 1px solid var(--line-2); border-radius: 10px; background: #fff;
+  font: inherit; font-size: 13px; color: var(--ink); }
+.ap-grid input:focus { outline: none; border-color: var(--blue); }
+
+.ap-sec-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.ap-pass { flex: 1 1 180px; min-width: 150px; padding: 8px 11px; border: 1px solid var(--line-2);
+  border-radius: 10px; font: inherit; font-size: 13px; }
+.ap-pass:focus { outline: none; border-color: var(--blue); }
+.ap-hint { font-size: 12px; color: var(--ink-3); }
+.ap-cred { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--blue-tint);
+  font-size: 13px; color: var(--navy); word-break: break-all; }
+.ap-cred span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
+.ap-empty { padding: 18px; border: 1px dashed var(--line-2); border-radius: var(--r-lg);
+  font-size: 13px; color: var(--ink-2); }
+.ap-new { margin-top: 14px; }
+
+@media (max-width: 720px) {
+  .ap-grid { grid-template-columns: 1fr; }
+}
