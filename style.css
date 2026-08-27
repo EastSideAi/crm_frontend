@@ -6448,9 +6448,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .gd-art { padding: 12px; }
   .gd-eis { grid-template-columns: 1fr; }
   .gd-do li { font-size: 14px; padding-left: 30px; }
-  /* Липкая полоса кнопок поднимается над таббаром телефона: он висит поверх и
-     иначе закрывает «Понятно, дальше» ровно в тот момент, когда его надо нажать. */
-  .gd-foot { padding: 14px 18px; bottom: 86px; }
+  /* На телефоне полоса кнопок не липкая. .gd-main с overflow:hidden сам стал
+     контекстом для sticky, поэтому bottom отсчитывался от низа карточки, а не
+     экрана — и bottom:86px поднимал футер на 86px ВНУТРЬ контента, накрывая
+     последний блок (его было не долистать). Статичный футер встает под контентом;
+     от таббара его держит padding-bottom:92px у .app. */
+  .gd-foot { padding: 14px 18px; position: static; }
   .gd-foot .bp { flex: 1; }
   .gd-fin { padding: 34px 18px 30px; }
   /* В шапке телефона от кнопки остается значок: подпись «Обучение по системе»
