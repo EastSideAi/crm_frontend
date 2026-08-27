@@ -7838,8 +7838,11 @@
       fr.readAsDataURL(picked);
     });
 
-    var CZB_ST = { created: ['приглашен', 'cz-ok'], skipped: ['пропущен', 'cz-wait'],
-                   error: ['ошибка', 'cz-off'] };
+    // Цвет исхода по смыслу: заведен — зеленый, ошибка — красный (нужно внимание),
+    // пропуск (дубль) — нейтральный серый. «Заведен», а не «приглашен»: «Приглашен» —
+    // это состояние готовности карточки (синее), одно слово не должно значить два цвета.
+    var CZB_ST = { created: ['заведен', 'cz-ok'], skipped: ['пропущен', 'cz-off'],
+                   error: ['ошибка', 'cz-bad'] };
     function showResults(r) {
       var rows = (r.rows || []).map(function (x) {
         var m = CZB_ST[x.status] || [x.status, ''];
@@ -7847,8 +7850,7 @@
             '<span class="czb-n">' + (x.row || '') + '</span>' +
             '<span class="czb-name">' + esc(x.full_name || '') + '</span>' +
             '<span class="sev ' + m[1] + '">' + m[0] + '</span>' +
-            '<span class="czb-msg">' + esc(x.status === 'created'
-              ? 'ссылка в выгрузке' : (x.message || '')) + '</span>' +
+            '<span class="czb-msg">' + esc(x.message || '') + '</span>' +
           '</div>';
       }).join('');
       var head = '<b>' + r.created + '</b> приглашено' +
