@@ -2014,7 +2014,7 @@
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
+    curator:       { label: 'Тьютор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
@@ -4621,7 +4621,7 @@
   }
 
   /* ── Срез «По ученикам» ────────────────────────────────────────────────────
-     Группа = ученик: имя, этап пути, заметка куратора и вся работа команды по
+     Группа = ученик: имя, этап пути, заметка тьютора и вся работа команды по
      нему. Внутри задачи разложены по роли исполнителя, потому что вопрос звучит
      именно так: что здесь на тьюторе, а что на администраторе. «Без
      исполнителя» идет первым блоком — это не мелочь оформления, а работа,
@@ -7198,7 +7198,7 @@
         : '') +
       '</div></div>';
 
-    /* 2б. Учетка в CRM. Преподаватели и кураторы — наши сотрудники и одновременно
+    /* 2б. Учетка в CRM. Преподаватели и тьюторы — наши сотрудники и одновременно
        самозанятые: связав карточку с их логином, мы открываем им раздел «Моя работа»
        вместо второго входа. Связь одна к одному — иначе под подписью в акте не понять,
        кто из двоих нажал. Подрядчику со стороны учетку не заводим вовсе: в CRM лиды,
@@ -7360,7 +7360,7 @@
            не украшение, а сообщение «это не твое поле». */
         '<div class="m-sec"><div class="m-sec-h">Основное</div><div class="cz-form">' +
           czField('full_name', 'ФИО', c.full_name, 'Как в паспорте') +
-          czField('job', 'Должность', c.job, 'Ассистент, СММ, Видео, Кураторство') +
+          czField('job', 'Должность', c.job, 'Ассистент, СММ, Видео, Тьюторство') +
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
           czField('connected_at', 'Дата подключения', c.connected_at, '', 'date') +
@@ -9458,7 +9458,7 @@
   }
 
   /* ── КАБИНЕТ ИСПОЛНИТЕЛЯ В CRM («Моя работа») ─────────────────────────────
-     Преподаватель и куратор у нас одновременно сотрудники и самозанятые: они ведут
+     Преподаватель и тьютор у нас одновременно сотрудники и самозанятые: они ведут
      клиентов в CRM и получают от нас задания. Второй логин тем же людям не нужен
      (решение владельца от 2026-08-11), поэтому свои задания, план и акты человек
      открывает здесь. Внешний кабинет по коду остается для подрядчиков со стороны —
@@ -13399,7 +13399,7 @@
     var rows = state._team.map(function (u) {
       var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
       /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
-         Показываем ее настоящую роль и запираем поля: пустой селект «Куратор» напротив
+         Показываем ее настоящую роль и запираем поля: пустой селект «Тьютор» напротив
          супер-админа врал бы о том, кто в системе главный. */
       var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
       var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
@@ -14903,7 +14903,7 @@
       { label: 'Открыли подарки', hint: 'бот показал меню', n: f.opened || 0 },
       { label: 'Выбрали подарок', hint: 'нажали кнопку в меню', n: f.chose || 0 },
       { label: 'Забрали', hint: 'дошли до конца сценария', n: f.got || 0 },
-      { label: 'Записались на разбор', hint: 'выбрали окно с куратором', n: f.booked || 0 }
+      { label: 'Записались на разбор', hint: 'выбрали окно с тьютором', n: f.booked || 0 }
     ];
     var first = steps[0].n;
     var ladder = steps.map(function (s, i) {
@@ -16074,7 +16074,7 @@
   }
 
   /* ── ЧАТ ПРАВОК ПЛАНА: пристыкованная колонка справа от доски ──────────────
-     Куратор говорит словами, что поправить; модель отвечает операциями по id задач,
+     Тьютор говорит словами, что поправить; модель отвечает операциями по id задач,
      бэкенд применяет их сам и возвращает готовую доску (см. app/plan_ops.py).
      Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
   /* Правый столбец карточки лида: у «Поступления» — чат по плану, у «Витрины» — чат
@@ -16145,7 +16145,7 @@
     '</aside>';
   }
 
-  /* Что именно AI сделал с доской. Куратору важно не «поправил задачу», а ЧТО стало
+  /* Что именно AI сделал с доской. Тьютору важно не «поправил задачу», а ЧТО стало
      другим — поэтому у правки показываем сам дифф «было → стало». Отклонённое
      показываем тоже: молчать о том, что правка не легла, нельзя. */
   var PCHAT_STAGE_RU = {
@@ -16201,7 +16201,7 @@
     }).join('');
 
     // Отклонённое схлопываем в одну строку: три подряд «Не применил» — это шум,
-    // куратору хватает факта и причины.
+    // тьютору хватает факта и причины.
     var badRow = '';
     if (bad.length) {
       var why = bad.map(function (r) { return r.why; }).filter(function (v, i, a) { return a.indexOf(v) === i; });
@@ -16326,7 +16326,7 @@
         inp.style.height = Math.min(inp.scrollHeight, 132) + 'px';
       });
       // без автофокуса: чат теперь открыт всегда, и перерисовка доски (чекбокс,
-      // раскрытие задачи) не должна воровать фокус у того, что делает куратор
+      // раскрытие задачи) не должна воровать фокус у того, что делает тьютор
     }
     var list = el('pchat-list');
     if (list) list.scrollTop = list.scrollHeight;
@@ -16354,7 +16354,7 @@
   }
 
   /* Логика последней AI-сборки: почему такой трек, ключевые решения и какие этапы
-     пропущены и почему. Без этого куратор видел готовый план и не понимал, откуда он. */
+     пропущены и почему. Без этого тьютор видел готовый план и не понимал, откуда он. */
   function aiReasonBlock(id) {
     var r = RM_REASON[id];
     if (!r) return '';
@@ -16391,7 +16391,7 @@
     if (state.planStatus[id] === 'loading') return;
     state.planStatus[id] = state.planStatus[id] || 'loading';
     api('/admin/api/leads/' + id + '/plan').then(function (r) {
-      // мета этапов (личные названия/описания от AI) — чтобы доска куратора показывала
+      // мета этапов (личные названия/описания от AI) — чтобы доска тьютора показывала
       // те же заголовки, что видит ученик, а не сухой словарь
       var meta = {};
       ((r && r.plan && r.plan.stages) || []).forEach(function (s) {
@@ -18738,7 +18738,7 @@
   /* Реальная сдача хранит doc_id (ссылка на client_docs), не готовый src — сам файл
      лежит в Storage за подписанной ссылкой, которую нужно резолвить запросом. Раньше
      rmSubCard рисовал либо мёртвую ссылку (href="#"), либо для картинок вообще
-     демо-заглушку вместо присланного фото: куратор физически не мог посмотреть,
+     демо-заглушку вместо присланного фото: тьютор физически не мог посмотреть,
      что прислал клиент. Для doc_id-карточек оставляем href="#" + data-docid,
      резолвим асинхронно (см. resolveDocLink) — картинки сразу для превью, файлы
      по клику. */
@@ -18895,12 +18895,12 @@
       var catts = c.atts && c.atts.length ? '<div class="rm-catts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
       var ctxt = c.text ? '<div class="rm-cmt-t">' + esc(c.text) + '</div>' : '';
       return '<div class="rm-cmt by-' + (c.by === 'client' ? 'client' : 'mgr') + '">' +
-        '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Куратор') + '</span>' +
+        '<div class="rm-cmt-h"><span class="rm-cmt-who">' + (c.by === 'client' ? 'Клиент' : 'Тьютор') + '</span>' +
         (c.at ? '<span class="rm-cmt-when">' + fmtWhen(c.at) + '</span>' : '') + '</div>' + ctxt + catts + '</div>';
     }).join('') + '</div>';
   }
   /* лента обсуждения по задаче В СТИЛЕ «ДИАЛОГОВ» — те же пузыри .tg-msg (клиент слева,
-     куратор справа), с днями-разделителями и вложениями; используется инбоксом «Обсуждения» */
+     тьютор справа), с днями-разделителями и вложениями; используется инбоксом «Обсуждения» */
   function buildThreadFromComments(comments) {
     if (!comments || !comments.length)
       return '<div class="tg-thread-empty">' + ic('chat', 24) +
@@ -18913,7 +18913,7 @@
       var dk = c.at ? String(c.at).slice(0, 10) : '';
       if (dk && dk !== lastDay) { lastDay = dk; sep = '<div class="tg-day"><span>' + dayLabel(c.at) + '</span></div>'; }
       var atts = c.atts && c.atts.length ? '<div class="tg-atts">' + c.atts.map(rmCmtAttCard).join('') + '</div>' : '';
-      var foot = isClient ? '' : '<span class="tg-by">' + ic('hand', 9) + 'Куратор</span>';
+      var foot = isClient ? '' : '<span class="tg-by">' + ic('hand', 9) + 'Тьютор</span>';
       return sep + '<div class="tg-msg ' + side + (isClient ? '' : ' mgr') + '">' +
         '<div class="tg-bub">' + atts + (c.text ? '<span class="tg-txt">' + mdMsg(c.text) + '</span>' : '') +
           '<span class="tg-mt num">' + fmtTime(c.at) + '</span></div>' + foot +
@@ -19014,7 +19014,7 @@
     var st = ADMISSION_STAGES.filter(function (s) { return s.key === th.stage; })[0];
     var last = th.last;
     var prev = last.text || (last.atts && last.atts.length ? 'вложение' : '');
-    var who = last.by === 'client' ? 'Клиент' : 'Куратор';
+    var who = last.by === 'client' ? 'Клиент' : 'Тьютор';
     return '<button class="tg-row th-row' + (sel ? ' on' : '') + (th.wait ? ' unread' : '') +
       '" data-id="' + esc(th.leadId) + '" data-tid="' + esc(th.taskId) + '">' +
       // анатомия строки — один в один с «Диалогами»: аватар, имя+время, превью, тег снизу
@@ -19228,7 +19228,7 @@
         '<span class="rm-discuss-ic">' + ic('chat', 16) + '</span>' +
         '<span class="rm-discuss-main">' +
           '<span class="rm-discuss-t">Обсуждение' + (comments.length ? ' <span class="num">' + comments.length + '</span>' : '') + '</span>' +
-          '<span class="rm-discuss-prev">' + (lastC ? esc((lastC.by === 'client' ? 'Клиент' : 'Куратор') + ': ' + prevTxt)
+          '<span class="rm-discuss-prev">' + (lastC ? esc((lastC.by === 'client' ? 'Клиент' : 'Тьютор') + ': ' + prevTxt)
                                                    : 'Открыть чат по задаче — фото и документы тоже можно') + '</span>' +
         '</span>' +
         '<span class="rm-discuss-go">' + ic('go', 15) + '</span>' +
@@ -21805,7 +21805,7 @@
             });
           }
         });
-        // кто делает задачу и когда — пустой исполнитель значит «отвечает куратор клиента»
+        // кто делает задачу и когда — пустой исполнитель значит «отвечает тьютор клиента»
         var aWho = tEl.querySelector('.rm-a-who');
         if (aWho) aWho.addEventListener('change', function (e) {
           e.stopPropagation();
@@ -22525,7 +22525,7 @@
       var reason = rs ? rs.value.trim() : (was.reason || '');
       var pitch = pt ? pt.value.trim() : (was.pitch || '');
       var priceShow = pr ? pr.checked : (was.price_show !== false);
-      // src переводим в «менеджер», только если куратор реально изменил текст
+      // src переводим в «менеджер», только если тьютор реально изменил текст
       var same = headline === (was.headline || '') && reason === (was.reason || '') &&
                  pitch === (was.pitch || '') &&
                  priceShow === (was.price_show !== false) && was.on;
@@ -22683,7 +22683,7 @@
     '</aside>';
   }
 
-  /* Что AI сделал с витриной: куратору важно видеть не «поправил», а что именно стало
+  /* Что AI сделал с витриной: тьютору важно видеть не «поправил», а что именно стало
      другим — тексты читает родитель, тихая подмена недопустима. */
   function ochatReport(report) {
     if (!Array.isArray(report) || !report.length) return '';
