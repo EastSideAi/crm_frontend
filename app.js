@@ -6201,6 +6201,7 @@
              людей: у выдуманного ИНН налоговая статус не подтвердит. В бою ручки нет,
              поэтому и кнопки там нет. */
           (CZ.demo ? '<button class="cdd" id="cz-demo-new">Демо-исполнитель</button>' : '') +
+          '<button class="cdd" id="cz-bulk">' + ic('rows', 13) + 'Пачкой</button>' +
           '<button class="bp sm cz-add" id="cz-add">' + ic('send', 14) + 'Пригласить исполнителя</button>' +
         '</div>' +
         '<div class="list-quick">' + quick + '</div>' +
@@ -6223,6 +6224,8 @@
       CZ.archived = !CZ.archived; CZ.list = null; renderView();
     });
     el('cz-add').addEventListener('click', openInviteCz);
+    var bl = el('cz-bulk');
+    if (bl) bl.addEventListener('click', openInviteBulk);
     var dn = el('cz-demo-new');
     if (dn) dn.addEventListener('click', function () {
       czSend('/admin/api/contractors/demo', 'POST')
@@ -7039,6 +7042,137 @@
     ov2.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
     });
+  }
+
+  /* Скачать файл, пришедший с сервера base64 (шаблон реестра, результат загрузки).
+     Браузер в песочнице ссылку-данные качает сам — тот же прием, что у выгрузки CSV. */
+  function dlBase64(name, b64, mime) {
+    var bin = atob(b64), len = bin.length, buf = new Uint8Array(len);
+    for (var i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+    var blob = new Blob([buf], { type: mime ||
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name || 'file.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  }
+
+  /* Пригласить пачкой (этап 11): загрузка реестра Excel/CSV. Диалог в два шага —
+     сперва выбор файла, потом отчет по строкам со ссылками. Одна ошибочная строка не
+     валит пачку: у каждой свой итог, а готовые ссылки уезжают выгрузкой для рассылки. */
+  function openInviteBulk() {
+    if (document.querySelector('.al-ov')) return;
+    var ov2 = document.createElement('div');
+    ov2.className = 'al-ov';
+    ov2.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Пригласить пачкой</div></div>' +
+          '<button class="al-x" id="czb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Загрузите список исполнителей. Обязательна колонка ФИО, телефон, почта и заметка — по желанию. На каждую строку заведем карточку и выпустим ссылку на анкету.</div>' +
+        '<div class="al-body">' +
+          '<button class="czb-tpl" id="czb-tpl">' + ic('dl', 14) + 'Скачать шаблон Excel</button>' +
+          '<label class="czb-drop" id="czb-drop">' +
+            '<input type="file" id="czb-file" accept=".xlsx,.csv" hidden>' +
+            '<span class="czb-drop-i">' + ic('rows', 20) + '</span>' +
+            '<span class="czb-drop-t" id="czb-fname">Выберите файл .xlsx или .csv</span>' +
+          '</label>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="czb-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="czb-go" disabled>' + ic('send', 14) + 'Пригласить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov2);
+    requestAnimationFrame(function () { ov2.classList.add('show'); });
+    var closed = false, touched = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov2.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov2.parentNode) ov2.parentNode.removeChild(ov2); }, 180);
+      if (touched) czLoad();   // что-то завели — список пересобрать
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('czb-x').addEventListener('click', close);
+    el('czb-cancel').addEventListener('click', close);
+    ov2.addEventListener('mousedown', function (e) { if (e.target === ov2) close(); });
+
+    el('czb-tpl').addEventListener('click', function () {
+      czSend('/admin/api/contractors/invite-bulk/template', 'GET')
+        .then(function (r) { dlBase64(r.name, r.data); })
+        .catch(function (e) { showToast(e.message); });
+    });
+
+    var picked = null;
+    var fi = el('czb-file'), go = el('czb-go');
+    fi.addEventListener('change', function () {
+      var f = fi.files && fi.files[0];
+      if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { showToast('Файл больше 2 МБ'); return; }
+      picked = f;
+      el('czb-fname').textContent = f.name;
+      el('czb-drop').classList.add('has');
+      go.disabled = false;
+    });
+
+    go.addEventListener('click', function () {
+      if (!picked) return;
+      go.disabled = true; go.classList.add('loading');
+      var fr = new FileReader();
+      fr.onload = function () {
+        czSend('/admin/api/contractors/invite-bulk', 'POST',
+          { name: picked.name, data: String(fr.result) })
+          .then(function (r) { touched = r.created > 0; showResults(r); })
+          .catch(function (e) {
+            go.disabled = false; go.classList.remove('loading');
+            showToast(e.message);
+          });
+      };
+      fr.onerror = function () {
+        go.disabled = false; go.classList.remove('loading');
+        showToast('Не удалось прочитать файл');
+      };
+      fr.readAsDataURL(picked);
+    });
+
+    var CZB_ST = { created: ['приглашен', 'cz-ok'], skipped: ['пропущен', 'cz-wait'],
+                   error: ['ошибка', 'cz-off'] };
+    function showResults(r) {
+      var rows = (r.rows || []).map(function (x) {
+        var m = CZB_ST[x.status] || [x.status, ''];
+        return '<div class="czb-row">' +
+            '<span class="czb-n">' + (x.row || '') + '</span>' +
+            '<span class="czb-name">' + esc(x.full_name || '') + '</span>' +
+            '<span class="sev ' + m[1] + '">' + m[0] + '</span>' +
+            '<span class="czb-msg">' + esc(x.status === 'created'
+              ? 'ссылка в выгрузке' : (x.message || '')) + '</span>' +
+          '</div>';
+      }).join('');
+      var head = '<b>' + r.created + '</b> приглашено' +
+        (r.skipped ? ', <b>' + r.skipped + '</b> пропущено' : '') +
+        (r.errors ? ', <b>' + r.errors + '</b> с ошибкой' : '');
+      ov2.querySelector('.al-card').innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Загрузка завершена</div></div>' +
+          '<button class="al-x" id="czb-x2" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + head + '. Ссылки на анкету — в выгрузке ниже, разошлите их людям сами.</div>' +
+        '<div class="al-body"><div class="czb-list">' + (rows || '<div class="czb-row">Пусто</div>') + '</div></div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="czb-close">Закрыть</button>' +
+          (r.results_file ? '<button class="bp al-save" id="czb-dl">' + ic('dl', 14) + 'Скачать ссылки</button>' : '') +
+        '</div>';
+      el('czb-x2').addEventListener('click', close);
+      el('czb-close').addEventListener('click', close);
+      var dl = el('czb-dl');
+      if (dl) dl.addEventListener('click', function () {
+        dlBase64(r.results_file.name, r.results_file.data);
+      });
+    }
   }
 
   /* ── ЗАДАНИЯ ИСПОЛНИТЕЛЯМ (модуль самозанятых, этап 2) ─────────────────────
