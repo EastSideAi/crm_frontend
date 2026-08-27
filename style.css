@@ -2294,7 +2294,7 @@ button.tr-crumb:hover { color: var(--blue); }
   font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--green-ink); }
 .dn-gh .tsk-prog { margin-top: 0; }
-.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px; align-items: center;
+.dn-t { display: grid; grid-template-columns: 22px minmax(0,1fr) 150px 110px 78px; align-items: center;
   gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); cursor: pointer;
   transition: background .14s var(--ease); }
 .dn-t:hover { background: #FBFBFC; }
@@ -2444,7 +2444,8 @@ button.tr-crumb:hover { color: var(--blue); }
 .rh-sf .bp { margin-left: auto; }
 
 /* карточка задачи: та же модалка, но шире — внутри лента истории */
-.tsk-card { max-width: 580px; display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.tsk-card { max-width: 580px; display: flex; flex-direction: column;
+  max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); }
 .tsk-load { display: flex; gap: 7px; justify-content: center; padding: 60px; }
 .tsk-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 24px 0;
   position: relative; }
@@ -2590,17 +2591,30 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-body { padding: 0; }
 .stu { padding: 16px 18px 14px; border-top: 1px solid var(--line); }
 .stu:first-child { border-top: none; }
-.stu-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-/* Имя ученика — переход в его карточку, поэтому кнопка, а не текст. */
-.stu-n { font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
+/* Строка ученика свернута: имя, этап, кто ведет и счетчики. Раскрывается кликом —
+   на 1000 учеников развернуть всем задачи сразу нельзя. Вся шапка и есть кнопка. */
+.stu-h { width: 100%; display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  text-align: left; background: none; padding: 2px 0; transition: .12s; }
+.stu-chev { color: var(--ink-3); display: inline-flex; transition: transform .18s var(--ease); }
+.stu-chev.on { transform: rotate(90deg); }
+.stu-h:hover .stu-n { color: var(--blue); }
+.stu-n { font-size: 15.5px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
   transition: .12s; }
-.stu-n:hover { color: var(--blue); }
 .stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
-.stu-cs { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* Кто ведет ученика — аватары исполнителей его открытых задач: отвечает на «не
+   видно, на кого поставлено» прямо в свернутой строке. */
+.stu-av-row { margin-left: auto; display: inline-flex; align-items: center; }
+.stu-av-row .stu-av + .stu-av { margin-left: -6px; }
+.stu-av { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid;
+  place-items: center; font: 700 9.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); box-shadow: 0 0 0 2px #fff; }
+.stu-av.more { background: #E7EAF0; color: var(--ink-3); }
+.stu-av.none { background: var(--amber-soft); color: var(--amber-ink); }
+.stu-cs { display: flex; align-items: center; gap: 10px; }
 .stu-c { font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .stu-c.over { color: var(--red-ink); }
-/* Заметка куратора — контекст, а не содержание экрана: две строки и тише всего
+/* Заметка тьютора — контекст, а не содержание экрана: две строки и тише всего
    остального. Полностью она читается в карточке ученика. */
 .stu-note { margin-top: 9px; font-size: 12.5px; line-height: 1.45; color: var(--ink-2);
   background: var(--fill); border-radius: 10px; padding: 8px 11px; }
@@ -2610,7 +2624,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-note span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; }
 .stu-g { margin-top: 12px; }
-.stu-gl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+.stu-gl { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); margin-bottom: 4px; }
 /* Работа, которую никто не взял, — состояние «внимание», а не поломка: красный
    в этом экране занят просрочкой. */
@@ -2626,17 +2640,27 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-td.due-none { color: var(--ink-3); font-weight: 500; }
 .stu-td.due-now { color: var(--amber-ink); }
 .stu-td.due-over { color: var(--red-ink); }
-/* Подсказки плана — не задачи: они не кликаются и написаны тише, иначе экран
-   работы команды превращается в пересказ плана ученика. */
-.stu-plan { margin-top: 11px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.stu-pl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--ink-3); }
-.stu-pt { font-size: 12px; color: var(--ink-2); background: var(--fill);
-  border-radius: var(--r-pill); padding: 4px 10px; }
-.stu-add { margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+/* Раскрытая часть: воздух сверху отделяет ее от свернутой шапки. */
+.stu-body-in { margin-top: 4px; animation: stu-open .18s var(--ease); }
+@keyframes stu-open { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+.stu-acts { margin-top: 12px; display: flex; align-items: center; gap: 16px; }
+.stu-add, .stu-open { display: inline-flex; align-items: center; gap: 6px;
   font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--blue); transition: .15s; }
+.stu-open { color: var(--ink-3); }
 .stu-add:hover { color: var(--blue-d); }
+.stu-open:hover { color: var(--ink); }
+
+/* Тулбар среза: переключатель мои/все (системный сегмент .pay-seg), фильтр по
+   исполнителю, чип просрочки. */
+.stu-tools { flex-wrap: wrap; gap: 8px 10px; }
+.stu-whowrap { flex: none; }
+.stu-more { display: block; width: calc(100% - 36px); margin: 8px 18px 4px;
+  padding: 10px; text-align: center; border-radius: 10px; background: var(--fill);
+  font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); transition: .14s; }
+.stu-more:hover { background: #EDEFF3; color: var(--ink); }
+.stu-trunc { padding: 8px 18px 14px; font-size: 12px; color: var(--ink-3); }
 
 /* ── Задачи в карточке ученика ───────────────────────────────────────────────
    Тот же контур задач, вид покороче: в карточке важнее «кто и когда», а вести
@@ -2825,7 +2849,7 @@ button.tr-crumb:hover { color: var(--blue); }
      как и название задачи в строке списка. */
   .tsk-step-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
-  .tsk-card { max-height: calc(100vh - 24px); }
+  .tsk-card { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
   .sec-head > .qchip { order: 2; margin-left: 0; }
 }
 
@@ -3157,6 +3181,93 @@ button.tr-crumb:hover { color: var(--blue); }
      посреди экрана: над ней и под ней оставалась пустота в треть высоты. */
   .gate-card { padding: 28px 28px 40px; align-items: stretch; justify-content: flex-start; }
   .gate-card > * { max-width: none; }
+}
+
+/* ── Матрица Эйзенхауэра: важность как второй признак задачи ─────────────────
+   Важность помечается амбером по формуле §3.2 (soft-фон + ink-текст), а не
+   красным: красное на экране задач одно — просрочка, и второй сигнал того же
+   веса свел бы оба на нет. */
+.tsk-imp { display: inline-flex; align-items: center; flex: none; margin-right: 6px;
+  color: var(--amber-ink); vertical-align: -1px; }
+.tsk-imp svg { width: 11px; height: 11px; }
+
+/* Полоса-разделитель внутри списка дня: «Срочно и важно» и все остальное.
+   Отдельным блоком наверху те же задачи не выносим — они задваивались бы. */
+.tsk-band { display: flex; align-items: baseline; gap: 9px; padding: 14px 16px 7px;
+  border-top: 1px solid var(--line); }
+.list-body > .tsk-band:first-child { border-top: 0; padding-top: 10px; }
+.tsk-band-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); }
+.tsk-band-h { font-size: 11.5px; color: var(--ink-3); }
+.tsk-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+
+/* Тумблер важности в карточке — рядом со сроком: две оси решаются вместе. */
+.tsk-mimp { display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 3px 10px 3px 8px;
+  transition: background .14s var(--ease), color .14s var(--ease), border-color .14s var(--ease); }
+.tsk-mimp svg { width: 12px; height: 12px; color: var(--ink-3); }
+.tsk-mimp:hover { color: var(--ink-2); border-color: var(--ink-3); }
+.tsk-mimp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.tsk-mimp.on svg { color: var(--amber-ink); }
+button.tsk-mimp { cursor: pointer; }
+
+/* Чип важности в форме постановки. Это тот же .qchip, только «включенное»
+   состояние амберное, а не navy: включенный фильтр и помеченная важной задача —
+   разные вещи, и цвет их разводит. */
+.nt-impf { flex-direction: column; align-items: flex-start; gap: 7px; }
+.qchip.nt-imp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.qchip.nt-imp.on svg { color: var(--amber-ink); }
+
+/* Сама матрица: четыре квадранта 2×2. Рамок между ними нет — разделяет
+   заливка, как у всех мини-карточек CRM. Акцент один: срочное и важное. */
+.eis { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px;
+  padding: 14px 16px 16px; align-items: start; }
+.eis-q { background: var(--fill); border-radius: var(--r-lg); padding: 13px 14px 6px;
+  display: flex; flex-direction: column; min-width: 0; }
+.eis-q.eis-q-iu { background: var(--amber-soft); }
+.eis-h { display: flex; align-items: baseline; gap: 8px; }
+.eis-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); }
+.eis-q-iu .eis-t { color: var(--amber-ink); }
+.eis-n { margin-left: auto; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+.eis-q-iu .eis-n { color: var(--amber-ink); }
+.eis-hint { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.eis-q-iu .eis-hint { color: var(--amber-ink); opacity: .72; }
+.eis-body { margin-top: 10px; display: flex; flex-direction: column; }
+.eis-t-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 0;
+  border-top: 1px solid rgba(15,19,32,.06); cursor: pointer; min-width: 0;
+  transition: color .14s var(--ease); }
+.eis-body > .eis-t-row:first-child { border-top: 0; }
+.eis-t-row:hover .eis-tt { color: var(--blue); }
+.eis-tt { font-size: 13px; color: var(--ink); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.eis-td { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.eis-empty { font-size: 12px; color: var(--ink-3); padding: 10px 0 10px; }
+
+/* Снять с готово прямо в отчете периода: действие тихое и появляется на
+   ховере строки — разбирают отчет глазами, а не кнопками. Место под кнопку
+   держится всегда (.dn-undo-gap), иначе строки без нее едут по сетке. */
+.dn-undo-gap { display: block; }
+.dn-undo { display: inline-flex; align-items: center; gap: 5px; flex: none;
+  font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 3px 9px 3px 7px;
+  opacity: 0; transition: opacity .14s var(--ease), color .14s var(--ease), border-color .14s var(--ease); }
+.dn-undo svg { width: 12px; height: 12px; }
+.dn-t:hover .dn-undo { opacity: 1; }
+.dn-undo:hover { color: var(--ink); border-color: var(--ink-3); }
+.dn-undo:focus-visible { opacity: 1; }
+
+/* Телефон. Блок стоит ПОСЛЕ базовых правил выше намеренно: у мобильного
+   переопределения та же специфичность, и, стоя раньше, оно проигрывало бы. */
+@media (max-width: 760px) {
+  /* Матрица — колонкой: два квадранта в ряд на 390px превращают названия задач
+     в два слова с многоточием. */
+  .eis { grid-template-columns: minmax(0,1fr); gap: 10px; padding: 12px 14px 14px; }
+  /* Ховера на телефоне нет: «вернуть» стоит видимой под датой, иначе до нее не
+     добраться вовсе. Пустую ячейку в двухколоночной строке не держим. */
+  .dn-undo { grid-column: 2; opacity: 1; justify-self: start; }
+  .dn-undo-gap { display: none; }
 }
 
 /* ════ ФИНАНСЫ ════ */
@@ -3998,7 +4109,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rm-ai-dots i:nth-child(2) { animation-delay: .16s; }
 .rm-ai-dots i:nth-child(3) { animation-delay: .32s; }
 
-/* ── «Как AI собрал этот план»: логика решения для куратора ──────────────── */
+/* ── «Как AI собрал этот план»: логика решения для тьютора ──────────────── */
 .rm-why { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line-2); }
 .rm-why-h { display: flex; align-items: center; gap: 7px; margin-bottom: 12px;
   font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -.012em; }
@@ -4056,7 +4167,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .pchat-m.me { align-items: flex-end; }
 @keyframes pchat-m-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 /* Реплика помощника — якорь панели: она без рамки и крупнее отчёта, потому что её
-   читают, а отчёт сверяют. Реплика куратора — плотная синяя пилюля. */
+   читают, а отчёт сверяют. Реплика тьютора — плотная синяя пилюля. */
 .pchat-b { font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pchat-m.me .pchat-b { padding: 10px 14px; border-radius: 15px; border-bottom-right-radius: 6px;
   background: var(--blue); color: #fff; max-width: 88%; font-size: 13.5px; }
@@ -4179,7 +4290,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
 
 .of-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
-/* Карточка витрины = то, что редактирует куратор, и одновременно превью для родителя.
+/* Карточка витрины = то, что редактирует тьютор, и одновременно превью для родителя.
    Поля без рамок-коробок: подчеркнутая строка читается как сам текст, а не как форма. */
 .of-card { position: relative; padding: 16px 18px 14px; border-radius: var(--r-lg);
   border: 1px solid var(--line); background: var(--card);
@@ -6199,4 +6310,177 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pr-take { color: var(--ink); background: var(--fill); border-color: transparent; }
   .pr-grid .pr-ch, .pr-grid .pr-hch { display: none; }
   .pr-take { padding: 7px 10px; }
+}
+
+/* ════ КАК РАБОТАТЬ — обучение сотрудника ════════════════════════════════════
+   Один шаг на экран, слева маршрут. Экран читают один раз в жизни и потом
+   изредка перечитывают, поэтому здесь плотность уступает ясности: строка текста
+   шире обычной админской, воздуха между блоками больше. Это единственное место
+   CRM, где так, и это осознанно.
+
+   Картинки шага — схемы окна (см. gdWin в app.js), а не скриншоты: на настоящих
+   экранах видны фамилии детей, а курс открыт всей команде. Цвета схем — те же
+   токены, что у интерфейса, чтобы человек узнавал то, что видит вокруг. */
+.gd { display: grid; grid-template-columns: 248px minmax(0, 1fr); gap: 20px; align-items: start; }
+.gd-side { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  padding: 18px 14px 14px; position: sticky; top: 14px; }
+.gd-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding: 0 8px; }
+.gd-prog { padding: 12px 8px 14px; }
+.gd-bar { height: 6px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
+.gd-bar i { display: block; height: 100%; border-radius: var(--r-pill); background: var(--blue);
+  transition: width .9s var(--ease); }
+.gd-prog-n { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
+.gd-prog-n b { color: var(--ink); font-weight: 700; }
+.gd-route { display: flex; flex-direction: column; gap: 2px; }
+.gd-r { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 8px;
+  border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink-2);
+  text-align: left; transition: .12s var(--ease); }
+.gd-r:hover { background: var(--fill); color: var(--ink); }
+.gd-r.on { background: var(--blue-tint); color: var(--blue); font-weight: 600; }
+.gd-n { display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 21px; height: 21px; border-radius: 50%; background: var(--fill); color: var(--ink-3);
+  font-size: 11px; font-weight: 700; }
+.gd-r.on .gd-n { background: var(--blue); color: #fff; }
+.gd-r.done .gd-n { background: var(--green-soft); color: var(--green-ink); }
+.gd-r.done { color: var(--ink); }
+.gd-reset { display: flex; align-items: center; gap: 7px; width: 100%; margin-top: 12px;
+  padding: 10px 8px; border-top: 1px solid var(--line); font-size: 12.5px; font-weight: 500;
+  color: var(--ink-3); transition: .12s; }
+.gd-reset:hover { color: var(--blue); }
+
+.gd-main { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  overflow: hidden; }
+.gd-step { padding: 30px 34px 26px; max-width: 720px; }
+.gd-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.gd-t { margin: 10px 0 0; font-size: 27px; font-weight: 700; letter-spacing: -.03em;
+  line-height: 1.2; text-wrap: balance; }
+.gd-lead { margin: 12px 0 0; font-size: 15.5px; line-height: 1.62; color: var(--ink-2); }
+
+/* Схема окна CRM. Рамка — не декор: она отделяет «нарисованное» от настоящего
+   интерфейса вокруг, иначе человек пробует нажать на картинку. */
+.gd-art { margin: 22px 0 0; padding: 16px; background: var(--fill); border: 1px solid var(--line);
+  border-radius: 14px; max-width: 520px; }
+.gd-art svg { display: block; width: 100%; height: auto; }
+.gw-app { fill: var(--card); stroke: var(--line-2); }
+.gw-side { fill: var(--fill); stroke: none; }
+.gw-logo { fill: var(--ink-3); opacity: .45; }
+.gw-it { fill: #E4E6EC; }
+.gw-on { fill: var(--blue-tint); stroke: var(--blue); stroke-width: 1.2; }
+.gw-row { fill: var(--fill); }
+.gw-row-on { fill: var(--blue-tint); }
+.gw-ptr { stroke: var(--blue); stroke-width: 1.1; stroke-dasharray: 3 3; }
+.gw-lb { fill: var(--blue); font: 700 9px 'Manrope', sans-serif; letter-spacing: .02em; }
+.gw-div { stroke: var(--line-2); stroke-width: 1; }
+.gw-top { stroke: var(--line); stroke-width: 6; stroke-linecap: round; }
+.gw-ava { fill: var(--navy); }
+.gw-dot { fill: var(--blue); }
+.gw-dn { fill: #fff; font: 700 9px 'Manrope', sans-serif; text-anchor: middle; }
+/* Легенда схемы: цифра на картинке и слово под ней — иначе схема остается
+   красивым набором плашек, из которого человек ничего не узнает. */
+.gd-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
+.gd-leg span { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
+  font-weight: 500; color: var(--ink-2); }
+.gd-leg i { display: inline-flex; align-items: center; justify-content: center; width: 17px;
+  height: 17px; border-radius: 50%; background: var(--blue); color: #fff; font-style: normal;
+  font-size: 10px; font-weight: 700; }
+
+/* Матрица в шаге про важность — та же сетка, что на настоящем экране задач. */
+.gd-art-eis { padding: 14px; }
+.gd-eis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gd-eq { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 13px; }
+.gd-eq b { display: block; font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
+.gd-eq span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+.gd-eq-a { background: var(--amber-soft); border-color: #EFDCBB; }
+.gd-eq-a b { color: var(--amber-ink); }
+.gd-eq-a span { color: var(--amber-ink); opacity: .8; }
+
+.gd-do { margin: 22px 0 0; padding: 0; list-style: none; counter-reset: gd; }
+.gd-do li { counter-increment: gd; position: relative; padding: 0 0 0 34px; font-size: 14.5px;
+  line-height: 1.6; color: var(--ink); }
+.gd-do li + li { margin-top: 14px; }
+.gd-do li::before { content: counter(gd); position: absolute; left: 0; top: 1px;
+  display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--blue-tint); color: var(--blue);
+  font-size: 11.5px; font-weight: 700; }
+
+.gd-tip { display: flex; align-items: flex-start; gap: 9px; margin: 24px 0 0; padding: 14px 16px;
+  background: var(--blue-tint); border: 1px solid #DCE7FF; border-radius: 14px;
+  font-size: 13.5px; line-height: 1.55; color: var(--navy); }
+.gd-tip svg { flex: none; margin-top: 2px; color: var(--blue); }
+
+/* Живой блок шага «Уведомления»: настройка делается здесь, а не в другом окне. */
+.gd-live { margin: 24px 0 0; padding: 16px; border: 1px solid var(--line-2); border-radius: 14px; }
+.gd-live.np-wait { opacity: .55; pointer-events: none; }
+.gd-live-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 10px; }
+.gd-live .np-seg { margin-bottom: 12px; }
+.gd-st { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  font-size: 13px; font-weight: 500; }
+.gd-st-ok { background: var(--green-soft); color: var(--green-ink); }
+.gd-st-wait { background: var(--amber-soft); color: var(--amber-ink); }
+.gd-st-off { background: var(--fill); color: var(--ink-2); }
+.gd-live-a { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gd-hint { font-size: 12.5px; color: var(--ink-3); }
+
+/* Футер липкий: шаг бывает длиннее экрана, и кнопка «дальше», уехавшая под сгиб,
+   каждый раз стоит человеку лишней прокрутки. */
+.gd-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 34px; border-top: 1px solid var(--line); background: var(--card);
+  position: sticky; bottom: 0; border-radius: 0 0 var(--r-xl) var(--r-xl); }
+
+.gd-fin { padding: 44px 34px 40px; text-align: center; max-width: 620px; margin: 0 auto; }
+.gd-fin-ic { display: inline-flex; align-items: center; justify-content: center; width: 60px;
+  height: 60px; border-radius: 50%; background: var(--green-soft); color: var(--green-ink);
+  margin-bottom: 18px; }
+.gd-fin .gd-lead { margin-top: 12px; }
+.gd-fin-a { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+/* .al-cancel родом из модалок и не рассчитан на иконку — иначе значок и подпись
+   встают в две строки. */
+.gd-fin-a .al-cancel, .gd-live-a .al-cancel { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Кнопка входа в курс живет в шапке «Задач» — тихий чип, не соперничающий с
+   «Новой задачей». Счетчик показывает, сколько шагов осталось, и исчезает вместе
+   с прохождением. */
+.gd-btn { flex: none; align-self: center; background: var(--card); border-color: var(--line-2); }
+.gd-btn:hover { background: var(--fill); }
+/* «Пропустить» отвечает на вопрос «а если мне сейчас некогда»: значок-стрелка
+   говорит, что это выход вперед, к работе, а не отказ от обучения. */
+.gd-skip svg { transform: translateX(1px); }
+.gd-btn-n { display: inline-flex; align-items: center; justify-content: center; min-width: 17px;
+  height: 17px; padding: 0 5px; border-radius: var(--r-pill); background: var(--blue);
+  color: #fff; font-style: normal; font-size: 10.5px; font-weight: 700; }
+
+/* Телефон: маршрут уезжает наверх лентой — вертикальный список из девяти пунктов
+   на 390px съедал бы первый экран целиком, и до самого шага человек не долистывал.
+   Правила идут ПОСЛЕ базовых: специфичность та же, побеждает порядок. */
+@media (max-width: 900px) {
+  .gd { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .gd-side { position: static; padding: 14px; }
+  .gd-route { flex-direction: row; gap: 6px; overflow-x: auto; padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .gd-route::-webkit-scrollbar { display: none; }
+  .gd-r { width: auto; flex: none; max-width: 190px; padding: 8px 12px 8px 8px; border-radius: 999px;
+    background: var(--fill); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gd-reset { margin-top: 10px; }
+  .gd-step { padding: 22px 18px 20px; }
+  .gd-t { font-size: 23px; }
+  .gd-lead { font-size: 14.5px; }
+  .gd-art { padding: 12px; }
+  .gd-eis { grid-template-columns: 1fr; }
+  .gd-do li { font-size: 14px; padding-left: 30px; }
+  /* На телефоне полоса кнопок не липкая. .gd-main с overflow:hidden сам стал
+     контекстом для sticky, поэтому bottom отсчитывался от низа карточки, а не
+     экрана — и bottom:86px поднимал футер на 86px ВНУТРЬ контента, накрывая
+     последний блок (его было не долистать). Статичный футер встает под контентом;
+     от таббара его держит padding-bottom:92px у .app. */
+  .gd-foot { padding: 14px 18px; position: static; }
+  .gd-foot .bp { flex: 1; }
+  .gd-fin { padding: 34px 18px 30px; }
+  /* В шапке телефона от кнопки остается значок: подпись «Обучение по системе»
+     отбирает половину строки у заголовка раздела. */
+  .gd-btn span { display: none; }
+  .gd-skip span { display: inline; }
 }
