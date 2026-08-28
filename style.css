@@ -2357,6 +2357,25 @@ button.tr-crumb:hover { color: var(--blue); }
    глубина заливкой. Кнопка стоит только там, где сдача еще нужна, поэтому на
    экране всегда ровно один призыв к действию, а не два одинаковых. */
 .rh-body { padding-top: 4px; }
+/* «Как это работает» — объяснение на самом экране, а не в инструкции, которую
+   надо искать. Синий тинт, а не серая заливка плашек: это подсказка, а не еще
+   один блок данных, и человек должен видеть разницу с первого взгляда.
+   Скрывается насовсем, поэтому позволяет себе занять место на первом заходе. */
+.rh-how { margin: 16px 24px 2px; padding: 14px 18px 15px; border-radius: 14px;
+  background: var(--blue-tint); }
+.rh-hh { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--blue-d); }
+.rh-hh svg { color: var(--blue); }
+.rh-hx { margin-left: auto; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 8px; color: var(--blue-d); opacity: .55; transition: .14s var(--ease); }
+.rh-hx:hover { opacity: 1; background: rgba(47,107,255,.1); }
+.rh-hl { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.rh-hl li { font-size: 12.5px; line-height: 1.5; color: #2C3A57; }
+.rh-hl li::marker { font-weight: 700; color: var(--blue); }
+/* Пустой план: текст и действие рядом, иначе объяснение упирается в тупик. */
+.rh-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.rh-empty span { max-width: 420px; }
+
 .rh-plates { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 24px 4px; }
 .rh-p { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px 15px;
   border-radius: 14px; background: var(--fill); }
@@ -2783,6 +2802,7 @@ button.tr-crumb:hover { color: var(--blue); }
   /* План на телефоне: плашки в колонку, а срез команды — имя во всю строку и
      состояния под ним. Шапка скрыта, поэтому каждая клетка называет себя сама. */
   .rh-plates { grid-template-columns: 1fr; padding: 14px 16px 2px; }
+  .rh-how { margin: 14px 16px 0; padding: 13px 15px 14px; }
   .rh-loose { margin: 14px 16px 2px; }
   .rh-sched { padding: 14px 16px 18px; }
   .trow.rh-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important;
@@ -6483,4 +6503,74 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      отбирает половину строки у заголовка раздела. */
   .gd-btn span { display: none; }
   .gd-skip span { display: inline; }
+}
+
+/* ── Секция «Подача»: заявки в вузы (buildApplySection) ──────────────────────
+   Плоско и плотно, как везде в CRM: белая карточка с бордером, чипы по формуле
+   -soft/-ink, ни теней, ни стекла. Чек-лист документов — строки-кнопки: одно
+   нажатие ведет документ от «ждем» к «собрано», отдельных контролов на каждую
+   строку нет, иначе пакет из десяти позиций превращается в панель управления. */
+.ap-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl);
+  padding: 16px 18px; margin-bottom: 14px; }
+.ap-card__h { display: flex; align-items: flex-start; gap: 14px; }
+.ap-card__b { flex: 1 1 auto; min-width: 0; }
+.ap-uni { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.ap-card .ap-sub { margin-top: 3px; font-size: 12.5px; color: var(--ink-2); }
+.ap-dl { flex: 0 0 auto; font-size: 12px; font-weight: 600; padding: 5px 10px;
+  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-2); }
+.ap-dl.soon { background: var(--amber-soft); color: var(--amber-ink); }
+.ap-dl.over { background: var(--red-soft); color: var(--red-ink); }
+.ap-dl.done { background: var(--green-soft); color: var(--green-ink); }
+.ap-dl.none { background: transparent; color: var(--ink-3); }
+
+.ap-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.ap-step { font-size: 12px; font-weight: 600; padding: 6px 11px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2); cursor: pointer;
+  transition: color .12s cubic-bezier(.22,1,.36,1), background .12s cubic-bezier(.22,1,.36,1),
+    border-color .12s cubic-bezier(.22,1,.36,1); }
+.ap-step:hover { color: var(--blue); border-color: var(--blue); }
+.ap-step.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+.ap-pack { display: flex; align-items: center; gap: 10px; margin-top: 14px;
+  font-size: 12.5px; color: var(--ink-2); }
+.ap-pack b { color: var(--ink); font-weight: 700; }
+.ap-bar { flex: 1 1 auto; height: 5px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
+.ap-bar i { display: block; height: 100%; background: var(--blue); transition: width .9s cubic-bezier(.22,1,.36,1); }
+
+.ap-reqs { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.ap-req { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 9px 12px; border: 0; border-bottom: 1px solid var(--line); background: #fff;
+  cursor: pointer; font: inherit; transition: background .12s cubic-bezier(.22,1,.36,1); }
+.ap-req:last-child { border-bottom: 0; }
+.ap-req:hover { background: #FBFBFC; }
+.ap-req__t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink); }
+.ap-req__t i { font-style: normal; color: var(--ink-3); }
+.ap-req__s { flex: 0 0 auto; font-size: 11.5px; font-weight: 600; padding: 4px 9px;
+  border-radius: var(--r-pill); background: var(--fill); color: var(--ink-3); }
+.ap-req__s.ok { background: var(--green-soft); color: var(--green-ink); }
+.ap-req__s.go { background: var(--blue-tint); color: var(--blue); }
+.ap-req__s.no { background: var(--red-soft); color: var(--red-ink); }
+
+.ap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.ap-grid label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ap-grid input { display: block; width: 100%; margin-top: 5px; padding: 8px 11px;
+  border: 1px solid var(--line-2); border-radius: 10px; background: #fff;
+  font: inherit; font-size: 13px; color: var(--ink); }
+.ap-grid input:focus { outline: none; border-color: var(--blue); }
+
+.ap-sec-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.ap-pass { flex: 1 1 180px; min-width: 150px; padding: 8px 11px; border: 1px solid var(--line-2);
+  border-radius: 10px; font: inherit; font-size: 13px; }
+.ap-pass:focus { outline: none; border-color: var(--blue); }
+.ap-hint { font-size: 12px; color: var(--ink-3); }
+.ap-cred { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--blue-tint);
+  font-size: 13px; color: var(--navy); word-break: break-all; }
+.ap-cred span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
+.ap-empty { padding: 18px; border: 1px dashed var(--line-2); border-radius: var(--r-lg);
+  font-size: 13px; color: var(--ink-2); }
+.ap-new { margin-top: 14px; }
+
+@media (max-width: 720px) {
+  .ap-grid { grid-template-columns: 1fr; }
 }
