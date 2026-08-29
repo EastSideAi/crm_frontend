@@ -1990,7 +1990,7 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
@@ -1998,13 +1998,13 @@
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy'] },
     // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
     // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
     // нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal'] },
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy'] },
+    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
@@ -2055,6 +2055,9 @@
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
+    // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
+    // (там ученики тьютора по английскому) — это учится сам тьютор.
+    { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
@@ -3034,6 +3037,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
+    else if (state.page === 'academy') return renderAcademy(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
@@ -3452,6 +3456,432 @@
         'Если вы вошли по общей ссылке, зайдите под своим логином — уведомления личные.</div>';
     });
   }
+
+  /* ── Академия тьютора ──────────────────────────────────────────────────────
+     Обучающие курсы с аттестацией. Механика как у обучения сотрудника выше
+     (renderGuide): тексты живут тут, прогресс — на сервере (routers/tutor_academy).
+     Отличие — у курса есть аттестация с результатом: вопросы, две практики,
+     соглашение и выбор оплаты, в конце допуск к работе. Первый курс — тёплый
+     приём; следующие добавляются в AC_COURSES контентом, не кодом.
+
+     id уроков совпадают с реестром COURSES на сервере: по ним считается «пройдено
+     N из M» и открытие аттестации. Верстка изолирована в .academy (классы ac-*),
+     чтобы общие .h/.p/.card/.btn CRM ее не задевали. */
+  var AC_COURSE_ID = 'warm_welcome';
+  var AC_LESSON_IDS = ['why', 'intro', 'before', 'arrival', 'week', 'avoid', 'pay'];
+  var AC_COURSE = [
+    { t: 'Зачем приём и главное правило', screens: [
+      { type: 'read', eye: 'Зачем это нужно', h: 'Семья не должна ни минуты чувствовать, что ребёнок один',
+        body: ['Родитель отпускает сына или дочь в другую страну. Как бы всё ни было спланировано, внутри один страх: там, далеко, до моего ребёнка никому нет дела.',
+          'Тёплый приём нужен ради одного: чтобы этого страха не было. Ты — тот человек, который в первый, самый тревожный день оказывается рядом. От того, как ты его проведёшь, зависит доверие семьи ко всей нашей работе.'],
+        note: { t: '<b>Сервис ровный у всех.</b> Неважно, кто тьютор и в каком городе. Семья получает одно и то же ощущение заботы. Этому и учит курс.' } },
+      { type: 'rules', eye: 'Главное правило', h: 'Ты активно на связи. Не ждёшь — пишешь сам',
+        body: ['Молчащий тьютор — плохой тьютор, даже если по факту всё делает. Родитель не видит твоих дел, он видит твои сообщения. Нет сообщений — значит, ребёнком не занимаются. Инициатива всегда на тебе, на трёх отрезках:'],
+        items: [['1', 'До заезда.', 'Познакомиться, договориться о встрече, прислать чек-лист, спросить, как сборы.'],
+          ['2', 'В день прилёта.', 'Встретить, довезти, заселить и в тот же час прислать родителю фото и «всё хорошо».'],
+          ['3', 'Первые дни.', 'Быть на связи, заходить самому: как ты, что непонятно.']] },
+      { type: 'q', eye: 'Проверим себя', h: 'Студент прилетает через 3 дня и молчит в чате', lead: 'Твой следующий шаг?',
+        opts: [['А', 'Подожду, когда напишет сам. Появятся вопросы — отвечу.', 0],
+          ['Б', 'Напишу сам: как настроение, как сборы, напомню чек-лист и точку встречи.', 1],
+          ['В', 'Напишу только в день прилёта — раньше незачем тревожить.', 0]],
+        ok: '<b>Верно.</b> Молчание пугает семью сильнее любой проблемы. Пока летит и собирается — инициатива на тебе: короткое «как ты, как сборы» стоит дороже, чем кажется.',
+        no: '<b>Не совсем.</b> Ждать нельзя. Верный шаг — написать самому: спросить про сборы, напомнить чек-лист и точку встречи. Родитель должен видеть, что ребёнком уже занимаются.' }
+    ] },
+    { t: 'Знакомство и видеокружок', screens: [
+      { type: 'read', eye: 'Первый контакт', h: 'Как только тебя закрепили — знакомишься первым',
+        body: ['Не жди, пока напишет семья. Текстом знакомиться сухо, поэтому записываешь видеокружок. Живое лицо реального человека, который уже в Китае, снимает тревогу лучше любого сообщения.'],
+        note: { t: '<b>Смысл кружка:</b> я тебя жду, уже готов к встрече, всем помогу, покажу город и основные места, один ты тут не будешь.' } },
+      { type: 'rules', eye: 'Правила съёмки', h: 'Кружок, который работает',
+        body: [], items: [
+          ['✓', '15-40 секунд', 'на улице или на кампусе, чтобы за спиной был реальный Китай, а не пустая комната.'],
+          ['✓', 'Всегда по имени', '«Привет, Даша» в первую секунду. Общий кружок без имени не цепляет.'],
+          ['✓', 'Своими словами', 'не по бумажке. Запнулся, улыбнулся — тем живее.'],
+          ['✓', 'Одна мысль', 'не пихать в один кружок и знакомство, и цену, и сроки.']], good: true },
+      { type: 'quote', eye: 'Как это звучит', h: 'Пример кружка-знакомства',
+        body: [], quote: { text: '«Привет, Даша. Я Софья, твой тьютор здесь, в Гуанчжоу. Сама тут живу и учусь, все ходы-выходы знаю. Встречу тебя в аэропорту, довезу, поможем с симкой и оплатой. Покажу город. Так что не переживай, я тебя уже жду. Будут вопросы — пиши прямо сюда.»', who: 'пример · знакомство' },
+        note: { warn: true, t: '<b>Не обещай того, чего не будет.</b> Если не встречаешь лично, не говори «встречу в аэропорту». Скажи «буду на связи в день прилёта».' } },
+      { type: 'q', eye: 'Проверим себя', h: 'Каким должен быть первый кружок семье', lead: 'Выбери верное:',
+        opts: [['А', 'Записать один общий кружок и разослать всем сразу — так быстрее.', 0],
+          ['Б', 'Личный кружок по имени, на фоне кампуса, своими словами, одна мысль — знакомство.', 1],
+          ['В', 'Подробно рассказать все тарифы и цены, чтобы сразу продать очную встречу.', 0]],
+        ok: '<b>Верно.</b> Живой, личный, по имени, про заботу. Кружок снимает страх, а не продаёт в лоб.',
+        no: '<b>Не то.</b> Кружок — это про заботу и живое лицо. По имени, своими словами, одна мысль. Не рассылка под копирку и не продажа цен.' }
+    ] },
+    { t: 'До вылета: рейс и чек-лист', screens: [
+      { type: 'read', eye: 'За 2-3 дня до вылета', h: 'Собери всё, чтобы день заезда прошёл гладко',
+        body: ['Заранее списываешься с семьёй и берёшь рейс: дата, время прилёта, терминал. Без этого ты не спланируешь встречу.'],
+        note: { t: '<b>Пришли своё фото и точку встречи.</b> Чтобы студент в аэропорту искал знакомое лицо, а не табличку в толпе.' } },
+      { type: 'check', eye: 'Чек-лист семье', h: 'Что напомнить взять в ручную кладь',
+        items: ['Паспорт и приглашение вуза', 'Деньги и карта', 'Телефон и зарядка', 'Скрины брони и адреса на всякий случай'] },
+      { type: 'q', eye: 'Проверим себя', h: 'Что нужно сделать до вылета в первую очередь', lead: 'Выбери верное:',
+        opts: [['А', 'Взять рейс: дату, время прилёта и терминал, договориться о точке встречи.', 1],
+          ['Б', 'Ничего заранее, разберёмся в день прилёта на месте.', 0],
+          ['В', 'Дождаться, пока семья сама пришлёт все данные.', 0]],
+        ok: '<b>Верно.</b> Рейс и точка встречи — основа. Без них день заезда превращается в импровизацию, а семья это чувствует.',
+        no: '<b>Не то.</b> До вылета берёшь рейс и договариваешься о точке встречи сам. Импровизация в день прилёта пугает и студента, и родителя.' }
+    ] },
+    { t: 'День заезда по шагам', screens: [
+      { type: 'rules', eye: 'День заезда', h: 'Шаг за шагом, ничего не забыть',
+        body: [], items: [
+          ['1', 'Встретить в аэропорту', 'помочь с багажом, спокойно, по-дружески.'],
+          ['2', 'Фото маме в течение часа', '«на месте, всё хорошо». Это то, ради чего родитель платит.'],
+          ['3', 'Симка и оплата', 'интернет, WeChat/Alipay, немного наличных на первое время.'],
+          ['4', 'Довезти и заселить', 'до жилья, показать комнату, где что рядом: магазин, еда, аптека.']] },
+      { type: 'q', eye: 'Проверим себя', h: 'Встретил студента в аэропорту. Что делаешь первым', lead: 'Выбери верное:',
+        opts: [['А', 'Молча везу до жилья, разберёмся на месте, потом отпишусь.', 0],
+          ['Б', 'В течение часа шлю маме фото и «всё хорошо», параллельно симка и дорога.', 1],
+          ['В', 'Сначала все документы и оплата вуза, фото потом, если успею.', 0]],
+        ok: '<b>Верно.</b> Фото и «всё хорошо» маме — главное обещание приёма. Родитель весь день ждёт именно этот сигнал.',
+        no: '<b>Не то.</b> Первым делом снимаешь тревогу родителя: фото ребёнка и короткое «на месте, всё хорошо». Остальное параллельно.' }
+    ] },
+    { t: 'Первая неделя и тон', screens: [
+      { type: 'read', eye: 'Первая неделя', h: 'Заезд закончился, а забота — нет',
+        body: ['Быть на связи в чате, отвечать по учёбе и быту. Проверить, что студент нашёл расписание, корпус, столовую. На 2-3 день сделать заход самому: как ты, что непонятно. Рассказать про город: куда сходить, как передвигаться.'] },
+      { type: 'rules', eye: 'Тон', h: 'Как ты звучишь всю дорогу',
+        body: [], items: [
+          ['✓', 'По-человечески', 'спокойно, без канцелярита, как старший, кто сам это прошёл.'],
+          ['✓', 'Родителю — короткий сигнал', 'регулярно: всё под контролем. Не заставляй его спрашивать.'],
+          ['✓', 'По имени, тепло', 'и студента, и родителя. Безличное сообщение бьёт мимо.']], good: true },
+      { type: 'q', eye: 'Проверим себя', h: 'Как держать тон с родителем в первую неделю', lead: 'Выбери верное:',
+        opts: [['А', 'Писать, только когда родитель сам спросит, чтобы не надоедать.', 0],
+          ['Б', 'Самому давать короткий регулярный сигнал «всё под контролем», по-человечески.', 1],
+          ['В', 'Слать длинные официальные отчёты раз в неделю.', 0]],
+        ok: '<b>Верно.</b> Короткий тёплый сигнал по своей инициативе — вот что снимает тревогу. Не отчёт, а живое «всё хорошо».',
+        no: '<b>Не то.</b> Родитель не должен выпрашивать новости, и казённые отчёты тут не работают. Короткий человеческий сигнал сам, регулярно.' }
+    ] },
+    { t: 'Чего не делать', screens: [
+      { type: 'rules', eye: 'Стоп-лист', h: 'Ошибки, которые ломают доверие',
+        body: [], items: [
+          ['✕', 'Пропадать из чата', 'долгое молчание пугает семью сильнее любой проблемы.'],
+          ['✕', 'Читать кружки по бумажке', 'ровным голосом. Лучше запнуться, но живо.'],
+          ['✕', 'Обещать, чего не будет', 'не встречаешь лично — не говори «встречу в аэропорту».'],
+          ['✕', 'Продавать в лоб', 'твоя работа — забота. Давить ценой нельзя, продаёт она сама.']], no: true },
+      { type: 'q', eye: 'Проверим себя', h: 'Ты не встречаешь лично, только онлайн', lead: 'Как честно сказать это семье?',
+        opts: [['А', '«Встречу тебя прямо в аэропорту» — так теплее звучит.', 0],
+          ['Б', '«Буду на связи с тобой в день прилёта, проведём этот день вместе онлайн».', 1],
+          ['В', 'Ничего не уточнять, разберёмся по ходу.', 0]],
+        ok: '<b>Верно.</b> Обещаем только то, что выполним. Честное «на связи в день прилёта» бережёт доверие, ложное «встречу» его убивает.',
+        no: '<b>Не то.</b> Обещать личную встречу, которой не будет, — прямой путь к скандалу. Говори ровно то, что реально сделаешь.' }
+    ] },
+    { t: 'Оплата и как её получить', screens: [
+      { type: 'pay', eye: 'Сколько платим', h: 'Твоя ставка зависит от услуги',
+        body: ['Ставка считается от твоего времени, а не от чека клиента. Выплаты два раза в месяц, 10 и 20 числа.'],
+        rows: [['Онлайн-сопровождение в чате', '1 500'], ['Встреча в аэропорту', '3 000'], ['Полный день заезда', '7 000'], ['Тьютор на месте, за месяц', '5 000']] },
+      { type: 'read', eye: 'Как получить', h: 'Способ оплаты выбираешь сам',
+        body: ['Alipay или рубли, договариваемся заранее. Реквизиты присылаешь до дня заезда.'],
+        note: { warn: true, t: '<b>Рубли: нужна самозанятость.</b> Если хочешь получать в рублях, оформи самозанятость через приложение «Мой налог». Это 5 минут, поможем инструкцией.' } },
+      { type: 'q', eye: 'Проверим себя', h: 'Когда приходят выплаты', lead: 'Выбери верное:',
+        opts: [['А', 'Два раза в месяц, 10 и 20 числа.', 1],
+          ['Б', 'Сразу в день встречи, наличными от студента.', 0],
+          ['В', 'Через месяц, вместе с зарплатой.', 0]],
+        ok: '<b>Верно.</b> Выплаты два раза в месяц, 10 и 20 числа. Деньги от студента лично не берём, платит компания.',
+        no: '<b>Не то.</b> Выплаты приходят от компании два раза в месяц, 10 и 20 числа. Наличные со студента не берём.' }
+    ] }
+  ];
+  var AC_EXAM = {
+    intro: { h: 'Финальная аттестация', body: ['Ответь на вопросы и выполни два практических задания. Пройдёшь — получишь допуск к заездам. Не сдал — вернись к урокам и попробуй снова.'] },
+    questions: [
+      { h: 'Студент молчит за 3 дня до вылета', lead: 'Твой шаг?',
+        opts: [['А', 'Жду, пока напишет сам.', 0], ['Б', 'Пишу сам: как сборы, чек-лист, точка встречи.', 1], ['В', 'Пишу только в день прилёта.', 0]] },
+      { h: 'Ты сопровождаешь только онлайн', lead: 'Как сказать семье?',
+        opts: [['А', '«Встречу в аэропорту лично».', 0], ['Б', '«Буду на связи в день прилёта».', 1], ['В', 'Не уточняю.', 0]] },
+      { h: 'Встретил студента в аэропорту', lead: 'Первое действие?',
+        opts: [['А', 'Фото маме и «всё хорошо».', 1], ['Б', 'Молча везу до жилья.', 0], ['В', 'Сначала все документы.', 0]] },
+      { h: 'Когда приходят выплаты', lead: 'Выбери верное:',
+        opts: [['А', 'Два раза в месяц, 10 и 20 числа.', 1], ['Б', 'Наличными от студента сразу.', 0], ['В', 'Через месяц.', 0]] }
+    ],
+    practice1: { h: 'Практика 1. Запиши пробный видеокружок', p: 'Запиши кружок-знакомство по правилам урока 2: по имени, на фоне кампуса, своими словами, одна мысль. Отправь его на проверку администратору @eastside_admin.', chk: 'Я записал пробный кружок и отправил администратору @eastside_admin' },
+    practice2: { h: 'Практика 2. Распиши план дня заезда', p: 'Учебный рейс: студентка Даша, прилёт 2 сентября 9:30, Гуанчжоу, терминал 2. Коротко распиши по шагам, что ты делаешь в этот день — от встречи до «студент заселён и на связи».' }
+  };
+
+  function acLoad(cb) {
+    api('/admin/api/academy?course=' + AC_COURSE_ID).then(function (r) {
+      state.ac = state.ac || {};
+      state.ac.srv = r;
+      if (cb) cb(r);
+    }).catch(function () { if (cb) cb(null); });
+  }
+  function acDoneSet() { return (state.ac.srv && state.ac.srv.lessons_done) || []; }
+  function acIsDone(i) { return acDoneSet().indexOf(AC_LESSON_IDS[i]) !== -1; }
+  function acPassedCount() { var n = 0; for (var i = 0; i < AC_COURSE.length; i++) if (acIsDone(i)) n++; return n; }
+  function acFirstOpen() { for (var i = 0; i < AC_COURSE.length; i++) if (!acIsDone(i)) return i; return AC_COURSE.length - 1; }
+  function acMaxUnlocked() { return acFirstOpen(); }
+  function acExamOpen() { return acPassedCount() >= AC_COURSE.length; }
+
+  var AC_EXAM_I = AC_COURSE.length;
+
+  function renderAcademy(view) {
+    if (!state.ac || !state.ac.srv) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return acLoad(function () { if (state.page === 'academy') renderAcademy(view); });
+    }
+    var A = state.ac;
+    if (A.li == null) {
+      A.li = A.srv.passed ? AC_EXAM_I : acFirstOpen();
+      A.si = 0; A.answered = false;
+      A.exStep = 0; A.exAnswers = []; A.pay = null; A.agreed = false; A.krug = false; A.plan = '';
+      A.examDone = !!A.srv.passed;
+    }
+    view.innerHTML =
+      '<div class="academy"><div class="ac-wrap">' +
+        '<aside class="ac-route">' +
+          '<div class="ac-route-head"><span class="ac-cap">Программа курса</span>' +
+            '<span class="ac-prog" id="ac-prog"></span></div>' +
+          '<div class="ac-bar"><i id="ac-bar"></i></div>' +
+          '<div class="ac-course-pill">' + ic('award', 13) + esc(A.srv.title) + '</div>' +
+          '<div class="ac-rlist" id="ac-rlist"></div>' +
+        '</aside>' +
+        '<section class="ac-stage">' +
+          '<div class="ac-stage-top"><span class="ac-cap" id="ac-label"></span><div class="ac-dots" id="ac-dots"></div></div>' +
+          '<div class="ac-screen" id="ac-screen"></div>' +
+          '<div class="ac-foot">' +
+            '<button class="ac-btn ghost" id="ac-back" style="visibility:hidden;">Назад</button>' +
+            '<span class="ac-step-lab" id="ac-steplab"></span>' +
+            '<button class="ac-btn pri" id="ac-next">Дальше</button>' +
+          '</div>' +
+        '</section>' +
+      '</div></div>';
+
+    el('ac-rlist').addEventListener('click', function (ev) {
+      var row = ev.target.closest('[data-go]'); if (!row) return;
+      var go = +row.getAttribute('data-go');
+      if (go === AC_EXAM_I) { if (!acExamOpen()) return; A.li = AC_EXAM_I; A.exStep = 0; acRenderExam(view); return; }
+      if (go > acMaxUnlocked()) return;
+      A.li = go; A.si = 0; acRender(view);
+    });
+    el('ac-back').addEventListener('click', function () {
+      if (A.li === AC_EXAM_I) { if (A.exStep > 0) { A.exStep--; acRenderExam(view); } return; }
+      if (A.si > 0) { A.si--; acRender(view); }
+    });
+    el('ac-next').addEventListener('click', function () { acNext(view); });
+
+    if (A.li === AC_EXAM_I) acRenderExam(view); else acRender(view);
+  }
+
+  function acBuildRoute() {
+    var A = state.ac, list = el('ac-rlist'); if (!list) return;
+    var maxU = acMaxUnlocked(), html = '';
+    AC_COURSE.forEach(function (L, i) {
+      var cls = 'ac-r', done = acIsDone(i);
+      if (i === A.li && A.li < AC_EXAM_I) cls += ' active';
+      if (done) cls += ' done';
+      if (i > maxU && !done) cls += ' lock';
+      var num = done ? ic('check', 12) : (i + 1);
+      html += '<div class="' + cls + '" data-go="' + i + '"><span class="ac-num">' + num + '</span>' +
+        '<span class="ac-tl">' + esc(L.t) + '</span>' + (i > maxU && !done ? '<span class="ac-lk">' + ic('lock', 12) + '</span>' : '') + '</div>';
+    });
+    var eLocked = !acExamOpen(), ecls = 'ac-r ac-exam';
+    if (A.li === AC_EXAM_I) ecls += ' active';
+    if (A.srv.passed) ecls += ' done';
+    if (eLocked) ecls += ' lock';
+    html += '<div class="' + ecls + '" data-go="' + AC_EXAM_I + '"><span class="ac-num">' + (A.srv.passed ? ic('check', 12) : '★') + '</span>' +
+      '<span class="ac-tl">Аттестация</span>' + (eLocked ? '<span class="ac-lk">' + ic('lock', 12) + '</span>' : '') + '</div>';
+    list.innerHTML = html;
+    var passed = acPassedCount() + (A.srv.passed ? 1 : 0), total = AC_COURSE.length + 1;
+    el('ac-prog').textContent = passed + ' / ' + total;
+    el('ac-bar').style.width = Math.round(passed / total * 100) + '%';
+  }
+
+  function acScreenHTML(sc) {
+    var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
+    var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>';
+    var body = (sc.body || []).map(function (p, i) { return '<p class="ac-p' + (i === 0 && sc.type === 'read' ? ' lead' : '') + '">' + esc(p) + '</p>'; }).join('');
+    var extra = '';
+    if (sc.type === 'read' && sc.note) extra = acNote(sc.note);
+    if (sc.type === 'rules') {
+      var cl = sc.good ? ' good' : (sc.no ? ' no' : '');
+      extra = '<ul class="ac-rules' + cl + '">' + sc.items.map(function (it) { return '<li><span class="ac-mk">' + esc(it[0]) + '</span><div><b>' + esc(it[1]) + '</b> ' + esc(it[2]) + '</div></li>'; }).join('') + '</ul>';
+    }
+    if (sc.type === 'check') extra = '<ul class="ac-rules good">' + sc.items.map(function (it) { return '<li><span class="ac-mk">✓</span><div>' + esc(it) + '</div></li>'; }).join('') + '</ul>';
+    if (sc.type === 'quote') extra = '<div class="ac-quote">' + esc(sc.quote.text) + '<span class="ac-who ac-cap">' + esc(sc.quote.who) + '</span></div>' + (sc.note ? acNote(sc.note) : '');
+    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(r[1]) + ' ₽</span></li>'; }).join('') + '</ul>';
+    if (sc.type === 'q') return acQHTML(sc);
+    return eye + h + body + extra;
+  }
+  function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
+  function acQHTML(sc) {
+    return '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div><h1 class="ac-h">' + esc(sc.h) + '</h1>' +
+      '<p class="ac-qlead">' + esc(sc.lead) + '</p>' +
+      '<div class="ac-opts" id="ac-opts">' + sc.opts.map(function (o) { return '<button class="ac-opt" data-ok="' + o[2] + '"><span class="ac-key">' + esc(o[0]) + '</span><span class="ac-ot">' + esc(o[1]) + '</span></button>'; }).join('') + '</div>' +
+      '<div class="ac-fb" id="ac-fb"></div>';
+  }
+
+  function acRender(view) {
+    var A = state.ac, L = AC_COURSE[A.li], sc = L.screens[A.si];
+    var scr = el('ac-screen');
+    el('ac-label').textContent = 'Урок ' + (A.li + 1) + ' · ' + L.t;
+    scr.innerHTML = acScreenHTML(sc);
+    acAnim(scr);
+    var dots = el('ac-dots'); dots.innerHTML = '';
+    L.screens.forEach(function (_, i) { var d = document.createElement('i'); d.className = i === A.si ? 'on' : (i < A.si ? 'past' : ''); dots.appendChild(d); });
+    el('ac-back').style.visibility = A.si > 0 ? 'visible' : 'hidden';
+    var isQ = sc.type === 'q';
+    A.answered = false;
+    el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
+    var nx = el('ac-next');
+    nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
+    nx.disabled = isQ;
+    if (isQ) acBindQ(sc);
+    acBuildRoute();
+  }
+  function acBindQ(sc) {
+    var A = state.ac, opts = el('ac-screen').querySelectorAll('#ac-opts .ac-opt'), fb = el('ac-fb');
+    Array.prototype.forEach.call(opts, function (o) {
+      o.addEventListener('click', function () {
+        if (A.answered) return; A.answered = true;
+        var ok = o.getAttribute('data-ok') === '1';
+        Array.prototype.forEach.call(opts, function (x) {
+          x.disabled = true;
+          if (x.getAttribute('data-ok') === '1') x.classList.add('correct');
+          else if (x === o) x.classList.add('wrong'); else x.classList.add('dim');
+        });
+        fb.className = 'ac-fb ' + (ok ? 'ok' : 'no') + ' show';
+        fb.innerHTML = ok ? sc.ok : sc.no;
+        el('ac-next').disabled = false;
+      });
+    });
+  }
+
+  /* Урок пройден: отмечаем на сервере, дальше открывается следующий. Прогресс не
+     живет в браузере — тьютор продолжит с телефона на том же месте. */
+  function acLessonDone(view, cb) {
+    var A = state.ac, id = AC_LESSON_IDS[A.li];
+    if (acIsDone(A.li)) { cb(); return; }
+    apiSend('/admin/api/academy/lesson/' + id + '?course=' + AC_COURSE_ID, 'POST', null, function (r) {
+      if (r) { A.srv = r; renderSide(); }
+      cb();
+    });
+  }
+  function acNext(view) {
+    var A = state.ac;
+    if (A.li === AC_EXAM_I) { acExamNext(view); return; }
+    var L = AC_COURSE[A.li];
+    if (A.si < L.screens.length - 1) { A.si++; acRender(view); return; }
+    acLessonDone(view, function () {
+      if (A.li + 1 < AC_COURSE.length) { A.li++; A.si = 0; acRender(view); }
+      else if (acExamOpen()) { A.li = AC_EXAM_I; A.exStep = 0; acRenderExam(view); }
+      else { A.si = 0; acRender(view); }
+    });
+  }
+
+  function acRenderExam(view) {
+    var A = state.ac, scr = el('ac-screen'), N = AC_EXAM.questions.length;
+    el('ac-label').textContent = 'Финальная аттестация';
+    el('ac-dots').innerHTML = '';
+    el('ac-back').style.visibility = A.exStep > 0 ? 'visible' : 'hidden';
+    var nx = el('ac-next'); nx.textContent = 'Дальше'; nx.disabled = false;
+    acBuildRoute();
+
+    if (A.exStep === 0) {
+      scr.innerHTML = '<div class="ac-eyebrow ac-cap">Аттестация</div><h1 class="ac-h">' + esc(AC_EXAM.intro.h) + '</h1>' +
+        AC_EXAM.intro.body.map(function (p) { return '<p class="ac-p lead">' + esc(p) + '</p>'; }).join('');
+      el('ac-steplab').textContent = 'Итоговая проверка';
+      el('ac-back').style.visibility = 'hidden'; nx.textContent = 'Начать'; acAnim(scr); return;
+    }
+    if (A.exStep >= 1 && A.exStep <= N) {
+      var q = AC_EXAM.questions[A.exStep - 1], qi = A.exStep - 1;
+      scr.innerHTML = '<div class="ac-eyebrow ac-cap">Вопрос ' + A.exStep + ' из ' + N + '</div><h1 class="ac-h">' + esc(q.h) + '</h1><p class="ac-qlead">' + esc(q.lead) + '</p>' +
+        '<div class="ac-opts" id="ac-opts">' + q.opts.map(function (o) { return '<button class="ac-opt" data-ok="' + o[2] + '"><span class="ac-key">' + esc(o[0]) + '</span><span class="ac-ot">' + esc(o[1]) + '</span></button>'; }).join('') + '</div>';
+      el('ac-steplab').textContent = 'Вопрос ' + A.exStep + ' из ' + N;
+      nx.disabled = A.exAnswers[qi] === undefined;
+      var opts = scr.querySelectorAll('#ac-opts .ac-opt');
+      Array.prototype.forEach.call(opts, function (o) {
+        if (A.exAnswers[qi] !== undefined) { o.disabled = true; if (o.getAttribute('data-ok') === '1') o.classList.add('correct'); }
+        o.addEventListener('click', function () {
+          if (A.exAnswers[qi] !== undefined) return;
+          A.exAnswers[qi] = o.getAttribute('data-ok') === '1' ? 1 : 0;
+          Array.prototype.forEach.call(opts, function (x) {
+            x.disabled = true; var k = x.getAttribute('data-ok') === '1';
+            if (k) x.classList.add('correct'); else if (x === o) x.classList.add('wrong'); else x.classList.add('dim');
+          });
+          nx.disabled = false;
+        });
+      });
+      acAnim(scr); return;
+    }
+    if (A.exStep === N + 1) {
+      scr.innerHTML = '<div class="ac-eyebrow ac-cap">Практика</div><h1 class="ac-h">' + esc(AC_EXAM.practice1.h) + '</h1>' +
+        '<div class="ac-task"><p>' + esc(AC_EXAM.practice1.p) + '</p><div class="ac-upl' + (A.krug ? ' done' : '') + '" id="ac-upl">' + (A.krug ? '✓ Кружок отправлен' : '🎥 Отметить: кружок отправлен') + '</div></div>' +
+        '<label class="ac-chkline"><input type="checkbox" id="ac-p1chk"' + (A.krug ? ' checked' : '') + '> ' + esc(AC_EXAM.practice1.chk) + '</label>';
+      el('ac-steplab').textContent = 'Практика 1 из 2';
+      var upl = el('ac-upl'), chk = el('ac-p1chk');
+      upl.addEventListener('click', function () { A.krug = true; upl.classList.add('done'); upl.textContent = '✓ Кружок отправлен'; chk.checked = true; nx.disabled = false; });
+      chk.addEventListener('change', function () { A.krug = chk.checked; nx.disabled = !A.krug; });
+      nx.disabled = !A.krug; acAnim(scr); return;
+    }
+    if (A.exStep === N + 2) {
+      scr.innerHTML = '<div class="ac-eyebrow ac-cap">Практика</div><h1 class="ac-h">' + esc(AC_EXAM.practice2.h) + '</h1>' +
+        '<div class="ac-task"><p>' + esc(AC_EXAM.practice2.p) + '</p><textarea class="ac-ta" id="ac-plan" placeholder="1. Встречаю в терминале 2...&#10;2. Симка и деньги...&#10;3. ..."></textarea></div>';
+      el('ac-steplab').textContent = 'Практика 2 из 2';
+      var ta = el('ac-plan'); if (A.plan) ta.value = A.plan;
+      var upd = function () { A.plan = ta.value; nx.disabled = ta.value.trim().length < 15; };
+      ta.addEventListener('input', upd); upd(); acAnim(scr); return;
+    }
+    if (A.exStep === N + 3) {
+      scr.innerHTML = '<div class="ac-eyebrow ac-cap">Соглашение и оплата</div><h1 class="ac-h">Последний шаг перед допуском</h1>' +
+        '<p class="ac-p">Подтверди, что принимаешь условия работы тьютора, и выбери, как хочешь получать оплату.</p>' +
+        '<div class="ac-pick">' +
+          '<div class="ac-payopt" data-pay="alipay"><div class="ac-pt">Alipay <span class="ac-rd"></span></div><div class="ac-pd">Быстро, без оформления. Реквизиты пришлёшь заранее.</div></div>' +
+          '<div class="ac-payopt" data-pay="rub"><div class="ac-pt">Рубли <span class="ac-rd"></span></div><div class="ac-pd">Нужна самозанятость. Поможем оформить за 5 минут.</div></div>' +
+        '</div>' +
+        '<label class="ac-chkline" style="margin-top:14px;"><input type="checkbox" id="ac-agree"' + (A.agreed ? ' checked' : '') + '> Я прочитал условия работы тьютора и принимаю их. Это соглашение между мной и EastSide.</label>';
+      el('ac-steplab').textContent = 'Соглашение';
+      var picks = scr.querySelectorAll('.ac-payopt'), ag = el('ac-agree');
+      var updA = function () { nx.disabled = !(A.pay && ag.checked); };
+      Array.prototype.forEach.call(picks, function (p) {
+        if (p.getAttribute('data-pay') === A.pay) p.classList.add('sel');
+        p.addEventListener('click', function () {
+          Array.prototype.forEach.call(picks, function (x) { x.classList.remove('sel'); });
+          p.classList.add('sel'); A.pay = p.getAttribute('data-pay'); updA();
+        });
+      });
+      ag.addEventListener('change', function () { A.agreed = ag.checked; updA(); });
+      nx.textContent = 'Завершить аттестацию'; updA(); acAnim(scr); return;
+    }
+    // результат
+    acExamResult(view);
+  }
+  function acExamResult(view) {
+    var A = state.ac, N = AC_EXAM.questions.length, scr = el('ac-screen');
+    var right = A.exAnswers.filter(function (x) { return x === 1; }).length;
+    scr.innerHTML = '<div class="ac-fin"><div class="ac-seal">' + ic('check', 32) + '</div><h1 class="ac-h">Аттестация пройдена</h1>' +
+      '<p class="ac-p" style="margin:0 auto 14px;">Ты ответил верно на ' + right + ' из ' + N + ', выполнил обе практики и подтвердил соглашение. Способ оплаты: ' + (A.pay === 'rub' ? 'рубли' : 'Alipay') + '.</p>' +
+      '<div class="ac-cert">' + ic('award', 15) + 'Допуск к заездам по тёплому приёму открыт</div>' +
+      '<p class="ac-cap" style="margin-top:20px;">Так тьютор завершает курс и попадает в список готовых к работе</p></div>';
+    el('ac-steplab').textContent = 'Курс завершён';
+    el('ac-back').style.visibility = 'visible';
+    var nx = el('ac-next'); nx.textContent = 'Пройти заново'; nx.disabled = false;
+    acBuildRoute(); acAnim(scr);
+  }
+  function acExamNext(view) {
+    var A = state.ac, N = AC_EXAM.questions.length;
+    if (A.exStep < N + 3) { A.exStep++; acRenderExam(view); return; }
+    if (A.exStep === N + 3) {
+      // соглашение заполнено — сдаем аттестацию на сервер, потом показываем результат
+      var right = A.exAnswers.filter(function (x) { return x === 1; }).length;
+      var nx = el('ac-next'); nx.disabled = true; nx.textContent = 'Отправляю…';
+      apiSend('/admin/api/academy/finish?course=' + AC_COURSE_ID, 'POST',
+        { score: right, krug: !!A.krug, plan: A.plan || '', pay_method: A.pay || '', agreement: !!A.agreed },
+        function (r) {
+          if (r && r.passed) {
+            A.srv = r; A.examDone = true; A.exStep = N + 4; renderSide(); acExamResult(view);
+            showToast('Аттестация пройдена, допуск открыт');
+          } else {
+            nx.disabled = false; nx.textContent = 'Завершить аттестацию';
+            showToast('Не удалось сохранить аттестацию, попробуй ещё раз');
+          }
+        });
+      return;
+    }
+    // с экрана результата — пройти заново
+    apiSend('/admin/api/academy/reset?course=' + AC_COURSE_ID, 'POST', null, function (r) {
+      if (r) A.srv = r;
+      A.exStep = 0; A.exAnswers = []; A.pay = null; A.agreed = false; A.krug = false; A.plan = '';
+      A.examDone = false; A.li = 0; A.si = 0; renderSide();
+      acRender(view); showToast('Курс сброшен, можно пройти заново');
+    });
+  }
+  function acAnim(scr) { scr.style.animation = 'none'; void scr.offsetWidth; scr.style.animation = ''; }
 
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };
