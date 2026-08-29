@@ -3619,8 +3619,10 @@
     if (A.li == null) {
       A.li = A.srv.passed ? AC_EXAM_I : acFirstOpen();
       A.si = 0; A.answered = false;
-      A.exStep = 0; A.exAnswers = []; A.pay = null; A.agreed = false; A.krug = false; A.plan = '';
-      A.examDone = !!A.srv.passed;
+      // Уже аттестован — открываем сразу экран допуска (шаг результата), а не интро.
+      A.exStep = A.srv.passed ? AC_EXAM.questions.length + 4 : 0;
+      A.exAnswers = []; A.pay = A.srv.pay_method || null; A.agreed = !!A.srv.agreement;
+      A.krug = false; A.plan = ''; A.examDone = !!A.srv.passed;
     }
     view.innerHTML =
       '<div class="academy"><div class="ac-wrap">' +
@@ -3843,9 +3845,10 @@
   }
   function acExamResult(view) {
     var A = state.ac, N = AC_EXAM.questions.length, scr = el('ac-screen');
-    var right = A.exAnswers.filter(function (x) { return x === 1; }).length;
+    var right = A.exAnswers.length ? A.exAnswers.filter(function (x) { return x === 1; }).length : (A.srv.exam_score || 0);
+    var pay = A.pay || A.srv.pay_method;
     scr.innerHTML = '<div class="ac-fin"><div class="ac-seal">' + ic('check', 32) + '</div><h1 class="ac-h">Аттестация пройдена</h1>' +
-      '<p class="ac-p" style="margin:0 auto 14px;">Ты ответил верно на ' + right + ' из ' + N + ', выполнил обе практики и подтвердил соглашение. Способ оплаты: ' + (A.pay === 'rub' ? 'рубли' : 'Alipay') + '.</p>' +
+      '<p class="ac-p" style="margin:0 auto 14px;">Ты ответил верно на ' + right + ' из ' + N + ', выполнил обе практики и подтвердил соглашение. Способ оплаты: ' + (pay === 'rub' ? 'рубли' : 'Alipay') + '.</p>' +
       '<div class="ac-cert">' + ic('award', 15) + 'Допуск к заездам по тёплому приёму открыт</div>' +
       '<p class="ac-cap" style="margin-top:20px;">Так тьютор завершает курс и попадает в список готовых к работе</p></div>';
     el('ac-steplab').textContent = 'Курс завершён';
