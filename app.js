@@ -4268,14 +4268,34 @@
     var a = ARR[clientId];
     if (!a) return;
 
+    // Пересчет оплаты на месте, без перерисовки всего дровера: перерисовка на каждый
+    // клик роняла быстрые клики (DOM пересобирался под рукой) и дергала экран. Тут
+    // же обновляем только суммы пунктов и строку «К оплате», а на сервер шлем в фоне.
+    function arCardRecalc() {
+      var deds = a.deductions || {}, lost = 0;
+      Array.prototype.forEach.call(document.querySelectorAll('#m-content .zz-chk'), function (row) {
+        var cb = row.querySelector('input[data-apt]'); if (!cb) return;
+        var amt = deds[cb.getAttribute('data-apt')] || 0;
+        var tag = row.querySelector('.zz-amt');
+        if (!cb.checked) lost += amt;
+        if (tag) { tag.classList.toggle('off', !cb.checked); tag.textContent = (cb.checked ? '' : '−') + arMoney(amt); }
+      });
+      var pay = Math.max(0, (a.rate || 0) - lost);
+      var cnt = document.querySelector('#m-content .zz-count');
+      if (cnt) cnt.innerHTML = 'К оплате <b>' + arMoney(pay) + '</b>' +
+        (pay < a.rate ? ' <span class="zz-mut">из ' + arMoney(a.rate) + '</span>' : ' <span class="zz-mut">полная ставка</span>');
+    }
+
     Array.prototype.forEach.call(document.querySelectorAll('#m-content .zz-chk input[data-apt]'), function (cb) {
       cb.addEventListener('change', function () {
+        arCardRecalc();
         var cl = {};
         Array.prototype.forEach.call(document.querySelectorAll('#m-content .zz-chk input[data-apt]'), function (x) {
           cl[x.getAttribute('data-apt')] = x.checked;
         });
+        // Кэш держим в актуальном виде для отправки на проверку, но экран не трогаем.
         apiSend('/admin/api/arrivals/' + a.id, 'PATCH', { checklist: cl }, function (r) {
-          if (r) { ARR[clientId] = r; if (state.modalSection === 'arrival') renderModalContent(); }
+          if (r) ARR[clientId] = r;
         });
       });
     });
