@@ -4156,6 +4156,162 @@
     });
   }
 
+  /* ── ЗАЕЗД В КАРТОЧКЕ УЧЕНИКА ─────────────────────────────────────────────
+     Тот же заезд, что в разделе «Заезды», только тьютор ведет его прямо из
+     карточки ученика: отмечает чек-лист, кладет ссылку на чат с семьей и скрины
+     подтверждений. Админ принимает из очереди «На проверке» раздела «Заезды».
+     Заезд на ученика один, грузится по client_id (это session_id карточки). */
+  var ARR = {};        // clientId -> заезд | null (нет) | undefined (не грузили)
+  var ARR_BUSY = {};
+
+  function docHref(docId) {
+    return API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey());
+  }
+
+  function loadArr(clientId, force) {
+    if (ARR_BUSY[clientId]) return;
+    if (force) delete ARR[clientId];
+    ARR_BUSY[clientId] = true;
+    api('/admin/api/arrivals/by-client?client_id=' + encodeURIComponent(clientId)).then(function (r) {
+      ARR_BUSY[clientId] = false;
+      ARR[clientId] = (r && r.arrival) ? r.arrival : null;
+      if (state.drawerId === clientId && state.modalSection === 'arrival') renderModalContent();
+    }).catch(function () {
+      ARR_BUSY[clientId] = false; ARR[clientId] = null;
+      if (state.drawerId === clientId && state.modalSection === 'arrival') renderModalContent();
+    });
+  }
+
+  function buildArrivalSection(ctx) {
+    var clientId = state.drawerId;
+    var a = ARR[clientId];
+    var head = '<div class="m-ctitle">Заезд</div>' +
+      '<div class="m-csub">Чек-лист заезда и подтверждения. За выполненные пункты идет оплата, приемку делает администратор.</div>';
+    if (a === undefined) { loadArr(clientId); return skeletonSection('arrival'); }
+
+    if (!a) {
+      var opts = Object.keys(AR_SERVICE).map(function (kk) {
+        return '<option value="' + kk + '">' + esc(AR_SERVICE[kk].label) + ' · ' + arMoney(AR_SERVICE[kk].rate) + '</option>';
+      }).join('');
+      return head + '<div class="zaezdy arr-card"><div class="arr-empty">' +
+        '<div class="arr-empty-t">Заезд по этому ученику еще не заведен.</div>' +
+        '<label class="zz-lbl">Услуга<select class="zz-in" id="arr-svc">' + opts + '</select></label>' +
+        '<button class="bp" id="arr-create">Завести заезд</button></div></div>';
+    }
+
+    var svc = AR_SERVICE[a.service] || { label: a.service, rate: 0 };
+    var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
+    var editable = (a.status === 'draft' || a.status === 'returned') && a.tutor_id === state.userId;
+    var pay = arPayout(a);
+    var deds = a.deductions || {};
+
+    var top = '<div class="arr-top"><div class="arr-svc">' + esc(svc.label) + '</div>' +
+      '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span></div>';
+
+    var note = a.status === 'returned' && a.review_note
+      ? '<div class="zz-note red">' + ic('info', 14) + '<div><b>Вернули на доработку:</b> ' + esc(a.review_note) + '</div></div>' : '';
+    var accepted = a.status === 'accepted'
+      ? '<div class="zz-note green">' + ic('check', 14) + '<div><b>Заезд принят.</b> К оплате ' + arMoney(a.payout_rub) + '. ' +
+          (a.paid_at ? 'Выплата проведена.' : 'Выплата 10 или 20 числа.') + '</div></div>' : '';
+
+    var list = '<div class="zz-checks">' + a.points.map(function (p) {
+      var on = !!a.checklist[p];
+      var amt = deds[p] || 0;
+      var tag = '<span class="zz-amt' + (on ? '' : ' off') + '">' + (on ? '' : '−') + arMoney(amt) + '</span>';
+      if (editable) {
+        return '<label class="zz-chk"><input type="checkbox" data-apt="' + p + '"' + (on ? ' checked' : '') + '><span>' + esc(AR_POINTS[p] || p) + '</span>' + tag + '</label>';
+      }
+      return '<div class="zz-chk ro' + (on ? ' on' : '') + '"><span class="zz-tick">' + (on ? ic('check', 12) : '') + '</span><span>' + esc(AR_POINTS[p] || p) + '</span>' + tag + '</div>';
+    }).join('') + '</div>';
+
+    // Подтверждения: ссылка на чат с семьей + скрины (фото маме, заселение, кружок).
+    var chat = editable
+      ? '<label class="zz-lbl">Ссылка на чат с семьей<input class="zz-in" id="arr-chat" placeholder="https://t.me/..." value="' + esc(a.chat_link || '') + '"></label>'
+      : (a.chat_link ? '<div class="arr-field"><div class="arr-flbl">Чат с семьей</div><a class="arr-link" href="' + esc(a.chat_link) + '" target="_blank" rel="noopener">' + ic('ext', 13) + esc(a.chat_link) + '</a></div>' : '');
+
+    var shots = (a.shots || []).map(function (s) {
+      return '<a class="arr-shot" href="' + docHref(s.id) + '" target="_blank" rel="noopener">' + ic('image', 13) + esc(s.name || 'скрин') + '</a>';
+    }).join('');
+    var shotsBlock = '<div class="arr-field"><div class="arr-flbl">Скрины подтверждений</div>' +
+      '<div class="arr-shots">' + (shots || '<span class="arr-muted">пока нет</span>') +
+      (editable ? '<label class="arr-up">' + ic('plus', 13) + 'Добавить<input type="file" id="arr-shot-in" accept="image/*" multiple hidden></label>' : '') +
+      '</div></div>';
+
+    var foot = '';
+    if (editable) {
+      foot = '<div class="zz-foot"><span class="zz-count">К оплате <b>' + arMoney(pay) + '</b>' +
+        (pay < a.rate ? ' <span class="zz-mut">из ' + arMoney(a.rate) + '</span>' : ' <span class="zz-mut">полная ставка</span>') + '</span>' +
+        '<button class="bp" id="arr-submit">Отправить на проверку</button></div>';
+    } else if (a.status === 'submitted') {
+      foot = '<div class="zz-note amber"><div>Заезд на проверке у администратора. К оплате при текущих отметках ' + arMoney(pay) + '.</div></div>';
+    } else if (!editable && (a.status === 'draft' || a.status === 'returned')) {
+      foot = '<div class="zz-note"><div>Этот заезд ведет ' + esc(a.tutor_name || 'другой тьютор') + '.</div></div>';
+    }
+
+    return head + '<div class="zaezdy arr-card">' + top + note + accepted + list + chat + shotsBlock + foot + '</div>';
+  }
+
+  function wireArrivalSection(clientId) {
+    var create = el('arr-create');
+    if (create) create.addEventListener('click', function () {
+      var svc = el('arr-svc') ? el('arr-svc').value : 'full_day';
+      var ctx = leadCtx(clientId);
+      create.disabled = true;
+      apiSend('/admin/api/arrivals', 'POST',
+        { client_id: clientId, service: svc, student: ov(ctx, 'name') || '', city: (ctx.lead && ctx.lead.geo && ctx.lead.geo.city) || '' },
+        function (r) {
+          if (r && r.id) { loadArr(clientId, true); showToast('Заезд заведен'); }
+          else { create.disabled = false; showToast('Не удалось завести заезд'); }
+        });
+    });
+
+    var a = ARR[clientId];
+    if (!a) return;
+
+    Array.prototype.forEach.call(document.querySelectorAll('#m-content .zz-chk input[data-apt]'), function (cb) {
+      cb.addEventListener('change', function () {
+        var cl = {};
+        Array.prototype.forEach.call(document.querySelectorAll('#m-content .zz-chk input[data-apt]'), function (x) {
+          cl[x.getAttribute('data-apt')] = x.checked;
+        });
+        apiSend('/admin/api/arrivals/' + a.id, 'PATCH', { checklist: cl }, function (r) {
+          if (r) { ARR[clientId] = r; if (state.modalSection === 'arrival') renderModalContent(); }
+        });
+      });
+    });
+
+    var chat = el('arr-chat');
+    if (chat) chat.addEventListener('change', function () {
+      apiSend('/admin/api/arrivals/' + a.id, 'PATCH', { chat_link: chat.value || '' }, function (r) {
+        if (r) { ARR[clientId] = r; showToast('Ссылка сохранена'); }
+      });
+    });
+
+    var shotIn = el('arr-shot-in');
+    if (shotIn) shotIn.addEventListener('change', function () {
+      if (!shotIn.files || !shotIn.files.length) return;
+      readFiles(shotIn.files, function (files) {
+        if (!files.length) return;
+        var left = files.length, last = null;
+        files.forEach(function (f) {
+          apiSend('/admin/api/arrivals/' + a.id + '/shot', 'POST', { name: f.name, mime: f.mime, data: f.data }, function (r) {
+            if (r) last = r;
+            if (!--left) { if (last) { ARR[clientId] = last; } if (state.modalSection === 'arrival') renderModalContent(); showToast('Скрин добавлен'); }
+          });
+        });
+      });
+    });
+
+    var submit = el('arr-submit');
+    if (submit) submit.addEventListener('click', function () {
+      submit.disabled = true;
+      apiSend('/admin/api/arrivals/' + a.id + '/submit', 'POST', null, function (r) {
+        if (r) { ARR[clientId] = r; if (state.modalSection === 'arrival') renderModalContent(); showToast('Отправлено на проверку'); }
+        else { submit.disabled = false; showToast('Не удалось отправить'); }
+      });
+    });
+  }
+
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };
     view.innerHTML = '<div class="stub">' +
@@ -19280,6 +19436,7 @@
     { id: 'exams',     label: 'Экзамены',    icon: 'award' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
+    { id: 'arrival', label: 'Заезд',      icon: 'flight' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
@@ -20183,6 +20340,8 @@
       // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
       // пункт, который открывается только отказом, хуже отсутствующего пункта.
       if (sct.id === 'dialog') return can('inbox');
+      // Заезд ведут тьюторы — раздел виден только с доступом к заездам.
+      if (sct.id === 'arrival') return can('zaezdy');
       return true;
     }).map(function (sct) {
       var extra = '';
@@ -20271,12 +20430,14 @@
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
+    if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
     else if (s === 'path') host.innerHTML = buildPathSection(ctx);
+    else if (s === 'arrival') host.innerHTML = buildArrivalSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
@@ -20297,6 +20458,7 @@
     var mdl = el('modal');
     if (mdl) mdl.classList.toggle('pchat-open', hasSidePanel());
     attachContentHandlers(id, ctx);
+    if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     if (s === 'apply') wireApplySection(id);
     if (s === 'offers' && ctx.d) {
@@ -20315,6 +20477,7 @@
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
+                 arrival: ['Заезд', 'Поднимаю заезд ученика'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -24204,6 +24367,7 @@
     }).then(function (me) {
       state.role = me.role || 'manager'; state.userName = me.name || '';
       state.caps = me.caps || [];
+      state.userId = me.id != null ? me.id : null;   // свой id: чей заезд можно править
       startApp();
     }).catch(function () {
       localStorage.removeItem(KEY_LS);

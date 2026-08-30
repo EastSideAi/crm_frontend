@@ -6782,6 +6782,28 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .zaezdy textarea.zz-in { min-height:70px; resize:vertical; }
 .zaezdy .zz-form-a { margin-top:4px; }
 
+/* Заезд внутри карточки ученика: те же zz-* элементы, но без обертки-панели —
+   секция уже живет в дровере. Здесь только специфика карточки. */
+.arr-card { margin-top:4px; }
+.arr-card .arr-top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+.arr-card .arr-svc { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--zz-ink); }
+.arr-card .arr-top .zz-pill { margin-left:auto; }
+.arr-card .zz-lbl { margin-top:14px; }
+.arr-card .arr-field { margin-top:16px; }
+.arr-card .arr-flbl { font-size:12.5px; font-weight:600; color:var(--zz-ink-2); margin-bottom:8px; }
+.arr-card .arr-link { display:inline-flex; align-items:center; gap:6px; font-size:13.5px; color:var(--zz-blue-d); text-decoration:none; word-break:break-all; }
+.arr-card .arr-link:hover { text-decoration:underline; }
+.arr-card .arr-shots { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.arr-card .arr-shot { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--zz-ink-2); background:var(--zz-fill); border:1px solid var(--zz-line-2); border-radius:9px; padding:7px 11px; text-decoration:none; }
+.arr-card .arr-shot:hover { border-color:var(--zz-blue); color:var(--zz-ink); }
+.arr-card .arr-up { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--zz-blue-d); background:var(--zz-tint); border-radius:9px; padding:7px 11px; cursor:pointer; }
+.arr-card .arr-up:hover { background:#DEE8FF; }
+.arr-card .arr-muted { font-size:13px; color:var(--zz-ink-3); }
+.arr-card .arr-empty { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+.arr-card .arr-empty-t { font-size:14px; color:var(--zz-ink-2); margin-bottom:6px; }
+.arr-card .arr-empty .zz-lbl { margin-top:0; min-width:260px; }
+.arr-card .arr-empty .bp { margin-top:12px; }
+
 @media (max-width:720px) {
   .zaezdy .zz-panel { padding:18px 16px; }
   .zaezdy .zz-card { padding:12px 13px; }
