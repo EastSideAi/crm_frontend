@@ -6631,6 +6631,19 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-pay li { display: flex; justify-content: space-between; align-items: center; gap: 14px; background: var(--ac-fill); border-radius: var(--ac-r-md); padding: 12px 16px; font-size: 14.5px; color: #333843; }
 .academy .ac-amt { font-weight: 700; color: var(--ac-ink); white-space: nowrap; }
 
+/* Разбивка ставки по пунктам чек-листа: полный чек-лист = полная ставка, у каждого
+   пункта своя цена. Три группы услуг, внутри плотно, между группами воздуха больше. */
+.academy .ac-deduct { display: flex; flex-direction: column; gap: 14px; margin: 18px 0; }
+.academy .ac-dgrp { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 15px 17px 8px; }
+.academy .ac-dhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 11px; }
+.academy .ac-dname { font-weight: 700; color: var(--ac-ink); font-size: 15px; letter-spacing: -.01em; }
+.academy .ac-drate { font-weight: 700; color: var(--ac-blue-d); font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.academy .ac-dlist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.academy .ac-dlist li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 8px 0; font-size: 14px; color: #333843; border-top: 1px solid var(--ac-line); }
+.academy .ac-dlist li:first-child { border-top: 0; }
+.academy .ac-damt { font-weight: 600; color: var(--ac-ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.academy .ac-dtot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 2px; padding: 11px 0 6px; border-top: 1.5px solid var(--ac-line-2); font-weight: 700; color: var(--ac-ink); font-size: 14.5px; font-variant-numeric: tabular-nums; }
+
 .academy .ac-qlead { font-size: 15px; color: var(--ac-ink); margin: 0 0 4px; }
 .academy .ac-opts { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 8px; }
 .academy .ac-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; cursor: pointer; background: var(--ac-card); border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-lg); padding: 14px 16px; font: inherit; color: var(--ac-ink); transition: .14s var(--ac-ease); }
