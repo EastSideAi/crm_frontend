@@ -1990,21 +1990,21 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'zaezdy', 'zaezd_review'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy'] },
     // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
     // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
     // нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy'] },
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy'] },
+    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy', 'zaezdy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
@@ -2058,6 +2058,8 @@
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
+    // Заезды тьютора: чек-лист заезда и приёмка администратором, от неё зависит оплата.
+    { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
@@ -3038,6 +3040,7 @@
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
+    else if (state.page === 'zaezdy') return renderArrivals(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
     else if (state.page === 'cztasks') renderCzTasks(view);
@@ -3886,6 +3889,258 @@
     });
   }
   function acAnim(scr) { scr.style.animation = 'none'; void scr.offsetWidth; scr.style.animation = ''; }
+
+  /* ── Заезды тьютора ─────────────────────────────────────────────────────────
+     Оплата тьютору идёт за выполненный чек-лист. Тьютор заводит заезд, проходит его
+     по пунктам, отправляет на проверку. Администратор (cap zaezd_review) сверяет с
+     подтверждениями и принимает — тогда открывается сумма к оплате по услуге. Не
+     принят или пункты не закрыты — оплата не начисляется. Логика приёмки и обязательные
+     пункты на сервере (routers/tutor_arrivals.py), тут верстка и подписи. */
+  var AR_POINTS = {
+    flight: 'Уточнил рейс: дата, время прилёта, терминал',
+    meetpoint: 'Договорился о точке встречи, прислал своё фото',
+    packlist: 'Отправил семье чек-лист ручной клади',
+    krug: 'Записал и отправил видеокружок-знакомство',
+    met: 'Встретил в аэропорту, помог с багажом',
+    photo_mama: 'Фото маме и «всё хорошо» в течение часа',
+    sim: 'Симка, WeChat/Alipay, немного наличных',
+    housing: 'Довёз и заселил, показал что рядом',
+    report: 'Вечером: заселён и на связи, план на завтра',
+    route: 'Расписал студенту маршрут из аэропорта',
+    sim_online: 'Помог с симкой и оплатой в переписке',
+    settled: 'К вечеру студент заселён и на связи'
+  };
+  var AR_SERVICE = {
+    meet: { label: 'Встреча в аэропорту', rate: 3000 },
+    full_day: { label: 'Полный день заезда', rate: 7000 },
+    online: { label: 'Онлайн-сопровождение', rate: 1500 }
+  };
+  var AR_STATUS = {
+    draft: { label: 'Черновик', cls: 'gray' },
+    submitted: { label: 'На проверке', cls: 'amber' },
+    accepted: { label: 'Принят', cls: 'green' },
+    returned: { label: 'Возвращён на доработку', cls: 'red' }
+  };
+  function arMoney(n) { return (n == null ? '' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽'); }
+  function arDate(s) { if (!s) return ''; var p = s.slice(0, 10).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : s; }
+
+  function arLoad(scope, cb) {
+    api('/admin/api/arrivals?scope=' + scope).then(function (r) {
+      state.arr = state.arr || {};
+      if (scope === 'review') state.arr.review = r.arrivals || [];
+      else state.arr.mine = r.arrivals || [];
+      state.arr.canReview = !!r.can_review;
+      if (cb) cb(r);
+    }).catch(function () { if (cb) cb(null); });
+  }
+
+  function renderArrivals(view) {
+    var A = state.arr = state.arr || {};
+    if (A.mine == null) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return arLoad('mine', function () {
+        if (A.canReview) arLoad('review', function () { if (state.page === 'zaezdy') arDraw(view); });
+        else if (state.page === 'zaezdy') arDraw(view);
+      });
+    }
+    arDraw(view);
+  }
+
+  function arDraw(view) {
+    var A = state.arr, tab = A.tab || 'mine';
+    var tabs = A.canReview
+      ? '<div class="zz-tabs">' +
+          '<button class="zz-tab' + (tab === 'mine' ? ' on' : '') + '" data-tab="mine">Мои заезды</button>' +
+          '<button class="zz-tab' + (tab === 'review' ? ' on' : '') + '" data-tab="review">' +
+            'На проверке' + (A.review && A.review.length ? ' <span class="zz-badge">' + A.review.length + '</span>' : '') + '</button>' +
+        '</div>'
+      : '';
+    var right = (tab === 'mine')
+      ? '<button class="bp" id="zz-new">' + ic('plus', 14) + 'Новый заезд</button>' : '';
+    var head = '<div class="zz-head"><div class="zz-h">Заезды тьютора</div>' + tabs + '<div class="zz-sp"></div>' + right + '</div>';
+
+    var body;
+    if (A.open) {
+      body = arDetail(A.open, tab === 'review');
+    } else if (A.creating) {
+      body = arCreateForm();
+    } else {
+      var items = tab === 'review' ? (A.review || []) : (A.mine || []);
+      body = arListHTML(items, tab === 'review');
+    }
+    view.innerHTML = '<div class="zaezdy">' + head + body + '</div>';
+    arBind(view);
+  }
+
+  function arListHTML(items, review) {
+    if (!items.length) {
+      return '<div class="zz-empty">' + ic('flight', 26) + '<div>' +
+        (review ? 'Заездов на проверке нет.' : 'Пока нет заездов. Заведи первый, когда возьмёшь заезд.') + '</div></div>';
+    }
+    return '<div class="zz-list">' + items.map(function (a) {
+      var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
+      var svc = AR_SERVICE[a.service] || { label: a.service };
+      var done = a.points.filter(function (p) { return a.checklist[p]; }).length;
+      return '<button class="zz-card" data-open="' + a.id + '">' +
+        '<div class="zz-card-main">' +
+          '<div class="zz-card-t">' + esc(a.student || 'Без имени') + (review ? ' <span class="zz-who">· ' + esc(a.tutor_name) + '</span>' : '') + '</div>' +
+          '<div class="zz-card-m">' + esc(svc.label) + (a.city ? ' · ' + esc(a.city) : '') + (a.arrival_date ? ' · ' + arDate(a.arrival_date) : '') + '</div>' +
+        '</div>' +
+        '<div class="zz-card-side">' +
+          (a.status === 'accepted' ? '<span class="zz-pay">' + arMoney(a.payout_rub) + '</span>' : '<span class="zz-prog">' + done + '/' + a.points.length + '</span>') +
+          '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span>' +
+        '</div></button>';
+    }).join('') + '</div>';
+  }
+
+  function arCreateForm() {
+    var opts = Object.keys(AR_SERVICE).map(function (k) {
+      return '<option value="' + k + '">' + esc(AR_SERVICE[k].label) + ' · ' + arMoney(AR_SERVICE[k].rate) + '</option>';
+    }).join('');
+    return '<div class="zz-panel"><button class="zz-back" id="zz-back">' + ic('back', 14) + 'Назад</button>' +
+      '<div class="zz-form">' +
+        '<label class="zz-lbl">Студент<input class="zz-in" id="zz-student" placeholder="Имя студента"></label>' +
+        '<label class="zz-lbl">Город<input class="zz-in" id="zz-city" placeholder="Гуанчжоу"></label>' +
+        '<label class="zz-lbl">Дата заезда<input class="zz-in" id="zz-date" type="date"></label>' +
+        '<label class="zz-lbl">Услуга<select class="zz-in" id="zz-service">' + opts + '</select></label>' +
+        '<div class="zz-form-a"><button class="bp" id="zz-create">Создать заезд</button></div>' +
+      '</div></div>';
+  }
+
+  function arFind(id) {
+    var all = (state.arr.mine || []).concat(state.arr.review || []);
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+    return null;
+  }
+
+  function arDetail(id, review) {
+    var a = arFind(id);
+    if (!a) return '<div class="zz-empty">Заезд не найден</div>';
+    var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
+    var svc = AR_SERVICE[a.service] || { label: a.service, rate: 0 };
+    var editable = !review && (a.status === 'draft' || a.status === 'returned');
+    var done = a.points.filter(function (p) { return a.checklist[p]; }).length;
+    var all = done === a.points.length;
+
+    var head = '<button class="zz-back" id="zz-back">' + ic('back', 14) + 'Назад</button>' +
+      '<div class="zz-dh"><div><div class="zz-dh-t">' + esc(a.student || 'Без имени') + '</div>' +
+        '<div class="zz-dh-m">' + esc(svc.label) + (a.city ? ' · ' + esc(a.city) : '') + (a.arrival_date ? ' · ' + arDate(a.arrival_date) : '') +
+        (review ? ' · ' + esc(a.tutor_name) : '') + '</div></div>' +
+        '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span></div>';
+
+    var note = a.status === 'returned' && a.review_note
+      ? '<div class="zz-note red">' + ic('info', 14) + '<div><b>Вернули на доработку:</b> ' + esc(a.review_note) + '</div></div>' : '';
+    var accepted = a.status === 'accepted'
+      ? '<div class="zz-note green">' + ic('check', 14) + '<div><b>Заезд принят.</b> К оплате ' + arMoney(a.payout_rub) + '. ' +
+          (a.paid_at ? 'Выплата проведена.' : 'Выплата 10 или 20 числа.') + '</div></div>' : '';
+
+    var list = '<div class="zz-checks">' + a.points.map(function (p) {
+      var on = !!a.checklist[p];
+      if (editable) {
+        return '<label class="zz-chk"><input type="checkbox" data-pt="' + p + '"' + (on ? ' checked' : '') + '><span>' + esc(AR_POINTS[p] || p) + '</span></label>';
+      }
+      return '<div class="zz-chk ro' + (on ? ' on' : '') + '"><span class="zz-tick">' + (on ? ic('check', 12) : '') + '</span><span>' + esc(AR_POINTS[p] || p) + '</span></div>';
+    }).join('') + '</div>';
+
+    var foot = '';
+    if (editable) {
+      foot = '<div class="zz-foot"><span class="zz-count">' + done + ' из ' + a.points.length + ' пунктов</span>' +
+        '<button class="bp" id="zz-submit">Отправить на проверку</button></div>';
+    } else if (review) {
+      foot = '<div class="zz-foot"><button class="al-cancel" id="zz-return">Вернуть на доработку</button>' +
+        '<button class="bp" id="zz-accept"' + (all ? '' : ' disabled title="Не все пункты выполнены"') + '>Принять · ' + arMoney(svc.rate) + '</button></div>' +
+        '<div class="zz-return-box" id="zz-return-box" hidden><textarea class="zz-in" id="zz-return-note" placeholder="Что доделать: какие пункты не подтверждены"></textarea>' +
+        '<button class="bp" id="zz-return-send">Отправить возврат</button></div>';
+    } else if (a.status === 'accepted' && state.arr.canReview && !a.paid_at) {
+      foot = '<div class="zz-foot"><span class="zz-sp"></span><button class="al-cancel" id="zz-paid">Отметить выплаченным</button></div>';
+    }
+
+    return '<div class="zz-panel">' + head + note + accepted + list + foot + '</div>';
+  }
+
+  function arBind(view) {
+    var A = state.arr;
+    var tabs = view.querySelectorAll('.zz-tab');
+    Array.prototype.forEach.call(tabs, function (b) {
+      b.addEventListener('click', function () { A.tab = b.getAttribute('data-tab'); A.open = null; A.creating = false; arDraw(view); });
+    });
+    var nw = el('zz-new'); if (nw) nw.addEventListener('click', function () { A.creating = true; A.open = null; arDraw(view); });
+    var back = el('zz-back'); if (back) back.addEventListener('click', function () { A.open = null; A.creating = false; arDraw(view); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-open]'), function (c) {
+      c.addEventListener('click', function () { A.open = +c.getAttribute('data-open'); A.creating = false; arDraw(view); });
+    });
+
+    var create = el('zz-create');
+    if (create) create.addEventListener('click', function () {
+      var body = {
+        student: (el('zz-student').value || '').trim(),
+        city: (el('zz-city').value || '').trim(),
+        arrival_date: el('zz-date').value || null,
+        service: el('zz-service').value
+      };
+      create.disabled = true;
+      apiSend('/admin/api/arrivals', 'POST', body, function (r) {
+        if (r && r.id) { arLoad('mine', function () { A.creating = false; A.open = r.id; arDraw(view); showToast('Заезд создан'); }); }
+        else { create.disabled = false; showToast('Не удалось создать заезд'); }
+      });
+    });
+
+    // чек-лист тьютора: любое изменение — сразу на сервер
+    Array.prototype.forEach.call(view.querySelectorAll('.zz-chk input[data-pt]'), function (cb) {
+      cb.addEventListener('change', function () {
+        var cl = {};
+        Array.prototype.forEach.call(view.querySelectorAll('.zz-chk input[data-pt]'), function (x) {
+          cl[x.getAttribute('data-pt')] = x.checked;
+        });
+        apiSend('/admin/api/arrivals/' + A.open, 'PATCH', { checklist: cl }, function (r) {
+          if (r) { arReplace(r); arDraw(view); }
+        });
+      });
+    });
+
+    var submit = el('zz-submit');
+    if (submit) submit.addEventListener('click', function () {
+      submit.disabled = true;
+      apiSend('/admin/api/arrivals/' + A.open + '/submit', 'POST', null, function (r) {
+        if (r) { arReplace(r); arLoad('mine', function () { arDraw(view); showToast('Отправлено на проверку'); }); }
+        else { submit.disabled = false; showToast('Не удалось отправить'); }
+      });
+    });
+
+    var accept = el('zz-accept');
+    if (accept) accept.addEventListener('click', function () {
+      accept.disabled = true;
+      apiSend('/admin/api/arrivals/' + A.open + '/accept', 'POST', null, function (r) {
+        if (r && r.status === 'accepted') { arReplace(r); arLoad('review', function () { A.open = null; arDraw(view); renderSide(); showToast('Заезд принят, оплата открыта'); }); }
+        else { accept.disabled = false; showToast('Не удалось принять, проверь пункты'); }
+      });
+    });
+    var ret = el('zz-return'); if (ret) ret.addEventListener('click', function () { var b = el('zz-return-box'); if (b) b.hidden = !b.hidden; });
+    var retSend = el('zz-return-send');
+    if (retSend) retSend.addEventListener('click', function () {
+      var note = (el('zz-return-note').value || '').trim();
+      retSend.disabled = true;
+      apiSend('/admin/api/arrivals/' + A.open + '/return', 'POST', { note: note }, function (r) {
+        if (r) { arReplace(r); arLoad('review', function () { A.open = null; arDraw(view); renderSide(); showToast('Возвращено тьютору'); }); }
+        else { retSend.disabled = false; showToast('Не удалось вернуть'); }
+      });
+    });
+    var paid = el('zz-paid');
+    if (paid) paid.addEventListener('click', function () {
+      paid.disabled = true;
+      apiSend('/admin/api/arrivals/' + A.open + '/paid', 'POST', null, function (r) {
+        if (r) { arReplace(r); arDraw(view); showToast('Отмечено выплаченным'); }
+        else { paid.disabled = false; }
+      });
+    });
+  }
+
+  function arReplace(a) {
+    ['mine', 'review'].forEach(function (key) {
+      var arr = state.arr[key]; if (!arr) return;
+      for (var i = 0; i < arr.length; i++) if (arr[i].id === a.id) { arr[i] = a; return; }
+    });
+  }
 
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };

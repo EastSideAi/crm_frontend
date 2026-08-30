@@ -6698,3 +6698,84 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-dl-wrap { margin-top: 18px; }
 .academy a.ac-dl { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
 .academy a.ac-dl svg { width: 15px; height: 15px; }
+
+/* ── Заезды тьютора ──────────────────────────────────────────────────────────
+   Раздел исполнения заезда с чек-листом и приёмкой. Классы zz-* под .zaezdy,
+   чтобы не задевать общие стили CRM. Кнопки берём общие (.bp, .al-cancel). */
+.zaezdy {
+  --zz-blue:#2F6BFF; --zz-blue-d:#1E50E6; --zz-tint:#EAF0FF;
+  --zz-ink:#11151F; --zz-ink-2:#5B6272; --zz-ink-3:#9AA0AD;
+  --zz-line:#E9EBF0; --zz-line-2:#E3E5EB; --zz-fill:#F5F6F9; --zz-card:#FFFFFF;
+  --zz-green:#18A957; --zz-green-ink:#0E7C3F; --zz-green-soft:#E4F6EC;
+  --zz-amber-ink:#9A5B12; --zz-amber-soft:#FBF0DD;
+  --zz-red:#E5484D; --zz-red-ink:#B4272B; --zz-red-soft:#FCEBEC;
+  --zz-r:12px; --zz-r-lg:14px; --zz-pill:999px;
+  color:var(--zz-ink);
+}
+.zaezdy .zz-head { display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+.zaezdy .zz-h { font-size:19px; font-weight:800; letter-spacing:-.02em; }
+.zaezdy .zz-sp { margin-left:auto; }
+.zaezdy .zz-tabs { display:flex; gap:4px; background:var(--zz-fill); padding:3px; border-radius:10px; }
+.zaezdy .zz-tab { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:7px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.zaezdy .zz-tab.on { background:var(--zz-card); color:var(--zz-ink); box-shadow:0 1px 2px rgba(17,21,31,.06); }
+.zaezdy .zz-badge { background:var(--zz-blue); color:#fff; font-size:11px; font-weight:700; min-width:17px; height:17px; padding:0 5px; border-radius:999px; display:inline-grid; place-items:center; }
+
+.zaezdy .zz-list { display:flex; flex-direction:column; gap:9px; }
+.zaezdy .zz-card { width:100%; text-align:left; background:var(--zz-card); border:1px solid var(--zz-line); border-radius:var(--zz-r-lg); padding:14px 16px; cursor:pointer; display:flex; align-items:center; gap:14px; transition:.12s cubic-bezier(.22,1,.36,1); font:inherit; }
+.zaezdy .zz-card:hover { border-color:var(--zz-blue); background:#FCFCFE; }
+.zaezdy .zz-card-main { min-width:0; }
+.zaezdy .zz-card-t { font-weight:700; font-size:14.5px; color:var(--zz-ink); }
+.zaezdy .zz-who { color:var(--zz-ink-3); font-weight:500; }
+.zaezdy .zz-card-m { font-size:13px; color:var(--zz-ink-2); margin-top:2px; }
+.zaezdy .zz-card-side { margin-left:auto; display:flex; align-items:center; gap:12px; flex:none; }
+.zaezdy .zz-prog { font-size:13px; font-weight:700; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; }
+.zaezdy .zz-pay { font-size:14px; font-weight:800; color:var(--zz-green-ink); white-space:nowrap; }
+.zaezdy .zz-pill { font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:var(--zz-pill); white-space:nowrap; }
+.zaezdy .zz-pill.gray { background:var(--zz-fill); color:var(--zz-ink-2); }
+.zaezdy .zz-pill.amber { background:var(--zz-amber-soft); color:var(--zz-amber-ink); }
+.zaezdy .zz-pill.green { background:var(--zz-green-soft); color:var(--zz-green-ink); }
+.zaezdy .zz-pill.red { background:var(--zz-red-soft); color:var(--zz-red-ink); }
+
+.zaezdy .zz-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--zz-ink-3); text-align:center; padding:60px 20px; }
+.zaezdy .zz-empty svg { opacity:.5; }
+
+.zaezdy .zz-panel { background:var(--zz-card); border:1px solid var(--zz-line); border-radius:16px; padding:22px 24px; max-width:680px; }
+.zaezdy .zz-back { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; margin-bottom:16px; }
+.zaezdy .zz-back:hover { color:var(--zz-ink); }
+.zaezdy .zz-dh { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+.zaezdy .zz-dh-t { font-size:20px; font-weight:800; letter-spacing:-.02em; }
+.zaezdy .zz-dh-m { font-size:13px; color:var(--zz-ink-2); margin-top:3px; }
+.zaezdy .zz-dh .zz-pill { margin-left:auto; }
+
+.zaezdy .zz-note { display:flex; gap:11px; align-items:flex-start; border-radius:var(--zz-r); padding:13px 15px; font-size:13.5px; margin-bottom:16px; }
+.zaezdy .zz-note.red { background:var(--zz-red-soft); color:var(--zz-red-ink); }
+.zaezdy .zz-note.green { background:var(--zz-green-soft); color:var(--zz-green-ink); }
+.zaezdy .zz-note b { font-weight:700; }
+.zaezdy .zz-note svg { flex:none; margin-top:1px; }
+
+.zaezdy .zz-checks { display:flex; flex-direction:column; gap:8px; margin-bottom:6px; }
+.zaezdy .zz-chk { display:flex; gap:11px; align-items:flex-start; font-size:14px; color:#333843; padding:10px 12px; border-radius:10px; background:var(--zz-fill); }
+.zaezdy label.zz-chk { cursor:pointer; }
+.zaezdy label.zz-chk:hover { background:#EEF0F5; }
+.zaezdy .zz-chk input { width:18px; height:18px; margin-top:1px; accent-color:var(--zz-blue); flex:none; }
+.zaezdy .zz-chk.ro .zz-tick { width:18px; height:18px; flex:none; border-radius:5px; border:1.6px solid var(--zz-line-2); display:grid; place-items:center; color:#fff; }
+.zaezdy .zz-chk.ro.on .zz-tick { background:var(--zz-green); border-color:var(--zz-green); }
+.zaezdy .zz-chk.ro.on { color:var(--zz-ink); }
+
+.zaezdy .zz-foot { display:flex; align-items:center; gap:12px; margin-top:18px; padding-top:16px; border-top:1px solid var(--zz-line); }
+.zaezdy .zz-count { font-size:13px; font-weight:600; color:var(--zz-ink-3); }
+.zaezdy .zz-foot .bp { margin-left:auto; }
+.zaezdy .zz-foot .zz-sp { margin-left:auto; }
+.zaezdy .zz-return-box { margin-top:12px; display:flex; flex-direction:column; gap:10px; }
+
+.zaezdy .zz-form { display:flex; flex-direction:column; gap:14px; max-width:420px; }
+.zaezdy .zz-lbl { display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-in { font:inherit; font-size:14px; color:var(--zz-ink); background:var(--zz-card); border:1px solid var(--zz-line-2); border-radius:10px; padding:10px 12px; transition:.14s; }
+.zaezdy .zz-in:focus { outline:none; border-color:var(--zz-blue); box-shadow:0 0 0 3px rgba(47,107,255,.1); }
+.zaezdy textarea.zz-in { min-height:70px; resize:vertical; }
+.zaezdy .zz-form-a { margin-top:4px; }
+
+@media (max-width:720px) {
+  .zaezdy .zz-panel { padding:18px 16px; }
+  .zaezdy .zz-card { padding:12px 13px; }
+}
