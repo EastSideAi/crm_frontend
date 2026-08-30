@@ -4225,9 +4225,12 @@
     }).join('') + '</div>';
 
     // Подтверждения: ссылка на чат с семьей + скрины (фото маме, заселение, кружок).
+    // Ссылку рисуем кликабельной только если это http(s): иначе (javascript:, data:)
+    // клик по ней в карточке выполнил бы чужой код в CRM. Бэкенд это же режет на записи.
+    var safeChat = /^https?:\/\//i.test(a.chat_link || '') ? a.chat_link : '';
     var chat = editable
       ? '<label class="zz-lbl">Ссылка на чат с семьей<input class="zz-in" id="arr-chat" placeholder="https://t.me/..." value="' + esc(a.chat_link || '') + '"></label>'
-      : (a.chat_link ? '<div class="arr-field"><div class="arr-flbl">Чат с семьей</div><a class="arr-link" href="' + esc(a.chat_link) + '" target="_blank" rel="noopener">' + ic('ext', 13) + esc(a.chat_link) + '</a></div>' : '');
+      : (safeChat ? '<div class="arr-field"><div class="arr-flbl">Чат с семьей</div><a class="arr-link" href="' + esc(safeChat) + '" target="_blank" rel="noopener">' + ic('ext', 13) + esc(safeChat) + '</a></div>' : '');
 
     var shots = (a.shots || []).map(function (s) {
       return '<a class="arr-shot" href="' + docHref(s.id) + '" target="_blank" rel="noopener">' + ic('image', 13) + esc(s.name || 'скрин') + '</a>';
