@@ -3850,7 +3850,8 @@
     scr.innerHTML = '<div class="ac-fin"><div class="ac-seal">' + ic('check', 32) + '</div><h1 class="ac-h">Аттестация пройдена</h1>' +
       '<p class="ac-p" style="margin:0 auto 14px;">Ты ответил верно на ' + right + ' из ' + N + ', выполнил обе практики и подтвердил соглашение. Способ оплаты: ' + (pay === 'rub' ? 'рубли' : 'Alipay') + '.</p>' +
       '<div class="ac-cert">' + ic('award', 15) + 'Допуск к заездам по тёплому приёму открыт</div>' +
-      '<p class="ac-cap" style="margin-top:20px;">Так тьютор завершает курс и попадает в список готовых к работе</p></div>';
+      '<div class="ac-dl-wrap"><a class="ac-btn ghost ac-dl" href="assets/chek-list-zaezda.pdf" download>' + ic('doc', 15) + 'Скачать чек-лист заезда</a></div>' +
+      '<p class="ac-cap" style="margin-top:18px;">Держи чек-лист под рукой в день заезда. Оплата за заезд идёт за выполненный список.</p></div>';
     el('ac-steplab').textContent = 'Курс завершён';
     el('ac-back').style.visibility = 'visible';
     var nx = el('ac-next'); nx.textContent = 'Пройти заново'; nx.disabled = false;
