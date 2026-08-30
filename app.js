@@ -3923,6 +3923,13 @@
   };
   function arMoney(n) { return (n == null ? '' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' ₽'); }
   function arDate(s) { if (!s) return ''; var p = s.slice(0, 10).split('-'); return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : s; }
+  // Оплата = ставка минус вычеты за неотмеченные пункты. Тот же расчёт, что на сервере
+  // (_payout), чтобы тьютор и админ видели сумму сразу, без ожидания ответа.
+  function arPayout(a) {
+    var d = a.deductions || {}, lost = 0;
+    (a.points || []).forEach(function (p) { if (!a.checklist[p]) lost += (d[p] || 0); });
+    return Math.max(0, (a.rate || 0) - lost);
+  }
 
   function arLoad(scope, cb) {
     api('/admin/api/arrivals?scope=' + scope).then(function (r) {
@@ -4021,6 +4028,7 @@
     var editable = !review && (a.status === 'draft' || a.status === 'returned');
     var done = a.points.filter(function (p) { return a.checklist[p]; }).length;
     var all = done === a.points.length;
+    var pay = arPayout(a);
 
     var head = '<button class="zz-back" id="zz-back">' + ic('back', 14) + 'Назад</button>' +
       '<div class="zz-dh"><div><div class="zz-dh-t">' + esc(a.student || 'Без имени') + '</div>' +
@@ -4034,21 +4042,27 @@
       ? '<div class="zz-note green">' + ic('check', 14) + '<div><b>Заезд принят.</b> К оплате ' + arMoney(a.payout_rub) + '. ' +
           (a.paid_at ? 'Выплата проведена.' : 'Выплата 10 или 20 числа.') + '</div></div>' : '';
 
+    var deds = a.deductions || {};
     var list = '<div class="zz-checks">' + a.points.map(function (p) {
       var on = !!a.checklist[p];
+      var amt = deds[p] || 0;
+      // Сумма пункта: серая, когда он засчитан, красная «−N», когда вычитается.
+      var tag = '<span class="zz-amt' + (on ? '' : ' off') + '">' + (on ? '' : '−') + arMoney(amt) + '</span>';
       if (editable) {
-        return '<label class="zz-chk"><input type="checkbox" data-pt="' + p + '"' + (on ? ' checked' : '') + '><span>' + esc(AR_POINTS[p] || p) + '</span></label>';
+        return '<label class="zz-chk"><input type="checkbox" data-pt="' + p + '"' + (on ? ' checked' : '') + '><span>' + esc(AR_POINTS[p] || p) + '</span>' + tag + '</label>';
       }
-      return '<div class="zz-chk ro' + (on ? ' on' : '') + '"><span class="zz-tick">' + (on ? ic('check', 12) : '') + '</span><span>' + esc(AR_POINTS[p] || p) + '</span></div>';
+      return '<div class="zz-chk ro' + (on ? ' on' : '') + '"><span class="zz-tick">' + (on ? ic('check', 12) : '') + '</span><span>' + esc(AR_POINTS[p] || p) + '</span>' + tag + '</div>';
     }).join('') + '</div>';
 
     var foot = '';
     if (editable) {
-      foot = '<div class="zz-foot"><span class="zz-count">' + done + ' из ' + a.points.length + ' пунктов</span>' +
+      foot = '<div class="zz-foot"><span class="zz-count">К оплате <b>' + arMoney(pay) + '</b>' +
+        (pay < a.rate ? ' <span class="zz-mut">из ' + arMoney(a.rate) + '</span>' : ' <span class="zz-mut">полная ставка</span>') + '</span>' +
         '<button class="bp" id="zz-submit">Отправить на проверку</button></div>';
     } else if (review) {
       foot = '<div class="zz-foot"><button class="al-cancel" id="zz-return">Вернуть на доработку</button>' +
-        '<button class="bp" id="zz-accept"' + (all ? '' : ' disabled title="Не все пункты выполнены"') + '>Принять · ' + arMoney(svc.rate) + '</button></div>' +
+        '<button class="bp" id="zz-accept">Принять · ' + arMoney(pay) + '</button></div>' +
+        (pay < a.rate ? '<div class="zz-note amber"><div>Не отмечено пунктов на ' + arMoney(a.rate - pay) + '. Примешь — к оплате ' + arMoney(pay) + ' вместо ' + arMoney(a.rate) + '. Если ждёшь подтверждений, верни на доработку.</div></div>' : '') +
         '<div class="zz-return-box" id="zz-return-box" hidden><textarea class="zz-in" id="zz-return-note" placeholder="Что доделать: какие пункты не подтверждены"></textarea>' +
         '<button class="bp" id="zz-return-send">Отправить возврат</button></div>';
     } else if (a.status === 'accepted' && state.arr.canReview && !a.paid_at) {
@@ -4111,8 +4125,8 @@
     if (accept) accept.addEventListener('click', function () {
       accept.disabled = true;
       apiSend('/admin/api/arrivals/' + A.open + '/accept', 'POST', null, function (r) {
-        if (r && r.status === 'accepted') { arReplace(r); arLoad('review', function () { A.open = null; arDraw(view); renderSide(); showToast('Заезд принят, оплата открыта'); }); }
-        else { accept.disabled = false; showToast('Не удалось принять, проверь пункты'); }
+        if (r && r.status === 'accepted') { arReplace(r); arLoad('review', function () { A.open = null; arDraw(view); renderSide(); showToast('Заезд принят, к оплате ' + arMoney(r.payout_rub)); }); }
+        else { accept.disabled = false; showToast('Не удалось принять заезд'); }
       });
     });
     var ret = el('zz-return'); if (ret) ret.addEventListener('click', function () { var b = el('zz-return-box'); if (b) b.hidden = !b.hidden; });

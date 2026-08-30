@@ -6761,9 +6761,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .zaezdy .zz-chk.ro .zz-tick { width:18px; height:18px; flex:none; border-radius:5px; border:1.6px solid var(--zz-line-2); display:grid; place-items:center; color:#fff; }
 .zaezdy .zz-chk.ro.on .zz-tick { background:var(--zz-green); border-color:var(--zz-green); }
 .zaezdy .zz-chk.ro.on { color:var(--zz-ink); }
+.zaezdy .zz-amt { flex:none; margin-left:auto; padding-left:12px; font-size:12.5px; font-weight:700; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.zaezdy .zz-amt.off { color:var(--zz-red-ink); }
+
+.zaezdy .zz-note.amber { background:var(--zz-amber-soft); color:var(--zz-amber-ink); }
 
 .zaezdy .zz-foot { display:flex; align-items:center; gap:12px; margin-top:18px; padding-top:16px; border-top:1px solid var(--zz-line); }
-.zaezdy .zz-count { font-size:13px; font-weight:600; color:var(--zz-ink-3); }
+.zaezdy .zz-count { font-size:13px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-count b { font-weight:800; color:var(--zz-ink); }
+.zaezdy .zz-mut { color:var(--zz-ink-3); font-weight:600; }
 .zaezdy .zz-foot .bp { margin-left:auto; }
 .zaezdy .zz-foot .zz-sp { margin-left:auto; }
 .zaezdy .zz-return-box { margin-top:12px; display:flex; flex-direction:column; gap:10px; }
