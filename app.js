@@ -12618,7 +12618,11 @@
 
     var rows = (o.items || []).map(function (it) {
       var neg = it.kind === 'расход';
-      return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') + '">' +
+      // Клик по строке дохода ведёт в карточку клиента: case_id отдаёт бэкенд только
+      // тем, кому открыты карточки (cap clients). У расходов и строк без клиента его нет.
+      var lead = it.case_id ? esc(it.case_id) : '';
+      return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') +
+        (lead ? ' click' : '') + '"' + (lead ? ' data-lead="' + lead + '"' : '') + '>' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
         // Подстрочник собираем из непустых кусков: у переводов нет статьи, и жестко
         // склеенная строка начиналась бы с висящей точки.
@@ -12685,6 +12689,14 @@
         var v = b.getAttribute('data-fsrc');
         FIN.src = FIN.src === v ? '' : v;
         finLoadOps();
+      });
+    });
+    // Строка дохода с клиентом — кнопка в карточку (openLeadTab открывает её в новой
+    // вкладке, как из ленты фондов). Без case_id строки этого обработчика не получают.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
       });
     });
     pageAnim(view);
