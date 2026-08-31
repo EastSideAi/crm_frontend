@@ -6712,6 +6712,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy a.ac-dl { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
 .academy a.ac-dl svg { width: 15px; height: 15px; }
 
+/* Материалы для скачивания в сайдбаре курса — доступны всегда, всем тьюторам. */
+.academy .ac-mats { margin: 16px 4px 2px; padding-top: 14px; border-top: 1px solid var(--ac-line);
+  display: flex; flex-direction: column; gap: 4px; }
+.academy .ac-mats .ac-cap { margin-bottom: 4px; }
+.academy a.ac-mat { display: flex; align-items: center; gap: 9px; text-decoration: none;
+  color: var(--ac-ink-2); font-size: 12.5px; font-weight: 600; line-height: 1.25;
+  padding: 8px 9px; border-radius: var(--ac-r-md); transition: .14s var(--ac-ease); }
+.academy a.ac-mat:hover { background: var(--ac-fill); color: var(--ac-blue-d); }
+.academy a.ac-mat svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--ac-blue-d); }
+
 /* ── Заезды тьютора ──────────────────────────────────────────────────────────
    Раздел исполнения заезда с чек-листом и приёмкой. Классы zz-* под .zaezdy,
    чтобы не задевать общие стили CRM. Кнопки берём общие (.bp, .al-cancel). */
