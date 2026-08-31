@@ -14460,6 +14460,13 @@
     var sub = tmSub(u);
     return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
   }
+  // Метка обучения в строке человека. Приемки у обучения нет, это просто статус:
+  // прошел / учится / не начал — чтобы руководитель видел, кого подтолкнуть.
+  var GUIDE_TAG = {
+    done:     { cls: 'gd-ok',  label: 'обучен',   ic: 'check' },
+    progress: { cls: 'gd-mid', label: 'учится',   ic: '' },
+    none:     { cls: 'gd-no',  label: 'не начал', ic: '' },
+  };
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();
@@ -14519,6 +14526,12 @@
         '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></div>';
       var chips = '';
       if (u.is_contractor) chips += '<span class="tm-tag smz">самозанятый</span>';
+      // Обучение: подрядчики и партнеры курс не проходят — им метку не рисуем.
+      if (!u.is_contractor && u.role !== 'partner') {
+        var gm = GUIDE_TAG[u.guide] || GUIDE_TAG.none;
+        chips += '<span class="tm-tag gd ' + gm.cls + '">' +
+          (gm.ic ? ic(gm.ic, 11) : '') + gm.label + '</span>';
+      }
       if (iAmTop) chips += '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') +
         '" data-uid="' + u.id + '" title="Видит задачи всей команды, а не только своей ветки">' +
         (u.full_team ? 'вся команда' : 'своя ветка') + '</button>';
@@ -14587,6 +14600,18 @@
           '<span class="pd-sw-l">' + (hierOn ? 'Включена' : 'Выключена') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div></div>' : '';
 
+    // Сводка обучения: считаем по тем, кто курс реально проходит (без подрядчиков
+    // и партнеров). Одна строка — видно, кого подтолкнуть, без захода в каждого.
+    var gdRel = state._team.filter(function (u) { return !u.is_contractor && u.role !== 'partner'; });
+    var gdDone = gdRel.filter(function (u) { return u.guide === 'done'; }).length;
+    var gdProg = gdRel.filter(function (u) { return u.guide === 'progress'; }).length;
+    var gdNone = gdRel.length - gdDone - gdProg;
+    var gdSum = gdRel.length ? '<div class="tm-gd-sum">' + ic('compass', 13) +
+      '<span>Обучение: <b class="num">' + gdDone + '</b> из <b class="num">' + gdRel.length + '</b> прошли' +
+        (gdProg ? ' · ' + gdProg + ' ' + plural(gdProg, 'учится', 'учатся', 'учатся') : '') +
+        (gdNone ? ' · ' + gdNone + ' не ' + plural(gdNone, 'начал', 'начали', 'начали') : '') +
+      '</span></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль определяет доступ к разделам, руководитель — кто кого контролирует, темы — уведомления о клиенте</div></div>' +
@@ -14595,7 +14620,7 @@
       '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
         ic('compass', 13) + '<span>Обучение всем</span></button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
-      '</div>' + madeHtml + formHtml +
+      '</div>' + gdSum + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
       hierHtml +
       '<div class="m-sec tm-nsec"><div class="m-sec-h">Уведомления команды</div>' +
