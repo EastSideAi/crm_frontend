@@ -6672,6 +6672,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-upl { display: inline-flex; align-items: center; gap: 8px; background: var(--ac-card); border: 1px dashed var(--ac-line-2); border-radius: var(--ac-r-md); padding: 10px 14px; font-size: 13.5px; color: var(--ac-ink-2); cursor: pointer; transition: .14s; }
 .academy .ac-upl:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
 .academy .ac-upl.done { border-style: solid; border-color: var(--ac-green); background: var(--ac-green-soft); color: var(--ac-green-ink); }
+.academy .ac-tg { display: flex; width: fit-content; align-items: center; gap: 8px; background: var(--ac-blue); color: #fff; border-radius: var(--ac-r-md); padding: 10px 15px; font-size: 13.5px; font-weight: 600; text-decoration: none; margin: 0 0 10px; transition: .14s; }
+.academy .ac-tg:hover { background: var(--ac-blue-d); }
+.academy .ac-tg svg { flex: none; }
 
 .academy .ac-pick { display: flex; gap: 12px; margin: 14px 0 6px; flex-wrap: wrap; }
 .academy .ac-payopt { flex: 1; min-width: 190px; border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-lg); padding: 15px 16px; cursor: pointer; transition: .14s var(--ac-ease); background: var(--ac-card); }

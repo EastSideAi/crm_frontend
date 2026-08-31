@@ -3623,7 +3623,7 @@
       { h: 'Когда приходят выплаты', lead: 'Выбери верное:',
         opts: [['А', 'Два раза в месяц, 10 и 20 числа.', 1], ['Б', 'Наличными от студента сразу.', 0], ['В', 'Через месяц.', 0]] }
     ],
-    practice1: { h: 'Практика 1. Запиши пробный видеокружок', p: 'Запиши кружок-знакомство по правилам урока 2: по имени, на фоне кампуса, своими словами, одна мысль. Отправь его на проверку в бот @eastide_knowledge_bot.', chk: 'Я записал пробный кружок и отправил в @eastide_knowledge_bot' },
+    practice1: { h: 'Практика 1. Запиши пробный видеокружок', p: 'Запиши кружок-знакомство по правилам урока 2: по имени, на фоне кампуса, своими словами, одна мысль. Отправь его на проверку администратору.', tg: 'eastside_admin', chk: 'Я записал пробный кружок и отправил администратору' },
     practice2: { h: 'Практика 2. Распиши план дня заезда', p: 'Учебный рейс: студентка Даша, прилёт 2 сентября 9:30, Гуанчжоу, терминал 2. Коротко распиши по шагам, что ты делаешь в этот день — от встречи до «студент заселён и на связи».' }
   };
 
@@ -3848,7 +3848,9 @@
     }
     if (A.exStep === N + 1) {
       scr.innerHTML = '<div class="ac-eyebrow ac-cap">Практика</div><h1 class="ac-h">' + esc(AC_EXAM.practice1.h) + '</h1>' +
-        '<div class="ac-task"><p>' + esc(AC_EXAM.practice1.p) + '</p><div class="ac-upl' + (A.krug ? ' done' : '') + '" id="ac-upl">' + (A.krug ? '✓ Кружок отправлен' : '🎥 Отметить: кружок отправлен') + '</div></div>' +
+        '<div class="ac-task"><p>' + esc(AC_EXAM.practice1.p) + '</p>' +
+        '<a class="ac-tg" href="https://t.me/' + esc(AC_EXAM.practice1.tg) + '" target="_blank" rel="noopener">' + ic('send', 15) + 'Открыть чат администратора · @' + esc(AC_EXAM.practice1.tg) + '</a>' +
+        '<div class="ac-upl' + (A.krug ? ' done' : '') + '" id="ac-upl">' + (A.krug ? '✓ Кружок отправлен' : '🎥 Отметить: кружок отправлен') + '</div></div>' +
         '<label class="ac-chkline"><input type="checkbox" id="ac-p1chk"' + (A.krug ? ' checked' : '') + '> ' + esc(AC_EXAM.practice1.chk) + '</label>';
       el('ac-steplab').textContent = 'Практика 1 из 2';
       var upl = el('ac-upl'), chk = el('ac-p1chk');
