@@ -6825,6 +6825,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .arr-card .arr-up { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--zz-blue-d); background:var(--zz-tint); border-radius:9px; padding:7px 11px; cursor:pointer; }
 .arr-card .arr-up:hover { background:#DEE8FF; }
 .arr-card .arr-muted { font-size:13px; color:var(--zz-ink-3); }
+.arr-card .arr-perf-nm { font-size:14px; font-weight:600; color:var(--zz-ink); }
+.arr-card .arr-perf-sel { max-width:340px; }
 .arr-card .arr-empty { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
 .arr-card .arr-empty-t { font-size:14px; color:var(--zz-ink-2); margin-bottom:6px; }
 .arr-card .arr-empty .zz-lbl { margin-top:0; min-width:260px; }
