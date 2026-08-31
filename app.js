@@ -2052,7 +2052,7 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
-    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients' },
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor', 'senior_tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
@@ -2166,7 +2166,12 @@
   function czPlansOn() { return state.page === 'czplans'; }
   function navItems(space) {
     var s = space || curSpace();
-    return NAV_ALL.filter(function (it) { return can(it.cap) && navSpace(it) === s; });
+    return NAV_ALL.filter(function (it) {
+      // Пункт может быть скрыт для отдельных ролей, даже если cap подходит: тьютор
+      // ведёт своих учеников, воронка входящих лидов не его работа (правило Павла).
+      if (it.hideRole && it.hideRole.indexOf(state.role) >= 0) return false;
+      return can(it.cap) && navSpace(it) === s;
+    });
   }
   /* Ждут ли человека его собственные задания и акты. Считает сервер (те же счетчики,
      что и внутри кабинета), экран только показывает точку на кнопке пространства. */
@@ -2181,6 +2186,14 @@
      ответят 403, а человек увидит экран с ошибками вместо объяснения. */
   function noSections() { return !NAV_ALL.some(function (it) { return can(it.cap); }); }
   function pageCap(page) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) return NAV_ALL[i].cap; return 'dash'; }
+  // Скрыт ли раздел для текущей роли (hideRole) — чтобы на него нельзя было попасть
+  // и по устаревшему state.page, не только через меню.
+  function pageHidden(page) {
+    for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === page) {
+      var hr = NAV_ALL[i].hideRole; return !!(hr && hr.indexOf(state.role) >= 0);
+    }
+    return false;
+  }
   function firstAllowedPage(space) {
     var n = navItems(space);
     // пространство пустое для этой роли — уводим в любой доступный раздел, а не в никуда
@@ -3015,7 +3028,7 @@
       return;
     }
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
-    if (!can(pageCap(state.page))) state.page = firstAllowedPage();
+    if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
     if (state.page === 'threads') { state.page = 'inbox'; state.inboxMode = 'threads'; }
     if (state.inboxMode === 'threads' && !can('clients')) state.inboxMode = 'bot';
@@ -24369,7 +24382,7 @@
     var p = hashRouteId('page');
     if (!p || p === state.page) return false;
     for (var i = 0; i < NAV_ALL.length; i++) {
-      if (NAV_ALL[i].id === p && can(NAV_ALL[i].cap)) { setPage(p); return true; }
+      if (NAV_ALL[i].id === p && can(NAV_ALL[i].cap) && !pageHidden(p)) { setPage(p); return true; }
     }
     return false;
   }
@@ -24442,7 +24455,7 @@
     state.seenBefore = parseInt(localStorage.getItem(SEEN_LS) || '0', 10);
     localStorage.setItem(SEEN_LS, String(Date.now()));
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
-    if (!can(pageCap(state.page))) state.page = firstAllowedPage();
+    if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
     var hp = hashPageParts();
     for (var i = 0; hp[0] && i < NAV_ALL.length; i++) {
