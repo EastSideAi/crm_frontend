@@ -601,6 +601,17 @@ button.tm-tag.ft::before { content: ''; width: 6px; height: 6px; border-radius: 
 button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tag.ft.on { background: var(--blue-tint); color: var(--blue-d); border-color: transparent; }
 .tm-tag.ft.on::before { background: var(--blue); border-color: var(--blue); }
+/* Обучение сотрудника: прошел / учится / не начал. Приемки нет — это статус. */
+.tm-tag.gd { display: inline-flex; align-items: center; gap: 4px; }
+.tm-tag.gd svg { width: 11px; height: 11px; }
+.tm-tag.gd-ok { background: var(--green-soft); color: var(--green-ink); }
+.tm-tag.gd-mid { background: var(--amber-soft); color: var(--amber-ink); }
+.tm-tag.gd-no { background: var(--fill); color: var(--ink-3); }
+/* Сводка обучения над списком: одна тихая строка, не якорь экрана. */
+.tm-gd-sum { display: flex; align-items: center; gap: 7px; margin: 14px 0 2px;
+  font-size: 12.5px; color: var(--ink-2); }
+.tm-gd-sum svg { color: var(--blue); flex: none; }
+.tm-gd-sum b { color: var(--ink); }
 
 /* темы уведомлений: за что этот человек отвечает. Чипы, а не селект с галочками —
    раскладка команды должна читаться одним взглядом по всему списку, без раскрытия */
