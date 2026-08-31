@@ -3069,6 +3069,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .tg-msg.out .tg-del { left: -9px; }
 .tg-msg:hover .tg-del { opacity: 1; }
 .tg-del:hover { color: var(--coral); }
+/* Отозванное сообщение. Не прячем: пропавшая реплика читается как «менеджер соврал»,
+   а зачёркнутая честно говорит, что мы отправили и убрали. Кнопки удаления у него уже
+   нет — сервер не отдаёт can_delete на удалённое. */
+.tg-msg.gone .tg-bub { opacity: .55; text-decoration: line-through; text-decoration-color: var(--ink-3); }
+.tg-msg.gone .tg-mt { text-decoration: none; }
 /* композер: написать сообщение (перехват у бота).
    Поле — textarea: Enter отправляет, Shift+Enter переносит строку, высота растёт по тексту
    (до 128px, дальше свой скролл), поэтому длинный ответ виден целиком, а не одной строкой. */
