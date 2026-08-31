@@ -3492,15 +3492,29 @@ button.tsk-mimp { cursor: pointer; }
 .tg-hint.mgr svg { color: var(--amber-ink); }
 .tg-hint b { font-weight: 700; color: var(--ink); }
 .tg-hint.mgr b { color: var(--amber-ink); }
-/* удалить сообщение — по наведению на пузырь */
+/* действия над сообщением (изменить, убрать) — по наведению на пузырь */
 .tg-msg { position: relative; }
-.tg-del { position: absolute; top: -7px; width: 22px; height: 22px; border-radius: 50%;
-  background: #fff; color: var(--ink-3); display: grid; place-items: center;
-  box-shadow: 0 2px 6px rgba(15,19,32,.16); opacity: 0; transition: .12s; z-index: 2; }
-.tg-msg.in .tg-del { right: -9px; }
-.tg-msg.out .tg-del { left: -9px; }
-.tg-msg:hover .tg-del { opacity: 1; }
+.tg-acts { position: absolute; top: -7px; display: flex; gap: 4px; opacity: 0; transition: .12s; z-index: 2; }
+.tg-msg.in .tg-acts { right: -9px; }
+.tg-msg.out .tg-acts { left: -9px; }
+.tg-msg:hover .tg-acts { opacity: 1; }
+.tg-acts > button { width: 22px; height: 22px; border-radius: 50%; background: #fff; color: var(--ink-3);
+  display: grid; place-items: center; box-shadow: 0 2px 6px rgba(15,19,32,.16); transition: color .12s; }
 .tg-del:hover { color: var(--coral); }
+.tg-edit:hover { color: var(--blue); }
+/* Правка прямо в пузыре: текст остаётся на своём месте в переписке, и видно, что
+   именно человек уже прочитал. Поле светлое даже у исходящего — на синем фоне
+   собственный ввод не читается. */
+.tg-msg.editing .tg-bub, .tg-msg.editing.out .tg-bub, .tg-msg.editing.out.mgr .tg-bub {
+  background: #fff; color: var(--ink); box-shadow: 0 0 0 1.5px var(--blue) inset; padding: 8px; }
+.tg-edin { width: 100%; min-width: 240px; border: 0; resize: vertical; font: inherit; color: var(--ink);
+  line-height: 1.45; background: transparent; outline: none; }
+.tg-edrow { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.tg-edrow button { height: 26px; padding: 0 11px; border-radius: 7px; font-size: 12px; font-weight: 600; }
+.tg-edx { color: var(--ink-3); }
+.tg-edx:hover { color: var(--ink); }
+.tg-edok { background: var(--blue); color: #fff; }
+.tg-edok:hover { filter: brightness(1.06); }
 /* Отозванное сообщение. Не прячем: пропавшая реплика читается как «менеджер соврал»,
    а зачёркнутая честно говорит, что мы отправили и убрали. Кнопки удаления у него уже
    нет — сервер не отдаёт can_delete на удалённое. */
