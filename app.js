@@ -2014,7 +2014,7 @@
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
-    curator:       { label: 'Тьютор',                short: 'ведёт клиентов',       caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
+    curator:       { label: 'Тьютор (старая роль)',  short: 'устар., без ограничений', caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
@@ -14426,6 +14426,9 @@
     var iAmTop = state.role === 'super_admin' || state.role === 'owner';
     var assignable = Object.keys(ROLES).filter(function (k) {
       if (k === 'owner' || k === 'manager') return false;
+      // curator — старая роль тьютора (видит всех, без Академии и Заездов). Её заменил
+      // scoped-tutor, из выбора убрана, чтобы новых людей не заводили на неё по ошибке.
+      if (k === 'curator') return false;
       return k !== 'super_admin' || iAmTop;
     });
     function roleOpts(cur) {
@@ -14695,7 +14698,7 @@
 
     var nb = el('tm-new');
     if (nb) nb.addEventListener('click', function () {
-      state._teamNew = { name: '', login: '', email: '', role: 'curator' };
+      state._teamNew = { name: '', login: '', email: '', role: 'tutor' };
       state._teamMade = null;   // прошлый выданный пароль убираем: он уже передан
       renderView();
       var f = el('tn-name'); if (f) f.focus();
