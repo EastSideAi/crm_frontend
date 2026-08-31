@@ -11768,6 +11768,7 @@
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
+    FIN.forecast = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -11799,6 +11800,20 @@
         FIN.programs = r; FIN.err = '';
         if (curSpace() === 'fin') renderAll();
       }).catch(function (e) { finFail(e, 'programs'); }).then(done);
+    });
+  }
+  // Прогноз плановых платежей наперёд — кросс-периодный (вся непогашенная рассрочка).
+  // Сбой не роняет весь платёжный календарь: это вторичная секция, ставим 'none' и
+  // показываем календарь без неё, а не общий экран ошибки.
+  function finLoadForecast() {
+    finBusy('forecast', function (done) {
+      api('/admin/api/fin/receivables-forecast?months=6').then(function (r) {
+        FIN.forecast = r;
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function () {
+        FIN.forecast = 'none';
+        if (curSpace() === 'fin') renderAll();
+      }).then(done);
     });
   }
   function finPeriod() {
@@ -13876,6 +13891,12 @@
       view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
     }
     if (FIN.calendar === 'none') return finErrView(view);
+    // Прогноз наперёд грузим лениво: он кросс-периодный и не должен задерживать календарь.
+    if (FIN.forecast === null) finLoadForecast();
+    var fc = FIN.forecast;
+    var forecastCard = (fc && fc !== 'none') ? finForecastCard(fc)
+      : (fc === 'none' ? ''
+         : '<div class="card"><div class="fin-note">Считаю плановые платежи наперёд…</div></div>');
     var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
     // Остаток на р/с берем из ведомости. Ее не открывали — подтягиваем сами (finBusy
     // не даст дублю), чтобы четвертая плитка показала живой остаток, а не пустой прочерк.
@@ -13924,10 +13945,18 @@
           '<div class="s">плановые строки этой ведомости: расходы, фонды, кредиты</div></div></div>' +
         outRows + '</div></div>' +
     '</div>' +
+    forecastCard +
     '<div class="card"><div class="fin-note ' + (c.net >= 0 ? 'calm' : 'warn') + '">' +
       'Прогноз считается по плановым строкам ведомости и плану выручки. Остаток на счете не равен ' +
       'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
       'чтобы прогноз был точнее.</div></div>';
+    // Строка платежа клиента ведёт в его карточку (новая вкладка), как в плане выручки.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 
@@ -13963,6 +13992,45 @@
     return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
       '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
       '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+  }
+
+  /* Плановые платежи клиентов наперёд: та же дебиторка из рассрочки, но не только за
+     открытый период — просрочка отдельным ведром, дальше по календарным месяцам. Строки
+     собираются сами из графиков заказов, клик ведёт в карточку клиента. */
+  function finForecastCard(f) {
+    var groups = [];
+    if (f.overdue && f.overdue.count) {
+      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true));
+    }
+    (f.months || []).forEach(function (m) {
+      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false));
+    });
+    var body = groups.length ? groups.join('') :
+      '<div class="empty">Ожидаемых платежей по рассрочке на ближайшие месяцы нет.</div>';
+    return '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
+        '<div><div class="t">Плановые платежи клиентов наперёд</div>' +
+        '<div class="s">ожидаемые взносы по рассрочке помесячно, не только текущий период · ' +
+        'всего наперёд ' + finRub(f.total_ahead || 0, 0) + '</div></div></div>' +
+      body + '</div>';
+  }
+
+  function finFcGroup(label, total, rows, warn) {
+    var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
+      '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
+      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+    var body = (rows || []).map(function (x) {
+      var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
+                           : '<span class="sev mini cz-wait">рассрочка</span>';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+        .filter(Boolean).map(esc).join(' · ');
+      var lead = x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '';
+      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
+          '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
+    return head + body;
   }
 
   /* Программы: выгодна ли. Доход по каждой тянется сам из позиций чеков ЮKassa (в
