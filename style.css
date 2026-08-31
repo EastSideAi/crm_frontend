@@ -5482,9 +5482,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
 .fo-sum.neg { color: var(--ink-2); }
 .fin-grid.muted { opacity: .5; }
-/* Строка дохода с клиентом кликается в карточку: курсор и синее имя на ховере — та же
-   подсказка, что у строк ленты фондов (.fl-row.click). */
-.trow.click { cursor: pointer; }
+/* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
+   отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
 .trow.click:hover .fo-what b { color: var(--blue); }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
