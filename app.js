@@ -4292,6 +4292,13 @@
      Заезд на ученика один, грузится по client_id (это session_id карточки). */
   var ARR = {};        // clientId -> заезд | null (нет) | undefined (не грузили)
   var ARR_BUSY = {};
+  // Кого можно назначить исполнителем заезда (активные тьюторы). Грузим один раз лениво.
+  var AR_TUTORS = null;
+  function arTutorsLoad(cb) {
+    api('/admin/api/arrivals/tutors').then(function (r) {
+      AR_TUTORS = r.tutors || []; if (cb) cb();
+    }).catch(function () { AR_TUTORS = []; if (cb) cb(); });
+  }
 
   function docHref(docId) {
     return API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey());
@@ -4319,12 +4326,25 @@
     if (a === undefined) { loadArr(clientId); return skeletonSection('arrival'); }
 
     if (!a) {
+      // Список исполнителей нужен для выпадающего меню — грузим лениво и перерисовываем.
+      if (AR_TUTORS == null) {
+        arTutorsLoad(function () {
+          if (state.drawerId === clientId && state.modalSection === 'arrival') renderModalContent();
+        });
+      }
       var opts = Object.keys(AR_SERVICE).map(function (kk) {
         return '<option value="' + kk + '">' + esc(AR_SERVICE[kk].label) + ' · ' + arMoney(AR_SERVICE[kk].rate) + '</option>';
       }).join('');
+      // Исполнитель: кто оказывает прием. По умолчанию — тот, кто ведет ученика; можно
+      // выбрать другого тьютора (прием проводит не всегда тот, кто ведет клиента).
+      var topts = '<option value="">По умолчанию — кто ведет ученика</option>' +
+        (AR_TUTORS || []).map(function (t) {
+          return '<option value="' + t.id + '">' + esc(t.name || t.login) + '</option>';
+        }).join('');
       return head + '<div class="zaezdy arr-card"><div class="arr-empty">' +
         '<div class="arr-empty-t">Заезд по этому ученику еще не заведен.</div>' +
         '<label class="zz-lbl">Услуга<select class="zz-in" id="arr-svc">' + opts + '</select></label>' +
+        '<label class="zz-lbl">Исполнитель заезда<select class="zz-in" id="arr-tutor">' + topts + '</select></label>' +
         '<button class="bp" id="arr-create">Завести заезд</button></div></div>';
     }
 
@@ -4336,6 +4356,23 @@
 
     var top = '<div class="arr-top"><div class="arr-svc">' + esc(svc.label) + '</div>' +
       '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span></div>';
+
+    // Исполнитель заезда: кто оказывает прием (может отличаться от того, кто ведет
+    // клиента). Администратор (cap zaezd_review) может переназначить прямо тут.
+    var canReassign = can('zaezd_review');
+    if (canReassign && AR_TUTORS == null) {
+      arTutorsLoad(function () {
+        if (state.drawerId === clientId && state.modalSection === 'arrival') renderModalContent();
+      });
+    }
+    var perf = '<div class="arr-field"><div class="arr-flbl">Исполнитель заезда</div>' +
+      (canReassign
+        ? '<select class="zz-in arr-perf-sel" id="arr-perf-sel">' +
+            (AR_TUTORS && AR_TUTORS.length ? AR_TUTORS : [{ id: a.tutor_id, name: a.tutor_name }]).map(function (t) {
+              return '<option value="' + t.id + '"' + (t.id === a.tutor_id ? ' selected' : '') + '>' + esc(t.name || t.login) + '</option>';
+            }).join('') + '</select>'
+        : '<div class="arr-perf-nm">' + esc(a.tutor_name || '—') + '</div>') +
+      '</div>';
 
     var note = a.status === 'returned' && a.review_note
       ? '<div class="zz-note red">' + ic('info', 14) + '<div><b>Вернули на доработку:</b> ' + esc(a.review_note) + '</div></div>' : '';
@@ -4380,17 +4417,19 @@
       foot = '<div class="zz-note"><div>Этот заезд ведет ' + esc(a.tutor_name || 'другой тьютор') + '.</div></div>';
     }
 
-    return head + '<div class="zaezdy arr-card">' + top + note + accepted + list + chat + shotsBlock + foot + '</div>';
+    return head + '<div class="zaezdy arr-card">' + top + perf + note + accepted + list + chat + shotsBlock + foot + '</div>';
   }
 
   function wireArrivalSection(clientId) {
     var create = el('arr-create');
     if (create) create.addEventListener('click', function () {
       var svc = el('arr-svc') ? el('arr-svc').value : 'full_day';
+      var tut = el('arr-tutor') ? el('arr-tutor').value : '';
       var ctx = leadCtx(clientId);
       create.disabled = true;
-      apiSend('/admin/api/arrivals', 'POST',
-        { client_id: clientId, service: svc, student: ov(ctx, 'name') || '', city: (ctx.lead && ctx.lead.geo && ctx.lead.geo.city) || '' },
+      var body = { client_id: clientId, service: svc, student: ov(ctx, 'name') || '', city: (ctx.lead && ctx.lead.geo && ctx.lead.geo.city) || '' };
+      if (tut) body.tutor_id = parseInt(tut, 10);
+      apiSend('/admin/api/arrivals', 'POST', body,
         function (r) {
           if (r && r.id) { loadArr(clientId, true); showToast('Заезд заведен'); }
           else { create.disabled = false; showToast('Не удалось завести заезд'); }
@@ -4436,6 +4475,19 @@
     if (chat) chat.addEventListener('change', function () {
       apiSend('/admin/api/arrivals/' + a.id, 'PATCH', { chat_link: chat.value || '' }, function (r) {
         if (r) { ARR[clientId] = r; showToast('Ссылка сохранена'); }
+      });
+    });
+
+    // Смена исполнителя заезда администратором (cap zaezd_review). Переносит и сам
+    // заезд, и задачу «провести заезд» на нового тьютора.
+    var psel = el('arr-perf-sel');
+    if (psel) psel.addEventListener('change', function () {
+      var nid = parseInt(psel.value, 10);
+      if (!nid || nid === a.tutor_id) return;
+      psel.disabled = true;
+      apiSend('/admin/api/arrivals/' + a.id + '/tutor', 'POST', { tutor_id: nid }, function (r) {
+        if (r && r.id) { ARR[clientId] = r; loadArr(clientId, true); showToast('Исполнитель обновлен'); }
+        else { psel.disabled = false; showToast('Не удалось сменить исполнителя'); }
       });
     });
 
