@@ -1990,14 +1990,14 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'zaezdy', 'zaezd_review'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy_review'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy_review'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy'] },
     // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
     // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
@@ -2058,6 +2058,9 @@
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
+    // Аттестации: сводка по всем тьюторам, кто сдал курс Академии. Руководителю и
+    // администратору (cap academy_review) — контроль допуска к работе.
+    { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review' },
     // Заезды тьютора: чек-лист заезда и приёмка администратором, от неё зависит оплата.
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
@@ -3040,6 +3043,7 @@
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
+    else if (state.page === 'attestations') return renderAttestations(view);
     else if (state.page === 'zaezdy') return renderArrivals(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -3927,6 +3931,77 @@
     });
   }
   function acAnim(scr) { scr.style.animation = 'none'; void scr.offsetWidth; scr.style.animation = ''; }
+
+  /* ── Аттестации тьюторов (надзор) ────────────────────────────────────────────
+     Сводка по всем: кто прошёл курс Академии, балл экзамена, практика, дата допуска.
+     Данные с сервера (routers/tutor_academy /results), тут только показ. Открыт по
+     cap academy_review (руководитель, администратор) — контроль, кого пускать в работу. */
+  function attLoad(cb) {
+    api('/admin/api/academy/results').then(function (r) {
+      state.att = { rows: r.results || [] };
+      if (cb) cb();
+    }).catch(function () { state.att = { rows: [] }; if (cb) cb(); });
+  }
+
+  function attPay(m) { return m === 'alipay' ? 'Alipay' : m === 'rub' ? 'Рубли' : '—'; }
+  function attYes(v) { return v ? '<span class="att-ok">' + ic('check', 13) + '</span>' : '<span class="att-no">—</span>'; }
+
+  function renderAttestations(view) {
+    if (state.att == null) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return attLoad(function () { if (state.page === 'attestations') attDraw(view); });
+    }
+    attDraw(view);
+  }
+
+  function attRow(r) {
+    var role = (ROLES[r.role] && ROLES[r.role].label) || r.role || '';
+    var who = '<div class="att-who"><span class="att-name">' + esc(r.name || r.login) + '</span>' +
+      '<span class="att-role">' + esc(role) + (r.active ? '' : ' · отключён') + '</span></div>';
+    var lessons = '<span class="att-frac' + (r.lessons_done >= r.lessons_total ? ' full' : '') + '">' +
+      r.lessons_done + '/' + r.lessons_total + '</span>';
+    var exam = (r.exam_score == null) ? '<span class="att-no">—</span>'
+      : '<span class="att-frac' + (r.exam_score >= (r.exam_total || 0) ? ' full' : '') + '">' +
+        r.exam_score + '/' + r.exam_total + '</span>';
+    var status = r.passed
+      ? '<span class="att-pill green">Допущен</span>' +
+        (r.passed_at ? '<span class="att-when">' + arDate(r.passed_at) + '</span>' : '') +
+        (r.passes > 1 ? '<span class="att-tries">' + r.passes + ' поп.</span>' : '')
+      : '<span class="att-pill gray">В процессе</span>';
+    return '<tr>' +
+      '<td>' + who + '</td>' +
+      '<td class="att-course">' + esc(r.course_title) + '</td>' +
+      '<td class="att-c">' + lessons + '</td>' +
+      '<td class="att-c">' + exam + '</td>' +
+      '<td class="att-c">' + attYes(r.practice_sent) + '</td>' +
+      '<td class="att-c">' + attYes(r.agreement) + '</td>' +
+      '<td>' + attPay(r.pay_method) + '</td>' +
+      '<td>' + status + '</td>' +
+    '</tr>';
+  }
+
+  function attDraw(view) {
+    var rows = (state.att && state.att.rows) || [];
+    var passed = rows.filter(function (r) { return r.passed; }).length;
+    var head = '<div class="att-head"><div class="att-h">Аттестации тьюторов</div>' +
+      '<div class="att-sp"></div>' +
+      '<button class="att-refresh" id="att-refresh">' + ic('refresh', 14) + 'Обновить</button></div>';
+    var sum = '<div class="att-sum"><span><b>' + rows.length + '</b> в курсе</span>' +
+      '<span class="att-mid"><b>' + passed + '</b> допущено</span></div>';
+    var body;
+    if (!rows.length) {
+      body = '<div class="att-empty">' + ic('award', 22) +
+        '<div>Пока никто не начал курс Академии. Тьютор пройдёт аттестацию и появится здесь.</div></div>';
+    } else {
+      body = '<div class="att-tablewrap"><table class="att-table"><thead><tr>' +
+        '<th>Тьютор</th><th>Курс</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
+        '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Оплата</th><th>Статус</th>' +
+        '</tr></thead><tbody>' + rows.map(attRow).join('') + '</tbody></table></div>';
+    }
+    view.innerHTML = '<div class="att">' + head + sum + body + '</div>';
+    var rb = view.querySelector('#att-refresh');
+    if (rb) rb.onclick = function () { state.att = null; renderAttestations(view); };
+  }
 
   /* ── Заезды тьютора ─────────────────────────────────────────────────────────
      Оплата тьютору идёт за выполненный чек-лист. Тьютор заводит заезд, проходит его

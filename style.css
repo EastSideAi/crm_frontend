@@ -6831,3 +6831,39 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .zaezdy .zz-panel { padding:18px 16px; }
   .zaezdy .zz-card { padding:12px 13px; }
 }
+
+/* ── Аттестации тьюторов (надзор, cap academy_review) ──────────────────────── */
+.att { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 22px 24px 10px; }
+.att-head { display: flex; align-items: center; gap: 12px; }
+.att-h { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.att-sp { flex: 1; }
+.att-refresh { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-pill); cursor: pointer; transition: .15s; }
+.att-refresh:hover { color: var(--ink); border-color: var(--line-2); }
+.att-sum { display: flex; gap: 0; margin-top: 7px; font-size: 13px; color: var(--ink-3); }
+.att-sum b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.att-sum .att-mid { position: relative; margin-left: 16px; padding-left: 17px; }
+.att-sum .att-mid::before { content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); transform: translateY(-50%); }
+.att-tablewrap { margin: 16px -24px 0; overflow-x: auto; }
+.att-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.att-table th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--ink-3); padding: 0 14px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.att-table th.att-c, .att-table td.att-c { text-align: center; }
+.att-table td { padding: 13px 14px; border-bottom: 1px solid var(--line); color: var(--ink); vertical-align: middle; }
+.att-table tbody tr:last-child td { border-bottom: none; }
+.att-table tbody tr:hover td { background: var(--fill); }
+.att-table th:first-child, .att-table td:first-child { padding-left: 24px; }
+.att-table th:last-child, .att-table td:last-child { padding-right: 24px; }
+.att-who { display: flex; flex-direction: column; gap: 2px; }
+.att-name { font-weight: 600; color: var(--ink); }
+.att-role { font-size: 11.5px; color: var(--ink-3); }
+.att-course { color: var(--ink-2); white-space: nowrap; }
+.att-frac { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
+.att-frac.full { color: var(--green-ink); }
+.att-ok { display: inline-flex; color: var(--green); }
+.att-no { color: var(--ink-3); }
+.att-pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.att-pill.green { background: var(--green-soft); color: var(--green-ink); }
+.att-pill.gray { background: var(--fill); color: var(--ink-2); }
+.att-when { margin-left: 8px; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.att-tries { margin-left: 6px; font-size: 11px; color: var(--ink-3); }
+.att-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 46px 20px 52px; color: var(--ink-3); font-size: 14px; max-width: 400px; margin: 0 auto; }
+.att-empty svg { opacity: .55; }
