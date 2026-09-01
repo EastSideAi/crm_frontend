@@ -170,7 +170,8 @@ a { color: inherit; text-decoration: none; }
 /* кастомный дропдаун-триггер */
 .cdd { display: inline-flex; align-items: center; gap: 8px; font: 600 13px 'Manrope', sans-serif; color: var(--ink-2);
   background: var(--fill); border: 1px solid transparent; border-radius: var(--r-pill);
-  padding: 10px 14px; cursor: pointer; transition: .15s; white-space: nowrap; }
+  padding: 10px 14px; cursor: pointer; transition: .15s; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
 .cdd:hover { color: var(--ink); background: #EDEFF3; }
 .cdd .cdd-ch { color: var(--ink-3); transition: transform .2s; }
 .cdd.open .cdd-ch { transform: rotate(180deg); }
@@ -186,6 +187,15 @@ a { color: inherit; text-decoration: none; }
 /* меню дропдауна (тот же контейнер, что #smenu) */
 #smenu.ddmenu button { justify-content: flex-start; }
 #smenu.ddmenu button svg { margin-left: auto; color: var(--blue); }
+
+/* выбор ведомости: год -> месяц (тихие фильтры) + ведомость со стрелками (якорь).
+   Стрелки — общий контрол .icobtn (не свой рецепт кнопки), бейдж — семья .sev. */
+.fin-perpick { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fin-perpick .fpk-filters, .fin-perpick .fpk-main { display: flex; align-items: center; gap: 8px; }
+.fpk-year { font: 700 13px 'Manrope', sans-serif; color: var(--ink-3); padding: 0 2px; }
+.fin-perpick .icobtn { font: 600 18px 'Manrope', sans-serif; line-height: 1; }
+.icobtn:disabled { opacity: .35; cursor: default; }
+.icobtn:disabled:hover { color: var(--ink-2); border-color: var(--line-2); }
 
 /* переключатель вида (таблица/канбан) — иконки */
 .vseg { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; margin-left: auto; }
@@ -5482,6 +5492,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
 .fo-sum.neg { color: var(--ink-2); }
 .fin-grid.muted { opacity: .5; }
+/* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
+   отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
+.trow.click:hover .fo-what b { color: var(--blue); }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }

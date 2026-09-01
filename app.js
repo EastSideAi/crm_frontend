@@ -2505,16 +2505,9 @@
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
-      var pers2 = (FIN.periods || []).slice(0, 8);
-      tb.innerHTML = pers2.length
-        ? '<nav class="tabs">' + pers2.map(function (p) {
-            return '<a class="tab' + (FIN.id === p.id ? ' on' : '') + '" data-fper="' + p.id + '">' +
-              esc(p.name) + (p.open ? '<span class="n num">открыт</span>' : '') + '</a>';
-          }).join('') + '</nav>'
-        : '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>ведомость</div>';
-      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
-        t.addEventListener('click', function () { finSetPeriod(t.getAttribute('data-fper')); });
-      });
+      // Ведомостей стало много (архив 2026), поэтому не лента вкладок, а выбор
+      // год -> месяц -> ведомость, как на старом сайте.
+      finTopbarPeriods(tb);
     } else if (state.page === 'inbox') {
       var bsrc = state.inboxMode === 'threads' ? 'обсуждения по задачам'
         : (state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс');
@@ -11761,6 +11754,69 @@
     finForget(true);
     renderAll();
   }
+
+  var FIN_MON_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль',
+                     'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  function finYM(s) { return { y: +String(s).slice(0, 4), m: +String(s).slice(5, 7) }; }
+
+  /* Навигация по ведомостям: год -> месяц -> ведомость плюс стрелки, как на старом
+     сайте. Год и месяц выводятся из выбранной ведомости, отдельного состояния нет:
+     переключил ведомость - фильтры сами встали на ее год и месяц. Стрелки шагают по
+     всем ведомостям по порядку дат, выпадашка «Ведомость» листает внутри месяца. */
+  function finTopbarPeriods(tb) {
+    var all = (FIN.periods || []).slice();  // с бэка идут по дате по убыванию
+    if (!all.length) {
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>ведомость</div>';
+      return;
+    }
+    var cur = finPeriod() || all[0];
+    var cy = finYM(cur.starts_on);
+    var asc = all.slice().sort(function (a, b) {
+      return a.starts_on < b.starts_on ? -1 : (a.starts_on > b.starts_on ? 1 : 0);
+    });
+    var idx = 0;
+    for (var i = 0; i < asc.length; i++) if (asc[i].id === cur.id) { idx = i; break; }
+    var years = [], monthsY = [], monthPers = [];
+    all.forEach(function (p) {
+      var d = finYM(p.starts_on);
+      if (years.indexOf(d.y) < 0) years.push(d.y);
+      if (d.y === cy.y && monthsY.indexOf(d.m) < 0) monthsY.push(d.m);
+      if (d.y === cy.y && d.m === cy.m) monthPers.push(p);
+    });
+
+    var yearCtl = years.length > 1
+      ? ddButton('fin-yr', String(cy.y), false)
+      : '<span class="fpk-year num">' + cy.y + '</span>';
+    var prevOff = idx <= 0, nextOff = idx >= asc.length - 1;
+    tb.innerHTML = '<div class="fin-perpick">' +
+      '<div class="fpk-filters">' + yearCtl + ddButton('fin-mo', FIN_MON_NOM[cy.m - 1], false) + '</div>' +
+      '<div class="fpk-main">' +
+        '<button class="icobtn" id="fin-prev"' + (prevOff ? ' disabled' : '') + ' aria-label="Предыдущая">‹</button>' +
+        ddButton('fin-per', cur.name, true) +
+        '<button class="icobtn" id="fin-next"' + (nextOff ? ' disabled' : '') + ' aria-label="Следующая">›</button>' +
+        '<span class="sev ' + (cur.open ? 'st-doing' : 'n-off') + '">' + (cur.open ? 'открыта' : 'закрыта') + '</span>' +
+      '</div>' +
+    '</div>';
+
+    function jump(pred) {
+      for (var j = 0; j < all.length; j++) if (pred(all[j], finYM(all[j].starts_on))) { finSetPeriod(all[j].id); return; }
+    }
+    if (el('fin-yr')) el('fin-yr').addEventListener('click', function () {
+      openDropdown(this, years.map(function (y) { return { v: String(y), label: String(y) }; }),
+        String(cy.y), function (v) { jump(function (p, d) { return d.y === +v; }); });
+    });
+    el('fin-mo').addEventListener('click', function () {
+      openDropdown(this, monthsY.map(function (m) { return { v: String(m), label: FIN_MON_NOM[m - 1] + ' ' + cy.y }; }),
+        String(cy.m), function (v) { jump(function (p, d) { return d.y === cy.y && d.m === +v; }); });
+    });
+    el('fin-per').addEventListener('click', function () {
+      openDropdown(this, monthPers.map(function (p) {
+        return { v: p.id, label: p.name + (p.open ? '  · открыта' : '') };
+      }), cur.id, function (v) { finSetPeriod(v); });
+    });
+    if (!prevOff) el('fin-prev').addEventListener('click', function () { finSetPeriod(asc[idx - 1].id); });
+    if (!nextOff) el('fin-next').addEventListener('click', function () { finSetPeriod(asc[idx + 1].id); });
+  }
   /* Сброс всего, что зависит от ведомости. Любая правда меняет соседние экраны:
      внесли доход — поехали отчисления, фонды, P&L и лента. Пересобирать надо все,
      иначе на соседнем экране останется цифра до правки. */
@@ -11768,6 +11824,7 @@
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
+    FIN.forecast = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -11799,6 +11856,20 @@
         FIN.programs = r; FIN.err = '';
         if (curSpace() === 'fin') renderAll();
       }).catch(function (e) { finFail(e, 'programs'); }).then(done);
+    });
+  }
+  // Прогноз плановых платежей наперёд — кросс-периодный (вся непогашенная рассрочка).
+  // Сбой не роняет весь платёжный календарь: это вторичная секция, ставим 'none' и
+  // показываем календарь без неё, а не общий экран ошибки.
+  function finLoadForecast() {
+    finBusy('forecast', function (done) {
+      api('/admin/api/fin/receivables-forecast?months=6').then(function (r) {
+        FIN.forecast = r;
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function () {
+        FIN.forecast = 'none';
+        if (curSpace() === 'fin') renderAll();
+      }).then(done);
     });
   }
   function finPeriod() {
@@ -12618,7 +12689,11 @@
 
     var rows = (o.items || []).map(function (it) {
       var neg = it.kind === 'расход';
-      return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') + '">' +
+      // Клик по строке дохода ведёт в карточку клиента: case_id отдаёт бэкенд только
+      // тем, кому открыты карточки (cap clients). У расходов и строк без клиента его нет.
+      var lead = it.case_id ? esc(it.case_id) : '';
+      return '<div class="trow fin-grid' + (it.included === false ? ' muted' : '') +
+        (lead ? ' click' : '') + '"' + (lead ? ' data-lead="' + lead + '"' : '') + '>' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
         // Подстрочник собираем из непустых кусков: у переводов нет статьи, и жестко
         // склеенная строка начиналась бы с висящей точки.
@@ -12685,6 +12760,14 @@
         var v = b.getAttribute('data-fsrc');
         FIN.src = FIN.src === v ? '' : v;
         finLoadOps();
+      });
+    });
+    // Строка дохода с клиентом — кнопка в карточку (openLeadTab открывает её в новой
+    // вкладке, как из ленты фондов). Без case_id строки этого обработчика не получают.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
       });
     });
     pageAnim(view);
@@ -13864,6 +13947,12 @@
       view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
     }
     if (FIN.calendar === 'none') return finErrView(view);
+    // Прогноз наперёд грузим лениво: он кросс-периодный и не должен задерживать календарь.
+    if (FIN.forecast === null) finLoadForecast();
+    var fc = FIN.forecast;
+    var forecastCard = (fc && fc !== 'none') ? finForecastCard(fc)
+      : (fc === 'none' ? ''
+         : '<div class="card"><div class="fin-note">Считаю плановые платежи наперёд…</div></div>');
     var c = FIN.calendar, inc = c.income || {}, out = c.outflow || {};
     // Остаток на р/с берем из ведомости. Ее не открывали — подтягиваем сами (finBusy
     // не даст дублю), чтобы четвертая плитка показала живой остаток, а не пустой прочерк.
@@ -13912,10 +14001,18 @@
           '<div class="s">плановые строки этой ведомости: расходы, фонды, кредиты</div></div></div>' +
         outRows + '</div></div>' +
     '</div>' +
+    forecastCard +
     '<div class="card"><div class="fin-note ' + (c.net >= 0 ? 'calm' : 'warn') + '">' +
       'Прогноз считается по плановым строкам ведомости и плану выручки. Остаток на счете не равен ' +
       'прибыли: часть денег отложена в фонды и уйдет по обязательствам. Заполняйте план выручки, ' +
       'чтобы прогноз был точнее.</div></div>';
+    // Строка платежа клиента ведёт в его карточку (новая вкладка), как в плане выручки.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 
@@ -13951,6 +14048,45 @@
     return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
       '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
       '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+  }
+
+  /* Плановые платежи клиентов наперёд: та же дебиторка из рассрочки, но не только за
+     открытый период — просрочка отдельным ведром, дальше по календарным месяцам. Строки
+     собираются сами из графиков заказов, клик ведёт в карточку клиента. */
+  function finForecastCard(f) {
+    var groups = [];
+    if (f.overdue && f.overdue.count) {
+      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true));
+    }
+    (f.months || []).forEach(function (m) {
+      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false));
+    });
+    var body = groups.length ? groups.join('') :
+      '<div class="empty">Ожидаемых платежей по рассрочке на ближайшие месяцы нет.</div>';
+    return '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
+        '<div><div class="t">Плановые платежи клиентов наперёд</div>' +
+        '<div class="s">ожидаемые взносы по рассрочке помесячно, не только текущий период · ' +
+        'всего наперёд ' + finRub(f.total_ahead || 0, 0) + '</div></div></div>' +
+      body + '</div>';
+  }
+
+  function finFcGroup(label, total, rows, warn) {
+    var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
+      '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
+      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+    var body = (rows || []).map(function (x) {
+      var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
+                           : '<span class="sev mini cz-wait">рассрочка</span>';
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+        .filter(Boolean).map(esc).join(' · ');
+      var lead = x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '';
+      return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
+        '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
+          '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
+        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+    }).join('');
+    return head + body;
   }
 
   /* Программы: выгодна ли. Доход по каждой тянется сам из позиций чеков ЮKassa (в
