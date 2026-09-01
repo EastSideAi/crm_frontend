@@ -8001,6 +8001,7 @@
              людей: у выдуманного ИНН налоговая статус не подтвердит. В бою ручки нет,
              поэтому и кнопки там нет. */
           (CZ.demo ? '<button class="cdd" id="cz-demo-new">Демо-исполнитель</button>' : '') +
+          '<button class="cdd" id="cz-bulk">' + ic('rows', 13) + 'Пачкой</button>' +
           '<button class="bp sm cz-add" id="cz-add">' + ic('send', 14) + 'Пригласить исполнителя</button>' +
         '</div>' +
         '<div class="list-quick">' + quick + '</div>' +
@@ -8023,6 +8024,8 @@
       CZ.archived = !CZ.archived; CZ.list = null; renderView();
     });
     el('cz-add').addEventListener('click', openInviteCz);
+    var bl = el('cz-bulk');
+    if (bl) bl.addEventListener('click', openInviteBulk);
     var dn = el('cz-demo-new');
     if (dn) dn.addEventListener('click', function () {
       czSend('/admin/api/contractors/demo', 'POST')
@@ -8839,6 +8842,139 @@
     ov2.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && e.target && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submit(); }
     });
+  }
+
+  /* Скачать файл, пришедший с сервера base64 (шаблон реестра, результат загрузки).
+     Браузер в песочнице ссылку-данные качает сам — тот же прием, что у выгрузки CSV. */
+  function dlBase64(name, b64, mime) {
+    var bin = atob(b64), len = bin.length, buf = new Uint8Array(len);
+    for (var i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+    var blob = new Blob([buf], { type: mime ||
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name || 'file.xlsx';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  }
+
+  /* Пригласить пачкой (этап 11): загрузка реестра Excel/CSV. Диалог в два шага —
+     сперва выбор файла, потом отчет по строкам со ссылками. Одна ошибочная строка не
+     валит пачку: у каждой свой итог, а готовые ссылки уезжают выгрузкой для рассылки. */
+  function openInviteBulk() {
+    if (document.querySelector('.al-ov')) return;
+    var ov2 = document.createElement('div');
+    ov2.className = 'al-ov';
+    ov2.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Пригласить пачкой</div></div>' +
+          '<button class="al-x" id="czb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Загрузите список исполнителей. Обязательна колонка ФИО, телефон, почта и заметка — по желанию. На каждую строку заведем карточку и выпустим ссылку на анкету.</div>' +
+        '<div class="al-body">' +
+          '<button class="czb-tpl" id="czb-tpl">' + ic('dl', 14) + 'Скачать шаблон Excel</button>' +
+          '<label class="czb-drop" id="czb-drop">' +
+            '<input type="file" id="czb-file" accept=".xlsx,.csv" hidden>' +
+            '<span class="czb-drop-i">' + ic('rows', 20) + '</span>' +
+            '<span class="czb-drop-t" id="czb-fname">Выберите файл .xlsx или .csv</span>' +
+          '</label>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="czb-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="czb-go" disabled>' + ic('send', 14) + 'Пригласить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov2);
+    requestAnimationFrame(function () { ov2.classList.add('show'); });
+    var closed = false, touched = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov2.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov2.parentNode) ov2.parentNode.removeChild(ov2); }, 180);
+      if (touched) czLoad();   // что-то завели — список пересобрать
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('czb-x').addEventListener('click', close);
+    el('czb-cancel').addEventListener('click', close);
+    ov2.addEventListener('mousedown', function (e) { if (e.target === ov2) close(); });
+
+    el('czb-tpl').addEventListener('click', function () {
+      czSend('/admin/api/contractors/invite-bulk/template', 'GET')
+        .then(function (r) { dlBase64(r.name, r.data); })
+        .catch(function (e) { showToast(e.message); });
+    });
+
+    var picked = null;
+    var fi = el('czb-file'), go = el('czb-go');
+    fi.addEventListener('change', function () {
+      var f = fi.files && fi.files[0];
+      if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { showToast('Файл больше 2 МБ'); return; }
+      picked = f;
+      el('czb-fname').textContent = f.name;
+      el('czb-drop').classList.add('has');
+      go.disabled = false;
+    });
+
+    go.addEventListener('click', function () {
+      if (!picked) return;
+      go.disabled = true; go.classList.add('loading');
+      var fr = new FileReader();
+      fr.onload = function () {
+        czSend('/admin/api/contractors/invite-bulk', 'POST',
+          { name: picked.name, data: String(fr.result) })
+          .then(function (r) { touched = r.created > 0; showResults(r); })
+          .catch(function (e) {
+            go.disabled = false; go.classList.remove('loading');
+            showToast(e.message);
+          });
+      };
+      fr.onerror = function () {
+        go.disabled = false; go.classList.remove('loading');
+        showToast('Не удалось прочитать файл');
+      };
+      fr.readAsDataURL(picked);
+    });
+
+    // Цвет исхода по смыслу: заведен — зеленый, ошибка — красный (нужно внимание),
+    // пропуск (дубль) — нейтральный серый. «Заведен», а не «приглашен»: «Приглашен» —
+    // это состояние готовности карточки (синее), одно слово не должно значить два цвета.
+    var CZB_ST = { created: ['заведен', 'cz-ok'], skipped: ['пропущен', 'cz-off'],
+                   error: ['ошибка', 'cz-bad'] };
+    function showResults(r) {
+      var rows = (r.rows || []).map(function (x) {
+        var m = CZB_ST[x.status] || [x.status, ''];
+        return '<div class="czb-row">' +
+            '<span class="czb-n">' + (x.row || '') + '</span>' +
+            '<span class="czb-name">' + esc(x.full_name || '') + '</span>' +
+            '<span class="sev ' + m[1] + '">' + m[0] + '</span>' +
+            '<span class="czb-msg">' + esc(x.message || '') + '</span>' +
+          '</div>';
+      }).join('');
+      var head = '<b>' + r.created + '</b> приглашено' +
+        (r.skipped ? ', <b>' + r.skipped + '</b> пропущено' : '') +
+        (r.errors ? ', <b>' + r.errors + '</b> с ошибкой' : '');
+      ov2.querySelector('.al-card').innerHTML =
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Загрузка завершена</div></div>' +
+          '<button class="al-x" id="czb-x2" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + head + '. Ссылки на анкету — в выгрузке ниже, разошлите их людям сами.</div>' +
+        '<div class="al-body"><div class="czb-list">' + (rows || '<div class="czb-row">Пусто</div>') + '</div></div>' +
+        '<div class="al-foot">' +
+          '<button class="al-cancel" id="czb-close">Закрыть</button>' +
+          (r.results_file ? '<button class="bp al-save" id="czb-dl">' + ic('dl', 14) + 'Скачать ссылки</button>' : '') +
+        '</div>';
+      el('czb-x2').addEventListener('click', close);
+      el('czb-close').addEventListener('click', close);
+      var dl = el('czb-dl');
+      if (dl) dl.addEventListener('click', function () {
+        dlBase64(r.results_file.name, r.results_file.data);
+      });
+    }
   }
 
   /* ── ЗАДАНИЯ ИСПОЛНИТЕЛЯМ (модуль самозанятых, этап 2) ─────────────────────
@@ -14460,6 +14596,13 @@
     var sub = tmSub(u);
     return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
   }
+  // Метка обучения в строке человека. Приемки у обучения нет, это просто статус:
+  // прошел / учится / не начал — чтобы руководитель видел, кого подтолкнуть.
+  var GUIDE_TAG = {
+    done:     { cls: 'gd-ok',  label: 'обучен',   ic: 'check' },
+    progress: { cls: 'gd-mid', label: 'учится',   ic: '' },
+    none:     { cls: 'gd-no',  label: 'не начал', ic: '' },
+  };
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();
@@ -14519,6 +14662,12 @@
         '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></div>';
       var chips = '';
       if (u.is_contractor) chips += '<span class="tm-tag smz">самозанятый</span>';
+      // Обучение: подрядчики и партнеры курс не проходят — им метку не рисуем.
+      if (!u.is_contractor && u.role !== 'partner') {
+        var gm = GUIDE_TAG[u.guide] || GUIDE_TAG.none;
+        chips += '<span class="tm-tag gd ' + gm.cls + '">' +
+          (gm.ic ? ic(gm.ic, 11) : '') + gm.label + '</span>';
+      }
       if (iAmTop) chips += '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') +
         '" data-uid="' + u.id + '" title="Видит задачи всей команды, а не только своей ветки">' +
         (u.full_team ? 'вся команда' : 'своя ветка') + '</button>';
@@ -14587,6 +14736,18 @@
           '<span class="pd-sw-l">' + (hierOn ? 'Включена' : 'Выключена') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div></div>' : '';
 
+    // Сводка обучения: считаем по тем, кто курс реально проходит (без подрядчиков
+    // и партнеров). Одна строка — видно, кого подтолкнуть, без захода в каждого.
+    var gdRel = state._team.filter(function (u) { return !u.is_contractor && u.role !== 'partner'; });
+    var gdDone = gdRel.filter(function (u) { return u.guide === 'done'; }).length;
+    var gdProg = gdRel.filter(function (u) { return u.guide === 'progress'; }).length;
+    var gdNone = gdRel.length - gdDone - gdProg;
+    var gdSum = gdRel.length ? '<div class="tm-gd-sum">' + ic('compass', 13) +
+      '<span>Обучение: <b class="num">' + gdDone + '</b> из <b class="num">' + gdRel.length + '</b> прошли' +
+        (gdProg ? ' · ' + gdProg + ' ' + plural(gdProg, 'учится', 'учатся', 'учатся') : '') +
+        (gdNone ? ' · ' + gdNone + ' не ' + plural(gdNone, 'начал', 'начали', 'начали') : '') +
+      '</span></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">роль определяет доступ к разделам, руководитель — кто кого контролирует, темы — уведомления о клиенте</div></div>' +
@@ -14595,7 +14756,7 @@
       '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
         ic('compass', 13) + '<span>Обучение всем</span></button>' +
       (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
-      '</div>' + madeHtml + formHtml +
+      '</div>' + gdSum + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
       hierHtml +
       '<div class="m-sec tm-nsec"><div class="m-sec-h">Уведомления команды</div>' +
@@ -18788,25 +18949,19 @@
   }
   /* точечно перерисовать ТОЛЬКО тред открытого чата (без композера/шапки — не сбрасывает ввод);
      докрутить скролл, если пользователь был внизу. */
-  function refreshOpenThread(scrollDown) {
+  function refreshOpenThread(scrollDown, force) {
     if (state.page !== 'inbox' || !state.inboxSel) return;
+    // Пока человек правит сообщение, фоновый опрос тред не трогает: перерисовка стёрла
+    // бы набранный текст (то же правило, что у композера). force — перерисовка по
+    // действию самого человека, её пропускаем всегда.
+    if (state.msgEdit && !force) return;
     var th = el('tg-thread'); if (!th) return;
     var wasNearBottom = th.scrollHeight - th.scrollTop - th.clientHeight < 120;
     var list = inboxConvos();
     var c = list.filter(function (x) { return String(x.id) === String(state.inboxSel); })[0];
     if (!c) return;
     th.innerHTML = buildThread(convoMessages(c));
-    // перепривязываем удаление сообщений
-    Array.prototype.forEach.call(th.querySelectorAll('.tg-del[data-del]'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var mid = b.getAttribute('data-del');
-        var d = state.bot.msgs[c.id];
-        if (d && d.messages) d.messages = d.messages.filter(function (m) { return String(m.id) !== String(mid); });
-        apiSend('/admin/api/bot/conversations/' + c.id + '/messages/' + mid, 'DELETE', null, function () {});
-        refreshOpenThread(false);
-      });
-    });
+    bindMsgActions(th, c.id, function () { refreshOpenThread(false, true); });
     if (scrollDown && wasNearBottom) th.scrollTop = th.scrollHeight;
   }
 
@@ -18833,7 +18988,12 @@
       if (!d) return null; // ещё не загружены
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
-        return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
+        return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+                 // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
+                 // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
+                 // копия правила разъедется с первой в день, когда канал его поменяет.
+                 canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
+                 canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by, orig: m.orig_content };
       });
     }
     var dlg = getDialog(c.lead);
@@ -18841,6 +19001,113 @@
   }
   /* HTML треда по массиву сообщений (или скелетон, если msgs === null). Вынесено, чтобы
      реалтайм-опрос мог обновить ТОЛЬКО тред, не трогая композер (не сбрасывая ввод). */
+  /* Убрать наше сообщение из чата у клиента. Оптимистично тут нельзя: если канал
+     откажет (прошли сутки, сообщение уже стёрли), человек увидит «удалено», а у
+     клиента текст останется висеть — ровно та ошибка, из-за которой это и делалось.
+     Поэтому сначала ответ сервера, потом экран. Текст отказа читаем сами: общий
+     api() отдаёт только код, а причина здесь и есть главное. */
+  function delMsg(convId, mid, done) {
+    var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
+    xfetch(path + '?k=' + encodeURIComponent(getKey()), { method: 'DELETE' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error(String((j && j.detail) || 'не удалось убрать сообщение'));
+          return j;
+        });
+      })
+      .then(function (j) {
+        if (j && j.deleted === false) { showToast(j.reason || 'Сообщение осталось у клиента'); return; }
+        patchCachedMsg(convId, mid, { deleted_at: new Date().toISOString(),
+                                      can_delete: false, can_edit: false });
+        showToast('Сообщение убрано у клиента');
+      })
+      .catch(function (e) { showToast(e.message || 'Не получилось убрать сообщение'); })
+      .then(function () { if (done) done(); });
+  }
+
+  /* Поправить уже отправленное сообщение прямо в чате у клиента. Порядок тот же, что
+     у отзыва: сначала ответ канала, потом экран. Канал отказал — у человека остался
+     прежний текст, и показывать ему на нашей стороне новый было бы враньем. */
+  function patchCachedMsg(convId, mid, patch) {
+    var lists = [];
+    var d = state.bot.msgs[convId];
+    if (d && d.messages) lists.push(d.messages);
+    // Та же переписка открыта в карточке лида — там свой кэш, и он не должен отставать.
+    Object.keys(state.leadConv || {}).forEach(function (k) {
+      var lc = state.leadConv[k];
+      if (lc && lc !== 'load' && lc.messages && String(lc.user_id) === String(convId)) lists.push(lc.messages);
+    });
+    lists.forEach(function (arr) {
+      arr.forEach(function (m) {
+        if (String(m.id) === String(mid)) Object.keys(patch).forEach(function (f) { m[f] = patch[f]; });
+      });
+    });
+  }
+
+  function editMsg(convId, mid, text, done) {
+    var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
+    xfetch(path + '?k=' + encodeURIComponent(getKey()), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error(String((j && j.detail) || 'не удалось изменить сообщение'));
+          return j;
+        });
+      })
+      .then(function (j) {
+        if (j && j.edited === false) { showToast(j.reason || 'У клиента остался прежний текст'); return; }
+        state.msgEdit = null;
+        patchCachedMsg(convId, mid, { text: text, edited_at: new Date().toISOString() });
+        showToast(j && j.already ? 'Текст и так такой' : 'Текст изменён у клиента');
+      })
+      .catch(function (e) { showToast(e.message || 'Не получилось изменить сообщение'); })
+      .then(function () { if (done) done(); });
+  }
+
+  /* Кнопки на сообщениях треда. Одна привязка на все три места, где рисуется тред
+     (инбокс, его точечное обновление и карточка лида): три копии разъехались бы. */
+  function bindMsgActions(host, convId, rerender) {
+    if (!host) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.tg-del[data-del]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        delMsg(convId, b.getAttribute('data-del'), rerender);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('.tg-edit[data-edit]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        state.msgEdit = b.getAttribute('data-edit');
+        rerender();
+      });
+    });
+    var box = host.querySelector('.tg-edbox');
+    if (box) {
+      var ta = box.querySelector('.tg-edin');
+      var save = box.querySelector('[data-edsave]');
+      var cancel = box.querySelector('[data-edcancel]');
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+      var stop = function () { state.msgEdit = null; rerender(); };
+      var apply = function () {
+        var t = (ta && ta.value || '').trim();
+        if (!t) { showToast('Пустой текст отправить нельзя — уберите сообщение целиком'); return; }
+        var mid = save.getAttribute('data-edsave');
+        editMsg(convId, mid, t, rerender);
+      };
+      if (cancel) cancel.addEventListener('click', function (e) { e.stopPropagation(); stop(); });
+      if (save) save.addEventListener('click', function (e) { e.stopPropagation(); apply(); });
+      if (ta) ta.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); stop(); }
+        // Enter сохраняет, Shift+Enter переносит строку — та же привычка, что в композере.
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
+          e.preventDefault(); apply();
+        }
+      });
+    }
+  }
+
   function buildThread(msgs) {
     if (msgs === null) {
       return '<div class="tg-sk">' +
@@ -18862,10 +19129,35 @@
       var foot = m.undelivered
         ? '<span class="tg-by warn" title="' + esc(m.reason || '') + '">' + ic('alert', 9) + 'не доставлено клиенту</span>'
         : (by ? '<span class="tg-by">' + (m.who === 'bot' ? ic('bot', 9) : ic('hand', 9)) + by + '</span>' : '');
-      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + '">' +
-        '<div class="tg-bub">' + mdMsg(m.text) + '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
-          (m.id ? '<button class="tg-del" data-del="' + m.id + '" title="Удалить сообщение">' + ic('x', 11) + '</button>' : '') +
-        '</div>' + foot + '</div>';
+      // Удалённое не прячем: переписка это доказательство разговора, и пропавшая
+      // реплика читается как «менеджер соврал». Показываем зачёркнутым и кем убрано.
+      if (m.delAt) {
+        foot = '<span class="tg-by">' + ic('x', 9) + 'удалено у клиента' +
+               (m.delBy ? ' · ' + esc(m.delBy) : '') + '</span>';
+      }
+      // Правку показываем пометкой, а не молчком: клиент читает уже другой текст, и
+      // менеджер должен видеть, что сообщение в переписке не то, которое он отправил.
+      if (m.edAt && !m.delAt) {
+        foot = '<span class="tg-by">' + ic('pen', 9) + 'изменено' +
+               (m.edBy ? ' · ' + esc(m.edBy) : '') + '</span>' + (foot || '');
+      }
+      var editing = state.msgEdit && String(state.msgEdit) === String(m.id);
+      var bub = editing
+        ? '<div class="tg-bub tg-edbox">' +
+            '<textarea class="tg-edin" rows="3">' + esc(m.text || '') + '</textarea>' +
+            '<div class="tg-edrow">' +
+              '<button class="tg-edx" data-edcancel="1">Отмена</button>' +
+              '<button class="tg-edok" data-edsave="' + m.id + '">Сохранить</button>' +
+            '</div>' +
+          '</div>'
+        : '<div class="tg-bub">' + mdMsg(m.text) + '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
+            ((m.canEdit || m.canDel) ? '<span class="tg-acts">' +
+              (m.canEdit ? '<button class="tg-edit" data-edit="' + m.id + '" title="Изменить текст у клиента">' + ic('pen', 11) + '</button>' : '') +
+              (m.canDel ? '<button class="tg-del" data-del="' + m.id + '" title="Убрать сообщение у клиента">' + ic('x', 11) + '</button>' : '') +
+            '</span>' : '') +
+          '</div>';
+      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + (m.delAt ? ' gone' : '') + (editing ? ' editing' : '') + '">' +
+        bub + foot + '</div>';
     }).join('');
   }
   /* единый бейдж статуса диалога (список + точечное обновление при тумблере) */
@@ -19441,17 +19733,8 @@
         }
       });
     }
-    // удаление сообщения (модерация) — оптимистично + фоном
-    Array.prototype.forEach.call(host.querySelectorAll('.tg-del[data-del]'), function (b) {
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var mid = b.getAttribute('data-del');
-        var d = state.bot.msgs[c.id];
-        if (d && d.messages) d.messages = d.messages.filter(function (m) { return String(m.id) !== String(mid); });
-        apiSend('/admin/api/bot/conversations/' + c.id + '/messages/' + mid, 'DELETE', null, function () {});
-        renderInboxChat(list);
-      });
-    });
+    // правка и отзыв нашего сообщения: экран меняем только после ответа канала
+    bindMsgActions(host, c.id, function () { renderInboxChat(list); });
   }
 
   /* ── РАЗДЕЛ «Диалог» в карточке лида ──
@@ -19475,7 +19758,9 @@
   function leadConvMsgs(d) {
     return (d.messages || []).map(function (m) {
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
-      return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason };
+      return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+               canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
+               canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
   }
   function buildDialog(ctx) {
@@ -23602,7 +23887,9 @@
     if (dIn) dIn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
     });
-    var dTh = el('dlg-thread'); if (dTh) dTh.scrollTop = dTh.scrollHeight;
+    var dTh = el('dlg-thread');
+    if (dTh && dcv) bindMsgActions(dTh, dcv.user_id, function () { renderModalContent(); });
+    if (dTh && !state.msgEdit) dTh.scrollTop = dTh.scrollHeight;
 
     // раздел «Написать»: режим/отправка/история
     if (state.modalSection === 'dialog') {
