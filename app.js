@@ -2505,16 +2505,9 @@
                state.page === 'finplan' || state.page === 'fincalendar' ||
                state.page === 'finspend' || state.page === 'finmetrics') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
-      var pers2 = (FIN.periods || []).slice(0, 8);
-      tb.innerHTML = pers2.length
-        ? '<nav class="tabs">' + pers2.map(function (p) {
-            return '<a class="tab' + (FIN.id === p.id ? ' on' : '') + '" data-fper="' + p.id + '">' +
-              esc(p.name) + (p.open ? '<span class="n num">открыт</span>' : '') + '</a>';
-          }).join('') + '</nav>'
-        : '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>ведомость</div>';
-      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
-        t.addEventListener('click', function () { finSetPeriod(t.getAttribute('data-fper')); });
-      });
+      // Ведомостей стало много (архив 2026), поэтому не лента вкладок, а выбор
+      // год -> месяц -> ведомость, как на старом сайте.
+      finTopbarPeriods(tb);
     } else if (state.page === 'inbox') {
       var bsrc = state.inboxMode === 'threads' ? 'обсуждения по задачам'
         : (state.bot.source === 'api' ? 'диалоги из бота · live' : 'омниканальный инбокс');
@@ -11760,6 +11753,69 @@
     FIN.id = id;
     finForget(true);
     renderAll();
+  }
+
+  var FIN_MON_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль',
+                     'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  function finYM(s) { return { y: +String(s).slice(0, 4), m: +String(s).slice(5, 7) }; }
+
+  /* Навигация по ведомостям: год -> месяц -> ведомость плюс стрелки, как на старом
+     сайте. Год и месяц выводятся из выбранной ведомости, отдельного состояния нет:
+     переключил ведомость - фильтры сами встали на ее год и месяц. Стрелки шагают по
+     всем ведомостям по порядку дат, выпадашка «Ведомость» листает внутри месяца. */
+  function finTopbarPeriods(tb) {
+    var all = (FIN.periods || []).slice();  // с бэка идут по дате по убыванию
+    if (!all.length) {
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>ведомость</div>';
+      return;
+    }
+    var cur = finPeriod() || all[0];
+    var cy = finYM(cur.starts_on);
+    var asc = all.slice().sort(function (a, b) {
+      return a.starts_on < b.starts_on ? -1 : (a.starts_on > b.starts_on ? 1 : 0);
+    });
+    var idx = 0;
+    for (var i = 0; i < asc.length; i++) if (asc[i].id === cur.id) { idx = i; break; }
+    var years = [], monthsY = [], monthPers = [];
+    all.forEach(function (p) {
+      var d = finYM(p.starts_on);
+      if (years.indexOf(d.y) < 0) years.push(d.y);
+      if (d.y === cy.y && monthsY.indexOf(d.m) < 0) monthsY.push(d.m);
+      if (d.y === cy.y && d.m === cy.m) monthPers.push(p);
+    });
+
+    var yearCtl = years.length > 1
+      ? ddButton('fin-yr', String(cy.y), false)
+      : '<span class="fpk-year num">' + cy.y + '</span>';
+    var prevOff = idx <= 0, nextOff = idx >= asc.length - 1;
+    tb.innerHTML = '<div class="fin-perpick">' +
+      '<div class="fpk-filters">' + yearCtl + ddButton('fin-mo', FIN_MON_NOM[cy.m - 1], false) + '</div>' +
+      '<div class="fpk-main">' +
+        '<button class="icobtn" id="fin-prev"' + (prevOff ? ' disabled' : '') + ' aria-label="Предыдущая">‹</button>' +
+        ddButton('fin-per', cur.name, true) +
+        '<button class="icobtn" id="fin-next"' + (nextOff ? ' disabled' : '') + ' aria-label="Следующая">›</button>' +
+        '<span class="sev ' + (cur.open ? 'st-doing' : 'n-off') + '">' + (cur.open ? 'открыта' : 'закрыта') + '</span>' +
+      '</div>' +
+    '</div>';
+
+    function jump(pred) {
+      for (var j = 0; j < all.length; j++) if (pred(all[j], finYM(all[j].starts_on))) { finSetPeriod(all[j].id); return; }
+    }
+    if (el('fin-yr')) el('fin-yr').addEventListener('click', function () {
+      openDropdown(this, years.map(function (y) { return { v: String(y), label: String(y) }; }),
+        String(cy.y), function (v) { jump(function (p, d) { return d.y === +v; }); });
+    });
+    el('fin-mo').addEventListener('click', function () {
+      openDropdown(this, monthsY.map(function (m) { return { v: String(m), label: FIN_MON_NOM[m - 1] + ' ' + cy.y }; }),
+        String(cy.m), function (v) { jump(function (p, d) { return d.y === cy.y && d.m === +v; }); });
+    });
+    el('fin-per').addEventListener('click', function () {
+      openDropdown(this, monthPers.map(function (p) {
+        return { v: p.id, label: p.name + (p.open ? '  · открыта' : '') };
+      }), cur.id, function (v) { finSetPeriod(v); });
+    });
+    if (!prevOff) el('fin-prev').addEventListener('click', function () { finSetPeriod(asc[idx - 1].id); });
+    if (!nextOff) el('fin-next').addEventListener('click', function () { finSetPeriod(asc[idx + 1].id); });
   }
   /* Сброс всего, что зависит от ведомости. Любая правда меняет соседние экраны:
      внесли доход — поехали отчисления, фонды, P&L и лента. Пересобирать надо все,
