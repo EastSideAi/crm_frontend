@@ -11801,15 +11801,20 @@
     function jump(pred) {
       for (var j = 0; j < all.length; j++) if (pred(all[j], finYM(all[j].starts_on))) { finSetPeriod(all[j].id); return; }
     }
-    if (el('fin-yr')) el('fin-yr').addEventListener('click', function () {
+    // stopPropagation обязателен: клик, открывший меню, иначе долетит до общего
+    // закрывателя (document click, ~строка 1939) и закроет его в тот же тик.
+    if (el('fin-yr')) el('fin-yr').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, years.map(function (y) { return { v: String(y), label: String(y) }; }),
         String(cy.y), function (v) { jump(function (p, d) { return d.y === +v; }); });
     });
-    el('fin-mo').addEventListener('click', function () {
+    el('fin-mo').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, monthsY.map(function (m) { return { v: String(m), label: FIN_MON_NOM[m - 1] + ' ' + cy.y }; }),
         String(cy.m), function (v) { jump(function (p, d) { return d.y === cy.y && d.m === +v; }); });
     });
-    el('fin-per').addEventListener('click', function () {
+    el('fin-per').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, monthPers.map(function (p) {
         return { v: p.id, label: p.name + (p.open ? '  · открыта' : '') };
       }), cur.id, function (v) { finSetPeriod(v); });
