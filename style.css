@@ -3817,6 +3817,55 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .po-lu { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
   font-weight: 600; color: var(--blue); white-space: nowrap; }
 
+
+/* способы оплаты: переключатель сверху, три цены под ним.
+   Переплата — не украшение, а сам аргумент разговора, поэтому она стоит
+   под ценой, а не прячется в примечании. */
+.po-payseg { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 17px; }
+.po-payh { font-size: 12.5px; color: var(--ink-3); }
+.po-pay { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.po-payc { background: var(--fill); border-radius: var(--r-lg); padding: 15px 17px; }
+.po-payc.accent { background: var(--blue-tint); }
+.po-payn { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.po-payv { margin-top: 9px; font-size: 25px; font-weight: 700; letter-spacing: -.035em; color: var(--ink); }
+.po-payo { margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+.po-payo.best { color: var(--green-ink); font-weight: 600; }
+.po-draft { display: inline-flex; margin-top: 11px; background: var(--amber-soft); color: var(--amber-ink); }
+.po-opens { display: flex; flex-direction: column; gap: 9px; }
+.po-openi { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-openi svg { flex: none; margin-top: 2px; color: var(--amber-ink); }
+
+/* этапы флагмана */
+.po-lede { margin-top: 16px; background: var(--blue-tint); border-radius: var(--r-lg);
+  padding: 14px 17px; font-size: 14.5px; font-weight: 600; letter-spacing: -.015em;
+  color: var(--navy); line-height: 1.5; }
+.po-stghead { margin-bottom: 20px; }
+.po-stg .po-sh { padding: 15px 20px; }
+.po-stnum { flex: none; width: 26px; font-size: 14px; font-weight: 700; color: var(--ink-3);
+  text-align: left; }
+.po-stg.open .po-stnum, .po-sh:hover .po-stnum { color: var(--blue); }
+.po-w { flex: none; }
+.po-w-plat { background: var(--fill); color: var(--ink-2); }
+.po-w-team { background: var(--blue-tint); color: var(--navy); }
+.po-w-self { background: var(--amber-soft); color: var(--amber-ink); }
+.po-sbody { padding-left: 59px; }
+.po-sbody .po-txt { margin-top: 15px; }
+.po-samet { margin-top: 15px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.po-samet + .po-txt { margin-top: 7px; }
+.po-sbody .po-pluses { margin-top: 13px; }
+.po-sell { margin-top: 15px; background: var(--amber-soft); border-radius: 12px; padding: 12px 15px;
+  font-size: 12.5px; color: var(--amber-ink); line-height: 1.5; }
+.po-sell b { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; }
+.po-tbl.cmp .po-w { display: inline-flex; margin-bottom: 8px; }
+.po-ct { display: block; }
+
+/* экономика: строка этапа несет его себестоимость, строки под ней — из чего она */
+.po-r-grp td { background: var(--fill); font-weight: 700; color: var(--ink); }
+.po-r-grp .po-hint { font-weight: 500; }
+.po-r-item .po-rl { font-weight: 500; color: var(--ink-2); }
+
 @media (max-width: 960px) {
   .po-cols { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .po-tick { display: none; }
@@ -3824,6 +3873,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
+  .po-pay { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .po-h1 { font-size: 23px; }
@@ -3841,4 +3891,21 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
      целиком (flex-basis 100%), иначе отбирает ширину у заголовка и тот ломается
      на три строки рядом с иконкой. */
   .po-when { order: 3; flex-basis: 100%; align-self: flex-start; margin-top: 4px; }
+  /* шапка этапа: на узком экране номер, название и шеврон в первой строке,
+     кто делает и срок — во второй, с отступом под колонку текста */
+  /* переключатель тарифа шире экрана: даем ему уехать вбок, как вкладкам,
+     а не ломаем в две строки — из двух строк не читается, что это один набор */
+  .po-payseg .dperiod { max-width: 100%; overflow-x: auto; }
+  .po-payseg .dperiod::-webkit-scrollbar { height: 0; }
+  .po-payseg .dperiod button { flex: none; }
+  .po-sh { flex-wrap: wrap; }
+  /* без явной ширины .po-it сжимается до нуля (min-width:0 у общего рецепта) и
+     название этапа встает столбиком по одному слову вместо переноса чипов */
+  .po-sh .po-it { min-width: 58%; }
+  .po-sh .po-iv { order: 2; }
+  .po-sh .po-w { order: 3; margin: 3px 0 0 37px; }
+  .po-sh .po-when { order: 4; flex-basis: auto; margin-top: 3px; }
+  .po-sbody { padding-left: 16px; }
+  .po-payv { font-size: 22px; }
+  .po-lede { font-size: 13.5px; padding: 13px 15px; }
 }

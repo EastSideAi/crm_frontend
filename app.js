@@ -49,6 +49,8 @@
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
+    // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
+    portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
@@ -4236,6 +4238,7 @@
      врет человеку, что материал есть, а он его не нашел. */
   var PORTAL_TABS = [
     { id: 'tariffs', label: 'Тарифы', has: function (p) { return (p.tariffs || []).length; } },
+    { id: 'stages', label: 'Этапы', has: function (p) { return (p.stages || []).length; } },
     { id: 'items', label: 'Продукты', has: function (p) { return (p.items || []).length; } },
     { id: 'flow', label: 'Путь клиента', has: function (p) { return (p.flow || []).length; } },
     { id: 'econ', label: 'Экономика', cap: 'finance', has: function (p) { return !!p.economics; } },
@@ -4361,6 +4364,8 @@
         var kw = t.label + ' ' + p.title;
         if (t.id === 'tariffs') kw += ' ' + (p.tariffs || []).map(function (x) { return x.name + ' ' + x.price; }).join(' ');
         if (t.id === 'econ') kw += ' маржа вклад расходы себестоимость налоги';
+        if (t.id === 'stages') kw += ' этапы наполнение что входит ' + (p.stages || []).map(function (x) { return x.title; }).join(' ');
+        if (t.id === 'tariffs') kw += ' цена оплата рассрочка кредит скидка';
         if (t.id === 'offer') kw += ' договор оферта';
         idx.push({ kw: kw, label: t.label, sub: p.title, go: { pid: p.id, tab: t.id } });
       });
@@ -4417,6 +4422,7 @@
 
     var bodyHtml = '';
     if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'stages') bodyHtml = portalStages(p);
     else if (state.portalTab === 'items') bodyHtml = portalItems(p);
     else if (state.portalTab === 'flow') bodyHtml = portalFlow(p);
     else if (state.portalTab === 'econ') bodyHtml = portalEcon(p);
@@ -4440,6 +4446,8 @@
       });
     });
     if (state.portalTab === 'econ') portalWireEcon(view, p);
+    if (state.portalTab === 'tariffs') portalWirePay(view, p);
+    if (state.portalTab === 'stages') portalWireStages(view, p);
     portalWireLinks(view);
   }
 
@@ -4497,7 +4505,204 @@
     }
 
     return '<div class="po-tariffs">' + cards + '</div>' +
-      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') + cmpHtml;
+      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') +
+      portalPayment(p) + portalGuarantee(p) + cmpHtml;
+  }
+
+  /* ── способы оплаты ────────────────────────────────────────────────────────
+     Цена у тарифа одна, а платит семья по-разному, и разница в деньгах — это и
+     есть аргумент на диагностике: чем меньше вносишь сразу, тем дороже выходит.
+     Поэтому не абзац с условиями, а переключатель: выбрал способ — увидел три
+     цены и переплату к оплате целиком. Цифры, которые команда еще не утвердила,
+     помечены прямо в карточке: молча выдавать их за согласованные нельзя. */
+  function payOption(pay, id) {
+    var os = (pay && pay.options) || [];
+    for (var i = 0; i < os.length; i++) if (os[i].id === id) return os[i];
+    return os[0] || null;
+  }
+  function portalPayment(p) {
+    var pay = p.payment;
+    if (!pay || !(pay.options || []).length) return '';
+    var cur = payOption(pay, state.portalPay) || pay.options[0];
+    /* точка отсчета переплаты — самый дешевый способ, а не «цена тарифа»:
+       переплату семья считает от того, что было бы, заплати она сразу */
+    var base = pay.options.reduce(function (a, o) {
+      var s = (p.tariffs || []).reduce(function (n, t) { return n + ((o.prices || {})[t.id] || 0); }, 0);
+      return (!a || s < a.sum) ? { o: o, sum: s } : a;
+    }, null).o;
+
+    var segs = pay.options.map(function (o) {
+      return '<button type="button" data-popay="' + esc(o.id) + '" class="' + (cur.id === o.id ? 'on' : '') + '">' + esc(o.label) + '</button>';
+    }).join('');
+
+    var cells = (p.tariffs || []).map(function (t) {
+      var v = (cur.prices || {})[t.id], b = (base.prices || {})[t.id];
+      var over = (v != null && b != null) ? v - b : 0;
+      var draft = (cur.draft || []).indexOf(t.id) !== -1;
+      return '<div class="po-payc' + (t.accent ? ' accent' : '') + '">' +
+        '<div class="po-payn">' + esc(t.name) + '</div>' +
+        '<div class="po-payv num">' + (v != null ? fmtMoney(v) + ' ₽' : '—') + '</div>' +
+        (over > 0
+          ? '<div class="po-payo num">переплата ' + fmtMoney(over) + ' ₽</div>'
+          : '<div class="po-payo best">самая низкая цена</div>') +
+        (draft ? '<span class="sev po-draft">нужно утвердить</span>' : '') +
+      '</div>';
+    }).join('');
+
+    var rules = (pay.rules || []).map(function (r) {
+      return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(r) + '</span></div>';
+    }).join('');
+    var open = (pay.open || []).map(function (r) {
+      return '<div class="po-openi">' + ic('alert', 13) + '<span>' + esc(r) + '</span></div>';
+    }).join('');
+
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+        '<div><div class="t">' + esc(pay.title || 'Способы оплаты') + '</div>' +
+        '<div class="s">переключите способ — цены пересчитаются</div></div></div>' +
+      '<div class="po-payseg"><div class="dperiod">' + segs + '</div>' +
+        (cur.hint ? '<div class="po-payh">' + esc(cur.hint) + '</div>' : '') + '</div>' +
+      '<div class="po-pay">' + cells + '</div>' +
+      (rules ? '<div class="po-fsec"><div class="po-flbl">Правила</div><div class="po-feats">' + rules + '</div></div>' : '') +
+      (open ? '<div class="po-fsec"><div class="po-flbl">Не утверждено</div><div class="po-opens">' + open + '</div></div>' : '') +
+      (pay.note ? '<div class="po-note">' + esc(pay.note) + '</div>' : '') +
+    '</div>';
+  }
+  function portalGuarantee(p) {
+    var g = p.guarantee;
+    if (!g || !(g.items || []).length) return '';
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('award', 14) + '</span>' +
+        '<div><div class="t">' + esc(g.title || 'Гарантии') + '</div>' +
+        '<div class="s">что обещаем словами договора, а что не обещаем никогда</div></div></div>' +
+      '<div class="po-feats">' + portalNotes(g.items, 'check') + '</div></div>';
+  }
+  function portalWirePay(view, p) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-popay]'), function (b) {
+      b.addEventListener('click', function () { state.portalPay = b.getAttribute('data-popay'); renderView(); });
+    });
+  }
+
+  /* ── этапы флагмана ────────────────────────────────────────────────────────
+     Двенадцать этапов есть во всех тарифах, отличается наполнение. Поэтому
+     экран собран не как три колонки услуг, а как один маршрут с переключателем
+     тарифа: на диагностике семью ведут по ее собственному пути, а не по
+     сравнительной таблице. Режим «Сравнить» — для внутреннего разговора.
+     Чип «семья сама» намеренно амбер: это ровно те места, где идет допродажа,
+     и их должно быть видно, не читая текст. */
+  var PO_WHO = { 'семья сама': 'po-w-self', 'платформа': 'po-w-plat', 'команда': 'po-w-team',
+                 'платформа и куратор': 'po-w-team', 'платформа и семья': 'po-w-self' };
+  /* same:true — «то же, что тарифом ниже»: текст не дублируем в json, чтобы
+     правка одного описания не разъезжалась по трем копиям */
+  function stageCell(p, st, tid) {
+    var ts = p.tariffs || [], i = 0;
+    for (; i < ts.length; i++) if (ts[i].id === tid) break;
+    var own = (st.cells || {})[tid] || {};
+    var out = { who: own.who || '', text: own.text || '', plus: own.plus || [], sell: own.sell || '', same: false, from: '' };
+    if (!out.text) {
+      for (var j = i - 1; j >= 0; j--) {
+        var b = (st.cells || {})[ts[j].id];
+        if (b && b.text) {
+          out.text = b.text;
+          out.sell = out.sell || b.sell || '';
+          if (!out.plus.length) out.plus = b.plus || [];
+          out.same = true; out.from = ts[j].name;
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  function stagePlusHtml(list) {
+    if (!(list || []).length) return '';
+    return '<div class="po-pluses">' + list.map(function (x) {
+      return '<span class="po-plus">' + esc(x) + '</span>';
+    }).join('') + '</div>';
+  }
+  function portalStages(p) {
+    var ts = p.tariffs || [], sts = p.stages || [];
+    var mode = state.portalTariff;
+    if (mode !== 'all' && !ts.some(function (t) { return t.id === mode; })) mode = (ts[0] || {}).id;
+
+    var segs = ts.map(function (t) {
+      return '<button type="button" data-postar="' + esc(t.id) + '" class="' + (mode === t.id ? 'on' : '') + '">' + esc(t.name) + '</button>';
+    }).join('') + '<button type="button" data-postar="all" class="' + (mode === 'all' ? 'on' : '') + '">Сравнить</button>';
+
+    var head = '<div class="card po-card po-stghead">' +
+      '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
+        '<div><div class="t">Двенадцать этапов поступления</div>' +
+        '<div class="s">этапы одни на всех тарифах, отличается наполнение</div></div></div>' +
+      '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
+
+    return head + (mode === 'all' ? portalStagesTable(p, sts) : portalStagesList(p, sts, mode));
+  }
+  /* якорь экрана: одно предложение, которое диагност произносит вслух */
+  function portalStagesLede(p, mode, sts) {
+    if (mode === 'all') {
+      return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
+    }
+    var self = sts.filter(function (st) { return (stageCell(p, st, mode).who || '').indexOf('семья') !== -1; });
+    var name = (p.tariffs || []).filter(function (t) { return t.id === mode; })[0];
+    if (!self.length) {
+      return '<div class="po-lede">На тарифе «' + esc(name ? name.name : '') + '» все ' + sts.length +
+        ' этапов ведем мы. Семье остается сдавать документы и учиться.</div>';
+    }
+    return '<div class="po-lede">На тарифе «' + esc(name ? name.name : '') + '» семья делает своими руками ' +
+      self.length + ' ' + plural(self.length, 'этап', 'этапа', 'этапов') + ' из ' + sts.length + ': ' +
+      esc(self.map(function (st) { return st.title.toLowerCase(); }).join(', ')) +
+      '. Это и есть места, где идет допродажа.</div>';
+  }
+  function portalStagesList(p, sts, mode) {
+    return sts.map(function (st, i) {
+      var c = stageCell(p, st, mode), open = state.portalStage === st.id;
+      var body = '';
+      if (c.same && c.from) body += '<div class="po-samet">Как в тарифе «' + esc(c.from) + '»</div>';
+      if (c.text) body += '<p class="po-txt">' + esc(c.text) + '</p>';
+      body += stagePlusHtml(c.plus);
+      if (c.sell) body += '<div class="po-sell"><b>Где допродаем</b>' + esc(c.sell) + '</div>';
+      if (st.foot) body += '<div class="po-note">' + esc(st.foot) + '</div>';
+      return '<div class="card po-card po-item po-stg' + (open ? ' open' : '') + '">' +
+        '<button type="button" class="po-ih po-sh" data-postage="' + esc(st.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<span class="po-stnum num">' + (i + 1) + '</span>' +
+          '<span class="po-it"><b>' + esc(st.title) + '</b>' +
+            (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</span>' +
+          (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
+          (st.when ? '<span class="po-when">' + esc(st.when) + '</span>' : '') +
+          '<span class="po-iv">' + ic('go', 14) + '</span>' +
+        '</button>' +
+        (open ? '<div class="po-ibody po-sbody">' + body + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+  function portalStagesTable(p, sts) {
+    var ts = p.tariffs || [];
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var trs = sts.map(function (st, i) {
+      var tds = ts.map(function (t) {
+        var c = stageCell(p, st, t.id);
+        return '<td>' +
+          (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
+          (c.same && c.from ? '<span class="po-hint">как в тарифе «' + esc(c.from) + '»</span>' : '<span class="po-ct">' + esc(c.text) + '</span>') +
+          stagePlusHtml(c.plus) + '</td>';
+      }).join('');
+      return '<tr><td class="po-rl">' + (i + 1) + '. ' + esc(st.title) +
+        (st.when ? '<span class="po-hint">' + esc(st.when) + '</span>' : '') + '</td>' + tds + '</tr>';
+    }).join('');
+    return '<div class="card po-card">' +
+      '<div class="po-tblwrap"><table class="po-tbl cmp"><thead><tr><th class="po-rl">Этап</th>' + ths + '</tr></thead>' +
+      '<tbody>' + trs + '</tbody></table></div></div>';
+  }
+  function portalWireStages(view, p) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-postar]'), function (b) {
+      b.addEventListener('click', function () { state.portalTariff = b.getAttribute('data-postar'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-postage]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-postage');
+        state.portalStage = state.portalStage === id ? null : id;
+        renderView();
+      });
+    });
   }
 
   /* Экономика: структура (какие статьи и тарифы) — из content/portal.json,
@@ -4536,19 +4741,42 @@
     return m;
   }
   function econNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  /* Группы строк расходов — этапы поступления плюс то, что к одному этапу не
+     привязано. Себестоимость этапа — это и есть сумма его строк, поэтому она
+     считается тут же, а не отдельной таблицей: два места для одной цифры
+     разъезжаются. Формат данных в базе от группировки не зависит — там по
+     прежнему плоский costs[статья][тариф]. */
+  function econGroups(p) {
+    var ec = p.economics || {};
+    var gs = (p.stages || []).map(function (st, i) { return { id: st.id, title: (i + 1) + '. ' + st.title }; })
+      .concat((ec.groups || []).map(function (g) { return { id: g.id, title: g.title, note: g.note }; }));
+    var known = {}; gs.forEach(function (g) { known[g.id] = true; });
+    var map = {}, rest = false;
+    (ec.costs || []).forEach(function (c) {
+      var sid = c.stage || 'common';
+      if (!known[sid]) { sid = '__rest'; rest = true; }
+      map[c.id] = sid;
+    });
+    if (rest) gs.push({ id: '__rest', title: 'Прочее' });
+    return { list: gs, of: map };
+  }
   function econCalc(p, m) {
-    var ec = p.economics || {}, out = {};
+    var ec = p.economics || {}, out = {}, gr = econGroups(p);
     (p.tariffs || []).forEach(function (t) {
-      var price = econNum(m.price[t.id]), sum = 0, rates = {}, costs = {};
+      var price = econNum(m.price[t.id]), sum = 0, cost = 0, rates = {}, costs = {}, stages = {};
       (ec.rates || []).forEach(function (r) {
         var v = Math.round(price * econNum(m.rates[r.id]) / 100);
         rates[r.id] = v; sum += v;
       });
       (ec.costs || []).forEach(function (c) {
         var v = econNum((m.costs[c.id] || {})[t.id]);
-        costs[c.id] = v; sum += v;
+        costs[c.id] = v; sum += v; cost += v;
+        var sid = gr.of[c.id] || 'common';
+        stages[sid] = (stages[sid] || 0) + v;
       });
-      out[t.id] = { total: sum, contrib: price - sum, margin: price ? Math.round((price - sum) / price * 100) : 0, rates: rates, costs: costs };
+      out[t.id] = { total: sum, cost: cost, contrib: price - sum,
+        margin: price ? Math.round((price - sum) / price * 100) : 0,
+        rates: rates, costs: costs, stages: stages };
     });
     return out;
   }
@@ -4579,12 +4807,24 @@
         '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-rate="' + esc(r.id) + '" value="' + econNum(m.rates[r.id]) + '"><span class="po-pc">%</span></td>' +
         ts.map(function (t) { return '<td class="num" data-ec="' + esc(r.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
     }).join('');
-    var costRows = (ec.costs || []).map(function (c) {
-      return '<tr><td class="po-rl">' + esc(c.label) + '</td>' + ts.map(function (t) {
-        return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
-      }).join('') + '</tr>';
+    var gr = econGroups(p);
+    var costRows = gr.list.map(function (g) {
+      var items = (ec.costs || []).filter(function (c) { return gr.of[c.id] === g.id; });
+      if (!items.length) return '';
+      return '<tr class="po-r-grp"><td class="po-rl">' + esc(g.title) +
+          (g.note ? '<span class="po-hint">' + esc(g.note) + '</span>' : '') + '</td>' +
+          ts.map(function (t) { return '<td class="num" data-ec="stage:' + esc(g.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+        items.map(function (c) {
+          return '<tr class="po-r-item"><td class="po-rl">' + esc(c.label) +
+            (c.hint ? '<span class="po-hint">' + esc(c.hint) + '</span>' : '') + '</td>' +
+            ts.map(function (t) {
+              return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
+            }).join('') + '</tr>';
+        }).join('');
     }).join('');
     var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Себестоимость реализации<span class="po-hint">только расходы по этапам, без налогов и продаж</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="cost:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Итого расходы</td>' + ts.map(function (t) { return '<td class="num" data-ec="total:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Вклад с клиента, ₽</td>' + ts.map(function (t) { return '<td class="num" data-ec="contrib:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-big"><td class="po-rl">Маржа вклада</td>' + ts.map(function (t) { return '<td class="num" data-ec="margin:' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
@@ -4604,9 +4844,16 @@
     function recalc() {
       var r = econCalc(p, m);
       Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
-        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0], v = r[parts[1]];
+        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0];
+        if (kind === 'stage') {
+          var sv = r[parts[2]];
+          if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
+          return;
+        }
+        var v = r[parts[1]];
         if (!v) return;
         if (kind === 'total') c.textContent = fmtMoney(v.total);
+        else if (kind === 'cost') c.textContent = fmtMoney(v.cost);
         else if (kind === 'contrib') c.textContent = fmtMoney(v.contrib);
         else if (kind === 'margin') {
           c.textContent = v.margin + '%';
