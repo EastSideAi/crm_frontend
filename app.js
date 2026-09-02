@@ -5741,6 +5741,7 @@
     return { people: out, nobody: nobody };
   }
 
+  var STU_PAGE = 25;   // сколько учеников показываем до «показать еще»
   function renderStudentTasks(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
     var over = !!state.stuOver;
