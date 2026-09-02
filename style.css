@@ -2481,7 +2481,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .rh-rvline.back { color: var(--red-ink); }
 
 /* Карточка приемки (модалка). */
-.rv-badge { display: inline-flex; margin-bottom: 4px; }
+.rv-badge { align-self: flex-start; margin-bottom: 4px; }
 .rv-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 4px;
   font-size: 13px; color: var(--ink-2); }
 .rv-facts b { color: var(--ink); font-weight: 700; }
@@ -2498,6 +2498,8 @@ button.tr-crumb:hover { color: var(--blue); }
 .rv-state.ok { color: var(--green-ink); }
 .rv-state.back { color: var(--red-ink); }
 .rv-note { margin-top: 14px; }
+.rv-foot .al-cancel { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.rv-foot .al-cancel svg { flex: none; }
 .rv-foot .al-cancel.armed { color: var(--red-ink); background: var(--red-soft); }
 
 /* Согласованные сроки. Настройка команды, поэтому лежит на экране команды, а
@@ -2882,6 +2884,9 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.rh-grid .rh-c::before, .trow.rh-grid .brd-n::before { content: attr(data-l);
     font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--ink-3); }
+  /* Отчет + метка приемки в узкой клетке: даем перенос, иначе «на доработке»
+     обрезается за краем колонки. */
+  .trow.rh-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
   /* Дерево на телефоне: у направления числа уходят под название и называют
