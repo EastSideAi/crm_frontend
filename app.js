@@ -6174,7 +6174,7 @@
           var mr = RH_REVIEW[rv] || RH_REVIEW.pending;
           return '<div class="rh-c" data-l="Отчет">' +
             '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть отчет">' +
-              rhChip(d.state) + '<span class="rv-tag ' + mr.cls + '">' + mr.label + '</span>' +
+              rhChip(d.state) + '<span class="sev ' + mr.cls + '">' + mr.label + '</span>' +
             '</button></div>';
         }
         return '<div class="rh-c" data-l="' + (kind === 'plan' ? 'План' : 'Отчет') + '">' +
@@ -6216,7 +6216,7 @@
     var pend = b.await_review
       ? '<div class="rh-await">' + ic('bell', 13) + '<span><b class="num">' + b.await_review +
         '</b> ' + plural(b.await_review, 'отчет ждет', 'отчета ждут', 'отчетов ждут') +
-        ' твоей приемки. Открой отметку «сдан» в колонке Отчет.</span></div>'
+        ' твоей приемки. Нажми на «ждет приемки» в колонке Отчет.</span></div>'
       : '';
 
     view.innerHTML = '<div class="card listcard">' + rhTools(b) +

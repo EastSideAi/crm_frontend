@@ -2461,12 +2461,12 @@ button.tr-crumb:hover { color: var(--blue); }
    руководителя), принят (зеленый), на доработке (красный — вернулось). */
 .rh-rv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 2px;
   background: none; border: 0; cursor: pointer; min-width: 0; }
-.rv-tag { font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill);
-  padding: 3px 9px; white-space: nowrap; }
-.rv-tag.rv-wait { color: var(--amber-ink); background: var(--amber-soft); }
-.rv-tag.rv-ok   { color: var(--green-ink); background: var(--green-soft); }
-.rv-tag.rv-back { color: var(--red-ink);   background: var(--red-soft); }
-.rh-rv-btn:hover .rv-tag { filter: brightness(.97); }
+/* Метка приемки — та же семья, что все чипы: модификатор на .sev, не свой чип.
+   Иначе рядом со «сдан» (тоже .sev) она другой высоты и скругления. */
+.sev.rv-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.rv-ok   { color: var(--green-ink); background: var(--green-soft); }
+.sev.rv-back { color: var(--red-ink);   background: var(--red-soft); }
+.rh-rv-btn:hover .sev { filter: brightness(.97); }
 /* Сколько ждет приемки — строка над таблицей. Амбер: это очередь действий. */
 .rh-await { display: flex; align-items: center; gap: 9px; margin: 14px 24px 2px;
   padding: 11px 15px; border-radius: 12px; background: var(--amber-soft);
