@@ -7095,6 +7095,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .wk-state.back { background: var(--red-soft); color: var(--red-ink); }
 .wk-state.back svg { color: var(--red-ink); }
 .wk-mark { margin-left: 8px; vertical-align: 2px; }
+.wk-accept .wk-mark { display: none; }
 .wk-row.closed .t-ttl { color: var(--ink-2); }
 .wk-row.closed .tsk-due { color: var(--ink-3); }
 .wk-accept { background: var(--blue-tint); border-radius: 12px; margin: 8px 16px 0; border-top: 0; }
@@ -7125,11 +7126,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-top: 1px solid var(--line); align-items: center; }
 .wkc-row:first-child { border-top: 0; }
 .wkc-t { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.35; }
-.wkc-choice { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 3px; }
-.wkc-choice button { padding: 7px 12px; border-radius: var(--r-pill); font: 600 12px 'Manrope', sans-serif;
-  color: var(--ink-2); background: none; border: 0; cursor: pointer; }
-.wkc-choice button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.12); }
-.wkc-why { grid-column: 1 / -1; padding: 8px 12px; font-size: 12.5px; }
+/* Выбор «перенести / в Потом» — системный сегмент .pay-seg, своего рецепта нет. */
+.wkc-choice { flex: none; }
+.wkc-why { grid-column: 1 / -1; }
+/* Назад к команде: шеврон смотрит назад, как у всех «назад» в CRM. */
+.wk-back svg { transform: rotate(180deg); }
+.wk-accept-btn { color: var(--blue); border-color: var(--blue-tint); background: var(--blue-tint); }
+.wk-accept-btn svg { color: var(--blue); }
+.wk-accept-btn:hover { background: #DFE8FF; color: var(--blue-d); }
+.rh-rv-btn svg { color: var(--ink-3); }
+.wk-pick .wk-state { margin: 0 0 12px; }
 .wkc-text { margin-top: 14px; }
 /* Команда: строка на человека. */
 .wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }

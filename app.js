@@ -2664,7 +2664,7 @@
       if (TASK_SEGS[taskSeg()].view === 'teamweek') {
         var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
         if (!tw) tphr = 'Собираю неделю команды.';
-        else if (tw.await_review) tphr = '<b>' + tw.await_review + ' ' + plural(tw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b> Нажми на «ждет приемки» в колонке Итог.';
+        else if (tw.await_review) tphr = '<b>' + tw.await_review + ' ' + plural(tw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b> Прими или верни с замечанием.';
         else if (tw.no_plan && !wkShift()) tphr = '<b>' + tw.no_plan + '</b> ' + plural(tw.no_plan, 'человек без плана', 'человека без плана', 'человек без плана') + ' на неделю. Они сверху списка.';
         else if (tw.stuck) tphr = 'Застряло <b>' + tw.stuck + '</b> ' + plural(tw.stuck, 'задача', 'задачи', 'задач') + ' — переносят второй раз подряд.';
         else tphr = 'Неделя у команды идет ровно: план собран, ничего не застряло.';
@@ -5252,9 +5252,11 @@
     if (t.client_name) sub.push(t.client_name);
     if (t.author_name && !own && !opts.hideAuthor) sub.push('поставил ' + t.author_name);
     var marks = '';
-    // «От руководителя» — пометка для исполнителя. Постановщику в блоке «тебе
-    // сдали» она ничего не говорит: он сам эту задачу и положил.
-    if (t.week_by_other && t.author_id !== state.taskMe) marks += '<span class="sev st-wait wk-mark">от руководителя</span>';
+    // Кто положил в неделю — словами в подписи, а не чипом: чип в цвете статуса
+    // «поставлена» читался бы как второй статус (design.md, словари не смешиваем).
+    if (t.week_by_other && t.author_id !== state.taskMe) {
+      sub.push('в неделю положил ' + (t.week_set_by_name || 'руководитель'));
+    }
     if (t.carry_count) {
       marks += '<span class="sev ' + (t.stuck ? 'rv-wait' : 'st-wait') + ' wk-mark">' +
         (t.stuck ? 'застряла · перенос ×' + t.carry_count : 'перенос') + '</span>';
@@ -5512,7 +5514,8 @@
           '<input id="tsk-q" class="search" type="search" placeholder="Задача, ученик, цель" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
-        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+        // Тихая, как на «Неделе»: главное действие здесь — «В неделю» в строках.
+        '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
       '</div>' +
       '<div class="list-body">' + body + '</div>' +
     '</div>';
@@ -5542,7 +5545,10 @@
         '<div class="al-title">Собрать неделю</div></div>' +
         '<button class="al-x" id="wkp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
       '<div class="al-sub">Отметь, что берешь в неделю. Не больше <b>' + cap + '</b> — остальное подождет в «Потом».</div>' +
-      '<div class="al-body" id="wkp-body">' + dashSkeleton() + '</div>' +
+      '<div class="al-body">' +
+        '<div class="wk-state wait" id="wkp-full" hidden>' + ic('bell', 13) + '<span>Предел набран: ' + cap + ' из ' + cap + '. Чтобы взять другую задачу, сними галочку или закрой неделю с переносом.</span></div>' +
+        '<div id="wkp-body">' + dashSkeleton() + '</div>' +
+      '</div>' +
       '<div class="al-foot wkp-foot">' +
         '<div class="wk-cap" id="wkp-cap"><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
         '<div class="ct-err" id="wkp-err"></div>' +
@@ -5567,6 +5573,10 @@
       var n = load + Object.keys(picked).length;
       el('wkp-n').textContent = n + ' из ' + cap;
       el('wkp-cap').classList.toggle('full', n >= cap);
+      // Предел набран — говорим словами, а не гасим галочки молча: человек должен
+      // понять, почему не берется, а не гадать, почему список серый.
+      var full = el('wkp-full');
+      if (full) full.hidden = n < cap;
       el('wkp-cap').querySelector('i').style.width = Math.min(100, Math.round(n / cap * 100)) + '%';
       Array.prototype.forEach.call(ov.querySelectorAll('input[data-pick]'), function (c) {
         c.disabled = !c.checked && n >= cap;
@@ -5641,11 +5651,12 @@
         '<div class="wkc-t">' + impMark(t) + esc(t.title) +
           (t.carry_count ? '<span class="sev ' + (t.carry_count >= 1 ? 'rv-wait' : 'st-wait') + ' wk-mark">уже переносили ×' + t.carry_count + '</span>' : '') +
         '</div>' +
-        '<div class="wkc-choice">' +
+        // Сегмент — системный .pay-seg, четвертого рецепта сегмента в CRM нет.
+        '<div class="pay-seg wkc-choice">' +
           '<button class="on" data-to="next">Перенести</button>' +
           '<button data-to="later">В «Потом»</button>' +
         '</div>' +
-        '<input class="al-in wkc-why" placeholder="Почему не сделано" maxlength="300">' +
+        '<input class="al-in sm wkc-why" placeholder="Почему не сделано" maxlength="300">' +
       '</div>';
     }).join('');
     ov.innerHTML = '<div class="al-card pick wk-pick" role="dialog" aria-modal="true">' +
@@ -5742,9 +5753,14 @@
       var rp = WK_REP[p.report.state] || WK_REP.wait;
       var repGiven = p.report.state === 'done' || p.report.state === 'late';
       var rv = RH_REVIEW[(p.report.review || {}).state] || RH_REVIEW.pending;
+      // Приемка — настоящая кнопка, а не чип: это главное действие руководителя
+      // на экране, и оно обязано отличаться от некликабельных чипов рядом.
+      var rvs = (p.report.review || {}).state;
       var itog = repGiven
-        ? '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть неделю на приемку">' +
-            '<span class="sev ' + rp.cls + '">' + rp.label + '</span><span class="sev ' + rv.cls + '">' + rv.label + '</span></button>'
+        ? (rvs === 'pending'
+            ? '<button class="qchip wk-accept-btn" data-review="' + p.id + '">' + ic('check', 12) + 'Принять' + chev() + '</button>'
+            : '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть неделю">' +
+                '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
         : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
       var said = (p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '');
       function n(v, cls, l) {
@@ -5766,13 +5782,13 @@
       : '';
 
     // Полоса действий руководителя. Амбер — очередь на приемку, красный — тревога.
+    // Сколько ждет приемки — уже в шапке раздела; здесь только то, чего там нет.
     var flags = [];
-    if (b.await_review) flags.push('<b class="num">' + b.await_review + '</b> ' + plural(b.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' приемки');
     if (b.no_plan && wkShift() >= 0) flags.push('без плана <b class="num">' + b.no_plan + '</b>');
     if (b.stuck) flags.push('застряло <b class="num">' + b.stuck + '</b>');
     if (b.unplanned) flags.push('не взяли в неделю <b class="num">' + b.unplanned + '</b>');
     var strip = flags.length
-      ? '<div class="rh-await' + (b.await_review ? '' : ' quiet') + '">' + ic(b.await_review ? 'bell' : 'spark', 13) + '<span>' + flags.join(' · ') + '</span></div>'
+      ? '<div class="rh-await quiet">' + ic('spark', 13) + '<span>' + flags.join(' · ') + '</span></div>'
       : '';
 
     view.innerHTML = '<div class="card listcard">' +
@@ -5813,7 +5829,7 @@
     var pl = p.plan ? (WK_PLAN[p.plan.state] || WK_PLAN.wait) : null;
     view.innerHTML = '<div class="card listcard">' +
       '<div class="list-tools brd-tools">' +
-        '<button class="qchip" id="wk-back">' + ic('go', 12) + 'Команда</button>' +
+        '<button class="qchip wk-back" id="wk-back">' + ic('go', 12) + 'Команда</button>' +
         '<div class="brd-who"><span class="tsk-av">' + esc(initials(who.name)) + '</span>' +
           '<span class="brd-nm">' + esc(who.name) + '<span class="t-sub">' + esc(b.label || '') + '</span></span></div>' +
         (pl ? '<span class="sev ' + pl.cls + '">' + pl.label + '</span>' : '') +
