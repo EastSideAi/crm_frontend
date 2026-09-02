@@ -950,9 +950,22 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 
 /* ── ТЕЛО: nav + контент ── */
 .m-body { flex: 1; display: flex; min-height: 0; position: relative; }
+/* Разделов пятнадцать, и на невысоком ноутбуке (окно ниже ~700px) в колонку влезает
+   семь: остальные листаются. Скроллбар тут был спрятан насовсем, и обрыв списка
+   читался как «карточка неполная» — 03.09.2026 из-за этого искали пропавшие
+   «Заметки». Тень у нижнего края появляется САМА, только когда ниже есть что
+   смотреть: фон на `local` едет со списком и закрывает тень, когда список кончился. */
 .m-nav { flex: none; width: 210px; border-right: 1px solid var(--line); padding: 16px 12px;
-  overflow-y: auto; background: #FBFBFC; }
-.m-nav::-webkit-scrollbar { width: 0; }
+  overflow-y: auto; scrollbar-width: thin; scrollbar-color: #DFE2E8 transparent;
+  background:
+    linear-gradient(#FBFBFC 62%, rgba(251,251,252,0)) top / 100% 26px no-repeat local,
+    linear-gradient(rgba(251,251,252,0), #FBFBFC 38%) bottom / 100% 26px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(15,19,32,.2), rgba(15,19,32,0)) top / 100% 15px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(15,19,32,.2), rgba(15,19,32,0)) bottom / 100% 15px no-repeat scroll,
+    #FBFBFC; }
+.m-nav::-webkit-scrollbar { width: 6px; }
+.m-nav::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
+.m-nav::-webkit-scrollbar-track { background: transparent; }
 .m-ni { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
   padding: 10px 13px; border-radius: 11px; font-size: 13.5px; font-weight: 500; color: var(--ink-2); transition: .14s; }
 .m-ni svg { color: var(--ink-3); transition: .14s; }
@@ -969,6 +982,22 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    размером, что и .dotw, чтобы столбец разделов не прыгал. */
 .m-ni .doto { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft); }
+
+/* Невысокий ноутбук: окно 550-700px, и на список разделов в карточке остается
+   около 320px при пятнадцати пунктах — видно семь. Отдаем карточке высоту и
+   сжимаем шапку с пунктами: разделов помещается на треть больше, листать
+   остается меньше. Пропорции те же, меняются только вертикальные отступы. */
+@media (max-height: 820px) {
+  .modal { height: 94vh; max-height: none; }
+  .m-head { padding: 15px 24px 13px; }
+  .m-ava { width: 44px; height: 44px; border-radius: 14px; font-size: 17px; }
+  .m-name { font-size: 20px; }
+  .m-sub { margin-top: 6px; }
+  .m-nav { padding: 10px; }
+  .m-ni { padding: 7px 12px; }
+  .m-foot { padding: 9px 22px; }
+  .m-content { padding: 20px 26px 28px; }
+}
 
 .m-content { flex: 1; overflow-y: auto; padding: 26px 30px 36px; min-width: 0; }
 .m-content::-webkit-scrollbar { width: 7px; }
@@ -3597,7 +3626,7 @@ button.tsk-mimp { cursor: pointer; }
   display: grid; place-items: center; box-shadow: 0 2px 6px rgba(15,19,32,.16); transition: color .12s; }
 .tg-del:hover { color: var(--coral); }
 .tg-edit:hover { color: var(--blue); }
-/* Правка прямо в пузыре: текст остаётся на своём месте в переписке, и видно, что
+/* Правка прямо в пузыре: текст остается на своём месте в переписке, и видно, что
    именно человек уже прочитал. Поле светлое даже у исходящего — на синем фоне
    собственный ввод не читается. */
 .tg-msg.editing .tg-bub, .tg-msg.editing.out .tg-bub, .tg-msg.editing.out.mgr .tg-bub {

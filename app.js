@@ -20843,6 +20843,10 @@
     if (ne) ne.addEventListener('click', function () { var n = el('m-name'); if (n) n.click(); });
     renderModalContent();
     if (keepScroll) { var c1 = modal.querySelector('.m-content'); if (c1) c1.scrollTop = prevScroll; }
+    // Открытый раздел держим в поле зрения: на невысоком экране «Заметки» и всё,
+    // что ниже, лежат за краем колонки, и человек не понимает, где он стоит.
+    var onNi = modal.querySelector('.m-ni.on');
+    if (onNi && onNi.scrollIntoView) onNi.scrollIntoView({ block: 'nearest' });
   }
 
   function renderModalContent() {
