@@ -4965,12 +4965,12 @@
           (rep.review.note ? ': ' + esc(rep.review.note) : '') + '. Поправь и закрой неделю заново.</span></div>';
       }
       return '<div class="wk-state wait">' + ic('bell', 13) + '<span>Неделя закрыта' +
-        (rep.late ? ' с опозданием' : '') + ', ждет приемки руководителя.' +
+        (rep.late ? ' с опозданием' : '') + ', ждет приемки.' +
         (rep.text ? ' Что мешало: ' + esc(rep.text) : '') + '</span></div>';
     }
     if (plan) {
       return '<div class="wk-state">' + ic('check', 13) + '<span>Неделя собрана' +
-        (plan.late ? ' с опозданием' : '') + '. Закрыть ее нужно ' + esc(r.report.due_text || 'в пятницу') + '.</span></div>';
+        (plan.late ? ' с опозданием' : '') + '. Закрыть до ' + esc((r.report.due_text || 'пятницы').replace(' до ', ', ')) + '.</span></div>';
     }
     return '';
   }
@@ -4982,17 +4982,25 @@
      строку. Прошлые и будущие недели — по дням списком (renderMyWeek). */
   function dyKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function dyDayOf(iso) { var d = new Date(iso); return dyKey(d); }
+  // Полные месяцы: MONTHS_RU ниже по файлу переопределен сокращениями («сен»),
+  // а в заголовке дня «2 сен» читается как обрубок.
+  var DY_MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   function dyTitle(d) {
     var wd = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][d.getDay()];
-    return wd + ', ' + d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+    return wd + ', ' + d.getDate() + ' ' + DY_MON[d.getMonth()];
   }
   /* Строка дня: галочка, название, справа только отклонение от нормы. */
   function dyRow(t, opts) {
     opts = opts || {};
     var own = isOwnTask(t);
-    var closed = t.status === 'done' || t.status === 'review' || t.status === 'cancel';
+    // В «Тебе сдали» задача чужая и живая: зачеркивать ее нечего.
+    var closed = !opts.accept && (t.status === 'done' || t.status === 'review' || t.status === 'cancel');
     var right = '';
-    if (t.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(t).text) + '</span>';
+    if (t.overdue) {
+      // Под полосой «Просрочено» слово не повторяем — только на сколько.
+      var od = dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
+      if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
+    }
     if (t.status === 'review' || t.status === 'return' || t.status === 'block' || (opts.showStatus && t.status === 'doing')) {
       var st = TASK_ST[t.status];
       right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
@@ -5000,11 +5008,12 @@
     if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
     var quick = !closed && own && !opts.readOnly
       ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>' : '';
-    var who = !own && t.assignee_name ? '<span class="dy-cl">' + esc(t.assignee_name) + '</span>' : '';
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.status === 'review' ? ' review' : '') +
+    var tail = opts.accept && t.assignee_name
+      ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
+      : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '');
+    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.status === 'review' && !opts.accept ? ' review' : '') +
       (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
-      '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
-        (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : who) + '</div>' +
+      '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' + tail + '</div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
   }
@@ -5077,7 +5086,7 @@
     if ((w.accept || []).length) {
       side += '<div class="card dy-card"><div class="dy-h blue"><span class="dy-h-t">Тебе сдали</span>' +
         '<span class="dy-h-n num"><b>' + w.accept.length + '</b></span></div><div class="dy-body">' +
-        w.accept.map(function (t) { return dyRow(t, { readOnly: true }); }).join('') + '</div></div>';
+        w.accept.map(function (t) { return dyRow(t, { readOnly: true, accept: true }); }).join('') + '</div></div>';
     }
     var tmTitle = tomorrow.getDay() === 6 ? 'В понедельник' : 'Завтра';
     side += '<div class="card dy-card"><div class="dy-h"><span class="dy-h-t">' + tmTitle + '</span>' +

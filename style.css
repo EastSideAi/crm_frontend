@@ -7289,7 +7289,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .dy-row .dy-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dy-side .dy-row .dy-ttl { font-size: 13.5px; }
-.dy-row .dy-cl { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.dy-row .dy-cl, .dy-row .dy-who { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+/* В узких боковых карточках имя ученика не помещается рядом с названием: там
+   его нет, оно в карточке задачи. Кто сдал — остается, это суть «Тебе сдали». */
+.dy-side .dy-row .dy-cl { display: none; }
 .dy-row .dy-r { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .dy-row.closed .dy-ttl { color: var(--ink-3); font-weight: 500; text-decoration: line-through; }
 .dy-row.closed .dy-t::before { content: ''; width: 20px; height: 20px; flex: none; border-radius: 50%;
