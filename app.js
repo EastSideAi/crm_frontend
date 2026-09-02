@@ -5748,6 +5748,13 @@
     done: { label: 'сдан',          cls: 'st-done' },
     late: { label: 'с опозданием',  cls: 'rh-late' },
   };
+  /* Приемка отчета — своя семья меток, отдельная от «сдан/не сдан»: сдача и
+     приемка это два разных события, и мешать их словарями нельзя. */
+  var RH_REVIEW = {
+    pending:  { label: 'ждет приемки', cls: 'rv-wait' },
+    accepted: { label: 'принят',       cls: 'rv-ok' },
+    returned: { label: 'на доработке', cls: 'rv-back' },
+  };
   var RH_WDAY = [['1', 'понедельник'], ['2', 'вторник'], ['3', 'среда'], ['4', 'четверг'],
                  ['5', 'пятница'], ['6', 'суббота'], ['7', 'воскресенье']];
 
@@ -5826,10 +5833,23 @@
           : '<span class="rh-hint">период еще не начался</span>');
     var said = given && given.text
       ? '<div class="rh-said">' + ic('chat', 12) + '<span>' + esc(given.text) + '</span></div>' : '';
+    // Судьба отчета после сдачи: принят или вернули с замечанием. У плана приемки
+    // нет, поэтому строка только у отчета.
+    var rvline = '';
+    if (kind === 'report' && given && given.review) {
+      var rs = given.review.state;
+      if (rs === 'accepted') {
+        rvline = '<div class="rh-rvline ok">' + ic('check', 12) + '<span>Отчет принят' +
+          (given.review.by ? ', ' + esc(given.review.by) : '') + '</span></div>';
+      } else if (rs === 'returned') {
+        rvline = '<div class="rh-rvline back">' + ic('refresh', 12) + '<span>Вернули на доработку' +
+          (given.review.note ? ': ' + esc(given.review.note) : '') + '</span></div>';
+      }
+    }
 
     return '<div class="rh-p' + (given ? ' given' : '') + (d.state === 'miss' ? ' miss' : '') + '">' +
       '<div class="rh-ph"><span class="rh-l">' + esc(title) + '</span>' + rhChip(d.state) + '</div>' +
-      body + said +
+      body + said + rvline +
       '<div class="rh-pf"><span class="rh-due">' + esc(d.due_text || '') + '</span>' + btn + '</div>' +
     '</div>';
   }
@@ -6015,6 +6035,123 @@
       null, 'План и отчет', isPlan ? 'Сдать план' : 'Сдать отчет');
   }
 
+  /* Карточка приемки отчета. Руководитель открывает ее по ссылке из уведомления
+     или из среза, видит текст и числа на момент сдачи и делает одно из двух:
+     принимает или возвращает с замечанием. Без этой петли сдача была тупиком —
+     отчет уходил в базу, и ответить на него было нечем. */
+  function openReportReview(uid, period, starts, after) {
+    if (document.querySelector('.al-ov')) return;
+    api('/admin/api/rhythm/report?user_id=' + uid + '&period=' + period + '&starts=' + starts)
+      .then(function (r) { reviewCard(r, period, starts, after); })
+      .catch(function () { showToast('Не удалось открыть отчет'); });
+  }
+
+  function reviewFacts(f) {
+    f = f || {};
+    var parts = [];
+    parts.push('<span><b class="num">' + (f.done || 0) + '</b> принято</span>');
+    if (f.left) parts.push('<span><b class="num">' + f.left + '</b> осталось</span>');
+    if (f.overdue) parts.push('<span class="rv-bad"><b class="num">' + f.overdue + '</b> просрочено</span>');
+    if (f.moved) parts.push('<span>сроки двигали <b class="num">' + f.moved + '</b></span>');
+    return '<div class="rv-facts">' + parts.join('') + '</div>';
+  }
+
+  function reviewCard(r, period, starts, after) {
+    if (document.querySelector('.al-ov')) return;
+    var rep = r.report || null;
+    var plan = r.plan || null;
+    var rv = (rep && rep.review) || { state: 'pending' };
+    var m = RH_REVIEW[rv.state] || RH_REVIEW.pending;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var stateLine = rv.state === 'accepted'
+      ? '<div class="rv-state ok">' + ic('check', 14) + 'Принят' +
+          (rv.by ? ', ' + esc(rv.by) : '') + '</div>'
+      : (rv.state === 'returned'
+        ? '<div class="rv-state back">' + ic('refresh', 14) + 'Возвращен на доработку' +
+            (rv.note ? ': ' + esc(rv.note) : '') + '</div>'
+        : '');
+    ov.innerHTML =
+      '<div class="al-card rv-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Отчет' + (r.role_label ? ' · ' + esc(r.role_label) : '') + '</div>' +
+            '<div class="al-title">' + esc(r.name || '') + '</div></div>' +
+          '<button class="al-x" id="rv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + esc(r.label || '') + '</div>' +
+        '<div class="al-body">' +
+          (rep
+            ? '<span class="sev ' + (RH_ST[rep.review && rep.late ? 'late' : 'done'] || RH_ST.done).cls + ' rv-badge">' +
+                (rep.late ? 'сдан с опозданием' : 'сдан') + '</span>' +
+              reviewFacts(rep.facts) +
+              (rep.text
+                ? '<div class="rv-said"><div class="rv-lbl">Что мешало</div>' + esc(rep.text) + '</div>'
+                : '<div class="rv-said muted">Комментарий не оставлен — числа выше отчет и есть.</div>') +
+              (plan && plan.text
+                ? '<div class="rv-said"><div class="rv-lbl">План на период</div>' + esc(plan.text) + '</div>' : '') +
+              stateLine +
+              '<label class="al-f rv-note" id="rv-note-wrap" hidden><span class="al-l">Что доработать</span>' +
+                '<textarea id="rv-note" class="al-in al-ta" rows="2" maxlength="1000" ' +
+                'placeholder="Коротко, что поправить в отчете"></textarea></label>' +
+              '<div class="ct-err" id="rv-err"></div>'
+            : '<div class="empty">Этот сотрудник еще не сдал отчет за период.</div>') +
+        '</div>' +
+        (rep
+          ? '<div class="al-foot rv-foot">' +
+              '<button class="al-cancel" id="rv-back">' + ic('refresh', 14) + 'Вернуть на доработку</button>' +
+              '<button class="bp al-save" id="rv-ok">' + ic('check', 14) +
+                (rv.state === 'accepted' ? 'Принят' : 'Принять') + '</button>' +
+            '</div>'
+          : '') +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('rv-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    if (!rep) return;
+
+    function send(action, note) {
+      api('/admin/api/rhythm/review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: r.user_id, period: period, starts: starts,
+          action: action, note: note || '' }),
+      }).then(function () {
+        close();
+        showToast(action === 'accept' ? 'Отчет принят' : 'Вернул на доработку');
+        state.rhythmTeam = null; state.rhythm = null;
+        if (after) after(); else renderView();
+      }).catch(function (e) {
+        el('rv-err').textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить';
+      });
+    }
+    el('rv-ok').addEventListener('click', function () { send('accept'); });
+    var backWrap = el('rv-note-wrap'), backBtn = el('rv-back');
+    backBtn.addEventListener('click', function () {
+      // Первый клик раскрывает поле замечания, второй — отправляет: возврат без
+      // «что доработать» это пустой пинг, от которого работа не двигается.
+      if (backWrap.hidden) {
+        backWrap.hidden = false;
+        el('rv-note').focus();
+        backBtn.classList.add('armed');
+        backBtn.innerHTML = ic('refresh', 14) + 'Отправить на доработку';
+        return;
+      }
+      var note = (el('rv-note').value || '').trim();
+      if (!note) { el('rv-err').textContent = 'Напиши, что доработать'; el('rv-note').focus(); return; }
+      send('return', note);
+    });
+  }
+
   /* Срез руководителя: кто сдал, кто нет. Колонок ровно четыре — рейтинга людей
      тут нет по той же причине, что и в табло «По людям». */
   function renderRhythmTeam(view) {
@@ -6029,8 +6166,19 @@
       '<span class="th">Задач в плане</span><span class="th">Принято</span></div>';
     var rows = (b.people || []).map(function (p) {
       function cell(kind) {
+        var d = p[kind] || {};
+        // Сданный отчет — кнопка приемки: рядом со «сдан» стоит его судьба
+        // (ждет приемки / принят / на доработке), клик открывает карточку.
+        if (kind === 'report' && (d.state === 'done' || d.state === 'late')) {
+          var rv = (d.review || {}).state || 'pending';
+          var mr = RH_REVIEW[rv] || RH_REVIEW.pending;
+          return '<div class="rh-c" data-l="Отчет">' +
+            '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть отчет">' +
+              rhChip(d.state) + '<span class="rv-tag ' + mr.cls + '">' + mr.label + '</span>' +
+            '</button></div>';
+        }
         return '<div class="rh-c" data-l="' + (kind === 'plan' ? 'План' : 'Отчет') + '">' +
-          rhChip((p[kind] || {}).state) + '</div>';
+          rhChip(d.state) + '</div>';
       }
       // Слова человека — строкой под числами, во всю ширину, как отчет дня в
       // табло: в клетке рядом с чипом они обрезаются до «Держу фоку…», а это
@@ -6063,8 +6211,16 @@
         '</div>'
       : '';
 
+    // Сколько отчетов ждет приемки — над таблицей: экран руководителя нужен
+    // ради этого действия, а не полюбоваться, кто как сдал.
+    var pend = b.await_review
+      ? '<div class="rh-await">' + ic('bell', 13) + '<span><b class="num">' + b.await_review +
+        '</b> ' + plural(b.await_review, 'отчет ждет', 'отчета ждут', 'отчетов ждут') +
+        ' твоей приемки. Открой отметку «сдан» в колонке Отчет.</span></div>'
+      : '';
+
     view.innerHTML = '<div class="card listcard">' + rhTools(b) +
-      '<div class="list-body">' +
+      '<div class="list-body">' + pend +
         (rows ? head + rows : '<div class="empty">В этом периоде задач нет ни у кого.</div>') +
       '</div>' + idle +
       // Кому сроки менять нельзя — говорим их строкой. Кому можно — они и так
@@ -6076,6 +6232,15 @@
     '</div>';
 
     rhWire(view);
+    // Клик по метке сданного отчета открывает карточку приемки — раньше клика,
+    // который ведет на задачи человека, поэтому stopPropagation.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openReportReview(+btn.getAttribute('data-review'), b.period, b.starts,
+          function () { state.rhythmTeam = null; renderView(); });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (row) {
       row.addEventListener('click', function () {
         var uid = +row.getAttribute('data-uid');
@@ -25212,6 +25377,41 @@
     // Через запятую — пакет разборов с одной планерки: #meeting/12,13,14.
     openMeetingImport(mid);
   }
+  /* #rreview/<uid>/<period>/<starts> — карточка приемки отчета конкретного
+     человека. По ней ведет уведомление руководителю о сдаче: из пуша сразу в
+     отчет, а не в срез, который открылся бы на пустом текущем периоде. */
+  function hashReviewParts() {
+    var raw = hashRouteId('rreview');
+    if (!raw) return null;
+    var p = raw.split('/');
+    return p.length >= 3 && +p[0] ? { uid: +p[0], period: p[1], starts: p[2] } : null;
+  }
+  function rhShiftFor(period, startsISO) {
+    var d = new Date(startsISO + 'T00:00:00'), now = new Date();
+    if (period === 'month') {
+      return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+    }
+    if (period === 'week') {
+      function mon(x) { var y = new Date(x); y.setDate(y.getDate() - ((y.getDay() + 6) % 7)); y.setHours(0, 0, 0, 0); return y; }
+      return Math.round((mon(d) - mon(now)) / (7 * 864e5));
+    }
+    var a = new Date(d); a.setHours(0, 0, 0, 0);
+    var c = new Date(now); c.setHours(0, 0, 0, 0);
+    return Math.round((a - c) / 864e5);
+  }
+  function openReportReviewFromHash() {
+    var q = hashReviewParts();
+    if (!q || document.querySelector('.al-ov') || !can('tasks_all')) return;
+    // Срез команды на нужном периоде — контекст под модалкой и верный список после.
+    state.page = 'tasks'; applyTaskSeg('plan');
+    state.rhythmWho = 'team'; state.rhythmPeriod = q.period;
+    state.rhythmShift = rhShiftFor(q.period, q.starts) || 0;
+    state.rhythmTeam = null;
+    saveUi(); renderSide(); renderTopbar(); renderHead(); renderView();
+    openReportReview(q.uid, q.period, q.starts,
+      function () { state.rhythmTeam = null; renderView(); });
+  }
+
   /* Раздел из адреса, а у задач — сразу нужная вкладка: #page/tasks/plan. Вкладка
      запоминается у каждого своя, поэтому голая ссылка на раздел приводила бы человека
      туда, где он был в прошлый раз, — для ссылки в инструкции команде это бесполезно. */
@@ -25243,6 +25443,7 @@
     else if (hashDialogId()) openDialogFromHash();
     else if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
+    else if (hashReviewParts()) openReportReviewFromHash();
     else if (hashPageId()) openPageFromHash();
     else if (state.drawerId) closeDrawer();
   });
@@ -25269,6 +25470,7 @@
     guideLoad();
     if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
+    else if (hashReviewParts()) openReportReviewFromHash();
     else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     if (can('inbox')) refreshBot(function () { renderSide(); });

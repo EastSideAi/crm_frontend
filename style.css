@@ -2456,6 +2456,50 @@ button.tr-crumb:hover { color: var(--blue); }
 .rh-note svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 .rh-note b { font-weight: 700; color: var(--ink-3); }
 
+/* ── Приемка отчета ──────────────────────────────────────────────────────────
+   Метка судьбы отчета рядом со «сдан»: ждет приемки (амбер — это дело
+   руководителя), принят (зеленый), на доработке (красный — вернулось). */
+.rh-rv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 2px;
+  background: none; border: 0; cursor: pointer; min-width: 0; }
+.rv-tag { font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill);
+  padding: 3px 9px; white-space: nowrap; }
+.rv-tag.rv-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.rv-tag.rv-ok   { color: var(--green-ink); background: var(--green-soft); }
+.rv-tag.rv-back { color: var(--red-ink);   background: var(--red-soft); }
+.rh-rv-btn:hover .rv-tag { filter: brightness(.97); }
+/* Сколько ждет приемки — строка над таблицей. Амбер: это очередь действий. */
+.rh-await { display: flex; align-items: center; gap: 9px; margin: 14px 24px 2px;
+  padding: 11px 15px; border-radius: 12px; background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 13px; font-weight: 500; }
+.rh-await svg { flex: none; color: var(--amber-ink); }
+.rh-await b { font-weight: 700; }
+/* Судьба отчета в своей плашке «Отчет за период». */
+.rh-rvline { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px;
+  font-size: 12.5px; line-height: 1.45; font-weight: 500; }
+.rh-rvline svg { flex: none; margin-top: 2px; }
+.rh-rvline.ok { color: var(--green-ink); }
+.rh-rvline.back { color: var(--red-ink); }
+
+/* Карточка приемки (модалка). */
+.rv-badge { display: inline-flex; margin-bottom: 4px; }
+.rv-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 4px;
+  font-size: 13px; color: var(--ink-2); }
+.rv-facts b { color: var(--ink); font-weight: 700; }
+.rv-facts .rv-bad b { color: var(--red-ink); }
+.rv-said { margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--fill); font-size: 13.5px; line-height: 1.5; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; }
+.rv-said.muted { color: var(--ink-3); }
+.rv-lbl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+.rv-state { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px;
+  font-size: 13px; font-weight: 600; line-height: 1.45; }
+.rv-state svg { flex: none; margin-top: 1px; }
+.rv-state.ok { color: var(--green-ink); }
+.rv-state.back { color: var(--red-ink); }
+.rv-note { margin-top: 14px; }
+.rv-foot .al-cancel.armed { color: var(--red-ink); background: var(--red-soft); }
+
 /* Согласованные сроки. Настройка команды, поэтому лежит на экране команды, а
    не в отдельном разделе: правило и его исполнение видны рядом. */
 .rh-sched { padding: 16px 24px 20px; border-top: 1px solid var(--line); }
