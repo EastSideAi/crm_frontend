@@ -6110,8 +6110,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent); }
 .po-routew::-webkit-scrollbar { height: 0; }
-.po-route { position: relative; display: flex; gap: 0; min-width: 940px; }
-.po-route::before { content: ''; position: absolute; left: 6%; right: 6%; top: 13px;
+/* хвост справа — «полка» под затухание маски: без нее последняя точка выцветает
+   даже когда лента влезла целиком и прокручивать нечего */
+.po-route { position: relative; display: flex; gap: 0; min-width: 1000px; padding-right: 34px; }
+.po-route::before { content: ''; position: absolute; left: 5%; right: 5%; top: 13px;
   height: 1px; background: var(--line-2); }
 .po-rt { position: relative; flex: 1 1 0; display: flex; flex-direction: column;
   align-items: center; gap: 8px; text-align: center; padding: 0 4px; }
@@ -6120,6 +6122,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   font-size: 10.5px; font-weight: 700; color: var(--ink-3); }
 .po-rtt { font-size: 11.5px; font-weight: 600; color: var(--ink-2); line-height: 1.3;
   letter-spacing: -.01em; }
+/* хвост маршрута, который есть только у старшего тарифа. Точка синяя и залитая,
+   а не крупнее остальных: это продолжение той же дороги, а не второй якорь. */
+.po-rt-only .po-rdot { background: var(--blue); border-color: var(--blue); color: #fff; }
+.po-rt-only .po-rtt { color: var(--ink); }
 
 /* маршрут внутри карточки тарифа: номер, этап, что человек получает, кто делает */
 .po-srlede { margin: -3px 0 15px; font-size: 13px; font-weight: 700; color: var(--ink);
@@ -6137,7 +6143,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    Гасить остальные строки нельзя: колонка становится бледной и читается как
    «тут меньше», хотя наполнение на месте. */
 .po-sr.po-up .po-srn { color: var(--blue); }
+/* этап, которого нет в младших тарифах. Рецепт тот же, что у точки в ленте
+   маршрута: залитый синий кружок. Это ДРУГОЙ факт, чем синяя цифра выше, и
+   рисуется он другим приемом намеренно. */
+.po-sr.po-only .po-srn { width: 19px; height: 19px; margin-top: 1px; padding: 0;
+  border-radius: var(--r-pill); background: var(--blue); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 9.5px; }
 .po-srt { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-2); line-height: 1.42; }
+/* этап, которого в этом тарифе нет. Гасим целиком, включая номер: пропуск в
+   маршруте должен читаться пропуском с одного взгляда, без чтения текста. */
+/* этапа нет в этом тарифе. Гасим до второго уровня чернил, но не до бордера:
+   обрыв маршрута надо ПРОЧИТАТЬ, а не угадать по пустому месту. */
+.po-sr.po-off .po-srn { color: var(--ink-3); }
+.po-sr.po-off .po-srh b { color: var(--ink-2); font-weight: 600; }
+.po-sr.po-off .po-srt { color: var(--ink-3); }
+
+.po-tbl td.po-offc .po-ct { color: var(--ink-3); }
 
 /* тарифы */
 .po-tariffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
@@ -6341,6 +6362,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-lede { margin-top: 16px; background: var(--blue-tint); border-radius: var(--r-lg);
   padding: 14px 17px; font-size: 14.5px; font-weight: 600; letter-spacing: -.015em;
   color: var(--navy); line-height: 1.5; }
+/* внутри плашки два предложения разного веса: общее для всех тарифов и то, ради
+   чего доплачивают. Иерархия весом, а не второй плашкой. */
+.po-lede b { font-weight: 800; }
 .po-stghead { margin-bottom: 20px; }
 .po-stg .po-sh { padding: 15px 20px; }
 .po-stnum { flex: none; width: 26px; font-size: 14px; font-weight: 700; color: var(--ink-3);
@@ -6386,7 +6410,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
-  .po-route { min-width: 780px; }
+  .po-route { min-width: 934px; }
   /* в одну колонку выравнивать нечего: min-height превращается в пустоты */
   .po-tpos, .po-tfmt, .po-tpr, .po-scope { min-height: 0; }
   .po-pay { grid-template-columns: 1fr; }

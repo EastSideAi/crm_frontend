@@ -16528,13 +16528,34 @@
      Лента маршрута над тарифами. Человек, который выбирает за 400 тысяч, хочет
      сначала увидеть дорогу целиком, а уже потом цену: двенадцать этапов от «не
      знаю, куда поступать» до заселения в общежитии есть в любом тарифе, тариф
-     решает только наполнение. Поэтому лента идет ОДНА на всю вкладку и стоит
-     выше карточек — иначе каждая карточка делает вид, что путь у нее свой. */
+     решает наполнение. Последние два этапа — только у Премиума: он один не
+     заканчивается на визе, а доводит до Китая и держит менеджера два месяца.
+     Лента идет ОДНА на всю вкладку и стоит выше карточек — иначе каждая
+     карточка делает вид, что путь у нее свой. */
+  /* only: ['prem'] — этап есть не во всех тарифах. Таких два, и оба после
+     заселения: путь Премиума длиннее не наполнением, а временем, и это самый
+     честный ответ на вопрос «за что доплата». */
+  function stageIn(st, tid) {
+    var o = st.only || [];
+    return !o.length || o.indexOf(tid) !== -1;
+  }
+  function stageOnly(p, st) {
+    var o = st.only || [];
+    if (!o.length) return '';
+    return (p.tariffs || []).filter(function (t) { return o.indexOf(t.id) !== -1; })
+      .map(function (t) { return t.name; }).join(' и ');
+  }
+
   function portalRoute(p) {
     var r = p.route, sts = p.stages || [];
     if (!r || !sts.length) return '';
     var pts = sts.map(function (st, i) {
-      return '<div class="po-rt"><span class="po-rdot num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
+      /* хвост, которого нет в младших тарифах, помечен только цветом точки:
+         подпись у каждой точки резервировала бы под лентой пустую строку во всю
+         ширину, а объясняет хвост и так лид прямо под лентой */
+      var only = stageOnly(p, st);
+      return '<div class="po-rt' + (only ? ' po-rt-only' : '') + '">' +
+        '<span class="po-rdot num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
         '<span class="po-rtt">' + esc(st.short || st.title) + '</span></div>';
     }).join('');
     return '<div class="card po-card po-routec">' +
@@ -16542,7 +16563,8 @@
         '<div><div class="t">' + esc(r.title || '') + '</div>' +
         (r.sub ? '<div class="s">' + esc(r.sub) + '</div>' : '') + '</div></div>' +
       '<div class="po-routew"><div class="po-route">' + pts + '</div></div>' +
-      (r.note ? '<div class="po-lede">' + esc(r.note) + '</div>' : '') +
+      (r.note || r.note_strong ? '<div class="po-lede">' + esc(r.note || '') +
+        (r.note_strong ? ' <b>' + esc(r.note_strong) + '</b>' : '') + '</div>' : '') +
     '</div>';
   }
 
@@ -16577,18 +16599,25 @@
      разъедется с первой же правкой этапа. */
   function sideLede(p, sts, tid) {
     var name = function (st) { return (st.short || st.title).toLowerCase(); };
+    var all = sts.length;
+    sts = sts.filter(function (st) { return stageIn(st, tid); });
+    /* «12 из 14» вместо «12 этапов»: под лидом идут все четырнадцать строк, и
+       если не назвать полную длину, обрыв на 13-14 читается пустым местом, а не
+       аргументом за старший тариф */
+    var part = sts.length < all;
     var own = sts.filter(function (st) { return stageWho(p, st, tid) === 'семья сама'; });
     var both = sts.filter(function (st) {
       var w = stageWho(p, st, tid);
       return w.indexOf('семья') !== -1 && w !== 'семья сама';
     });
+    var head = part ? sts.length + ' из ' + all + ' этапов' : 'Все ' + all + ' этапов';
     if (own.length) {
-      return sts.length + ' этапов, ' + own.length + ' из них семья делает сама: ' + own.map(name).join(' и ');
+      return head + ', ' + own.length + ' из них семья делает сама: ' + own.map(name).join(' и ');
     }
     if (both.length) {
-      return 'Все ' + sts.length + ' этапов ведем мы, вместе с семьей только ' + both.map(name).join(' и ');
+      return head + ' ведем мы, вместе с семьей только ' + both.map(name).join(' и ');
     }
-    return 'Все ' + sts.length + ' этапов ведем мы';
+    return head + ' ведем мы';
   }
 
   /* ── тарифы ────────────────────────────────────────────────────────────────
@@ -16610,9 +16639,22 @@
          текст при этом нигде не гасится: тихая карточка читалась бы как бедная */
       var base = ti === 0;
       var feats = sts.map(function (st, i) {
+        var num = '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>';
+        /* этапа нет в этом тарифе — строку не прячем. Пропуск в маршруте и есть
+           аргумент за старший тариф, а пустое место семья не заметит */
+        if (!stageIn(st, t.id)) {
+          return '<div class="po-sr po-off">' + num +
+            '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b></span>' +
+            '<span class="po-srt">только в тарифе «' + esc(stageOnly(p, st)) + '»</span></span></div>';
+        }
         var who = stageWho(p, st, t.id), br = stageBrief(p, st, t.id);
         var self = who.indexOf('семья') !== -1;
-        return '<div class="po-sr' + (br.own && !base ? ' po-up' : '') + '">' +
+        /* этап, которого нет в младших тарифах, помечен ТЕМ ЖЕ рецептом, что в
+           ленте маршрута — залитая синяя точка. Синяя цифра рядом означает
+           другое («у тарифа свое наполнение»), и смешивать эти два словаря
+           нельзя: один акцент не может значить два разных факта. */
+        var only = (st.only || []).length;
+        return '<div class="po-sr' + (only ? ' po-only' : (br.own && !base ? ' po-up' : '')) + '">' +
           '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
           '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b>' +
             (self ? '<span class="sev po-w po-w-self">' + esc(who) + '</span>' : '') +
@@ -16760,7 +16802,8 @@
   }
 
   /* ── этапы флагмана ────────────────────────────────────────────────────────
-     Двенадцать этапов есть во всех тарифах, отличается наполнение. Поэтому
+     Двенадцать этапов есть во всех тарифах, отличается наполнение, и еще два
+     после заселения есть только у Премиума. Поэтому
      экран собран не как три колонки услуг, а как один маршрут с переключателем
      тарифа: на диагностике семью ведут по ее собственному пути, а не по
      сравнительной таблице. Режим «Сравнить» — для внутреннего разговора.
@@ -16805,10 +16848,22 @@
       return '<button type="button" data-postar="' + esc(t.id) + '" class="' + (mode === t.id ? 'on' : '') + '">' + esc(t.name) + '</button>';
     }).join('') + '<button type="button" data-postar="all" class="' + (mode === 'all' ? 'on' : '') + '">Сравнить</button>';
 
+    /* «этапы одни на всех тарифах» перестало быть правдой, когда у Премиума
+       появился хвост после заселения. Считаем по данным и имя старшего тарифа
+       берем оттуда же, чтобы подпись не разъехалась с json. */
+    var tail = sts.filter(function (st) { return (st.only || []).length; });
+    var nb = sts.length - tail.length;
+    var cnt = sts.filter(function (st) { return stageIn(st, mode); }).length;
+    var who = tail.length ? stageOnly(p, tail[0]) : '';
+    var sub = mode === 'all'
+      ? nb + ' ' + plural(nb, 'этап', 'этапа', 'этапов') + ' одни на всех тарифах, последние ' + tail.length + ' только в тарифе «' + who + '»'
+      : cnt < sts.length
+        ? cnt + ' из ' + sts.length + ' этапов: последние ' + (sts.length - cnt) + ' только в тарифе «' + who + '»'
+        : 'все ' + cnt + ' ' + plural(cnt, 'этап', 'этапа', 'этапов') + ', последние ' + tail.length + ' есть только здесь';
     var head = '<div class="card po-card po-stghead">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
-        '<div><div class="t">Двенадцать этапов поступления</div>' +
-        '<div class="s">этапы одни на всех тарифах, отличается наполнение</div></div></div>' +
+        '<div><div class="t">Этапы поступления</div>' +
+        '<div class="s">' + esc(sub) + '</div></div></div>' +
       '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
 
     return head + (mode === 'all' ? portalStagesTable(p, sts) : portalStagesList(p, sts, mode));
@@ -16818,6 +16873,7 @@
     if (mode === 'all') {
       return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
     }
+    sts = sts.filter(function (st) { return stageIn(st, mode); });
     var self = sts.filter(function (st) { return (stageCell(p, st, mode).who || '').indexOf('семья') !== -1; });
     var name = (p.tariffs || []).filter(function (t) { return t.id === mode; })[0];
     if (!self.length) {
@@ -16831,6 +16887,7 @@
   }
   function portalStagesList(p, sts, mode) {
     return sts.map(function (st, i) {
+      if (!stageIn(st, mode)) return '';
       var c = stageCell(p, st, mode), open = state.portalStage === st.id;
       var body = '';
       if (c.same && c.from) body += '<div class="po-samet">как в тарифе «' + esc(c.from) + '»</div>';
@@ -16856,6 +16913,7 @@
     var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
     var trs = sts.map(function (st, i) {
       var tds = ts.map(function (t) {
+        if (!stageIn(st, t.id)) return '<td class="po-offc"><span class="po-ct">нет в этом тарифе</span></td>';
         var c = stageCell(p, st, t.id);
         return '<td>' +
           (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
