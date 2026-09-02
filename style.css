@@ -2197,6 +2197,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* Свое дело в списке: галочка слева и тихий перенос на завтра справа. Оба
    действия появляются только там, где человек и исполнитель, и постановщик —
    в чужой задаче отметка «сделано» это приемка, и одним кликом ее не ставят. */
+/* Свое дело в списке задач — строка сетки, а не блок «ответственный» из карточки
+   лида (.own ниже по файлу — другой компонент с тем же именем, он делал строку
+   flex с серой заливкой). Возвращаем строке ее сетку явно. */
+.trow.tsk-grid.own { display: grid; margin-top: 0; padding: 0 24px; background: none; border-radius: 0; }
+.trow.tsk-grid.own:hover { background: #FBFBFC; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
@@ -7081,3 +7086,91 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-tries { margin-left: 6px; font-size: 11px; color: var(--ink-3); }
 .att-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 46px 20px 52px; color: var(--ink-3); font-size: 14px; max-width: 400px; margin: 0 auto; }
 .att-empty svg { opacity: .55; }
+
+/* ── Недельный цикл: «Неделя», «Потом», «Команда» (ADR 001) ──────────────────
+   Полосы дней — тот же .tsk-band, что делил «Сегодня» на важное и остальное.
+   Предел недели — тонкая полоса заполненности рядом с навигацией: число «5 из 7»
+   и есть план, полоса только подсвечивает, что место кончается (амбер на пределе,
+   не красный: красное на экране задач одно — просрочка). */
+.wk-cap { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;
+  color: var(--ink-3); white-space: nowrap; }
+.wk-cap-bar { width: 72px; height: 6px; border-radius: var(--r-pill); background: var(--fill); overflow: hidden; }
+.wk-cap-bar i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: var(--r-pill);
+  transition: width .9s var(--ease); }
+.wk-cap.full .wk-cap-bar i { background: var(--amber); }
+.wk-cap.full { color: var(--amber-ink); }
+.wk-caps { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.wk-search { flex: 1; min-width: 160px; }
+/* Состояние недели под панелью: собрана / закрыта, ждет / принята / вернули. */
+.wk-state { display: flex; align-items: flex-start; gap: 8px; margin: 12px 24px 0;
+  padding: 10px 14px; border-radius: 12px; background: var(--fill);
+  font-size: 12.5px; line-height: 1.45; font-weight: 500; color: var(--ink-2); }
+.wk-state svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+.wk-state.ok   { background: var(--green-soft); color: var(--green-ink); }
+.wk-state.ok svg { color: var(--green-ink); }
+.wk-state.wait { background: var(--amber-soft); color: var(--amber-ink); }
+.wk-state.wait svg { color: var(--amber-ink); }
+.wk-state.back { background: var(--red-soft); color: var(--red-ink); }
+.wk-state.back svg { color: var(--red-ink); }
+.wk-mark { margin-left: 8px; vertical-align: 2px; }
+.wk-row.closed .t-ttl { color: var(--ink-2); }
+.wk-row.closed .tsk-due { color: var(--ink-3); }
+.wk-accept { background: var(--blue-tint); border-radius: 12px; margin: 8px 16px 0; border-top: 0; }
+.wk-accept .tsk-band-t { color: var(--blue); }
+.wk-aim { color: var(--ink-3); }
+.wk-aim svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; }
+/* В «Потом» третья колонка — действие, а не статус. */
+.wk-row.later { grid-template-columns: minmax(0,1fr) 170px 120px; }
+.wk-pull { white-space: nowrap; }
+.wk-empty { padding: 44px 24px 40px; text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 8px; }
+.wk-empty-t { font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.wk-empty-s { max-width: 460px; font-size: 13px; line-height: 1.5; color: var(--ink-2); margin-bottom: 8px; }
+/* Окна «Собрать неделю» и «Закрыть неделю» — малая модалка (.pick). */
+.wk-pick .al-body { max-height: 56vh; overflow: auto; }
+.wkp-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line);
+  cursor: pointer; }
+.wkp-row:first-child { border-top: 0; }
+.wkp-row input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--blue); flex: none; }
+.wkp-row input:disabled + .wkp-t { color: var(--ink-3); }
+.wkp-t { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.wkp-s { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 11.5px;
+  font-weight: 500; color: var(--ink-3); }
+.wkp-d { flex: none; font-size: 11.5px; font-weight: 600; color: var(--ink-3); padding-top: 2px; }
+.wkp-foot { gap: 12px; }
+.wkp-foot .wk-cap { margin-right: auto; }
+.wkc-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 12px; padding: 12px 0;
+  border-top: 1px solid var(--line); align-items: center; }
+.wkc-row:first-child { border-top: 0; }
+.wkc-t { font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.35; }
+.wkc-choice { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 3px; }
+.wkc-choice button { padding: 7px 12px; border-radius: var(--r-pill); font: 600 12px 'Manrope', sans-serif;
+  color: var(--ink-2); background: none; border: 0; cursor: pointer; }
+.wkc-choice button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.12); }
+.wkc-why { grid-column: 1 / -1; padding: 8px 12px; font-size: 12.5px; }
+.wkc-text { margin-top: 14px; }
+/* Команда: строка на человека. */
+.wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }
+.wk-grid .th:nth-child(n+3):nth-child(-n+6), .wk-grid .brd-n { text-align: right; }
+/* Поле замечания раскрывается первым кликом по «Вернуть»: до него скрыто,
+   и атрибут hidden обязан побеждать display у .al-f. */
+.rv-note[hidden] { display: none !important; }
+.trow.wk-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.trow.wk-grid { cursor: pointer; }
+.rh-await.quiet { background: var(--fill); color: var(--ink-2); }
+.rh-await.quiet svg { color: var(--ink-3); }
+@media (max-width: 720px) {
+  .wk-search { order: 5; flex-basis: 100%; }
+  .trow.wk-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; height: auto;
+    padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
+  .trow.wk-grid.thead { display: none; }
+  .trow.wk-grid .brd-who { grid-column: 1 / -1; }
+  .trow.wk-grid .rh-c, .trow.wk-grid .brd-n { display: flex; flex-direction: column; align-items: flex-start;
+    gap: 3px; text-align: left; }
+  .trow.wk-grid .rh-c::before, .trow.wk-grid .brd-n::before { content: attr(data-l); font-size: 10.5px;
+    font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.wk-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
+  .wk-row.later { grid-template-columns: minmax(0,1fr) !important; }
+  .wk-row.later > div:nth-child(2) { order: 3; }
+  .wkc-row { grid-template-columns: minmax(0,1fr); }
+}
