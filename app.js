@@ -18794,6 +18794,34 @@
       .catch(function () { cb(null); });
   }
 
+  /* Открыть документ клиента по кнопке. Ручка /admin/api/docs/:id/download
+     отдает JSON с подписанной ссылкой на Storage, а не сам файл. Кнопка вела
+     на ручку напрямую — вместо документа открывалась вкладка с текстом
+     {"link": ...}, и менеджер не мог скачать присланное. Резолвим ссылку и
+     уводим браузер уже на нее. Вкладку открываем синхронно, до запроса: если
+     звать window.open из промиса, блокировщик всплывающих окон ее срежет.
+     Не кэшируем — подпись живет ограниченное время, а вкладка CRM висит
+     открытой весь день. */
+  function openDoc(docId) {
+    var w = window.open('', '_blank');
+    if (w) try { w.opener = null; } catch (e) {}
+    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) {
+        if (!url) { if (w) w.close(); showToast('Файл не открылся — обнови страницу'); return; }
+        if (w) w.location.replace(url);
+        else window.open(url, '_blank', 'noopener');
+      })
+      .catch(function () {
+        if (w) w.close();
+        showToast('Файл не открылся — проверь сеть');
+      });
+  }
+
   /* присланное клиентом — одна карточка вложения */
   function rmSubCard(s) {
     if (s.kind === 'image') {
@@ -21304,13 +21332,16 @@
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
-      var href = dc.link ? dc.link : (API + '/admin/api/docs/' + dc.id + '/download?k=' + encodeURIComponent(getKey()));
+      /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
+      var href = dc.link || '#';
       var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
         '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + esc(meta) + '</div></div>' +
         '<div class="doc-act">' +
-          '<a class="icobtn" target="_blank" rel="noopener" href="' + esc(href) + '" title="Открыть">' + ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
+          '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
+            ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
+            ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
           '<button class="icobtn del" data-deldoc="' + dc.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
         '</div></div>';
     }).join('');
@@ -21590,7 +21621,7 @@
         : fmtWhen(p.created_at);
       var amtCls = p.status === 'refunded' ? ' refunded' : (p.status === 'pending' ? ' pending' : '');
       var rcpt = p.receipt_doc_id
-        ? '<a class="pay-rcpt has" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + p.receipt_doc_id + '/download?k=' + encodeURIComponent(getKey()) + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
+        ? '<a class="pay-rcpt has" href="#" data-docdl="' + p.receipt_doc_id + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
         : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
       return '<div class="pay-row">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
@@ -22214,6 +22245,12 @@
       var nm = url.split('/').filter(Boolean).pop() || 'Ссылка';
       apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url }, function () {
         refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-docdl]'), function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        openDoc(a.getAttribute('data-docdl'));
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-deldoc]'), function (b) {
