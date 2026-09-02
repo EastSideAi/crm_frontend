@@ -14848,7 +14848,7 @@
     var formHtml = d ? '<div class="tm-add">' +
         '<div class="tm-add-g">' +
           '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
-          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="olesy.stepanova (без собаки)" autocomplete="off"></label>' +
           '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
           '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
         '</div>' +
@@ -15082,13 +15082,22 @@
         state._teamNew[id.slice(3)] = f.value;
       });
     });
+    function normLogin(v) {
+      return String(v || '').trim().toLowerCase().replace(/^@+/, '');
+    }
     var sv = el('tn-save');
     if (sv) sv.addEventListener('click', function () {
       var body = state._teamNew || {};
-      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      // Проверяем уже нормализованный логин: из одной собаки после срезки
+      // остается пустая строка, и без этой проверки человек получил бы отказ
+      // от сервера вместо понятной подсказки.
+      if (!body.name.trim() || !normLogin(body.login)) return showToast('Заполните имя и логин');
       sv.disabled = true;
       apiSend('/admin/api/users', 'POST', {
-        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        // Собаку срезаем сами: поле называется «Логин», рядом в списке стоят
+        // телеграм-ники с собакой, и человек естественно копирует ник целиком.
+        // Сервер такой логин не принимает, а человек видит отказ на ровном месте.
+        name: body.name.trim(), login: normLogin(body.login),
         email: body.email.trim(), role: body.role,
       }, function (r) {
         state._teamNew = null;
@@ -15099,7 +15108,7 @@
         sv.disabled = false;
         showToast(code === 409 ? 'Такой логин или почта уже заняты'
           : code === 403 ? 'Эту роль может выдать только владелец'
-          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : code === 422 ? 'Логин пишется латиницей, без собаки — например olesy.stepanova'
           : 'Не удалось завести — попробуйте еще раз');
       });
     });
