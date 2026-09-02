@@ -2653,6 +2653,14 @@
         else if (mf && mf.plan) tphr = 'На неделе <b>' + mf.plan + '</b> ' + plural(mf.plan, 'задача', 'задачи', 'задач') + ', сделано <b>' + mf.done + '</b>.';
         else tphr = 'Неделя пустая. Возьми задачи из «Потом» и собери ее.';
       }
+      // На «Потом» сводка про очередь, а не про просрочку: просрочки тут нет по
+      // определению, и фраза «начни с них» указывала бы на другой экран.
+      if (TASK_SEGS[taskSeg()].view === 'later') {
+        var lt = Array.isArray(state.tasks) ? state.tasks.length : (ts ? ts.later : 0);
+        tphr = lt
+          ? 'В очереди <b>' + lt + '</b> ' + plural(lt, 'задача', 'задачи', 'задач') + '. Сроков и просрочки тут нет: возьми в неделю то, что обещаешь сделать.'
+          : 'Очередь пустая: все, что есть, уже в неделе.';
+      }
       if (TASK_SEGS[taskSeg()].view === 'teamweek') {
         var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
         if (!tw) tphr = 'Собираю неделю команды.';
@@ -5155,7 +5163,7 @@
     late: { label: 'собрана поздно',  cls: 'rh-late' },
   };
   var WK_REP = {
-    wait: { label: 'открыта',         cls: 'st-wait' },
+    wait: { label: 'идет',            cls: 'st-wait' },
     miss: { label: 'не закрыта',      cls: 'rh-miss' },
     done: { label: 'закрыта',         cls: 'st-done' },
     late: { label: 'закрыта поздно',  cls: 'rh-late' },
@@ -5244,7 +5252,9 @@
     if (t.client_name) sub.push(t.client_name);
     if (t.author_name && !own && !opts.hideAuthor) sub.push('поставил ' + t.author_name);
     var marks = '';
-    if (t.week_by_other) marks += '<span class="sev st-wait wk-mark">от руководителя</span>';
+    // «От руководителя» — пометка для исполнителя. Постановщику в блоке «тебе
+    // сдали» она ничего не говорит: он сам эту задачу и положил.
+    if (t.week_by_other && t.author_id !== state.taskMe) marks += '<span class="sev st-wait wk-mark">от руководителя</span>';
     if (t.carry_count) {
       marks += '<span class="sev ' + (t.stuck ? 'rv-wait' : 'st-wait') + ' wk-mark">' +
         (t.stuck ? 'застряла · перенос ×' + t.carry_count : 'перенос') + '</span>';

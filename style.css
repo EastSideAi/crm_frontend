@@ -2197,6 +2197,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* Свое дело в списке: галочка слева и тихий перенос на завтра справа. Оба
    действия появляются только там, где человек и исполнитель, и постановщик —
    в чужой задаче отметка «сделано» это приемка, и одним кликом ее не ставят. */
+/* Свое дело в списке задач — строка сетки, а не блок «ответственный» из карточки
+   лида (.own ниже по файлу — другой компонент с тем же именем, он делал строку
+   flex с серой заливкой). Возвращаем строке ее сетку явно. */
+.trow.tsk-grid.own { display: grid; margin-top: 0; padding: 0 24px; background: none; border-radius: 0; }
+.trow.tsk-grid.own:hover { background: #FBFBFC; }
 .trow.tsk-grid.own .t-cell { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .trow.tsk-grid.own .t-ttl,
 .trow.tsk-grid.own .t-sub { flex-basis: calc(100% - 30px); }
@@ -7129,6 +7134,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Команда: строка на человека. */
 .wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }
 .wk-grid .th:nth-child(n+3):nth-child(-n+6), .wk-grid .brd-n { text-align: right; }
+/* Поле замечания раскрывается первым кликом по «Вернуть»: до него скрыто,
+   и атрибут hidden обязан побеждать display у .al-f. */
+.rv-note[hidden] { display: none !important; }
+.trow.wk-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.trow.wk-grid { cursor: pointer; }
 .rh-await.quiet { background: var(--fill); color: var(--ink-2); }
 .rh-await.quiet svg { color: var(--ink-3); }
 @media (max-width: 720px) {
