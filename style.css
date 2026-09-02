@@ -6099,6 +6099,42 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
 .po-note.wide { margin: 16px 0 26px; }
 
+/* путь студента — лента маршрута над тарифами.
+   Точки соединены одной линией, а не стрелками и не градиентом: это карта, а не
+   герой экрана, спорить с ценой она не должна. На узком экране лента едет вбок,
+   а не ломается в столбик — дорога должна читаться дорогой. */
+.po-routec { padding-bottom: 18px; }
+.po-routew { margin-top: 16px; overflow-x: auto; padding-bottom: 4px; }
+.po-routew::-webkit-scrollbar { height: 0; }
+.po-route { position: relative; display: flex; gap: 0; min-width: 940px; }
+.po-route::before { content: ''; position: absolute; left: 6%; right: 6%; top: 13px;
+  height: 1px; background: var(--line-2); }
+.po-rt { position: relative; flex: 1 1 0; display: flex; flex-direction: column;
+  align-items: center; gap: 8px; text-align: center; padding: 0 4px; }
+.po-rdot { width: 27px; height: 27px; border-radius: var(--r-pill); background: var(--card);
+  border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 700; color: var(--ink-3); }
+.po-rtt { font-size: 11.5px; font-weight: 600; color: var(--ink-2); line-height: 1.3;
+  letter-spacing: -.01em; }
+
+/* маршрут внутри карточки тарифа: номер, этап, что человек получает, кто делает */
+.po-srlede { margin: -3px 0 14px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  line-height: 1.42; }
+.po-srs { display: flex; flex-direction: column; gap: 13px; }
+.po-sr { display: flex; gap: 11px; }
+.po-srn { flex: none; width: 19px; padding-top: 1px; font-size: 11px; font-weight: 700;
+  color: var(--ink-3); }
+.po-srb { min-width: 0; flex: 1 1 auto; }
+.po-srh { display: flex; align-items: baseline; gap: 8px; }
+.po-srh b { flex: 1 1 auto; font-size: 12.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.01em; }
+.po-srt { display: block; margin-top: 3px; font-size: 12px; color: var(--ink-2); line-height: 1.42; }
+/* «вы сами» амбером — это и есть места, где семье неудобно и где идет допродажа */
+.po-side { flex: none; font-style: normal; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase; padding: 3px 7px; border-radius: var(--r-pill); }
+.po-side--we { background: var(--fill); color: var(--ink-3); }
+.po-side--self { background: var(--amber-soft); color: var(--amber-ink); }
+
 /* тарифы */
 .po-tariffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
 .po-tcard { padding: 21px; position: relative; }
@@ -6346,6 +6382,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
+  .po-route { min-width: 780px; }
   /* в одну колонку выравнивать нечего: min-height превращается в пустоты */
   .po-tpos, .po-tfmt, .po-tpr, .po-scope { min-height: 0; }
   .po-pay { grid-template-columns: 1fr; }
