@@ -7188,3 +7188,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .wk-row.later > div:nth-child(2) { order: 3; }
   .wkc-row { grid-template-columns: minmax(0,1fr); }
 }
+
+/* Настройки недели в окне «Бот задач»: предел и сводки. */
+.tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.tgg-num { width: 64px; text-align: center; }
