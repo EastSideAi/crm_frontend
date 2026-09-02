@@ -4813,6 +4813,40 @@
     });
   }
 
+  /* Счетчик для бейджа в меню и вкладки «Команда»: открытые, просрочка, сколько
+     недель ждут приемки. Тянется отдельно от списка, чтобы бейдж жил и вне раздела. */
+  function loadTaskSummary(cb) {
+    if (!can('tasks')) return;
+    api('/admin/api/tasks/summary').then(function (r) {
+      state.taskSum = r || null;
+      if (state.page === 'tasks') renderTopbar();
+      if (cb) cb(); else renderSide();
+    }).catch(function () {});
+  }
+  /* Задачи по одному ученику — для карточки кейса. */
+  function loadCardTasks(id, cb) {
+    api('/admin/api/tasks?view=all&limit=100&session=' + encodeURIComponent(id)).then(function (r) {
+      state.cardTasks[id] = (r && r.tasks) || [];
+      if (cb) cb();
+    }).catch(function () {
+      state.cardTasks[id] = 'none';
+      if (cb) cb();
+    });
+  }
+  function loadTaskPeople(cb) {
+    if (state.taskPeople) { cb(state.taskPeople); return; }
+    api('/admin/api/tasks/people').then(function (r) {
+      state.taskPeople = (r && r.people) || [];
+      cb(state.taskPeople);
+    }).catch(function () { cb([]); });
+  }
+  function progBar(done, total) {
+    if (!total) return '';
+    return '<div class="tsk-prog"><span class="tsk-prog-b"><i style="width:' +
+      Math.round(done / total * 100) + '%"></i></span>' +
+      '<span class="tsk-prog-n num">' + done + ' из ' + total + '</span></div>';
+  }
+
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
     state.myweek = null; state.teamWeek = null; state.tasks = null;
@@ -5522,17 +5556,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-goalopen]'), function (r) {
       var id = +r.getAttribute('data-goalopen');
       r.addEventListener('click', function () {
-        var g = (state.tasks || []).filter(function (x) { return x.id === id; })[0];
-        if (!g) return;
-        // Дерево живет под cap tasks_all. У кого его нет, тому шаги чужой цели
-        // все равно не отдадут — открываем карточку цели, она доступна всем
-        // участникам и показывает то же самое по сути.
-        if (!can('tasks_all')) { openTask(id); return; }
-        state.taskSeg = 'team';
-        state.taskWho = null;
-        saveUi();
-        treeGo(g.dept || '', g);
-        renderTopbar();
+        // Карточка цели показывает шаги и кто их ведет — отдельного дерева больше нет.
+        openTask(id);
       });
     });
   }
