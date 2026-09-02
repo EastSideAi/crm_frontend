@@ -16379,18 +16379,94 @@
     return '';
   }
 
+  /* ── путь студента ─────────────────────────────────────────────────────────
+     Лента маршрута над тарифами. Человек, который выбирает за 400 тысяч, хочет
+     сначала увидеть дорогу целиком, а уже потом цену: двенадцать этапов от «не
+     знаю, куда поступать» до заселения в общежитии есть в любом тарифе, тариф
+     решает только наполнение. Поэтому лента идет ОДНА на всю вкладку и стоит
+     выше карточек — иначе каждая карточка делает вид, что путь у нее свой. */
+  function portalRoute(p) {
+    var r = p.route, sts = p.stages || [];
+    if (!r || !sts.length) return '';
+    var pts = sts.map(function (st, i) {
+      return '<div class="po-rt"><span class="po-rdot num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
+        '<span class="po-rtt">' + esc(st.short || st.title) + '</span></div>';
+    }).join('');
+    return '<div class="card po-card po-routec">' +
+      '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
+        '<div><div class="t">' + esc(r.title || '') + '</div>' +
+        (r.sub ? '<div class="s">' + esc(r.sub) + '</div>' : '') + '</div></div>' +
+      '<div class="po-routew"><div class="po-route">' + pts + '</div></div>' +
+      (r.note ? '<div class="po-lede">' + esc(r.note) + '</div>' : '') +
+    '</div>';
+  }
+
+  /* Одна строка про этап на конкретном тарифе. Наследование то же, что у
+     stageCell: не написали свою — значит «как тарифом ниже», и текст не
+     дублируется в json тремя копиями, которые потом разъедутся. */
+  function stageBrief(p, st, tid) {
+    var ts = p.tariffs || [], i = 0;
+    for (; i < ts.length; i++) if (ts[i].id === tid) break;
+    for (var j = i; j >= 0; j--) {
+      var c = (st.cells || {})[ts[j].id];
+      if (c && c.brief) return c.brief;
+    }
+    return '';
+  }
+  /* Клиенту не нужны наши внутренние роли — ему нужен ответ «мне это делать
+     или нет». Поэтому в карточке тарифа чип бинарный, а полный расклад ролей
+     живет на вкладке «Этапы», где его читает команда. */
+  function stageSide(p, st, tid) {
+    var ts = p.tariffs || [], i = 0;
+    for (; i < ts.length; i++) if (ts[i].id === tid) break;
+    for (var j = i; j >= 0; j--) {
+      var c = (st.cells || {})[ts[j].id];
+      if (c && c.who) return c.who.indexOf('семья') !== -1
+        ? { cls: 'self', label: c.who === 'семья сама' ? 'вы сами' : 'вместе' }
+        : { cls: 'we', label: 'мы' };
+    }
+    return { cls: 'we', label: 'мы' };
+  }
+
+  /* Одна строка над маршрутом. Она и есть разница тарифов в чистом виде: сколько
+     этапов остается на семье. Считается по данным, а не пишется руками, — иначе
+     разъедется с первой же правкой этапа. */
+  function sideLede(p, sts, tid) {
+    var name = function (st) { return (st.short || st.title).toLowerCase(); };
+    var own = sts.filter(function (st) { return stageSide(p, st, tid).label === 'вы сами'; });
+    var both = sts.filter(function (st) { return stageSide(p, st, tid).label === 'вместе'; });
+    if (own.length) {
+      return sts.length + ' этапов, ' + own.length + ' из них семья делает сама: ' + own.map(name).join(' и ');
+    }
+    if (both.length) {
+      return 'Все ' + sts.length + ' этапов ведем мы, вместе с семьей только ' + both.map(name).join(' и ');
+    }
+    return 'Все ' + sts.length + ' этапов ведем мы';
+  }
+
   /* ── тарифы ────────────────────────────────────────────────────────────────
-     Карточка тарифа читается сверху вниз ровно в том порядке, в котором семья
-     задает вопросы: сколько стоит, на сколько вузов, что я получаю, чего я НЕ
-     получаю. Последний блок — не мелкий шрифт внизу договора, а такая же часть
-     карточки: обещание, которого нет в тарифе, всплывет через полгода и будет
-     стоить дороже скидки. Якорь один — цена со скидкой; цена без скидки стоит
-     НАД ней и зачеркнута, чтобы глаз падал на нее первой и уже потом на цифру,
-     которую мы называем. */
+     Карточка тарифа — это тот же маршрут, только с ответом «что здесь получаю
+     я». Плоского списка фич тут больше нет: он был выборкой автора, по нему не
+     видно ни дороги, ни за что человек платит, и ценность в нем растворялась.
+     Двенадцать строк маршрута читаются иначе: видно и путь, и где тариф щедрее
+     (до 5, 7 или 10 вузов), и где работу делает семья, а не мы. Чип «вы сами» —
+     ровно та точка, где семье неудобно и где идет допродажа старшего тарифа.
+     Якорь один — цена со скидкой; цена без скидки стоит НАД ней и зачеркнута,
+     чтобы глаз падал на нее первой. Блок «Не входит» — не мелкий шрифт внизу
+     договора: обещание, которого нет в тарифе, всплывет через полгода и будет
+     стоить дороже скидки. */
   function portalTariffs(p) {
+    var sts = p.stages || [];
     var cards = (p.tariffs || []).map(function (t) {
-      var feats = (t.features || []).map(function (f) {
-        return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(f) + '</span></div>';
+      var feats = sts.map(function (st, i) {
+        var side = stageSide(p, st, t.id), br = stageBrief(p, st, t.id);
+        return '<div class="po-sr">' +
+          '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
+          '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b>' +
+            (side.cls === 'we' ? '' : '<em class="po-side po-side--self">' + esc(side.label) + '</em>') +
+          '</span>' +
+            (br ? '<span class="po-srt">' + esc(br) + '</span>' : '') + '</span>' +
+        '</div>';
       }).join('');
       var nos = (t.excludes || []).map(function (f) {
         return '<div class="po-nofeat">' + ic('x', 13) + '<span>' + esc(f) + '</span></div>';
@@ -16408,8 +16484,9 @@
           '</div>' + onceLine(p, t) +
         '</div>' +
         (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
-        '<div class="po-fsec po-tsec"><div class="po-flbl">Что входит</div>' +
-          '<div class="po-feats">' + feats + '</div></div>' +
+        '<div class="po-fsec po-tsec"><div class="po-flbl">Что входит по этапам</div>' +
+          '<div class="po-srlede">' + esc(sideLede(p, sts, t.id)) + '</div>' +
+          '<div class="po-srs">' + feats + '</div></div>' +
         '<div class="po-fsec po-tsec"><div class="po-flbl">Не входит</div>' +
           (nos ? '<div class="po-feats">' + nos + '</div>'
                : '<div class="po-noall">' + esc(t.excludes_note || '') + '</div>') + '</div>' +
@@ -16451,7 +16528,7 @@
         '<tbody>' + trs + '</tbody></table></div></div>';
     }
 
-    return '<div class="po-tariffs">' + cards + '</div>' +
+    return portalRoute(p) + '<div class="po-tariffs">' + cards + '</div>' +
       (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') +
       excHtml + portalPayment(p) + portalGuarantee(p) + cmpHtml;
   }
