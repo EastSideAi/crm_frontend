@@ -16409,23 +16409,22 @@
     for (; i < ts.length; i++) if (ts[i].id === tid) break;
     for (var j = i; j >= 0; j--) {
       var c = (st.cells || {})[ts[j].id];
-      if (c && c.brief) return c.brief;
+      if (c && c.brief) return { text: c.brief, own: j === i };
     }
-    return '';
+    return { text: '', own: false };
   }
-  /* Клиенту не нужны наши внутренние роли — ему нужен ответ «мне это делать
-     или нет». Поэтому в карточке тарифа чип бинарный, а полный расклад ролей
-     живет на вкладке «Этапы», где его читает команда. */
-  function stageSide(p, st, tid) {
+  /* В карточке тарифа чип показывается ТОЛЬКО там, где этап хоть частью лежит на
+     семье: десять одинаковых «команда» подряд были бы шумом, а молчание и значит
+     «этап на нас». Слова и рецепт чипа те же, что на «Этапах» (PO_WHO) — один
+     факт не должен называться в продукте двумя словарями. */
+  function stageWho(p, st, tid) {
     var ts = p.tariffs || [], i = 0;
     for (; i < ts.length; i++) if (ts[i].id === tid) break;
     for (var j = i; j >= 0; j--) {
       var c = (st.cells || {})[ts[j].id];
-      if (c && c.who) return c.who.indexOf('семья') !== -1
-        ? { cls: 'self', label: c.who === 'семья сама' ? 'вы сами' : 'вместе' }
-        : { cls: 'we', label: 'мы' };
+      if (c && c.who) return c.who;
     }
-    return { cls: 'we', label: 'мы' };
+    return '';
   }
 
   /* Одна строка над маршрутом. Она и есть разница тарифов в чистом виде: сколько
@@ -16433,8 +16432,11 @@
      разъедется с первой же правкой этапа. */
   function sideLede(p, sts, tid) {
     var name = function (st) { return (st.short || st.title).toLowerCase(); };
-    var own = sts.filter(function (st) { return stageSide(p, st, tid).label === 'вы сами'; });
-    var both = sts.filter(function (st) { return stageSide(p, st, tid).label === 'вместе'; });
+    var own = sts.filter(function (st) { return stageWho(p, st, tid) === 'семья сама'; });
+    var both = sts.filter(function (st) {
+      var w = stageWho(p, st, tid);
+      return w.indexOf('семья') !== -1 && w !== 'семья сама';
+    });
     if (own.length) {
       return sts.length + ' этапов, ' + own.length + ' из них семья делает сама: ' + own.map(name).join(' и ');
     }
@@ -16457,15 +16459,20 @@
      стоить дороже скидки. */
   function portalTariffs(p) {
     var sts = p.stages || [];
-    var cards = (p.tariffs || []).map(function (t) {
+    var cards = (p.tariffs || []).map(function (t, ti) {
+      /* у младшего тарифа «свое наполнение» — это вообще все, помечать там нечего;
+         на старших синий номер отвечает на вопрос «где этот тариф сильнее», и
+         текст при этом нигде не гасится: тихая карточка читалась бы как бедная */
+      var base = ti === 0;
       var feats = sts.map(function (st, i) {
-        var side = stageSide(p, st, t.id), br = stageBrief(p, st, t.id);
-        return '<div class="po-sr">' +
+        var who = stageWho(p, st, t.id), br = stageBrief(p, st, t.id);
+        var self = who.indexOf('семья') !== -1;
+        return '<div class="po-sr' + (br.own && !base ? ' po-up' : '') + '">' +
           '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
           '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b>' +
-            (side.cls === 'we' ? '' : '<em class="po-side po-side--self">' + esc(side.label) + '</em>') +
+            (self ? '<span class="sev po-w po-w-self">' + esc(who) + '</span>' : '') +
           '</span>' +
-            (br ? '<span class="po-srt">' + esc(br) + '</span>' : '') + '</span>' +
+            (br.text ? '<span class="po-srt">' + esc(br.text) + '</span>' : '') + '</span>' +
         '</div>';
       }).join('');
       var nos = (t.excludes || []).map(function (f) {
