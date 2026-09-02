@@ -17799,6 +17799,20 @@
     });
   }
 
+  /* Строка про оплату целиком. Пустое место у тарифа читалось бы как «такой
+     опции нет», а она есть — просто цифра еще не утверждена. Тариф в списке
+     draft у способа «целиком» — это и есть признак несогласованной цены. */
+  function onceLine(p, t) {
+    if (t.price_once) {
+      return '<div class="po-tonce">при оплате целиком <b class="num">' + fmtMoney(t.price_once) + ' ₽</b></div>';
+    }
+    var fullOpt = payOption(p.payment, 'full');
+    if (fullOpt && fullOpt.id === 'full' && (fullOpt.draft || []).indexOf(t.id) !== -1) {
+      return '<div class="po-tonce draft">оплата целиком: цена не утверждена</div>';
+    }
+    return '';
+  }
+
   /* ── тарифы ────────────────────────────────────────────────────────────────
      Карточка тарифа читается сверху вниз ровно в том порядке, в котором семья
      задает вопросы: сколько стоит, на сколько вузов, что я получаю, чего я НЕ
@@ -17825,13 +17839,12 @@
           (full ? '<div class="po-told"><s class="num">' + fmtMoney(full) + ' ₽</s> без скидки</div>' : '') +
           '<div class="po-tprow"><span class="po-tprice num">' + fmtMoney(t.price) + ' ₽</span>' +
             (save > 0 ? '<span class="po-psave pill num">выгода ' + fmtMoney(save) + ' ₽</span>' : '') +
-          '</div>' +
-          (t.price_once ? '<div class="po-tonce">при оплате целиком <b class="num">' + fmtMoney(t.price_once) + ' ₽</b></div>' : '') +
+          '</div>' + onceLine(p, t) +
         '</div>' +
         (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
         '<div class="po-fsec po-tsec"><div class="po-flbl">Что входит</div>' +
           '<div class="po-feats">' + feats + '</div></div>' +
-        '<div class="po-fsec"><div class="po-flbl">Не входит</div>' +
+        '<div class="po-fsec po-tsec"><div class="po-flbl">Не входит</div>' +
           (nos ? '<div class="po-feats">' + nos + '</div>'
                : '<div class="po-noall">' + esc(t.excludes_note || '') + '</div>') + '</div>' +
       '</div>';
