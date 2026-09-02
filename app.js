@@ -2632,7 +2632,7 @@
         var mw = state.myweek && state.myweek !== 'none' ? state.myweek : null;
         var mf = mw && mw.r && mw.r.facts ? mw.r.facts : null;
         if (!mw) tphr = 'Смотрю, что на сегодня.';
-        else if (mf && mf.overdue) tphr = '<b>' + mf.overdue + ' ' + plural(mf.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '</b> на этой неделе. Начни с них.';
+        else if (mf && mf.overdue && wkShift()) tphr = '<b>' + mf.overdue + ' ' + plural(mf.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '</b> на той неделе.';
         else if (ts && ts.to_accept && !wkShift()) tphr = 'Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
         else if (mf && mf.stuck) tphr = '<b>' + mf.stuck + '</b> ' + plural(mf.stuck, 'задача застряла', 'задачи застряли', 'задач застряло') + ': переносишь второй раз. Разбери или сними.';
         else if (mf && mf.plan) tphr = 'Неделя: <b>' + mf.done + '</b> из <b>' + mf.plan + '</b> сделано.';
@@ -5001,26 +5001,28 @@
       var od = dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
       if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
     }
-    if (t.status === 'review' || t.status === 'return' || t.status === 'block' || (opts.showStatus && t.status === 'doing')) {
+    // Статус только там, где он отклонение: в «Тебе сдали» все на приемке, и
+    // чип повторял бы заголовок карточки.
+    if (!opts.accept && (t.status === 'review' || t.status === 'return' || t.status === 'block')) {
       var st = TASK_ST[t.status];
       right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     }
     if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
-    var quick = !closed && own && !opts.readOnly
-      ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>' : '';
+    var quick = '';
+    if (closed) quick = '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>';
+    else if (own && !opts.readOnly) quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
     var tail = opts.accept && t.assignee_name
       ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
       : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '');
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.status === 'review' && !opts.accept ? ' review' : '') +
-      (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' + tail + '</div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
   }
   function dyBand(title, items, cls) {
     if (!items.length) return '';
-    return '<div class="dy-band' + (cls ? ' ' + cls : '') + '"><span class="dy-band-t">' + esc(title) + '</span>' +
-      '<span class="dy-band-n num">' + items.length + '</span></div>' + items.map(function (t) { return dyRow(t); }).join('');
+    return '<div class="tsk-band' + (cls ? ' ' + cls : '') + '"><span class="tsk-band-t">' + esc(title) + '</span></div>' +
+      items.map(function (t) { return dyRow(t); }).join('');
   }
   function renderMyDay(view, w, r, tools) {
     var now = new Date();
@@ -5065,8 +5067,8 @@
         return WDAYS_RU[d.getDay()] + ' ' + rest[k].length;
       }).join(' · ');
       var open = !!state.dyMore || (!over.length && !todayL.length);
-      restHtml = '<button class="dy-more' + (open ? ' open' : '') + '" id="dy-more">' + ic('go', 14) +
-        '<span>Еще ' + restN + ' на неделе</span><span class="dy-more-h">' + esc(hint) + '</span></button>' +
+      restHtml = '<button class="stu-more dy-more' + (open ? ' open' : '') + '" id="dy-more">' +
+        (open ? 'Свернуть' : 'Еще ' + restN + ' на неделе · ' + esc(hint)) + '</button>' +
         '<div class="dy-rest"' + (open ? '' : ' hidden') + '>' +
           restKeys.map(function (k) {
             if (k === 'z-noday') return dyBand('Без дня, до пятницы', rest[k]);
@@ -5077,25 +5079,24 @@
     var todayN = over.length + todayL.length;
     var mainCard = '<div class="card dy-card">' +
       '<div class="dy-h"><span class="dy-h-t">' + esc(dyTitle(today)) + '</span>' +
-        '<span class="dy-h-n num">' + (todayN ? '<b>' + todayN + '</b> ' + plural(todayN, 'задача', 'задачи', 'задач') : '') + '</span>' +
-        '<button class="qchip" id="tsk-new">' + ic('plus', 12) + 'Задача</button></div>' +
+        '<span class="dy-h-n num">' + (todayN ? '<b>' + todayN + '</b> ' + plural(todayN, 'задача', 'задачи', 'задач') : '') + '</span></div>' +
       '<div class="dy-body">' + main + restHtml + '</div></div>';
 
     // Сбоку: сдали мне (только если есть), завтра, сделано.
     var side = '';
     if ((w.accept || []).length) {
-      side += '<div class="card dy-card"><div class="dy-h blue"><span class="dy-h-t">Тебе сдали</span>' +
+      side += '<div class="card dy-card"><div class="dy-h blue"><span class="t">Тебе сдали</span>' +
         '<span class="dy-h-n num"><b>' + w.accept.length + '</b></span></div><div class="dy-body">' +
         w.accept.map(function (t) { return dyRow(t, { readOnly: true, accept: true }); }).join('') + '</div></div>';
     }
     var tmTitle = tomorrow.getDay() === 6 ? 'В понедельник' : 'Завтра';
-    side += '<div class="card dy-card"><div class="dy-h"><span class="dy-h-t">' + tmTitle + '</span>' +
+    side += '<div class="card dy-card"><div class="dy-h"><span class="t">' + tmTitle + '</span>' +
       '<span class="dy-h-n num">' + (tomorrowL.length ? '<b>' + tomorrowL.length + '</b>' : '') + '</span></div>' +
       '<div class="dy-body">' + (tomorrowL.length
         ? tomorrowL.map(function (t) { return dyRow(t); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
     var doneN = doneToday.length + review.length;
-    side += '<div class="card dy-card"><div class="dy-h"><span class="dy-h-t">Сделано сегодня</span>' +
+    side += '<div class="card dy-card"><div class="dy-h"><span class="t">Сделано сегодня</span>' +
       '<span class="dy-h-n num">' + (doneN ? '<b>' + doneN + '</b>' : '') + '</span></div>' +
       '<div class="dy-body">' + (doneN
         ? review.concat(doneToday).map(function (t) { return dyRow(t); }).join('')
@@ -5107,8 +5108,7 @@
       '<div class="dy-grid">' + mainCard + '<div class="dy-side">' + side + '</div></div>';
     if (el('dy-more')) el('dy-more').addEventListener('click', function () {
       state.dyMore = !el('dy-more').classList.contains('open');
-      el('dy-more').classList.toggle('open', state.dyMore);
-      view.querySelector('.dy-rest').hidden = !state.dyMore;
+      renderView();
     });
   }
 
@@ -5166,7 +5166,8 @@
     if (sh === 0 && !q) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
-      renderMyDay(view, w, r, wkNav(w.label || r.label) + meter + '<span class="wk-spacer"></span>' + act + wkStateLine(r));
+      renderMyDay(view, w, r, wkNav(w.label || r.label) + meter + '<span class="wk-spacer"></span>' + act +
+        '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
     } else {
       view.innerHTML = '<div class="card listcard">' +
         '<div class="list-tools brd-tools">' + wkNav(w.label || r.label) + meter +

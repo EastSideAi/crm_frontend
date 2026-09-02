@@ -7260,8 +7260,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    тихо справа. Зоны разделены подложкой страницы (--main) между белыми
    карточками, а не подзаголовками: слов на экране минимум. Строка — одна
    линия: галочка, название, справа только то, что отличается от нормы
-   (просрочка, «на приемке», «вернули»). «Поставлена» и «сегодня» не пишем:
-   это норма, а норму не подписывают. Единственное красное — просрочка. */
+   (просрочка, «вернули»). «Поставлена» и «сегодня» не пишем: это норма, а
+   норму не подписывают. Единственное красное — просрочка (полоса .tsk-band.over
+   и дни в тексте; строка идет через системный .r-crit). Полосы-подзаголовки —
+   системный .tsk-band, шапки боковых карточек — рецепт .sec-head .t, «еще на
+   неделе» — .stu-more: своих рецептов у дня нет, только якорь-заголовок 20px. */
 .wk-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .wk-top .brd-nav { margin-right: 4px; }
 .wk-top .wk-spacer { flex: 1; }
@@ -7269,16 +7272,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .dy-grid { display: grid; grid-template-columns: minmax(0, 1fr) 336px; gap: 16px; align-items: start; }
 .dy-side { display: grid; gap: 16px; min-width: 0; }
 .dy-card { min-width: 0; overflow: hidden; }
-.dy-h { display: flex; align-items: baseline; gap: 10px; padding: 18px 20px 10px; }
+.dy-h { display: flex; align-items: baseline; gap: 10px; padding: 18px 20px 8px; }
 .dy-h-t { font-size: 20px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1.15; }
-.dy-side .dy-h { padding: 14px 18px 6px; }
-.dy-side .dy-h-t { font-size: 15px; letter-spacing: -.02em; }
+.dy-side .dy-h { padding: 14px 18px 4px; }
+.dy-h .t { font-size: 16px; font-weight: 600; letter-spacing: -.015em; color: var(--ink); }
 .dy-h-n { font-size: 12.5px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
 .dy-h-n b { color: var(--ink); font-weight: 700; }
-.dy-h .qchip { margin-left: auto; }
-.dy-h.blue .dy-h-t { color: var(--blue); }
-.dy-h.blue .dy-h-n { color: var(--blue); }
+.dy-h.blue .t, .dy-h.blue .dy-h-n { color: var(--blue); }
 .dy-body { padding: 0 0 6px; }
+.dy-card .tsk-band { padding: 8px 20px 4px; }
+.dy-card .tsk-band + .tsk-band { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.tsk-band.over .tsk-band-t { color: var(--red-ink); }
+.dy-rest .tsk-band:first-child { border-top: 1px solid var(--line); margin-top: 0; padding-top: 12px; }
 /* Строка дня: галочка, название, справа отклонение от нормы. Ниже общей .trow:
    день читается сверху вниз одним взглядом, 58px на строку тут лишние. */
 .trow.dy-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; height: auto; min-height: 46px;
@@ -7294,25 +7299,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    его нет, оно в карточке задачи. Кто сдал — остается, это суть «Тебе сдали». */
 .dy-side .dy-row .dy-cl { display: none; }
 .dy-row .dy-r { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.dy-row .dy-r:empty { display: none; }
 .dy-row.closed .dy-ttl { color: var(--ink-3); font-weight: 500; text-decoration: line-through; }
-.dy-row.closed .dy-t::before { content: ''; width: 20px; height: 20px; flex: none; border-radius: 50%;
-  background: var(--green-soft); }
-.dy-row.closed.review .dy-t::before { background: var(--blue-tint); }
-.dy-row.over::before { opacity: 1; background: var(--coral); }
-/* Полоса «Просрочено» над строками дня: красным только слово, не заливка. */
-.dy-band { display: flex; align-items: baseline; gap: 9px; padding: 8px 20px 4px; }
-.dy-band-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
-.dy-band.over .dy-band-t { color: var(--red-ink); }
-.dy-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
-.dy-band + .dy-band { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
-.dy-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 20px; border: 0;
-  border-top: 1px solid var(--line); background: #FBFBFC; font: inherit; font-size: 13px; font-weight: 600;
-  color: var(--ink-2); cursor: pointer; text-align: left; transition: background .14s; }
-.dy-more:hover { background: var(--fill); color: var(--ink); }
-.dy-more svg { color: var(--ink-3); transition: transform .2s var(--ease); }
-.dy-more.open svg { transform: rotate(90deg); }
-.dy-more .dy-more-h { font-weight: 500; color: var(--ink-3); }
-.dy-rest .dy-band:first-child { border-top: 1px solid var(--line); margin-top: 0; padding-top: 12px; }
+/* «Сделано» — та же галочка, что и у живой задачи, только заполненная и
+   нейтральная: зеленый в CRM про деньги, а сделанная задача — норма. На
+   приемке — синяя заливка, как у статуса. */
+.tsk-chk.done { background: var(--fill); border-color: var(--fill); color: var(--ink-3); cursor: default; }
+.tsk-chk.done.rv { background: var(--blue-tint); border-color: var(--blue-tint); color: var(--blue); }
+.dy-more { margin: 6px 20px 8px; width: calc(100% - 40px); }
 .dy-empty { padding: 22px 20px 26px; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
 .dy-empty b { color: var(--ink-2); font-weight: 600; }
 .dy-side .dy-empty { padding: 6px 18px 18px; font-size: 12.5px; }
@@ -7321,11 +7315,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .dy-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
-  .wk-top .brd-nav { flex-basis: 100%; }
+  /* Шапка не должна съедать половину экрана: дата и метр в одну строку,
+     кнопки во вторую; название задачи может занять две строки, а имя ученика
+     возвращается второй строкой — на телефоне иначе теряется, по кому дело. */
+  .wk-top { gap: 8px; margin-bottom: 10px; }
+  .wk-top .brd-nav { margin-right: 0; }
+  .wk-top .wk-spacer { flex-basis: 100%; }
   .trow.dy-row { grid-template-columns: minmax(0, 1fr) auto !important; padding: 10px 16px; }
-  .dy-row .dy-cl { display: none; }
-  .dy-h { padding: 16px 16px 8px; }
+  .dy-row .dy-t { flex-wrap: wrap; align-items: flex-start; }
+  .dy-row .tsk-chk { margin-top: 1px; }
+  .dy-row .dy-ttl { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    line-height: 1.3; flex: 1 1 calc(100% - 31px); }
+  .dy-row .dy-cl, .dy-side .dy-row .dy-cl { display: block; flex-basis: 100%; padding-left: 31px; margin-top: -2px; }
+  .dy-h { padding: 14px 16px 6px; }
   .dy-h-t { font-size: 18px; }
+  .dy-card .tsk-band { padding-left: 16px; padding-right: 16px; }
+  .dy-more { margin: 6px 16px 8px; width: calc(100% - 32px); }
 }
 
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
