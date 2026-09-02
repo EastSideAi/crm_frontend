@@ -1812,15 +1812,19 @@
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
+  // 'finance_edit' — двигать деньги клиента: завести и удалить платеж, выставить счет,
+  // вернуть на карту. Отделено от 'finance' по решению владельца от 24.08.2026:
+  // руководителю маркетинга нужны цифры, дошла ли заявка до оплаты, а не право их
+  // менять. Смотреть — 'finance', менять — 'finance_edit'.
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'finance_edit', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'finance_edit', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'finance_edit', 'portal', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal'] },
@@ -1845,10 +1849,10 @@
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
     // (ведет всю финансовую работу); ведомостью управляет, поэтому есть и правка
     // (finmodel_edit): экраны ввода Доходы и листы работают только с ней.
-    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'contractors', 'finmodel', 'finmodel_edit'] },
+    assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'finance_edit', 'contractors', 'finmodel', 'finmodel_edit'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
-    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
+    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'finance_edit'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
     manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
@@ -13622,6 +13626,15 @@
           function () { mark('не сохранилось — проверьте связь', true); });
       }, 700);
     }
+    /* Смотреть экономику может тот, у кого есть деньги клиента, а править — тот, кому
+       разрешено их двигать (cap finance_edit). Поле только для чтения честнее, чем
+       поле, которое молча не сохраняется. */
+    if (!can('finance_edit')) {
+      Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
+        i.readOnly = true;
+        i.title = 'Цифры продукта меняет тот, кто ведет деньги';
+      });
+    }
     Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
       i.addEventListener('input', function () {
         var k;
@@ -16097,10 +16110,12 @@
     }
     var st = state.botStats;
     var bar = statBar([
-      { tint: 'blue', label: 'Первый ответ', value: st.first_resp + ' сек', sub: 'среднее по каналам' },
-      { tint: 'green', label: 'AI довёл до заявки', value: st.ai_closed, sub: st.dialogs ? Math.round(st.ai_closed / st.dialogs * 100) + '% диалогов' : '' },
+      { tint: 'blue', label: 'Первый ответ', value: st.first_resp ? st.first_resp + ' сек' : '—',
+        sub: st.first_resp ? 'медиана по всем ответам' : 'пока не из чего считать' },
+      { tint: 'green', label: 'Бот вёл сам', value: st.ai_closed, sub: st.dialogs ? Math.round(st.ai_closed / st.dialogs * 100) + '% диалогов' : '' },
       { tint: 'navy', label: 'Передано менеджеру', value: st.handed, sub: 'сложные / горячие' },
-      { tint: 'amber', label: 'Расход AI', value: fmtMoney(st.cost) + ' ₽', sub: st.bot_msgs + ' ответов' },
+      { tint: 'amber', label: 'Расход на нейросеть', value: aiMoney(st.cost, 'total'),
+        sub: st.cost ? fmtMoney(st.cost.calls) + ' ' + plural(st.cost.calls, 'запрос', 'запроса', 'запросов') : 'нет данных' },
     ]);
     var chParts = st.by_channel.filter(function (x) { return x.n; });
     var chTotal = chParts.reduce(function (s2, x) { return s2 + x.n; }, 0) || 1;
@@ -16137,20 +16152,64 @@
           '<div class="cvc-c num">' + q.n + '</div><div class="cvc-p num"></div></div>';
       }).join('') + '</div>' : '<div class="empty">Пока нет данных по вопросам.</div>') + '</div>';
 
-    var costCard = '<div class="card sp5" style="padding:22px 26px">' +
-      '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div><div class="t">Стоимость обработки</div><div class="s">сколько AI тратит на лида</div></div></div>' +
-      '<div class="lose-body"><div class="lose-big"><b class="num" style="color:var(--amber-ink)">' + (st.dialogs ? Math.round(st.cost / st.dialogs) : 0) + ' ₽</b><span>на один диалог</span></div>' +
-      '<div class="lose-sub">Всего ' + fmtMoney(st.cost) + ' ₽ на ' + st.dialogs + ' ' + plural(st.dialogs, 'диалог', 'диалога', 'диалогов') + '. Дешевле менеджера на первичке.</div></div></div>';
+    var costCard = costCardHtml(st);
 
     var banner = st.source === 'demo'
       ? '<div class="ib-banner">' + ic('bolt', 14) + '<span>Демо-аналитика. С подключением бота цифры станут реальными (каналы, конверсии, расход, пробелы базы).</span></div>' : '';
     view.innerHTML = '<div class="dash">' + banner + bar + '<div class="grid">' + chanCard + funCard + faqCard + costCard + '</div></div>';
   }
+  /* Расход на нейросеть OpenRouter считает в долларах — это факт, который у нас есть.
+     Рубли показываем, только когда на боте задан курс (LLM_USD_RUB): зашитый в код курс
+     через полгода врёт, а придуманная цифра хуже отсутствующей. */
+  function aiMoney(c, field) {
+    if (!c) return '—';
+    var rub = field === 'total' ? c.rub : c.rub_30d;
+    var usd = field === 'total' ? c.usd : c.usd_30d;
+    if (rub != null) return fmtMoney(Math.round(rub)) + '\u00a0₽';
+    return (usd < 0.01 && usd > 0 ? '<0,01' : String((usd || 0).toFixed(2)).replace('.', ',')) + '\u00a0$';
+  }
+  /* Цена одного диалога — сотые доли доллара, поэтому две цифры после запятой обязательны:
+     округление до целого превратило бы ее в честный, но бесполезный ноль. */
+  function aiPerDialog(c, dialogs) {
+    if (!c || !dialogs) return '—';
+    if (c.rub != null) return (c.rub / dialogs).toFixed(1).replace('.', ',') + '\u00a0₽';
+    var v = (c.usd || 0) / dialogs;
+    return (v < 0.01 && v > 0 ? '<0,01' : v.toFixed(2).replace('.', ',')) + '\u00a0$';
+  }
+  function costCardHtml(st) {
+    var c = st.cost;
+    if (!c) {
+      return '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div class="t">Стоимость обработки</div></div>' +
+        '<div class="empty">Бот еще не записал ни одного вызова нейросети.</div></div>';
+    }
+    var since = c.since ? ' с ' + dayFull(c.since) : '';
+    /* Деньги — главная колонка, число вызовов приглушенное: карточка про стоимость,
+       а не про количество запросов. */
+    var models = (c.by_model || []).map(function (m) {
+      var short = String(m.model || '').split('/').pop().replace(/^~/, '');
+      return '<div class="r"><span class="dnm">' + esc(short) + '</span>' +
+        '<span class="dcount num">' + fmtMoney(m.calls) + '</span>' +
+        '<span class="dpc num">' + aiMoney({ usd: m.usd, rub: m.rub }, 'total') + '</span></div>';
+    }).join('');
+    return '<div class="card sp5" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div><div class="t">Стоимость обработки</div><div class="s">сколько нейросеть тратит на диалог</div></div></div>' +
+      '<div class="lose-body"><div class="lose-big"><b class="num" style="color:var(--amber-ink)">' + aiPerDialog(c, st.dialogs) + '</b><span>на один диалог</span></div>' +
+      '<div class="lose-sub">Всего ' + aiMoney(c, 'total') + ' за ' + fmtMoney(c.calls) + ' ' +
+        plural(c.calls, 'запрос', 'запроса', 'запросов') + since +
+        '. За последние 30 дней ' + aiMoney(c, 'month') + '.</div>' +
+      (models ? '<div class="dleg" style="margin-top:14px">' + models + '</div>' : '') +
+      '</div></div>';
+  }
   function normBotStats(r, source) {
     var byCh = (r.by_channel || []).map(function (x) { return { channel: x.channel, n: x.n }; });
     return {
-      source: source, first_resp: 7, dialogs: r.dialogs || 0, bot_msgs: r.bot_msgs || 0,
-      ai_closed: Math.max(0, (r.dialogs || 0) - (r.handed || 0)), handed: r.handed || 0, cost: r.est_cost_rub || 0,
+      /* first_resp и cost приходят из базы: раньше семерка была зашита в код, а расход
+         считался формулой «ответы на константу», хотя бот пишет каждый вызов в llm_usage */
+      source: source, first_resp: r.first_reply_sec || null,
+      dialogs: r.dialogs || 0, bot_msgs: r.bot_msgs || 0,
+      ai_closed: Math.max(0, (r.dialogs || 0) - (r.handed || 0)), handed: r.handed || 0,
+      cost: r.ai_cost || null,
       by_channel: byCh.length ? byCh : [{ channel: 'telegram', n: r.dialogs || 0 }],
       funnel: [
         { l: 'Написали боту', n: r.dialogs || 0 },
@@ -16168,7 +16227,8 @@
     arr.forEach(function (l) { var d = getDialog(l); byCh[d.channel]++; cost += d.cost_rub; msgs += d.msgs; if (d.handed) handed++; else if (l.booking) closed++; });
     var total = arr.length;
     return {
-      source: 'demo', first_resp: 6, dialogs: total, bot_msgs: msgs, ai_closed: closed, handed: handed, cost: cost,
+      source: 'demo', first_resp: 6, dialogs: total, bot_msgs: msgs, ai_closed: closed, handed: handed,
+      cost: { calls: msgs, usd: 0, rub: cost, rate: 1, since: null, usd_30d: 0, rub_30d: 0, calls_30d: msgs, by_model: [] },
       by_channel: CHAN_ORDER.filter(function (k) { return byCh[k]; }).map(function (k) { return { channel: k, n: byCh[k] }; }),
       funnel: [
         { l: 'Написали боту', n: total },
@@ -18821,6 +18881,10 @@
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
+    /* Деньги смотрят одни, двигают другие (cap finance_edit, решение владельца от
+       24.08.2026). Кнопки, которые сервер все равно не пропустит, не показываем:
+       отказ после нажатия — это обещание, которого интерфейс не держит. */
+    var mayEdit = can('finance_edit');
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var pending = pays.filter(function (p) { return p.status === 'pending'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var refunded = pays.filter(function (p) { return p.status === 'refunded'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
@@ -18842,24 +18906,20 @@
       var amtCls = p.status === 'refunded' ? ' refunded' : (p.status === 'pending' ? ' pending' : '');
       var rcpt = p.receipt_doc_id
         ? '<a class="pay-rcpt has" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + p.receipt_doc_id + '/download?k=' + encodeURIComponent(getKey()) + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
-        : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
+        : (mayEdit ? '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>' : '');
       return '<div class="pay-row">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
           ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
           '<div class="doc-m">' + [when, p.note].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
         rcpt +
         '<span class="pay-amt' + amtCls + ' num">' + fmtMoney(p.amount_rub) + ' ₽</span>' +
-        '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>';
+        (mayEdit ? '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button>' : '') +
+        '</div>';
     }).join('');
 
     var manualCount = pays.length;
-    return '<div class="m-ctitle">Оплаты</div>' +
-      '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
-      board +
-      '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
-        '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
-        '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
-        '<div class="ord-b">' +
+    var orderBox = mayEdit
+      ? '<div class="ord-b">' +
           '<div class="ord-newh">Новый счет</div>' +
           '<div class="ord-addwrap">' +
             '<button type="button" class="ord-addbtn" id="ord-addbtn">' + ic('plus', 13) + 'Добавить в счет' + ic('go', 12) + '</button>' +
@@ -18873,38 +18933,54 @@
             '<label class="ord-n-wrap" id="ord-n-wrap" hidden>взносов <input id="ord-n" class="ord-n" inputmode="numeric" value="4"></label>' +
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
-        '</div></div>' +
-      /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
-         здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
-         спрашивать не надо — его впишет сама семья на странице оплаты. */
-      '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
-        '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
-        '<div class="pay-grid sch">' +
-          '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
-          '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
-          '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
-        '</div>' +
-        '<div id="sch-out"></div></div>' +
-      '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
-        '<summary><span class="pm-t">Записать оплату вручную</span>' +
+        '</div>'
+      : '';
+    /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
+       здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
+       спрашивать не надо — его впишет сама семья на странице оплаты. */
+    var schoolBox = mayEdit
+      ? '<div class="m-sec"><div class="m-sec-h">Счет за уроки</div>' +
+          '<div class="m-csub" style="margin:0 0 10px">Ссылку отправляете семье вы. Почту или телефон для чека человек впишет сам, оплаченные уроки прибавятся на странице учета уроков, а контакт запишется в эту карточку.</div>' +
+          '<div class="pay-grid sch">' +
+            '<input id="sch-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+            '<input id="sch-les" inputmode="numeric" placeholder="Уроков (по тарифу)">' +
+            '<button class="bp sm" id="sch-btn" style="justify-content:center">' + ic('card', 13) + 'Получить ссылку</button>' +
+          '</div>' +
+          '<div id="sch-out"></div></div>'
+      : '';
+    var manualBox = '<details class="pay-manual"' + (manualCount ? ' open' : '') + '>' +
+        '<summary><span class="pm-t">' + (mayEdit ? 'Записать оплату вручную' : 'Оплаты мимо кассы') + '</span>' +
           '<span class="pm-h">нал, перевод и прочее мимо кассы' + (manualCount ? ' · ' + manualCount : '') + '</span>' +
           ic('go', 13) + '</summary>' +
         '<div class="pay-manual__body">' +
           (pays.length ? '<div>' + rows + '</div>' : '<div class="field-empty">Ручных платежей нет. Оплаты через кассу учитываются автоматически.</div>') +
-          '<div class="m-sec" style="margin-top:12px"><div class="m-sec-h">Добавить платеж</div>' +
-            '<div class="pay-form">' +
-              '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
-                '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
-              '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
-              '<div class="pay-grid">' +
-                '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
-                '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
-                '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
-              '</div>' +
-              '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
-            '</div></div>' +
-        '</div></details>' +
-      '<input type="file" id="pay-rcpt-file" style="display:none">';
+          (mayEdit
+            ? '<div class="m-sec" style="margin-top:12px"><div class="m-sec-h">Добавить платеж</div>' +
+              '<div class="pay-form">' +
+                '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
+                  '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
+                '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
+                '<div class="pay-grid">' +
+                  '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+                  '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
+                  '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
+                '</div>' +
+                '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
+              '</div></div>'
+            : '') +
+        '</div></details>';
+    return '<div class="m-ctitle">Оплаты</div>' +
+      '<div class="m-csub">' + (mayEdit
+        ? 'Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.'
+        : 'Что клиент оплатил и что еще ждем. Счета выставляют продажи и финансы.') + '</div>' +
+      board +
+      '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
+        '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
+        orderBox + '</div>' +
+      schoolBox +
+      manualBox +
+      (mayEdit ? '<input type="file" id="pay-rcpt-file" style="display:none">' : '');
   }
   function fmtMoney(n) { return String(n || 0).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
 
@@ -19482,7 +19558,8 @@
       };
       var renderOrders = function (orders) {
         if (!orders || !orders.length) {
-          ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
+          ordList.innerHTML = '<div class="field-empty">' +
+            (can('finance_edit') ? 'Счетов пока нет — выставьте первый ниже.' : 'Счетов пока нет.') + '</div>';
           return;
         }
         ordList.innerHTML = orders.map(function (o) {
@@ -19522,7 +19599,8 @@
         ordAddBtn.classList.toggle('on', !ordMenu.hidden);
       });
       document.addEventListener('click', function (e) { if (ordMenu && !ordMenu.hidden && !ordMenu.contains(e.target) && e.target !== ordAddBtn) closeMenu(); });
-      api('/api/tariffs').then(function (r) {
+      // Конструктора счета нет у того, кому нельзя двигать деньги — тарифы тогда не нужны.
+      if (ordMenu) api('/api/tariffs').then(function (r) {
         var tar = [], add = [];
         (r.tariffs || []).forEach(function (t) { tariffById[t.id] = t; (/^addon-/.test(t.id) ? add : tar).push(t); });
         var chips = function (label, list, cls) {
