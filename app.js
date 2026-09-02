@@ -17096,23 +17096,56 @@
     });
   }
 
+  /* ── тарифы ────────────────────────────────────────────────────────────────
+     Карточка тарифа читается сверху вниз ровно в том порядке, в котором семья
+     задает вопросы: сколько стоит, на сколько вузов, что я получаю, чего я НЕ
+     получаю. Последний блок — не мелкий шрифт внизу договора, а такая же часть
+     карточки: обещание, которого нет в тарифе, всплывет через полгода и будет
+     стоить дороже скидки. Якорь один — цена со скидкой; цена без скидки стоит
+     НАД ней и зачеркнута, чтобы глаз падал на нее первой и уже потом на цифру,
+     которую мы называем. */
   function portalTariffs(p) {
     var cards = (p.tariffs || []).map(function (t) {
       var feats = (t.features || []).map(function (f) {
         return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(f) + '</span></div>';
       }).join('');
-      var sc = t.scope || {};
+      var nos = (t.excludes || []).map(function (f) {
+        return '<div class="po-nofeat">' + ic('x', 13) + '<span>' + esc(f) + '</span></div>';
+      }).join('');
+      var sc = t.scope || {}, full = t.price_full || 0, save = full - (t.price || 0);
       return '<div class="card po-tcard' + (t.accent ? ' accent' : '') + '">' +
         (t.accent ? '<span class="uz-tag uz-tag--rev po-tflag">основной</span>' : '') +
         '<div class="po-tname">' + esc(t.name) + '</div>' +
         '<div class="po-tpos">' + esc(t.positioning || '') + '</div>' +
         '<div class="po-tfmt">' + esc(t.formats || '') + '</div>' +
-        '<div class="po-tprice num">' + fmtMoney(t.price) + ' ₽</div>' +
-        (t.price_full ? '<div class="po-told num">' + fmtMoney(t.price_full) + ' ₽ без скидки</div>' : '') +
-        '<div class="po-feats">' + feats + '</div>' +
+        '<div class="po-tpr">' +
+          (full ? '<div class="po-told"><s class="num">' + fmtMoney(full) + ' ₽</s> без скидки</div>' : '') +
+          '<div class="po-tprow"><span class="po-tprice num">' + fmtMoney(t.price) + ' ₽</span>' +
+            (save > 0 ? '<span class="po-psave pill num">выгода ' + fmtMoney(save) + ' ₽</span>' : '') +
+          '</div>' +
+          (t.price_once ? '<div class="po-tonce">при оплате целиком <b class="num">' + fmtMoney(t.price_once) + ' ₽</b></div>' : '') +
+        '</div>' +
         (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
+        '<div class="po-fsec po-tsec"><div class="po-flbl">Что входит</div>' +
+          '<div class="po-feats">' + feats + '</div></div>' +
+        '<div class="po-fsec"><div class="po-flbl">Не входит</div>' +
+          (nos ? '<div class="po-feats">' + nos + '</div>'
+               : '<div class="po-noall">' + esc(t.excludes_note || '') + '</div>') + '</div>' +
       '</div>';
     }).join('');
+
+    /* общие исключения — отдельной карточкой, а не сноской: это самый частый
+       источник спора с семьей после оплаты */
+    var exc = p.excludes_common || {}, excHtml = '';
+    if ((exc.items || []).length) {
+      excHtml = '<div class="card po-card">' +
+        '<div class="sec-head"><span class="ic">' + ic('x', 14) + '</span>' +
+          '<div><div class="t">' + esc(exc.title || 'Не входит ни в один тариф') + '</div>' +
+          (exc.sub ? '<div class="s">' + esc(exc.sub) + '</div>' : '') + '</div></div>' +
+        '<div class="po-feats">' + exc.items.map(function (f) {
+          return '<div class="po-nofeat">' + ic('x', 13) + '<span>' + esc(f) + '</span></div>';
+        }).join('') + '</div></div>';
+    }
 
     var cmp = p.compare || {};
     var cmpHtml = '';
@@ -17138,7 +17171,7 @@
 
     return '<div class="po-tariffs">' + cards + '</div>' +
       (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') +
-      portalPayment(p) + portalGuarantee(p) + cmpHtml;
+      excHtml + portalPayment(p) + portalGuarantee(p) + cmpHtml;
   }
 
   /* ── способы оплаты ────────────────────────────────────────────────────────

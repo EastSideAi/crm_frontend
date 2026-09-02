@@ -6073,16 +6073,33 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
 .po-tpos { margin-top: 5px; min-height: 54px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .po-tfmt { margin-top: 9px; min-height: 35px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
-.po-tprice { margin-top: 15px; font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
-.po-told { margin-top: 3px; font-size: 12px; color: var(--ink-3); text-decoration: line-through; }
+/* цена: якорь без скидки сверху и тихий, цена со скидкой крупная, выгода —
+   тем же зеленым чипом, что и в «Ценообразовании», второго рецепта не заводим */
+/* блок цены держит одну высоту у всех трех карточек: строка «при оплате целиком»
+   есть не везде, а лейблы «что входит» должны стоять на одной линии */
+.po-tpr { margin-top: 16px; min-height: 82px; }
+.po-told { font-size: 12px; color: var(--ink-3); }
+.po-told s { text-decoration-thickness: 1px; }
+.po-tprow { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin-top: 2px; }
+.po-tprice { font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
+.po-tonce { margin-top: 7px; font-size: 12px; color: var(--ink-2); }
+.po-tonce b { font-weight: 700; color: var(--ink); }
 .po-feats { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 9px; }
 .po-feat { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.42; }
 /* галочка тут — маркер списка, а не «хорошо»: зеленый в разделе значит только маржу */
 .po-feat svg { margin-top: 2px; color: var(--ink-3); }
-.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 12px 14px; }
+.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 12px 14px;
+  min-height: 104px; }
 .po-scope b { display: block; font-size: 13.5px; font-weight: 700; letter-spacing: -.015em; }
 .po-scope small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+/* «не входит» — не предупреждение и не ошибка, а граница услуги: тише состава
+   на один уровень чернил, без красного. Красный тут читался бы как поломка. */
+.po-tcard .po-tsec { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
+.po-nofeat { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-3); line-height: 1.42; }
+.po-nofeat svg { flex: none; margin-top: 2px; color: var(--line-2); }
+.po-noall { background: var(--green-soft); color: var(--green-ink); border-radius: var(--r-lg);
+  padding: 11px 13px; font-size: 12.5px; font-weight: 600; line-height: 1.45; }
 
 /* продукты направления и путь клиента.
    Один рецепт на оба экрана: подпись-микролейбл, шаги с тихими номерами,
@@ -6184,6 +6201,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-psave { margin-top: 14px; background: var(--green-soft); color: var(--green-ink);
   border-radius: var(--r-lg); padding: 9px 12px; font-size: 12.5px; font-weight: 600; }
 .po-psave.off { background: var(--fill); color: var(--ink-3); font-weight: 500; }
+.po-psave.pill { margin-top: 0; border-radius: var(--r-pill); padding: 5px 11px; font-size: 12px; }
 .po-pwarn { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; line-height: 1.45;
   color: var(--amber-ink); }
 .po-pwarn svg { flex: none; margin-top: 2px; }
