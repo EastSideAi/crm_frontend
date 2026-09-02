@@ -170,7 +170,8 @@ a { color: inherit; text-decoration: none; }
 /* кастомный дропдаун-триггер */
 .cdd { display: inline-flex; align-items: center; gap: 8px; font: 600 13px 'Manrope', sans-serif; color: var(--ink-2);
   background: var(--fill); border: 1px solid transparent; border-radius: var(--r-pill);
-  padding: 10px 14px; cursor: pointer; transition: .15s; white-space: nowrap; }
+  padding: 10px 14px; cursor: pointer; transition: .15s; white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
 .cdd:hover { color: var(--ink); background: #EDEFF3; }
 .cdd .cdd-ch { color: var(--ink-3); transition: transform .2s; }
 .cdd.open .cdd-ch { transform: rotate(180deg); }
@@ -186,6 +187,15 @@ a { color: inherit; text-decoration: none; }
 /* меню дропдауна (тот же контейнер, что #smenu) */
 #smenu.ddmenu button { justify-content: flex-start; }
 #smenu.ddmenu button svg { margin-left: auto; color: var(--blue); }
+
+/* выбор ведомости: год -> месяц (тихие фильтры) + ведомость со стрелками (якорь).
+   Стрелки — общий контрол .icobtn (не свой рецепт кнопки), бейдж — семья .sev. */
+.fin-perpick { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.fin-perpick .fpk-filters, .fin-perpick .fpk-main { display: flex; align-items: center; gap: 8px; }
+.fpk-year { font: 700 13px 'Manrope', sans-serif; color: var(--ink-3); padding: 0 2px; }
+.fin-perpick .icobtn { font: 600 18px 'Manrope', sans-serif; line-height: 1; }
+.icobtn:disabled { opacity: .35; cursor: default; }
+.icobtn:disabled:hover { color: var(--ink-2); border-color: var(--line-2); }
 
 /* переключатель вида (таблица/канбан) — иконки */
 .vseg { display: inline-flex; gap: 3px; background: var(--fill); border-radius: var(--r-pill); padding: 4px; margin-left: auto; }
@@ -601,6 +611,17 @@ button.tm-tag.ft::before { content: ''; width: 6px; height: 6px; border-radius: 
 button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tag.ft.on { background: var(--blue-tint); color: var(--blue-d); border-color: transparent; }
 .tm-tag.ft.on::before { background: var(--blue); border-color: var(--blue); }
+/* Обучение сотрудника: прошел / учится / не начал. Приемки нет — это статус. */
+.tm-tag.gd { display: inline-flex; align-items: center; gap: 4px; }
+.tm-tag.gd svg { width: 11px; height: 11px; }
+.tm-tag.gd-ok { background: var(--green-soft); color: var(--green-ink); }
+.tm-tag.gd-mid { background: var(--amber-soft); color: var(--amber-ink); }
+.tm-tag.gd-no { background: var(--fill); color: var(--ink-3); }
+/* Сводка обучения над списком: одна тихая строка, не якорь экрана. */
+.tm-gd-sum { display: flex; align-items: center; gap: 7px; margin: 14px 0 2px;
+  font-size: 12.5px; color: var(--ink-2); }
+.tm-gd-sum svg { color: var(--blue); flex: none; }
+.tm-gd-sum b { color: var(--ink); }
 
 /* темы уведомлений: за что этот человек отвечает. Чипы, а не селект с галочками —
    раскладка команды должна читаться одним взглядом по всему списку, без раскрытия */
@@ -2085,6 +2106,29 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .al-save { height: 42px; }
 .al-save.loading { opacity: .6; pointer-events: none; }
 .lead-add { gap: 6px; }
+
+/* Пригласить пачкой (этап 11): загрузка реестра и отчет по строкам */
+.czb-tpl { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  padding: 8px 12px; border-radius: 10px; font: 600 13px 'Manrope', sans-serif;
+  color: var(--blue-d); background: var(--blue-tint); transition: background .15s; }
+.czb-tpl:hover { background: #DEE8FF; }
+.czb-drop { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 26px 18px; border: 1.5px dashed var(--line-2); border-radius: var(--r-lg);
+  background: var(--fill); color: var(--ink-2); cursor: pointer; text-align: center;
+  transition: border-color .15s, background .15s, color .15s; }
+.czb-drop:hover { border-color: var(--blue); color: var(--ink); }
+.czb-drop.has { border-style: solid; border-color: var(--green); background: var(--green-soft);
+  color: var(--green-ink); }
+.czb-drop-i { color: var(--ink-3); }
+.czb-drop.has .czb-drop-i { color: var(--green-ink); }
+.czb-drop-t { font-weight: 600; font-size: 13.5px; word-break: break-all; }
+.czb-list { display: flex; flex-direction: column; gap: 2px; }
+.czb-row { display: grid; grid-template-columns: 28px 1fr auto minmax(0, 40%);
+  align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); }
+.czb-row:last-child { border-bottom: 0; }
+.czb-n { color: var(--ink-3); font-feature-settings: 'tnum'; font-size: 12.5px; text-align: right; }
+.czb-name { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.czb-msg { color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .al-row { flex-direction: column; gap: 13px; } .lead-add span { display: none; } }
 /* Телефон: форма встает листом снизу — так же, как везде на мобильных. Экран
    отдан ей целиком, кнопка сохранения всегда на виду над нижним краем, а
@@ -2411,6 +2455,52 @@ button.tr-crumb:hover { color: var(--blue); }
   margin-top: 9px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .rh-note svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 .rh-note b { font-weight: 700; color: var(--ink-3); }
+
+/* ── Приемка отчета ──────────────────────────────────────────────────────────
+   Метка судьбы отчета рядом со «сдан»: ждет приемки (амбер — это дело
+   руководителя), принят (зеленый), на доработке (красный — вернулось). */
+.rh-rv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 2px;
+  background: none; border: 0; cursor: pointer; min-width: 0; }
+/* Метка приемки — та же семья, что все чипы: модификатор на .sev, не свой чип.
+   Иначе рядом со «сдан» (тоже .sev) она другой высоты и скругления. */
+.sev.rv-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.rv-ok   { color: var(--green-ink); background: var(--green-soft); }
+.sev.rv-back { color: var(--red-ink);   background: var(--red-soft); }
+.rh-rv-btn:hover .sev { filter: brightness(.97); }
+/* Сколько ждет приемки — строка над таблицей. Амбер: это очередь действий. */
+.rh-await { display: flex; align-items: center; gap: 9px; margin: 14px 24px 2px;
+  padding: 11px 15px; border-radius: 12px; background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 13px; font-weight: 500; }
+.rh-await svg { flex: none; color: var(--amber-ink); }
+.rh-await b { font-weight: 700; }
+/* Судьба отчета в своей плашке «Отчет за период». */
+.rh-rvline { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px;
+  font-size: 12.5px; line-height: 1.45; font-weight: 500; }
+.rh-rvline svg { flex: none; margin-top: 2px; }
+.rh-rvline.ok { color: var(--green-ink); }
+.rh-rvline.back { color: var(--red-ink); }
+
+/* Карточка приемки (модалка). */
+.rv-badge { align-self: flex-start; margin-bottom: 4px; }
+.rv-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 4px;
+  font-size: 13px; color: var(--ink-2); }
+.rv-facts b { color: var(--ink); font-weight: 700; }
+.rv-facts .rv-bad b { color: var(--red-ink); }
+.rv-said { margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--fill); font-size: 13.5px; line-height: 1.5; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; }
+.rv-said.muted { color: var(--ink-3); }
+.rv-lbl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+.rv-state { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px;
+  font-size: 13px; font-weight: 600; line-height: 1.45; }
+.rv-state svg { flex: none; margin-top: 1px; }
+.rv-state.ok { color: var(--green-ink); }
+.rv-state.back { color: var(--red-ink); }
+.rv-note { margin-top: 14px; }
+.rv-foot .al-cancel { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.rv-foot .al-cancel svg { flex: none; }
+.rv-foot .al-cancel.armed { color: var(--red-ink); background: var(--red-soft); }
 
 /* Согласованные сроки. Настройка команды, поэтому лежит на экране команды, а
    не в отдельном разделе: правило и его исполнение видны рядом. */
@@ -2794,6 +2884,9 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.rh-grid .rh-c::before, .trow.rh-grid .brd-n::before { content: attr(data-l);
     font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--ink-3); }
+  /* Отчет + метка приемки в узкой клетке: даем перенос, иначе «на доработке»
+     обрезается за краем колонки. */
+  .trow.rh-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
   /* Дерево на телефоне: у направления числа уходят под название и называют
@@ -3489,15 +3582,34 @@ button.tsk-mimp { cursor: pointer; }
 .tg-hint.mgr svg { color: var(--amber-ink); }
 .tg-hint b { font-weight: 700; color: var(--ink); }
 .tg-hint.mgr b { color: var(--amber-ink); }
-/* удалить сообщение — по наведению на пузырь */
+/* действия над сообщением (изменить, убрать) — по наведению на пузырь */
 .tg-msg { position: relative; }
-.tg-del { position: absolute; top: -7px; width: 22px; height: 22px; border-radius: 50%;
-  background: #fff; color: var(--ink-3); display: grid; place-items: center;
-  box-shadow: 0 2px 6px rgba(15,19,32,.16); opacity: 0; transition: .12s; z-index: 2; }
-.tg-msg.in .tg-del { right: -9px; }
-.tg-msg.out .tg-del { left: -9px; }
-.tg-msg:hover .tg-del { opacity: 1; }
+.tg-acts { position: absolute; top: -7px; display: flex; gap: 4px; opacity: 0; transition: .12s; z-index: 2; }
+.tg-msg.in .tg-acts { right: -9px; }
+.tg-msg.out .tg-acts { left: -9px; }
+.tg-msg:hover .tg-acts { opacity: 1; }
+.tg-acts > button { width: 22px; height: 22px; border-radius: 50%; background: #fff; color: var(--ink-3);
+  display: grid; place-items: center; box-shadow: 0 2px 6px rgba(15,19,32,.16); transition: color .12s; }
 .tg-del:hover { color: var(--coral); }
+.tg-edit:hover { color: var(--blue); }
+/* Правка прямо в пузыре: текст остаётся на своём месте в переписке, и видно, что
+   именно человек уже прочитал. Поле светлое даже у исходящего — на синем фоне
+   собственный ввод не читается. */
+.tg-msg.editing .tg-bub, .tg-msg.editing.out .tg-bub, .tg-msg.editing.out.mgr .tg-bub {
+  background: #fff; color: var(--ink); box-shadow: 0 0 0 1.5px var(--blue) inset; padding: 8px; }
+.tg-edin { width: 100%; min-width: 240px; border: 0; resize: vertical; font: inherit; color: var(--ink);
+  line-height: 1.45; background: transparent; outline: none; }
+.tg-edrow { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.tg-edrow button { height: 26px; padding: 0 11px; border-radius: 7px; font-size: 12px; font-weight: 600; }
+.tg-edx { color: var(--ink-3); }
+.tg-edx:hover { color: var(--ink); }
+.tg-edok { background: var(--blue); color: #fff; }
+.tg-edok:hover { filter: brightness(1.06); }
+/* Отозванное сообщение. Не прячем: пропавшая реплика читается как «менеджер соврал»,
+   а зачёркнутая честно говорит, что мы отправили и убрали. Кнопки удаления у него уже
+   нет — сервер не отдаёт can_delete на удалённое. */
+.tg-msg.gone .tg-bub { opacity: .55; text-decoration: line-through; text-decoration-color: var(--ink-3); }
+.tg-msg.gone .tg-mt { text-decoration: none; }
 /* композер: написать сообщение (перехват у бота).
    Поле — textarea: Enter отправляет, Shift+Enter переносит строку, высота растёт по тексту
    (до 128px, дальше свой скролл), поэтому длинный ответ виден целиком, а не одной строкой. */
@@ -5429,6 +5541,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
 .fo-sum.neg { color: var(--ink-2); }
 .fin-grid.muted { opacity: .5; }
+/* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
+   отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
+.trow.click:hover .fo-what b { color: var(--blue); }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
@@ -5956,7 +6071,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tcard.accent { border-color: #CFE0FF; }
 .po-tflag { position: absolute; top: 17px; right: 17px; }
 .po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
-.po-tpos { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-tpos { margin-top: 5px; min-height: 54px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .po-tfmt { margin-top: 9px; min-height: 35px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 .po-tprice { margin-top: 15px; font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
 .po-told { margin-top: 3px; font-size: 12px; color: var(--ink-3); text-decoration: line-through; }
@@ -6034,7 +6149,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tbl.econ .po-rl { width: 250px; }
 /* поля экономики — системный .al-in, компактный размер (прецедент — .ed-input.big).
    Своего рецепта инпута в разделе нет: фокус, фон и обводка приходят из системы. */
-.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px; }
+.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px;
+  font-variant-numeric: tabular-nums; }
 .po-in { max-width: 152px; }
 .po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
   display: inline-block; vertical-align: middle; }
@@ -6105,6 +6221,63 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-lu { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
   font-weight: 600; color: var(--blue); white-space: nowrap; }
 
+
+/* способы оплаты: переключатель сверху, три цены под ним.
+   Переплата — не украшение, а сам аргумент разговора, поэтому она стоит
+   под ценой, а не прячется в примечании. */
+.po-payseg { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 17px; }
+.po-payh { font-size: 12.5px; color: var(--ink-3); }
+.po-pay { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.po-payc { background: var(--fill); border-radius: var(--r-lg); padding: 15px 17px; }
+.po-payc.accent { background: var(--blue-tint); }
+.po-payn { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.po-payv { margin-top: 9px; font-size: 25px; font-weight: 700; letter-spacing: -.035em; color: var(--ink); }
+.po-payo { margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+.po-payo.best { color: var(--green-ink); font-weight: 600; }
+.po-draft { display: inline-flex; margin-top: 11px; background: var(--amber-soft); color: var(--amber-ink); }
+.po-opens { display: flex; flex-direction: column; gap: 9px; }
+.po-openi { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-openi svg { flex: none; margin-top: 2px; color: var(--amber-ink); }
+
+/* этапы флагмана */
+.po-lede { margin-top: 16px; background: var(--blue-tint); border-radius: var(--r-lg);
+  padding: 14px 17px; font-size: 14.5px; font-weight: 600; letter-spacing: -.015em;
+  color: var(--navy); line-height: 1.5; }
+.po-stghead { margin-bottom: 20px; }
+.po-stg .po-sh { padding: 15px 20px; }
+.po-stnum { flex: none; width: 26px; font-size: 14px; font-weight: 700; color: var(--ink-3);
+  text-align: left; }
+.po-stg.open .po-stnum, .po-sh:hover .po-stnum { color: var(--blue); }
+.po-w { flex: none; }
+.po-w-plat { background: var(--fill); color: var(--ink-2); }
+.po-w-team { background: var(--blue-tint); color: var(--navy); }
+.po-w-self { background: var(--amber-soft); color: var(--amber-ink); }
+.po-sbody { padding-left: 59px; }
+.po-sbody .po-txt { margin-top: 15px; }
+/* в шапке этапа плашка только одна — роль. Срок рядом с ней такой же серой
+   пилюлей читался бы как второй чип: в режиме «Сравнить» он и так тихий текст */
+.po-sh .po-when { background: none; padding: 0 2px; font-weight: 500; color: var(--ink-3); }
+.po-samet { margin-top: 15px; font-size: 11.5px; color: var(--ink-3); }
+.po-samet + .po-txt { margin-top: 7px; }
+.po-sbody .po-pluses { margin-top: 13px; }
+.po-sell { margin-top: 15px; background: var(--amber-soft); border-radius: 12px; padding: 12px 15px;
+  font-size: 12.5px; color: var(--amber-ink); line-height: 1.5; }
+.po-sell b { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; }
+.po-tbl.cmp .po-w { display: inline-flex; margin-bottom: 8px; }
+.po-ct { display: block; }
+
+/* экономика: строка этапа несет его себестоимость, строки под ней — из чего она */
+/* строка этапа несет его себестоимость. Свой класс, не .po-r-grp: тот занят
+   группами прайса на вкладке «Ценообразование» и выглядит иначе.
+   Вес 600, а не 700: подытог этапа не должен спорить с итогом продукта ниже. */
+.po-r-stage td { background: var(--fill); font-weight: 600; color: var(--ink); }
+.po-r-stage .po-hint { font-weight: 500; }
+.po-r-item .po-rl { font-weight: 500; color: var(--ink-2); }
+/* итог продукта отделен от двенадцати подытогов линией — иначе они читаются
+   одним уровнем и итог теряется */
+.po-tbl.econ .po-r-sum:first-of-type td { border-top: 1px solid var(--line-2); }
+
 @media (max-width: 960px) {
   /* на планшете и телефоне колонок две, ряды переносятся — общая сетка строк
      тут только мешает, каждая колонка живет своей высотой */
@@ -6115,6 +6288,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
+  .po-pay { grid-template-columns: 1fr; }
   .po-pcards { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
@@ -6133,6 +6307,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      целиком (flex-basis 100%), иначе отбирает ширину у заголовка и тот ломается
      на три строки рядом с иконкой. */
   .po-when { order: 3; flex-basis: 100%; align-self: flex-start; margin-top: 4px; }
+  /* шапка этапа: на узком экране номер, название и шеврон в первой строке,
+     кто делает и срок — во второй, с отступом под колонку текста */
+  /* переключатель тарифа шире экрана: даем ему уехать вбок, как вкладкам,
+     а не ломаем в две строки — из двух строк не читается, что это один набор */
+  .po-payseg .dperiod { max-width: 100%; overflow-x: auto; }
+  .po-payseg .dperiod::-webkit-scrollbar { height: 0; }
+  .po-payseg .dperiod button { flex: none; }
+  .po-sh { flex-wrap: wrap; }
+  /* без явной ширины .po-it сжимается до нуля (min-width:0 у общего рецепта) и
+     название этапа встает столбиком по одному слову вместо переноса чипов */
+  .po-sh .po-it { min-width: 58%; }
+  .po-sh .po-iv { order: 2; }
+  .po-sh .po-w { order: 3; margin: 3px 0 0 37px; }
+  .po-sh .po-when { order: 4; flex-basis: auto; margin-top: 3px; }
+  .po-sbody { padding-left: 16px; }
+  .po-payv { font-size: 22px; }
+  .po-lede { font-size: 13.5px; padding: 13px 15px; }
 }
 
 /* ════ ИМПОРТ ВСТРЕЧИ — загрузка протокола и экран проверки ════
@@ -6551,3 +6742,324 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 720px) {
   .ap-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Академия тьютора ───────────────────────────────────────────────────────
+   Обучающие курсы с аттестацией (renderAcademy в app.js). Как и «Обучение
+   сотрудника» (.gd-*), это единственная зона CRM, где плотность уступает
+   ясности: воздуха больше, экран уже, заголовок шага крупнее. Токены палитры
+   те же, что во всей CRM; заданы локально на .academy, чтобы верстку курса
+   можно было переносить целиком. Все классы под .academy, чтобы общие
+   .h/.p/.card/.opt не пересекались с уроком. */
+.academy {
+  --ac-blue: #2F6BFF; --ac-blue-d: #1E50E6; --ac-blue-tint: #EAF0FF; --ac-navy: #1C2B4A;
+  --ac-ink: #11151F; --ac-ink-2: #697086; --ac-ink-3: #A6ABB8;
+  --ac-line: #EDEEF2; --ac-line-2: #E3E5EB; --ac-fill: #F5F6F9; --ac-card: #FFFFFF;
+  --ac-green: #18A957; --ac-green-ink: #0E7C3F; --ac-green-soft: #E4F6EC;
+  --ac-amber-ink: #9A5B12; --ac-amber-soft: #FBF0DD;
+  --ac-red: #E5484D; --ac-red-soft: #FCEBEC;
+  --ac-r-xl: 20px; --ac-r-lg: 14px; --ac-r-md: 12px; --ac-r-pill: 999px;
+  --ac-ease: cubic-bezier(.22,1,.36,1);
+  color: var(--ac-ink); font-feature-settings: 'tnum';
+}
+.academy .ac-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ac-ink-3); }
+.academy .ac-wrap { display: grid; grid-template-columns: 264px 1fr; gap: 18px; align-items: start; max-width: 1080px; }
+
+.academy .ac-route { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 16px 14px; position: sticky; top: 16px; }
+.academy .ac-route-head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 4px 12px; }
+.academy .ac-prog { font-weight: 700; color: var(--ac-blue-d); font-size: 12.5px; }
+.academy .ac-bar { height: 6px; background: var(--ac-fill); border-radius: var(--ac-r-pill); overflow: hidden; margin: 0 4px 14px; }
+.academy .ac-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ac-blue), var(--ac-blue-d)); border-radius: var(--ac-r-pill); transition: width .9s var(--ac-ease); }
+.academy .ac-course-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--ac-blue-tint); color: var(--ac-blue-d); font-weight: 600; font-size: 12px; padding: 6px 11px; border-radius: var(--ac-r-pill); margin: 0 4px 14px; }
+.academy .ac-course-pill svg { width: 13px; height: 13px; }
+.academy .ac-r { display: flex; align-items: center; gap: 11px; padding: 9px 8px; border-radius: var(--ac-r-md); color: var(--ac-ink-2); font-weight: 500; position: relative; cursor: pointer; transition: .12s var(--ac-ease); }
+.academy .ac-r:hover:not(.lock) { background: #FBFBFC; }
+.academy .ac-r.active { background: var(--ac-blue-tint); color: var(--ac-ink); font-weight: 600; }
+.academy .ac-r.active::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px; background: var(--ac-blue); }
+.academy .ac-r.lock { color: var(--ac-ink-3); cursor: default; }
+.academy .ac-num { width: 22px; height: 22px; flex: none; border-radius: 7px; display: grid; place-items: center; font-size: 11.5px; font-weight: 700; background: var(--ac-fill); color: var(--ac-ink-3); }
+.academy .ac-num svg { width: 12px; height: 12px; }
+.academy .ac-r.active .ac-num { background: var(--ac-blue); color: #fff; }
+.academy .ac-r.done .ac-num { background: var(--ac-green-soft); color: var(--ac-green-ink); }
+.academy .ac-r.ac-exam .ac-num { background: var(--ac-navy); color: #fff; }
+.academy .ac-r.ac-exam.lock .ac-num { background: var(--ac-fill); color: var(--ac-ink-3); }
+.academy .ac-lk { margin-left: auto; color: var(--ac-ink-3); display: inline-flex; }
+.academy .ac-lk svg { width: 12px; height: 12px; }
+.academy .ac-tl { font-size: 13px; line-height: 1.25; }
+
+.academy .ac-stage { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 32px 40px 24px; min-height: 520px; display: flex; flex-direction: column; }
+.academy .ac-stage-top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.academy .ac-dots { display: flex; gap: 6px; margin-left: auto; }
+.academy .ac-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac-line-2); transition: .25s var(--ac-ease); }
+.academy .ac-dots i.on { background: var(--ac-blue); transform: scale(1.15); }
+.academy .ac-dots i.past { background: var(--ac-blue-tint); }
+
+.academy .ac-screen { flex: 1; animation: ac-fade .28s var(--ac-ease); max-width: 640px; }
+@keyframes ac-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.academy .ac-eyebrow { margin-bottom: 10px; color: var(--ac-blue-d); }
+.academy .ac-h { font-size: 27px; font-weight: 700; letter-spacing: -.03em; line-height: 1.12; text-wrap: balance; margin: 0 0 14px; color: var(--ac-ink); }
+.academy .ac-p { font-size: 15px; color: #2a2f3a; margin: 0 0 14px; max-width: 60ch; }
+.academy .ac-p.lead { font-size: 16px; color: var(--ac-ink); }
+.academy .ac-p b { font-weight: 700; }
+
+.academy .ac-note { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 16px 18px; margin: 18px 0; display: flex; gap: 13px; align-items: flex-start; }
+.academy .ac-nic { width: 30px; height: 30px; flex: none; border-radius: 9px; background: var(--ac-blue-tint); color: var(--ac-blue-d); display: grid; place-items: center; font-weight: 800; }
+.academy .ac-note.warn .ac-nic { background: var(--ac-amber-soft); color: var(--ac-amber-ink); }
+.academy .ac-nt { font-size: 14px; color: #333843; }
+.academy .ac-nt b { color: var(--ac-ink); }
+
+.academy .ac-quote { border-left: 3px solid var(--ac-blue); padding: 4px 0 4px 16px; margin: 16px 0; font-size: 15px; color: #333843; }
+.academy .ac-who { display: block; margin-top: 6px; }
+
+.academy .ac-rules { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.academy .ac-rules li { display: flex; gap: 11px; align-items: flex-start; font-size: 14.5px; color: #333843; }
+.academy .ac-mk { width: 22px; height: 22px; flex: none; border-radius: 7px; background: var(--ac-blue-tint); color: var(--ac-blue-d); display: grid; place-items: center; font-weight: 800; font-size: 12px; margin-top: 1px; }
+.academy .ac-rules.good .ac-mk { background: var(--ac-green-soft); color: var(--ac-green-ink); }
+.academy .ac-rules.no .ac-mk { background: var(--ac-red-soft); color: var(--ac-red); }
+.academy .ac-rules li b { font-weight: 700; color: var(--ac-ink); }
+
+.academy .ac-pay { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.academy .ac-pay li { display: flex; justify-content: space-between; align-items: center; gap: 14px; background: var(--ac-fill); border-radius: var(--ac-r-md); padding: 12px 16px; font-size: 14.5px; color: #333843; }
+.academy .ac-amt { font-weight: 700; color: var(--ac-ink); white-space: nowrap; }
+
+/* Разбивка ставки по пунктам чек-листа: полный чек-лист = полная ставка, у каждого
+   пункта своя цена. Три группы услуг, внутри плотно, между группами воздуха больше. */
+.academy .ac-deduct { display: flex; flex-direction: column; gap: 14px; margin: 18px 0; }
+.academy .ac-dgrp { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 15px 17px 8px; }
+.academy .ac-dhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding-bottom: 11px; }
+.academy .ac-dname { font-weight: 700; color: var(--ac-ink); font-size: 15px; letter-spacing: -.01em; }
+.academy .ac-drate { font-weight: 700; color: var(--ac-blue-d); font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.academy .ac-dlist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.academy .ac-dlist li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 8px 0; font-size: 14px; color: #333843; border-top: 1px solid var(--ac-line); }
+.academy .ac-dlist li:first-child { border-top: 0; }
+.academy .ac-damt { font-weight: 600; color: var(--ac-ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.academy .ac-dtot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-top: 2px; padding: 11px 0 6px; border-top: 1.5px solid var(--ac-line-2); font-weight: 700; color: var(--ac-ink); font-size: 14.5px; font-variant-numeric: tabular-nums; }
+
+.academy .ac-qlead { font-size: 15px; color: var(--ac-ink); margin: 0 0 4px; }
+.academy .ac-opts { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 8px; }
+.academy .ac-opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; cursor: pointer; background: var(--ac-card); border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-lg); padding: 14px 16px; font: inherit; color: var(--ac-ink); transition: .14s var(--ac-ease); }
+.academy .ac-opt:hover:not(:disabled) { border-color: var(--ac-blue); background: #FCFCFE; }
+.academy .ac-key { width: 24px; height: 24px; flex: none; border-radius: 7px; background: var(--ac-fill); color: var(--ac-ink-2); display: grid; place-items: center; font-weight: 700; font-size: 12.5px; transition: .14s; }
+.academy .ac-ot { font-size: 14.5px; line-height: 1.35; padding-top: 2px; }
+.academy .ac-opt:disabled { cursor: default; }
+.academy .ac-opt.correct { border-color: var(--ac-green); background: var(--ac-green-soft); }
+.academy .ac-opt.correct .ac-key { background: var(--ac-green); color: #fff; }
+.academy .ac-opt.wrong { border-color: var(--ac-red); background: var(--ac-red-soft); }
+.academy .ac-opt.wrong .ac-key { background: var(--ac-red); color: #fff; }
+.academy .ac-opt.dim { opacity: .5; }
+
+.academy .ac-fb { display: none; margin-top: 16px; border-radius: var(--ac-r-lg); padding: 15px 17px; font-size: 14.5px; animation: ac-fade .28s var(--ac-ease); }
+.academy .ac-fb.show { display: block; }
+.academy .ac-fb.ok { background: var(--ac-green-soft); color: #155f38; }
+.academy .ac-fb.no { background: var(--ac-amber-soft); color: var(--ac-amber-ink); }
+.academy .ac-fb b { font-weight: 700; }
+
+.academy .ac-task { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 18px; margin: 16px 0; }
+.academy .ac-task p { margin: 0 0 12px; font-size: 14px; color: #333843; }
+.academy .ac-ta { width: 100%; min-height: 96px; resize: vertical; border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-md); padding: 11px 13px; font: inherit; font-size: 14px; color: var(--ac-ink); background: var(--ac-card); transition: .14s; }
+.academy .ac-ta:focus { outline: none; border-color: var(--ac-blue); box-shadow: 0 0 0 3px rgba(47,107,255,.1); }
+.academy .ac-chkline { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 14px; color: #333843; margin-top: 4px; }
+.academy .ac-chkline input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--ac-blue); flex: none; }
+.academy .ac-upl { display: inline-flex; align-items: center; gap: 8px; background: var(--ac-card); border: 1px dashed var(--ac-line-2); border-radius: var(--ac-r-md); padding: 10px 14px; font-size: 13.5px; color: var(--ac-ink-2); cursor: pointer; transition: .14s; }
+.academy .ac-upl:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-upl.done { border-style: solid; border-color: var(--ac-green); background: var(--ac-green-soft); color: var(--ac-green-ink); }
+.academy .ac-tg { display: flex; width: fit-content; align-items: center; gap: 8px; background: var(--ac-blue); color: #fff; border-radius: var(--ac-r-md); padding: 10px 15px; font-size: 13.5px; font-weight: 600; text-decoration: none; margin: 0 0 10px; transition: .14s; }
+.academy .ac-tg:hover { background: var(--ac-blue-d); }
+.academy .ac-tg svg { flex: none; }
+
+.academy .ac-pick { display: flex; gap: 12px; margin: 14px 0 6px; flex-wrap: wrap; }
+.academy .ac-payopt { flex: 1; min-width: 190px; border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-lg); padding: 15px 16px; cursor: pointer; transition: .14s var(--ac-ease); background: var(--ac-card); }
+.academy .ac-payopt:hover { border-color: var(--ac-blue); }
+.academy .ac-payopt.sel { border-color: var(--ac-blue); background: var(--ac-blue-tint); }
+.academy .ac-pt { font-weight: 700; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+.academy .ac-pd { font-size: 13px; color: var(--ac-ink-2); margin-top: 4px; }
+.academy .ac-rd { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--ac-line-2); margin-left: auto; flex: none; }
+.academy .ac-payopt.sel .ac-rd { border-color: var(--ac-blue); background: radial-gradient(circle, var(--ac-blue) 0 4px, transparent 5px); }
+
+.academy .ac-fin { text-align: center; max-width: 540px; margin: auto; padding: 14px 0; }
+.academy .ac-seal { width: 70px; height: 70px; border-radius: 50%; margin: 0 auto 18px; display: grid; place-items: center; background: var(--ac-green-soft); color: var(--ac-green); animation: ac-pop .5s var(--ac-ease); }
+.academy .ac-seal svg { width: 32px; height: 32px; }
+@keyframes ac-pop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+.academy .ac-fin .ac-h { font-size: 25px; }
+.academy .ac-cert { display: inline-flex; align-items: center; gap: 9px; margin-top: 16px; background: var(--ac-fill); border-radius: var(--ac-r-pill); padding: 9px 18px; font-weight: 600; font-size: 13.5px; color: var(--ac-navy); }
+.academy .ac-cert svg { width: 15px; height: 15px; }
+
+.academy .ac-foot { display: flex; align-items: center; gap: 12px; margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--ac-line); }
+.academy .ac-btn { font: inherit; font-weight: 600; font-size: 14px; border-radius: 11px; padding: 11px 20px; cursor: pointer; border: 1px solid transparent; transition: .14s var(--ac-ease); }
+.academy .ac-btn.pri { background: var(--ac-blue); color: #fff; }
+.academy .ac-btn.pri:hover:not(:disabled) { background: var(--ac-blue-d); }
+.academy .ac-btn.pri:disabled { background: var(--ac-line-2); color: var(--ac-ink-3); cursor: default; }
+.academy .ac-btn.ghost { background: var(--ac-card); border-color: var(--ac-line-2); color: var(--ac-ink-2); }
+.academy .ac-btn.ghost:hover { border-color: var(--ac-ink-3); color: var(--ac-ink); }
+.academy .ac-step-lab { margin-left: auto; color: var(--ac-ink-3); font-weight: 600; font-size: 12.5px; }
+
+@media (max-width: 820px) {
+  .academy .ac-wrap { grid-template-columns: 1fr; gap: 14px; }
+  .academy .ac-route { position: static; padding: 13px 12px; }
+  .academy .ac-rlist { display: none; }
+  .academy .ac-stage { padding: 22px 18px 18px; min-height: 0; }
+  .academy .ac-h { font-size: 23px; }
+  .academy .ac-fin .ac-h { font-size: 22px; }
+}
+
+.academy .ac-dl-wrap { margin-top: 18px; }
+.academy a.ac-dl { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.academy a.ac-dl svg { width: 15px; height: 15px; }
+
+/* Материалы для скачивания в сайдбаре курса — доступны всегда, всем тьюторам. */
+.academy .ac-mats { margin: 16px 4px 2px; padding-top: 14px; border-top: 1px solid var(--ac-line);
+  display: flex; flex-direction: column; gap: 4px; }
+.academy .ac-mats .ac-cap { margin-bottom: 4px; }
+.academy a.ac-mat { display: flex; align-items: center; gap: 9px; text-decoration: none;
+  color: var(--ac-ink-2); font-size: 12.5px; font-weight: 600; line-height: 1.25;
+  padding: 8px 9px; border-radius: var(--ac-r-md); transition: .14s var(--ac-ease); }
+.academy a.ac-mat:hover { background: var(--ac-fill); color: var(--ac-blue-d); }
+.academy a.ac-mat svg { width: 14px; height: 14px; flex: 0 0 auto; color: var(--ac-blue-d); }
+
+/* ── Заезды тьютора ──────────────────────────────────────────────────────────
+   Раздел исполнения заезда с чек-листом и приёмкой. Классы zz-* под .zaezdy,
+   чтобы не задевать общие стили CRM. Кнопки берём общие (.bp, .al-cancel). */
+.zaezdy {
+  --zz-blue:#2F6BFF; --zz-blue-d:#1E50E6; --zz-tint:#EAF0FF;
+  --zz-ink:#11151F; --zz-ink-2:#5B6272; --zz-ink-3:#9AA0AD;
+  --zz-line:#E9EBF0; --zz-line-2:#E3E5EB; --zz-fill:#F5F6F9; --zz-card:#FFFFFF;
+  --zz-green:#18A957; --zz-green-ink:#0E7C3F; --zz-green-soft:#E4F6EC;
+  --zz-amber-ink:#9A5B12; --zz-amber-soft:#FBF0DD;
+  --zz-red:#E5484D; --zz-red-ink:#B4272B; --zz-red-soft:#FCEBEC;
+  --zz-r:12px; --zz-r-lg:14px; --zz-pill:999px;
+  color:var(--zz-ink);
+}
+.zaezdy .zz-head { display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+.zaezdy .zz-h { font-size:19px; font-weight:800; letter-spacing:-.02em; }
+.zaezdy .zz-sp { margin-left:auto; }
+.zaezdy .zz-tabs { display:flex; gap:4px; background:var(--zz-fill); padding:3px; border-radius:10px; }
+.zaezdy .zz-tab { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:7px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.zaezdy .zz-tab.on { background:var(--zz-card); color:var(--zz-ink); box-shadow:0 1px 2px rgba(17,21,31,.06); }
+.zaezdy .zz-badge { background:var(--zz-blue); color:#fff; font-size:11px; font-weight:700; min-width:17px; height:17px; padding:0 5px; border-radius:999px; display:inline-grid; place-items:center; }
+
+.zaezdy .zz-list { display:flex; flex-direction:column; gap:9px; }
+.zaezdy .zz-card { width:100%; text-align:left; background:var(--zz-card); border:1px solid var(--zz-line); border-radius:var(--zz-r-lg); padding:14px 16px; cursor:pointer; display:flex; align-items:center; gap:14px; transition:.12s cubic-bezier(.22,1,.36,1); font:inherit; }
+.zaezdy .zz-card:hover { border-color:var(--zz-blue); background:#FCFCFE; }
+.zaezdy .zz-card-main { min-width:0; }
+.zaezdy .zz-card-t { font-weight:700; font-size:14.5px; color:var(--zz-ink); }
+.zaezdy .zz-who { color:var(--zz-ink-3); font-weight:500; }
+.zaezdy .zz-card-m { font-size:13px; color:var(--zz-ink-2); margin-top:2px; }
+.zaezdy .zz-card-side { margin-left:auto; display:flex; align-items:center; gap:12px; flex:none; }
+.zaezdy .zz-prog { font-size:13px; font-weight:700; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; }
+.zaezdy .zz-pay { font-size:14px; font-weight:800; color:var(--zz-green-ink); white-space:nowrap; }
+.zaezdy .zz-pill { font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:var(--zz-pill); white-space:nowrap; }
+.zaezdy .zz-pill.gray { background:var(--zz-fill); color:var(--zz-ink-2); }
+.zaezdy .zz-pill.amber { background:var(--zz-amber-soft); color:var(--zz-amber-ink); }
+.zaezdy .zz-pill.green { background:var(--zz-green-soft); color:var(--zz-green-ink); }
+.zaezdy .zz-pill.red { background:var(--zz-red-soft); color:var(--zz-red-ink); }
+
+.zaezdy .zz-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--zz-ink-3); text-align:center; padding:60px 20px; }
+.zaezdy .zz-empty svg { opacity:.5; }
+
+.zaezdy .zz-panel { background:var(--zz-card); border:1px solid var(--zz-line); border-radius:16px; padding:22px 24px; max-width:680px; }
+.zaezdy .zz-back { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; margin-bottom:16px; }
+.zaezdy .zz-back:hover { color:var(--zz-ink); }
+.zaezdy .zz-dh { display:flex; align-items:flex-start; gap:14px; margin-bottom:16px; }
+.zaezdy .zz-dh-t { font-size:20px; font-weight:800; letter-spacing:-.02em; }
+.zaezdy .zz-dh-m { font-size:13px; color:var(--zz-ink-2); margin-top:3px; }
+.zaezdy .zz-dh .zz-pill { margin-left:auto; }
+
+.zaezdy .zz-note { display:flex; gap:11px; align-items:flex-start; border-radius:var(--zz-r); padding:13px 15px; font-size:13.5px; margin-bottom:16px; }
+.zaezdy .zz-note.red { background:var(--zz-red-soft); color:var(--zz-red-ink); }
+.zaezdy .zz-note.green { background:var(--zz-green-soft); color:var(--zz-green-ink); }
+.zaezdy .zz-note b { font-weight:700; }
+.zaezdy .zz-note svg { flex:none; margin-top:1px; }
+
+.zaezdy .zz-checks { display:flex; flex-direction:column; gap:8px; margin-bottom:6px; }
+.zaezdy .zz-chk { display:flex; gap:11px; align-items:flex-start; font-size:14px; color:#333843; padding:10px 12px; border-radius:10px; background:var(--zz-fill); }
+.zaezdy label.zz-chk { cursor:pointer; }
+.zaezdy label.zz-chk:hover { background:#EEF0F5; }
+.zaezdy .zz-chk input { width:18px; height:18px; margin-top:1px; accent-color:var(--zz-blue); flex:none; }
+.zaezdy .zz-chk.ro .zz-tick { width:18px; height:18px; flex:none; border-radius:5px; border:1.6px solid var(--zz-line-2); display:grid; place-items:center; color:#fff; }
+.zaezdy .zz-chk.ro.on .zz-tick { background:var(--zz-green); border-color:var(--zz-green); }
+.zaezdy .zz-chk.ro.on { color:var(--zz-ink); }
+.zaezdy .zz-amt { flex:none; margin-left:auto; padding-left:12px; font-size:12.5px; font-weight:700; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.zaezdy .zz-amt.off { color:var(--zz-red-ink); }
+
+.zaezdy .zz-note.amber { background:var(--zz-amber-soft); color:var(--zz-amber-ink); }
+
+.zaezdy .zz-foot { display:flex; align-items:center; gap:12px; margin-top:18px; padding-top:16px; border-top:1px solid var(--zz-line); }
+.zaezdy .zz-count { font-size:13px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-count b { font-weight:800; color:var(--zz-ink); }
+.zaezdy .zz-mut { color:var(--zz-ink-3); font-weight:600; }
+.zaezdy .zz-foot .bp { margin-left:auto; }
+.zaezdy .zz-foot .zz-sp { margin-left:auto; }
+.zaezdy .zz-return-box { margin-top:12px; display:flex; flex-direction:column; gap:10px; }
+.zaezdy .zz-return-box[hidden] { display:none; }
+
+.zaezdy .zz-form { display:flex; flex-direction:column; gap:14px; max-width:420px; }
+.zaezdy .zz-lbl { display:flex; flex-direction:column; gap:6px; font-size:12.5px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-in { font:inherit; font-size:14px; color:var(--zz-ink); background:var(--zz-card); border:1px solid var(--zz-line-2); border-radius:10px; padding:10px 12px; transition:.14s; }
+.zaezdy .zz-in:focus { outline:none; border-color:var(--zz-blue); box-shadow:0 0 0 3px rgba(47,107,255,.1); }
+.zaezdy textarea.zz-in { min-height:70px; resize:vertical; }
+.zaezdy .zz-form-a { margin-top:4px; }
+
+/* Заезд внутри карточки ученика: те же zz-* элементы, но без обертки-панели —
+   секция уже живет в дровере. Здесь только специфика карточки. */
+.arr-card { margin-top:4px; }
+.arr-card .arr-top { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+.arr-card .arr-svc { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--zz-ink); }
+.arr-card .arr-top .zz-pill { margin-left:auto; }
+.arr-card .zz-lbl { margin-top:14px; }
+.arr-card .arr-field { margin-top:16px; }
+.arr-card .arr-flbl { font-size:12.5px; font-weight:600; color:var(--zz-ink-2); margin-bottom:8px; }
+.arr-card .arr-link { display:inline-flex; align-items:center; gap:6px; font-size:13.5px; color:var(--zz-blue-d); text-decoration:none; word-break:break-all; }
+.arr-card .arr-link:hover { text-decoration:underline; }
+.arr-card .arr-shots { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.arr-card .arr-shot { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--zz-ink-2); background:var(--zz-fill); border:1px solid var(--zz-line-2); border-radius:9px; padding:7px 11px; text-decoration:none; }
+.arr-card .arr-shot:hover { border-color:var(--zz-blue); color:var(--zz-ink); }
+.arr-card .arr-up { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:var(--zz-blue-d); background:var(--zz-tint); border-radius:9px; padding:7px 11px; cursor:pointer; }
+.arr-card .arr-up:hover { background:#DEE8FF; }
+.arr-card .arr-muted { font-size:13px; color:var(--zz-ink-3); }
+.arr-card .arr-perf-nm { font-size:14px; font-weight:600; color:var(--zz-ink); }
+.arr-card .arr-perf-sel { max-width:340px; }
+.arr-card .arr-empty { display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+.arr-card .arr-empty-t { font-size:14px; color:var(--zz-ink-2); margin-bottom:6px; }
+.arr-card .arr-empty .zz-lbl { margin-top:0; min-width:260px; }
+.arr-card .arr-empty .bp { margin-top:12px; }
+
+@media (max-width:720px) {
+  .zaezdy .zz-panel { padding:18px 16px; }
+  .zaezdy .zz-card { padding:12px 13px; }
+}
+
+/* ── Аттестации тьюторов (надзор, cap academy_review) ──────────────────────── */
+.att { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 22px 24px 10px; }
+.att-head { display: flex; align-items: center; gap: 12px; }
+.att-h { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.att-sp { flex: 1; }
+.att-refresh { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; font: 600 13px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-pill); cursor: pointer; transition: .15s; }
+.att-refresh:hover { color: var(--ink); border-color: var(--line-2); }
+.att-sum { display: flex; gap: 0; margin-top: 7px; font-size: 13px; color: var(--ink-3); }
+.att-sum b { color: var(--ink); font-weight: 700; font-variant-numeric: tabular-nums; }
+.att-sum .att-mid { position: relative; margin-left: 16px; padding-left: 17px; }
+.att-sum .att-mid::before { content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); transform: translateY(-50%); }
+.att-tablewrap { margin: 16px -24px 0; overflow-x: auto; }
+.att-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.att-table th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--ink-3); padding: 0 14px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.att-table th.att-c, .att-table td.att-c { text-align: center; }
+.att-table td { padding: 13px 14px; border-bottom: 1px solid var(--line); color: var(--ink); vertical-align: middle; }
+.att-table tbody tr:last-child td { border-bottom: none; }
+.att-table tbody tr:hover td { background: var(--fill); }
+.att-table th:first-child, .att-table td:first-child { padding-left: 24px; }
+.att-table th:last-child, .att-table td:last-child { padding-right: 24px; }
+.att-who { display: flex; flex-direction: column; gap: 2px; }
+.att-name { font-weight: 600; color: var(--ink); }
+.att-role { font-size: 11.5px; color: var(--ink-3); }
+.att-course { color: var(--ink-2); white-space: nowrap; }
+.att-frac { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink-2); }
+.att-frac.full { color: var(--green-ink); }
+.att-ok { display: inline-flex; color: var(--green); }
+.att-no { color: var(--ink-3); }
+.att-pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.att-pill.green { background: var(--green-soft); color: var(--green-ink); }
+.att-pill.gray { background: var(--fill); color: var(--ink-2); }
+.att-when { margin-left: 8px; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.att-tries { margin-left: 6px; font-size: 11px; color: var(--ink-3); }
+.att-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 46px 20px 52px; color: var(--ink-3); font-size: 14px; max-width: 400px; margin: 0 auto; }
+.att-empty svg { opacity: .55; }
