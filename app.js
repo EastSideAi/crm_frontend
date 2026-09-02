@@ -76,6 +76,8 @@
     board: null, boardPeriod: 'week', boardShift: 0, taskWho: null,
     // ритм: план на период и отчет за него; свой и, у руководителя, срез по команде
     rhythm: null, rhythmTeam: null, rhythmSched: null,
+    // недельный цикл: моя неделя, неделя команды, сдвиг недель, чью неделю смотрю
+    myweek: null, teamWeek: null, weekShift: 0, teamWho: null,
     rhythmPeriod: 'week', rhythmShift: 0, rhythmWho: 'me',
     // «Готово» за период: тот же переключатель, что у табло, но свой отрезок
     donePeriod: 'week', doneShift: 0, donePeriodLabel: '', doneGoals: [],
@@ -2397,7 +2399,8 @@
     } else if (state.page === 'tasks') {
       var tsegs = taskSegs();
       tb.innerHTML = '<nav class="tabs">' + tsegs.map(function (k) {
-        var n = k === 'accept' && state.taskSum ? state.taskSum.to_accept : 0;
+        // Счетчик у «Недели» — сколько сдали мне на приемку: это первый блок экрана.
+        var n = k === 'week' && state.taskSum ? state.taskSum.to_accept : 0;
         return '<a class="tab' + (taskSeg() === k ? ' on' : '') + '" data-tseg="' + k + '">' +
           TASK_SEGS[k].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
       }).join('') + '</nav>';
@@ -2407,6 +2410,7 @@
           state.guideOn = false; state.guideSkip = true;
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
+          state.myweek = null; state.teamWeek = null; state.teamWho = null;
           state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
           // Ушел из дерева — вернулся к его корню: иначе через час забываешь,
           // что «Вся команда» показывает не всю команду, а один шаг одной цели.
@@ -2637,6 +2641,26 @@
       // Сводка всегда про МОИ задачи (summary считает по assignee_id), а список
       // рядом может показывать всю команду — без «на тебе» фраза противоречит списку.
       else tphr = 'Открытых задач на тебе нет.';
+      // На «Неделе» сводка про неделю, а не про все открытое: экран отвечает
+      // «что я обещал на эту неделю и как идет».
+      if (TASK_SEGS[taskSeg()].view === 'myweek') {
+        var mw = state.myweek && state.myweek !== 'none' ? state.myweek : null;
+        var mf = mw && mw.r && mw.r.facts ? mw.r.facts : null;
+        if (!mw) tphr = 'Смотрю, что на неделе.';
+        else if (mf && mf.overdue) tphr = '<b>' + mf.overdue + ' ' + plural(mf.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '</b> на этой неделе. Начни с них.';
+        else if (ts && ts.to_accept && !wkShift()) tphr = 'Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
+        else if (mf && mf.stuck) tphr = '<b>' + mf.stuck + '</b> ' + plural(mf.stuck, 'задача застряла', 'задачи застряли', 'задач застряло') + ': переносишь второй раз. Разбери или сними.';
+        else if (mf && mf.plan) tphr = 'На неделе <b>' + mf.plan + '</b> ' + plural(mf.plan, 'задача', 'задачи', 'задач') + ', сделано <b>' + mf.done + '</b>.';
+        else tphr = 'Неделя пустая. Возьми задачи из «Потом» и собери ее.';
+      }
+      if (TASK_SEGS[taskSeg()].view === 'teamweek') {
+        var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
+        if (!tw) tphr = 'Собираю неделю команды.';
+        else if (tw.await_review) tphr = '<b>' + tw.await_review + ' ' + plural(tw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b> Нажми на «ждет приемки» в колонке Итог.';
+        else if (tw.no_plan && !wkShift()) tphr = '<b>' + tw.no_plan + '</b> ' + plural(tw.no_plan, 'человек без плана', 'человека без плана', 'человек без плана') + ' на неделю. Они сверху списка.';
+        else if (tw.stuck) tphr = 'Застряло <b>' + tw.stuck + '</b> ' + plural(tw.stuck, 'задача', 'задачи', 'задач') + ' — переносят второй раз подряд.';
+        else tphr = 'Неделя у команды идет ровно: план собран, ничего не застряло.';
+      }
       // На табло сводка «про меня» противоречит экрану: там вся команда.
       if (TASK_SEGS[taskSeg()].view === 'board') {
         var bd = state.board && state.board !== 'none' ? state.board : null;
@@ -4605,36 +4629,17 @@
     cancel: { label: 'отменена',     cls: 'st-cancel' },
   };
   var TASK_SEGS = {
-    today:  { label: 'Сегодня',     view: 'today',  scope: 'my',     hint: 'что на тебе сегодня и что уже просрочено' },
-    // «План» — не еще один список задач, а ритуал: сдать план на период и
-    // отчет по нему в согласованный срок. Стоит вторым, потому что читается
-    // раньше работы: сначала во что я целюсь на период, потом что делаю сегодня.
-    plan:   { label: 'План',        view: 'rhythm', scope: 'my',     hint: 'план на день, неделю и месяц и отчет по нему' },
-    // Цели идут сразу за «Сегодня» намеренно: сегодняшняя задача без цели —
-    // просто дело, а с целью — шаг к результату. Порядок вкладок и есть ответ
-    // на вопрос «зачем я это делаю» (решение Павла от 14.08.2026).
-    goals:  { label: 'Цели',        view: 'goals',  scope: 'my',     hint: 'куда мы идем, по направлениям' },
-    week:   { label: 'Неделя',      view: 'week',   scope: 'my',     hint: 'ближайшие семь дней' },
-    mine:   { label: 'Все мои',     view: 'open',   scope: 'my',     hint: 'все незакрытые задачи на тебе' },
+    /* Пять вкладок вместо десяти (ADR 001 бэкенда, разбор 02.09.2026). Единица
+       планирования — неделя; все остальное либо очередь, либо разрез по ученикам,
+       целям и людям. Старые «Сегодня», «План», «Все мои», «На приемку», «Готово»,
+       «Вся команда», «По людям» слились сюда. */
+    week:  { label: 'Неделя',  view: 'myweek',   scope: 'my',  hint: 'что я взял на эту неделю: собрать в понедельник, закрыть в пятницу' },
+    later: { label: 'Потом',   view: 'later',    scope: 'my',  hint: 'очередь без сроков — отсюда берут в неделю' },
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
-    // учеником»: работа по одной семье разложена по разным исполнителям и в
-    // обычном списке между ее строками стоят чужие задачи.
-    stud:   { label: 'По ученикам', view: 'students', scope: 'my',   hint: 'что команда должна сделать по каждому ученику' },
-    // Вкладка живет, только когда тебе реально что-то сдали (или ты сейчас на
-    // ней — иначе приемка последней задачи выкидывала бы на «Сегодня»). Правило
-    // Павла от 2026-08-20: у тьютора приемки нет, он исполнитель, а не
-    // постановщик. Пустая вкладка с нулем — это шум у всех, а не только у него.
-    accept: { label: 'На приемку',  view: 'review', scope: 'author', hint: 'сдали тебе — прими или верни', live: function () {
-      return !!(state.taskSum && state.taskSum.to_accept) || state.taskSeg === 'accept';
-    } },
-    // «Вся команда» — не список, а дерево: направление, цель, шаги. Плоская
-    // выдача всех задач компании нечитаема в принципе: в ней рядом лежат
-    // «позвонить семье Ким» и «перевести школу на новый формат».
-    team:   { label: 'Вся команда', view: 'tree',   scope: 'all',    cap: 'tasks_all', hint: 'вся работа компании сверху вниз' },
-    // Третий вопрос руководителя — не «что сейчас», а «как идет у каждого».
-    // Тот же список задач, свернутый по людям и по периоду.
-    board:  { label: 'По людям',    view: 'board',  scope: 'all',    cap: 'tasks_all', hint: 'сколько закрыл каждый и что у него горит' },
-    done:   { label: 'Готово',      view: 'done',   scope: 'my',     hint: 'закрытые задачи' },
+    // учеником»: работа по одной семье разложена по разным исполнителям.
+    stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
+    goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
+    team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'у кого как идет неделя: собрана, сделано, застряло' },
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
@@ -4657,7 +4662,7 @@
   }
   function taskSeg() {
     var s = state.taskSeg;
-    return TASK_SEGS[s] && taskSegs().indexOf(s) !== -1 ? s : 'today';
+    return TASK_SEGS[s] && taskSegs().indexOf(s) !== -1 ? s : 'week';
   }
 
   /* Дата через N дней в формате поля <input type=date> (местный день, не UTC:
@@ -4737,6 +4742,8 @@
 
   function loadTasks(cb) {
     var seg = TASK_SEGS[taskSeg()];
+    if (seg.view === 'myweek') { loadMyWeek(cb); return; }
+    if (seg.view === 'teamweek') { loadTeamWeek(cb); return; }
     if (seg.view === 'board') { loadBoard(cb); return; }
     // «Вся команда» — дерево направлений. Но если выбран человек (пришли из «По
     // людям»), показываем не дерево, а его плоский список задач: вопрос был «над
@@ -4916,6 +4923,9 @@
   function renderTasks(view) {
     // Первый заход в «Задачи» встречает обучением, дальше — обычный список.
     if (state.guideOn) { renderGuide(view); return; }
+    if (TASK_SEGS[taskSeg()].view === 'myweek') { renderMyWeek(view); return; }
+    if (TASK_SEGS[taskSeg()].view === 'teamweek') { renderTeamWeek(view); return; }
+    if (TASK_SEGS[taskSeg()].view === 'later') { renderLater(view); return; }
     if (TASK_SEGS[taskSeg()].view === 'board') { renderBoard(view); return; }
     if (TASK_SEGS[taskSeg()].view === 'rhythm') { renderRhythm(view); return; }
     if (state.tasks === null) {
@@ -5131,6 +5141,686 @@
       });
     });
   }
+  /* ── Недельный цикл: «Неделя», «Потом», «Команда» (ADR 001 бэкенда) ─────────
+     Единица планирования одна — неделя. Задача либо взята в неделю, либо лежит
+     в «Потом»: там у нее нет срока и, значит, нет просрочки. В понедельник
+     человек собирает неделю из «Потом» (не больше предела), в пятницу закрывает:
+     сделано, или перенос с причиной. Закрытие и есть отчет — отдельного текста
+     нет. Руководитель на «Команде» видит по каждому три числа и два флага и
+     принимает закрытую неделю той же карточкой, что раньше принимал отчет. */
+  var WK_PLAN = {
+    wait: { label: 'не собрана',      cls: 'st-wait' },
+    miss: { label: 'не собрана',      cls: 'rh-miss' },
+    done: { label: 'собрана',         cls: 'st-done' },
+    late: { label: 'собрана поздно',  cls: 'rh-late' },
+  };
+  var WK_REP = {
+    wait: { label: 'открыта',         cls: 'st-wait' },
+    miss: { label: 'не закрыта',      cls: 'rh-miss' },
+    done: { label: 'закрыта',         cls: 'st-done' },
+    late: { label: 'закрыта поздно',  cls: 'rh-late' },
+  };
+  var WDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+  function wkShift() { return state.weekShift || 0; }
+
+  function loadMyWeek(cb) {
+    var sh = wkShift();
+    state.tasksLoading = true;
+    Promise.all([
+      api('/admin/api/tasks?view=week&scope=my&shift=' + sh),
+      api('/admin/api/rhythm?period=week&shift=' + sh),
+      // Сданное мне на приемку — первый блок недели, но только на текущей:
+      // приемка не зависит от того, какую неделю я листаю.
+      sh === 0 && state.taskSum && state.taskSum.to_accept
+        ? api('/admin/api/tasks?view=review&scope=author') : Promise.resolve(null),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
+                       accept: (rs[2] && rs[2].tasks) || [],
+                       starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
+      state.taskMe = rs[0] ? rs[0].me : state.taskMe;
+      if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.myweek = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+
+  function loadTeamWeek(cb) {
+    var sh = wkShift();
+    state.tasksLoading = true;
+    var who = state.teamWho;
+    Promise.all([
+      api('/admin/api/rhythm/team?period=week&shift=' + sh),
+      who ? api('/admin/api/tasks?view=week&scope=all&assignee=' + who.id + '&shift=' + sh)
+          : Promise.resolve(null),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      state.teamWeek = rs[0] || 'none';
+      state.tasks = rs[1] ? (rs[1].tasks || []) : [];
+      if (rs[1]) state.taskMe = rs[1].me;
+      if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.teamWeek = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+
+  /* Сбросить все, что зависит от выбранной недели. */
+  function wkReload() {
+    state.myweek = null; state.teamWeek = null; state.tasks = null;
+    loadTaskSummary();
+    renderHead(); renderView();
+  }
+
+  function wkNav(label) {
+    return '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="wk-prev" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(label || '') + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="wk-next" title="Следующая неделя">' + ic('go', 15) + '</button>' +
+      (wkShift() ? '<button class="qchip" id="wk-now">Сейчас</button>' : '') +
+    '</div>';
+  }
+  function wkWireNav(view) {
+    function go(d) { state.weekShift = Math.max(-36, Math.min(12, wkShift() + d)); wkReload(); }
+    if (el('wk-prev')) el('wk-prev').addEventListener('click', function () { go(-1); });
+    if (el('wk-next')) el('wk-next').addEventListener('click', function () { go(1); });
+    if (el('wk-now')) el('wk-now').addEventListener('click', function () { state.weekShift = 0; wkReload(); });
+  }
+
+  /* Строка задачи в неделе. Колонки: задача, день, статус. Исполнителя нет —
+     неделя всегда одного человека. Перенос помечен рядом с названием: второй
+     перенос подряд — амбер, это «застряла», а не «не успел». */
+  function wkRow(t, opts) {
+    opts = opts || {};
+    var st = TASK_ST[t.status] || TASK_ST.wait;
+    var due = dueLabel(t);
+    var own = isOwnTask(t);
+    var closed = t.status === 'done' || t.status === 'cancel';
+    var sub = [];
+    if (t.client_name) sub.push(t.client_name);
+    if (t.author_name && !own && !opts.hideAuthor) sub.push('поставил ' + t.author_name);
+    var marks = '';
+    if (t.week_by_other) marks += '<span class="sev st-wait wk-mark">от руководителя</span>';
+    if (t.carry_count) {
+      marks += '<span class="sev ' + (t.stuck ? 'rv-wait' : 'st-wait') + ' wk-mark">' +
+        (t.stuck ? 'застряла · перенос ×' + t.carry_count : 'перенос') + '</span>';
+    }
+    var quick = '';
+    if (!closed && own && !opts.readOnly) {
+      quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
+    }
+    return '<div class="trow tsk-grid mine wk-row' + (t.parent_title ? ' has-goal' : '') +
+      (t.overdue ? ' r-crit' : '') + (own ? ' own' : '') + (closed ? ' closed' : '') +
+      '" data-tid="' + t.id + '">' +
+      '<div class="t-cell">' + quick +
+        '<div class="t-ttl">' + impMark(t) + esc(t.title) + marks + '</div>' +
+        (t.parent_title
+          ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + esc(t.parent_title) + '</button>'
+          : '') +
+        (sub.length ? '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' : '') +
+      '</div>' +
+      '<div class="tsk-due ' + (closed ? '' : due.cls) + '">' + esc(closed ? (t.closed_at ? dayLabel(t.closed_at) : '') : due.text) + '</div>' +
+      '<div><span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+    '</div>';
+  }
+
+  function wkBand(title, hint, items, rowFn) {
+    if (!items.length) return '';
+    return '<div class="tsk-band"><span class="tsk-band-t">' + esc(title) + '</span>' +
+      (hint ? '<span class="tsk-band-h">' + esc(hint) + '</span>' : '') +
+      '<span class="tsk-band-n num">' + items.length + '</span></div>' +
+      items.map(rowFn).join('');
+  }
+
+  /* Дни недели как полосы: просрочено, сегодня, дальше по дням, без дня, потом
+     сданное и сделанное. Один проход сверху вниз — это и есть план на неделю. */
+  function wkBands(tasks, rowFn) {
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var live = tasks.filter(function (t) { return t.status !== 'done' && t.status !== 'review' && t.status !== 'cancel'; });
+    var review = tasks.filter(function (t) { return t.status === 'review'; });
+    var done = tasks.filter(function (t) { return t.status === 'done'; });
+    var over = live.filter(function (t) { return t.overdue; });
+    var rest = live.filter(function (t) { return !t.overdue; });
+    var byDay = {};
+    var noDay = [];
+    rest.forEach(function (t) {
+      if (!t.due_at) { noDay.push(t); return; }
+      var d = new Date(t.due_at);
+      var key = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      (byDay[key] = byDay[key] || []).push(t);
+    });
+    var out = wkBand('Просрочено', 'обещал и не сделал', over, rowFn);
+    Object.keys(byDay).sort().forEach(function (key) {
+      var d = new Date(key + 'T00:00:00');
+      var diff = Math.round((d - today) / 864e5);
+      var title = diff === 0 ? 'Сегодня' : diff === 1 ? 'Завтра'
+        : WDAYS_RU[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+      out += wkBand(title, '', byDay[key], rowFn);
+    });
+    out += wkBand('Без дня', 'до пятницы', noDay, rowFn);
+    out += wkBand('На приемке', 'сдано, ждет постановщика', review, rowFn);
+    out += wkBand('Сделано', '', done, rowFn);
+    return out;
+  }
+
+  function wkStateLine(r) {
+    if (!r) return '';
+    var rep = r.report && r.report.given;
+    var plan = r.plan && r.plan.given;
+    if (rep) {
+      var rv = (rep.review || {}).state;
+      if (rv === 'accepted') {
+        return '<div class="wk-state ok">' + ic('check', 13) + '<span>Неделя принята' +
+          (rep.review.by ? ' — ' + esc(rep.review.by) : '') + '</span></div>';
+      }
+      if (rv === 'returned') {
+        return '<div class="wk-state back">' + ic('refresh', 13) + '<span>Вернули на доработку' +
+          (rep.review.note ? ': ' + esc(rep.review.note) : '') + '. Поправь и закрой неделю заново.</span></div>';
+      }
+      return '<div class="wk-state wait">' + ic('bell', 13) + '<span>Неделя закрыта' +
+        (rep.late ? ' с опозданием' : '') + ', ждет приемки руководителя.' +
+        (rep.text ? ' Что мешало: ' + esc(rep.text) : '') + '</span></div>';
+    }
+    if (plan) {
+      return '<div class="wk-state">' + ic('check', 13) + '<span>Неделя собрана' +
+        (plan.late ? ' с опозданием' : '') + '. Закрыть ее нужно ' + esc(r.report.due_text || 'в пятницу') + '.</span></div>';
+    }
+    return '';
+  }
+
+  function renderMyWeek(view) {
+    if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
+    if (state.myweek === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
+      return;
+    }
+    var w = state.myweek, r = w.r || {};
+    var tasks = w.tasks || [];
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
+    var cap = r.cap || 0, load = r.load || 0;
+    var planGiven = !!(r.plan && r.plan.given), repGiven = !!(r.report && r.report.given);
+    var sh = wkShift();
+
+    // Кнопка одна: собрать, пока не собрана; закрыть, когда собрана; прошлую
+    // незакрытую — закрыть. Две синие кнопки рядом это «все важно».
+    var act = '';
+    if (sh > 0 || (sh === 0 && !planGiven)) {
+      act = '<button class="bp sm" id="wk-collect">' + ic('plus', 14) + 'Собрать неделю</button>';
+    } else if (!repGiven) {
+      act = '<button class="bp sm" id="wk-close">' + ic('check', 14) + 'Закрыть неделю</button>';
+    } else if (sh <= 0) {
+      act = '<button class="qchip" id="wk-close">Закрыть заново</button>';
+    }
+    var meter = cap
+      ? '<div class="wk-cap' + (load >= cap ? ' full' : '') + '" title="Предел задач на неделю">' +
+          '<span class="wk-cap-bar"><i style="width:' + Math.min(100, Math.round(load / cap * 100)) + '%"></i></span>' +
+          '<span class="num">' + load + ' из ' + cap + '</span></div>'
+      : '';
+
+    var accept = (w.accept || []).length && sh === 0
+      ? '<div class="tsk-band wk-accept"><span class="tsk-band-t">Тебе сдали</span>' +
+          '<span class="tsk-band-h">прими или верни, пока человек ждет</span>' +
+          '<span class="tsk-band-n num">' + w.accept.length + '</span></div>' +
+        w.accept.map(function (t) { return wkRow(t, { readOnly: true }); }).join('')
+      : '';
+
+    var body;
+    if (!tasks.length && !accept) {
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
+        (sh >= 0
+          ? '<div class="wk-empty-s">Возьми задачи из «Потом» — не больше ' + cap + ' — и нажми «Собрать неделю». ' +
+            'Задача со сроком на этой неделе попадает сюда сама.</div>' +
+            '<button class="bp sm" id="wk-collect2">' + ic('plus', 14) + 'Собрать неделю</button>'
+          : '') +
+        '</div>';
+    } else {
+      body = accept + wkBands(tasks, function (t) { return wkRow(t); });
+    }
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' + wkNav(w.label || r.label) + meter +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        act +
+        '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      wkStateLine(r) +
+      '<div class="list-body">' + body + '</div>' +
+    '</div>';
+
+    wkWireNav(view);
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    ['wk-collect', 'wk-collect2'].forEach(function (id) {
+      if (el(id)) el(id).addEventListener('click', function () { openWeekCollect(w); });
+    });
+    if (el('wk-close')) el('wk-close').addEventListener('click', function () { openWeekClose(w); });
+    wkWireRows(view);
+  }
+
+  function wkWireRows(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-done]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); taskDone(+b.getAttribute('data-done'), b); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-goalid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pull]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        taskToWeek(+b.getAttribute('data-pull'), b);
+      });
+    });
+  }
+
+  /* Взять задачу в текущую неделю прямо из строки. Предел держит сервер — его
+     отказ показываем словами, а не гасим кнопку заранее: человек должен понять,
+     почему не взялось, а не гадать, почему кнопка серая. */
+  function taskToWeek(id, btn, cb) {
+    if (btn) btn.disabled = true;
+    apiSend('/admin/api/tasks/' + id + '/week', 'POST', { starts: state.myweek && state.myweek.starts ? state.myweek.starts : wkMondayIso(0) }, function () {
+      showToast('Взял в неделю');
+      if (cb) cb(); else wkReload();
+    }, function (e) {
+      if (btn) btn.disabled = false;
+      showToast((e && e.body && e.body.detail) || 'Не взялось — проверь сеть');
+    });
+  }
+
+  function wkMondayIso(shift) {
+    var d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (shift || 0));
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  /* ── «Потом»: очередь без сроков ──────────────────────────────────────────────
+     Отсюда берут в неделю. Дата у задачи здесь — ориентир серым, не срок: срок
+     появляется, когда задачу взяли в неделю. Первой полосой — то, что стоит с
+     ориентиром на эту неделю: по-хорошему это надо было взять в понедельник. */
+  function renderLater(view) {
+    if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
+    if (state.tasks === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить очередь. Обнови страницу.</div></div>';
+      return;
+    }
+    var q = (state.taskQ || '').toLowerCase().trim();
+    var list = (state.tasks || []).filter(function (t) {
+      if (!q) return true;
+      return (t.title + ' ' + (t.client_name || '') + ' ' + (t.parent_title || '')).toLowerCase().indexOf(q) !== -1;
+    });
+    var mon = new Date(wkMondayIso(0) + 'T00:00:00'), sun = new Date(mon); sun.setDate(sun.getDate() + 7);
+    var soon = list.filter(function (t) { return t.due_at && new Date(t.due_at) < sun; });
+    var rest = list.filter(function (t) { return soon.indexOf(t) === -1; });
+
+    var row = function (t) {
+      var own = isOwnTask(t);
+      var sub = [];
+      if (t.client_name) sub.push(t.client_name);
+      if (t.author_name && !own) sub.push('поставил ' + t.author_name);
+      var mark = t.due_at
+        ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + 'ориентир ' + esc(dayLabel(t.due_at)) + '</span>'
+        : '<span class="tsk-due due-none">без ориентира</span>';
+      return '<div class="trow tsk-grid mine wk-row later' + (t.parent_title ? ' has-goal' : '') +
+        (own ? ' own' : '') + '" data-tid="' + t.id + '">' +
+        '<div class="t-cell">' +
+          (own ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>' : '') +
+          '<div class="t-ttl">' + impMark(t) + esc(t.title) + '</div>' +
+          (t.parent_title
+            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + esc(t.parent_title) + '</button>' : '') +
+          (sub.length ? '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' : '') +
+        '</div>' +
+        '<div>' + mark + '</div>' +
+        '<div><button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button></div>' +
+      '</div>';
+    };
+
+    var body = list.length
+      ? wkBand('Ориентир на этой неделе', 'стоило взять в понедельник', soon, row) +
+        wkBand(soon.length ? 'Остальное' : 'Очередь', 'без сроков и без просрочки', rest, row)
+      : '<div class="wk-empty"><div class="wk-empty-t">В очереди пусто</div>' +
+        '<div class="wk-empty-s">Сюда падает все входящее: задачи от коллег, из протоколов встреч и из карточек учеников. Отсюда их берут в неделю.</div></div>';
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools">' +
+        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Задача, ученик, цель" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
+        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+      '</div>' +
+      '<div class="list-body">' + body + '</div>' +
+    '</div>';
+
+    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    wkWireRows(view);
+  }
+
+  /* ── Собрать неделю ───────────────────────────────────────────────────────────
+     Одно окно: очередь с галочками и полоса предела. Отметил, нажал — задачи
+     встали в неделю, и неделя подписана как собранная. Восьмую галочку ставить
+     нельзя: предел это и есть планирование, без него список, а не план. */
+  function openWeekCollect(w) {
+    if (document.querySelector('.al-ov')) return;
+    var r = w.r || {}, cap = r.cap || 7, load = r.load || 0;
+    var starts = w.starts || wkMondayIso(wkShift());
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card pick wk-pick" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Неделя · ' + esc(w.label || r.label || '') + '</div>' +
+        '<div class="al-title">Собрать неделю</div></div>' +
+        '<button class="al-x" id="wkp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Отметь, что берешь в неделю. Не больше <b>' + cap + '</b> — остальное подождет в «Потом».</div>' +
+      '<div class="al-body" id="wkp-body">' + dashSkeleton() + '</div>' +
+      '<div class="al-foot wkp-foot">' +
+        '<div class="wk-cap" id="wkp-cap"><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
+        '<div class="ct-err" id="wkp-err"></div>' +
+        '<button class="bp al-save" id="wkp-ok">' + ic('check', 14) + 'Собрать</button>' +
+      '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('wkp-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var picked = {};
+    function meter() {
+      var n = load + Object.keys(picked).length;
+      el('wkp-n').textContent = n + ' из ' + cap;
+      el('wkp-cap').classList.toggle('full', n >= cap);
+      el('wkp-cap').querySelector('i').style.width = Math.min(100, Math.round(n / cap * 100)) + '%';
+      Array.prototype.forEach.call(ov.querySelectorAll('input[data-pick]'), function (c) {
+        c.disabled = !c.checked && n >= cap;
+      });
+    }
+    api('/admin/api/tasks?view=later&scope=my').then(function (res) {
+      var list = (res && res.tasks) || [];
+      el('wkp-body').innerHTML = list.length
+        ? list.map(function (t) {
+            return '<label class="wkp-row"><input type="checkbox" data-pick="' + t.id + '">' +
+              '<span class="wkp-t">' + impMark(t) + esc(t.title) +
+                (t.client_name ? '<span class="wkp-s">' + esc(t.client_name) + '</span>' : '') +
+                (t.parent_title ? '<span class="wkp-s">' + ic('target', 10) + esc(t.parent_title) + '</span>' : '') +
+              '</span>' +
+              '<span class="wkp-d">' + (t.due_at ? 'ориентир ' + esc(dayLabel(t.due_at)) : '') + '</span>' +
+            '</label>';
+          }).join('')
+        : '<div class="empty">В «Потом» пусто. Закрой окно и поставь задачи себе через «Новая задача» — со сроком на этой неделе они встанут в нее сами.</div>';
+      Array.prototype.forEach.call(ov.querySelectorAll('input[data-pick]'), function (c) {
+        c.addEventListener('change', function () {
+          var id = c.getAttribute('data-pick');
+          if (c.checked) picked[id] = true; else delete picked[id];
+          meter();
+        });
+      });
+      meter();
+    }).catch(function () { el('wkp-body').innerHTML = '<div class="empty">Очередь не загрузилась.</div>'; });
+
+    el('wkp-ok').addEventListener('click', function () {
+      var ids = Object.keys(picked);
+      if (!ids.length && !load) { el('wkp-err').textContent = 'В неделе пусто — отметь хотя бы одну задачу'; return; }
+      el('wkp-ok').disabled = true;
+      el('wkp-err').textContent = '';
+      // По одной, а не пачкой: предел проверяет сервер на каждой, и первая, что
+      // не влезла, останавливает остальных с понятным словом.
+      var i = 0;
+      function next() {
+        if (i >= ids.length) { give(); return; }
+        var id = ids[i++];
+        apiSend('/admin/api/tasks/' + id + '/week', 'POST', { starts: starts }, next, function (e) {
+          el('wkp-ok').disabled = false;
+          el('wkp-err').textContent = (e && e.body && e.body.detail) || 'Не удалось взять задачу';
+          wkReload();
+        });
+      }
+      function give() {
+        apiSend('/admin/api/rhythm', 'POST', { period: 'week', kind: 'plan', shift: wkShift() }, function () {
+          close(); showToast('Неделя собрана'); wkReload();
+        }, function () {
+          el('wkp-ok').disabled = false;
+          el('wkp-err').textContent = 'Задачи взял, но подписать неделю не вышло — попробуй еще раз';
+        });
+      }
+      next();
+    });
+  }
+
+  /* ── Закрыть неделю ───────────────────────────────────────────────────────────
+     По каждой открытой задаче — перенос с причиной или в «Потом». Сделанное и
+     сданное решения не требуют, они перечислены строкой. Строка «что мешало» —
+     по желанию: числа система считает сама. Это и есть отчет за неделю. */
+  function openWeekClose(w) {
+    if (document.querySelector('.al-ov')) return;
+    var tasks = w.tasks || [];
+    var open = tasks.filter(function (t) { return ['wait', 'doing', 'return', 'block'].indexOf(t.status) !== -1; });
+    var done = tasks.filter(function (t) { return t.status === 'done'; }).length;
+    var review = tasks.filter(function (t) { return t.status === 'review'; }).length;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var rows = open.map(function (t) {
+      return '<div class="wkc-row" data-wid="' + t.id + '">' +
+        '<div class="wkc-t">' + impMark(t) + esc(t.title) +
+          (t.carry_count ? '<span class="sev ' + (t.carry_count >= 1 ? 'rv-wait' : 'st-wait') + ' wk-mark">уже переносили ×' + t.carry_count + '</span>' : '') +
+        '</div>' +
+        '<div class="wkc-choice">' +
+          '<button class="on" data-to="next">Перенести</button>' +
+          '<button data-to="later">В «Потом»</button>' +
+        '</div>' +
+        '<input class="al-in wkc-why" placeholder="Почему не сделано" maxlength="300">' +
+      '</div>';
+    }).join('');
+    ov.innerHTML = '<div class="al-card pick wk-pick" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Неделя · ' + esc(w.label || '') + '</div>' +
+        '<div class="al-title">Закрыть неделю</div></div>' +
+        '<button class="al-x" id="wkc-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Сделано <b class="num">' + done + '</b>' + (review ? ', на приемке <b class="num">' + review + '</b>' : '') +
+        (open.length ? '. По каждой открытой — что с ней дальше.' : '. Открытых не осталось.') + '</div>' +
+      '<div class="al-body">' + rows +
+        '<label class="al-f wkc-text"><span class="al-l">Что мешало</span>' +
+          '<textarea id="wkc-text" class="al-in al-ta" rows="2" maxlength="1000" placeholder="Необязательно. Одной строкой, для руководителя"></textarea></label>' +
+        '<div class="ct-err" id="wkc-err"></div>' +
+      '</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="wkc-cancel">Отмена</button>' +
+        '<button class="bp al-save" id="wkc-ok">' + ic('check', 14) + 'Закрыть неделю</button></div>' +
+    '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('wkc-x').addEventListener('click', close);
+    el('wkc-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    Array.prototype.forEach.call(ov.querySelectorAll('.wkc-choice button'), function (b) {
+      b.addEventListener('click', function () {
+        var box = b.closest('.wkc-row');
+        Array.prototype.forEach.call(box.querySelectorAll('button'), function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+        var why = box.querySelector('.wkc-why');
+        why.placeholder = b.getAttribute('data-to') === 'next' ? 'Почему не сделано' : 'Почему снимаем (необязательно)';
+      });
+    });
+
+    el('wkc-ok').addEventListener('click', function () {
+      var decisions = [];
+      var bad = null;
+      Array.prototype.forEach.call(ov.querySelectorAll('.wkc-row'), function (box) {
+        var to = box.querySelector('.wkc-choice .on').getAttribute('data-to');
+        var why = (box.querySelector('.wkc-why').value || '').trim();
+        if (to === 'next' && !why && !bad) bad = box;
+        decisions.push({ id: +box.getAttribute('data-wid'), to: to, reason: why });
+      });
+      if (bad) {
+        el('wkc-err').textContent = 'У переноса должна быть причина — одной строкой';
+        bad.querySelector('.wkc-why').focus();
+        return;
+      }
+      el('wkc-ok').disabled = true;
+      apiSend('/admin/api/rhythm/close', 'POST',
+        { shift: wkShift(), text: (el('wkc-text').value || '').trim(), decisions: decisions },
+        function () { close(); showToast('Неделя закрыта', 'Руководитель получил ее на приемку'); wkReload(); },
+        function (e) {
+          el('wkc-ok').disabled = false;
+          el('wkc-err').textContent = (e && e.body && e.body.detail) || 'Не удалось закрыть — проверь сеть';
+        });
+    });
+  }
+
+  /* ── «Команда»: неделя каждого ────────────────────────────────────────────────
+     Строка на человека: собрана ли неделя, взял, сделано, застряло, не взял, и
+     закрыта ли. Руководитель читает экран по исключениям: сверху те, у кого нет
+     плана или что-то застряло. Клик по имени — его неделя целиком; клик по
+     «ждет приемки» — карточка приемки. */
+  function renderTeamWeek(view) {
+    if (state.teamWeek === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
+    if (state.teamWeek === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
+      return;
+    }
+    var b = state.teamWeek;
+    if (state.teamWho) { renderTeamPerson(view, b); return; }
+
+    var people = (b.people || []).slice();
+    // Сначала исключения: без плана, застряло, просрочено; потом по имени.
+    people.sort(function (x, y) {
+      var xs = (x.plan.state === 'wait' || x.plan.state === 'miss' ? 4 : 0) + (x.stuck ? 2 : 0) + (x.overdue ? 1 : 0);
+      var ys = (y.plan.state === 'wait' || y.plan.state === 'miss' ? 4 : 0) + (y.stuck ? 2 : 0) + (y.overdue ? 1 : 0);
+      return ys - xs || x.name.localeCompare(y.name, 'ru');
+    });
+
+    var head = '<div class="trow wk-grid thead"><span class="th">Сотрудник</span>' +
+      '<span class="th">Неделя</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+      '<span class="th">Застряло</span><span class="th">Не взял</span><span class="th">Итог</span></div>';
+    var rows = people.map(function (p) {
+      var pl = WK_PLAN[p.plan.state] || WK_PLAN.wait;
+      var rp = WK_REP[p.report.state] || WK_REP.wait;
+      var repGiven = p.report.state === 'done' || p.report.state === 'late';
+      var rv = RH_REVIEW[(p.report.review || {}).state] || RH_REVIEW.pending;
+      var itog = repGiven
+        ? '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть неделю на приемку">' +
+            '<span class="sev ' + rp.cls + '">' + rp.label + '</span><span class="sev ' + rv.cls + '">' + rv.label + '</span></button>'
+        : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
+      var said = (p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '');
+      function n(v, cls, l) {
+        return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>';
+      }
+      return '<div class="trow wk-grid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
+        '<div class="rh-c" data-l="Неделя"><span class="sev ' + pl.cls + '">' + pl.label + '</span></div>' +
+        n(p.plan_count, '', 'Взял') + n(p.done, 'ok', 'Сделано') + n(p.stuck, 'bad', 'Застряло') + n(p.unplanned, 'bad', 'Не взял') +
+        '<div class="rh-c" data-l="Итог">' + itog + '</div>' + said +
+      '</div>';
+    }).join('');
+
+    var idleAll = b.idle || [];
+    var idle = idleAll.length
+      ? '<div class="brd-idle"><span class="brd-il">Пустая неделя</span>' + esc(idleAll.slice(0, 8).join(', ')) +
+        (idleAll.length > 8 ? ' <span class="brd-more num">и еще ' + (idleAll.length - 8) + '</span>' : '') + '</div>'
+      : '';
+
+    // Полоса действий руководителя. Амбер — очередь на приемку, красный — тревога.
+    var flags = [];
+    if (b.await_review) flags.push('<b class="num">' + b.await_review + '</b> ' + plural(b.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' приемки');
+    if (b.no_plan && wkShift() >= 0) flags.push('без плана <b class="num">' + b.no_plan + '</b>');
+    if (b.stuck) flags.push('застряло <b class="num">' + b.stuck + '</b>');
+    if (b.unplanned) flags.push('не взяли в неделю <b class="num">' + b.unplanned + '</b>');
+    var strip = flags.length
+      ? '<div class="rh-await' + (b.await_review ? '' : ' quiet') + '">' + ic(b.await_review ? 'bell' : 'spark', 13) + '<span>' + flags.join(' · ') + '</span></div>'
+      : '';
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' + wkNav(b.label) +
+        (b.caps ? '<span class="wk-caps">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</span>' : '') +
+      '</div>' +
+      '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
+      idle +
+    '</div>';
+
+    wkWireNav(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openReportReview(+btn.getAttribute('data-review'), 'week', b.starts, function () { wkReload(); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (row) {
+      row.addEventListener('click', function () {
+        var uid = +row.getAttribute('data-uid');
+        var who = (b.people || []).filter(function (x) { return x.id === uid; })[0];
+        state.teamWho = { id: uid, name: who ? who.name : '' };
+        state.teamWeek = null; state.tasks = null;
+        renderView();
+      });
+    });
+  }
+
+  /* Неделя одного человека глазами руководителя: те же полосы, что у него
+     самого, плюс кнопка приемки, если неделя закрыта. */
+  function renderTeamPerson(view, b) {
+    var who = state.teamWho;
+    var p = (b.people || []).filter(function (x) { return x.id === who.id; })[0] || {};
+    var tasks = state.tasks === null ? null : (state.tasks || []);
+    if (tasks === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
+    var repGiven = p.report && (p.report.state === 'done' || p.report.state === 'late');
+    var rv = repGiven ? (RH_REVIEW[(p.report.review || {}).state] || RH_REVIEW.pending) : null;
+    var pl = p.plan ? (WK_PLAN[p.plan.state] || WK_PLAN.wait) : null;
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<button class="qchip" id="wk-back">' + ic('go', 12) + 'Команда</button>' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(who.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(who.name) + '<span class="t-sub">' + esc(b.label || '') + '</span></span></div>' +
+        (pl ? '<span class="sev ' + pl.cls + '">' + pl.label + '</span>' : '') +
+        (rv ? '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' : '') +
+        (repGiven ? '<button class="bp sm" id="wk-review">' + ic('check', 14) + (rv.label === 'принят' ? 'Открыть приемку' : 'Принять неделю') + '</button>' : '') +
+      '</div>' +
+      '<div class="list-body">' + (tasks.length
+        ? wkBands(tasks, function (t) { return wkRow(t, { readOnly: true, hideAuthor: false }); })
+        : '<div class="empty">В этой неделе у ' + esc(who.name) + ' ничего нет.</div>') + '</div>' +
+    '</div>';
+    el('wk-back').addEventListener('click', function () { state.teamWho = null; state.tasks = null; renderView(); });
+    if (el('wk-review')) el('wk-review').addEventListener('click', function () {
+      openReportReview(who.id, 'week', b.starts, function () { wkReload(); });
+    });
+    wkWireRows(view);
+  }
+
   /* ── Срез «Цели» ───────────────────────────────────────────────────────────
      Не плоский список, а разбивка по направлениям: вопрос к этому экрану —
      «куда мы идем и где стоим», а он задается по отделам, а не по алфавиту.
@@ -6052,7 +6742,10 @@
     parts.push('<span><b class="num">' + (f.done || 0) + '</b> принято</span>');
     if (f.left) parts.push('<span><b class="num">' + f.left + '</b> осталось</span>');
     if (f.overdue) parts.push('<span class="rv-bad"><b class="num">' + f.overdue + '</b> просрочено</span>');
-    if (f.moved) parts.push('<span>сроки двигали <b class="num">' + f.moved + '</b></span>');
+    if (f.carried) parts.push('<span>перенесено <b class="num">' + f.carried + '</b></span>');
+    else if (f.moved) parts.push('<span>сроки двигали <b class="num">' + f.moved + '</b></span>');
+    if (f.dropped) parts.push('<span>снято в «Потом» <b class="num">' + f.dropped + '</b></span>');
+    if (f.stuck) parts.push('<span class="rv-bad">застряло <b class="num">' + f.stuck + '</b></span>');
     return '<div class="rv-facts">' + parts.join('') + '</div>';
   }
 
@@ -6074,7 +6767,7 @@
     ov.innerHTML =
       '<div class="al-card rv-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Отчет' + (r.role_label ? ' · ' + esc(r.role_label) : '') + '</div>' +
+          '<div><div class="al-eyebrow">' + (period === 'week' ? 'Неделя' : 'Отчет') + (r.role_label ? ' · ' + esc(r.role_label) : '') + '</div>' +
             '<div class="al-title">' + esc(r.name || '') + '</div></div>' +
           '<button class="al-x" id="rv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
@@ -6082,7 +6775,7 @@
         '<div class="al-body">' +
           (rep
             ? '<span class="sev ' + (RH_ST[rep.review && rep.late ? 'late' : 'done'] || RH_ST.done).cls + ' rv-badge">' +
-                (rep.late ? 'сдан с опозданием' : 'сдан') + '</span>' +
+                (period === 'week' ? (rep.late ? 'закрыта с опозданием' : 'закрыта') : (rep.late ? 'сдан с опозданием' : 'сдан')) + '</span>' +
               reviewFacts(rep.facts) +
               (rep.text
                 ? '<div class="rv-said"><div class="rv-lbl">Что мешало</div>' + esc(rep.text) + '</div>'
@@ -6094,13 +6787,13 @@
                 '<textarea id="rv-note" class="al-in al-ta" rows="2" maxlength="1000" ' +
                 'placeholder="Коротко, что поправить в отчете"></textarea></label>' +
               '<div class="ct-err" id="rv-err"></div>'
-            : '<div class="empty">Этот сотрудник еще не сдал отчет за период.</div>') +
+            : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
         '</div>' +
         (rep
           ? '<div class="al-foot rv-foot">' +
               '<button class="al-cancel" id="rv-back">' + ic('refresh', 14) + 'Вернуть на доработку</button>' +
               '<button class="bp al-save" id="rv-ok">' + ic('check', 14) +
-                (rv.state === 'accepted' ? 'Принят' : 'Принять') + '</button>' +
+                (rv.state === 'accepted' ? (period === 'week' ? 'Принята' : 'Принят') : (period === 'week' ? 'Принять неделю' : 'Принять')) + '</button>' +
             '</div>'
           : '') +
       '</div>';
@@ -6127,7 +6820,7 @@
           action: action, note: note || '' }),
       }).then(function () {
         close();
-        showToast(action === 'accept' ? 'Отчет принят' : 'Вернул на доработку');
+        showToast(action === 'accept' ? (period === 'week' ? 'Неделя принята' : 'Отчет принят') : 'Вернул на доработку');
         state.rhythmTeam = null; state.rhythm = null;
         if (after) after(); else renderView();
       }).catch(function (e) {
@@ -25404,10 +26097,9 @@
     var q = hashReviewParts();
     if (!q || document.querySelector('.al-ov') || !can('tasks_all')) return;
     // Срез команды на нужном периоде — контекст под модалкой и верный список после.
-    state.page = 'tasks'; applyTaskSeg('plan');
-    state.rhythmWho = 'team'; state.rhythmPeriod = q.period;
-    state.rhythmShift = rhShiftFor(q.period, q.starts) || 0;
-    state.rhythmTeam = null;
+    state.page = 'tasks'; applyTaskSeg('team');
+    state.weekShift = q.period === 'week' ? (rhShiftFor('week', q.starts) || 0) : 0;
+    state.teamWeek = null; state.teamWho = null;
     saveUi(); renderSide(); renderTopbar(); renderHead(); renderView();
     openReportReview(q.uid, q.period, q.starts,
       function () { state.rhythmTeam = null; renderView(); });
