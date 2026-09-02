@@ -2631,12 +2631,12 @@
       if (TASK_SEGS[taskSeg()].view === 'myweek') {
         var mw = state.myweek && state.myweek !== 'none' ? state.myweek : null;
         var mf = mw && mw.r && mw.r.facts ? mw.r.facts : null;
-        if (!mw) tphr = 'Смотрю, что на неделе.';
+        if (!mw) tphr = 'Смотрю, что на сегодня.';
         else if (mf && mf.overdue) tphr = '<b>' + mf.overdue + ' ' + plural(mf.overdue, 'задача просрочена', 'задачи просрочены', 'задач просрочено') + '</b> на этой неделе. Начни с них.';
         else if (ts && ts.to_accept && !wkShift()) tphr = 'Тебе сдали <b>' + ts.to_accept + '</b> — прими или верни, пока человек ждет.';
         else if (mf && mf.stuck) tphr = '<b>' + mf.stuck + '</b> ' + plural(mf.stuck, 'задача застряла', 'задачи застряли', 'задач застряло') + ': переносишь второй раз. Разбери или сними.';
-        else if (mf && mf.plan) tphr = 'На неделе <b>' + mf.plan + '</b> ' + plural(mf.plan, 'задача', 'задачи', 'задач') + ', сделано <b>' + mf.done + '</b>.';
-        else tphr = 'Неделя пустая. Возьми задачи из «Потом» и собери ее.';
+        else if (mf && mf.plan) tphr = 'Неделя: <b>' + mf.done + '</b> из <b>' + mf.plan + '</b> сделано.';
+        else tphr = 'Неделя пустая. Собери ее из «Потом».';
       }
       // На «Потом» сводка про очередь, а не про просрочку: просрочки тут нет по
       // определению, и фраза «начни с них» указывала бы на другой экран.
@@ -4641,7 +4641,7 @@
     var row = btn.closest ? btn.closest('.trow') : null;
     if (row) row.classList.add('done');
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
-      state.tasks = null;
+      state.tasks = null; state.myweek = null; state.teamWeek = null;
       loadTaskSummary();
       setTimeout(renderView, 420);
     }, function () {
@@ -4975,6 +4975,134 @@
     return '';
   }
 
+  /* ── День: главный экран задач ───────────────────────────────────────────────
+     Павел 02.09.2026: «один экран и как можно меньше слов: что делаю сегодня,
+     что завтра и что сделал». Текущая неделя показывается днем: «Сегодня»
+     крупно, «Завтра» и «Сделано» сбоку, остальная неделя свернута в одну
+     строку. Прошлые и будущие недели — по дням списком (renderMyWeek). */
+  function dyKey(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function dyDayOf(iso) { var d = new Date(iso); return dyKey(d); }
+  function dyTitle(d) {
+    var wd = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'][d.getDay()];
+    return wd + ', ' + d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+  }
+  /* Строка дня: галочка, название, справа только отклонение от нормы. */
+  function dyRow(t, opts) {
+    opts = opts || {};
+    var own = isOwnTask(t);
+    var closed = t.status === 'done' || t.status === 'review' || t.status === 'cancel';
+    var right = '';
+    if (t.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(t).text) + '</span>';
+    if (t.status === 'review' || t.status === 'return' || t.status === 'block' || (opts.showStatus && t.status === 'doing')) {
+      var st = TASK_ST[t.status];
+      right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
+    }
+    if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
+    var quick = !closed && own && !opts.readOnly
+      ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>' : '';
+    var who = !own && t.assignee_name ? '<span class="dy-cl">' + esc(t.assignee_name) + '</span>' : '';
+    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.status === 'review' ? ' review' : '') +
+      (t.overdue ? ' over' : '') + '" data-tid="' + t.id + '">' +
+      '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
+        (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : who) + '</div>' +
+      '<div class="dy-r">' + right + '</div>' +
+    '</div>';
+  }
+  function dyBand(title, items, cls) {
+    if (!items.length) return '';
+    return '<div class="dy-band' + (cls ? ' ' + cls : '') + '"><span class="dy-band-t">' + esc(title) + '</span>' +
+      '<span class="dy-band-n num">' + items.length + '</span></div>' + items.map(function (t) { return dyRow(t); }).join('');
+  }
+  function renderMyDay(view, w, r, tools) {
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var tomorrow = new Date(today.getTime() + 864e5);
+    var tKey = dyKey(today), tmKey = dyKey(tomorrow);
+    var friday = today.getDay() === 5 || today.getDay() === 6 || today.getDay() === 0;
+    var tasks = w.tasks || [];
+    var live = tasks.filter(function (t) { return t.status !== 'done' && t.status !== 'review' && t.status !== 'cancel'; });
+    var over = live.filter(function (t) { return t.overdue; });
+    var todayL = [], tomorrowL = [], rest = {}, noDay = [];
+    live.filter(function (t) { return !t.overdue; }).forEach(function (t) {
+      if (!t.due_at) { noDay.push(t); return; }
+      var k = dyDayOf(t.due_at);
+      if (k === tKey) todayL.push(t);
+      else if (k === tmKey) tomorrowL.push(t);
+      else if (k < tKey) todayL.push(t);
+      else (rest[k] = rest[k] || []).push(t);
+    });
+    // Без дня — до пятницы: в пятницу это уже «сегодня», раньше — остаток недели.
+    if (friday) todayL = todayL.concat(noDay); else if (noDay.length) rest['z-noday'] = noDay;
+    var doneToday = tasks.filter(function (t) { return t.status === 'done' && t.closed_at && dyDayOf(t.closed_at) === tKey; });
+    var doneWeek = tasks.filter(function (t) { return t.status === 'done' && !(t.closed_at && dyDayOf(t.closed_at) === tKey); });
+    var review = tasks.filter(function (t) { return t.status === 'review'; });
+    var restKeys = Object.keys(rest).sort();
+    var restN = restKeys.reduce(function (a, k) { return a + rest[k].length; }, 0);
+
+    // Сегодня — якорь экрана.
+    var main = '';
+    if (over.length) main += dyBand('Просрочено', over, 'over');
+    if (todayL.length) main += (over.length ? dyBand('Сегодня', todayL) : todayL.map(function (t) { return dyRow(t); }).join(''));
+    if (!over.length && !todayL.length) {
+      main += '<div class="dy-empty">' + (restN
+        ? 'На сегодня ничего не назначено. <b>Ниже остаток недели</b> — открой задачу и поставь ей день, или просто делай по порядку.'
+        : (tasks.length ? 'На сегодня ничего. Неделя сделана — можно взять что-то из «Потом».' : 'Неделя пустая. Собери ее: возьми задачи из «Потом».')) + '</div>';
+    }
+    var restHtml = '';
+    if (restN) {
+      var hint = restKeys.map(function (k) {
+        if (k === 'z-noday') return 'без дня ' + rest[k].length;
+        var d = new Date(k + 'T00:00:00');
+        return WDAYS_RU[d.getDay()] + ' ' + rest[k].length;
+      }).join(' · ');
+      var open = !!state.dyMore || (!over.length && !todayL.length);
+      restHtml = '<button class="dy-more' + (open ? ' open' : '') + '" id="dy-more">' + ic('go', 14) +
+        '<span>Еще ' + restN + ' на неделе</span><span class="dy-more-h">' + esc(hint) + '</span></button>' +
+        '<div class="dy-rest"' + (open ? '' : ' hidden') + '>' +
+          restKeys.map(function (k) {
+            if (k === 'z-noday') return dyBand('Без дня, до пятницы', rest[k]);
+            var d = new Date(k + 'T00:00:00');
+            return dyBand(dyTitle(d), rest[k]);
+          }).join('') + '</div>';
+    }
+    var todayN = over.length + todayL.length;
+    var mainCard = '<div class="card dy-card">' +
+      '<div class="dy-h"><span class="dy-h-t">' + esc(dyTitle(today)) + '</span>' +
+        '<span class="dy-h-n num">' + (todayN ? '<b>' + todayN + '</b> ' + plural(todayN, 'задача', 'задачи', 'задач') : '') + '</span>' +
+        '<button class="qchip" id="tsk-new">' + ic('plus', 12) + 'Задача</button></div>' +
+      '<div class="dy-body">' + main + restHtml + '</div></div>';
+
+    // Сбоку: сдали мне (только если есть), завтра, сделано.
+    var side = '';
+    if ((w.accept || []).length) {
+      side += '<div class="card dy-card"><div class="dy-h blue"><span class="dy-h-t">Тебе сдали</span>' +
+        '<span class="dy-h-n num"><b>' + w.accept.length + '</b></span></div><div class="dy-body">' +
+        w.accept.map(function (t) { return dyRow(t, { readOnly: true }); }).join('') + '</div></div>';
+    }
+    var tmTitle = tomorrow.getDay() === 6 ? 'В понедельник' : 'Завтра';
+    side += '<div class="card dy-card"><div class="dy-h"><span class="dy-h-t">' + tmTitle + '</span>' +
+      '<span class="dy-h-n num">' + (tomorrowL.length ? '<b>' + tomorrowL.length + '</b>' : '') + '</span></div>' +
+      '<div class="dy-body">' + (tomorrowL.length
+        ? tomorrowL.map(function (t) { return dyRow(t); }).join('')
+        : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
+    var doneN = doneToday.length + review.length;
+    side += '<div class="card dy-card"><div class="dy-h"><span class="dy-h-t">Сделано сегодня</span>' +
+      '<span class="dy-h-n num">' + (doneN ? '<b>' + doneN + '</b>' : '') + '</span></div>' +
+      '<div class="dy-body">' + (doneN
+        ? review.concat(doneToday).map(function (t) { return dyRow(t); }).join('')
+        : '<div class="dy-empty">Еще ничего. Галочка слева от задачи — и она здесь.</div>') +
+      (doneWeek.length ? '<div class="dy-foot">За неделю сделано еще ' + doneWeek.length + '</div>' : '') +
+      '</div></div>';
+
+    view.innerHTML = '<div class="wk-top">' + tools + '</div>' +
+      '<div class="dy-grid">' + mainCard + '<div class="dy-side">' + side + '</div></div>';
+    if (el('dy-more')) el('dy-more').addEventListener('click', function () {
+      state.dyMore = !el('dy-more').classList.contains('open');
+      el('dy-more').classList.toggle('open', state.dyMore);
+      view.querySelector('.dy-rest').hidden = !state.dyMore;
+    });
+  }
+
   function renderMyWeek(view) {
     if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
     if (state.myweek === 'none') {
@@ -5026,26 +5154,34 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools brd-tools">' + wkNav(w.label || r.label) + meter +
-        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
-          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        act +
-        '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
-      '</div>' +
-      wkStateLine(r) +
-      '<div class="list-body">' + body + '</div>' +
-    '</div>';
+    if (sh === 0 && !q) {
+      // Текущая неделя — это день. Панель сверху без поиска: на экране дня
+      // искать нечего, десять строк видны целиком.
+      renderMyDay(view, w, r, wkNav(w.label || r.label) + meter + '<span class="wk-spacer"></span>' + act + wkStateLine(r));
+    } else {
+      view.innerHTML = '<div class="card listcard">' +
+        '<div class="list-tools brd-tools">' + wkNav(w.label || r.label) + meter +
+          '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+            '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+            '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+          act +
+          '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
+        '</div>' +
+        wkStateLine(r) +
+        '<div class="list-body">' + body + '</div>' +
+      '</div>';
+    }
 
     wkWireNav(view);
-    el('tsk-new').addEventListener('click', function () { openNewTask(); });
+    if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
-    qi.addEventListener('input', function () {
-      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
-      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
-    });
-    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    }
     ['wk-collect', 'wk-collect2'].forEach(function (id) {
       if (el(id)) el(id).addEventListener('click', function () { openWeekCollect(w); });
     });

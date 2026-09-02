@@ -7218,6 +7218,76 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .wkc-row { grid-template-columns: minmax(0,1fr); }
 }
 
+/* ── День: главный экран задач (решение Павла 02.09.2026) ─────────────────────
+   Не список недели, а три зоны: «Сегодня» крупно слева, «Завтра» и «Сделано»
+   тихо справа. Зоны разделены подложкой страницы (--main) между белыми
+   карточками, а не подзаголовками: слов на экране минимум. Строка — одна
+   линия: галочка, название, справа только то, что отличается от нормы
+   (просрочка, «на приемке», «вернули»). «Поставлена» и «сегодня» не пишем:
+   это норма, а норму не подписывают. Единственное красное — просрочка. */
+.wk-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.wk-top .brd-nav { margin-right: 4px; }
+.wk-top .wk-spacer { flex: 1; }
+.wk-top .wk-state { margin: 0; flex-basis: 100%; }
+.dy-grid { display: grid; grid-template-columns: minmax(0, 1fr) 336px; gap: 16px; align-items: start; }
+.dy-side { display: grid; gap: 16px; min-width: 0; }
+.dy-card { min-width: 0; overflow: hidden; }
+.dy-h { display: flex; align-items: baseline; gap: 10px; padding: 18px 20px 10px; }
+.dy-h-t { font-size: 20px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); line-height: 1.15; }
+.dy-side .dy-h { padding: 14px 18px 6px; }
+.dy-side .dy-h-t { font-size: 15px; letter-spacing: -.02em; }
+.dy-h-n { font-size: 12.5px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+.dy-h-n b { color: var(--ink); font-weight: 700; }
+.dy-h .qchip { margin-left: auto; }
+.dy-h.blue .dy-h-t { color: var(--blue); }
+.dy-h.blue .dy-h-n { color: var(--blue); }
+.dy-body { padding: 0 0 6px; }
+/* Строка дня: галочка, название, справа отклонение от нормы. Ниже общей .trow:
+   день читается сверху вниз одним взглядом, 58px на строку тут лишние. */
+.trow.dy-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; height: auto; min-height: 46px;
+  padding: 9px 20px; align-items: center; }
+.dy-side .trow.dy-row { padding: 8px 18px; min-height: 40px; }
+.dy-row .dy-t { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.dy-row .tsk-chk { margin-top: 0; }
+.dy-row .dy-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dy-side .dy-row .dy-ttl { font-size: 13.5px; }
+.dy-row .dy-cl { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.dy-row .dy-r { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.dy-row.closed .dy-ttl { color: var(--ink-3); font-weight: 500; text-decoration: line-through; }
+.dy-row.closed .dy-t::before { content: ''; width: 20px; height: 20px; flex: none; border-radius: 50%;
+  background: var(--green-soft); }
+.dy-row.closed.review .dy-t::before { background: var(--blue-tint); }
+.dy-row.over::before { opacity: 1; background: var(--coral); }
+/* Полоса «Просрочено» над строками дня: красным только слово, не заливка. */
+.dy-band { display: flex; align-items: baseline; gap: 9px; padding: 8px 20px 4px; }
+.dy-band-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.dy-band.over .dy-band-t { color: var(--red-ink); }
+.dy-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.dy-band + .dy-band { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.dy-more { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 20px; border: 0;
+  border-top: 1px solid var(--line); background: #FBFBFC; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--ink-2); cursor: pointer; text-align: left; transition: background .14s; }
+.dy-more:hover { background: var(--fill); color: var(--ink); }
+.dy-more svg { color: var(--ink-3); transition: transform .2s var(--ease); }
+.dy-more.open svg { transform: rotate(90deg); }
+.dy-more .dy-more-h { font-weight: 500; color: var(--ink-3); }
+.dy-rest .dy-band:first-child { border-top: 1px solid var(--line); margin-top: 0; padding-top: 12px; }
+.dy-empty { padding: 22px 20px 26px; font-size: 13px; line-height: 1.5; color: var(--ink-3); }
+.dy-empty b { color: var(--ink-2); font-weight: 600; }
+.dy-side .dy-empty { padding: 6px 18px 18px; font-size: 12.5px; }
+.dy-foot { padding: 6px 18px 12px; font-size: 12px; color: var(--ink-3); }
+@media (max-width: 960px) {
+  .dy-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .wk-top .brd-nav { flex-basis: 100%; }
+  .trow.dy-row { grid-template-columns: minmax(0, 1fr) auto !important; padding: 10px 16px; }
+  .dy-row .dy-cl { display: none; }
+  .dy-h { padding: 16px 16px 8px; }
+  .dy-h-t { font-size: 18px; }
+}
+
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
