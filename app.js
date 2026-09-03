@@ -83,6 +83,7 @@
     tree: null, treeDept: null, treeGoal: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
+    cardCalls: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
     // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
@@ -4883,6 +4884,17 @@
       if (cb) cb();
     }).catch(function () {
       state.cardTasks[id] = 'none';
+      if (cb) cb();
+    });
+  }
+  // Консультации карточки: запись встречи и конспект. Грузим отдельно от карточки —
+  // список нужен только на вкладке «Заметки», а карточка открывается чаще.
+  function loadCardCalls(id, cb) {
+    api('/admin/api/leads/' + id + '/calls').then(function (r) {
+      state.cardCalls[id] = (r && r.calls) || [];
+      if (cb) cb();
+    }).catch(function () {
+      state.cardCalls[id] = 'none';
       if (cb) cb();
     });
   }
@@ -23278,6 +23290,152 @@
     });
   }
 
+  /* ── Консультации: запись встречи и конспект ──
+     25.08.2026 клиентка попросила запись консультации, а записи не было нигде: она
+     осталась на компьютере ведущего. Здесь живет то, что от встречи остается системе —
+     ссылка на исходник и конспект. Само видео к себе не тащим (см. §10в CLAUDE.md). */
+  var CALL_ST = { transcribing: 'расшифровываем', failed: 'расшифровать не вышло' };
+
+  function callRow(c) {
+    // Дата без времени: часа встречи мы не спрашиваем, и показывать подставленный
+    // полдень значит врать о том, когда разговор был.
+    var when = c.held_at ? dayLabel(c.held_at) : '';
+    var meta = [when, c.minutes ? c.minutes + ' мин' : '', c.created_by || ''].filter(Boolean).join(' · ');
+    var st = CALL_ST[c.status];
+    var body = (c.summary || '').trim();
+    return '<div class="cl-row" data-clid="' + c.id + '">' +
+      '<div class="cl-h">' +
+        '<span class="cl-ic">' + ic('phone', 15) + '</span>' +
+        '<div class="cl-m">' + esc(meta) + '</div>' +
+        (st ? '<span class="cl-st ' + c.status + '">' + st + '</span>' : '') +
+        (c.link ? '<a class="icobtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" ' +
+                  'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
+        '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
+      '</div>' +
+      (body ? '<div class="cl-sum">' + esc(body).replace(/\n/g, '<br>') + '</div>'
+            : '<div class="cl-empty">' + (c.status === 'transcribing'
+                 ? 'Разбираем запись, конспект появится через пару минут.'
+                 : 'Конспекта нет. Допишите своими словами или приложите запись.') + '</div>') +
+      '<div class="cl-acts">' +
+        (body ? '<button class="bp sm ghost" data-tonote="' + c.id + '">' +
+                  ic('note', 13) + 'В заметку</button>' : '') +
+        '<button class="bp sm ghost" data-editcall="' + c.id + '">' +
+          ic('pen', 13) + (body ? 'Поправить' : 'Дописать') + '</button>' +
+      '</div>';
+  }
+
+  function callsBlock(ctx) {
+    var loaded = state.cardCalls[ctx.id];
+    var body;
+    if (loaded === undefined) body = '<div class="ct-skel shim"></div>';
+    else if (loaded === 'none') body = '<div class="field-empty">Не удалось загрузить. Откройте раздел заново.</div>';
+    else if (!loaded.length) body = '<div class="field-empty">Консультаций пока нет.</div>';
+    else body = loaded.map(callRow).join('');
+    return '<div class="m-sec"><div class="m-sec-h">Консультации</div>' +
+      '<div id="m-calls">' + body + '</div>' +
+      '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+      '<div class="ct-hint">Запись разбираем в конспект и храним текстом. Само видео остается там, ' +
+        'где лежит: файл сюда только звуком и до 60 МБ, иначе ссылкой.</div>' +
+      '</div>';
+  }
+
+  function openCallForm(id, after, call) {
+    if (document.querySelector('.al-ov')) return;
+    var edit = !!call;
+    var today = (edit && call.held_at ? String(call.held_at).slice(0, 10)
+                                      : new Date().toISOString().slice(0, 10));
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';   // поверх карточки ученика, как форма задания
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Клиент</div><div class="al-title">' +
+            (edit ? 'Правка консультации' : 'Консультация') + '</div></div>' +
+          '<button class="al-x" id="cf-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Запись разберем в конспект и сохраним текстом. Само видео остается ' +
+          'там, где лежит: сюда только звук до 60 МБ, иначе ссылка.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Когда была</span>' +
+            '<input id="cf-date" class="al-in" type="date" value="' + today + '"></label>' +
+          '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
+            '<input id="cf-link" class="al-in" type="text" placeholder="диск ведущего или облако" ' +
+              'value="' + esc((edit && call.link) || '') + '"></label>' +
+          '<label class="czb-drop" id="cf-drop">' +
+            '<input type="file" id="cf-file" accept="audio/*,video/*" hidden>' +
+            '<span class="czb-drop-i">' + ic('phone', 20) + '</span>' +
+            '<span class="czb-drop-t" id="cf-fname">Выберите файл записи</span>' +
+          '</label>' +
+          '<label class="al-f"><span class="al-l">Или конспект своими словами</span>' +
+            '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000">' +
+              esc((edit && call.summary) || '') + '</textarea></label>' +
+          '<div class="ct-err" id="cf-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="cf-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="cf-ok">Сохранить</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('cf-x').addEventListener('click', close);
+    el('cf-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var fileIn = el('cf-file'), fname = el('cf-fname'), err = el('cf-err');
+    fileIn.addEventListener('change', function () {
+      var f = fileIn.files && fileIn.files[0];
+      fname.textContent = f ? f.name + ' · ' + fmtSize(f.size) : 'Выберите файл записи';
+    });
+
+    el('cf-ok').addEventListener('click', function () {
+      var date = (el('cf-date') || {}).value || '';
+      var link = ((el('cf-link') || {}).value || '').trim();
+      var sum = ((el('cf-sum') || {}).value || '').trim();
+      var file = fileIn.files && fileIn.files[0];
+      err.textContent = '';
+      if (!file && !link && !sum) { err.textContent = 'Нужна запись, ссылка или конспект'; return; }
+      // Тот же потолок, что на сервере: сказать «файл великоват» до отправки честнее,
+      // чем гнать 100 МБ по мобильному интернету и получить отказ в конце.
+      if (file && file.size > 60 * 1024 * 1024) {
+        err.textContent = 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись';
+        return;
+      }
+      var payload = { held_at: date ? date + 'T12:00:00+03:00' : null,
+                      link: link || null, summary: sum || null };
+      var send = function () {
+        el('cf-ok').disabled = true;
+        var path = edit ? '/admin/api/calls/' + call.id : '/admin/api/leads/' + id + '/calls';
+        apiSend(path, edit ? 'PATCH' : 'POST', payload, function () {
+          close();
+          loadCardCalls(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+          showToast(payload.audio_base64 ? 'Записал, разбираю запись' : 'Записал');
+          if (after) after();
+        }, function (code) {
+          el('cf-ok').disabled = false;
+          err.textContent = code === 413
+            ? 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись'
+            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка или конспект'
+                            : 'Не сохранилось, проверьте сеть');
+        });
+      };
+      if (!file) { send(); return; }
+      var reader = new FileReader();
+      reader.onload = function () { payload.audio_base64 = String(reader.result); send(); };
+      reader.onerror = function () { err.textContent = 'Не удалось прочитать файл'; };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function buildNotesSection(ctx) {
     var crm = ctx.crm;
     var loaded = state.cardTasks[ctx.id];
@@ -23305,6 +23463,7 @@
           '<button class="bp sm ghost" id="m-note-parse">' + ic('spark', 13) + 'Разобрать в задачи</button>' +
           '<div class="note-state" id="m-notestate"></div></div>' +
         '<div id="m-note-parsed"></div></div>' +
+      callsBlock(ctx) +
       '<div class="m-sec"><div class="m-sec-h">Задачи по ученику</div>' +
         '<div id="m-tasks">' + body + '</div>' +
         '<button class="bp sm ct-add" id="m-task-add">' + ic('plus', 13) + 'Поставить задачу</button>' +
@@ -24208,6 +24367,61 @@
           });
       });
     });
+
+    // консультации: список, добавление, перенос конспекта в заметку
+    if (el('m-calls') && state.cardCalls[id] === undefined) {
+      loadCardCalls(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+      });
+    }
+    var callAdd = el('m-call-add');
+    if (callAdd) callAdd.addEventListener('click', function () { openCallForm(id); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-editcall]'), function (b) {
+      b.addEventListener('click', function () {
+        var list = state.cardCalls[id];
+        if (!list || list === 'none') return;
+        var cid = +b.getAttribute('data-editcall');
+        var call = list.filter(function (c) { return c.id === cid; })[0];
+        if (call) openCallForm(id, null, call);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-delcall]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Убрать эту консультацию из карточки?')) return;
+        apiSend('/admin/api/calls/' + b.getAttribute('data-delcall'), 'DELETE', null, function () {
+          loadCardCalls(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+        });
+      });
+    });
+    // Конспект в заметку — оттуда его разбирают в задачи той же кнопкой, что и обычную
+    // заметку. Отдельного разбора для консультации не заводим: путь должен быть один.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-tonote]'), function (b) {
+      b.addEventListener('click', function () {
+        var list = state.cardCalls[id];
+        if (!list || list === 'none') return;
+        var cid = +b.getAttribute('data-tonote');
+        var call = list.filter(function (c) { return c.id === cid; })[0];
+        if (!call || !note) return;
+        var when = call.held_at ? dayLabel(call.held_at) : '';
+        var head = ('Консультация ' + when).trim();
+        note.value = (note.value ? note.value.trim() + '\n\n' : '') + head + '\n' + call.summary;
+        patch(id, { note: note.value }, noteState);
+        note.focus();
+        showToast('Конспект в заметке, можно разобрать в задачи');
+      });
+    });
+    // Пока идет расшифровка, карточка сама перечитывает список: разбор занимает
+    // минуты, а менеджер не должен гадать, закончилось или нет.
+    var busy = (state.cardCalls[id] || []).some
+      && (state.cardCalls[id] || []).some(function (c) { return c.status === 'transcribing'; });
+    if (busy) setTimeout(function () {
+      if (state.drawerId !== id || state.modalSection !== 'notes') return;
+      loadCardCalls(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+      });
+    }, 15000);
 
     var addBtn = el('m-task-add');
     if (addBtn) addBtn.addEventListener('click', function () {
