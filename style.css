@@ -2456,6 +2456,52 @@ button.tr-crumb:hover { color: var(--blue); }
 .rh-note svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 .rh-note b { font-weight: 700; color: var(--ink-3); }
 
+/* ── Приемка отчета ──────────────────────────────────────────────────────────
+   Метка судьбы отчета рядом со «сдан»: ждет приемки (амбер — это дело
+   руководителя), принят (зеленый), на доработке (красный — вернулось). */
+.rh-rv-btn { display: inline-flex; align-items: center; gap: 8px; padding: 2px;
+  background: none; border: 0; cursor: pointer; min-width: 0; }
+/* Метка приемки — та же семья, что все чипы: модификатор на .sev, не свой чип.
+   Иначе рядом со «сдан» (тоже .sev) она другой высоты и скругления. */
+.sev.rv-wait { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.rv-ok   { color: var(--green-ink); background: var(--green-soft); }
+.sev.rv-back { color: var(--red-ink);   background: var(--red-soft); }
+.rh-rv-btn:hover .sev { filter: brightness(.97); }
+/* Сколько ждет приемки — строка над таблицей. Амбер: это очередь действий. */
+.rh-await { display: flex; align-items: center; gap: 9px; margin: 14px 24px 2px;
+  padding: 11px 15px; border-radius: 12px; background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 13px; font-weight: 500; }
+.rh-await svg { flex: none; color: var(--amber-ink); }
+.rh-await b { font-weight: 700; }
+/* Судьба отчета в своей плашке «Отчет за период». */
+.rh-rvline { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px;
+  font-size: 12.5px; line-height: 1.45; font-weight: 500; }
+.rh-rvline svg { flex: none; margin-top: 2px; }
+.rh-rvline.ok { color: var(--green-ink); }
+.rh-rvline.back { color: var(--red-ink); }
+
+/* Карточка приемки (модалка). */
+.rv-badge { align-self: flex-start; margin-bottom: 4px; }
+.rv-facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0 4px;
+  font-size: 13px; color: var(--ink-2); }
+.rv-facts b { color: var(--ink); font-weight: 700; }
+.rv-facts .rv-bad b { color: var(--red-ink); }
+.rv-said { margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+  background: var(--fill); font-size: 13.5px; line-height: 1.5; color: var(--ink);
+  white-space: pre-wrap; word-break: break-word; }
+.rv-said.muted { color: var(--ink-3); }
+.rv-lbl { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+.rv-state { display: flex; align-items: flex-start; gap: 7px; margin-top: 14px;
+  font-size: 13px; font-weight: 600; line-height: 1.45; }
+.rv-state svg { flex: none; margin-top: 1px; }
+.rv-state.ok { color: var(--green-ink); }
+.rv-state.back { color: var(--red-ink); }
+.rv-note { margin-top: 14px; }
+.rv-foot .al-cancel { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.rv-foot .al-cancel svg { flex: none; }
+.rv-foot .al-cancel.armed { color: var(--red-ink); background: var(--red-soft); }
+
 /* Согласованные сроки. Настройка команды, поэтому лежит на экране команды, а
    не в отдельном разделе: правило и его исполнение видны рядом. */
 .rh-sched { padding: 16px 24px 20px; border-top: 1px solid var(--line); }
@@ -2838,6 +2884,9 @@ button.tr-crumb:hover { color: var(--blue); }
   .trow.rh-grid .rh-c::before, .trow.rh-grid .brd-n::before { content: attr(data-l);
     font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
     color: var(--ink-3); }
+  /* Отчет + метка приемки в узкой клетке: даем перенос, иначе «на доработке»
+     обрезается за краем колонки. */
+  .trow.rh-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
   .brd-nav { margin-left: 0; }
   .brd-label { min-width: 0; flex: 1; }
   /* Дерево на телефоне: у направления числа уходят под название и называют
@@ -6022,7 +6071,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tcard.accent { border-color: #CFE0FF; }
 .po-tflag { position: absolute; top: 17px; right: 17px; }
 .po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
-.po-tpos { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-tpos { margin-top: 5px; min-height: 54px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 .po-tfmt { margin-top: 9px; min-height: 35px; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 .po-tprice { margin-top: 15px; font-size: 28px; font-weight: 700; letter-spacing: -.035em; }
 .po-told { margin-top: 3px; font-size: 12px; color: var(--ink-3); text-decoration: line-through; }
@@ -6100,7 +6149,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tbl.econ .po-rl { width: 250px; }
 /* поля экономики — системный .al-in, компактный размер (прецедент — .ed-input.big).
    Своего рецепта инпута в разделе нет: фокус, фон и обводка приходят из системы. */
-.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px; }
+.al-in.sm { font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 11px;
+  font-variant-numeric: tabular-nums; }
 .po-in { max-width: 152px; }
 .po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
   display: inline-block; vertical-align: middle; }
@@ -6171,6 +6221,63 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-lu { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px;
   font-weight: 600; color: var(--blue); white-space: nowrap; }
 
+
+/* способы оплаты: переключатель сверху, три цены под ним.
+   Переплата — не украшение, а сам аргумент разговора, поэтому она стоит
+   под ценой, а не прячется в примечании. */
+.po-payseg { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 17px; }
+.po-payh { font-size: 12.5px; color: var(--ink-3); }
+.po-pay { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.po-payc { background: var(--fill); border-radius: var(--r-lg); padding: 15px 17px; }
+.po-payc.accent { background: var(--blue-tint); }
+.po-payn { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.po-payv { margin-top: 9px; font-size: 25px; font-weight: 700; letter-spacing: -.035em; color: var(--ink); }
+.po-payo { margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+.po-payo.best { color: var(--green-ink); font-weight: 600; }
+.po-draft { display: inline-flex; margin-top: 11px; background: var(--amber-soft); color: var(--amber-ink); }
+.po-opens { display: flex; flex-direction: column; gap: 9px; }
+.po-openi { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.po-openi svg { flex: none; margin-top: 2px; color: var(--amber-ink); }
+
+/* этапы флагмана */
+.po-lede { margin-top: 16px; background: var(--blue-tint); border-radius: var(--r-lg);
+  padding: 14px 17px; font-size: 14.5px; font-weight: 600; letter-spacing: -.015em;
+  color: var(--navy); line-height: 1.5; }
+.po-stghead { margin-bottom: 20px; }
+.po-stg .po-sh { padding: 15px 20px; }
+.po-stnum { flex: none; width: 26px; font-size: 14px; font-weight: 700; color: var(--ink-3);
+  text-align: left; }
+.po-stg.open .po-stnum, .po-sh:hover .po-stnum { color: var(--blue); }
+.po-w { flex: none; }
+.po-w-plat { background: var(--fill); color: var(--ink-2); }
+.po-w-team { background: var(--blue-tint); color: var(--navy); }
+.po-w-self { background: var(--amber-soft); color: var(--amber-ink); }
+.po-sbody { padding-left: 59px; }
+.po-sbody .po-txt { margin-top: 15px; }
+/* в шапке этапа плашка только одна — роль. Срок рядом с ней такой же серой
+   пилюлей читался бы как второй чип: в режиме «Сравнить» он и так тихий текст */
+.po-sh .po-when { background: none; padding: 0 2px; font-weight: 500; color: var(--ink-3); }
+.po-samet { margin-top: 15px; font-size: 11.5px; color: var(--ink-3); }
+.po-samet + .po-txt { margin-top: 7px; }
+.po-sbody .po-pluses { margin-top: 13px; }
+.po-sell { margin-top: 15px; background: var(--amber-soft); border-radius: 12px; padding: 12px 15px;
+  font-size: 12.5px; color: var(--amber-ink); line-height: 1.5; }
+.po-sell b { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; }
+.po-tbl.cmp .po-w { display: inline-flex; margin-bottom: 8px; }
+.po-ct { display: block; }
+
+/* экономика: строка этапа несет его себестоимость, строки под ней — из чего она */
+/* строка этапа несет его себестоимость. Свой класс, не .po-r-grp: тот занят
+   группами прайса на вкладке «Ценообразование» и выглядит иначе.
+   Вес 600, а не 700: подытог этапа не должен спорить с итогом продукта ниже. */
+.po-r-stage td { background: var(--fill); font-weight: 600; color: var(--ink); }
+.po-r-stage .po-hint { font-weight: 500; }
+.po-r-item .po-rl { font-weight: 500; color: var(--ink-2); }
+/* итог продукта отделен от двенадцати подытогов линией — иначе они читаются
+   одним уровнем и итог теряется */
+.po-tbl.econ .po-r-sum:first-of-type td { border-top: 1px solid var(--line-2); }
+
 @media (max-width: 960px) {
   /* на планшете и телефоне колонок две, ряды переносятся — общая сетка строк
      тут только мешает, каждая колонка живет своей высотой */
@@ -6181,6 +6288,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
+  .po-pay { grid-template-columns: 1fr; }
   .po-pcards { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
@@ -6199,6 +6307,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      целиком (flex-basis 100%), иначе отбирает ширину у заголовка и тот ломается
      на три строки рядом с иконкой. */
   .po-when { order: 3; flex-basis: 100%; align-self: flex-start; margin-top: 4px; }
+  /* шапка этапа: на узком экране номер, название и шеврон в первой строке,
+     кто делает и срок — во второй, с отступом под колонку текста */
+  /* переключатель тарифа шире экрана: даем ему уехать вбок, как вкладкам,
+     а не ломаем в две строки — из двух строк не читается, что это один набор */
+  .po-payseg .dperiod { max-width: 100%; overflow-x: auto; }
+  .po-payseg .dperiod::-webkit-scrollbar { height: 0; }
+  .po-payseg .dperiod button { flex: none; }
+  .po-sh { flex-wrap: wrap; }
+  /* без явной ширины .po-it сжимается до нуля (min-width:0 у общего рецепта) и
+     название этапа встает столбиком по одному слову вместо переноса чипов */
+  .po-sh .po-it { min-width: 58%; }
+  .po-sh .po-iv { order: 2; }
+  .po-sh .po-w { order: 3; margin: 3px 0 0 37px; }
+  .po-sh .po-when { order: 4; flex-basis: auto; margin-top: 3px; }
+  .po-sbody { padding-left: 16px; }
+  .po-payv { font-size: 22px; }
+  .po-lede { font-size: 13.5px; padding: 13px 15px; }
 }
 
 /* ════ ИМПОРТ ВСТРЕЧИ — загрузка протокола и экран проверки ════

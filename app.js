@@ -85,6 +85,8 @@
     cardTasks: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
+    // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
+    portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
@@ -2011,6 +2013,14 @@
     // не видит маркетинг, а «Руководитель» — это заодно зарплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
     marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal'] },
+    // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
+    // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
+    // такой же, как у руководителя маркетинга: владелец просил роль без права менять
+    // платежи и сделки, но права выданы разделами, и доступ к разделу даёт и правку.
+    // Просмотр-без-правки — второй шаг, там роли и разойдутся. Ведомости нет: процент
+    // продюсера от чистой прибыли — отдельный расчётный лист. Зеркало ROLE_CAPS в
+    // backend/app/routers/admin.py.
+    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
@@ -5738,6 +5748,13 @@
     done: { label: 'сдан',          cls: 'st-done' },
     late: { label: 'с опозданием',  cls: 'rh-late' },
   };
+  /* Приемка отчета — своя семья меток, отдельная от «сдан/не сдан»: сдача и
+     приемка это два разных события, и мешать их словарями нельзя. */
+  var RH_REVIEW = {
+    pending:  { label: 'ждет приемки', cls: 'rv-wait' },
+    accepted: { label: 'принят',       cls: 'rv-ok' },
+    returned: { label: 'на доработке', cls: 'rv-back' },
+  };
   var RH_WDAY = [['1', 'понедельник'], ['2', 'вторник'], ['3', 'среда'], ['4', 'четверг'],
                  ['5', 'пятница'], ['6', 'суббота'], ['7', 'воскресенье']];
 
@@ -5816,10 +5833,23 @@
           : '<span class="rh-hint">период еще не начался</span>');
     var said = given && given.text
       ? '<div class="rh-said">' + ic('chat', 12) + '<span>' + esc(given.text) + '</span></div>' : '';
+    // Судьба отчета после сдачи: принят или вернули с замечанием. У плана приемки
+    // нет, поэтому строка только у отчета.
+    var rvline = '';
+    if (kind === 'report' && given && given.review) {
+      var rs = given.review.state;
+      if (rs === 'accepted') {
+        rvline = '<div class="rh-rvline ok">' + ic('check', 12) + '<span>Отчет принят' +
+          (given.review.by ? ', ' + esc(given.review.by) : '') + '</span></div>';
+      } else if (rs === 'returned') {
+        rvline = '<div class="rh-rvline back">' + ic('refresh', 12) + '<span>Вернули на доработку' +
+          (given.review.note ? ': ' + esc(given.review.note) : '') + '</span></div>';
+      }
+    }
 
     return '<div class="rh-p' + (given ? ' given' : '') + (d.state === 'miss' ? ' miss' : '') + '">' +
       '<div class="rh-ph"><span class="rh-l">' + esc(title) + '</span>' + rhChip(d.state) + '</div>' +
-      body + said +
+      body + said + rvline +
       '<div class="rh-pf"><span class="rh-due">' + esc(d.due_text || '') + '</span>' + btn + '</div>' +
     '</div>';
   }
@@ -6005,6 +6035,123 @@
       null, 'План и отчет', isPlan ? 'Сдать план' : 'Сдать отчет');
   }
 
+  /* Карточка приемки отчета. Руководитель открывает ее по ссылке из уведомления
+     или из среза, видит текст и числа на момент сдачи и делает одно из двух:
+     принимает или возвращает с замечанием. Без этой петли сдача была тупиком —
+     отчет уходил в базу, и ответить на него было нечем. */
+  function openReportReview(uid, period, starts, after) {
+    if (document.querySelector('.al-ov')) return;
+    api('/admin/api/rhythm/report?user_id=' + uid + '&period=' + period + '&starts=' + starts)
+      .then(function (r) { reviewCard(r, period, starts, after); })
+      .catch(function () { showToast('Не удалось открыть отчет'); });
+  }
+
+  function reviewFacts(f) {
+    f = f || {};
+    var parts = [];
+    parts.push('<span><b class="num">' + (f.done || 0) + '</b> принято</span>');
+    if (f.left) parts.push('<span><b class="num">' + f.left + '</b> осталось</span>');
+    if (f.overdue) parts.push('<span class="rv-bad"><b class="num">' + f.overdue + '</b> просрочено</span>');
+    if (f.moved) parts.push('<span>сроки двигали <b class="num">' + f.moved + '</b></span>');
+    return '<div class="rv-facts">' + parts.join('') + '</div>';
+  }
+
+  function reviewCard(r, period, starts, after) {
+    if (document.querySelector('.al-ov')) return;
+    var rep = r.report || null;
+    var plan = r.plan || null;
+    var rv = (rep && rep.review) || { state: 'pending' };
+    var m = RH_REVIEW[rv.state] || RH_REVIEW.pending;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var stateLine = rv.state === 'accepted'
+      ? '<div class="rv-state ok">' + ic('check', 14) + 'Принят' +
+          (rv.by ? ', ' + esc(rv.by) : '') + '</div>'
+      : (rv.state === 'returned'
+        ? '<div class="rv-state back">' + ic('refresh', 14) + 'Возвращен на доработку' +
+            (rv.note ? ': ' + esc(rv.note) : '') + '</div>'
+        : '');
+    ov.innerHTML =
+      '<div class="al-card rv-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Отчет' + (r.role_label ? ' · ' + esc(r.role_label) : '') + '</div>' +
+            '<div class="al-title">' + esc(r.name || '') + '</div></div>' +
+          '<button class="al-x" id="rv-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + esc(r.label || '') + '</div>' +
+        '<div class="al-body">' +
+          (rep
+            ? '<span class="sev ' + (RH_ST[rep.review && rep.late ? 'late' : 'done'] || RH_ST.done).cls + ' rv-badge">' +
+                (rep.late ? 'сдан с опозданием' : 'сдан') + '</span>' +
+              reviewFacts(rep.facts) +
+              (rep.text
+                ? '<div class="rv-said"><div class="rv-lbl">Что мешало</div>' + esc(rep.text) + '</div>'
+                : '<div class="rv-said muted">Комментарий не оставлен — числа выше отчет и есть.</div>') +
+              (plan && plan.text
+                ? '<div class="rv-said"><div class="rv-lbl">План на период</div>' + esc(plan.text) + '</div>' : '') +
+              stateLine +
+              '<label class="al-f rv-note" id="rv-note-wrap" hidden><span class="al-l">Что доработать</span>' +
+                '<textarea id="rv-note" class="al-in al-ta" rows="2" maxlength="1000" ' +
+                'placeholder="Коротко, что поправить в отчете"></textarea></label>' +
+              '<div class="ct-err" id="rv-err"></div>'
+            : '<div class="empty">Этот сотрудник еще не сдал отчет за период.</div>') +
+        '</div>' +
+        (rep
+          ? '<div class="al-foot rv-foot">' +
+              '<button class="al-cancel" id="rv-back">' + ic('refresh', 14) + 'Вернуть на доработку</button>' +
+              '<button class="bp al-save" id="rv-ok">' + ic('check', 14) +
+                (rv.state === 'accepted' ? 'Принят' : 'Принять') + '</button>' +
+            '</div>'
+          : '') +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('rv-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    if (!rep) return;
+
+    function send(action, note) {
+      api('/admin/api/rhythm/review', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: r.user_id, period: period, starts: starts,
+          action: action, note: note || '' }),
+      }).then(function () {
+        close();
+        showToast(action === 'accept' ? 'Отчет принят' : 'Вернул на доработку');
+        state.rhythmTeam = null; state.rhythm = null;
+        if (after) after(); else renderView();
+      }).catch(function (e) {
+        el('rv-err').textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить';
+      });
+    }
+    el('rv-ok').addEventListener('click', function () { send('accept'); });
+    var backWrap = el('rv-note-wrap'), backBtn = el('rv-back');
+    backBtn.addEventListener('click', function () {
+      // Первый клик раскрывает поле замечания, второй — отправляет: возврат без
+      // «что доработать» это пустой пинг, от которого работа не двигается.
+      if (backWrap.hidden) {
+        backWrap.hidden = false;
+        el('rv-note').focus();
+        backBtn.classList.add('armed');
+        backBtn.innerHTML = ic('refresh', 14) + 'Отправить на доработку';
+        return;
+      }
+      var note = (el('rv-note').value || '').trim();
+      if (!note) { el('rv-err').textContent = 'Напиши, что доработать'; el('rv-note').focus(); return; }
+      send('return', note);
+    });
+  }
+
   /* Срез руководителя: кто сдал, кто нет. Колонок ровно четыре — рейтинга людей
      тут нет по той же причине, что и в табло «По людям». */
   function renderRhythmTeam(view) {
@@ -6019,8 +6166,19 @@
       '<span class="th">Задач в плане</span><span class="th">Принято</span></div>';
     var rows = (b.people || []).map(function (p) {
       function cell(kind) {
+        var d = p[kind] || {};
+        // Сданный отчет — кнопка приемки: рядом со «сдан» стоит его судьба
+        // (ждет приемки / принят / на доработке), клик открывает карточку.
+        if (kind === 'report' && (d.state === 'done' || d.state === 'late')) {
+          var rv = (d.review || {}).state || 'pending';
+          var mr = RH_REVIEW[rv] || RH_REVIEW.pending;
+          return '<div class="rh-c" data-l="Отчет">' +
+            '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть отчет">' +
+              rhChip(d.state) + '<span class="sev ' + mr.cls + '">' + mr.label + '</span>' +
+            '</button></div>';
+        }
         return '<div class="rh-c" data-l="' + (kind === 'plan' ? 'План' : 'Отчет') + '">' +
-          rhChip((p[kind] || {}).state) + '</div>';
+          rhChip(d.state) + '</div>';
       }
       // Слова человека — строкой под числами, во всю ширину, как отчет дня в
       // табло: в клетке рядом с чипом они обрезаются до «Держу фоку…», а это
@@ -6053,8 +6211,16 @@
         '</div>'
       : '';
 
+    // Сколько отчетов ждет приемки — над таблицей: экран руководителя нужен
+    // ради этого действия, а не полюбоваться, кто как сдал.
+    var pend = b.await_review
+      ? '<div class="rh-await">' + ic('bell', 13) + '<span><b class="num">' + b.await_review +
+        '</b> ' + plural(b.await_review, 'отчет ждет', 'отчета ждут', 'отчетов ждут') +
+        ' твоей приемки. Нажми на «ждет приемки» в колонке Отчет.</span></div>'
+      : '';
+
     view.innerHTML = '<div class="card listcard">' + rhTools(b) +
-      '<div class="list-body">' +
+      '<div class="list-body">' + pend +
         (rows ? head + rows : '<div class="empty">В этом периоде задач нет ни у кого.</div>') +
       '</div>' + idle +
       // Кому сроки менять нельзя — говорим их строкой. Кому можно — они и так
@@ -6066,6 +6232,15 @@
     '</div>';
 
     rhWire(view);
+    // Клик по метке сданного отчета открывает карточку приемки — раньше клика,
+    // который ведет на задачи человека, поэтому stopPropagation.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openReportReview(+btn.getAttribute('data-review'), b.period, b.starts,
+          function () { state.rhythmTeam = null; renderView(); });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (row) {
       row.addEventListener('click', function () {
         var uid = +row.getAttribute('data-uid');
@@ -11801,15 +11976,20 @@
     function jump(pred) {
       for (var j = 0; j < all.length; j++) if (pred(all[j], finYM(all[j].starts_on))) { finSetPeriod(all[j].id); return; }
     }
-    if (el('fin-yr')) el('fin-yr').addEventListener('click', function () {
+    // stopPropagation обязателен: клик, открывший меню, иначе долетит до общего
+    // закрывателя (document click, ~строка 1939) и закроет его в тот же тик.
+    if (el('fin-yr')) el('fin-yr').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, years.map(function (y) { return { v: String(y), label: String(y) }; }),
         String(cy.y), function (v) { jump(function (p, d) { return d.y === +v; }); });
     });
-    el('fin-mo').addEventListener('click', function () {
+    el('fin-mo').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, monthsY.map(function (m) { return { v: String(m), label: FIN_MON_NOM[m - 1] + ' ' + cy.y }; }),
         String(cy.m), function (v) { jump(function (p, d) { return d.y === cy.y && d.m === +v; }); });
     });
-    el('fin-per').addEventListener('click', function () {
+    el('fin-per').addEventListener('click', function (e) {
+      e.stopPropagation();
       openDropdown(this, monthPers.map(function (p) {
         return { v: p.id, label: p.name + (p.open ? '  · открыта' : '') };
       }), cur.id, function (v) { finSetPeriod(v); });
@@ -14833,7 +15013,7 @@
     var formHtml = d ? '<div class="tm-add">' +
         '<div class="tm-add-g">' +
           '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
-          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="olesy.stepanova (без собаки)" autocomplete="off"></label>' +
           '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
           '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
         '</div>' +
@@ -15067,13 +15247,22 @@
         state._teamNew[id.slice(3)] = f.value;
       });
     });
+    function normLogin(v) {
+      return String(v || '').trim().toLowerCase().replace(/^@+/, '');
+    }
     var sv = el('tn-save');
     if (sv) sv.addEventListener('click', function () {
       var body = state._teamNew || {};
-      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      // Проверяем уже нормализованный логин: из одной собаки после срезки
+      // остается пустая строка, и без этой проверки человек получил бы отказ
+      // от сервера вместо понятной подсказки.
+      if (!body.name.trim() || !normLogin(body.login)) return showToast('Заполните имя и логин');
       sv.disabled = true;
       apiSend('/admin/api/users', 'POST', {
-        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        // Собаку срезаем сами: поле называется «Логин», рядом в списке стоят
+        // телеграм-ники с собакой, и человек естественно копирует ник целиком.
+        // Сервер такой логин не принимает, а человек видит отказ на ровном месте.
+        name: body.name.trim(), login: normLogin(body.login),
         email: body.email.trim(), role: body.role,
       }, function (r) {
         state._teamNew = null;
@@ -15084,7 +15273,7 @@
         sv.disabled = false;
         showToast(code === 409 ? 'Такой логин или почта уже заняты'
           : code === 403 ? 'Эту роль может выдать только владелец'
-          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : code === 422 ? 'Логин пишется латиницей, без собаки — например olesy.stepanova'
           : 'Не удалось завести — попробуйте еще раз');
       });
     });
@@ -16668,6 +16857,7 @@
      врет человеку, что материал есть, а он его не нашел. */
   var PORTAL_TABS = [
     { id: 'tariffs', label: 'Тарифы', has: function (p) { return (p.tariffs || []).length; } },
+    { id: 'stages', label: 'Этапы', has: function (p) { return (p.stages || []).length; } },
     { id: 'price', label: 'Ценообразование', has: function (p) { return !!p.pricing; } },
     { id: 'items', label: 'Продукты', has: function (p) { return (p.items || []).length; } },
     { id: 'flow', label: 'Путь клиента', has: function (p) { return (p.flow || []).length; } },
@@ -16800,6 +16990,8 @@
         var kw = t.label + ' ' + p.title;
         if (t.id === 'tariffs') kw += ' ' + (p.tariffs || []).map(function (x) { return x.name + ' ' + x.price; }).join(' ');
         if (t.id === 'econ') kw += ' маржа вклад расходы себестоимость налоги';
+        if (t.id === 'stages') kw += ' этапы наполнение что входит ' + (p.stages || []).map(function (x) { return x.title; }).join(' ');
+        if (t.id === 'tariffs') kw += ' цена оплата рассрочка кредит скидка';
         if (t.id === 'offer') kw += ' договор оферта';
         idx.push({ kw: kw, label: t.label, sub: p.title, go: { pid: p.id, tab: t.id } });
       });
@@ -16861,6 +17053,7 @@
 
     var bodyHtml = '';
     if (state.portalTab === 'tariffs') bodyHtml = portalTariffs(p);
+    else if (state.portalTab === 'stages') bodyHtml = portalStages(p);
     else if (state.portalTab === 'price') bodyHtml = portalPricing(p);
     else if (state.portalTab === 'items') bodyHtml = portalItems(p);
     else if (state.portalTab === 'flow') bodyHtml = portalFlow(p);
@@ -16885,6 +17078,8 @@
       });
     });
     if (state.portalTab === 'econ') portalWireEcon(view, p);
+    if (state.portalTab === 'tariffs') portalWirePay(view, p);
+    if (state.portalTab === 'stages') portalWireStages(view, p);
     portalWireLinks(view);
   }
 
@@ -16942,7 +17137,205 @@
     }
 
     return '<div class="po-tariffs">' + cards + '</div>' +
-      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') + cmpHtml;
+      (p.tariff_note ? '<div class="po-note wide">' + esc(p.tariff_note) + '</div>' : '') +
+      portalPayment(p) + portalGuarantee(p) + cmpHtml;
+  }
+
+  /* ── способы оплаты ────────────────────────────────────────────────────────
+     Цена у тарифа одна, а платит семья по-разному, и разница в деньгах — это и
+     есть аргумент на диагностике: чем меньше вносишь сразу, тем дороже выходит.
+     Поэтому не абзац с условиями, а переключатель: выбрал способ — увидел три
+     цены и переплату к оплате целиком. Цифры, которые команда еще не утвердила,
+     помечены прямо в карточке: молча выдавать их за согласованные нельзя. */
+  function payOption(pay, id) {
+    var os = (pay && pay.options) || [];
+    for (var i = 0; i < os.length; i++) if (os[i].id === id) return os[i];
+    return os[0] || null;
+  }
+  function portalPayment(p) {
+    var pay = p.payment;
+    if (!pay || !(pay.options || []).length) return '';
+    var cur = payOption(pay, state.portalPay) || pay.options[0];
+    /* точка отсчета переплаты — самый дешевый способ, а не «цена тарифа»:
+       переплату семья считает от того, что было бы, заплати она сразу */
+    var base = pay.options.reduce(function (a, o) {
+      var s = (p.tariffs || []).reduce(function (n, t) { return n + ((o.prices || {})[t.id] || 0); }, 0);
+      return (!a || s < a.sum) ? { o: o, sum: s } : a;
+    }, null).o;
+
+    var segs = pay.options.map(function (o) {
+      return '<button type="button" data-popay="' + esc(o.id) + '" class="' + (cur.id === o.id ? 'on' : '') + '">' + esc(o.label) + '</button>';
+    }).join('');
+
+    var cells = (p.tariffs || []).map(function (t) {
+      var v = (cur.prices || {})[t.id], b = (base.prices || {})[t.id];
+      var over = (v != null && b != null) ? v - b : 0;
+      var draft = (cur.draft || []).indexOf(t.id) !== -1;
+      return '<div class="po-payc' + (t.accent ? ' accent' : '') + '">' +
+        '<div class="po-payn">' + esc(t.name) + '</div>' +
+        '<div class="po-payv num">' + (v != null ? fmtMoney(v) + ' ₽' : '—') + '</div>' +
+        (over > 0
+          ? '<div class="po-payo num">переплата ' + fmtMoney(over) + ' ₽</div>'
+          : '<div class="po-payo best">самая низкая цена</div>') +
+        (draft ? '<span class="sev po-draft">нужно утвердить</span>' : '') +
+      '</div>';
+    }).join('');
+
+    var rules = (pay.rules || []).map(function (r) {
+      return '<div class="po-feat">' + ic('check', 13) + '<span>' + esc(r) + '</span></div>';
+    }).join('');
+    var open = (pay.open || []).map(function (r) {
+      return '<div class="po-openi">' + ic('alert', 13) + '<span>' + esc(r) + '</span></div>';
+    }).join('');
+
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
+        '<div><div class="t">' + esc(pay.title || 'Способы оплаты') + '</div>' +
+        '<div class="s">переключите способ — цены пересчитаются</div></div></div>' +
+      '<div class="po-payseg"><div class="dperiod">' + segs + '</div>' +
+        (cur.hint ? '<div class="po-payh">' + esc(cur.hint) + '</div>' : '') + '</div>' +
+      '<div class="po-pay">' + cells + '</div>' +
+      (rules ? '<div class="po-fsec"><div class="po-flbl">Правила</div><div class="po-feats">' + rules + '</div></div>' : '') +
+      (open ? '<div class="po-fsec"><div class="po-flbl">Не утверждено</div><div class="po-opens">' + open + '</div></div>' : '') +
+      (pay.note ? '<div class="po-note">' + esc(pay.note) + '</div>' : '') +
+    '</div>';
+  }
+  function portalGuarantee(p) {
+    var g = p.guarantee;
+    if (!g || !(g.items || []).length) return '';
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('award', 14) + '</span>' +
+        '<div><div class="t">' + esc(g.title || 'Гарантии') + '</div>' +
+        '<div class="s">что обещаем словами договора, а что не обещаем никогда</div></div></div>' +
+      '<div class="po-feats">' + portalNotes(g.items, 'check') + '</div></div>';
+  }
+  function portalWirePay(view, p) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-popay]'), function (b) {
+      b.addEventListener('click', function () { state.portalPay = b.getAttribute('data-popay'); renderView(); });
+    });
+  }
+
+  /* ── этапы флагмана ────────────────────────────────────────────────────────
+     Двенадцать этапов есть во всех тарифах, отличается наполнение. Поэтому
+     экран собран не как три колонки услуг, а как один маршрут с переключателем
+     тарифа: на диагностике семью ведут по ее собственному пути, а не по
+     сравнительной таблице. Режим «Сравнить» — для внутреннего разговора.
+     Чип «семья сама» намеренно амбер: это ровно те места, где идет допродажа,
+     и их должно быть видно, не читая текст. */
+  var PO_WHO = { 'семья сама': 'po-w-self', 'платформа': 'po-w-plat', 'команда': 'po-w-team',
+                 'платформа и куратор': 'po-w-team', 'платформа и диагност': 'po-w-team',
+                 'платформа и семья': 'po-w-self' };
+  /* same:true — «то же, что тарифом ниже»: текст не дублируем в json, чтобы
+     правка одного описания не разъезжалась по трем копиям */
+  function stageCell(p, st, tid) {
+    var ts = p.tariffs || [], i = 0;
+    for (; i < ts.length; i++) if (ts[i].id === tid) break;
+    var own = (st.cells || {})[tid] || {};
+    var out = { who: own.who || '', text: own.text || '', plus: own.plus || [], sell: own.sell || '', same: false, from: '' };
+    if (!out.text) {
+      for (var j = i - 1; j >= 0; j--) {
+        var b = (st.cells || {})[ts[j].id];
+        if (b && b.text) {
+          out.text = b.text;
+          out.sell = out.sell || b.sell || '';
+          if (!out.plus.length) out.plus = b.plus || [];
+          out.same = true; out.from = ts[j].name;
+          break;
+        }
+      }
+    }
+    return out;
+  }
+  function stagePlusHtml(list) {
+    if (!(list || []).length) return '';
+    return '<div class="po-pluses">' + list.map(function (x) {
+      return '<span class="po-plus">' + esc(x) + '</span>';
+    }).join('') + '</div>';
+  }
+  function portalStages(p) {
+    var ts = p.tariffs || [], sts = p.stages || [];
+    var mode = state.portalTariff;
+    if (mode !== 'all' && !ts.some(function (t) { return t.id === mode; })) mode = (ts[0] || {}).id;
+
+    var segs = ts.map(function (t) {
+      return '<button type="button" data-postar="' + esc(t.id) + '" class="' + (mode === t.id ? 'on' : '') + '">' + esc(t.name) + '</button>';
+    }).join('') + '<button type="button" data-postar="all" class="' + (mode === 'all' ? 'on' : '') + '">Сравнить</button>';
+
+    var head = '<div class="card po-card po-stghead">' +
+      '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
+        '<div><div class="t">Двенадцать этапов поступления</div>' +
+        '<div class="s">этапы одни на всех тарифах, отличается наполнение</div></div></div>' +
+      '<div class="po-payseg"><div class="dperiod">' + segs + '</div></div>' + portalStagesLede(p, mode, sts) + '</div>';
+
+    return head + (mode === 'all' ? portalStagesTable(p, sts) : portalStagesList(p, sts, mode));
+  }
+  /* якорь экрана: одно предложение, которое диагност произносит вслух */
+  function portalStagesLede(p, mode, sts) {
+    if (mode === 'all') {
+      return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
+    }
+    var self = sts.filter(function (st) { return (stageCell(p, st, mode).who || '').indexOf('семья') !== -1; });
+    var name = (p.tariffs || []).filter(function (t) { return t.id === mode; })[0];
+    if (!self.length) {
+      return '<div class="po-lede">На тарифе «' + esc(name ? name.name : '') + '» все ' + sts.length +
+        ' этапов ведем мы. Семье остается сдавать документы и учиться.</div>';
+    }
+    return '<div class="po-lede">На тарифе «' + esc(name ? name.name : '') + '» семья делает своими руками ' +
+      self.length + ' ' + plural(self.length, 'этап', 'этапа', 'этапов') + ' из ' + sts.length + ': ' +
+      esc(self.map(function (st) { return st.title.toLowerCase(); }).join(', ')) +
+      '. Это и есть места, где идет допродажа.</div>';
+  }
+  function portalStagesList(p, sts, mode) {
+    return sts.map(function (st, i) {
+      var c = stageCell(p, st, mode), open = state.portalStage === st.id;
+      var body = '';
+      if (c.same && c.from) body += '<div class="po-samet">как в тарифе «' + esc(c.from) + '»</div>';
+      if (c.text) body += '<p class="po-txt">' + esc(c.text) + '</p>';
+      body += stagePlusHtml(c.plus);
+      if (c.sell) body += '<div class="po-sell"><b>Где допродаем</b>' + esc(c.sell) + '</div>';
+      if (st.foot) body += '<div class="po-note">' + esc(st.foot) + '</div>';
+      return '<div class="card po-card po-item po-stg' + (open ? ' open' : '') + '">' +
+        '<button type="button" class="po-ih po-sh" data-postage="' + esc(st.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<span class="po-stnum num">' + (i + 1) + '</span>' +
+          '<span class="po-it"><b>' + esc(st.title) + '</b>' +
+            (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</span>' +
+          (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
+          (st.when ? '<span class="po-when">' + esc(st.when) + '</span>' : '') +
+          '<span class="po-iv">' + ic('go', 14) + '</span>' +
+        '</button>' +
+        (open ? '<div class="po-ibody po-sbody">' + body + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+  function portalStagesTable(p, sts) {
+    var ts = p.tariffs || [];
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var trs = sts.map(function (st, i) {
+      var tds = ts.map(function (t) {
+        var c = stageCell(p, st, t.id);
+        return '<td>' +
+          (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
+          (c.same && c.from ? '<span class="po-hint">как в тарифе «' + esc(c.from) + '»</span>' : '<span class="po-ct">' + esc(c.text) + '</span>') +
+          stagePlusHtml(c.plus) + '</td>';
+      }).join('');
+      return '<tr><td class="po-rl">' + (i + 1) + '. ' + esc(st.title) +
+        (st.when ? '<span class="po-hint">' + esc(st.when) + '</span>' : '') + '</td>' + tds + '</tr>';
+    }).join('');
+    return '<div class="card po-card">' +
+      '<div class="po-tblwrap"><table class="po-tbl cmp"><thead><tr><th class="po-rl">Этап</th>' + ths + '</tr></thead>' +
+      '<tbody>' + trs + '</tbody></table></div></div>';
+  }
+  function portalWireStages(view, p) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-postar]'), function (b) {
+      b.addEventListener('click', function () { state.portalTariff = b.getAttribute('data-postar'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-postage]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-postage');
+        state.portalStage = state.portalStage === id ? null : id;
+        renderView();
+      });
+    });
   }
 
   /* ── Ценообразование ──────────────────────────────────────────────────────
@@ -17061,19 +17454,42 @@
     return m;
   }
   function econNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  /* Группы строк расходов — этапы поступления плюс то, что к одному этапу не
+     привязано. Себестоимость этапа — это и есть сумма его строк, поэтому она
+     считается тут же, а не отдельной таблицей: два места для одной цифры
+     разъезжаются. Формат данных в базе от группировки не зависит — там по
+     прежнему плоский costs[статья][тариф]. */
+  function econGroups(p) {
+    var ec = p.economics || {};
+    var gs = (p.stages || []).map(function (st, i) { return { id: st.id, title: (i + 1) + '. ' + st.title }; })
+      .concat((ec.groups || []).map(function (g) { return { id: g.id, title: g.title, note: g.note }; }));
+    var known = {}; gs.forEach(function (g) { known[g.id] = true; });
+    var map = {}, rest = false;
+    (ec.costs || []).forEach(function (c) {
+      var sid = c.stage || 'common';
+      if (!known[sid]) { sid = '__rest'; rest = true; }
+      map[c.id] = sid;
+    });
+    if (rest) gs.push({ id: '__rest', title: 'Прочее' });
+    return { list: gs, of: map };
+  }
   function econCalc(p, m) {
-    var ec = p.economics || {}, out = {};
+    var ec = p.economics || {}, out = {}, gr = econGroups(p);
     (p.tariffs || []).forEach(function (t) {
-      var price = econNum(m.price[t.id]), sum = 0, rates = {}, costs = {};
+      var price = econNum(m.price[t.id]), sum = 0, cost = 0, rates = {}, costs = {}, stages = {};
       (ec.rates || []).forEach(function (r) {
         var v = Math.round(price * econNum(m.rates[r.id]) / 100);
         rates[r.id] = v; sum += v;
       });
       (ec.costs || []).forEach(function (c) {
         var v = econNum((m.costs[c.id] || {})[t.id]);
-        costs[c.id] = v; sum += v;
+        costs[c.id] = v; sum += v; cost += v;
+        var sid = gr.of[c.id] || 'common';
+        stages[sid] = (stages[sid] || 0) + v;
       });
-      out[t.id] = { total: sum, contrib: price - sum, margin: price ? Math.round((price - sum) / price * 100) : 0, rates: rates, costs: costs };
+      out[t.id] = { total: sum, cost: cost, contrib: price - sum,
+        margin: price ? Math.round((price - sum) / price * 100) : 0,
+        rates: rates, costs: costs, stages: stages };
     });
     return out;
   }
@@ -17104,12 +17520,24 @@
         '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-rate="' + esc(r.id) + '" value="' + econNum(m.rates[r.id]) + '"><span class="po-pc">%</span></td>' +
         ts.map(function (t) { return '<td class="num" data-ec="' + esc(r.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
     }).join('');
-    var costRows = (ec.costs || []).map(function (c) {
-      return '<tr><td class="po-rl">' + esc(c.label) + '</td>' + ts.map(function (t) {
-        return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
-      }).join('') + '</tr>';
+    var gr = econGroups(p);
+    var costRows = gr.list.map(function (g) {
+      var items = (ec.costs || []).filter(function (c) { return gr.of[c.id] === g.id; });
+      if (!items.length) return '';
+      return '<tr class="po-r-stage"><td class="po-rl">' + esc(g.title) +
+          (g.note ? '<span class="po-hint">' + esc(g.note) + '</span>' : '') + '</td>' +
+          ts.map(function (t) { return '<td class="num" data-ec="stage:' + esc(g.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+        items.map(function (c) {
+          return '<tr class="po-r-item"><td class="po-rl">' + esc(c.label) +
+            (c.hint ? '<span class="po-hint">' + esc(c.hint) + '</span>' : '') + '</td>' +
+            ts.map(function (t) {
+              return '<td><input class="al-in sm po-in num" type="number" inputmode="numeric" data-cost="' + esc(c.id) + ':' + esc(t.id) + '" value="' + econNum((m.costs[c.id] || {})[t.id]) + '"></td>';
+            }).join('') + '</tr>';
+        }).join('');
     }).join('');
     var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Себестоимость реализации<span class="po-hint">только расходы по этапам, без налогов и продаж</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="cost:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Итого расходы</td>' + ts.map(function (t) { return '<td class="num" data-ec="total:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Вклад с клиента, ₽</td>' + ts.map(function (t) { return '<td class="num" data-ec="contrib:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-big"><td class="po-rl">Маржа вклада</td>' + ts.map(function (t) { return '<td class="num" data-ec="margin:' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
@@ -17129,9 +17557,16 @@
     function recalc() {
       var r = econCalc(p, m);
       Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
-        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0], v = r[parts[1]];
+        var parts = c.getAttribute('data-ec').split(':'), kind = parts[0];
+        if (kind === 'stage') {
+          var sv = r[parts[2]];
+          if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
+          return;
+        }
+        var v = r[parts[1]];
         if (!v) return;
         if (kind === 'total') c.textContent = fmtMoney(v.total);
+        else if (kind === 'cost') c.textContent = fmtMoney(v.cost);
         else if (kind === 'contrib') c.textContent = fmtMoney(v.contrib);
         else if (kind === 'margin') {
           c.textContent = v.margin + '%';
@@ -19967,10 +20402,12 @@
     }
     var st = state.botStats;
     var bar = statBar([
-      { tint: 'blue', label: 'Первый ответ', value: st.first_resp + ' сек', sub: 'среднее по каналам' },
-      { tint: 'green', label: 'AI довёл до заявки', value: st.ai_closed, sub: st.dialogs ? Math.round(st.ai_closed / st.dialogs * 100) + '% диалогов' : '' },
+      { tint: 'blue', label: 'Первый ответ', value: st.first_resp ? st.first_resp + ' сек' : '—',
+        sub: st.first_resp ? 'медиана по всем ответам' : 'пока не из чего считать' },
+      { tint: 'green', label: 'Бот вёл сам', value: st.ai_closed, sub: st.dialogs ? Math.round(st.ai_closed / st.dialogs * 100) + '% диалогов' : '' },
       { tint: 'navy', label: 'Передано менеджеру', value: st.handed, sub: 'сложные / горячие' },
-      { tint: 'amber', label: 'Расход AI', value: fmtMoney(st.cost) + ' ₽', sub: st.bot_msgs + ' ответов' },
+      { tint: 'amber', label: 'Расход на нейросеть', value: aiMoney(st.cost, 'total'),
+        sub: st.cost ? fmtMoney(st.cost.calls) + ' ' + plural(st.cost.calls, 'запрос', 'запроса', 'запросов') : 'нет данных' },
     ]);
     var chParts = st.by_channel.filter(function (x) { return x.n; });
     var chTotal = chParts.reduce(function (s2, x) { return s2 + x.n; }, 0) || 1;
@@ -20007,20 +20444,64 @@
           '<div class="cvc-c num">' + q.n + '</div><div class="cvc-p num"></div></div>';
       }).join('') + '</div>' : '<div class="empty">Пока нет данных по вопросам.</div>') + '</div>';
 
-    var costCard = '<div class="card sp5" style="padding:22px 26px">' +
-      '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div><div class="t">Стоимость обработки</div><div class="s">сколько AI тратит на лида</div></div></div>' +
-      '<div class="lose-body"><div class="lose-big"><b class="num" style="color:var(--amber-ink)">' + (st.dialogs ? Math.round(st.cost / st.dialogs) : 0) + ' ₽</b><span>на один диалог</span></div>' +
-      '<div class="lose-sub">Всего ' + fmtMoney(st.cost) + ' ₽ на ' + st.dialogs + ' ' + plural(st.dialogs, 'диалог', 'диалога', 'диалогов') + '. Дешевле менеджера на первичке.</div></div></div>';
+    var costCard = costCardHtml(st);
 
     var banner = st.source === 'demo'
       ? '<div class="ib-banner">' + ic('bolt', 14) + '<span>Демо-аналитика. С подключением бота цифры станут реальными (каналы, конверсии, расход, пробелы базы).</span></div>' : '';
     view.innerHTML = '<div class="dash">' + banner + bar + '<div class="grid">' + chanCard + funCard + faqCard + costCard + '</div></div>';
   }
+  /* Расход на нейросеть OpenRouter считает в долларах — это факт, который у нас есть.
+     Рубли показываем, только когда на боте задан курс (LLM_USD_RUB): зашитый в код курс
+     через полгода врёт, а придуманная цифра хуже отсутствующей. */
+  function aiMoney(c, field) {
+    if (!c) return '—';
+    var rub = field === 'total' ? c.rub : c.rub_30d;
+    var usd = field === 'total' ? c.usd : c.usd_30d;
+    if (rub != null) return fmtMoney(Math.round(rub)) + '\u00a0₽';
+    return (usd < 0.01 && usd > 0 ? '<0,01' : String((usd || 0).toFixed(2)).replace('.', ',')) + '\u00a0$';
+  }
+  /* Цена одного диалога — сотые доли доллара, поэтому две цифры после запятой обязательны:
+     округление до целого превратило бы ее в честный, но бесполезный ноль. */
+  function aiPerDialog(c, dialogs) {
+    if (!c || !dialogs) return '—';
+    if (c.rub != null) return (c.rub / dialogs).toFixed(1).replace('.', ',') + '\u00a0₽';
+    var v = (c.usd || 0) / dialogs;
+    return (v < 0.01 && v > 0 ? '<0,01' : v.toFixed(2).replace('.', ',')) + '\u00a0$';
+  }
+  function costCardHtml(st) {
+    var c = st.cost;
+    if (!c) {
+      return '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div class="t">Стоимость обработки</div></div>' +
+        '<div class="empty">Бот еще не записал ни одного вызова нейросети.</div></div>';
+    }
+    var since = c.since ? ' с ' + dayFull(c.since) : '';
+    /* Деньги — главная колонка, число вызовов приглушенное: карточка про стоимость,
+       а не про количество запросов. */
+    var models = (c.by_model || []).map(function (m) {
+      var short = String(m.model || '').split('/').pop().replace(/^~/, '');
+      return '<div class="r"><span class="dnm">' + esc(short) + '</span>' +
+        '<span class="dcount num">' + fmtMoney(m.calls) + '</span>' +
+        '<span class="dpc num">' + aiMoney({ usd: m.usd, rub: m.rub }, 'total') + '</span></div>';
+    }).join('');
+    return '<div class="card sp5" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic gold">' + ic('coins', 14) + '</span><div><div class="t">Стоимость обработки</div><div class="s">сколько нейросеть тратит на диалог</div></div></div>' +
+      '<div class="lose-body"><div class="lose-big"><b class="num" style="color:var(--amber-ink)">' + aiPerDialog(c, st.dialogs) + '</b><span>на один диалог</span></div>' +
+      '<div class="lose-sub">Всего ' + aiMoney(c, 'total') + ' за ' + fmtMoney(c.calls) + ' ' +
+        plural(c.calls, 'запрос', 'запроса', 'запросов') + since +
+        '. За последние 30 дней ' + aiMoney(c, 'month') + '.</div>' +
+      (models ? '<div class="dleg" style="margin-top:14px">' + models + '</div>' : '') +
+      '</div></div>';
+  }
   function normBotStats(r, source) {
     var byCh = (r.by_channel || []).map(function (x) { return { channel: x.channel, n: x.n }; });
     return {
-      source: source, first_resp: 7, dialogs: r.dialogs || 0, bot_msgs: r.bot_msgs || 0,
-      ai_closed: Math.max(0, (r.dialogs || 0) - (r.handed || 0)), handed: r.handed || 0, cost: r.est_cost_rub || 0,
+      /* first_resp и cost приходят из базы: раньше семерка была зашита в код, а расход
+         считался формулой «ответы на константу», хотя бот пишет каждый вызов в llm_usage */
+      source: source, first_resp: r.first_reply_sec || null,
+      dialogs: r.dialogs || 0, bot_msgs: r.bot_msgs || 0,
+      ai_closed: Math.max(0, (r.dialogs || 0) - (r.handed || 0)), handed: r.handed || 0,
+      cost: r.ai_cost || null,
       by_channel: byCh.length ? byCh : [{ channel: 'telegram', n: r.dialogs || 0 }],
       funnel: [
         { l: 'Написали боту', n: r.dialogs || 0 },
@@ -20038,7 +20519,8 @@
     arr.forEach(function (l) { var d = getDialog(l); byCh[d.channel]++; cost += d.cost_rub; msgs += d.msgs; if (d.handed) handed++; else if (l.booking) closed++; });
     var total = arr.length;
     return {
-      source: 'demo', first_resp: 6, dialogs: total, bot_msgs: msgs, ai_closed: closed, handed: handed, cost: cost,
+      source: 'demo', first_resp: 6, dialogs: total, bot_msgs: msgs, ai_closed: closed, handed: handed,
+      cost: { calls: msgs, usd: 0, rub: cost, rate: 1, since: null, usd_30d: 0, rub_30d: 0, calls_30d: msgs, by_model: [] },
       by_channel: CHAN_ORDER.filter(function (k) { return byCh[k]; }).map(function (k) { return { channel: k, n: byCh[k] }; }),
       funnel: [
         { l: 'Написали боту', n: total },
@@ -20280,6 +20762,34 @@
       })
       .then(function (url) { if (url) RM_DOC_LINK_CACHE[docId] = url; cb(url || null); })
       .catch(function () { cb(null); });
+  }
+
+  /* Открыть документ клиента по кнопке. Ручка /admin/api/docs/:id/download
+     отдает JSON с подписанной ссылкой на Storage, а не сам файл. Кнопка вела
+     на ручку напрямую — вместо документа открывалась вкладка с текстом
+     {"link": ...}, и менеджер не мог скачать присланное. Резолвим ссылку и
+     уводим браузер уже на нее. Вкладку открываем синхронно, до запроса: если
+     звать window.open из промиса, блокировщик всплывающих окон ее срежет.
+     Не кэшируем — подпись живет ограниченное время, а вкладка CRM висит
+     открытой весь день. */
+  function openDoc(docId) {
+    var w = window.open('', '_blank');
+    if (w) try { w.opener = null; } catch (e) {}
+    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) {
+        if (!url) { if (w) w.close(); showToast('Файл не открылся — обнови страницу'); return; }
+        if (w) w.location.replace(url);
+        else window.open(url, '_blank', 'noopener');
+      })
+      .catch(function () {
+        if (w) w.close();
+        showToast('Файл не открылся — проверь сеть');
+      });
   }
 
   /* присланное клиентом — одна карточка вложения */
@@ -22798,13 +23308,16 @@
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
-      var href = dc.link ? dc.link : (API + '/admin/api/docs/' + dc.id + '/download?k=' + encodeURIComponent(getKey()));
+      /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
+      var href = dc.link || '#';
       var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
         '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + esc(meta) + '</div></div>' +
         '<div class="doc-act">' +
-          '<a class="icobtn" target="_blank" rel="noopener" href="' + esc(href) + '" title="Открыть">' + ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
+          '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
+            ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
+            ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
           '<button class="icobtn del" data-deldoc="' + dc.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
         '</div></div>';
     }).join('');
@@ -23084,7 +23597,7 @@
         : fmtWhen(p.created_at);
       var amtCls = p.status === 'refunded' ? ' refunded' : (p.status === 'pending' ? ' pending' : '');
       var rcpt = p.receipt_doc_id
-        ? '<a class="pay-rcpt has" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + p.receipt_doc_id + '/download?k=' + encodeURIComponent(getKey()) + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
+        ? '<a class="pay-rcpt has" href="#" data-docdl="' + p.receipt_doc_id + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
         : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
       return '<div class="pay-row">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
@@ -23708,6 +24221,12 @@
       var nm = url.split('/').filter(Boolean).pop() || 'Ссылка';
       apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url }, function () {
         refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-docdl]'), function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        openDoc(a.getAttribute('data-docdl'));
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-deldoc]'), function (b) {
@@ -24896,6 +25415,41 @@
     // Через запятую — пакет разборов с одной планерки: #meeting/12,13,14.
     openMeetingImport(mid);
   }
+  /* #rreview/<uid>/<period>/<starts> — карточка приемки отчета конкретного
+     человека. По ней ведет уведомление руководителю о сдаче: из пуша сразу в
+     отчет, а не в срез, который открылся бы на пустом текущем периоде. */
+  function hashReviewParts() {
+    var raw = hashRouteId('rreview');
+    if (!raw) return null;
+    var p = raw.split('/');
+    return p.length >= 3 && +p[0] ? { uid: +p[0], period: p[1], starts: p[2] } : null;
+  }
+  function rhShiftFor(period, startsISO) {
+    var d = new Date(startsISO + 'T00:00:00'), now = new Date();
+    if (period === 'month') {
+      return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+    }
+    if (period === 'week') {
+      function mon(x) { var y = new Date(x); y.setDate(y.getDate() - ((y.getDay() + 6) % 7)); y.setHours(0, 0, 0, 0); return y; }
+      return Math.round((mon(d) - mon(now)) / (7 * 864e5));
+    }
+    var a = new Date(d); a.setHours(0, 0, 0, 0);
+    var c = new Date(now); c.setHours(0, 0, 0, 0);
+    return Math.round((a - c) / 864e5);
+  }
+  function openReportReviewFromHash() {
+    var q = hashReviewParts();
+    if (!q || document.querySelector('.al-ov') || !can('tasks_all')) return;
+    // Срез команды на нужном периоде — контекст под модалкой и верный список после.
+    state.page = 'tasks'; applyTaskSeg('plan');
+    state.rhythmWho = 'team'; state.rhythmPeriod = q.period;
+    state.rhythmShift = rhShiftFor(q.period, q.starts) || 0;
+    state.rhythmTeam = null;
+    saveUi(); renderSide(); renderTopbar(); renderHead(); renderView();
+    openReportReview(q.uid, q.period, q.starts,
+      function () { state.rhythmTeam = null; renderView(); });
+  }
+
   /* Раздел из адреса, а у задач — сразу нужная вкладка: #page/tasks/plan. Вкладка
      запоминается у каждого своя, поэтому голая ссылка на раздел приводила бы человека
      туда, где он был в прошлый раз, — для ссылки в инструкции команде это бесполезно. */
@@ -24927,6 +25481,7 @@
     else if (hashDialogId()) openDialogFromHash();
     else if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
+    else if (hashReviewParts()) openReportReviewFromHash();
     else if (hashPageId()) openPageFromHash();
     else if (state.drawerId) closeDrawer();
   });
@@ -24953,6 +25508,7 @@
     guideLoad();
     if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
+    else if (hashReviewParts()) openReportReviewFromHash();
     else if (hashPageId()) openPageFromHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     if (can('inbox')) refreshBot(function () { renderSide(); });
