@@ -159,6 +159,7 @@
     det_test_started: 'начал тест по английскому',
     webinar_registered: 'записался на вебинар',
     webinar_comment: 'написал в чате вебинара',
+    webinar_viewed: 'смотрел эфир',
     call_reminder_sent: 'напомнили о созвоне',
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
@@ -179,6 +180,19 @@
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
     if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'webinar_registered') {
+      /* интенсив с лендинга: «записался на интенсив, расширенный доступ» */
+      if (String(p.event || '').indexOf('intensive') === 0) label = 'записался на интенсив';
+      if (p.tariff === 'vip') label += ', расширенный доступ';
+      if (p.tariff === 'free') label += ', бесплатно';
+    }
+    if (e.type === 'webinar_viewed') {
+      /* одна строка на человека, цифра растет по ходу эфира: «смотрел эфир: 43 мин (16.09, 17.09)» */
+      var mins = Math.round((p.seconds || 0) / 60);
+      var days = Object.keys(p.days || {}).sort().map(function (d) { return d.slice(8, 10) + '.' + d.slice(5, 7); });
+      label = (String(p.event || '').indexOf('intensive') === 0 ? 'смотрел интенсив' : 'смотрел эфир') +
+        ': ' + (mins < 1 ? 'меньше минуты' : mins + ' мин') + (days.length ? ' (' + days.join(', ') + ')' : '');
+    }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
