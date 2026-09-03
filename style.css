@@ -1452,6 +1452,44 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .ord-n { width: 52px; outline: none; text-align: center; font: 600 13px 'Manrope', sans-serif; color: var(--ink);
   background: var(--fill); border: 1px solid transparent; border-radius: 9px; padding: 8px; font-variant-numeric: tabular-nums; }
 .ord-n:focus { background: #fff; border-color: #DCE7FF; }
+/* Свой график рассрочки: строки дата+сумма, «разбить помесячно» и полоса сходимости */
+.ord-sched { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px;
+  background: var(--fill); border-radius: 12px; }
+.osch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.osch-hint { font: 500 11.5px 'Manrope', sans-serif; color: var(--ink-3); line-height: 1.3; }
+.osch-fill { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--blue);
+  font: 600 12px 'Manrope', sans-serif; }
+.osch-fill:hover { text-decoration: underline; }
+.osch-rows { display: flex; flex-direction: column; gap: 7px; }
+.osch-row { display: grid; grid-template-columns: 1fr 118px 34px; gap: 7px; align-items: center; }
+.osch-row input { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid transparent; border-radius: 9px; padding: 9px 11px; min-width: 0; }
+.osch-row input:focus { border-color: #DCE7FF; }
+.osch-row .osch-a { text-align: right; font-variant-numeric: tabular-nums; }
+.osch-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  color: var(--blue); font: 600 12px 'Manrope', sans-serif; }
+.osch-add:hover { text-decoration: underline; }
+.osch-sum { font: 700 12px 'Manrope', sans-serif; padding: 8px 11px; border-radius: 9px;
+  font-variant-numeric: tabular-nums; }
+.osch-sum.ok { color: var(--green-ink); background: var(--green-soft); }
+.osch-sum.bad { color: var(--amber-ink); background: var(--amber-soft); }
+/* Раскрытый график выставленного счёта: взносы со статусом и ручной отметкой оплаты */
+.pay-row.ord-oh { cursor: pointer; }
+.ord-caret { display: inline-flex; color: var(--ink-3); margin-right: 5px; transition: transform .15s; vertical-align: middle; }
+.ord-caret.on { transform: rotate(90deg); }
+.oi-box { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; padding: 10px 12px;
+  background: var(--fill); border-radius: 11px; }
+.oi-hint { font: 500 11.5px 'Manrope', sans-serif; color: var(--ink-3); line-height: 1.3; margin-bottom: 2px; }
+.oi-row { display: grid; grid-template-columns: 74px 84px 1fr auto auto; gap: 8px; align-items: center;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink); }
+.oi-n { color: var(--ink-2); }
+.oi-d { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.oi-a { text-align: right; font-variant-numeric: tabular-nums; }
+.oi-st { justify-self: start; }
+.oi-mark { justify-self: end; color: var(--blue); font: 600 12px 'Manrope', sans-serif; white-space: nowrap; }
+.oi-mark:hover { text-decoration: underline; }
+.oi-mark.off { color: var(--ink-3); }
+.oi-lock { justify-self: end; color: var(--ink-3); font: 500 11.5px 'Manrope', sans-serif; white-space: nowrap; }
 .field-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 26px 10px; }
 
 /* загрузчик (запасной — финансы/прочее) */
@@ -2768,6 +2806,22 @@ button.tr-crumb:hover { color: var(--blue); }
 .ct-skel { height: 44px; border-radius: 10px; background: var(--fill); margin-bottom: 6px; }
 .ct-add { margin-top: 12px; }
 .ct-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+/* ── Консультации в карточке: что осталось от встречи ──
+   Запись живет ссылкой, а в системе остается конспект. Строка тихая: якорь секции
+   «Заметки» — сама заметка, а не список прошедших разговоров. */
+.cl-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.cl-row:last-of-type { border-bottom: none; }
+.cl-h { display: flex; align-items: center; gap: 9px; }
+.cl-ic { display: inline-flex; color: var(--ink-3); }
+.cl-m { flex: 1; min-width: 0; font-size: 12px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-st { font: 600 10.5px 'Manrope', sans-serif; padding: 2px 7px; border-radius: var(--r-pill); }
+.cl-st.transcribing { color: var(--blue); background: var(--blue-tint); }
+.cl-st.failed { color: var(--red-ink); background: var(--red-soft); }
+.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.cl-empty { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.cl-acts { display: flex; gap: 8px; margin-top: 8px; }
+
 /* Ученик в шапке карточки задачи — ссылка в его карточку. */
 .al-eyelink { font: inherit; color: var(--blue); transition: .12s; }
 .al-eyelink:hover { color: var(--blue-d); }
