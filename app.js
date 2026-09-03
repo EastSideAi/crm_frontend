@@ -160,6 +160,7 @@
     det_test_started: 'начал тест по английскому',
     webinar_registered: 'записался на вебинар',
     webinar_comment: 'написал в чате вебинара',
+    webinar_viewed: 'смотрел эфир',
     call_reminder_sent: 'напомнили о созвоне',
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
@@ -180,6 +181,19 @@
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
     if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'webinar_registered') {
+      /* интенсив с лендинга: «записался на интенсив, расширенный доступ» */
+      if (String(p.event || '').indexOf('intensive') === 0) label = 'записался на интенсив';
+      if (p.tariff === 'vip') label += ', расширенный доступ';
+      if (p.tariff === 'free') label += ', бесплатно';
+    }
+    if (e.type === 'webinar_viewed') {
+      /* одна строка на человека, цифра растет по ходу эфира: «смотрел эфир: 43 мин (16.09, 17.09)» */
+      var mins = Math.round((p.seconds || 0) / 60);
+      var days = Object.keys(p.days || {}).sort().map(function (d) { return d.slice(8, 10) + '.' + d.slice(5, 7); });
+      label = (String(p.event || '').indexOf('intensive') === 0 ? 'смотрел интенсив' : 'смотрел эфир') +
+        ': ' + (mins < 1 ? 'меньше минуты' : mins + ' мин') + (days.length ? ' (' + days.join(', ') + ')' : '');
+    }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
@@ -23773,9 +23787,12 @@
           '<div class="ord-foot">' +
             '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
               '<button data-v="installment">рассрочка</button></span>' +
+            '<span class="pay-seg" id="ord-split" hidden><button data-v="equal" class="on">поровну</button>' +
+              '<button data-v="custom">свой график</button></span>' +
             '<label class="ord-n-wrap" id="ord-n-wrap" hidden>взносов <input id="ord-n" class="ord-n" inputmode="numeric" value="4"></label>' +
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
+          '<div class="ord-sched" id="ord-sched" hidden></div>' +
         '</div></div>' +
       /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
          здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
@@ -24559,6 +24576,7 @@
             var total = ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0);
             el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
             el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+            var sb = el('ord-sched'); if (sb && !sb.hidden && typeof renderSched === 'function') renderSched();
           });
         });
         Array.prototype.forEach.call(host.querySelectorAll('.ord-it-x'), function (b) {
@@ -24576,12 +24594,97 @@
         renderItems();
       };
 
-      var ordMode = 'full', ordModeEl = el('ord-mode');
+      /* Рассрочка бывает равными долями (введи число взносов) и своим графиком: живой
+         платёж почти всегда неравный — 100к сейчас, остаток через два месяца. Свой
+         график = строки дата+сумма, их сумма обязана сойтись с итогом счёта, иначе
+         дебиторка соберёт не те деньги (то же правило проверяет бэк — orders.build_schedule). */
+      var ordMode = 'full', ordSplit = 'equal', schedRows = [];
+      var ordModeEl = el('ord-mode'), ordSplitEl = el('ord-split'), schedBox = el('ord-sched');
+      var curTotal = function () { return ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0); };
+      var schedSum = function () { return schedRows.reduce(function (s, r) { return s + (r.amount || 0); }, 0); };
+
+      /* +k месяцев к ISO-дате, день зажат в 28 (как add_months на бэке — чтобы не ловить
+         31 февраля) */
+      var addMonthsISO = function (iso, k) {
+        var p = (iso || todayISO(0)).split('-'), y = +p[0], m = +p[1] - 1 + k, d = +p[2];
+        y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+        return y + '-' + pad(m + 1) + '-' + pad(Math.min(d, 28));
+      };
+      var fillSched = function () {
+        var total = curTotal();
+        if (!total) { showToast('Сначала добавьте позиции с суммой'); return; }
+        var n = Math.max(2, parseInt((el('ord-n') || {}).value, 10) || 4);
+        var base = Math.floor(total / n), parts = [];
+        for (var k = 0; k < n; k++) parts.push(base);
+        parts[0] += total - base * n;  // остаток рублей — в первый взнос
+        var first = todayISO(0);
+        schedRows = parts.map(function (a, i) { return { due_date: addMonthsISO(first, i), amount: a }; });
+        renderSched();
+      };
+      var renderSched = function () {
+        if (!schedBox) return;
+        var total = curTotal(), sum = schedSum(), diff = total - sum;
+        var rowsHtml = schedRows.map(function (r, i) {
+          return '<div class="osch-row" data-i="' + i + '">' +
+            '<input type="date" class="osch-d" data-i="' + i + '" value="' + esc(r.due_date || '') + '">' +
+            '<input class="osch-a num" data-i="' + i + '" inputmode="numeric" value="' + (r.amount || '') + '" placeholder="₽">' +
+            '<button type="button" class="icobtn del osch-x" data-i="' + i + '" title="Убрать взнос">' + ic('x', 14) + '</button></div>';
+        }).join('');
+        var sumTxt = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+        if (diff > 0) sumTxt += ' · осталось ' + fmtMoney(diff);
+        else if (diff < 0) sumTxt += ' · лишние ' + fmtMoney(-diff);
+        schedBox.innerHTML =
+          '<div class="osch-head"><span class="osch-hint">Даты и суммы взносов — как договорились с семьёй.</span>' +
+            '<button type="button" class="osch-fill" id="osch-fill">' + ic('refresh', 12) + 'разбить помесячно</button></div>' +
+          '<div class="osch-rows">' + (rowsHtml || '') + '</div>' +
+          '<button type="button" class="osch-add" id="osch-add">' + ic('plus', 12) + 'добавить взнос</button>' +
+          '<div class="osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad') + '">' + esc(sumTxt) + '</div>';
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-d'), function (n) {
+          n.addEventListener('change', function () { schedRows[+n.getAttribute('data-i')].due_date = n.value; });
+        });
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-a'), function (n) {
+          n.addEventListener('input', function () {
+            schedRows[+n.getAttribute('data-i')].amount = parseInt(n.value.replace(/\D/g, ''), 10) || 0;
+            var sum = schedSum(), total = curTotal(), diff = total - sum;
+            var t = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+            if (diff > 0) t += ' · осталось ' + fmtMoney(diff); else if (diff < 0) t += ' · лишние ' + fmtMoney(-diff);
+            var box = schedBox.querySelector('.osch-sum');
+            if (box) { box.textContent = t; box.className = 'osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad'); }
+          });
+        });
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-x'), function (b) {
+          b.addEventListener('click', function () { schedRows.splice(+b.getAttribute('data-i'), 1); renderSched(); });
+        });
+        var addB = el('osch-add');
+        if (addB) addB.addEventListener('click', function () {
+          var last = schedRows[schedRows.length - 1];
+          schedRows.push({ due_date: last ? addMonthsISO(last.due_date, 1) : todayISO(0), amount: 0 });
+          renderSched();
+        });
+        var fillB = el('osch-fill');
+        if (fillB) fillB.addEventListener('click', fillSched);
+      };
+      var updateInstallmentUI = function () {
+        var inst = ordMode === 'installment';
+        if (ordSplitEl) ordSplitEl.hidden = !inst;
+        var nWrap = el('ord-n-wrap'); if (nWrap) nWrap.hidden = !(inst && ordSplit === 'equal');
+        if (schedBox) {
+          schedBox.hidden = !(inst && ordSplit === 'custom');
+          if (!schedBox.hidden) { if (!schedRows.length) fillSched(); else renderSched(); }
+        }
+      };
       if (ordModeEl) Array.prototype.forEach.call(ordModeEl.children, function (b) {
         b.addEventListener('click', function () {
           ordMode = b.getAttribute('data-v');
           Array.prototype.forEach.call(ordModeEl.children, function (x) { x.classList.toggle('on', x === b); });
-          el('ord-n-wrap').hidden = ordMode !== 'installment';
+          updateInstallmentUI();
+        });
+      });
+      if (ordSplitEl) Array.prototype.forEach.call(ordSplitEl.children, function (b) {
+        b.addEventListener('click', function () {
+          ordSplit = b.getAttribute('data-v');
+          Array.prototype.forEach.call(ordSplitEl.children, function (x) { x.classList.toggle('on', x === b); });
+          updateInstallmentUI();
         });
       });
       var ordBtn = el('ord-add-btn');
@@ -24589,21 +24692,29 @@
         var items = ordItems.filter(function (it) { return (it.title || '').trim() && (it.amount || 0) > 0; });
         if (!items.length) { showToast('Добавьте хотя бы одну позицию с суммой'); return; }
         var total = items.reduce(function (s, it) { return s + it.amount; }, 0);
-        var n = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
         // название счета = единственная позиция или «тариф + N услуг»
         var title = items.length === 1 ? items[0].title : (items[0].title + ' + ещё ' + (items.length - 1));
+        var body = {
+          title: title,
+          items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
+          amount_total: total, pay_mode: ordMode, installments_count: 1,
+        };
+        if (ordMode === 'installment' && ordSplit === 'custom') {
+          var rows = schedRows.filter(function (r) { return r.due_date && (r.amount || 0) > 0; });
+          if (!rows.length) { showToast('Заполните график взносов — дата и сумма у каждого'); return; }
+          if (schedSum() !== total) { showToast('Сумма взносов должна сойтись с итогом счёта'); return; }
+          body.installments = rows.map(function (r) { return { due_date: r.due_date, amount: r.amount }; });
+        } else if (ordMode === 'installment') {
+          body.installments_count = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
+        }
         ordBtn.disabled = true;
         api('/admin/api/leads/' + id + '/orders', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: title,
-            items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
-            amount_total: total,
-            pay_mode: ordMode, installments_count: ordMode === 'installment' ? n : 1,
-          }),
+          body: JSON.stringify(body),
         }).then(function () {
           ordBtn.disabled = false;
-          ordItems = []; renderItems();
+          ordItems = []; schedRows = []; renderItems();
+          if (schedBox && !schedBox.hidden) renderSched();
           showToast('Счет выставлен — клиент увидит его в кабинете');
           loadOrders();
         }).catch(function (e) {
