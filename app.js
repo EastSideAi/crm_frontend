@@ -16540,6 +16540,19 @@
     var o = st.only || [];
     return !o.length || o.indexOf(tid) !== -1;
   }
+  /* zero:true — то, что человек получает в день оплаты, ДО первого этапа. Номер у
+     такого этапа «00», и остальные от него не съезжают: нумерация 1-12 уже разошлась
+     по экономике и базе знаний, и сдвигать ее ради нулевой строки нельзя. */
+  function stageNo(sts, i) {
+    if (sts[i].zero) return '00';
+    var n = 0;
+    for (var j = 0; j <= i; j++) if (!sts[j].zero) n++;
+    return (n < 10 ? '0' : '') + n;
+  }
+  /* этапы пути — все, кроме нулевого: он есть у всех и разницу тарифов не считает */
+  function realStages(sts) {
+    return sts.filter(function (st) { return !st.zero; });
+  }
   function stageOnly(p, st) {
     var o = st.only || [];
     if (!o.length) return '';
@@ -16555,8 +16568,8 @@
          подпись у каждой точки резервировала бы под лентой пустую строку во всю
          ширину, а объясняет хвост и так лид прямо под лентой */
       var only = stageOnly(p, st);
-      return '<div class="po-rt' + (only ? ' po-rt-only' : '') + '">' +
-        '<span class="po-rdot num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
+      return '<div class="po-rt' + (only ? ' po-rt-only' : '') + (st.zero ? ' po-rt-zero' : '') + '">' +
+        '<span class="po-rdot num">' + stageNo(sts, i) + '</span>' +
         '<span class="po-rtt">' + esc(st.short || st.title) + '</span></div>';
     }).join('');
     return '<div class="card po-card po-routec">' +
@@ -16600,6 +16613,7 @@
      разъедется с первой же правкой этапа. */
   function sideLede(p, sts, tid) {
     var name = function (st) { return (st.short || st.title).toLowerCase(); };
+    sts = realStages(sts);
     var all = sts.length;
     sts = sts.filter(function (st) { return stageIn(st, tid); });
     /* «12 из 14» вместо «12 этапов»: под лидом идут все четырнадцать строк, и
@@ -16640,7 +16654,7 @@
          текст при этом нигде не гасится: тихая карточка читалась бы как бедная */
       var base = ti === 0;
       var feats = sts.map(function (st, i) {
-        var num = '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>';
+        var num = '<span class="po-srn num">' + stageNo(sts, i) + '</span>';
         /* этапа нет в этом тарифе — строку не прячем и не оставляем пустой:
            показываем ЧТО именно проходит мимо, словами старшего тарифа. Пропуск
            без содержания человек видит, но не считает потерей. */
@@ -16660,7 +16674,7 @@
            нельзя: один акцент не может значить два разных факта. */
         var only = (st.only || []).length;
         return '<div class="po-sr' + (only ? ' po-only' : (br.own && !base ? ' po-up' : '')) + '">' +
-          '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>' +
+          num +
           '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b>' +
             (self ? '<span class="sev po-w po-w-self">' + esc(who) + '</span>' : '') +
           '</span>' +
@@ -16856,14 +16870,15 @@
     /* «этапы одни на всех тарифах» перестало быть правдой, когда у Премиума
        появился хвост после заселения. Считаем по данным и имя старшего тарифа
        берем оттуда же, чтобы подпись не разъехалась с json. */
-    var tail = sts.filter(function (st) { return (st.only || []).length; });
-    var nb = sts.length - tail.length;
-    var cnt = sts.filter(function (st) { return stageIn(st, mode); }).length;
+    var real = realStages(sts);
+    var tail = real.filter(function (st) { return (st.only || []).length; });
+    var nb = real.length - tail.length;
+    var cnt = real.filter(function (st) { return stageIn(st, mode); }).length;
     var who = tail.length ? stageOnly(p, tail[0]) : '';
     var sub = mode === 'all'
       ? nb + ' ' + plural(nb, 'этап', 'этапа', 'этапов') + ' одни на всех тарифах, последние ' + tail.length + ' только в тарифе «' + who + '»'
-      : cnt < sts.length
-        ? cnt + ' из ' + sts.length + ' этапов: последние ' + (sts.length - cnt) + ' только в тарифе «' + who + '»'
+      : cnt < real.length
+        ? cnt + ' из ' + real.length + ' этапов: ' + (real.length - cnt) + ' только в тарифе «' + who + '»'
         : 'все ' + cnt + ' ' + plural(cnt, 'этап', 'этапа', 'этапов') + ', последние ' + tail.length + ' есть только здесь';
     var head = '<div class="card po-card po-stghead">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
@@ -16878,7 +16893,7 @@
     if (mode === 'all') {
       return '<div class="po-lede">Слева направо тариф не добавляет этапов — он забирает у семьи работу и добавляет вузы в подачу.</div>';
     }
-    sts = sts.filter(function (st) { return stageIn(st, mode); });
+    sts = realStages(sts).filter(function (st) { return stageIn(st, mode); });
     var self = sts.filter(function (st) { return (stageCell(p, st, mode).who || '').indexOf('семья') !== -1; });
     var name = (p.tariffs || []).filter(function (t) { return t.id === mode; })[0];
     if (!self.length) {
@@ -16902,7 +16917,7 @@
       if (st.foot) body += '<div class="po-note">' + esc(st.foot) + '</div>';
       return '<div class="card po-card po-item po-stg' + (open ? ' open' : '') + '">' +
         '<button type="button" class="po-ih po-sh" data-postage="' + esc(st.id) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
-          '<span class="po-stnum num">' + (i + 1) + '</span>' +
+          '<span class="po-stnum num">' + (st.zero ? '0' : stageNo(sts, i).replace(/^0/, '')) + '</span>' +
           '<span class="po-it"><b>' + esc(st.title) + '</b>' +
             (st.note ? '<small>' + esc(st.note) + '</small>' : '') + '</span>' +
           (c.who ? '<span class="sev po-w ' + (PO_WHO[c.who] || 'po-w-team') + '">' + esc(c.who) + '</span>' : '') +
@@ -16925,7 +16940,7 @@
           (c.same && c.from ? '<span class="po-hint">как в тарифе «' + esc(c.from) + '»</span>' : '<span class="po-ct">' + esc(c.text) + '</span>') +
           stagePlusHtml(c.plus) + '</td>';
       }).join('');
-      return '<tr><td class="po-rl">' + (i + 1) + '. ' + esc(st.title) +
+      return '<tr><td class="po-rl">' + (st.zero ? '0' : stageNo(sts, i).replace(/^0/, '')) + '. ' + esc(st.title) +
         (st.when ? '<span class="po-hint">' + esc(st.when) + '</span>' : '') + '</td>' + tds + '</tr>';
     }).join('');
     return '<div class="card po-card">' +

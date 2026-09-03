@@ -6112,7 +6112,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-routew::-webkit-scrollbar { height: 0; }
 /* хвост справа — «полка» под затухание маски: без нее последняя точка выцветает
    даже когда лента влезла целиком и прокручивать нечего */
-.po-route { position: relative; display: flex; gap: 0; min-width: 1044px; padding-right: 34px; }
+.po-route { position: relative; display: flex; gap: 0; min-width: 1040px; padding-right: 34px; }
 .po-route::before { content: ''; position: absolute; left: 5%; right: 5%; top: 13px;
   height: 1px; background: var(--line-2); }
 .po-rt { position: relative; flex: 1 1 0; display: flex; flex-direction: column;
@@ -6125,6 +6125,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* хвост маршрута, который есть только у старшего тарифа. Точка синяя и залитая,
    а не крупнее остальных: это продолжение той же дороги, а не второй якорь. */
 .po-rt-only .po-rdot { background: var(--blue); border-color: var(--blue); color: #fff; }
+/* нулевая точка — не этап, а старт: заливка вместо белого кружка, номер «00» */
+.po-rt-zero .po-rdot { background: var(--fill); border-style: dashed; }
 .po-rt-only .po-rtt { color: var(--ink); }
 
 /* маршрут внутри карточки тарифа: номер, этап, что человек получает, кто делает */
@@ -6413,7 +6415,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-stem::before { display: none; }
   .po-lane { margin-bottom: 18px; }
   .po-tariffs { grid-template-columns: 1fr; }
-  .po-route { min-width: 1000px; }
+  .po-route { min-width: 1010px; }
   /* в одну колонку выравнивать нечего: min-height превращается в пустоты */
   .po-tpos, .po-tfmt, .po-tpr, .po-scope { min-height: 0; }
   .po-pay { grid-template-columns: 1fr; }
