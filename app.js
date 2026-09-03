@@ -23297,7 +23297,9 @@
   var CALL_ST = { transcribing: 'расшифровываем', failed: 'расшифровать не вышло' };
 
   function callRow(c) {
-    var when = c.held_at ? fmtWhen(c.held_at) : '';
+    // Дата без времени: часа встречи мы не спрашиваем, и показывать подставленный
+    // полдень значит врать о том, когда разговор был.
+    var when = c.held_at ? dayLabel(c.held_at) : '';
     var meta = [when, c.minutes ? c.minutes + ' мин' : '', c.created_by || ''].filter(Boolean).join(' · ');
     var st = CALL_ST[c.status];
     var body = (c.summary || '').trim();
@@ -23314,8 +23316,12 @@
             : '<div class="cl-empty">' + (c.status === 'transcribing'
                  ? 'Разбираем запись, конспект появится через пару минут.'
                  : 'Конспекта нет. Допишите своими словами или приложите запись.') + '</div>') +
-      (body ? '<button class="bp sm ghost cl-tonote" data-tonote="' + c.id + '">' +
-                ic('note', 13) + 'В заметку</button>' : '');
+      '<div class="cl-acts">' +
+        (body ? '<button class="bp sm ghost" data-tonote="' + c.id + '">' +
+                  ic('note', 13) + 'В заметку</button>' : '') +
+        '<button class="bp sm ghost" data-editcall="' + c.id + '">' +
+          ic('pen', 13) + (body ? 'Поправить' : 'Дописать') + '</button>' +
+      '</div>';
   }
 
   function callsBlock(ctx) {
@@ -23333,15 +23339,18 @@
       '</div>';
   }
 
-  function openCallForm(id, after) {
+  function openCallForm(id, after, call) {
     if (document.querySelector('.al-ov')) return;
-    var today = new Date().toISOString().slice(0, 10);
+    var edit = !!call;
+    var today = (edit && call.held_at ? String(call.held_at).slice(0, 10)
+                                      : new Date().toISOString().slice(0, 10));
     var ov = document.createElement('div');
     ov.className = 'al-ov over';   // поверх карточки ученика, как форма задания
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Клиент</div><div class="al-title">Консультация</div></div>' +
+          '<div><div class="al-eyebrow">Клиент</div><div class="al-title">' +
+            (edit ? 'Правка консультации' : 'Консультация') + '</div></div>' +
           '<button class="al-x" id="cf-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         '<div class="al-sub">Запись разберем в конспект и сохраним текстом. Само видео остается ' +
@@ -23350,14 +23359,16 @@
           '<label class="al-f"><span class="al-l">Когда была</span>' +
             '<input id="cf-date" class="al-in" type="date" value="' + today + '"></label>' +
           '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
-            '<input id="cf-link" class="al-in" type="text" placeholder="диск ведущего или облако"></label>' +
+            '<input id="cf-link" class="al-in" type="text" placeholder="диск ведущего или облако" ' +
+              'value="' + esc((edit && call.link) || '') + '"></label>' +
           '<label class="czb-drop" id="cf-drop">' +
             '<input type="file" id="cf-file" accept="audio/*,video/*" hidden>' +
             '<span class="czb-drop-i">' + ic('phone', 20) + '</span>' +
             '<span class="czb-drop-t" id="cf-fname">Выберите файл записи</span>' +
           '</label>' +
           '<label class="al-f"><span class="al-l">Или конспект своими словами</span>' +
-            '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000"></textarea></label>' +
+            '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000">' +
+              esc((edit && call.summary) || '') + '</textarea></label>' +
           '<div class="ct-err" id="cf-err"></div>' +
         '</div>' +
         '<div class="al-foot"><button class="al-cancel" id="cf-cancel">Отмена</button>' +
@@ -23401,7 +23412,8 @@
                       link: link || null, summary: sum || null };
       var send = function () {
         el('cf-ok').disabled = true;
-        apiSend('/admin/api/leads/' + id + '/calls', 'POST', payload, function () {
+        var path = edit ? '/admin/api/calls/' + call.id : '/admin/api/leads/' + id + '/calls';
+        apiSend(path, edit ? 'PATCH' : 'POST', payload, function () {
           close();
           loadCardCalls(id, function () {
             if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
@@ -24364,6 +24376,15 @@
     }
     var callAdd = el('m-call-add');
     if (callAdd) callAdd.addEventListener('click', function () { openCallForm(id); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-editcall]'), function (b) {
+      b.addEventListener('click', function () {
+        var list = state.cardCalls[id];
+        if (!list || list === 'none') return;
+        var cid = +b.getAttribute('data-editcall');
+        var call = list.filter(function (c) { return c.id === cid; })[0];
+        if (call) openCallForm(id, null, call);
+      });
+    });
     Array.prototype.forEach.call(host.querySelectorAll('[data-delcall]'), function (b) {
       b.addEventListener('click', function () {
         if (!confirm('Убрать эту консультацию из карточки?')) return;
@@ -24383,7 +24404,7 @@
         var cid = +b.getAttribute('data-tonote');
         var call = list.filter(function (c) { return c.id === cid; })[0];
         if (!call || !note) return;
-        var when = call.held_at ? fmtWhen(call.held_at) : '';
+        var when = call.held_at ? dayLabel(call.held_at) : '';
         var head = ('Консультация ' + when).trim();
         note.value = (note.value ? note.value.trim() + '\n\n' : '') + head + '\n' + call.summary;
         patch(id, { note: note.value }, noteState);

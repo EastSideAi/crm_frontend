@@ -2803,7 +2803,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .cl-st.failed { color: var(--red-ink); background: var(--red-soft); }
 .cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink); }
 .cl-empty { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
-.cl-tonote { margin-top: 8px; }
+.cl-acts { display: flex; gap: 8px; margin-top: 8px; }
 
 /* Ученик в шапке карточки задачи — ссылка в его карточку. */
 .al-eyelink { font: inherit; color: var(--blue); transition: .12s; }
