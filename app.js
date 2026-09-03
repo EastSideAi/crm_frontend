@@ -16641,12 +16641,16 @@
       var base = ti === 0;
       var feats = sts.map(function (st, i) {
         var num = '<span class="po-srn num">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>';
-        /* этапа нет в этом тарифе — строку не прячем. Пропуск в маршруте и есть
-           аргумент за старший тариф, а пустое место семья не заметит */
+        /* этапа нет в этом тарифе — строку не прячем и не оставляем пустой:
+           показываем ЧТО именно проходит мимо, словами старшего тарифа. Пропуск
+           без содержания человек видит, но не считает потерей. */
         if (!stageIn(st, t.id)) {
+          var miss = stageBrief(p, st, (st.only || [])[0]);
           return '<div class="po-sr po-off">' + num +
-            '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b></span>' +
-            '<span class="po-srt">только в тарифе «' + esc(stageOnly(p, st)) + '»</span></span></div>';
+            '<span class="po-srb"><span class="po-srh"><b>' + esc(st.short || st.title) + '</b>' +
+              '<span class="sev po-w po-w-only">только ' + esc(stageOnly(p, st)) + '</span></span>' +
+              (miss.text ? '<span class="po-srt">' + esc(miss.text) + '</span>' : '') +
+            '</span></div>';
         }
         var who = stageWho(p, st, t.id), br = stageBrief(p, st, t.id);
         var self = who.indexOf('семья') !== -1;

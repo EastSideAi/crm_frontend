@@ -6374,6 +6374,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-w-plat { background: var(--fill); color: var(--ink-2); }
 .po-w-team { background: var(--blue-tint); color: var(--navy); }
 .po-w-self { background: var(--amber-soft); color: var(--amber-ink); }
+/* «только Премиум» — тот же синий, что у залитой точки в ленте и у номера
+   эксклюзивного этапа: один факт, один цвет по всему порталу */
+.po-w-only { background: var(--blue-tint); color: var(--blue-d); }
 .po-sbody { padding-left: 59px; }
 .po-sbody .po-txt { margin-top: 15px; }
 /* в шапке этапа плашка только одна — роль. Срок рядом с ней такой же серой
