@@ -1452,6 +1452,27 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .ord-n { width: 52px; outline: none; text-align: center; font: 600 13px 'Manrope', sans-serif; color: var(--ink);
   background: var(--fill); border: 1px solid transparent; border-radius: 9px; padding: 8px; font-variant-numeric: tabular-nums; }
 .ord-n:focus { background: #fff; border-color: #DCE7FF; }
+/* Свой график рассрочки: строки дата+сумма, «разбить помесячно» и полоса сходимости */
+.ord-sched { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px;
+  background: var(--fill); border-radius: 12px; }
+.osch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.osch-hint { font: 500 11.5px 'Manrope', sans-serif; color: var(--ink-3); line-height: 1.3; }
+.osch-fill { display: inline-flex; align-items: center; gap: 5px; flex: none; color: var(--blue);
+  font: 600 12px 'Manrope', sans-serif; }
+.osch-fill:hover { text-decoration: underline; }
+.osch-rows { display: flex; flex-direction: column; gap: 7px; }
+.osch-row { display: grid; grid-template-columns: 1fr 118px 34px; gap: 7px; align-items: center; }
+.osch-row input { outline: none; font: 500 13px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border: 1px solid transparent; border-radius: 9px; padding: 9px 11px; min-width: 0; }
+.osch-row input:focus { border-color: #DCE7FF; }
+.osch-row .osch-a { text-align: right; font-variant-numeric: tabular-nums; }
+.osch-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  color: var(--blue); font: 600 12px 'Manrope', sans-serif; }
+.osch-add:hover { text-decoration: underline; }
+.osch-sum { font: 700 12px 'Manrope', sans-serif; padding: 8px 11px; border-radius: 9px;
+  font-variant-numeric: tabular-nums; }
+.osch-sum.ok { color: var(--green-ink); background: var(--green-soft); }
+.osch-sum.bad { color: var(--amber-ink); background: var(--amber-soft); }
 .field-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 26px 10px; }
 
 /* загрузчик (запасной — финансы/прочее) */
