@@ -24301,6 +24301,25 @@
         paid:             { label: 'оплачен', sev: 'client' },
         canceled:         { label: 'отменен', sev: 'rejected' },
       };
+      var IST = {  // статус взноса → подпись и цвет
+        paid:      { label: 'оплачен', sev: 'client' },
+        awaiting:  { label: 'оплата идёт', sev: 'call_scheduled' },
+        scheduled: { label: 'ждёт', sev: 'contacted' },
+        refunded:  { label: 'возврат', sev: 'rejected' },
+        canceled:  { label: 'отменён', sev: 'rejected' },
+      };
+      var ordOpen = {};   // какие заказы раскрыты (id → true), переживает перерисовку
+      var markInst = function (oid, no, paid) {
+        api('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/paid', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paid: paid }),
+        }).then(function () {
+          showToast(paid ? 'Взнос отмечен оплаченным' : 'Отметка снята');
+          loadOrders();
+        }).catch(function (e) {
+          if (e.message !== '403') showToast('Не получилось: ' + (e.message || 'проверьте сеть'));
+        });
+      };
       var renderOrders = function (orders) {
         if (!orders || !orders.length) {
           ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
@@ -24309,18 +24328,56 @@
         ordList.innerHTML = orders.map(function (o) {
           var st = ORD_ST[o.status] || ORD_ST.awaiting_payment;
           var inst = o.installments || [];
+          var isInst = o.pay_mode === 'installment' && inst.length > 1;
           var paidN = inst.filter(function (i) { return i.status === 'paid'; }).length;
           var next = inst.filter(function (i) { return i.status !== 'paid' && i.status !== 'refunded'; })[0];
           var meta = [];
-          if (o.pay_mode === 'installment') meta.push('рассрочка: взнос ' + Math.min(paidN + 1, inst.length) + ' из ' + inst.length);
+          if (isInst) meta.push('рассрочка: оплачено ' + paidN + ' из ' + inst.length);
           if (next) meta.push('след. ' + next.due_date.slice(8, 10) + '.' + next.due_date.slice(5, 7) + ' · ' + fmtMoney(next.amount) + ' ₽');
           if (o.paid_total) meta.push('внесено ' + fmtMoney(o.paid_total) + ' ₽');
-          return '<div class="pay-row">' +
-            '<div class="doc-b"><div class="doc-n">' + esc(o.title) +
+          var open = !!ordOpen[o.id];
+          var head = '<div class="pay-row' + (isInst ? ' ord-oh' : '') + '"' + (isInst ? ' data-oid="' + o.id + '"' : '') + '>' +
+            '<div class="doc-b"><div class="doc-n">' + (isInst ? '<span class="ord-caret' + (open ? ' on' : '') + '">' + ic('go', 11) + '</span>' : '') + esc(o.title) +
               ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
               '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
             '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
+          if (!isInst || !open) return head;
+          // раскрытый график: каждый взнос со статусом и ручной отметкой
+          var rows = inst.map(function (i) {
+            var s = IST[i.status] || IST.scheduled;
+            var d = i.due_date ? i.due_date.slice(8, 10) + '.' + i.due_date.slice(5, 7) + '.' + i.due_date.slice(0, 4) : '—';
+            var act = '';
+            if (!i.linked && i.status !== 'paid') {
+              act = '<button class="oi-mark" data-oid="' + o.id + '" data-no="' + i.no + '" data-p="1">отметить оплаченным</button>';
+            } else if (!i.linked && i.status === 'paid') {
+              act = '<button class="oi-mark off" data-oid="' + o.id + '" data-no="' + i.no + '" data-p="0">снять отметку</button>';
+            } else if (i.linked) {
+              act = '<span class="oi-lock">' + (i.status === 'paid' ? 'оплачен картой' : 'оплата через кассу') + '</span>';
+            }
+            return '<div class="oi-row">' +
+              '<span class="oi-n">взнос ' + i.no + '</span>' +
+              '<span class="oi-d">' + d + '</span>' +
+              '<span class="oi-a num">' + fmtMoney(i.amount) + ' ₽</span>' +
+              '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
+              act + '</div>';
+          }).join('');
+          return head + '<div class="oi-box">' +
+            '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
+            rows + '</div>';
         }).join('');
+        // тумблер раскрытия
+        Array.prototype.forEach.call(ordList.querySelectorAll('.ord-oh'), function (h) {
+          h.addEventListener('click', function () {
+            var oid = h.getAttribute('data-oid'); ordOpen[oid] = !ordOpen[oid]; renderOrders(orders);
+          });
+        });
+        // отметка взноса
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            markInst(b.getAttribute('data-oid'), b.getAttribute('data-no'), b.getAttribute('data-p') === '1');
+          });
+        });
       };
       var loadOrders = function () {
         api('/admin/api/leads/' + id + '/orders').then(function (r) { renderOrders(r.orders); })

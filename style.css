@@ -1473,6 +1473,23 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   font-variant-numeric: tabular-nums; }
 .osch-sum.ok { color: var(--green-ink); background: var(--green-soft); }
 .osch-sum.bad { color: var(--amber-ink); background: var(--amber-soft); }
+/* Раскрытый график выставленного счёта: взносы со статусом и ручной отметкой оплаты */
+.pay-row.ord-oh { cursor: pointer; }
+.ord-caret { display: inline-flex; color: var(--ink-3); margin-right: 5px; transition: transform .15s; vertical-align: middle; }
+.ord-caret.on { transform: rotate(90deg); }
+.oi-box { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 10px; padding: 10px 12px;
+  background: var(--fill); border-radius: 11px; }
+.oi-hint { font: 500 11.5px 'Manrope', sans-serif; color: var(--ink-3); line-height: 1.3; margin-bottom: 2px; }
+.oi-row { display: grid; grid-template-columns: 74px 84px 1fr auto auto; gap: 8px; align-items: center;
+  font: 600 12.5px 'Manrope', sans-serif; color: var(--ink); }
+.oi-n { color: var(--ink-2); }
+.oi-d { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.oi-a { text-align: right; font-variant-numeric: tabular-nums; }
+.oi-st { justify-self: start; }
+.oi-mark { justify-self: end; color: var(--blue); font: 600 12px 'Manrope', sans-serif; white-space: nowrap; }
+.oi-mark:hover { text-decoration: underline; }
+.oi-mark.off { color: var(--ink-3); }
+.oi-lock { justify-self: end; color: var(--ink-3); font: 500 11.5px 'Manrope', sans-serif; white-space: nowrap; }
 .field-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 26px 10px; }
 
 /* загрузчик (запасной — финансы/прочее) */
