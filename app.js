@@ -77,6 +77,7 @@
     myweek: null, teamWeek: null, weekShift: 0, teamWho: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
+    cardCalls: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
     // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
@@ -149,6 +150,7 @@
     det_test_started: 'начал тест по английскому',
     webinar_registered: 'записался на вебинар',
     webinar_comment: 'написал в чате вебинара',
+    webinar_viewed: 'смотрел эфир',
     call_reminder_sent: 'напомнили о созвоне',
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
@@ -169,6 +171,19 @@
         (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
     }
     if (e.type === 'lead_created_bot' && p.source) label += ' по слову «' + p.source + '»';
+    if (e.type === 'webinar_registered') {
+      /* интенсив с лендинга: «записался на интенсив, расширенный доступ» */
+      if (String(p.event || '').indexOf('intensive') === 0) label = 'записался на интенсив';
+      if (p.tariff === 'vip') label += ', расширенный доступ';
+      if (p.tariff === 'free') label += ', бесплатно';
+    }
+    if (e.type === 'webinar_viewed') {
+      /* одна строка на человека, цифра растет по ходу эфира: «смотрел эфир: 43 мин (16.09, 17.09)» */
+      var mins = Math.round((p.seconds || 0) / 60);
+      var days = Object.keys(p.days || {}).sort().map(function (d) { return d.slice(8, 10) + '.' + d.slice(5, 7); });
+      label = (String(p.event || '').indexOf('intensive') === 0 ? 'смотрел интенсив' : 'смотрел эфир') +
+        ': ' + (mins < 1 ? 'меньше минуты' : mins + ' мин') + (days.length ? ' (' + days.join(', ') + ')' : '');
+    }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_result') {
@@ -4830,6 +4845,17 @@
       if (cb) cb();
     }).catch(function () {
       state.cardTasks[id] = 'none';
+      if (cb) cb();
+    });
+  }
+  // Консультации карточки: запись встречи и конспект. Грузим отдельно от карточки —
+  // список нужен только на вкладке «Заметки», а карточка открывается чаще.
+  function loadCardCalls(id, cb) {
+    api('/admin/api/leads/' + id + '/calls').then(function (r) {
+      state.cardCalls[id] = (r && r.calls) || [];
+      if (cb) cb();
+    }).catch(function () {
+      state.cardCalls[id] = 'none';
       if (cb) cb();
     });
   }
@@ -20393,6 +20419,34 @@
       .catch(function () { cb(null); });
   }
 
+  /* Открыть документ клиента по кнопке. Ручка /admin/api/docs/:id/download
+     отдает JSON с подписанной ссылкой на Storage, а не сам файл. Кнопка вела
+     на ручку напрямую — вместо документа открывалась вкладка с текстом
+     {"link": ...}, и менеджер не мог скачать присланное. Резолвим ссылку и
+     уводим браузер уже на нее. Вкладку открываем синхронно, до запроса: если
+     звать window.open из промиса, блокировщик всплывающих окон ее срежет.
+     Не кэшируем — подпись живет ограниченное время, а вкладка CRM висит
+     открытой весь день. */
+  function openDoc(docId) {
+    var w = window.open('', '_blank');
+    if (w) try { w.opener = null; } catch (e) {}
+    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+      .then(function (r) {
+        var ct = r.headers.get('content-type') || '';
+        if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
+        return r.blob().then(function (b) { return URL.createObjectURL(b); });
+      })
+      .then(function (url) {
+        if (!url) { if (w) w.close(); showToast('Файл не открылся — обнови страницу'); return; }
+        if (w) w.location.replace(url);
+        else window.open(url, '_blank', 'noopener');
+      })
+      .catch(function () {
+        if (w) w.close();
+        showToast('Файл не открылся — проверь сеть');
+      });
+  }
+
   /* присланное клиентом — одна карточка вложения */
   function rmSubCard(s) {
     if (s.kind === 'image') {
@@ -22869,6 +22923,152 @@
     });
   }
 
+  /* ── Консультации: запись встречи и конспект ──
+     25.08.2026 клиентка попросила запись консультации, а записи не было нигде: она
+     осталась на компьютере ведущего. Здесь живет то, что от встречи остается системе —
+     ссылка на исходник и конспект. Само видео к себе не тащим (см. §10в CLAUDE.md). */
+  var CALL_ST = { transcribing: 'расшифровываем', failed: 'расшифровать не вышло' };
+
+  function callRow(c) {
+    // Дата без времени: часа встречи мы не спрашиваем, и показывать подставленный
+    // полдень значит врать о том, когда разговор был.
+    var when = c.held_at ? dayLabel(c.held_at) : '';
+    var meta = [when, c.minutes ? c.minutes + ' мин' : '', c.created_by || ''].filter(Boolean).join(' · ');
+    var st = CALL_ST[c.status];
+    var body = (c.summary || '').trim();
+    return '<div class="cl-row" data-clid="' + c.id + '">' +
+      '<div class="cl-h">' +
+        '<span class="cl-ic">' + ic('phone', 15) + '</span>' +
+        '<div class="cl-m">' + esc(meta) + '</div>' +
+        (st ? '<span class="cl-st ' + c.status + '">' + st + '</span>' : '') +
+        (c.link ? '<a class="icobtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" ' +
+                  'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
+        '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
+      '</div>' +
+      (body ? '<div class="cl-sum">' + esc(body).replace(/\n/g, '<br>') + '</div>'
+            : '<div class="cl-empty">' + (c.status === 'transcribing'
+                 ? 'Разбираем запись, конспект появится через пару минут.'
+                 : 'Конспекта нет. Допишите своими словами или приложите запись.') + '</div>') +
+      '<div class="cl-acts">' +
+        (body ? '<button class="bp sm ghost" data-tonote="' + c.id + '">' +
+                  ic('note', 13) + 'В заметку</button>' : '') +
+        '<button class="bp sm ghost" data-editcall="' + c.id + '">' +
+          ic('pen', 13) + (body ? 'Поправить' : 'Дописать') + '</button>' +
+      '</div>';
+  }
+
+  function callsBlock(ctx) {
+    var loaded = state.cardCalls[ctx.id];
+    var body;
+    if (loaded === undefined) body = '<div class="ct-skel shim"></div>';
+    else if (loaded === 'none') body = '<div class="field-empty">Не удалось загрузить. Откройте раздел заново.</div>';
+    else if (!loaded.length) body = '<div class="field-empty">Консультаций пока нет.</div>';
+    else body = loaded.map(callRow).join('');
+    return '<div class="m-sec"><div class="m-sec-h">Консультации</div>' +
+      '<div id="m-calls">' + body + '</div>' +
+      '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+      '<div class="ct-hint">Запись разбираем в конспект и храним текстом. Само видео остается там, ' +
+        'где лежит: файл сюда только звуком и до 60 МБ, иначе ссылкой.</div>' +
+      '</div>';
+  }
+
+  function openCallForm(id, after, call) {
+    if (document.querySelector('.al-ov')) return;
+    var edit = !!call;
+    var today = (edit && call.held_at ? String(call.held_at).slice(0, 10)
+                                      : new Date().toISOString().slice(0, 10));
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';   // поверх карточки ученика, как форма задания
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Клиент</div><div class="al-title">' +
+            (edit ? 'Правка консультации' : 'Консультация') + '</div></div>' +
+          '<button class="al-x" id="cf-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Запись разберем в конспект и сохраним текстом. Само видео остается ' +
+          'там, где лежит: сюда только звук до 60 МБ, иначе ссылка.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Когда была</span>' +
+            '<input id="cf-date" class="al-in" type="date" value="' + today + '"></label>' +
+          '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
+            '<input id="cf-link" class="al-in" type="text" placeholder="диск ведущего или облако" ' +
+              'value="' + esc((edit && call.link) || '') + '"></label>' +
+          '<label class="czb-drop" id="cf-drop">' +
+            '<input type="file" id="cf-file" accept="audio/*,video/*" hidden>' +
+            '<span class="czb-drop-i">' + ic('phone', 20) + '</span>' +
+            '<span class="czb-drop-t" id="cf-fname">Выберите файл записи</span>' +
+          '</label>' +
+          '<label class="al-f"><span class="al-l">Или конспект своими словами</span>' +
+            '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000">' +
+              esc((edit && call.summary) || '') + '</textarea></label>' +
+          '<div class="ct-err" id="cf-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="cf-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="cf-ok">Сохранить</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('cf-x').addEventListener('click', close);
+    el('cf-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var fileIn = el('cf-file'), fname = el('cf-fname'), err = el('cf-err');
+    fileIn.addEventListener('change', function () {
+      var f = fileIn.files && fileIn.files[0];
+      fname.textContent = f ? f.name + ' · ' + fmtSize(f.size) : 'Выберите файл записи';
+    });
+
+    el('cf-ok').addEventListener('click', function () {
+      var date = (el('cf-date') || {}).value || '';
+      var link = ((el('cf-link') || {}).value || '').trim();
+      var sum = ((el('cf-sum') || {}).value || '').trim();
+      var file = fileIn.files && fileIn.files[0];
+      err.textContent = '';
+      if (!file && !link && !sum) { err.textContent = 'Нужна запись, ссылка или конспект'; return; }
+      // Тот же потолок, что на сервере: сказать «файл великоват» до отправки честнее,
+      // чем гнать 100 МБ по мобильному интернету и получить отказ в конце.
+      if (file && file.size > 60 * 1024 * 1024) {
+        err.textContent = 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись';
+        return;
+      }
+      var payload = { held_at: date ? date + 'T12:00:00+03:00' : null,
+                      link: link || null, summary: sum || null };
+      var send = function () {
+        el('cf-ok').disabled = true;
+        var path = edit ? '/admin/api/calls/' + call.id : '/admin/api/leads/' + id + '/calls';
+        apiSend(path, edit ? 'PATCH' : 'POST', payload, function () {
+          close();
+          loadCardCalls(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+          showToast(payload.audio_base64 ? 'Записал, разбираю запись' : 'Записал');
+          if (after) after();
+        }, function (code) {
+          el('cf-ok').disabled = false;
+          err.textContent = code === 413
+            ? 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись'
+            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка или конспект'
+                            : 'Не сохранилось, проверьте сеть');
+        });
+      };
+      if (!file) { send(); return; }
+      var reader = new FileReader();
+      reader.onload = function () { payload.audio_base64 = String(reader.result); send(); };
+      reader.onerror = function () { err.textContent = 'Не удалось прочитать файл'; };
+      reader.readAsDataURL(file);
+    });
+  }
+
   function buildNotesSection(ctx) {
     var crm = ctx.crm;
     var loaded = state.cardTasks[ctx.id];
@@ -22896,6 +23096,7 @@
           '<button class="bp sm ghost" id="m-note-parse">' + ic('spark', 13) + 'Разобрать в задачи</button>' +
           '<div class="note-state" id="m-notestate"></div></div>' +
         '<div id="m-note-parsed"></div></div>' +
+      callsBlock(ctx) +
       '<div class="m-sec"><div class="m-sec-h">Задачи по ученику</div>' +
         '<div id="m-tasks">' + body + '</div>' +
         '<button class="bp sm ct-add" id="m-task-add">' + ic('plus', 13) + 'Поставить задачу</button>' +
@@ -22913,13 +23114,16 @@
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
-      var href = dc.link ? dc.link : (API + '/admin/api/docs/' + dc.id + '/download?k=' + encodeURIComponent(getKey()));
+      /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
+      var href = dc.link || '#';
       var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
         '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + esc(meta) + '</div></div>' +
         '<div class="doc-act">' +
-          '<a class="icobtn" target="_blank" rel="noopener" href="' + esc(href) + '" title="Открыть">' + ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
+          '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
+            ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
+            ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
           '<button class="icobtn del" data-deldoc="' + dc.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
         '</div></div>';
     }).join('');
@@ -23199,7 +23403,7 @@
         : fmtWhen(p.created_at);
       var amtCls = p.status === 'refunded' ? ' refunded' : (p.status === 'pending' ? ' pending' : '');
       var rcpt = p.receipt_doc_id
-        ? '<a class="pay-rcpt has" target="_blank" rel="noopener" href="' + API + '/admin/api/docs/' + p.receipt_doc_id + '/download?k=' + encodeURIComponent(getKey()) + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
+        ? '<a class="pay-rcpt has" href="#" data-docdl="' + p.receipt_doc_id + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
         : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
       return '<div class="pay-row">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
@@ -23228,9 +23432,12 @@
           '<div class="ord-foot">' +
             '<span class="pay-seg" id="ord-mode"><button data-v="full" class="on">полная оплата</button>' +
               '<button data-v="installment">рассрочка</button></span>' +
+            '<span class="pay-seg" id="ord-split" hidden><button data-v="equal" class="on">поровну</button>' +
+              '<button data-v="custom">свой график</button></span>' +
             '<label class="ord-n-wrap" id="ord-n-wrap" hidden>взносов <input id="ord-n" class="ord-n" inputmode="numeric" value="4"></label>' +
             '<button class="bp sm" id="ord-add-btn" style="margin-left:auto">' + ic('plus', 13) + '<span id="ord-btn-lbl">Выставить счет</span></button>' +
           '</div>' +
+          '<div class="ord-sched" id="ord-sched" hidden></div>' +
         '</div></div>' +
       /* Счет за уроки школы. Отдельно от счетов платформы: там продукты и рассрочка,
          здесь уроки и остаток ученика на странице учета уроков. Контакт для чека
@@ -23794,6 +24001,61 @@
       });
     });
 
+    // консультации: список, добавление, перенос конспекта в заметку
+    if (el('m-calls') && state.cardCalls[id] === undefined) {
+      loadCardCalls(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+      });
+    }
+    var callAdd = el('m-call-add');
+    if (callAdd) callAdd.addEventListener('click', function () { openCallForm(id); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-editcall]'), function (b) {
+      b.addEventListener('click', function () {
+        var list = state.cardCalls[id];
+        if (!list || list === 'none') return;
+        var cid = +b.getAttribute('data-editcall');
+        var call = list.filter(function (c) { return c.id === cid; })[0];
+        if (call) openCallForm(id, null, call);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-delcall]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Убрать эту консультацию из карточки?')) return;
+        apiSend('/admin/api/calls/' + b.getAttribute('data-delcall'), 'DELETE', null, function () {
+          loadCardCalls(id, function () {
+            if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+          });
+        });
+      });
+    });
+    // Конспект в заметку — оттуда его разбирают в задачи той же кнопкой, что и обычную
+    // заметку. Отдельного разбора для консультации не заводим: путь должен быть один.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-tonote]'), function (b) {
+      b.addEventListener('click', function () {
+        var list = state.cardCalls[id];
+        if (!list || list === 'none') return;
+        var cid = +b.getAttribute('data-tonote');
+        var call = list.filter(function (c) { return c.id === cid; })[0];
+        if (!call || !note) return;
+        var when = call.held_at ? dayLabel(call.held_at) : '';
+        var head = ('Консультация ' + when).trim();
+        note.value = (note.value ? note.value.trim() + '\n\n' : '') + head + '\n' + call.summary;
+        patch(id, { note: note.value }, noteState);
+        note.focus();
+        showToast('Конспект в заметке, можно разобрать в задачи');
+      });
+    });
+    // Пока идет расшифровка, карточка сама перечитывает список: разбор занимает
+    // минуты, а менеджер не должен гадать, закончилось или нет.
+    var busy = (state.cardCalls[id] || []).some
+      && (state.cardCalls[id] || []).some(function (c) { return c.status === 'transcribing'; });
+    if (busy) setTimeout(function () {
+      if (state.drawerId !== id || state.modalSection !== 'notes') return;
+      loadCardCalls(id, function () {
+        if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+      });
+    }, 15000);
+
     var addBtn = el('m-task-add');
     if (addBtn) addBtn.addEventListener('click', function () {
       var lead = findLead(id);
@@ -23823,6 +24085,12 @@
       var nm = url.split('/').filter(Boolean).pop() || 'Ссылка';
       apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url }, function () {
         refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-docdl]'), function (a) {
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        openDoc(a.getAttribute('data-docdl'));
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-deldoc]'), function (b) {
@@ -23880,6 +24148,25 @@
         paid:             { label: 'оплачен', sev: 'client' },
         canceled:         { label: 'отменен', sev: 'rejected' },
       };
+      var IST = {  // статус взноса → подпись и цвет
+        paid:      { label: 'оплачен', sev: 'client' },
+        awaiting:  { label: 'оплата идёт', sev: 'call_scheduled' },
+        scheduled: { label: 'ждёт', sev: 'contacted' },
+        refunded:  { label: 'возврат', sev: 'rejected' },
+        canceled:  { label: 'отменён', sev: 'rejected' },
+      };
+      var ordOpen = {};   // какие заказы раскрыты (id → true), переживает перерисовку
+      var markInst = function (oid, no, paid) {
+        api('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/paid', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paid: paid }),
+        }).then(function () {
+          showToast(paid ? 'Взнос отмечен оплаченным' : 'Отметка снята');
+          loadOrders();
+        }).catch(function (e) {
+          if (e.message !== '403') showToast('Не получилось: ' + (e.message || 'проверьте сеть'));
+        });
+      };
       var renderOrders = function (orders) {
         if (!orders || !orders.length) {
           ordList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте первый ниже.</div>';
@@ -23888,18 +24175,56 @@
         ordList.innerHTML = orders.map(function (o) {
           var st = ORD_ST[o.status] || ORD_ST.awaiting_payment;
           var inst = o.installments || [];
+          var isInst = o.pay_mode === 'installment' && inst.length > 1;
           var paidN = inst.filter(function (i) { return i.status === 'paid'; }).length;
           var next = inst.filter(function (i) { return i.status !== 'paid' && i.status !== 'refunded'; })[0];
           var meta = [];
-          if (o.pay_mode === 'installment') meta.push('рассрочка: взнос ' + Math.min(paidN + 1, inst.length) + ' из ' + inst.length);
+          if (isInst) meta.push('рассрочка: оплачено ' + paidN + ' из ' + inst.length);
           if (next) meta.push('след. ' + next.due_date.slice(8, 10) + '.' + next.due_date.slice(5, 7) + ' · ' + fmtMoney(next.amount) + ' ₽');
           if (o.paid_total) meta.push('внесено ' + fmtMoney(o.paid_total) + ' ₽');
-          return '<div class="pay-row">' +
-            '<div class="doc-b"><div class="doc-n">' + esc(o.title) +
+          var open = !!ordOpen[o.id];
+          var head = '<div class="pay-row' + (isInst ? ' ord-oh' : '') + '"' + (isInst ? ' data-oid="' + o.id + '"' : '') + '>' +
+            '<div class="doc-b"><div class="doc-n">' + (isInst ? '<span class="ord-caret' + (open ? ' on' : '') + '">' + ic('go', 11) + '</span>' : '') + esc(o.title) +
               ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
               '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
             '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
+          if (!isInst || !open) return head;
+          // раскрытый график: каждый взнос со статусом и ручной отметкой
+          var rows = inst.map(function (i) {
+            var s = IST[i.status] || IST.scheduled;
+            var d = i.due_date ? i.due_date.slice(8, 10) + '.' + i.due_date.slice(5, 7) + '.' + i.due_date.slice(0, 4) : '—';
+            var act = '';
+            if (!i.linked && i.status !== 'paid') {
+              act = '<button class="oi-mark" data-oid="' + o.id + '" data-no="' + i.no + '" data-p="1">отметить оплаченным</button>';
+            } else if (!i.linked && i.status === 'paid') {
+              act = '<button class="oi-mark off" data-oid="' + o.id + '" data-no="' + i.no + '" data-p="0">снять отметку</button>';
+            } else if (i.linked) {
+              act = '<span class="oi-lock">' + (i.status === 'paid' ? 'оплачен картой' : 'оплата через кассу') + '</span>';
+            }
+            return '<div class="oi-row">' +
+              '<span class="oi-n">взнос ' + i.no + '</span>' +
+              '<span class="oi-d">' + d + '</span>' +
+              '<span class="oi-a num">' + fmtMoney(i.amount) + ' ₽</span>' +
+              '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
+              act + '</div>';
+          }).join('');
+          return head + '<div class="oi-box">' +
+            '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
+            rows + '</div>';
         }).join('');
+        // тумблер раскрытия
+        Array.prototype.forEach.call(ordList.querySelectorAll('.ord-oh'), function (h) {
+          h.addEventListener('click', function () {
+            var oid = h.getAttribute('data-oid'); ordOpen[oid] = !ordOpen[oid]; renderOrders(orders);
+          });
+        });
+        // отметка взноса
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            markInst(b.getAttribute('data-oid'), b.getAttribute('data-no'), b.getAttribute('data-p') === '1');
+          });
+        });
       };
       var loadOrders = function () {
         api('/admin/api/leads/' + id + '/orders').then(function (r) { renderOrders(r.orders); })
@@ -23962,6 +24287,7 @@
             var total = ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0);
             el('ord-total-v').textContent = fmtMoney(total) + ' ₽';
             el('ord-btn-lbl').textContent = total ? 'Выставить счет · ' + fmtMoney(total) + ' ₽' : 'Выставить счет';
+            var sb = el('ord-sched'); if (sb && !sb.hidden && typeof renderSched === 'function') renderSched();
           });
         });
         Array.prototype.forEach.call(host.querySelectorAll('.ord-it-x'), function (b) {
@@ -23979,12 +24305,97 @@
         renderItems();
       };
 
-      var ordMode = 'full', ordModeEl = el('ord-mode');
+      /* Рассрочка бывает равными долями (введи число взносов) и своим графиком: живой
+         платёж почти всегда неравный — 100к сейчас, остаток через два месяца. Свой
+         график = строки дата+сумма, их сумма обязана сойтись с итогом счёта, иначе
+         дебиторка соберёт не те деньги (то же правило проверяет бэк — orders.build_schedule). */
+      var ordMode = 'full', ordSplit = 'equal', schedRows = [];
+      var ordModeEl = el('ord-mode'), ordSplitEl = el('ord-split'), schedBox = el('ord-sched');
+      var curTotal = function () { return ordItems.reduce(function (s, it) { return s + (it.amount || 0); }, 0); };
+      var schedSum = function () { return schedRows.reduce(function (s, r) { return s + (r.amount || 0); }, 0); };
+
+      /* +k месяцев к ISO-дате, день зажат в 28 (как add_months на бэке — чтобы не ловить
+         31 февраля) */
+      var addMonthsISO = function (iso, k) {
+        var p = (iso || todayISO(0)).split('-'), y = +p[0], m = +p[1] - 1 + k, d = +p[2];
+        y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+        return y + '-' + pad(m + 1) + '-' + pad(Math.min(d, 28));
+      };
+      var fillSched = function () {
+        var total = curTotal();
+        if (!total) { showToast('Сначала добавьте позиции с суммой'); return; }
+        var n = Math.max(2, parseInt((el('ord-n') || {}).value, 10) || 4);
+        var base = Math.floor(total / n), parts = [];
+        for (var k = 0; k < n; k++) parts.push(base);
+        parts[0] += total - base * n;  // остаток рублей — в первый взнос
+        var first = todayISO(0);
+        schedRows = parts.map(function (a, i) { return { due_date: addMonthsISO(first, i), amount: a }; });
+        renderSched();
+      };
+      var renderSched = function () {
+        if (!schedBox) return;
+        var total = curTotal(), sum = schedSum(), diff = total - sum;
+        var rowsHtml = schedRows.map(function (r, i) {
+          return '<div class="osch-row" data-i="' + i + '">' +
+            '<input type="date" class="osch-d" data-i="' + i + '" value="' + esc(r.due_date || '') + '">' +
+            '<input class="osch-a num" data-i="' + i + '" inputmode="numeric" value="' + (r.amount || '') + '" placeholder="₽">' +
+            '<button type="button" class="icobtn del osch-x" data-i="' + i + '" title="Убрать взнос">' + ic('x', 14) + '</button></div>';
+        }).join('');
+        var sumTxt = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+        if (diff > 0) sumTxt += ' · осталось ' + fmtMoney(diff);
+        else if (diff < 0) sumTxt += ' · лишние ' + fmtMoney(-diff);
+        schedBox.innerHTML =
+          '<div class="osch-head"><span class="osch-hint">Даты и суммы взносов — как договорились с семьёй.</span>' +
+            '<button type="button" class="osch-fill" id="osch-fill">' + ic('refresh', 12) + 'разбить помесячно</button></div>' +
+          '<div class="osch-rows">' + (rowsHtml || '') + '</div>' +
+          '<button type="button" class="osch-add" id="osch-add">' + ic('plus', 12) + 'добавить взнос</button>' +
+          '<div class="osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad') + '">' + esc(sumTxt) + '</div>';
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-d'), function (n) {
+          n.addEventListener('change', function () { schedRows[+n.getAttribute('data-i')].due_date = n.value; });
+        });
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-a'), function (n) {
+          n.addEventListener('input', function () {
+            schedRows[+n.getAttribute('data-i')].amount = parseInt(n.value.replace(/\D/g, ''), 10) || 0;
+            var sum = schedSum(), total = curTotal(), diff = total - sum;
+            var t = 'Разбито ' + fmtMoney(sum) + ' из ' + fmtMoney(total) + ' ₽';
+            if (diff > 0) t += ' · осталось ' + fmtMoney(diff); else if (diff < 0) t += ' · лишние ' + fmtMoney(-diff);
+            var box = schedBox.querySelector('.osch-sum');
+            if (box) { box.textContent = t; box.className = 'osch-sum ' + (sum === total && total > 0 ? 'ok' : 'bad'); }
+          });
+        });
+        Array.prototype.forEach.call(schedBox.querySelectorAll('.osch-x'), function (b) {
+          b.addEventListener('click', function () { schedRows.splice(+b.getAttribute('data-i'), 1); renderSched(); });
+        });
+        var addB = el('osch-add');
+        if (addB) addB.addEventListener('click', function () {
+          var last = schedRows[schedRows.length - 1];
+          schedRows.push({ due_date: last ? addMonthsISO(last.due_date, 1) : todayISO(0), amount: 0 });
+          renderSched();
+        });
+        var fillB = el('osch-fill');
+        if (fillB) fillB.addEventListener('click', fillSched);
+      };
+      var updateInstallmentUI = function () {
+        var inst = ordMode === 'installment';
+        if (ordSplitEl) ordSplitEl.hidden = !inst;
+        var nWrap = el('ord-n-wrap'); if (nWrap) nWrap.hidden = !(inst && ordSplit === 'equal');
+        if (schedBox) {
+          schedBox.hidden = !(inst && ordSplit === 'custom');
+          if (!schedBox.hidden) { if (!schedRows.length) fillSched(); else renderSched(); }
+        }
+      };
       if (ordModeEl) Array.prototype.forEach.call(ordModeEl.children, function (b) {
         b.addEventListener('click', function () {
           ordMode = b.getAttribute('data-v');
           Array.prototype.forEach.call(ordModeEl.children, function (x) { x.classList.toggle('on', x === b); });
-          el('ord-n-wrap').hidden = ordMode !== 'installment';
+          updateInstallmentUI();
+        });
+      });
+      if (ordSplitEl) Array.prototype.forEach.call(ordSplitEl.children, function (b) {
+        b.addEventListener('click', function () {
+          ordSplit = b.getAttribute('data-v');
+          Array.prototype.forEach.call(ordSplitEl.children, function (x) { x.classList.toggle('on', x === b); });
+          updateInstallmentUI();
         });
       });
       var ordBtn = el('ord-add-btn');
@@ -23992,21 +24403,29 @@
         var items = ordItems.filter(function (it) { return (it.title || '').trim() && (it.amount || 0) > 0; });
         if (!items.length) { showToast('Добавьте хотя бы одну позицию с суммой'); return; }
         var total = items.reduce(function (s, it) { return s + it.amount; }, 0);
-        var n = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
         // название счета = единственная позиция или «тариф + N услуг»
         var title = items.length === 1 ? items[0].title : (items[0].title + ' + ещё ' + (items.length - 1));
+        var body = {
+          title: title,
+          items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
+          amount_total: total, pay_mode: ordMode, installments_count: 1,
+        };
+        if (ordMode === 'installment' && ordSplit === 'custom') {
+          var rows = schedRows.filter(function (r) { return r.due_date && (r.amount || 0) > 0; });
+          if (!rows.length) { showToast('Заполните график взносов — дата и сумма у каждого'); return; }
+          if (schedSum() !== total) { showToast('Сумма взносов должна сойтись с итогом счёта'); return; }
+          body.installments = rows.map(function (r) { return { due_date: r.due_date, amount: r.amount }; });
+        } else if (ordMode === 'installment') {
+          body.installments_count = Math.max(2, parseInt(el('ord-n').value, 10) || 4);
+        }
         ordBtn.disabled = true;
         api('/admin/api/leads/' + id + '/orders', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: title,
-            items: items.map(function (it) { return { product_id: it.product_id || null, title: it.title, amount: it.amount, qty: 1 }; }),
-            amount_total: total,
-            pay_mode: ordMode, installments_count: ordMode === 'installment' ? n : 1,
-          }),
+          body: JSON.stringify(body),
         }).then(function () {
           ordBtn.disabled = false;
-          ordItems = []; renderItems();
+          ordItems = []; schedRows = []; renderItems();
+          if (schedBox && !schedBox.hidden) renderSched();
           showToast('Счет выставлен — клиент увидит его в кабинете');
           loadOrders();
         }).catch(function (e) {
