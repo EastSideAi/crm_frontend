@@ -5698,8 +5698,10 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
-  function deptChips() {
-    var all = [''].concat(Object.keys(DEPTS));
+  function deptChips(hideOps) {
+    // На «Целях» операционку не предлагаем: целей туда не заводят, и чип вел бы
+    // в пустой блок без единого действия.
+    var all = [''].concat(Object.keys(DEPTS).filter(function (d) { return !(hideOps && d === 'ops'); }));
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
       return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
@@ -5790,8 +5792,6 @@
     });
 
     var body = groups.map(function (grp) {
-      var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
-      var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
       var adding = state.glNew === (grp.dept || '~');
       var addRow = adding
         ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
@@ -5800,19 +5800,18 @@
         : '';
       return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
         '<div class="gl-dh"><span class="gl-dl">' + esc(grp.label) + '</span>' +
-          '<span class="gl-dn num">' + (grp.goals.length ? grp.goals.length + ' ' + plural(grp.goals.length, 'цель', 'цели', 'целей') +
-            (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') : 'целей нет') + '</span>' +
+          '<span class="gl-dn num">' + (grp.goals.length ? grp.goals.length + ' ' + plural(grp.goals.length, 'цель', 'цели', 'целей') : 'целей нет') + '</span>' +
           (grp.dept !== 'ops' && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
         '</div>' + addRow +
         grp.goals.map(glGoalCard).join('') +
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="gl-tools">' + deptChips() +
+    view.innerHTML = '<div class="gl-tools">' + deptChips(true) +
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        '<button class="bp ghost sm" id="tsk-meet">' + ic('doc', 14) + 'Импорт встречи</button>' +
+        '<button class="bp ghost sm gl-meet" id="tsk-meet" title="Импорт встречи">' + ic('doc', 14) + '<span>Импорт встречи</span></button>' +
       '</div>' +
       (groups.length ? body
         : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
