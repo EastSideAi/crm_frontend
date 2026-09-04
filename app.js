@@ -70,7 +70,7 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
-    glOpen: {}, glNew: '', glPct: {},
+    glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     taskWho: null,
@@ -2656,12 +2656,6 @@
       }
       // На «Потом» сводка про очередь, а не про просрочку: просрочки тут нет по
       // определению, и фраза «начни с них» указывала бы на другой экран.
-      if (TASK_SEGS[taskSeg()].view === 'later') {
-        var lt = Array.isArray(state.tasks) ? state.tasks.length : (ts ? ts.later : 0);
-        tphr = lt
-          ? 'В очереди <b>' + lt + '</b> ' + plural(lt, 'задача', 'задачи', 'задач') + '. Сроков и просрочки тут нет: возьми в неделю то, что обещаешь сделать.'
-          : 'Очередь пустая: все, что есть, уже в неделе.';
-      }
       if (TASK_SEGS[taskSeg()].view === 'teamweek') {
         var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
         if (!tw) tphr = 'Собираю неделю команды.';
@@ -4575,8 +4569,7 @@
        планирования — неделя; все остальное либо очередь, либо разрез по ученикам,
        целям и людям. Старые «Сегодня», «План», «Все мои», «На приемку», «Готово»,
        «Вся команда», «По людям» слились сюда. */
-    week:  { label: 'Неделя',  view: 'myweek',   scope: 'my',  hint: 'что я взял на эту неделю: собрать в понедельник, закрыть в пятницу' },
-    later: { label: 'Потом',   view: 'later',    scope: 'my',  hint: 'очередь без сроков — отсюда берут в неделю' },
+    week:  { label: 'План',    view: 'myweek',   scope: 'my',  hint: 'мой план: сегодня, неделя, месяц; внизу очередь «Потом»' },
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям.
     stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
@@ -4659,7 +4652,7 @@
     var row = btn.closest ? btn.closest('.trow') : null;
     if (row) row.classList.add('done');
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
-      state.tasks = null; state.myweek = null; state.teamWeek = null;
+      state.tasks = null; state.myweek = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       setTimeout(renderView, 420);
     }, function () {
@@ -4753,7 +4746,6 @@
     var v = TASK_SEGS[taskSeg()].view;
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
-    if (v === 'later') { renderLater(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
     if (state.tasks === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
@@ -4786,20 +4778,23 @@
 
   function wkShift() { return state.weekShift || 0; }
 
+  function deptQ() { return state.taskDept ? '&dept=' + encodeURIComponent(state.taskDept) : ''; }
   function loadMyWeek(cb) {
     var sh = wkShift();
     state.tasksLoading = true;
     Promise.all([
-      api('/admin/api/tasks?view=week&scope=my&shift=' + sh),
+      api('/admin/api/tasks?view=week&scope=my&shift=' + sh + deptQ()),
       api('/admin/api/rhythm?period=week&shift=' + sh),
       // Сданное мне на приемку — первый блок недели, но только на текущей:
       // приемка не зависит от того, какую неделю я листаю.
       sh === 0 && state.taskSum && state.taskSum.to_accept
         ? api('/admin/api/tasks?view=review&scope=author') : Promise.resolve(null),
+      // Очередь «Потом» — полоса внизу плана: отсюда берут в неделю.
+      api('/admin/api/tasks?view=later&scope=my' + deptQ()),
     ]).then(function (rs) {
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
-                       accept: (rs[2] && rs[2].tasks) || [],
+                       accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -4878,7 +4873,7 @@
 
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
-    state.myweek = null; state.teamWeek = null; state.tasks = null;
+    state.myweek = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -5141,7 +5136,48 @@
     });
   }
 
+  /* Переключатель вида плана: Сегодня / Неделя / Месяц (Павел 04.09.2026). Один
+     экран, три глубины: день — что делаю, неделя — что обещал, месяц — план/факт
+     по неделям. Фильтр отдела режет все три. */
+  function planModeSeg() {
+    return '<div class="pay-seg plan-seg">' + [['day', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц']].map(function (m) {
+      return '<button type="button" class="' + (state.planMode === m[0] ? 'on' : '') + '" data-planmode="' + m[0] + '">' + m[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  function wirePlanMode(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-planmode]'), function (b) {
+      b.addEventListener('click', function () {
+        state.planMode = b.getAttribute('data-planmode');
+        if (state.planMode === 'day') state.weekShift = 0;
+        renderView();
+      });
+    });
+  }
+  /* Очередь «Потом» под планом: свернута в одну строку, раскрывается кликом.
+     Задачи без обещания, без просрочки; кнопка «В неделю» кладет в текущую. */
+  function laterBand(later) {
+    if (!later.length) return '';
+    var rows = later.map(function (t) {
+      var own = isOwnTask(t);
+      var right = (t.due_at ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + esc(dayLabel(t.due_at)) + '</span>' : '') +
+        (own ? '<button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button>' : '');
+      return '<div class="trow dy-row later" data-tid="' + t.id + '">' +
+        '<div class="dy-t"><span class="tsk-chk" style="cursor:default;opacity:.35"></span><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
+          (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : (t.parent_title ? '<span class="dy-cl">' + esc(t.parent_title) + '</span>' : '')) + '</div>' +
+        '<div class="dy-r">' + right + '</div></div>';
+    }).join('');
+    return '<div class="card dy-card dy-later' + (state.laterOpen ? ' open' : '') + '">' +
+      '<button class="dy-h dy-later-h" id="dy-later"><span class="t">Потом</span>' +
+        '<span class="dy-h-n num"><b>' + later.length + '</b> ' + plural(later.length, 'задача', 'задачи', 'задач') + ' без срока</span>' +
+        '<span class="dy-later-ic">' + ic('go', 14) + '</span></button>' +
+      (state.laterOpen ? '<div class="dy-body">' + rows + '</div>' : '') + '</div>';
+  }
+  function wireLater(view) {
+    var b = el('dy-later');
+    if (b) b.addEventListener('click', function () { state.laterOpen = !state.laterOpen; renderView(); });
+  }
   function renderMyWeek(view) {
+    if (state.planMode === 'month') { renderMyMonth(view); return; }
     if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
     if (state.myweek === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
@@ -5192,14 +5228,18 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    if (sh === 0 && !q) {
+    var head = planModeSeg() + deptChips();
+    if (state.planMode === 'day' && sh === 0 && !q) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
-      renderMyDay(view, w, r, wkNav(w.label || r.label) + meter + '<span class="wk-spacer"></span>' + act +
+      renderMyDay(view, w, r, head + '<span class="wk-spacer"></span>' + meter + act +
         '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
+      var dg = view.querySelector('.dy-grid');
+      if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []));
     } else {
-      view.innerHTML = '<div class="card listcard">' +
-        '<div class="list-tools brd-tools">' + wkNav(w.label || r.label) + meter +
+      view.innerHTML = '<div class="wk-top">' + head + '<span class="wk-spacer"></span>' + wkNav(w.label || r.label) + '</div>' +
+        '<div class="card listcard">' +
+        '<div class="list-tools brd-tools">' + meter +
           '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
             '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
             '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -5208,10 +5248,10 @@
         '</div>' +
         wkStateLine(r) +
         '<div class="list-body">' + body + '</div>' +
-      '</div>';
+      '</div>' + laterBand(w.later || []);
     }
 
-    wkWireNav(view);
+    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wireLater(view);
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -5225,6 +5265,67 @@
       if (el(id)) el(id).addEventListener('click', function () { openWeekCollect(w); });
     });
     if (el('wk-close')) el('wk-close').addEventListener('click', function () { openWeekClose(w); });
+    wkWireRows(view);
+  }
+
+  /* ── Месяц: план/факт по неделям ─────────────────────────────────────────────
+     Не календарь и не список: пять строк-недель, у каждой взял / сделано /
+     перенос и сдана ли, ниже задачи недели. Это и есть «мои итоги» за месяц —
+     то, что руководитель увидит в карточке человека. */
+  function loadMyMonth() {
+    state.tasksLoading = true;
+    api('/admin/api/rhythm/month?shift=' + (state.monthShift || 0) + deptQ()).then(function (r) {
+      state.tasksLoading = false; state.mymonth = r || 'none';
+      if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () { state.tasksLoading = false; state.mymonth = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function renderMyMonth(view) {
+    if (state.mymonth === null) { view.innerHTML = dashSkeleton(); loadMyMonth(); return; }
+    if (state.mymonth === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить месяц. Обнови страницу.</div></div>'; return; }
+    var m = state.mymonth, t = m.totals || {};
+    var byWeek = {};
+    (m.tasks || []).forEach(function (x) { (byWeek[x.week_starts] = byWeek[x.week_starts] || []).push(x); });
+    var pct = t.plan ? Math.round(t.done / t.plan * 100) : 0;
+    var nav = '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="mo-prev" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(m.label || '') + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="mo-next" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+      (state.monthShift ? '<button class="qchip" id="mo-now">Сейчас</button>' : '') + '</div>';
+    var stats = '<div class="mo-stats">' +
+      '<div class="mo-stat"><b class="num">' + pct + '%</b><span>плана сделано</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (t.done || 0) + ' <i>из ' + (t.plan || 0) + '</i></b><span>задач за месяц</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (t.closed || 0) + ' <i>из ' + (m.weeks || []).filter(function (w) { return !w.future; }).length + '</i></b><span>недель закрыто</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>переносов</span></div></div>';
+    var weeks = (m.weeks || []).map(function (w) {
+      var f = w.facts || {}, open = !!state.glOpen['w' + w.starts];
+      var st = w.future ? '<span class="sev st-wait">впереди</span>'
+        : w.report.state === 'done' ? '<span class="sev st-done">закрыта</span>'
+        : w.report.state === 'late' ? '<span class="sev st-done">закрыта поздно</span>'
+        : w.report.state === 'miss' ? '<span class="sev rv-miss">не закрыта</span>'
+        : w.plan.state === 'miss' ? '<span class="sev rv-miss">без плана</span>'
+        : w.plan.state === 'wait' ? '<span class="sev st-wait">собирается</span>'
+        : '<span class="sev st-doing">идет</span>';
+      var rv = w.report.review && w.report.review.state === 'accepted' ? ' · принята' : w.report.review && w.report.review.state === 'returned' ? ' · вернули' : '';
+      var wpct = f.plan ? Math.round(f.done / f.plan * 100) : 0;
+      var rows = open ? '<div class="gl-steps">' + (byWeek[w.starts] || []).map(function (x) { return dyRow(x, { showStatus: true }); }).join('') +
+        (!(byWeek[w.starts] || []).length ? '<div class="dy-empty">На этой неделе задач не было</div>' : '') + '</div>' : '';
+      return '<div class="gl-card mo-week' + (w.current ? ' current' : '') + (open ? ' open' : '') + '" data-gid="w' + w.starts + '">' +
+        '<div class="gl-head" data-wtoggle="' + w.starts + '">' +
+          '<span class="gl-ring" style="--p:' + wpct + '"><b class="num">' + wpct + '</b></span>' +
+          '<div class="gl-main"><div class="gl-title">' + esc(w.label) + (w.current ? ' <span class="mo-now">эта неделя</span>' : '') + '</div>' +
+            '<div class="gl-meta">' + (f.plan ? 'взял ' + f.plan + ' · сделано ' + f.done + (f.carried ? ' · перенос ' + f.carried : '') + (f.stuck ? ' · застряло ' + f.stuck : '') : 'ничего не взято') + esc(rv) + '</div></div>' +
+          st + '</div>' + rows + '</div>';
+    }).join('');
+    view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+      stats + weeks;
+    wirePlanMode(view); wireDeptChips(view);
+    function go(d) { state.monthShift = Math.max(-12, Math.min(3, (state.monthShift || 0) + d)); state.mymonth = null; renderView(); }
+    if (el('mo-prev')) el('mo-prev').addEventListener('click', function () { go(-1); });
+    if (el('mo-next')) el('mo-next').addEventListener('click', function () { go(1); });
+    if (el('mo-now')) el('mo-now').addEventListener('click', function () { state.monthShift = 0; state.mymonth = null; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-wtoggle]'), function (h) {
+      h.addEventListener('click', function () { var k = 'w' + h.getAttribute('data-wtoggle'); state.glOpen[k] = !state.glOpen[k]; renderView(); });
+    });
     wkWireRows(view);
   }
 
@@ -5266,74 +5367,7 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
-  /* ── «Потом»: очередь без сроков ──────────────────────────────────────────────
-     Отсюда берут в неделю. Дата у задачи здесь — ориентир серым, не срок: срок
-     появляется, когда задачу взяли в неделю. Первой полосой — то, что стоит с
-     ориентиром на эту неделю: по-хорошему это надо было взять в понедельник. */
-  function renderLater(view) {
-    if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
-    if (state.tasks === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить очередь. Обнови страницу.</div></div>';
-      return;
-    }
-    var q = (state.taskQ || '').toLowerCase().trim();
-    var list = (state.tasks || []).filter(function (t) {
-      if (!q) return true;
-      return (t.title + ' ' + (t.client_name || '') + ' ' + (t.parent_title || '')).toLowerCase().indexOf(q) !== -1;
-    });
-    var mon = new Date(wkMondayIso(0) + 'T00:00:00'), sun = new Date(mon); sun.setDate(sun.getDate() + 7);
-    var soon = list.filter(function (t) { return t.due_at && new Date(t.due_at) < sun; });
-    var rest = list.filter(function (t) { return soon.indexOf(t) === -1; });
 
-    var row = function (t) {
-      var own = isOwnTask(t);
-      var sub = [];
-      if (t.client_name) sub.push(t.client_name);
-      if (t.author_name && !own) sub.push('поставил ' + t.author_name);
-      var mark = t.due_at
-        ? '<span class="tsk-due wk-aim">' + ic('cal', 11) + 'ориентир ' + esc(dayLabel(t.due_at)) + '</span>'
-        : '<span class="tsk-due due-none">без ориентира</span>';
-      return '<div class="trow tsk-grid mine wk-row later' + (t.parent_title ? ' has-goal' : '') +
-        (own ? ' own' : '') + '" data-tid="' + t.id + '">' +
-        '<div class="t-cell">' +
-          (own ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>' : '') +
-          '<div class="t-ttl">' + impMark(t) + esc(t.title) + '</div>' +
-          (t.parent_title
-            ? '<button class="tsk-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + esc(t.parent_title) + '</button>' : '') +
-          (sub.length ? '<div class="t-sub">' + esc(sub.join(' · ')) + '</div>' : '') +
-        '</div>' +
-        '<div>' + mark + '</div>' +
-        '<div><button class="qchip wk-pull" data-pull="' + t.id + '">' + ic('go', 12) + 'В неделю</button></div>' +
-      '</div>';
-    };
-
-    var body = list.length
-      ? wkBand('Ориентир на этой неделе', 'стоило взять в понедельник', soon, row) +
-        wkBand(soon.length ? 'Остальное' : 'Очередь', 'без сроков и без просрочки', rest, row)
-      : '<div class="wk-empty"><div class="wk-empty-t">В очереди пусто</div>' +
-        '<div class="wk-empty-s">Сюда падает все входящее: задачи от коллег, из протоколов встреч и из карточек учеников. Отсюда их берут в неделю.</div></div>';
-
-    view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools">' +
-        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Задача, ученик, цель" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
-          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        '<span class="list-count"><b>' + list.length + '</b> ' + plural(list.length, 'задача', 'задачи', 'задач') + '</span>' +
-        // Тихая, как на «Неделе»: главное действие здесь — «В неделю» в строках.
-        '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
-      '</div>' +
-      '<div class="list-body">' + body + '</div>' +
-    '</div>';
-
-    el('tsk-new').addEventListener('click', function () { openNewTask(); });
-    var qi = el('tsk-q');
-    qi.addEventListener('input', function () {
-      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
-      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
-    });
-    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
-    wkWireRows(view);
-  }
 
   /* ── Собрать неделю ───────────────────────────────────────────────────────────
      Одно окно: очередь с галочками и полоса предела. Отметил, нажал — задачи
@@ -5675,7 +5709,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null;
+        state.tasks = null; state.myweek = null; state.mymonth = null;
         saveUi(); renderHead(); renderView();
       });
     });

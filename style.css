@@ -7470,6 +7470,33 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .gl-add { padding-left: 14px; }
 }
 
+/* ── План: Сегодня / Неделя / Месяц, полоса «Потом», месяц по неделям ───────
+   Переключатель вида — системный сегмент .pay-seg. «Потом» — карточка дня,
+   свернутая до шапки. Месяц — те же карточки, что у целей (.gl-card): неделя
+   с кольцом процента, раскрывается в задачи; сверху четыре числа месяца. */
+.plan-seg { flex: none; }
+.dy-later { margin-top: 16px; }
+.dy-later-h { width: 100%; border: 0; background: none; font: inherit; cursor: pointer; text-align: left;
+  padding: 14px 20px; align-items: center; }
+.dy-later-h:hover { background: #FBFBFC; }
+.dy-later-ic { margin-left: auto; color: var(--ink-3); display: inline-flex; transition: transform .2s var(--ease); }
+.dy-later.open .dy-later-ic { transform: rotate(90deg); }
+.dy-later .trow.dy-row.later { padding: 8px 20px; }
+.mo-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.mo-stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px;
+  display: flex; flex-direction: column; gap: 2px; }
+.mo-stat b { font-size: 26px; font-weight: 800; letter-spacing: -.035em; color: var(--ink); line-height: 1.1; }
+.mo-stat b i { font-style: normal; font-size: 14px; font-weight: 600; color: var(--ink-3); letter-spacing: -.01em; }
+.mo-stat span { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.mo-week.current { border-color: var(--blue); }
+.mo-now { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--blue); }
+.mo-week .gl-head > .sev { flex: none; }
+@media (max-width: 720px) {
+  .mo-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .mo-stat b { font-size: 22px; }
+}
+
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
