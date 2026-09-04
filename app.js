@@ -23738,6 +23738,43 @@
      ссылка на исходник и конспект. Само видео к себе не тащим (см. §10в CLAUDE.md). */
   var CALL_ST = { transcribing: 'расшифровываем', failed: 'расшифровать не вышло' };
 
+  /* Конспект приходит текстом с секциями («Предложили:», «Мы обещали:» и т.д.),
+     тот же текст уходит в заметку. Здесь раскладываем его глазу: что продавали и
+     главное обещание — одним блоком сверху, обещания и факты — списками. Секции,
+     которых модель не знает, остаются абзацами. */
+  var CALL_KV = { 'Предложили': 'offer', 'Главное обещание': 'promise' };
+  var CALL_SEC = ['Мы обещали', 'Семья обещала', 'Дополнение к диагностике', 'Про семью'];
+  function callSummaryHtml(text) {
+    var blocks = String(text || '').split(/\n\s*\n/), kv = [], out = [];
+    blocks.forEach(function (b) {
+      var lines = b.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!lines.length) return;
+      var head = lines[0], m = head.match(/^([^:]{3,40}):\s*(.*)$/);
+      if (m && CALL_KV[m[1]] && lines.length === 1) {
+        kv.push('<div class="cl-kv ' + CALL_KV[m[1]] + '"><span class="cl-k">' + esc(m[1]) + '</span>' +
+                '<span class="cl-v">' + esc(m[2]) + '</span></div>');
+        return;
+      }
+      if (m && CALL_SEC.indexOf(m[1]) !== -1) {
+        var items = lines.slice(1).map(function (l) {
+          // «мы: прислать список» — секция уже говорит, чья это работа.
+          return l.replace(/^-\s*/, '').replace(/^(мы|семья)\s*:\s*/i, '');
+        });
+        if (m[2]) items.unshift(m[2]);
+        out.push('<div class="cl-sec"><div class="cl-k">' + esc(m[1]) + '</div>' +
+          (items.length > 1 || /^-/.test(lines[1] || '')
+            ? '<ul class="cl-ul">' + items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>'
+            : '<div class="cl-p">' + esc(items[0] || '') + '</div>') + '</div>');
+        return;
+      }
+      out.push('<div class="cl-p">' + lines.map(esc).join('<br>') + '</div>');
+    });
+    // Блок «что продавали» стоит сразу после сводки: руководитель открывает
+    // карточку ради этих двух строк.
+    if (kv.length) out.splice(Math.min(1, out.length), 0, '<div class="cl-deal">' + kv.join('') + '</div>');
+    return out.join('');
+  }
+
   function callRow(c) {
     // Дата без времени: часа встречи мы не спрашиваем, и показывать подставленный
     // полдень значит врать о том, когда разговор был.
@@ -23754,7 +23791,7 @@
                   'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
         '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
       '</div>' +
-      (body ? '<div class="cl-sum">' + esc(body).replace(/\n/g, '<br>') + '</div>'
+      (body ? '<div class="cl-sum">' + callSummaryHtml(body) + '</div>'
             : '<div class="cl-empty">' + (c.status === 'transcribing'
                  ? 'Разбираем запись, конспект появится через пару минут.'
                  : 'Конспекта нет. Допишите своими словами или приложите запись.') + '</div>') +
@@ -23808,6 +23845,10 @@
             '<span class="czb-drop-i">' + ic('phone', 20) + '</span>' +
             '<span class="czb-drop-t" id="cf-fname">Выберите файл записи</span>' +
           '</label>' +
+          (edit ? '' :
+          '<label class="al-f"><span class="al-l">Или расшифровка текстом</span>' +
+            '<textarea id="cf-tr" class="al-in al-ta" rows="3" maxlength="150000" ' +
+              'placeholder="Вставьте расшифровку из Zoom или Fathom: конспект сделаю сам"></textarea></label>') +
           '<label class="al-f"><span class="al-l">Или конспект своими словами</span>' +
             '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000">' +
               esc((edit && call.summary) || '') + '</textarea></label>' +
@@ -23841,9 +23882,11 @@
       var date = (el('cf-date') || {}).value || '';
       var link = ((el('cf-link') || {}).value || '').trim();
       var sum = ((el('cf-sum') || {}).value || '').trim();
+      var tr = ((el('cf-tr') || {}).value || '').trim();
       var file = fileIn.files && fileIn.files[0];
       err.textContent = '';
-      if (!file && !link && !sum) { err.textContent = 'Нужна запись, ссылка или конспект'; return; }
+      if (!file && !link && !sum && !tr) { err.textContent = 'Нужна запись, ссылка, расшифровка или конспект'; return; }
+      if (tr && tr.length < 100) { err.textContent = 'Расшифровка слишком короткая, разбирать нечего'; return; }
       // Тот же потолок, что на сервере: сказать «файл великоват» до отправки честнее,
       // чем гнать 100 МБ по мобильному интернету и получить отказ в конце.
       if (file && file.size > 60 * 1024 * 1024) {
@@ -23851,7 +23894,7 @@
         return;
       }
       var payload = { held_at: date ? date + 'T12:00:00+03:00' : null,
-                      link: link || null, summary: sum || null };
+                      link: link || null, summary: sum || null, transcript: tr || null };
       var send = function () {
         el('cf-ok').disabled = true;
         var path = edit ? '/admin/api/calls/' + call.id : '/admin/api/leads/' + id + '/calls';
@@ -23860,13 +23903,14 @@
           loadCardCalls(id, function () {
             if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
           });
-          showToast(payload.audio_base64 ? 'Записал, разбираю запись' : 'Записал');
+          showToast(payload.audio_base64 ? 'Записал, разбираю запись'
+                    : payload.transcript ? 'Записал, делаю конспект' : 'Записал');
           if (after) after();
         }, function (code) {
           el('cf-ok').disabled = false;
           err.textContent = code === 413
             ? 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись'
-            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка или конспект'
+            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка, расшифровка или конспект'
                             : 'Не сохранилось, проверьте сеть');
         });
       };

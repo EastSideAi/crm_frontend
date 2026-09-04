@@ -2845,7 +2845,25 @@ button.tr-crumb:hover { color: var(--blue); }
 .cl-st { font: 600 10.5px 'Manrope', sans-serif; padding: 2px 7px; border-radius: var(--r-pill); }
 .cl-st.transcribing { color: var(--blue); background: var(--blue-tint); }
 .cl-st.failed { color: var(--red-ink); background: var(--red-soft); }
-.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px; }
+.cl-sum .cl-p { margin: 0; }
+/* Что продавали и главное обещание — единственный акцент конспекта: тонированная
+   плашка без рамки, подписи мелким капсом, значения обычным весом. */
+.cl-deal { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  border-radius: 12px; background: var(--blue-tint); }
+.cl-kv { display: grid; grid-template-columns: 96px 1fr; gap: 2px 12px; align-items: baseline; }
+.cl-k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); line-height: 1.4; }
+.cl-kv .cl-k { padding-top: 2px; }
+.cl-kv.promise .cl-v { font-weight: 600; color: var(--navy); }
+.cl-sec { display: flex; flex-direction: column; gap: 3px; }
+.cl-ul { margin: 0; padding-left: 16px; }
+.cl-ul li { margin: 0; padding-left: 2px; }
+.cl-ul li::marker { color: var(--ink-3); }
+@media (max-width: 520px) {
+  .cl-kv { grid-template-columns: 1fr; gap: 1px; }
+}
 .cl-empty { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 .cl-acts { display: flex; gap: 8px; margin-top: 8px; }
 
