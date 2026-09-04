@@ -17431,7 +17431,13 @@
      прежнему плоский costs[статья][тариф]. */
   function econGroups(p) {
     var ec = p.economics || {};
-    var gs = (p.stages || []).map(function (st, i) { return { id: st.id, title: (i + 1) + '. ' + st.title }; })
+    /* нумерация та же, что в маршруте и на «Этапах»: порядковый номер этапа
+       сдвинулся бы на единицу от нулевого «Доступа к платформе», и статья
+       расходов уехала бы не в тот этап при разговоре о себестоимости */
+    var sts = p.stages || [];
+    var gs = sts.map(function (st, i) {
+      return { id: st.id, title: (st.zero ? '0' : stageNo(sts, i).replace(/^0/, '')) + '. ' + st.title };
+    })
       .concat((ec.groups || []).map(function (g) { return { id: g.id, title: g.title, note: g.note }; }));
     var known = {}; gs.forEach(function (g) { known[g.id] = true; });
     var map = {}, rest = false;
