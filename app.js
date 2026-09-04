@@ -4630,9 +4630,9 @@
   }
 
   /* Свое дело: и исполнитель, и постановщик — я. Такое закрывается галочкой в
-     один клик и переносится на завтра без спроса; чужую задачу ни то, ни другое
-     не берет — там срок двигает только тот, кому это положено (cap tasks_due),
-     а закрывает постановщик приемкой. */
+     один клик и переносится на завтра без спроса; чужую задачу галочкой не
+     закрыть — ее принимает постановщик (срок исполнитель двигает и в ней,
+     но отодвинутый уходит сообщением постановщику). */
   function isOwnTask(t) {
     return !!(t && state.taskMe && t.assignee_id === state.taskMe &&
               t.author_id === state.taskMe &&
@@ -4660,6 +4660,17 @@
       if (row) row.classList.remove('done');
       showToast('Не отметилось — проверь сеть');
     });
+  }
+
+  /* Притянуть свою задачу на сегодня: раньше исполнитель двигает сам, без спроса. */
+  function taskMoveToday(id, btn) {
+    btn.disabled = true;
+    apiSend('/admin/api/tasks/' + id, 'PATCH',
+            { due_at: new Date(isoDay(0) + 'T23:59:59').toISOString() }, function () {
+      state.tasks = null; state.myweek = null; state.mymonth = null;
+      renderView();
+      showToast('Перенес на сегодня');
+    }, function () { btn.disabled = false; showToast('Не перенеслось — проверь сеть'); });
   }
 
   /* Перенести свое дело на завтра. Тот же конец дня по Москве, что и везде в
@@ -4792,10 +4803,13 @@
         ? api('/admin/api/tasks?view=review&scope=author') : Promise.resolve(null),
       // Очередь «Потом» — полоса внизу плана: отсюда берут в неделю.
       api('/admin/api/tasks?view=later&scope=my' + deptQ()),
+      // Что я поручил другим — контроль, а не мой день; только на текущей неделе.
+      sh === 0 ? api('/admin/api/tasks?view=open&scope=author') : Promise.resolve(null),
     ]).then(function (rs) {
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
                        accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
+                       gave: (rs[4] && rs[4].tasks) || [],
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -5033,10 +5047,14 @@
       right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     }
     if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
+    if (opts.who && t.due_at && !t.overdue) right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
+    // «На сегодня» у своей завтрашней задачи: раньше исполнитель двигает сам.
+    var mine = !!(state.taskMe && t.assignee_id === state.taskMe);
+    if (opts.today && mine && !closed) right += '<button class="qchip dy-today" data-today="' + t.id + '">на сегодня</button>';
     var quick = '';
     if (closed) quick = '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>';
     else if (own && !opts.readOnly) quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
-    var tail = opts.accept && t.assignee_name
+    var tail = (opts.accept || opts.who) && t.assignee_name
       ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
       : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '');
     return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
@@ -5118,8 +5136,18 @@
     side += '<div class="card dy-card"><div class="dy-h"><span class="t">' + tmTitle + '</span>' +
       '<span class="dy-h-n num">' + (tomorrowL.length ? '<b>' + tomorrowL.length + '</b>' : '') + '</span></div>' +
       '<div class="dy-body">' + (tomorrowL.length
-        ? tomorrowL.map(function (t) { return dyRow(t); }).join('')
+        ? tomorrowL.map(function (t) { return dyRow(t, { today: true }); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
+    // Поручил другим: открытые задачи, которые я поставил не себе. Свернуто —
+    // это контроль, а не мой день (Ольга, 04.09.2026: «негде посмотреть»).
+    var gave = (w.gave || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
+    if (gave.length) {
+      var gOpen = !!state.dyGave;
+      side += '<div class="card dy-card"><div class="dy-h"><span class="t">Поручил другим</span>' +
+        '<span class="dy-h-n num"><b>' + gave.length + '</b></span></div><div class="dy-body">' +
+        (gOpen ? gave.map(function (t) { return dyRow(t, { readOnly: true, who: true }); }).join('') : '') +
+        '<button class="stu-more dy-more' + (gOpen ? ' open' : '') + '" id="dy-gave">' + (gOpen ? 'Свернуть' : 'Показать') + '</button></div></div>';
+    }
     var doneN = doneToday.length + review.length;
     side += '<div class="card dy-card"><div class="dy-h"><span class="t">Сделано сегодня</span>' +
       '<span class="dy-h-n num">' + (doneN ? '<b>' + doneN + '</b>' : '') + '</span></div>' +
@@ -5134,6 +5162,10 @@
     if (el('dy-more')) el('dy-more').addEventListener('click', function () {
       state.dyMore = !el('dy-more').classList.contains('open');
       renderView();
+    });
+    if (el('dy-gave')) el('dy-gave').addEventListener('click', function () { state.dyGave = !state.dyGave; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-today]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); taskMoveToday(+b.getAttribute('data-today'), b); });
     });
   }
 
@@ -5583,6 +5615,54 @@
       b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; renderView(); });
     });
   }
+  /* Сроки недели — договоренность команды, правит cap team, лежит под срезом
+     недели: правило и его исполнение рядом. Только неделя: день и месяц с
+     ADR 001 выключены. День 8 — понедельник следующей недели: закрыть прошлую
+     утром, потом собрать новую (Ольга и Павел, 04.09.2026). */
+  var RH_WDAY = [['1', 'пн'], ['2', 'вт'], ['3', 'ср'], ['4', 'чт'], ['5', 'пт'], ['6', 'сб'], ['7', 'вс'], ['8', 'пн следующей']];
+  function loadRhSched(cb) {
+    if (state.rhythmSched) { cb(state.rhythmSched); return; }
+    api('/admin/api/rhythm/schedule').then(function (r) {
+      state.rhythmSched = (r && r.schedule) || null; cb(state.rhythmSched);
+    }).catch(function () { cb(null); });
+  }
+  function renderRhSched(s) {
+    var box = el('rh-sched');
+    if (!box) return;
+    if (!s || !s.week) { box.innerHTML = '<div class="rh-shh">Сроки недели не загрузились.</div>'; return; }
+    var w = s.week;
+    // Время выбором, а не <input type="time">: он рисуется по локали браузера,
+    // и у половины команды срок выглядел бы как «05:00 PM». Шаг полчаса.
+    function timeIn(kind) {
+      var cur = w[kind + '_at'], opts = '';
+      for (var h = 6; h <= 22; h++) for (var m = 0; m < 60; m += 30) {
+        var v = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        opts += '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + v + '</option>';
+      }
+      if (opts.indexOf('value="' + cur + '"') === -1) opts = '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' + opts;
+      return '<select class="al-in sm rh-t" data-f="' + kind + '_at">' + opts + '</select>';
+    }
+    function dayIn(kind) {
+      var cur = String(w[kind + '_day']);
+      return '<select class="al-in sm rh-d" data-f="' + kind + '_day">' + RH_WDAY.map(function (o) {
+        return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      }).join('') + '</select>';
+    }
+    box.innerHTML = '<div class="rh-shh">Сроки недели</div>' +
+      '<div class="rh-sr"><span class="rh-sp">Собрать до</span>' + dayIn('plan') + timeIn('plan') + '</div>' +
+      '<div class="rh-sr"><span class="rh-sp">Закрыть до</span>' + dayIn('report') + timeIn('report') + '</div>' +
+      '<div class="rh-sf"><span class="rh-hint">По Москве. Бот напомнит за час до срока и один раз после.</span>' +
+        '<button class="qchip" id="rh-save">Сохранить</button></div>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-f]'), function (i) {
+      i.addEventListener('change', function () { var f = i.getAttribute('data-f'); w[f] = f.indexOf('_day') > 0 ? +i.value : i.value; });
+    });
+    el('rh-save').addEventListener('click', function () {
+      apiSend('/admin/api/rhythm/schedule', 'PUT', { schedule: s }, function (r) {
+        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null;
+        showToast('Сроки сохранены'); renderView();
+      }, function () { showToast('Не удалось сохранить сроки'); });
+    });
+  }
   function loadTeamStats() {
     state.tasksLoading = true;
     api('/admin/api/rhythm/team/stats?period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
@@ -5597,6 +5677,7 @@
       wireTeamMode(view); return;
     }
     var d = state.teamStats, t = d.totals || {};
+    var stuckN = (d.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0);
     var per = '<div class="pay-seg plan-seg">' + [['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
       return '<button type="button" class="' + (state.teamPeriod === m[0] ? 'on' : '') + '" data-teamper="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
@@ -5608,8 +5689,8 @@
     var stats = '<div class="mo-stats">' +
       '<div class="mo-stat"><b class="num">' + (t.pct || 0) + '%</b><span>плана сделано командой</span></div>' +
       '<div class="mo-stat"><b class="num">' + (t.done || 0) + ' <i>из ' + (t.plan || 0) + '</i></b><span>задач за период</span></div>' +
-      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>переносов</span></div>' +
-      '<div class="mo-stat"><b class="num">' + (d.people || []).length + '</b><span>' + plural((d.people || []).length, 'человек', 'человека', 'человек') + ' с задачами</span></div></div>';
+      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>' + plural(t.carried || 0, 'перенос', 'переноса', 'переносов') + '</span></div>' +
+      '<div class="mo-stat"><b class="num">' + stuckN + '</b><span>застряло</span></div></div>';
     function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
     var head = '<div class="trow ts-grid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
       '<span class="th">План</span><span class="th">Вовремя</span><span class="th">Переносы</span><span class="th">Застряло</span><span class="th">Недели</span><span class="th">Серия</span></div>';
@@ -5618,13 +5699,14 @@
         '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
           '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
         n(p.plan, '', 'Взял') + n(p.done, 'ok', 'Сделано') +
-        '<span class="brd-n num ts-pct' + (p.pct >= 80 ? ' ok' : p.plan && p.pct < 50 ? ' bad' : '') + '" data-l="План">' + p.pct + '%</span>' +
+        '<span class="brd-n num ts-pct" data-l="План">' + p.pct + '%</span>' +
         n(p.on_time, 'ok', 'Вовремя') + n(p.carried, 'bad', 'Переносы') + n(p.stuck, 'bad', 'Застряло') +
-        '<span class="brd-n num" data-l="Недели">' + p.weeks_closed + '<i>/' + p.weeks_past + '</i></span>' +
-        '<span class="brd-n num' + (p.streak >= 3 ? ' ok' : '') + '" data-l="Серия">' + p.streak + '</span>' +
+        '<span class="brd-n num" data-l="Недели"><span class="v">' + p.weeks_closed + '<i>/' + p.weeks_past + '</i></span></span>' +
+        '<span class="brd-n num" data-l="Серия">' + p.streak + '</span>' +
       '</div>';
     }).join('');
-    var depts = (d.depts || []).length
+    // Один отдел повторил бы шапку посимвольно — таблица только при двух и больше.
+    var depts = (d.depts || []).length > 1
       ? '<div class="card listcard ts-depts"><div class="dy-h"><span class="t">По отделам</span></div>' +
         '<div class="trow ts-dgrid thead"><span class="th">Отдел</span><span class="th">Взял</span><span class="th">Сделано</span><span class="th">План</span><span class="th">Переносы</span></div>' +
         d.depts.map(function (x) {
@@ -5632,7 +5714,7 @@
             '<span class="brd-n num ts-pct" data-l="План">' + x.pct + '%</span>' + n(x.carried, 'bad', 'Переносы') + '</div>';
         }).join('') + '</div>'
       : '';
-    view.innerHTML = '<div class="wk-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats +
       '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div></div>' +
       depts;
@@ -5672,19 +5754,22 @@
     if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
     var byWeek = {}, order = [];
     list.forEach(function (r) { if (!byWeek[r.starts]) { byWeek[r.starts] = { label: r.label, rows: [] }; order.push(r.starts); } byWeek[r.starts].rows.push(r); });
+    var head = '<div class="trow rp-grid thead"><span class="th">Сотрудник</span><span class="th">Сделано</span>' +
+      '<span class="th">План</span><span class="th">Перенос</span><span class="th">Итог</span></div>';
     var body = order.map(function (k) {
       var g = byWeek[k];
       return '<div class="tsk-band"><span class="tsk-band-t">' + esc(g.label) + '</span><span class="tsk-band-n num">' + g.rows.length + '</span></div>' +
         g.rows.map(function (r) {
           var f = r.facts || {}, rv = RH_REVIEW[(r.review || {}).state] || RH_REVIEW.pending;
           var pct = f.plan ? Math.round((f.done || 0) / f.plan * 100) : 0;
-          return '<div class="trow rp-grid" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
+          return '<div class="trow rp-grid' + (r.text ? ' has-note' : '') + '" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
             '<div class="brd-who"><span class="tsk-av">' + esc(initials(r.name)) + '</span>' +
-              '<span class="brd-nm">' + esc(r.name) + (r.text ? '<span class="t-sub">' + esc(r.text) + '</span>' : '') + '</span></div>' +
-            '<span class="brd-n num" data-l="Сделано">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span>' +
-            '<span class="brd-n num ts-pct' + (pct >= 80 ? ' ok' : f.plan && pct < 50 ? ' bad' : '') + '" data-l="План">' + pct + '%</span>' +
+              '<span class="brd-nm">' + esc(r.name) + '<span class="t-sub">' + esc(r.role_label || '') + '</span></span></div>' +
+            '<span class="brd-n num" data-l="Сделано"><span class="v">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span></span>' +
+            '<span class="brd-n num ts-pct" data-l="План">' + pct + '%</span>' +
             '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
             '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
+            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(r.text) + '</span></div>' : '') +
           '</div>';
         }).join('');
     }).join('');
@@ -5692,7 +5777,7 @@
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Человек, неделя, что мешало" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
-      '<div class="card listcard"><div class="list-body">' + (body || '<div class="empty">Закрытых недель пока нет. Отчет появляется, когда человек закрывает неделю.</div>') + '</div></div>';
+      '<div class="card listcard"><div class="list-body">' + (body ? head + body : '<div class="empty">Закрытых недель пока нет. Отчет появляется, когда человек закрывает неделю.</div>') + '</div></div>';
     wireTeamMode(view);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
@@ -5776,9 +5861,11 @@
       '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
       idle +
       (b.caps ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
-    '</div>';
+    '</div>' +
+      (can('team') ? '<div class="card rh-sched-card"><div class="rh-sched" id="rh-sched"></div></div>' : '');
 
     wkWireNav(view); wireTeamMode(view);
+    if (el('rh-sched')) loadRhSched(function (s) { if (el('rh-sched')) renderRhSched(s); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -6453,8 +6540,8 @@
      задачи: срок двигают на бегу и по одной штуке, ради одной даты открывать
      форму со всеми полями — четыре лишних клика и риск задеть соседнее.
 
-     Кто двигает — только суперадмин (cap tasks_due, правило Павла 19.08.2026),
-     поэтому для остальных плашка остается подписью и поповера у нее нет. */
+     Кто двигает — исполнитель свою и суперадмин любую (cap tasks_due; Павел
+     04.09.2026); у остальных плашка остается подписью и поповера у нее нет. */
   function duePop(anchor, task, after) {
     var host = anchor.parentNode;
     var open = host.querySelector('.due-pop');
@@ -6573,7 +6660,9 @@
       var boss = isAuthor || can('tasks_all');
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.
-      var canDue = can('tasks_due') && t.status !== 'done' && t.status !== 'cancel';
+      // Свой срок исполнитель двигает сам: раньше молча, позже — с сообщением
+      // постановщику (Павел, 04.09.2026). Чужой — только cap tasks_due.
+      var canDue = (can('tasks_due') || isAssignee) && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.

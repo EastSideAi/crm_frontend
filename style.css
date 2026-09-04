@@ -2225,6 +2225,9 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   font-size: 10.5px; font-weight: 700; color: #fff; letter-spacing: -.01em;
   background: linear-gradient(140deg, var(--blue), var(--navy)); }
 .tsk-nobody { color: var(--ink-3); font-weight: 500; }
+.dy-today { opacity: 0; transition: opacity .14s; }
+.trow.dy-row:hover .dy-today, .trow.dy-row:focus-within .dy-today { opacity: 1; }
+@media (max-width: 720px) { .dy-today { opacity: 1; } }
 .tsk-due { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px; }
 .tsk-due svg { color: var(--ink-3); }
@@ -7311,13 +7314,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .rh-await.quiet svg { color: var(--ink-3); }
 @media (max-width: 720px) {
   .wk-search { order: 5; flex-basis: 100%; }
-  .trow.wk-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; height: auto;
+  /* Одна раскладка клетки на телефоне для недели, итогов и архива: человек во
+     всю строку, число под подписью из data-l. Значение — один элемент (.v),
+     иначе «1/3» рвется на две строки. */
+  .trow.wk-grid, .trow.ts-grid, .trow.ts-dgrid, .trow.rp-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; height: auto;
     padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
-  .trow.wk-grid.thead { display: none; }
-  .trow.wk-grid .brd-who { grid-column: 1 / -1; }
-  .trow.wk-grid .rh-c, .trow.wk-grid .brd-n { display: flex; flex-direction: column; align-items: flex-start;
-    gap: 3px; text-align: left; }
-  .trow.wk-grid .rh-c::before, .trow.wk-grid .brd-n::before { content: attr(data-l); font-size: 10.5px;
+  .trow.wk-grid.thead, .trow.ts-grid.thead, .trow.ts-dgrid.thead, .trow.rp-grid.thead { display: none; }
+  .trow.wk-grid .brd-who, .trow.ts-grid .brd-who, .trow.rp-grid .brd-who { grid-column: 1 / -1; }
+  .trow.wk-grid .rh-c, .trow.wk-grid .brd-n, .trow.ts-grid .brd-n, .trow.ts-dgrid .brd-n, .trow.rp-grid .brd-n, .trow.rp-grid .rh-c {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; }
+  .trow.wk-grid .rh-c::before, .trow.wk-grid .brd-n::before, .trow.ts-grid .brd-n::before, .trow.ts-dgrid .brd-n::before,
+  .trow.rp-grid .brd-n::before, .trow.rp-grid .rh-c::before { content: attr(data-l); font-size: 10.5px;
     font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.wk-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
   .wk-row.later { grid-template-columns: minmax(0,1fr) !important; }
@@ -7457,7 +7464,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   /* Шапка не должна съедать полэкрана: отделы одной строкой с прокруткой,
      импорт встречи — иконкой рядом с поиском. */
   .gl-tools { gap: 8px; }
-  .dept-seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; flex: 1 1 100%; }
+  .dept-seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; flex: 1 1 100%;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
   .dept-seg::-webkit-scrollbar { display: none; }
   .dept-seg button { white-space: nowrap; }
   .gl-search { flex: 1; min-width: 0; }
@@ -7496,9 +7504,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 
 /* ── Команда: итоги и архив отчетов ──────────────────────────────────────────
-   Таблица дашборда — та же строка .trow с числами .brd-n, что у недели; процент
-   зеленеет от 80 и краснеет ниже 50 при непустом плане. Отделы — вторая
-   таблица ниже. Архив — полосы недель на .tsk-band и строки на .trow. */
+   Таблица дашборда — та же строка .trow с числами .brd-n, что у недели. Процент
+   и серия чернилами: красное на экране только переносы и застрявшее (красный
+   процент в незакрытом месяце врал бы). Отделы — вторая таблица, только когда
+   их больше одного. Архив — полосы недель на .tsk-band и строки на .trow;
+   «что мешало» второй строкой тем же .rh-note, что на «Неделе». Раскладка
+   клетки на телефоне общая с .wk-grid. */
 .ts-grid { grid-template-columns: minmax(180px, 300px) repeat(8, minmax(56px, 1fr)); cursor: pointer; }
 .ts-grid .th:nth-child(n+2), .ts-grid .brd-n { text-align: right; }
 .ts-dgrid { grid-template-columns: minmax(160px, 1fr) repeat(4, minmax(64px, 120px)); }
@@ -7508,18 +7519,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .brd-n i { font-style: normal; color: var(--ink-3); font-weight: 600; }
 .brd-n.ts-pct { font-weight: 800; }
 .rp-grid { grid-template-columns: minmax(200px, 1fr) 80px 70px 70px 200px; cursor: pointer; }
-.rp-grid .brd-n { text-align: right; }
-.rp-grid .brd-nm .t-sub { white-space: normal; }
+.rp-grid .th:nth-child(n+2), .rp-grid .brd-n { text-align: right; }
 .rp-grid .rh-c { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.trow.rp-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.rh-sched-card { margin-top: 16px; }
+.rh-sched-card .rh-sched { border-top: 0; }
 @media (max-width: 720px) {
-  .trow.ts-grid, .trow.ts-dgrid, .trow.rp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; height: auto;
-    padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
-  .trow.ts-grid.thead, .trow.ts-dgrid.thead { display: none; }
-  .trow.ts-grid .brd-who, .trow.rp-grid .brd-who, .trow.ts-dgrid .brd-nm { grid-column: 1 / -1; }
-  .trow.ts-grid .brd-n, .trow.ts-dgrid .brd-n, .trow.rp-grid .brd-n, .trow.rp-grid .rh-c { display: flex; flex-direction: column;
-    align-items: flex-start; gap: 3px; text-align: left; }
-  .trow.ts-grid .brd-n::before, .trow.ts-dgrid .brd-n::before, .trow.rp-grid .brd-n::before, .trow.rp-grid .rh-c::before { content: attr(data-l);
-    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.ts-grid, .trow.ts-dgrid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .trow.ts-dgrid .brd-nm { grid-column: 1 / -1; }
+  /* Период и стрелки одной строкой, отделы — последней: шапка не должна
+     съедать пол-экрана до первой цифры. */
+  .ts-top .wk-spacer { flex-basis: 0; }
+  .ts-top .dept-seg { order: 5; }
 }
 
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
