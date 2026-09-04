@@ -4908,7 +4908,7 @@
       }).join('');
       var free = people.filter(function (x) { return ids.indexOf(x.id) === -1 && x.id !== opts.except; });
       var sel = free.length
-        ? '<span class="al-selwrap pp-addw"><select class="al-sel sm pp-add"><option value="">+ ' + (ids.length ? 'еще' : 'участник') + '</option>' +
+        ? '<span class="al-selwrap pp-addw"><select class="al-sel sm pp-add"><option value="">+ ' + (ids.length ? 'еще' : (opts.word || 'человек')) + '</option>' +
             free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select></span>'
         : '';
       box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
@@ -5168,7 +5168,7 @@
               ? '<button class="tsk-chk submit" data-submit="' + t.id + '" title="Сдать на проверку">' + ic('check', 12) + '</button>'
               : (opts.tickSlot !== false && !opts.readOnly ? '<span class="tsk-chk quiet"></span>' : '')));
     var meta = dyRoles(t, opts);
-    if (t.client_name) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
+    if (t.client_name && !opts.noClient) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
     // Шаг цели носит метку цели: план и цели — одна сущность; клик открывает цель.
     if (!opts.noGoal && t.parent_id && t.parent_title) {
       meta.push('<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>');
@@ -6237,11 +6237,11 @@
             return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
           }).join('');
           var pp = box.querySelector('.gl-add-pp'), px = box.querySelector('.gl-add-ex');
-          pick = peoplePick(pp, [], people, { except: +who.value || null });
-          pickEx = peoplePick(px, [], people, { except: +who.value || null });
+          pick = peoplePick(pp, [], people, { except: +who.value || null, word: 'наблюдатель' });
+          pickEx = peoplePick(px, [], people, { except: +who.value || null, word: 'исполнитель' });
           who.addEventListener('change', function () {
-            pick = peoplePick(pp, pick.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null });
-            pickEx = peoplePick(px, pickEx.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null });
+            pick = peoplePick(pp, pick.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null, word: 'наблюдатель' });
+            pickEx = peoplePick(px, pickEx.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null, word: 'исполнитель' });
           });
         });
       }
@@ -6576,7 +6576,7 @@
           // Та же двухъярусная строка, что в плане и целях: галочка (сдать или
           // принять), название, роли подписями, срок справа.
           var rows = g.tasks.map(function (t) {
-            return dyRow(t, { who: true, due: true, noGoal: true, boss: true, tickSlot: true });
+            return dyRow(t, { who: true, due: true, noGoal: true, noClient: true, boss: true, tickSlot: true });
           }).join('');
           return '<div class="stu-g">' + (g.label ? '<div class="stu-gl">' + esc(g.label) + '</div>' : '') + rows + '</div>';
         }).join('');
@@ -7204,11 +7204,11 @@
             }, function () { showToast('Не получилось поменять роли'); });
           };
           peoplePick(box.querySelector('.tsk-role-ex'), execIds, people, {
-            except: t.assignee_id,
+            except: t.assignee_id, word: 'исполнитель',
             onChange: function (ids) { save({ executors: ids }, 'Исполнители обновлены'); }
           });
           peoplePick(box.querySelector('.tsk-role-w'), watchIds, people, {
-            except: t.assignee_id,
+            except: t.assignee_id, word: 'наблюдатель',
             onChange: function (ids) { save({ watchers: ids }, 'Наблюдатели обновлены'); }
           });
         });
@@ -7508,12 +7508,12 @@
 
       // Участники: ответственный из списка исключается, при смене «кому» —
       // пересобирается.
-      var partPick = el('nt-watch') ? peoplePick(el('nt-watch'), [], people, { except: +el('nt-who').value || null }) : null;
-      var execPick = el('nt-exec') ? peoplePick(el('nt-exec'), [], people, { except: +el('nt-who').value || null }) : null;
+      var partPick = el('nt-watch') ? peoplePick(el('nt-watch'), [], people, { except: +el('nt-who').value || null, word: 'наблюдатель' }) : null;
+      var execPick = el('nt-exec') ? peoplePick(el('nt-exec'), [], people, { except: +el('nt-who').value || null, word: 'исполнитель' }) : null;
       el('nt-who').addEventListener('change', function () {
         var w = +el('nt-who').value || null;
-        if (partPick) partPick = peoplePick(el('nt-watch'), partPick.get().filter(function (x) { return x !== w; }), people, { except: w });
-        if (execPick) execPick = peoplePick(el('nt-exec'), execPick.get().filter(function (x) { return x !== w; }), people, { except: w });
+        if (partPick) partPick = peoplePick(el('nt-watch'), partPick.get().filter(function (x) { return x !== w; }), people, { except: w, word: 'наблюдатель' });
+        if (execPick) execPick = peoplePick(el('nt-exec'), execPick.get().filter(function (x) { return x !== w; }), people, { except: w, word: 'исполнитель' });
       });
       var impB = el('nt-imp');
       impB.addEventListener('click', function () { impB.classList.toggle('on'); });
