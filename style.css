@@ -6165,7 +6165,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* тарифы */
 .po-tariffs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
 .po-tcard { padding: 21px; position: relative; }
-.po-tcard.accent { border-color: #CFE0FF; }
+.po-tcard.accent { border-color: var(--blue); }
 .po-tflag { position: absolute; top: 17px; right: 17px; }
 .po-tname { font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
 .po-tpos { margin-top: 5px; min-height: 54px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
@@ -6295,7 +6295,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    рядом тихая и зачеркнутая, выгода — единственное цветное пятно. */
 .po-pcards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .po-pcard { padding: 20px 21px; }
-.po-pcard.accent { border-color: #CFE0FF; }
+.po-pcard.accent { border-color: var(--blue); }
 .po-prow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   margin-top: 13px; font-size: 12.5px; color: var(--ink-3); }
 .po-prow b { font-size: 15px; font-weight: 700; color: var(--ink-2); letter-spacing: -.02em; }
