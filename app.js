@@ -17009,11 +17009,18 @@
   function portalGuarantee(p) {
     var g = p.guarantee;
     if (!g || !(g.items || []).length) return '';
+    /* открытые вопросы рисуем тем же рецептом, что у способов оплаты: пока условие
+       не утверждено, диагност не должен пересказывать его семье как обещание */
+    var open = (g.open || []).map(function (r) {
+      return '<div class="po-openi">' + ic('alert', 13) + '<span>' + esc(r) + '</span></div>';
+    }).join('');
     return '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('award', 14) + '</span>' +
         '<div><div class="t">' + esc(g.title || 'Гарантии') + '</div>' +
         '<div class="s">что обещаем словами договора, а что не обещаем никогда</div></div></div>' +
-      '<div class="po-feats">' + portalNotes(g.items, 'check') + '</div></div>';
+      '<div class="po-feats">' + portalNotes(g.items, 'check') + '</div>' +
+      (open ? '<div class="po-fsec"><div class="po-flbl">Не утверждено</div><div class="po-opens">' + open + '</div></div>' : '') +
+    '</div>';
   }
   function portalWirePay(view, p) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-popay]'), function (b) {
