@@ -5068,8 +5068,19 @@
     return wd + ', ' + d.getDate() + ' ' + DY_MON[d.getMonth()];
   }
   /* Строка дня: галочка, название, справа только отклонение от нормы. */
+  function dyAv(name, cls) {
+    return '<span class="dy-av' + (cls ? ' ' + cls : '') + '" title="' + esc(name) + '">' + esc(initials(name)) + '</span>';
+  }
+  /* Строка задачи: два яруса. Сверху название, снизу — кто делает, кто поставил,
+     кто участвует (Павел 04.09.2026: исполнитель, постановщик и участники видны
+     всегда). Свое имя в своем плане не повторяем; чужое — с кружком инициалов.
+     Справа срок (в целях — всегда, в дне — только просрочка) и статус, если он
+     отклонение. opts: who — показать исполнителя даже если это я; due — срок
+     всегда; boss — галочка руководителю; tickSlot — держать место под галочку;
+     noGoal — без метки цели; accept — строка приемки; today — «на сегодня». */
   function dyRow(t, opts) {
     opts = opts || {};
+    var me = state.taskMe;
     var own = isOwnTask(t);
     // В «Тебе сдали» задача чужая и живая: зачеркивать ее нечего.
     var closed = !opts.accept && (t.status === 'done' || t.status === 'review' || t.status === 'cancel');
@@ -5078,6 +5089,8 @@
       // Под полосой «Просрочено» слово не повторяем — только на сколько.
       var od = dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
       if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
+    } else if (t.due_at && !closed && (opts.who || opts.due)) {
+      right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
     }
     // Статус только там, где он отклонение: в «Тебе сдали» все на приемке, и
     // чип повторял бы заголовок карточки.
@@ -5086,22 +5099,38 @@
       right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     }
     if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
-    if (opts.who && t.due_at && !t.overdue) right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
     // «На сегодня» у своей завтрашней задачи: раньше исполнитель двигает сам.
-    var mine = !!(state.taskMe && t.assignee_id === state.taskMe);
+    var mine = !!(me && t.assignee_id === me);
     if (opts.today && mine && !closed) right += '<button class="qchip dy-today" data-today="' + t.id + '">на сегодня</button>';
-    var quick = '';
-    if (closed) quick = '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>';
-    else if (own && !opts.readOnly) quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
-    // Шаг цели носит метку цели: план и цели — одна сущность, и это должно
-    // быть видно в строке (Павел 04.09.2026); клик открывает цель.
-    var goalTag = !opts.noGoal && t.parent_id && t.parent_title
-      ? '<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>' : '';
-    var tail = ((opts.accept || opts.who) && t.assignee_name
-      ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
-      : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '')) + goalTag;
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
-      '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' + tail + '</div>' +
+    var canTick = !closed && !opts.readOnly && (own || (opts.boss && can('tasks_all')));
+    var quick = closed
+      ? '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>'
+      : (canTick
+          ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>'
+          : (opts.tickSlot ? '<span class="tsk-chk quiet"></span>' : ''));
+    var meta = [];
+    if (t.assignee_name && (opts.who || opts.accept || t.assignee_id !== me)) {
+      meta.push('<span class="dy-m">' + dyAv(t.assignee_name) + '<b>' + esc(t.assignee_name) + '</b></span>');
+    } else if (!t.assignee_id) {
+      meta.push('<span class="dy-m dy-none">без исполнителя</span>');
+    }
+    if (t.author_name && t.author_id !== me && t.author_id !== t.assignee_id) {
+      meta.push('<span class="dy-m">поставил ' + esc(t.author_name) + '</span>');
+    }
+    var parts = t.participants || [];
+    if (parts.length) {
+      meta.push('<span class="dy-m dy-avs" title="' + esc(parts.map(function (x) { return x.name; }).join(', ')) + '">' +
+        parts.slice(0, 3).map(function (x) { return dyAv(x.name, 'part'); }).join('') +
+        (parts.length > 3 ? '<span class="dy-av part">+' + (parts.length - 3) + '</span>' : '') + '</span>');
+    }
+    if (t.client_name) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
+    // Шаг цели носит метку цели: план и цели — одна сущность; клик открывает цель.
+    if (!opts.noGoal && t.parent_id && t.parent_title) {
+      meta.push('<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>');
+    }
+    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
+      '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
+        (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
   }
@@ -6002,26 +6031,8 @@
     return out;
   }
   function glStepRow(st, g) {
-    var own = isOwnTask(st) || can('tasks_all');
-    var closed = st.status === 'done' || st.status === 'cancel';
-    var right = '';
-    // Срок у шага показываем, только если он свой: унаследованный от цели на
-    // каждой строке — это тот же срок, повторенный пять раз.
-    var ownDue = st.due_at && !(g && g.due_at && dyDayOf(st.due_at) === dyDayOf(g.due_at));
-    if (st.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(st).text) + '</span>';
-    else if (ownDue && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
-    if (st.status === 'review' || st.status === 'return' || st.status === 'block') {
-      right += '<span class="sev ' + TASK_ST[st.status].cls + '">' + TASK_ST[st.status].label + '</span>';
-    }
-    var who = st.assignee_name && st.assignee_id !== state.taskMe ? '<span class="dy-cl">' + esc(st.assignee_name) + '</span>' : '';
-    var chk = closed
-      ? '<span class="tsk-chk done">' + ic('check', 12) + '</span>'
-      : (own && st.status !== 'review'
-          ? '<button class="tsk-chk" data-done="' + st.id + '" title="Сделано">' + ic('check', 12) + '</button>'
-          : '<span class="tsk-chk" style="cursor:default"></span>');
-    return '<div class="trow dy-row gl-step' + (closed ? ' closed' : '') + (st.overdue ? ' r-crit' : '') + '" data-tid="' + st.id + '">' +
-      '<div class="dy-t">' + chk + '<span class="dy-ttl">' + esc(st.title) + '</span>' + who + '</div>' +
-      '<div class="dy-r">' + right + '</div></div>';
+    // Под целью шаг показывает исполнителя и срок всегда: здесь на них и смотрят.
+    return dyRow(st, { who: true, due: true, noGoal: true, boss: true, tickSlot: true });
   }
   function glGoalCard(g) {
     var total = g.steps_total || 0, done = g.steps_done || 0;
@@ -6036,7 +6047,15 @@
     var complete = total && done === total && g.status !== 'done';
     var steps = open
       ? '<div class="gl-steps">' + (g.steps || []).map(function (st) { return glStepRow(st, g); }).join('') +
-          '<div class="gl-add"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг и Enter" autocomplete="off"></div>' +
+          // Композер шага: одна строка, по фокусу раскрываются кому / день /
+          // участники (Павел 04.09.2026: шаг ставится сразу с людьми и сроком).
+          '<div class="gl-add" data-add-for="' + g.id + '"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг" autocomplete="off">' +
+            '<div class="gl-add-more" hidden>' +
+              '<label class="gl-add-f"><span>Кому</span><select class="al-sel sm gl-add-who"></select></label>' +
+              '<label class="gl-add-f"><span>День</span><input type="date" class="al-in sm gl-add-day" value="' + (g.due_at ? dyDayOf(g.due_at) : '') + '"></label>' +
+              '<div class="gl-add-f gl-add-part"><span>Участники</span><div class="gl-add-pp"></div></div>' +
+              '<button type="button" class="bp sm gl-add-go">Добавить</button>' +
+            '</div></div>' +
         '</div>'
       : '';
     return '<div class="gl-card' + (open ? ' open' : '') + (complete ? ' complete' : '') + '" data-gid="' + g.id + '">' +
@@ -6071,6 +6090,7 @@
       var adding = state.glNew === (grp.dept || '~');
       var addRow = adding
         ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
+            '<select class="al-sel sm gl-goal-who" title="Кто ведет"><option value="">Кто ведет</option></select>' +
             '<select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select>' +
             '<button class="qchip gl-goal-x" type="button">Отмена</button></div>'
         : '';
@@ -6136,20 +6156,48 @@
       b.addEventListener('click', function (e) { e.stopPropagation(); taskDone(+b.getAttribute('data-done'), b); });
     });
     // Новый шаг: одна строка. Кому и срок — от цели, отдел сервер берет у цели сам.
-    Array.prototype.forEach.call(view.querySelectorAll('[data-step-for]'), function (inp) {
-      inp.addEventListener('click', function (e) { e.stopPropagation(); });
-      inp.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter') return;
-        var title = inp.value.trim(); if (!title) return;
-        var gid = +inp.getAttribute('data-step-for');
-        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
-        inp.disabled = true;
-        apiSend('/admin/api/tasks', 'POST', { title: title, parent_id: gid, assignee_id: g.assignee_id || state.taskMe || null,
-                                              due_at: g.due_at || null }, function () {
+    Array.prototype.forEach.call(view.querySelectorAll('.gl-add'), function (box) {
+      var gid = +box.getAttribute('data-add-for');
+      var inp = box.querySelector('.gl-add-in'), more = box.querySelector('.gl-add-more');
+      var who = box.querySelector('.gl-add-who'), day = box.querySelector('.gl-add-day'), go = box.querySelector('.gl-add-go');
+      var pick = null;
+      var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+      box.addEventListener('click', function (e) { e.stopPropagation(); });
+      function open() {
+        if (!more.hidden) return;
+        more.hidden = false;
+        loadTaskPeople(function (people) {
+          var def = g.assignee_id || state.taskMe;
+          who.innerHTML = people.map(function (x) {
+            return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
+          }).join('');
+          var pp = box.querySelector('.gl-add-pp');
+          pick = peoplePick(pp, [], people, { except: +who.value || null });
+          who.addEventListener('change', function () {
+            pick = peoplePick(pp, pick.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null });
+          });
+        });
+      }
+      function send() {
+        var title = inp.value.trim(); if (!title) { inp.focus(); return; }
+        inp.disabled = true; go.disabled = true;
+        var d = day.value;
+        apiSend('/admin/api/tasks', 'POST', {
+          title: title, parent_id: gid,
+          assignee_id: who.value ? +who.value : (g.assignee_id || state.taskMe || null),
+          due_at: d ? new Date(d + 'T23:59:59').toISOString() : (g.due_at || null),
+          participants: pick ? pick.get() : [],
+        }, function () {
           state.tasks = null; loadTaskSummary(); renderView();
           var again = view.querySelector('[data-step-for="' + gid + '"]'); if (again) again.focus();
-        }, function (err) { inp.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+        }, function (err) { inp.disabled = false; go.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+      }
+      inp.addEventListener('focus', open);
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); send(); }
+        if (e.key === 'Escape') inp.blur();
       });
+      go.addEventListener('click', send);
     });
     // Новая цель: название и месяц. Ведет тот, кто завел; поправить можно в карточке.
     Array.prototype.forEach.call(view.querySelectorAll('[data-newgoal]'), function (b) {
@@ -6162,6 +6210,12 @@
     if (gx) gx.addEventListener('click', function () { state.glNew = ''; renderView(); });
     var gi = view.querySelector('.gl-goal-in');
     if (gi) {
+      loadTaskPeople(function (people) {
+        var gw = view.querySelector('.gl-goal-who'); if (!gw) return;
+        gw.innerHTML = people.map(function (x) {
+          return '<option value="' + x.id + '"' + (x.id === state.taskMe ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
+        }).join('');
+      });
       gi.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { state.glNew = ''; renderView(); return; }
         if (e.key !== 'Enter') return;
@@ -6169,7 +6223,8 @@
         var dept = gi.getAttribute('data-goal-for') || '';
         var mon = view.querySelector('.gl-goal-mon').value;
         gi.disabled = true;
-        apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: state.taskMe || null,
+        var gwho = view.querySelector('.gl-goal-who');
+        apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: (gwho && +gwho.value) || state.taskMe || null,
                                               due_at: new Date(mon + 'T23:59:59').toISOString() }, function (r) {
           state.glNew = ''; state.tasks = null;
           if (r && r.task) state.glOpen[r.task.id] = true;
