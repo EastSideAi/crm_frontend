@@ -71,6 +71,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
+    teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     taskWho: null,
@@ -5567,7 +5568,141 @@
      закрыта ли. Руководитель читает экран по исключениям: сверху те, у кого нет
      плана или что-то застряло. Клик по имени — его неделя целиком; клик по
      «ждет приемки» — карточка приемки. */
+  /* ── Команда: неделя (исключения) / итоги (дашборд) / отчеты (архив) ─────────
+     Павел 04.09.2026: «отдельный блок со всеми отчетами по людям, дашборд
+     эффективности, где у кого получается и где нет». Дашборд без рейтинга:
+     строки по имени, цифры без сравнения людей между собой (planner-research.md,
+     §7). Серия — сколько недель подряд закрыто, нейтральная информация. */
+  function teamModeSeg() {
+    return '<div class="pay-seg plan-seg">' + [['week', 'Неделя'], ['stats', 'Итоги'], ['reports', 'Отчеты']].map(function (m) {
+      return '<button type="button" class="' + (state.teamMode === m[0] ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  function wireTeamMode(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-teammode]'), function (b) {
+      b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; renderView(); });
+    });
+  }
+  function loadTeamStats() {
+    state.tasksLoading = true;
+    api('/admin/api/rhythm/team/stats?period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
+      state.tasksLoading = false; state.teamStats = r || 'none';
+      if (state.page === 'tasks') renderView();
+    }).catch(function () { state.tasksLoading = false; state.teamStats = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function renderTeamStats(view) {
+    if (state.teamStats === null) { view.innerHTML = dashSkeleton(); loadTeamStats(); return; }
+    if (state.teamStats === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать итоги. Обнови страницу.</div></div>'; return; }
+    var d = state.teamStats, t = d.totals || {};
+    var per = '<div class="pay-seg plan-seg">' + [['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
+      return '<button type="button" class="' + (state.teamPeriod === m[0] ? 'on' : '') + '" data-teamper="' + m[0] + '">' + m[1] + '</button>';
+    }).join('') + '</div>';
+    var nav = '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="ts-prev">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(d.label || '') + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="ts-next">' + ic('go', 15) + '</button>' +
+      (state.teamShift ? '<button class="qchip" id="ts-now">Сейчас</button>' : '') + '</div>';
+    var stats = '<div class="mo-stats">' +
+      '<div class="mo-stat"><b class="num">' + (t.pct || 0) + '%</b><span>плана сделано командой</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (t.done || 0) + ' <i>из ' + (t.plan || 0) + '</i></b><span>задач за период</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>переносов</span></div>' +
+      '<div class="mo-stat"><b class="num">' + (d.people || []).length + '</b><span>' + plural((d.people || []).length, 'человек', 'человека', 'человек') + ' с задачами</span></div></div>';
+    function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
+    var head = '<div class="trow ts-grid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+      '<span class="th">План</span><span class="th">Вовремя</span><span class="th">Переносы</span><span class="th">Застряло</span><span class="th">Недели</span><span class="th">Серия</span></div>';
+    var rows = (d.people || []).map(function (p) {
+      return '<div class="trow ts-grid" data-uid="' + p.id + '">' +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
+        n(p.plan, '', 'Взял') + n(p.done, 'ok', 'Сделано') +
+        '<span class="brd-n num ts-pct' + (p.pct >= 80 ? ' ok' : p.plan && p.pct < 50 ? ' bad' : '') + '" data-l="План">' + p.pct + '%</span>' +
+        n(p.on_time, 'ok', 'Вовремя') + n(p.carried, 'bad', 'Переносы') + n(p.stuck, 'bad', 'Застряло') +
+        '<span class="brd-n num" data-l="Недели">' + p.weeks_closed + '<i>/' + p.weeks_past + '</i></span>' +
+        '<span class="brd-n num' + (p.streak >= 3 ? ' ok' : '') + '" data-l="Серия">' + p.streak + '</span>' +
+      '</div>';
+    }).join('');
+    var depts = (d.depts || []).length
+      ? '<div class="card listcard ts-depts"><div class="dy-h"><span class="t">По отделам</span></div>' +
+        '<div class="trow ts-dgrid thead"><span class="th">Отдел</span><span class="th">Взял</span><span class="th">Сделано</span><span class="th">План</span><span class="th">Переносы</span></div>' +
+        d.depts.map(function (x) {
+          return '<div class="trow ts-dgrid"><span class="brd-nm">' + esc(x.label) + '</span>' + n(x.plan, '', 'Взял') + n(x.done, 'ok', 'Сделано') +
+            '<span class="brd-n num ts-pct" data-l="План">' + x.pct + '%</span>' + n(x.carried, 'bad', 'Переносы') + '</div>';
+        }).join('') + '</div>'
+      : '';
+    view.innerHTML = '<div class="wk-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+      stats +
+      '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div></div>' +
+      depts;
+    wireTeamMode(view); wireDeptChips(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-teamper]'), function (b) {
+      b.addEventListener('click', function () { state.teamPeriod = b.getAttribute('data-teamper'); state.teamShift = 0; state.teamStats = null; renderView(); });
+    });
+    function go(x) { state.teamShift = Math.max(-12, Math.min(4, (state.teamShift || 0) + x)); state.teamStats = null; renderView(); }
+    if (el('ts-prev')) el('ts-prev').addEventListener('click', function () { go(-1); });
+    if (el('ts-next')) el('ts-next').addEventListener('click', function () { go(1); });
+    if (el('ts-now')) el('ts-now').addEventListener('click', function () { state.teamShift = 0; state.teamStats = null; renderView(); });
+    // Клик по человеку — его недели: та же карточка, что на «Неделе».
+    Array.prototype.forEach.call(view.querySelectorAll('.ts-grid[data-uid]'), function (row) {
+      row.addEventListener('click', function () {
+        var uid = +row.getAttribute('data-uid');
+        var who = (d.people || []).filter(function (x) { return x.id === uid; })[0];
+        state.teamMode = 'week'; state.teamWho = { id: uid, name: who ? who.name : '' };
+        state.teamWeek = null; state.tasks = null; renderView();
+      });
+    });
+  }
+  function loadTeamReports() {
+    state.tasksLoading = true;
+    api('/admin/api/rhythm/reports?limit=80').then(function (r) {
+      state.tasksLoading = false; state.teamReports = r || 'none';
+      if (state.page === 'tasks') renderView();
+    }).catch(function () { state.tasksLoading = false; state.teamReports = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function renderTeamReports(view) {
+    if (state.teamReports === null) { view.innerHTML = dashSkeleton(); loadTeamReports(); return; }
+    if (state.teamReports === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить отчеты. Обнови страницу.</div></div>'; return; }
+    var list = (state.teamReports.reports || []);
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
+    var byWeek = {}, order = [];
+    list.forEach(function (r) { if (!byWeek[r.starts]) { byWeek[r.starts] = { label: r.label, rows: [] }; order.push(r.starts); } byWeek[r.starts].rows.push(r); });
+    var body = order.map(function (k) {
+      var g = byWeek[k];
+      return '<div class="tsk-band"><span class="tsk-band-t">' + esc(g.label) + '</span><span class="tsk-band-n num">' + g.rows.length + '</span></div>' +
+        g.rows.map(function (r) {
+          var f = r.facts || {}, rv = RH_REVIEW[(r.review || {}).state] || RH_REVIEW.pending;
+          var pct = f.plan ? Math.round((f.done || 0) / f.plan * 100) : 0;
+          return '<div class="trow rp-grid" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
+            '<div class="brd-who"><span class="tsk-av">' + esc(initials(r.name)) + '</span>' +
+              '<span class="brd-nm">' + esc(r.name) + (r.text ? '<span class="t-sub">' + esc(r.text) + '</span>' : '') + '</span></div>' +
+            '<span class="brd-n num" data-l="Сделано">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span>' +
+            '<span class="brd-n num ts-pct' + (pct >= 80 ? ' ok' : f.plan && pct < 50 ? ' bad' : '') + '" data-l="План">' + pct + '%</span>' +
+            '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
+            '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
+          '</div>';
+        }).join('');
+    }).join('');
+    view.innerHTML = '<div class="wk-top">' + teamModeSeg() +
+        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Человек, неделя, что мешало" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
+      '<div class="card listcard"><div class="list-body">' + (body || '<div class="empty">Закрытых недель пока нет. Отчет появляется, когда человек закрывает неделю.</div>') + '</div></div>';
+    wireTeamMode(view);
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rep]'), function (row) {
+      row.addEventListener('click', function () {
+        openReportReview(+row.getAttribute('data-rep'), 'week', row.getAttribute('data-starts'), function () { state.teamReports = null; renderView(); });
+      });
+    });
+  }
   function renderTeamWeek(view) {
+    if (state.teamMode === 'stats') { renderTeamStats(view); return; }
+    if (state.teamMode === 'reports') { renderTeamReports(view); return; }
     if (state.teamWeek === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
     if (state.teamWeek === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
@@ -5630,15 +5765,14 @@
       ? '<div class="rh-await quiet">' + ic('spark', 13) + '<span>' + flags.join(' · ') + '</span></div>'
       : '';
 
-    view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools brd-tools">' + wkNav(b.label) +
-        (b.caps ? '<span class="wk-caps">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</span>' : '') +
-      '</div>' +
+    view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '<span class="wk-spacer"></span>' + wkNav(b.label) + '</div>' +
+      '<div class="card listcard">' +
       '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
       idle +
+      (b.caps ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
     '</div>';
 
-    wkWireNav(view);
+    wkWireNav(view); wireTeamMode(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -5711,7 +5845,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.mymonth = null;
+        state.tasks = null; state.myweek = null; state.mymonth = null; state.teamStats = null;
         saveUi(); renderHead(); renderView();
       });
     });
