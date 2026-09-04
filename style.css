@@ -2852,7 +2852,7 @@ button.tr-crumb:hover { color: var(--blue); }
    плашка без рамки, подписи мелким капсом, значения обычным весом. */
 .cl-deal { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
   border-radius: 12px; background: var(--blue-tint); }
-.cl-kv { display: grid; grid-template-columns: 96px 1fr; gap: 2px 12px; align-items: baseline; }
+.cl-kv { display: grid; grid-template-columns: 128px 1fr; gap: 2px 12px; align-items: baseline; }
 .cl-k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); line-height: 1.4; }
 .cl-kv .cl-k { padding-top: 2px; }
