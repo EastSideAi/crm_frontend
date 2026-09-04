@@ -4912,10 +4912,13 @@
     return { get: function () { return ids.slice(); } };
   }
   function loadTaskPeople(cb) {
-    if (state.taskPeople) { cb(state.taskPeople); return; }
+    if (state.taskPeople && state.taskPeople.length) { cb(state.taskPeople); return; }
     api('/admin/api/tasks/people').then(function (r) {
-      state.taskPeople = (r && r.people) || [];
-      cb(state.taskPeople);
+      // Пустой или упавший ответ не кэшируем: иначе все пикеры до перезагрузки
+      // страницы останутся пустыми.
+      var people = (r && r.people) || [];
+      if (people.length) state.taskPeople = people;
+      cb(people);
     }).catch(function () { cb([]); });
   }
   function progBar(done, total) {
@@ -6176,7 +6179,9 @@
       function open() {
         if (!more.hidden) return;
         more.hidden = false;
+        if (!who.options.length) who.innerHTML = '<option value="">…</option>';
         loadTaskPeople(function (people) {
+          if (!people.length) { who.innerHTML = '<option value="">не загрузилось</option>'; return; }
           var def = g.assignee_id || state.taskMe;
           who.innerHTML = people.map(function (x) {
             return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
