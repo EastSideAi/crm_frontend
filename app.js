@@ -16976,6 +16976,48 @@
     return head + ' ведем мы';
   }
 
+  /* Лестница отличий под ценой. Три карточки до нее читались как три копии: якорь
+     был один — цена, а дальше шестнадцать строк одинакового серого текста, и
+     разница тонула в середине списка (жалоба маркетологов 03.09.2026, правка
+     Павла 04.09.2026). Три факта выбраны так, чтобы у соседних карточек они
+     отличались ВСЕГДА: вузы 5-7-10, этапы 12-13-15, конец работы виза - месяц -
+     два месяца. Два из трех считаются по данным, руками пишется только «где
+     заканчивается работа»: вывести это из этапов нельзя, у Плюса и Премиума
+     последний этап один и тот же и отличается длиной. */
+  function tariffDiff(p, sts, t, sc) {
+    var real = realStages(sts);
+    var mine = real.filter(function (st) { return stageIn(st, t.id); }).length;
+    var rows = '';
+    rows += '<div class="po-tdr"><span>Этапов ведем мы</span>' +
+      '<b class="num">' + mine + ' из ' + real.length + '</b></div>';
+    if (t.ends) {
+      rows += '<div class="po-tdr"><span>Работа заканчивается</span><b>' + esc(t.ends) + '</b></div>';
+    }
+    if (!sc.num && !rows) return '';
+    return '<div class="po-scope">' +
+      (sc.num ? '<b>' + esc(sc.num) + '</b>' : '') +
+      (sc.cap ? '<small>' + esc(sc.cap) + '</small>' : '') +
+      (rows ? '<div class="po-tdrs">' + rows + '</div>' : '') +
+    '</div>';
+  }
+  /* «Все из тарифа ниже, плюс» — то, за что человек доплачивает, словами и
+     сразу, а не вычитанием двух списков по шестнадцать строк. У младшего тарифа
+     вычитать не из чего, поэтому там свой лейбл и та же четверка пунктов про
+     базу. Пунктов не больше пяти: шестой уже никто не читает, а карточка
+     Премиума и без того должна выглядеть плотнее остальных. */
+  function tariffAdds(t) {
+    var a = t.adds;
+    if (!a || !(a.items || []).length) return '';
+    var label = a.from ? 'Все из тарифа «' + a.from + '», плюс' : (a.label || 'Что вы получаете');
+    return '<div class="po-tadd">' +
+      '<div class="po-flbl">' + esc(label) + '</div>' +
+      a.items.map(function (it) {
+        return '<div class="po-taddi">' + (a.from ? '<i>+</i>' : ic('check', 13)) +
+          '<span>' + esc(it) + '</span></div>';
+      }).join('') +
+    '</div>';
+  }
+
   /* ── тарифы ────────────────────────────────────────────────────────────────
      Карточка тарифа — это тот же маршрут, только с ответом «что здесь получаю
      я». Плоского списка фич тут больше нет: он был выборкой автора, по нему не
@@ -17037,7 +17079,8 @@
             (save > 0 ? '<span class="po-psave pill num">выгода ' + fmtMoney(save) + ' ₽</span>' : '') +
           '</div>' + onceLine(p, t) +
         '</div>' +
-        (sc.num ? '<div class="po-scope"><b>' + esc(sc.num) + '</b><small>' + esc(sc.cap || '') + '</small></div>' : '') +
+        tariffDiff(p, sts, t, sc) +
+        tariffAdds(t) +
         '<div class="po-fsec po-tsec"><div class="po-flbl">Что входит по этапам</div>' +
           '<div class="po-srlede">' + esc(sideLede(p, sts, t.id)) + '</div>' +
           '<div class="po-srs">' + feats + '</div></div>' +
