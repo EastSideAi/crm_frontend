@@ -6193,6 +6193,13 @@
         }, function (err) { inp.disabled = false; go.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
       }
       inp.addEventListener('focus', open);
+      // Ушел из композера с пустой строкой — поля сворачиваются: раскрытый
+      // пустой композер под каждой открытой целью это шум.
+      box.addEventListener('focusout', function () {
+        setTimeout(function () {
+          if (!box.contains(document.activeElement) && !inp.value.trim()) more.hidden = true;
+        }, 150);
+      });
       inp.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); send(); }
         if (e.key === 'Escape') inp.blur();
