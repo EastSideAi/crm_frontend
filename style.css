@@ -7449,7 +7449,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-dl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
 .gl-company .gl-dl { color: var(--blue); }
 .gl-dn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
-.gl-newbtn { margin-left: auto; }
+/* «+ Цель» — единственное действие в шапке отдела, синим тинтом, а не серым
+   чипом: серый терялся на фоне (Павел 04.09.2026). */
+.gl-newbtn { margin-left: auto; background: var(--blue-tint); color: var(--blue); border-color: transparent; font-weight: 700; }
+.gl-newbtn:hover { background: var(--blue); color: #fff; }
 .gl-newgoal { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; padding: 10px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
 .gl-goal-in { flex: 1; min-width: 160px; }
