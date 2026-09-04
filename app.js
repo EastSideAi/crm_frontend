@@ -4807,13 +4807,15 @@
         ? api('/admin/api/tasks?view=review&scope=author') : Promise.resolve(null),
       // Очередь «Потом» — полоса внизу плана: отсюда берут в неделю.
       api('/admin/api/tasks?view=later&scope=my' + deptQ()),
-      // Что я поручил другим — контроль, а не мой день; только на текущей неделе.
+      // Что я поручил другим и за чем наблюдаю — контроль, а не мой день;
+      // только на текущей неделе.
       sh === 0 ? api('/admin/api/tasks?view=open&scope=author') : Promise.resolve(null),
+      sh === 0 ? api('/admin/api/tasks?view=open&scope=watch') : Promise.resolve(null),
     ]).then(function (rs) {
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
                        accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
-                       gave: (rs[4] && rs[4].tasks) || [],
+                       gave: ((rs[4] && rs[4].tasks) || []).concat((rs[5] && rs[5].tasks) || []),
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -5142,12 +5144,16 @@
       '<div class="dy-body">' + (tomorrowL.length
         ? tomorrowL.map(function (t) { return dyRow(t, { today: true }); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
-    // Поручил другим: открытые задачи, которые я поставил не себе. Свернуто —
-    // это контроль, а не мой день (Ольга, 04.09.2026: «негде посмотреть»).
-    var gave = (w.gave || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
+    // На контроле: поставил не себе или наблюдаю. Свернуто — это контроль, а
+    // не мой день (Ольга, 04.09.2026: «негде посмотреть»).
+    var seen = {};
+    var gave = (w.gave || []).filter(function (t) {
+      if (t.assignee_id === state.taskMe || seen[t.id]) return false;
+      seen[t.id] = true; return true;
+    });
     if (gave.length) {
       var gOpen = !!state.dyGave;
-      side += '<div class="card dy-card"><div class="dy-h"><span class="t">Поручил другим</span>' +
+      side += '<div class="card dy-card"><div class="dy-h"><span class="t">На контроле</span>' +
         '<span class="dy-h-n num"><b>' + gave.length + '</b></span></div><div class="dy-body">' +
         (gOpen ? gave.map(function (t) { return dyRow(t, { readOnly: true, who: true }); }).join('') : '') +
         '<button class="stu-more dy-more' + (gOpen ? ' open' : '') + '" id="dy-gave">' + (gOpen ? 'Свернуть' : 'Показать') + '</button></div></div>';
@@ -5984,6 +5990,7 @@
     var due = g.due_at ? dueLabel(g) : null;
     var meta = [];
     meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
+    if ((g.team || []).length) meta.push('с ' + g.team.join(', '));
     if (!total) meta.push('шагов нет');
     if (due) meta.push('до ' + due.text.replace(/^сегодня$/, 'сегодня'));
     var complete = total && done === total && g.status !== 'done';
@@ -6722,6 +6729,12 @@
             : (t.important ? '<span class="tsk-mimp on">' + ic('bolt', 12) + 'важная</span>' : '')) +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
+          // Наблюдатель: чип становится кнопкой у постановщика, исполнителя и
+          // руководителя — клик открывает выбор человека прямо на месте.
+          (isAuthor || isAssignee || can('tasks_all')
+            ? '<button class="tsk-mwho dim tsk-watch" id="tk-watch" title="Получает в бот движение задачи">' + ic('leads', 12) +
+                (t.watcher_name ? 'наблюдает ' + esc(t.watcher_name) : 'наблюдатель') + '</button>'
+            : (t.watcher_name ? '<span class="tsk-mwho dim">' + ic('leads', 12) + 'наблюдает ' + esc(t.watcher_name) + '</span>' : '')) +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
@@ -6949,6 +6962,31 @@
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
 
+      var wB = el('tk-watch');
+      if (wB) wB.addEventListener('click', function () {
+        loadTaskPeople(function (people) {
+          var sel = document.createElement('select');
+          sel.className = 'al-sel tsk-watch-sel';
+          sel.innerHTML = '<option value="">— никто —</option>' + people.filter(function (p) { return p.id !== t.assignee_id; }).map(function (p) {
+            return '<option value="' + p.id + '"' + (p.id === t.watcher_id ? ' selected' : '') + '>' + esc(p.name || p.login) + '</option>';
+          }).join('');
+          wB.parentNode.replaceChild(sel, wB);
+          sel.focus();
+          sel.addEventListener('change', function () {
+            var v = sel.value;
+            sel.disabled = true;
+            apiSend('/admin/api/tasks/' + id, 'PATCH', v ? { watcher_id: +v } : { watcher_clear: true }, function () {
+              state.tasks = null; state.myweek = null;
+              api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+              showToast(v ? 'Наблюдатель назначен' : 'Наблюдатель снят');
+            }, function () { sel.disabled = false; showToast('Не получилось поменять наблюдателя'); });
+          });
+          sel.addEventListener('blur', function () {
+            if (sel.parentNode && !sel.disabled) sel.parentNode.replaceChild(wB, sel);
+          });
+        });
+      });
+
       var impB = el('tk-imp');
       if (impB) impB.addEventListener('click', function () {
         var to = !t.important;
@@ -7171,6 +7209,11 @@
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
               '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
             '</div>' +
+            // Наблюдатель — второй человек в курсе, ответственный один (Павел
+            // 04.09.2026): получает в бот движение задачи и видит ее в «На контроле».
+            '<label class="al-f"><span class="al-l">Наблюдатель</span><span class="al-selwrap">' +
+              '<select id="nt-watch" class="al-sel"><option value="">— никто —</option>' +
+                opts.replace(/ selected/g, '').replace(/^<option value="">[^<]*<\/option>/, '') + '</select></span></label>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -7336,6 +7379,7 @@
           parent_id: goal ? +goal : null,
           is_goal: isGoal,
           important: impB.classList.contains('on'),
+          watcher_id: el('nt-watch') && el('nt-watch').value ? +el('nt-watch').value : null,
         }, function (r) {
           close();
           state.tasks = null;
