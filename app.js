@@ -5100,14 +5100,18 @@
     var me = state.taskMe;
     var meta = [];
     var ex = t.executors || [];
-    var names = function (list) {
-      return list.map(function (x) { return dyAv(x.name) + '<b>' + esc(x.name) + '</b>'; }).join('');
+    // Каждый человек своим span: группа из трех имен одной строкой не влезает
+    // в мобильную ширину и наезжает на срок, а отдельные — переносятся.
+    var names = function (label, list) {
+      return list.map(function (x, i) {
+        return '<span class="dy-m">' + (i === 0 ? '<i class="dy-k">' + label + '</i>' : '') +
+          dyAv(x.name) + '<b>' + esc(x.name) + '</b></span>';
+      }).join('');
     };
     if (t.assignee_name && (opts.who || opts.accept || t.assignee_id !== me)) {
-      meta.push('<span class="dy-m"><i class="dy-k">' + (ex.length ? 'исполнители' : 'исполнитель') + '</i>' +
-        names([{ name: t.assignee_name }].concat(ex)) + '</span>');
+      meta.push(names(ex.length ? 'исполнители' : 'исполнитель', [{ name: t.assignee_name }].concat(ex)));
     } else if (t.assignee_id && ex.length) {
-      meta.push('<span class="dy-m"><i class="dy-k">вместе с</i>' + names(ex) + '</span>');
+      meta.push(names('вместе с', ex));
     } else if (!t.assignee_id) {
       meta.push('<span class="dy-m dy-none">без исполнителя</span>');
     }
@@ -6091,8 +6095,9 @@
       ? '<span class="dy-m"><i class="dy-k">ведет</i>' + dyAv(g.assignee_name) + '<b>' + esc(g.assignee_name) + '</b></span>'
       : '<span class="dy-m dy-none">без ответственного</span>');
     if ((g.executors || []).length) {
-      meta.push('<span class="dy-m"><i class="dy-k">исполнители</i>' + g.executors.map(function (x) {
-        return dyAv(x.name) + '<b>' + esc(x.name) + '</b>'; }).join('') + '</span>');
+      meta.push(g.executors.map(function (x, i) {
+        return '<span class="dy-m">' + (i === 0 ? '<i class="dy-k">исполнители</i>' : '') + dyAv(x.name) + '<b>' + esc(x.name) + '</b></span>';
+      }).join(''));
     }
     if ((g.watchers || []).length) meta.push('<span class="dy-m"><i class="dy-k">наблюдают</i>' + dyAvs(g.watchers) + '</span>');
     if (!total) meta.push('<span class="dy-m">шагов нет</span>');
@@ -6878,7 +6883,7 @@
       // зашел (Павел 04.09.2026, «закрыть за Лану»). Исполнителю уйдет
       // сообщение в бот, что задачу закрыли за него.
       if (boss && !isAssignee && can('tasks_all') && (t.status === 'wait' || t.status === 'doing' || t.status === 'block')) {
-        acts.push(['done', 'Закрыть за исполнителя', 'bp ghost']);
+        acts.push(['done', 'Закрыть за исполнителя', 'bp ghost al-save']);
       }
       if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
       // Приемку иногда отменяют: приняли по ошибке или вскрылось, что работа
@@ -6934,7 +6939,7 @@
             ? '<span class="tsk-mwho dim"><i>наблюдают</i>' + esc(t.watchers.map(function (x) { return x.name; }).join(', ')) + '</span>'
             : '') +
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
-            ? '<button class="tsk-mwho dim tsk-watch" id="tk-watch" title="Исполнители и наблюдатели">' + ic('leads', 12) + 'роли</button>'
+            ? '<button class="tsk-mwho tsk-watch" id="tk-watch" title="Исполнители и наблюдатели">' + ic('leads', 12) + 'роли' + chev() + '</button>'
             : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
