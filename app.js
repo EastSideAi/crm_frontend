@@ -7680,6 +7680,7 @@
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
               'placeholder="Скопируй протокол сюда, если файла нет"></textarea></label>' +
           '<div class="al-ai-note" id="mu-note"></div>' +
+          '<div class="mu-drafts" id="mu-drafts" hidden></div>' +
         '</div>' +
         '<div class="al-foot">' +
           '<button class="al-cancel" id="mu-cancel">Отмена</button>' +
@@ -7738,6 +7739,37 @@
     };
     drop.addEventListener('click', function () { fileI.click(); });
     fileI.addEventListener('change', function () { take(fileI.files); });
+
+    // Разборы, до которых не дошли руки. Встречи из Fathom приходят сами, без
+    // человека у экрана, и до сих пор к ним вела только ссылка из бота.
+    var drafts = el('mu-drafts');
+    var srcLabel = function (d) {
+      return d.source === 'fathom' ? 'Fathom' : d.source === 'text' ? 'текст' : 'файл';
+    };
+    api('/admin/api/meetings?status=draft&limit=20').then(function (r) {
+      var list = (r && r.imports) || [];
+      if (!list.length || closed) return;
+      drafts.innerHTML =
+        '<div class="mu-drafts-h">Не заведены <b>' + list.length + '</b></div>' +
+        list.map(function (d) {
+          var bits = [srcLabel(d), fmtWhen(d.at)];
+          if (d.goals) bits.push(d.goals + ' ' + plural(d.goals, 'цель', 'цели', 'целей'));
+          if (d.by_name) bits.push(d.by_name);
+          return '<button class="mu-draft" data-id="' + d.id + '">' +
+            '<span class="mu-draft-i">' + ic(d.source === 'fathom' ? 'mic' : 'doc', 15) + '</span>' +
+            '<span class="mu-draft-b"><span class="mu-draft-t">' + esc(d.file_name || 'Протокол встречи') + '</span>' +
+            '<span class="mu-draft-m">' + esc(bits.join(' · ')) + '</span></span>' +
+            ic('go', 14) + '</button>';
+        }).join('');
+      drafts.hidden = false;
+    }).catch(function () {});
+    drafts.addEventListener('click', function (e) {
+      var b = e.target.closest('.mu-draft');
+      if (!b) return;
+      close();
+      // Экран проверки открываем после ухода формы, как и после разбора файла.
+      setTimeout(function () { openMeetingImport([+b.getAttribute('data-id')]); }, 200);
+    });
     ['dragenter', 'dragover'].forEach(function (ev) {
       drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
     });
@@ -18347,11 +18379,28 @@
      Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
   /* Правый столбец карточки лида: у «Поступления» — чат по плану, у «Витрины» — чат
      по продуктам. Один и тот же материал (.pchat), разные предметные области. */
-  function hasSidePanel() {
+  /* Правый столбец (чат плана, чат витрины) есть у двух секций. На широком экране он
+     стоит рядом с доской всегда. На узком (до 1180px) рядом не помещается: раньше он
+     занимал место доски вместе с навигацией, и выйти из него было нельзя, только
+     закрыть карточку (Павел 04.09.2026, телефон). Теперь на узком экране столбец
+     открывается кнопкой в секции и закрывается крестиком в своей шапке. */
+  function sideSection() {
     return state.modalSection === 'admission' || state.modalSection === 'offers';
+  }
+  function narrowModal() {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 1180px)').matches);
+  }
+  function hasSidePanel() {
+    return sideSection() && (!narrowModal() || !!state.sideOpen);
+  }
+  function sideOpenButton() {
+    if (!sideSection() || !narrowModal() || state.sideOpen) return '';
+    return '<button class="bp sm m-side-open" id="m-side-open">' + ic('spark', 13) +
+      (state.modalSection === 'offers' ? 'Витрина с AI' : 'План с AI') + '</button>';
   }
 
   function drawerChatPanel(id) {
+    if (!hasSidePanel()) return '';
     if (state.modalSection === 'admission') return planChatPanel(id);
     if (state.modalSection === 'offers') return offersChatPanel(id);
     return '';
@@ -18401,6 +18450,7 @@
     return '<aside class="pchat" id="pchat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
         '<span class="pchat-title">План с AI</span>' +
+        '<button class="pchat-x" data-side-close title="К карточке">' + ic('x', 14) + '</button>' +
       '</div>' +
       '<div class="pchat-list" id="pchat-list">' + body + '</div>' +
       '<div class="pchat-foot">' +
@@ -21858,6 +21908,7 @@
   }
   function setModalSection(s) {
     state.modalSection = s;
+    state.sideOpen = false;
     RM_CHAT = null;
     // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
     if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
@@ -22035,6 +22086,19 @@
     if (side) side.innerHTML = drawerChatPanel(id);
     var mdl = el('modal');
     if (mdl) mdl.classList.toggle('pchat-open', hasSidePanel());
+    var openBtn = sideOpenButton();
+    if (openBtn) {
+      host.insertAdjacentHTML('afterbegin', openBtn);
+      el('m-side-open').addEventListener('click', function () {
+        state.sideOpen = true;
+        renderModalContent();
+      });
+    }
+    var sideX = side && side.querySelector('[data-side-close]');
+    if (sideX) sideX.addEventListener('click', function () {
+      state.sideOpen = false;
+      renderModalContent();
+    });
     attachContentHandlers(id, ctx);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
@@ -23710,6 +23774,43 @@
      ссылка на исходник и конспект. Само видео к себе не тащим (см. §10в CLAUDE.md). */
   var CALL_ST = { transcribing: 'расшифровываем', failed: 'расшифровать не вышло' };
 
+  /* Конспект приходит текстом с секциями («Предложили:», «Мы обещали:» и т.д.),
+     тот же текст уходит в заметку. Здесь раскладываем его глазу: что продавали и
+     главное обещание — одним блоком сверху, обещания и факты — списками. Секции,
+     которых модель не знает, остаются абзацами. */
+  var CALL_KV = { 'Предложили': 'offer', 'Главное обещание': 'promise' };
+  var CALL_SEC = ['Мы обещали', 'Семья обещала', 'Дополнение к диагностике', 'Про семью'];
+  function callSummaryHtml(text) {
+    var blocks = String(text || '').split(/\n\s*\n/), kv = [], out = [];
+    blocks.forEach(function (b) {
+      var lines = b.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!lines.length) return;
+      var head = lines[0], m = head.match(/^([^:]{3,40}):\s*(.*)$/);
+      if (m && CALL_KV[m[1]] && lines.length === 1) {
+        kv.push('<div class="cl-kv ' + CALL_KV[m[1]] + '"><span class="cl-k">' + esc(m[1]) + '</span>' +
+                '<span class="cl-v">' + esc(m[2]) + '</span></div>');
+        return;
+      }
+      if (m && CALL_SEC.indexOf(m[1]) !== -1) {
+        var items = lines.slice(1).map(function (l) {
+          // «мы: прислать список» — секция уже говорит, чья это работа.
+          return l.replace(/^-\s*/, '').replace(/^(мы|семья)\s*:\s*/i, '');
+        });
+        if (m[2]) items.unshift(m[2]);
+        out.push('<div class="cl-sec"><div class="cl-k">' + esc(m[1]) + '</div>' +
+          (items.length > 1 || /^-/.test(lines[1] || '')
+            ? '<ul class="cl-ul">' + items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>'
+            : '<div class="cl-p">' + esc(items[0] || '') + '</div>') + '</div>');
+        return;
+      }
+      out.push('<div class="cl-p">' + lines.map(esc).join('<br>') + '</div>');
+    });
+    // Блок «что продавали» стоит сразу после сводки: руководитель открывает
+    // карточку ради этих двух строк.
+    if (kv.length) out.splice(Math.min(1, out.length), 0, '<div class="cl-deal">' + kv.join('') + '</div>');
+    return out.join('');
+  }
+
   function callRow(c) {
     // Дата без времени: часа встречи мы не спрашиваем, и показывать подставленный
     // полдень значит врать о том, когда разговор был.
@@ -23726,7 +23827,7 @@
                   'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
         '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
       '</div>' +
-      (body ? '<div class="cl-sum">' + esc(body).replace(/\n/g, '<br>') + '</div>'
+      (body ? '<div class="cl-sum">' + callSummaryHtml(body) + '</div>'
             : '<div class="cl-empty">' + (c.status === 'transcribing'
                  ? 'Разбираем запись, конспект появится через пару минут.'
                  : 'Конспекта нет. Допишите своими словами или приложите запись.') + '</div>') +
@@ -23780,6 +23881,10 @@
             '<span class="czb-drop-i">' + ic('phone', 20) + '</span>' +
             '<span class="czb-drop-t" id="cf-fname">Выберите файл записи</span>' +
           '</label>' +
+          (edit ? '' :
+          '<label class="al-f"><span class="al-l">Или расшифровка текстом</span>' +
+            '<textarea id="cf-tr" class="al-in al-ta" rows="3" maxlength="150000" ' +
+              'placeholder="Вставьте расшифровку из Zoom или Fathom: конспект сделаю сам"></textarea></label>') +
           '<label class="al-f"><span class="al-l">Или конспект своими словами</span>' +
             '<textarea id="cf-sum" class="al-in al-ta" rows="3" maxlength="4000">' +
               esc((edit && call.summary) || '') + '</textarea></label>' +
@@ -23813,9 +23918,11 @@
       var date = (el('cf-date') || {}).value || '';
       var link = ((el('cf-link') || {}).value || '').trim();
       var sum = ((el('cf-sum') || {}).value || '').trim();
+      var tr = ((el('cf-tr') || {}).value || '').trim();
       var file = fileIn.files && fileIn.files[0];
       err.textContent = '';
-      if (!file && !link && !sum) { err.textContent = 'Нужна запись, ссылка или конспект'; return; }
+      if (!file && !link && !sum && !tr) { err.textContent = 'Нужна запись, ссылка, расшифровка или конспект'; return; }
+      if (tr && tr.length < 100) { err.textContent = 'Расшифровка слишком короткая, разбирать нечего'; return; }
       // Тот же потолок, что на сервере: сказать «файл великоват» до отправки честнее,
       // чем гнать 100 МБ по мобильному интернету и получить отказ в конце.
       if (file && file.size > 60 * 1024 * 1024) {
@@ -23823,7 +23930,7 @@
         return;
       }
       var payload = { held_at: date ? date + 'T12:00:00+03:00' : null,
-                      link: link || null, summary: sum || null };
+                      link: link || null, summary: sum || null, transcript: tr || null };
       var send = function () {
         el('cf-ok').disabled = true;
         var path = edit ? '/admin/api/calls/' + call.id : '/admin/api/leads/' + id + '/calls';
@@ -23832,13 +23939,14 @@
           loadCardCalls(id, function () {
             if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
           });
-          showToast(payload.audio_base64 ? 'Записал, разбираю запись' : 'Записал');
+          showToast(payload.audio_base64 ? 'Записал, разбираю запись'
+                    : payload.transcript ? 'Записал, делаю конспект' : 'Записал');
           if (after) after();
         }, function (code) {
           el('cf-ok').disabled = false;
           err.textContent = code === 413
             ? 'Файл больше 60 МБ. Приложите звук или дайте ссылку на запись'
-            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка или конспект'
+            : (code === 422 ? 'Проверьте поля: нужна запись, ссылка, расшифровка или конспект'
                             : 'Не сохранилось, проверьте сеть');
         });
       };
@@ -25736,6 +25844,7 @@
     return '<aside class="pchat" id="ochat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
         '<span class="pchat-title">Витрина с AI</span>' +
+        '<button class="pchat-x" data-side-close title="К карточке">' + ic('x', 14) + '</button>' +
       '</div>' +
       '<div class="pchat-list" id="ochat-list">' + body + '</div>' +
       '<div class="pchat-foot">' +

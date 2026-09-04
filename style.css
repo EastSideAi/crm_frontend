@@ -2845,7 +2845,25 @@ button.tr-crumb:hover { color: var(--blue); }
 .cl-st { font: 600 10.5px 'Manrope', sans-serif; padding: 2px 7px; border-radius: var(--r-pill); }
 .cl-st.transcribing { color: var(--blue); background: var(--blue-tint); }
 .cl-st.failed { color: var(--red-ink); background: var(--red-soft); }
-.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px; }
+.cl-sum .cl-p { margin: 0; }
+/* Что продавали и главное обещание — единственный акцент конспекта: тонированная
+   плашка без рамки, подписи мелким капсом, значения обычным весом. */
+.cl-deal { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  border-radius: 12px; background: var(--blue-tint); }
+.cl-kv { display: grid; grid-template-columns: 128px 1fr; gap: 2px 12px; align-items: baseline; }
+.cl-k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); line-height: 1.4; }
+.cl-kv .cl-k { padding-top: 2px; }
+.cl-kv.promise .cl-v { font-weight: 600; color: var(--navy); }
+.cl-sec { display: flex; flex-direction: column; gap: 3px; }
+.cl-ul { margin: 0; padding-left: 16px; }
+.cl-ul li { margin: 0; padding-left: 2px; }
+.cl-ul li::marker { color: var(--ink-3); }
+@media (max-width: 520px) {
+  .cl-kv { grid-template-columns: 1fr; gap: 1px; }
+}
 .cl-empty { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 .cl-acts { display: flex; gap: 8px; margin-top: 8px; }
 
@@ -4409,11 +4427,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .pchat-go:hover:not(:disabled) { background: var(--blue-d); }
 .pchat-go:disabled { background: var(--line-2); color: var(--ink-3); cursor: default; }
 
-/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы */
+/* Кнопка «План с AI» в секции и крестик в шапке чата живут только на узком экране:
+   на широком чат стоит рядом с доской и закрывать его незачем. */
+.m-side-open { display: none; }
+.pchat-x { display: none; }
+/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы.
+   Открывается кнопкой из секции, закрывается крестиком: путь назад есть всегда. */
 @media (max-width: 1180px) {
   .modal.pchat-open { width: 1020px; }
   .modal.pchat-open .m-content, .modal.pchat-open .m-nav { display: none; }
   .pchat { flex: 1; border-left: 0; }
+  .pchat-x { display: grid; }
+  .m-side-open { display: inline-flex; margin-bottom: 14px; }
 }
 @keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes rmDot { 0%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
@@ -6542,6 +6567,29 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mu-drop-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
   overflow-wrap: anywhere; }
 .mu-drop-s { font-size: 11.5px; color: var(--ink-2); }
+/* Черновики, которые еще не завели: строки на языке списка — ховер фоном и левой
+   полоской, без рамок. Отдельный блок с воздухом сверху: это другая сущность, чем
+   загрузка нового файла. */
+.mu-drafts { display: flex; flex-direction: column; margin: 6px -8px 0; }
+.mu-drafts-h { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em;
+  padding: 0 8px 6px; }
+.mu-drafts-h b { color: var(--navy); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mu-draft { position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 8px; border: 0; border-radius: 12px; background: none; text-align: left;
+  font: inherit; color: var(--ink); cursor: pointer; transition: background .14s; }
+.mu-draft::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 2px; background: var(--blue); opacity: 0; transition: opacity .14s; }
+.mu-draft:hover { background: #FBFBFC; }
+.mu-draft:hover::before { opacity: 1; }
+.mu-draft > svg:last-child { flex: none; color: var(--ink-3); transition: transform .15s, color .15s; }
+.mu-draft:hover > svg:last-child { color: var(--blue); transform: translateX(2px); }
+.mu-draft-i { flex: none; width: 30px; height: 30px; border-radius: 10px; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--blue-tint); color: var(--blue); }
+.mu-draft-b { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mu-draft-t { font-size: 13px; font-weight: 600; letter-spacing: -.01em; color: var(--navy);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mu-draft-m { font-size: 11.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 
 /* Экран проверки */
 .mi-card { max-width: 720px; }
