@@ -6242,10 +6242,32 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-feat { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.42; }
 /* галочка тут — маркер списка, а не «хорошо»: зеленый в разделе значит только маржу */
 .po-feat svg { margin-top: 2px; color: var(--ink-3); }
-.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 12px 14px;
-  min-height: 104px; }
-.po-scope b { display: block; font-size: 13.5px; font-weight: 700; letter-spacing: -.015em; }
-.po-scope small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); line-height: 1.45; }
+/* лестница отличий: масштаб подачи крупно — он и есть первое, чем тарифы
+   расходятся, — под ним два тихих факта парами «что : сколько». Три карточки
+   рядом читаются ступенями 5-7-10, 12-13-15, виза - месяц - два месяца. */
+.po-scope { margin-top: 16px; background: var(--fill); border-radius: 12px; padding: 13px 14px 4px;
+  min-height: 176px; }
+.po-scope b { display: block; font-size: 21px; font-weight: 800; letter-spacing: -.035em;
+  line-height: 1.1; }
+.po-scope small { display: block; margin-top: 5px; min-height: 51px; font-size: 11.5px;
+  color: var(--ink-3); line-height: 1.45; }
+.po-tdrs { margin-top: 2px; }
+.po-tdr { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 42px; padding: 8px 0; border-top: 1px solid var(--line-2);
+  font-size: 12px; color: var(--ink-2); }
+.po-tdr b { font-size: 12.5px; font-weight: 700; color: var(--ink); text-align: right;
+  letter-spacing: -.01em; }
+
+/* «все из тарифа ниже, плюс» — единственный блок карточки, где плюсы синие:
+   это и есть ответ на «за что доплата», и он должен ловиться взглядом раньше
+   состава по этапам. У младшего тарифа плюсов нет, там галочки-маркеры. */
+.po-tadd { margin-top: 17px; padding-top: 16px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px; }
+.po-tadd .po-flbl { margin-bottom: 1px; }
+.po-taddi { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink); line-height: 1.42; }
+.po-taddi i { flex: none; width: 13px; font-style: normal; font-weight: 800; color: var(--blue);
+  text-align: center; }
+.po-taddi svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 /* «не входит» — не предупреждение и не ошибка, а граница услуги: тише состава
    на один уровень чернил, без красного. Красный тут читался бы как поломка. */
 .po-tcard .po-tsec { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
