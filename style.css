@@ -2225,6 +2225,9 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   font-size: 10.5px; font-weight: 700; color: #fff; letter-spacing: -.01em;
   background: linear-gradient(140deg, var(--blue), var(--navy)); }
 .tsk-nobody { color: var(--ink-3); font-weight: 500; }
+.dy-today { opacity: 0; transition: opacity .14s; }
+.trow.dy-row:hover .dy-today, .trow.dy-row:focus-within .dy-today { opacity: 1; }
+@media (max-width: 720px) { .dy-today { opacity: 1; } }
 .tsk-due { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
   display: inline-flex; align-items: center; gap: 6px; }
 .tsk-due svg { color: var(--ink-3); }
@@ -2624,6 +2627,19 @@ button.tr-crumb:hover { color: var(--blue); }
   color: var(--ink-2); }
 .tsk-mwho svg { color: var(--ink-3); }
 .tsk-mwho.dim { color: var(--ink-3); font-weight: 500; }
+/* Наблюдатель: чип-кнопка в той же строке, что исполнитель и постановщик;
+   по клику на его месте встает выбор человека. */
+.tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink-3); }
+.tsk-mwho.tsk-watch:hover { color: var(--blue); }
+.tsk-part-box { display: inline-flex; }
+/* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
+.pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
+  background: var(--fill); font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.pp-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0;
+  border-radius: 50%; background: transparent; color: var(--ink-3); cursor: pointer; }
+.pp-x:hover { background: var(--card); color: var(--ink); }
+.pp-add { width: auto; min-width: 120px; height: 28px; padding: 0 28px 0 10px; font-size: 12.5px; }
 .tsk-card .al-body { overflow-y: auto; gap: 16px; padding-bottom: 16px; }
 .tsk-sec { display: flex; flex-direction: column; gap: 7px; }
 .tsk-l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
@@ -2747,6 +2763,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-h:hover .stu-n { color: var(--blue); }
 .stu-n { font-size: 15.5px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
   transition: .12s; }
+.stu-own { font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
 .stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
 /* Кто ведет ученика — аватары исполнителей его открытых задач: отвечает на «не
@@ -3376,7 +3393,7 @@ button.tsk-mimp { cursor: pointer; }
 /* Чип важности в форме постановки. Это тот же .qchip, только «включенное»
    состояние амберное, а не navy: включенный фильтр и помеченная важной задача —
    разные вещи, и цвет их разводит. */
-.nt-impf { flex-direction: column; align-items: flex-start; gap: 7px; }
+.nt-impf { flex-direction: column; align-items: flex-start; gap: 7px; margin-bottom: 6px; }
 .qchip.nt-imp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
 .qchip.nt-imp.on svg { color: var(--amber-ink); }
 
@@ -7345,13 +7362,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .rh-await.quiet svg { color: var(--ink-3); }
 @media (max-width: 720px) {
   .wk-search { order: 5; flex-basis: 100%; }
-  .trow.wk-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; height: auto;
+  /* Одна раскладка клетки на телефоне для недели, итогов и архива: человек во
+     всю строку, число под подписью из data-l. Значение — один элемент (.v),
+     иначе «1/3» рвется на две строки. */
+  .trow.wk-grid, .trow.ts-grid, .trow.ts-dgrid, .trow.rp-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; height: auto;
     padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
-  .trow.wk-grid.thead { display: none; }
-  .trow.wk-grid .brd-who { grid-column: 1 / -1; }
-  .trow.wk-grid .rh-c, .trow.wk-grid .brd-n { display: flex; flex-direction: column; align-items: flex-start;
-    gap: 3px; text-align: left; }
-  .trow.wk-grid .rh-c::before, .trow.wk-grid .brd-n::before { content: attr(data-l); font-size: 10.5px;
+  .trow.wk-grid.thead, .trow.ts-grid.thead, .trow.ts-dgrid.thead, .trow.rp-grid.thead { display: none; }
+  .trow.wk-grid .brd-who, .trow.ts-grid .brd-who, .trow.rp-grid .brd-who { grid-column: 1 / -1; }
+  .trow.wk-grid .rh-c, .trow.wk-grid .brd-n, .trow.ts-grid .brd-n, .trow.ts-dgrid .brd-n, .trow.rp-grid .brd-n, .trow.rp-grid .rh-c {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; }
+  .trow.wk-grid .rh-c::before, .trow.wk-grid .brd-n::before, .trow.ts-grid .brd-n::before, .trow.ts-dgrid .brd-n::before,
+  .trow.rp-grid .brd-n::before, .trow.rp-grid .rh-c::before { content: attr(data-l); font-size: 10.5px;
     font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.wk-grid .rh-rv-btn { flex-wrap: wrap; align-items: flex-start; gap: 6px; }
   .wk-row.later { grid-template-columns: minmax(0,1fr) !important; }
@@ -7395,10 +7416,25 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .dy-side .trow.dy-row { padding: 8px 18px; min-height: 40px; }
 .dy-row .dy-t { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .dy-row .tsk-chk { margin-top: 0; }
+/* Два яруса: название и строка «кто» под ним. Галочка равняется на название. */
+.dy-row .dy-main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.dy-row.has-meta .dy-t { align-items: flex-start; }
+.dy-row.has-meta .tsk-chk { margin-top: 2px; }
+.dy-row .dy-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; font-weight: 500;
+  color: var(--ink-3); line-height: 1.3; }
+.dy-row .dy-m { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.dy-row .dy-meta b { font-weight: 600; color: var(--ink-2); }
+.dy-row .dy-none { color: var(--amber-ink); }
+.dy-av { box-sizing: border-box; width: 18px; height: 18px; border-radius: 50%; background: var(--blue-tint); color: var(--blue);
+  font: 700 9px 'Manrope', sans-serif; letter-spacing: 0; display: inline-grid; place-items: center; flex: none; }
+.dy-av.part { background: var(--fill); color: var(--ink-2); border: 1.5px solid var(--card); width: 20px; height: 20px; }
+.dy-avs .dy-av + .dy-av { margin-left: -7px; }
+.dy-row .dy-goal { margin-top: 0; }
+.tsk-chk.quiet { cursor: default; border-color: transparent; background: transparent; }
 .dy-row .dy-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dy-side .dy-row .dy-ttl { font-size: 13.5px; }
-.dy-row .dy-cl, .dy-row .dy-who { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.dy-row .dy-cl { flex: none; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
 /* В узких боковых карточках имя ученика не помещается рядом с названием: там
    его нет, оно в карточке задачи. Кто сдал — остается, это суть «Тебе сдали». */
 .dy-side .dy-row .dy-cl { display: none; }
@@ -7450,7 +7486,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-dl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
 .gl-company .gl-dl { color: var(--blue); }
 .gl-dn { font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
-.gl-newbtn { margin-left: auto; }
+/* «+ Цель» — единственное действие в шапке отдела, синим тинтом, а не серым
+   чипом: серый терялся на фоне (Павел 04.09.2026). */
+.gl-newbtn { margin-left: auto; background: var(--blue-tint); color: var(--blue); border-color: transparent; font-weight: 700; }
+.gl-newbtn:hover { background: var(--blue); color: #fff; }
 .gl-newgoal { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; padding: 10px 12px;
   background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
 .gl-goal-in { flex: 1; min-width: 160px; }
@@ -7481,8 +7520,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-steps .dy-ttl { font-size: 13.5px; }
 .gl-steps .trow.dy-row { padding-left: 24px; padding-right: 16px; min-height: 40px; }
 .gl-steps .trow.dy-row:hover { background: var(--fill); }
-.gl-add { padding: 8px 16px 4px 24px; }
+.gl-add { padding: 8px 16px 6px 24px; }
 .gl-add-in { width: 100%; }
+/* Композер шага: раскрывается по фокусу под строкой названия. */
+.gl-add-more { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin-top: 8px; }
+.gl-add-more[hidden] { display: none; }
+.gl-add-f { display: flex; flex-direction: column; gap: 4px; }
+.gl-add-f > span { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.gl-add-who { width: auto; min-width: 170px; }
+.gl-add-day { width: auto; }
+.gl-add-part { min-width: 170px; }
+.gl-add-go { align-self: flex-end; }
+.gl-goal-who { width: auto; min-width: 150px; }
 .nt-moreb { align-self: flex-start; margin: 2px 0 6px; }
 @media (max-width: 720px) {
   .gl-head { gap: 10px; padding: 12px; }
@@ -7491,7 +7540,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   /* Шапка не должна съедать полэкрана: отделы одной строкой с прокруткой,
      импорт встречи — иконкой рядом с поиском. */
   .gl-tools { gap: 8px; }
-  .dept-seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; flex: 1 1 100%; }
+  .dept-seg { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; flex: 1 1 100%;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
   .dept-seg::-webkit-scrollbar { display: none; }
   .dept-seg button { white-space: nowrap; }
   .gl-search { flex: 1; min-width: 0; }
@@ -7530,9 +7580,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 
 /* ── Команда: итоги и архив отчетов ──────────────────────────────────────────
-   Таблица дашборда — та же строка .trow с числами .brd-n, что у недели; процент
-   зеленеет от 80 и краснеет ниже 50 при непустом плане. Отделы — вторая
-   таблица ниже. Архив — полосы недель на .tsk-band и строки на .trow. */
+   Таблица дашборда — та же строка .trow с числами .brd-n, что у недели. Процент
+   и серия чернилами: красное на экране только переносы и застрявшее (красный
+   процент в незакрытом месяце врал бы). Отделы — вторая таблица, только когда
+   их больше одного. Архив — полосы недель на .tsk-band и строки на .trow;
+   «что мешало» второй строкой тем же .rh-note, что на «Неделе». Раскладка
+   клетки на телефоне общая с .wk-grid. */
 .ts-grid { grid-template-columns: minmax(180px, 300px) repeat(8, minmax(56px, 1fr)); cursor: pointer; }
 .ts-grid .th:nth-child(n+2), .ts-grid .brd-n { text-align: right; }
 .ts-dgrid { grid-template-columns: minmax(160px, 1fr) repeat(4, minmax(64px, 120px)); }
@@ -7542,18 +7595,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .brd-n i { font-style: normal; color: var(--ink-3); font-weight: 600; }
 .brd-n.ts-pct { font-weight: 800; }
 .rp-grid { grid-template-columns: minmax(200px, 1fr) 80px 70px 70px 200px; cursor: pointer; }
-.rp-grid .brd-n { text-align: right; }
-.rp-grid .brd-nm .t-sub { white-space: normal; }
+.rp-grid .th:nth-child(n+2), .rp-grid .brd-n { text-align: right; }
 .rp-grid .rh-c { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.trow.rp-grid.has-note { height: auto; min-height: 58px; padding-top: 12px; padding-bottom: 12px; }
+.rh-sched-card { margin-top: 16px; }
+.rh-sched-card .rh-sched { border-top: 0; }
 @media (max-width: 720px) {
-  .trow.ts-grid, .trow.ts-dgrid, .trow.rp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; height: auto;
-    padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
-  .trow.ts-grid.thead, .trow.ts-dgrid.thead { display: none; }
-  .trow.ts-grid .brd-who, .trow.rp-grid .brd-who, .trow.ts-dgrid .brd-nm { grid-column: 1 / -1; }
-  .trow.ts-grid .brd-n, .trow.ts-dgrid .brd-n, .trow.rp-grid .brd-n, .trow.rp-grid .rh-c { display: flex; flex-direction: column;
-    align-items: flex-start; gap: 3px; text-align: left; }
-  .trow.ts-grid .brd-n::before, .trow.ts-dgrid .brd-n::before, .trow.rp-grid .brd-n::before, .trow.rp-grid .rh-c::before { content: attr(data-l);
-    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.ts-grid, .trow.ts-dgrid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .trow.ts-dgrid .brd-nm { grid-column: 1 / -1; }
+  /* Период и стрелки одной строкой, отделы — последней: шапка не должна
+     съедать пол-экрана до первой цифры. */
+  .ts-top .wk-spacer { flex-basis: 0; }
+  .ts-top .dept-seg { order: 5; }
 }
 
 /* Настройки недели в окне «Бот задач»: предел и сводки. */

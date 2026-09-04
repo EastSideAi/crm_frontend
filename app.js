@@ -4591,6 +4591,10 @@
     hr:        'Команда',
     ops:       'Операционка',
   };
+  // Отделы планера — четыре (Павел 04.09.2026): сопровождение живет во вкладке
+  // «Ученики», операционка доживает со старыми целями, пока их не разложат.
+  var DEPT_LIVE = ['product', 'marketing', 'sales', 'hr'];
+  function deptLive(d) { return DEPT_LIVE.indexOf(d) !== -1; }
   function deptLabel(d) { return DEPTS[d] || ''; }
   function taskSegs() {
     return Object.keys(TASK_SEGS).filter(function (k) {
@@ -4630,9 +4634,9 @@
   }
 
   /* Свое дело: и исполнитель, и постановщик — я. Такое закрывается галочкой в
-     один клик и переносится на завтра без спроса; чужую задачу ни то, ни другое
-     не берет — там срок двигает только тот, кому это положено (cap tasks_due),
-     а закрывает постановщик приемкой. */
+     один клик и переносится на завтра без спроса; чужую задачу галочкой не
+     закрыть — ее принимает постановщик (срок исполнитель двигает и в ней,
+     но отодвинутый уходит сообщением постановщику). */
   function isOwnTask(t) {
     return !!(t && state.taskMe && t.assignee_id === state.taskMe &&
               t.author_id === state.taskMe &&
@@ -4660,6 +4664,17 @@
       if (row) row.classList.remove('done');
       showToast('Не отметилось — проверь сеть');
     });
+  }
+
+  /* Притянуть свою задачу на сегодня: раньше исполнитель двигает сам, без спроса. */
+  function taskMoveToday(id, btn) {
+    btn.disabled = true;
+    apiSend('/admin/api/tasks/' + id, 'PATCH',
+            { due_at: new Date(isoDay(0) + 'T23:59:59').toISOString() }, function () {
+      state.tasks = null; state.myweek = null; state.mymonth = null;
+      renderView();
+      showToast('Перенес на сегодня');
+    }, function () { btn.disabled = false; showToast('Не перенеслось — проверь сеть'); });
   }
 
   /* Перенести свое дело на завтра. Тот же конец дня по Москве, что и везде в
@@ -4792,10 +4807,15 @@
         ? api('/admin/api/tasks?view=review&scope=author') : Promise.resolve(null),
       // Очередь «Потом» — полоса внизу плана: отсюда берут в неделю.
       api('/admin/api/tasks?view=later&scope=my' + deptQ()),
+      // Что я поручил другим и за чем наблюдаю — контроль, а не мой день;
+      // только на текущей неделе.
+      sh === 0 ? api('/admin/api/tasks?view=open&scope=author') : Promise.resolve(null),
+      sh === 0 ? api('/admin/api/tasks?view=open&scope=watch') : Promise.resolve(null),
     ]).then(function (rs) {
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
                        accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
+                       gave: (rs[4] && rs[4].tasks) || [], part: (rs[5] && rs[5].tasks) || [],
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -4857,6 +4877,39 @@
       state.cardCalls[id] = 'none';
       if (cb) cb();
     });
+  }
+  /* Участники задачи: чипы с крестиком и выбор «+ участник». Один компонент
+     для формы и карточки (Павел 04.09.2026: соисполнители и наблюдатели у цели
+     и у шага, ответственный один). onChange получает массив id. */
+  function peoplePick(box, ids, people, opts) {
+    opts = opts || {};
+    ids = (ids || []).slice();
+    function draw() {
+      var chips = ids.map(function (id) {
+        var p = people.filter(function (x) { return x.id === id; })[0];
+        return '<span class="pp-chip">' + esc(p ? (p.name || p.login) : '#' + id) +
+          '<button type="button" class="pp-x" data-ppx="' + id + '" title="Убрать">' + ic('x', 10) + '</button></span>';
+      }).join('');
+      var free = people.filter(function (x) { return ids.indexOf(x.id) === -1 && x.id !== opts.except; });
+      var sel = free.length
+        ? '<select class="al-sel pp-add"><option value="">+ ' + (ids.length ? 'еще' : 'участник') + '</option>' +
+            free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select>'
+        : '';
+      box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
+        b.addEventListener('click', function () {
+          ids = ids.filter(function (x) { return x !== +b.getAttribute('data-ppx'); });
+          draw(); if (opts.onChange) opts.onChange(ids);
+        });
+      });
+      var add = box.querySelector('.pp-add');
+      if (add) add.addEventListener('change', function () {
+        if (!add.value) return;
+        ids.push(+add.value); draw(); if (opts.onChange) opts.onChange(ids);
+      });
+    }
+    draw();
+    return { get: function () { return ids.slice(); } };
   }
   function loadTaskPeople(cb) {
     if (state.taskPeople) { cb(state.taskPeople); return; }
@@ -5015,8 +5068,19 @@
     return wd + ', ' + d.getDate() + ' ' + DY_MON[d.getMonth()];
   }
   /* Строка дня: галочка, название, справа только отклонение от нормы. */
+  function dyAv(name, cls) {
+    return '<span class="dy-av' + (cls ? ' ' + cls : '') + '" title="' + esc(name) + '">' + esc(initials(name)) + '</span>';
+  }
+  /* Строка задачи: два яруса. Сверху название, снизу — кто делает, кто поставил,
+     кто участвует (Павел 04.09.2026: исполнитель, постановщик и участники видны
+     всегда). Свое имя в своем плане не повторяем; чужое — с кружком инициалов.
+     Справа срок (в целях — всегда, в дне — только просрочка) и статус, если он
+     отклонение. opts: who — показать исполнителя даже если это я; due — срок
+     всегда; boss — галочка руководителю; tickSlot — держать место под галочку;
+     noGoal — без метки цели; accept — строка приемки; today — «на сегодня». */
   function dyRow(t, opts) {
     opts = opts || {};
+    var me = state.taskMe;
     var own = isOwnTask(t);
     // В «Тебе сдали» задача чужая и живая: зачеркивать ее нечего.
     var closed = !opts.accept && (t.status === 'done' || t.status === 'review' || t.status === 'cancel');
@@ -5025,6 +5089,8 @@
       // Под полосой «Просрочено» слово не повторяем — только на сколько.
       var od = dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
       if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
+    } else if (t.due_at && !closed && (opts.who || opts.due)) {
+      right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
     }
     // Статус только там, где он отклонение: в «Тебе сдали» все на приемке, и
     // чип повторял бы заголовок карточки.
@@ -5033,14 +5099,38 @@
       right += '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     }
     if (t.stuck) right += '<span class="sev rv-wait">застряла</span>';
-    var quick = '';
-    if (closed) quick = '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>';
-    else if (own && !opts.readOnly) quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
-    var tail = opts.accept && t.assignee_name
-      ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
-      : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '');
-    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
-      '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' + tail + '</div>' +
+    // «На сегодня» у своей завтрашней задачи: раньше исполнитель двигает сам.
+    var mine = !!(me && t.assignee_id === me);
+    if (opts.today && mine && !closed) right += '<button class="qchip dy-today" data-today="' + t.id + '">на сегодня</button>';
+    var canTick = !closed && !opts.readOnly && (own || (opts.boss && can('tasks_all')));
+    var quick = closed
+      ? '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>'
+      : (canTick
+          ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>'
+          : (opts.tickSlot ? '<span class="tsk-chk quiet"></span>' : ''));
+    var meta = [];
+    if (t.assignee_name && (opts.who || opts.accept || t.assignee_id !== me)) {
+      meta.push('<span class="dy-m">' + dyAv(t.assignee_name) + '<b>' + esc(t.assignee_name) + '</b></span>');
+    } else if (!t.assignee_id) {
+      meta.push('<span class="dy-m dy-none">без исполнителя</span>');
+    }
+    if (t.author_name && t.author_id !== me && t.author_id !== t.assignee_id) {
+      meta.push('<span class="dy-m">поставил ' + esc(t.author_name) + '</span>');
+    }
+    var parts = t.participants || [];
+    if (parts.length) {
+      meta.push('<span class="dy-m dy-avs" title="' + esc(parts.map(function (x) { return x.name; }).join(', ')) + '">' +
+        parts.slice(0, 3).map(function (x) { return dyAv(x.name, 'part'); }).join('') +
+        (parts.length > 3 ? '<span class="dy-av part">+' + (parts.length - 3) + '</span>' : '') + '</span>');
+    }
+    if (t.client_name) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
+    // Шаг цели носит метку цели: план и цели — одна сущность; клик открывает цель.
+    if (!opts.noGoal && t.parent_id && t.parent_title) {
+      meta.push('<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>');
+    }
+    return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
+      '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
+        (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
   }
@@ -5118,8 +5208,25 @@
     side += '<div class="card dy-card"><div class="dy-h"><span class="t">' + tmTitle + '</span>' +
       '<span class="dy-h-n num">' + (tomorrowL.length ? '<b>' + tomorrowL.length + '</b>' : '') + '</span></div>' +
       '<div class="dy-body">' + (tomorrowL.length
-        ? tomorrowL.map(function (t) { return dyRow(t); }).join('')
+        ? tomorrowL.map(function (t) { return dyRow(t, { today: true }); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
+    // Участвую: чужие задачи, где я соисполнитель или наблюдатель — видны
+    // сразу, это и моя работа. На контроле: поставил не себе — свернуто, это
+    // контроль, а не мой день (Ольга, 04.09.2026: «негде посмотреть»).
+    var part = (w.part || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
+    if (part.length) {
+      side += '<div class="card dy-card"><div class="dy-h"><span class="t">Участвую</span>' +
+        '<span class="dy-h-n num"><b>' + part.length + '</b></span></div><div class="dy-body">' +
+        part.map(function (t) { return dyRow(t, { readOnly: true, who: true, noGoal: true }); }).join('') + '</div></div>';
+    }
+    var gave = (w.gave || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
+    if (gave.length) {
+      var gOpen = !!state.dyGave;
+      side += '<div class="card dy-card"><div class="dy-h"><span class="t">На контроле</span>' +
+        '<span class="dy-h-n num"><b>' + gave.length + '</b></span></div><div class="dy-body">' +
+        (gOpen ? gave.map(function (t) { return dyRow(t, { readOnly: true, who: true, noGoal: true }); }).join('') : '') +
+        '<button class="stu-more dy-more' + (gOpen ? ' open' : '') + '" id="dy-gave">' + (gOpen ? 'Свернуть' : 'Показать') + '</button></div></div>';
+    }
     var doneN = doneToday.length + review.length;
     side += '<div class="card dy-card"><div class="dy-h"><span class="t">Сделано сегодня</span>' +
       '<span class="dy-h-n num">' + (doneN ? '<b>' + doneN + '</b>' : '') + '</span></div>' +
@@ -5134,6 +5241,10 @@
     if (el('dy-more')) el('dy-more').addEventListener('click', function () {
       state.dyMore = !el('dy-more').classList.contains('open');
       renderView();
+    });
+    if (el('dy-gave')) el('dy-gave').addEventListener('click', function () { state.dyGave = !state.dyGave; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-today]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); taskMoveToday(+b.getAttribute('data-today'), b); });
     });
   }
 
@@ -5583,6 +5694,54 @@
       b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; renderView(); });
     });
   }
+  /* Сроки недели — договоренность команды, правит cap team, лежит под срезом
+     недели: правило и его исполнение рядом. Только неделя: день и месяц с
+     ADR 001 выключены. День 8 — понедельник следующей недели: закрыть прошлую
+     утром, потом собрать новую (Ольга и Павел, 04.09.2026). */
+  var RH_WDAY = [['1', 'пн'], ['2', 'вт'], ['3', 'ср'], ['4', 'чт'], ['5', 'пт'], ['6', 'сб'], ['7', 'вс'], ['8', 'пн следующей']];
+  function loadRhSched(cb) {
+    if (state.rhythmSched) { cb(state.rhythmSched); return; }
+    api('/admin/api/rhythm/schedule').then(function (r) {
+      state.rhythmSched = (r && r.schedule) || null; cb(state.rhythmSched);
+    }).catch(function () { cb(null); });
+  }
+  function renderRhSched(s) {
+    var box = el('rh-sched');
+    if (!box) return;
+    if (!s || !s.week) { box.innerHTML = '<div class="rh-shh">Сроки недели не загрузились.</div>'; return; }
+    var w = s.week;
+    // Время выбором, а не <input type="time">: он рисуется по локали браузера,
+    // и у половины команды срок выглядел бы как «05:00 PM». Шаг полчаса.
+    function timeIn(kind) {
+      var cur = w[kind + '_at'], opts = '';
+      for (var h = 6; h <= 22; h++) for (var m = 0; m < 60; m += 30) {
+        var v = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        opts += '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + v + '</option>';
+      }
+      if (opts.indexOf('value="' + cur + '"') === -1) opts = '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' + opts;
+      return '<select class="al-in sm rh-t" data-f="' + kind + '_at">' + opts + '</select>';
+    }
+    function dayIn(kind) {
+      var cur = String(w[kind + '_day']);
+      return '<select class="al-in sm rh-d" data-f="' + kind + '_day">' + RH_WDAY.map(function (o) {
+        return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+      }).join('') + '</select>';
+    }
+    box.innerHTML = '<div class="rh-shh">Сроки недели</div>' +
+      '<div class="rh-sr"><span class="rh-sp">Собрать до</span>' + dayIn('plan') + timeIn('plan') + '</div>' +
+      '<div class="rh-sr"><span class="rh-sp">Закрыть до</span>' + dayIn('report') + timeIn('report') + '</div>' +
+      '<div class="rh-sf"><span class="rh-hint">По Москве. Бот напомнит за час до срока и один раз после.</span>' +
+        '<button class="qchip" id="rh-save">Сохранить</button></div>';
+    Array.prototype.forEach.call(box.querySelectorAll('[data-f]'), function (i) {
+      i.addEventListener('change', function () { var f = i.getAttribute('data-f'); w[f] = f.indexOf('_day') > 0 ? +i.value : i.value; });
+    });
+    el('rh-save').addEventListener('click', function () {
+      apiSend('/admin/api/rhythm/schedule', 'PUT', { schedule: s }, function (r) {
+        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null;
+        showToast('Сроки сохранены'); renderView();
+      }, function () { showToast('Не удалось сохранить сроки'); });
+    });
+  }
   function loadTeamStats() {
     state.tasksLoading = true;
     api('/admin/api/rhythm/team/stats?period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
@@ -5597,6 +5756,7 @@
       wireTeamMode(view); return;
     }
     var d = state.teamStats, t = d.totals || {};
+    var stuckN = (d.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0);
     var per = '<div class="pay-seg plan-seg">' + [['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
       return '<button type="button" class="' + (state.teamPeriod === m[0] ? 'on' : '') + '" data-teamper="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
@@ -5608,8 +5768,8 @@
     var stats = '<div class="mo-stats">' +
       '<div class="mo-stat"><b class="num">' + (t.pct || 0) + '%</b><span>плана сделано командой</span></div>' +
       '<div class="mo-stat"><b class="num">' + (t.done || 0) + ' <i>из ' + (t.plan || 0) + '</i></b><span>задач за период</span></div>' +
-      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>переносов</span></div>' +
-      '<div class="mo-stat"><b class="num">' + (d.people || []).length + '</b><span>' + plural((d.people || []).length, 'человек', 'человека', 'человек') + ' с задачами</span></div></div>';
+      '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>' + plural(t.carried || 0, 'перенос', 'переноса', 'переносов') + '</span></div>' +
+      '<div class="mo-stat"><b class="num">' + stuckN + '</b><span>застряло</span></div></div>';
     function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
     var head = '<div class="trow ts-grid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
       '<span class="th">План</span><span class="th">Вовремя</span><span class="th">Переносы</span><span class="th">Застряло</span><span class="th">Недели</span><span class="th">Серия</span></div>';
@@ -5618,13 +5778,14 @@
         '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
           '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
         n(p.plan, '', 'Взял') + n(p.done, 'ok', 'Сделано') +
-        '<span class="brd-n num ts-pct' + (p.pct >= 80 ? ' ok' : p.plan && p.pct < 50 ? ' bad' : '') + '" data-l="План">' + p.pct + '%</span>' +
+        '<span class="brd-n num ts-pct" data-l="План">' + p.pct + '%</span>' +
         n(p.on_time, 'ok', 'Вовремя') + n(p.carried, 'bad', 'Переносы') + n(p.stuck, 'bad', 'Застряло') +
-        '<span class="brd-n num" data-l="Недели">' + p.weeks_closed + '<i>/' + p.weeks_past + '</i></span>' +
-        '<span class="brd-n num' + (p.streak >= 3 ? ' ok' : '') + '" data-l="Серия">' + p.streak + '</span>' +
+        '<span class="brd-n num" data-l="Недели"><span class="v">' + p.weeks_closed + '<i>/' + p.weeks_past + '</i></span></span>' +
+        '<span class="brd-n num" data-l="Серия">' + p.streak + '</span>' +
       '</div>';
     }).join('');
-    var depts = (d.depts || []).length
+    // Один отдел повторил бы шапку посимвольно — таблица только при двух и больше.
+    var depts = (d.depts || []).length > 1
       ? '<div class="card listcard ts-depts"><div class="dy-h"><span class="t">По отделам</span></div>' +
         '<div class="trow ts-dgrid thead"><span class="th">Отдел</span><span class="th">Взял</span><span class="th">Сделано</span><span class="th">План</span><span class="th">Переносы</span></div>' +
         d.depts.map(function (x) {
@@ -5632,7 +5793,7 @@
             '<span class="brd-n num ts-pct" data-l="План">' + x.pct + '%</span>' + n(x.carried, 'bad', 'Переносы') + '</div>';
         }).join('') + '</div>'
       : '';
-    view.innerHTML = '<div class="wk-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats +
       '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div></div>' +
       depts;
@@ -5672,19 +5833,22 @@
     if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
     var byWeek = {}, order = [];
     list.forEach(function (r) { if (!byWeek[r.starts]) { byWeek[r.starts] = { label: r.label, rows: [] }; order.push(r.starts); } byWeek[r.starts].rows.push(r); });
+    var head = '<div class="trow rp-grid thead"><span class="th">Сотрудник</span><span class="th">Сделано</span>' +
+      '<span class="th">План</span><span class="th">Перенос</span><span class="th">Итог</span></div>';
     var body = order.map(function (k) {
       var g = byWeek[k];
       return '<div class="tsk-band"><span class="tsk-band-t">' + esc(g.label) + '</span><span class="tsk-band-n num">' + g.rows.length + '</span></div>' +
         g.rows.map(function (r) {
           var f = r.facts || {}, rv = RH_REVIEW[(r.review || {}).state] || RH_REVIEW.pending;
           var pct = f.plan ? Math.round((f.done || 0) / f.plan * 100) : 0;
-          return '<div class="trow rp-grid" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
+          return '<div class="trow rp-grid' + (r.text ? ' has-note' : '') + '" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
             '<div class="brd-who"><span class="tsk-av">' + esc(initials(r.name)) + '</span>' +
-              '<span class="brd-nm">' + esc(r.name) + (r.text ? '<span class="t-sub">' + esc(r.text) + '</span>' : '') + '</span></div>' +
-            '<span class="brd-n num" data-l="Сделано">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span>' +
-            '<span class="brd-n num ts-pct' + (pct >= 80 ? ' ok' : f.plan && pct < 50 ? ' bad' : '') + '" data-l="План">' + pct + '%</span>' +
+              '<span class="brd-nm">' + esc(r.name) + '<span class="t-sub">' + esc(r.role_label || '') + '</span></span></div>' +
+            '<span class="brd-n num" data-l="Сделано"><span class="v">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span></span>' +
+            '<span class="brd-n num ts-pct" data-l="План">' + pct + '%</span>' +
             '<span class="brd-n num ' + (f.carried ? 'bad' : 'zero') + '" data-l="Перенос">' + (f.carried || 0) + '</span>' +
             '<div class="rh-c" data-l="Итог">' + (r.late ? '<span class="sev rh-late">поздно</span> ' : '') + '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</div>' +
+            (r.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(r.text) + '</span></div>' : '') +
           '</div>';
         }).join('');
     }).join('');
@@ -5692,7 +5856,7 @@
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Человек, неделя, что мешало" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
-      '<div class="card listcard"><div class="list-body">' + (body || '<div class="empty">Закрытых недель пока нет. Отчет появляется, когда человек закрывает неделю.</div>') + '</div></div>';
+      '<div class="card listcard"><div class="list-body">' + (body ? head + body : '<div class="empty">Закрытых недель пока нет. Отчет появляется, когда человек закрывает неделю.</div>') + '</div></div>';
     wireTeamMode(view);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
@@ -5776,9 +5940,11 @@
       '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
       idle +
       (b.caps ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
-    '</div>';
+    '</div>' +
+      (can('team') ? '<div class="card rh-sched-card"><div class="rh-sched" id="rh-sched"></div></div>' : '');
 
     wkWireNav(view); wireTeamMode(view);
+    if (el('rh-sched')) loadRhSched(function (s) { if (el('rh-sched')) renderRhSched(s); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -5838,10 +6004,8 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
-  function deptChips(hideOps) {
-    // На «Целях» операционку не предлагаем: целей туда не заводят, и чип вел бы
-    // в пустой блок без единого действия.
-    var all = [''].concat(Object.keys(DEPTS).filter(function (d) { return !(hideOps && d === 'ops'); }));
+  function deptChips() {
+    var all = [''].concat(DEPT_LIVE);
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
       return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
@@ -5867,26 +6031,8 @@
     return out;
   }
   function glStepRow(st, g) {
-    var own = isOwnTask(st) || can('tasks_all');
-    var closed = st.status === 'done' || st.status === 'cancel';
-    var right = '';
-    // Срок у шага показываем, только если он свой: унаследованный от цели на
-    // каждой строке — это тот же срок, повторенный пять раз.
-    var ownDue = st.due_at && !(g && g.due_at && dyDayOf(st.due_at) === dyDayOf(g.due_at));
-    if (st.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(st).text) + '</span>';
-    else if (ownDue && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
-    if (st.status === 'review' || st.status === 'return' || st.status === 'block') {
-      right += '<span class="sev ' + TASK_ST[st.status].cls + '">' + TASK_ST[st.status].label + '</span>';
-    }
-    var who = st.assignee_name && st.assignee_id !== state.taskMe ? '<span class="dy-cl">' + esc(st.assignee_name) + '</span>' : '';
-    var chk = closed
-      ? '<span class="tsk-chk done">' + ic('check', 12) + '</span>'
-      : (own && st.status !== 'review'
-          ? '<button class="tsk-chk" data-done="' + st.id + '" title="Сделано">' + ic('check', 12) + '</button>'
-          : '<span class="tsk-chk" style="cursor:default"></span>');
-    return '<div class="trow dy-row gl-step' + (closed ? ' closed' : '') + (st.overdue ? ' r-crit' : '') + '" data-tid="' + st.id + '">' +
-      '<div class="dy-t">' + chk + '<span class="dy-ttl">' + esc(st.title) + '</span>' + who + '</div>' +
-      '<div class="dy-r">' + right + '</div></div>';
+    // Под целью шаг показывает исполнителя и срок всегда: здесь на них и смотрят.
+    return dyRow(st, { who: true, due: true, noGoal: true, boss: true, tickSlot: true });
   }
   function glGoalCard(g) {
     var total = g.steps_total || 0, done = g.steps_done || 0;
@@ -5895,12 +6041,21 @@
     var due = g.due_at ? dueLabel(g) : null;
     var meta = [];
     meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
+    if ((g.team || []).length) meta.push('с ' + g.team.join(', '));
     if (!total) meta.push('шагов нет');
     if (due) meta.push('до ' + due.text.replace(/^сегодня$/, 'сегодня'));
     var complete = total && done === total && g.status !== 'done';
     var steps = open
       ? '<div class="gl-steps">' + (g.steps || []).map(function (st) { return glStepRow(st, g); }).join('') +
-          '<div class="gl-add"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг и Enter" autocomplete="off"></div>' +
+          // Композер шага: одна строка, по фокусу раскрываются кому / день /
+          // участники (Павел 04.09.2026: шаг ставится сразу с людьми и сроком).
+          '<div class="gl-add" data-add-for="' + g.id + '"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг" autocomplete="off">' +
+            '<div class="gl-add-more" hidden>' +
+              '<label class="gl-add-f"><span>Кому</span><select class="al-sel sm gl-add-who"></select></label>' +
+              '<label class="gl-add-f"><span>День</span><input type="date" class="al-in sm gl-add-day" value="' + (g.due_at ? dyDayOf(g.due_at) : '') + '"></label>' +
+              '<div class="gl-add-f gl-add-part"><span>Участники</span><div class="gl-add-pp"></div></div>' +
+              '<button type="button" class="bp sm gl-add-go">Добавить</button>' +
+            '</div></div>' +
         '</div>'
       : '';
     return '<div class="gl-card' + (open ? ' open' : '') + (complete ? ' complete' : '') + '" data-gid="' + g.id + '">' +
@@ -5928,26 +6083,27 @@
       if (state.taskDept) return grp.dept === state.taskDept;
       // Пустой блок показываем, чтобы было куда завести цель; операционку и
       // «вся компания» — только когда там что-то есть.
-      return grp.goals.length || (grp.dept && grp.dept !== 'ops' && !q);
+      return grp.goals.length || (deptLive(grp.dept) && !q);
     });
 
     var body = groups.map(function (grp) {
       var adding = state.glNew === (grp.dept || '~');
       var addRow = adding
         ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
+            '<select class="al-sel sm gl-goal-who" title="Кто ведет"><option value="">Кто ведет</option></select>' +
             '<select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select>' +
             '<button class="qchip gl-goal-x" type="button">Отмена</button></div>'
         : '';
       return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
         '<div class="gl-dh"><span class="gl-dl">' + esc(grp.label) + '</span>' +
           '<span class="gl-dn num">' + (grp.goals.length ? grp.goals.length + ' ' + plural(grp.goals.length, 'цель', 'цели', 'целей') : 'целей нет') + '</span>' +
-          (grp.dept !== 'ops' && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
+          (deptLive(grp.dept) && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
         '</div>' + addRow +
         grp.goals.map(glGoalCard).join('') +
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="gl-tools">' + deptChips(true) +
+    view.innerHTML = '<div class="gl-tools">' + deptChips() +
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -6000,20 +6156,55 @@
       b.addEventListener('click', function (e) { e.stopPropagation(); taskDone(+b.getAttribute('data-done'), b); });
     });
     // Новый шаг: одна строка. Кому и срок — от цели, отдел сервер берет у цели сам.
-    Array.prototype.forEach.call(view.querySelectorAll('[data-step-for]'), function (inp) {
-      inp.addEventListener('click', function (e) { e.stopPropagation(); });
-      inp.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter') return;
-        var title = inp.value.trim(); if (!title) return;
-        var gid = +inp.getAttribute('data-step-for');
-        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
-        inp.disabled = true;
-        apiSend('/admin/api/tasks', 'POST', { title: title, parent_id: gid, assignee_id: g.assignee_id || state.taskMe || null,
-                                              due_at: g.due_at || null }, function () {
+    Array.prototype.forEach.call(view.querySelectorAll('.gl-add'), function (box) {
+      var gid = +box.getAttribute('data-add-for');
+      var inp = box.querySelector('.gl-add-in'), more = box.querySelector('.gl-add-more');
+      var who = box.querySelector('.gl-add-who'), day = box.querySelector('.gl-add-day'), go = box.querySelector('.gl-add-go');
+      var pick = null;
+      var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+      box.addEventListener('click', function (e) { e.stopPropagation(); });
+      function open() {
+        if (!more.hidden) return;
+        more.hidden = false;
+        loadTaskPeople(function (people) {
+          var def = g.assignee_id || state.taskMe;
+          who.innerHTML = people.map(function (x) {
+            return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
+          }).join('');
+          var pp = box.querySelector('.gl-add-pp');
+          pick = peoplePick(pp, [], people, { except: +who.value || null });
+          who.addEventListener('change', function () {
+            pick = peoplePick(pp, pick.get().filter(function (x) { return x !== +who.value; }), people, { except: +who.value || null });
+          });
+        });
+      }
+      function send() {
+        var title = inp.value.trim(); if (!title) { inp.focus(); return; }
+        inp.disabled = true; go.disabled = true;
+        var d = day.value;
+        apiSend('/admin/api/tasks', 'POST', {
+          title: title, parent_id: gid,
+          assignee_id: who.value ? +who.value : (g.assignee_id || state.taskMe || null),
+          due_at: d ? new Date(d + 'T23:59:59').toISOString() : (g.due_at || null),
+          participants: pick ? pick.get() : [],
+        }, function () {
           state.tasks = null; loadTaskSummary(); renderView();
           var again = view.querySelector('[data-step-for="' + gid + '"]'); if (again) again.focus();
-        }, function (err) { inp.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+        }, function (err) { inp.disabled = false; go.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+      }
+      inp.addEventListener('focus', open);
+      // Ушел из композера с пустой строкой — поля сворачиваются: раскрытый
+      // пустой композер под каждой открытой целью это шум.
+      box.addEventListener('focusout', function () {
+        setTimeout(function () {
+          if (!box.contains(document.activeElement) && !inp.value.trim()) more.hidden = true;
+        }, 150);
       });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); send(); }
+        if (e.key === 'Escape') inp.blur();
+      });
+      go.addEventListener('click', send);
     });
     // Новая цель: название и месяц. Ведет тот, кто завел; поправить можно в карточке.
     Array.prototype.forEach.call(view.querySelectorAll('[data-newgoal]'), function (b) {
@@ -6026,6 +6217,12 @@
     if (gx) gx.addEventListener('click', function () { state.glNew = ''; renderView(); });
     var gi = view.querySelector('.gl-goal-in');
     if (gi) {
+      loadTaskPeople(function (people) {
+        var gw = view.querySelector('.gl-goal-who'); if (!gw) return;
+        gw.innerHTML = people.map(function (x) {
+          return '<option value="' + x.id + '"' + (x.id === state.taskMe ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
+        }).join('');
+      });
       gi.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { state.glNew = ''; renderView(); return; }
         if (e.key !== 'Enter') return;
@@ -6033,7 +6230,8 @@
         var dept = gi.getAttribute('data-goal-for') || '';
         var mon = view.querySelector('.gl-goal-mon').value;
         gi.disabled = true;
-        apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: state.taskMe || null,
+        var gwho = view.querySelector('.gl-goal-who');
+        apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: (gwho && +gwho.value) || state.taskMe || null,
                                               due_at: new Date(mon + 'T23:59:59').toISOString() }, function (r) {
           state.glNew = ''; state.tasks = null;
           if (r && r.task) state.glOpen[r.task.id] = true;
@@ -6280,6 +6478,10 @@
       var head = '<button class="stu-h" data-exp="' + esc(s.session_id) + '" aria-expanded="' + opened + '">' +
         '<span class="stu-chev' + (opened ? ' on' : '') + '">' + ic('go', 14) + '</span>' +
         '<span class="stu-n">' + esc(s.client_name) + '</span>' +
+        // Кто ведет ученика — ответственный из карточки клиента и его роль:
+        // тьютор это или администратор (Павел 04.09.2026).
+        (s.owner_name ? '<span class="stu-own">ведет ' + esc(s.owner_name) +
+          (s.owner_role_label ? ' · ' + esc(s.owner_role_label.toLowerCase()) : '') + '</span>' : '') +
         (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
           (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
         '<span class="stu-av-row">' + avs + '</span>' +
@@ -6453,8 +6655,8 @@
      задачи: срок двигают на бегу и по одной штуке, ради одной даты открывать
      форму со всеми полями — четыре лишних клика и риск задеть соседнее.
 
-     Кто двигает — только суперадмин (cap tasks_due, правило Павла 19.08.2026),
-     поэтому для остальных плашка остается подписью и поповера у нее нет. */
+     Кто двигает — исполнитель свою и суперадмин любую (cap tasks_due; Павел
+     04.09.2026); у остальных плашка остается подписью и поповера у нее нет. */
   function duePop(anchor, task, after) {
     var host = anchor.parentNode;
     var open = host.querySelector('.due-pop');
@@ -6573,7 +6775,9 @@
       var boss = isAuthor || can('tasks_all');
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.
-      var canDue = can('tasks_due') && t.status !== 'done' && t.status !== 'cancel';
+      // Свой срок исполнитель двигает сам: раньше молча, позже — с сообщением
+      // постановщику (Павел, 04.09.2026). Чужой — только cap tasks_due.
+      var canDue = (can('tasks_due') || isAssignee) && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -6631,6 +6835,15 @@
             : (t.important ? '<span class="tsk-mimp on">' + ic('bolt', 12) + 'важная</span>' : '')) +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
+          // Участники: чип становится кнопкой у постановщика, исполнителя и
+          // руководителя — клик открывает чипы с выбором прямо на месте.
+          (function () {
+            var names = (t.participants || []).map(function (x) { return x.name; });
+            var label = names.length ? 'с ' + esc(names.join(', ')) : 'участники';
+            return (isAuthor || isAssignee || can('tasks_all'))
+              ? '<button class="tsk-mwho dim tsk-watch" id="tk-watch" title="Соисполнители и наблюдатели">' + ic('leads', 12) + label + '</button>'
+              : (names.length ? '<span class="tsk-mwho dim">' + ic('leads', 12) + label + '</span>' : '');
+          })() +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
@@ -6858,6 +7071,24 @@
       el('tk-send').addEventListener('click', send);
       say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
 
+      var wB = el('tk-watch');
+      if (wB) wB.addEventListener('click', function () {
+        loadTaskPeople(function (people) {
+          var box = document.createElement('span');
+          box.className = 'tsk-part-box';
+          wB.parentNode.replaceChild(box, wB);
+          peoplePick(box, (t.participants || []).map(function (x) { return x.id; }), people, {
+            except: t.assignee_id,
+            onChange: function (ids) {
+              apiSend('/admin/api/tasks/' + id, 'PATCH', { participants: ids }, function () {
+                state.tasks = null; state.myweek = null;
+                showToast('Участники обновлены');
+              }, function () { showToast('Не получилось поменять участников'); });
+            }
+          });
+        });
+      });
+
       var impB = el('tk-imp');
       if (impB) impB.addEventListener('click', function () {
         var to = !t.important;
@@ -6982,7 +7213,7 @@
       // Одно и то же значение, но человеку это разные вещи, и подписи разные.
       var dopts = '<option value="">' +
           (isGoal ? 'Вся компания — общая цель' : '— без направления —') + '</option>' +
-        Object.keys(DEPTS).map(function (d) {
+        Object.keys(DEPTS).filter(function (d) { return deptLive(d) || dept0 === d; }).map(function (d) {
           return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
         }).join('');
       // Цель, из карточки которой пришли, могла появиться после того, как список
@@ -7080,6 +7311,10 @@
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
               '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
             '</div>' +
+            // Участники — соисполнители и наблюдатели при одном ответственном
+            // (Павел 04.09.2026): видят задачу в «Участвую», получают движение в бот.
+            '<div class="al-f"><span class="al-l">Участники</span><div id="nt-part"></div>' +
+              '<span class="al-hint">Соисполнители и наблюдатели: видят задачу у себя и получают ее движение в бот. Ответственный один — тот, кому.</span></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -7144,6 +7379,12 @@
       dueI.addEventListener('change', markWhen);
       markWhen();
 
+      // Участники: ответственный из списка исключается, при смене «кому» —
+      // пересобирается.
+      var partPick = el('nt-part') ? peoplePick(el('nt-part'), [], people, { except: +el('nt-who').value || null }) : null;
+      el('nt-who').addEventListener('change', function () {
+        if (partPick) partPick = peoplePick(el('nt-part'), partPick.get().filter(function (x) { return x !== +el('nt-who').value; }), people, { except: +el('nt-who').value || null });
+      });
       var impB = el('nt-imp');
       impB.addEventListener('click', function () { impB.classList.toggle('on'); });
 
@@ -7245,6 +7486,7 @@
           parent_id: goal ? +goal : null,
           is_goal: isGoal,
           important: impB.classList.contains('on'),
+          participants: partPick ? partPick.get().filter(function (x) { return x !== +who; }) : [],
         }, function (r) {
           close();
           state.tasks = null;
@@ -7466,7 +7708,7 @@
         }).join('');
       };
       var deptOpts = function (sel) {
-        return '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
+        return '<option value="">— без направления —</option>' + Object.keys(DEPTS).filter(function (d) { return deptLive(d) || sel === d; }).map(function (d) {
           return '<option value="' + d + '"' + (sel === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
         }).join('');
       };
