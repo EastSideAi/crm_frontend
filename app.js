@@ -24300,7 +24300,6 @@
   var CNS_STATUS = { booked: ['Записана', 'st-doing'], held: ['Проведена', 'st-done'],
                      no_show: ['Не пришёл', 'st-block'], canceled: ['Отмена', 'st-cancel'] };
   var CNS_RESULT = { thinking: 'Думает', declined: 'Отказ', rebook: 'Перенос' };
-  var CNS_ROLE = { manager: 'Менеджер', curator: 'Тьютор', teacher: 'Преподаватель' };
 
   function cnsWhen(iso) {
     if (!iso) return 'без даты';
@@ -24337,7 +24336,7 @@
 
   function consultRowHtml(c) {
     var st = CNS_STATUS[c.status] || CNS_STATUS.booked;
-    var role = c.lead_role ? '<span class="cns-role">' + esc(CNS_ROLE[c.lead_role] || c.lead_role) + '</span>' : '';
+    var role = c.lead_name ? '<span class="cns-role">' + esc(c.lead_name) + '</span>' : '';
     // Результат — та же семья .sev: думает = ожидание (n-wait, амбер), отказ = выбыл
     // (n-off, серый), перенос = в работе (st-doing, синий). Зелёный НЕ ставим — он под
     // реальные оплаты, а «думает» это ещё надежда.
@@ -24395,9 +24394,6 @@
   }
 
   function consultAddForm() {
-    var roles = Object.keys(CNS_ROLE).map(function (k) {
-      return '<option value="' + k + '">' + CNS_ROLE[k] + '</option>';
-    }).join('');
     // Время — селект с шагом 30 минут (09:00–21:00). Нативный datetime-local/time
     // показывает часть команды в формате AM/PM — 24-часовой селект однозначен всем.
     var times = '<option value="">время</option>';
@@ -24407,10 +24403,12 @@
         times += '<option value="' + t + '">' + t + '</option>';
       }
     }
+    // «Кто ведёт» — живой человек, а не роль: через час после встречи бот напомнит
+    // ему загрузить запись. Список подтянем в wireConsultSection (loadAssignees).
     return '<div class="cns-add">' +
       '<input type="date" id="cns-date" class="al-in sm">' +
       '<select id="cns-time" class="al-in sm">' + times + '</select>' +
-      '<select id="cns-role" class="al-in sm"><option value="">кто ведёт</option>' + roles + '</select>' +
+      '<select id="cns-lead" class="al-in sm"><option value="">кто ведёт</option></select>' +
       '<input type="text" id="cns-note" class="al-in sm cns-note-in" placeholder="о чём (по желанию)">' +
       '<button class="bp sm" id="cns-add-btn">Записать</button>' +
     '</div>';
@@ -24460,16 +24458,28 @@
 
   function wireConsultSection(id) {
     loadConsult(id);
+    // Заполняем «кто ведёт» живыми сотрудниками. По умолчанию — Лиана: сейчас
+    // консультации ведёт она; появятся диагносты — выберут их, и напоминание уйдёт им.
+    var lead = el('cns-lead');
+    if (lead) fetchPeople(function (people) {
+      if (!lead || lead.options.length > 1) return;
+      (people || []).forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p.id; o.textContent = p.name || p.login;
+        if (/лиан/i.test(p.name || '')) o.selected = true;
+        lead.appendChild(o);
+      });
+    });
     var btn = el('cns-add-btn');
     if (btn) btn.addEventListener('click', function () {
-      var date = el('cns-date'), time = el('cns-time'), role = el('cns-role'), note = el('cns-note');
+      var date = el('cns-date'), time = el('cns-time'), lead = el('cns-lead'), note = el('cns-note');
       var body = {};
       if (date && date.value) {
         var t = (time && time.value) ? time.value : '12:00';   // без времени — полдень
         var dt = new Date(date.value + 'T' + t);
         if (!isNaN(dt)) body.scheduled_at = dt.toISOString();
       }
-      if (role && role.value) body.lead_role = role.value;
+      if (lead && lead.value) body.lead_user_id = parseInt(lead.value, 10);
       if (note && note.value.trim()) body.note = note.value.trim();
       btn.disabled = true;
       api('/admin/api/leads/' + id + '/consultations', {
