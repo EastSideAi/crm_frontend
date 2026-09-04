@@ -5881,7 +5881,7 @@
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
     var byWeek = {}, order = [];
-    list.forEach(function (r) { if (!byWeek[r.starts]) { byWeek[r.starts] = { label: r.label, rows: [] }; order.push(r.starts); } byWeek[r.starts].rows.push(r); });
+    list.forEach(function (r) { var k = (r.period || 'week') + ':' + r.starts; if (!byWeek[k]) { byWeek[k] = { label: r.label, rows: [] }; order.push(k); } byWeek[k].rows.push(r); });
     var head = '<div class="trow rp-grid thead"><span class="th">Сотрудник</span><span class="th">Сделано</span>' +
       '<span class="th">План</span><span class="th">Перенос</span><span class="th">Итог</span></div>';
     var body = order.map(function (k) {
@@ -5890,7 +5890,7 @@
         g.rows.map(function (r) {
           var f = r.facts || {}, rv = RH_REVIEW[(r.review || {}).state] || RH_REVIEW.pending;
           var pct = f.plan ? Math.round((f.done || 0) / f.plan * 100) : 0;
-          return '<div class="trow rp-grid' + (r.text ? ' has-note' : '') + '" data-rep="' + r.user_id + '" data-starts="' + r.starts + '">' +
+          return '<div class="trow rp-grid' + (r.text ? ' has-note' : '') + '" data-rep="' + r.user_id + '" data-starts="' + r.starts + '" data-period="' + esc(r.period || 'week') + '">' +
             '<div class="brd-who"><span class="tsk-av">' + esc(initials(r.name)) + '</span>' +
               '<span class="brd-nm">' + esc(r.name) + '<span class="t-sub">' + esc(r.role_label || '') + '</span></span></div>' +
             '<span class="brd-n num" data-l="Сделано"><span class="v">' + (f.done || 0) + '<i>/' + (f.plan || 0) + '</i></span></span>' +
@@ -5915,7 +5915,7 @@
     el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-rep]'), function (row) {
       row.addEventListener('click', function () {
-        openReportReview(+row.getAttribute('data-rep'), 'week', row.getAttribute('data-starts'), function () { state.teamReports = null; renderView(); });
+        openReportReview(+row.getAttribute('data-rep'), row.getAttribute('data-period') || 'week', row.getAttribute('data-starts'), function () { state.teamReports = null; renderView(); });
       });
     });
   }
