@@ -70,6 +70,7 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
+    glOpen: {}, glNew: '', glPct: {},
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     taskWho: null,
@@ -4586,12 +4587,14 @@
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
      короткий и меняется раз в полгода, лишний запрос ради шести строк дороже.
      Цветом направления НЕ кодируются: акцент в CRM один (design.md §3). */
+  // Порядок — решение Павла 04.09.2026: Продукт, Маркетинг, Продажи, Сопровождение
+  // (работа тьюторов по ученикам), Команда; Операционка последней и без новых целей.
   var DEPTS = {
     product:   'Продукт',
     marketing: 'Маркетинг',
     sales:     'Продажи',
-    edu:       'Обучение',
-    hr:        'HR и команда',
+    edu:       'Сопровождение',
+    hr:        'Команда',
     ops:       'Операционка',
   };
   function deptLabel(d) { return DEPTS[d] || ''; }
@@ -5655,83 +5658,212 @@
      Первым блоком — цели компании: они общие для всех, и направление у них не
      пустое по забывчивости, а пустое по смыслу (решение Павла 15.08.2026).
      Работают-то все в одном векторе, направления только делят зоны ответа. */
+  /* ── Цели: отдел → цель → шаги ─────────────────────────────────────────────
+     Стержень планера (Павел 04.09.2026). Отделы блоками в фиксированном порядке,
+     у цели кольцо прогресса от шагов, шаги раскрываются под целью и закрываются
+     галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
+     наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
+     правится в карточке. Форма из восьми полей осталась для подробностей. */
+  function deptChips() {
+    var all = [''].concat(Object.keys(DEPTS));
+    return '<div class="dept-seg pay-seg">' + all.map(function (d) {
+      return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
+        (d ? esc(DEPTS[d]) : 'Все') + '</button>';
+    }).join('') + '</div>';
+  }
+  function wireDeptChips(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
+      b.addEventListener('click', function () {
+        state.taskDept = b.getAttribute('data-dept') || '';
+        state.tasks = null; state.myweek = null;
+        saveUi(); renderHead(); renderView();
+      });
+    });
+  }
+  function glMonthOpts() {
+    var out = '', d = new Date();
+    for (var i = 0; i < 4; i++) {
+      var m = new Date(d.getFullYear(), d.getMonth() + i, 1);
+      var last = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+      var iso = last.getFullYear() + '-' + pad(last.getMonth() + 1) + '-' + pad(last.getDate());
+      out += '<option value="' + iso + '">' + ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'][m.getMonth()] + '</option>';
+    }
+    return out;
+  }
+  function glStepRow(st, g) {
+    var own = isOwnTask(st) || can('tasks_all');
+    var closed = st.status === 'done' || st.status === 'cancel';
+    var right = '';
+    if (st.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(st).text) + '</span>';
+    else if (st.due_at && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
+    if (st.status === 'review' || st.status === 'return' || st.status === 'block') {
+      right += '<span class="sev ' + TASK_ST[st.status].cls + '">' + TASK_ST[st.status].label + '</span>';
+    }
+    var who = st.assignee_name && st.assignee_id !== state.taskMe ? '<span class="dy-cl">' + esc(st.assignee_name) + '</span>' : '';
+    var chk = closed
+      ? '<span class="tsk-chk done">' + ic('check', 12) + '</span>'
+      : (own && st.status !== 'review'
+          ? '<button class="tsk-chk" data-done="' + st.id + '" title="Сделано">' + ic('check', 12) + '</button>'
+          : '<span class="tsk-chk" style="cursor:default"></span>');
+    return '<div class="trow dy-row gl-step' + (closed ? ' closed' : '') + (st.overdue ? ' r-crit' : '') + '" data-tid="' + st.id + '">' +
+      '<div class="dy-t">' + chk + '<span class="dy-ttl">' + esc(st.title) + '</span>' + who + '</div>' +
+      '<div class="dy-r">' + right + '</div></div>';
+  }
+  function glGoalCard(g) {
+    var total = g.steps_total || 0, done = g.steps_done || 0;
+    var pct = total ? Math.round(done / total * 100) : 0;
+    var open = !!state.glOpen[g.id];
+    var due = g.due_at ? dueLabel(g) : null;
+    var meta = [];
+    meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
+    if (total) meta.push(done + ' из ' + total + ' ' + plural(total, 'шаг', 'шага', 'шагов')); else meta.push('шагов нет');
+    if (due) meta.push(due.text);
+    var complete = total && done === total && g.status !== 'done';
+    var steps = open
+      ? '<div class="gl-steps">' + (g.steps || []).map(function (st) { return glStepRow(st, g); }).join('') +
+          '<div class="gl-add"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг и Enter" autocomplete="off"></div>' +
+        '</div>'
+      : '';
+    return '<div class="gl-card' + (open ? ' open' : '') + (complete ? ' complete' : '') + '" data-gid="' + g.id + '">' +
+      '<div class="gl-head" data-gtoggle="' + g.id + '">' +
+        '<span class="gl-ring" data-p="' + pct + '"><b class="num">' + pct + '</b></span>' +
+        '<div class="gl-main"><div class="gl-title">' + esc(g.title) + '</div>' +
+          '<div class="gl-meta">' + esc(meta.join(' · ')) +
+            (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
+          '</div></div>' +
+        '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('go', 14) + '</button>' +
+      '</div>' + steps + '</div>';
+  }
   function renderGoals(view) {
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = (state.tasks || []).filter(function (g) {
       if (!q) return true;
       return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
     });
-
     var order = [''].concat(Object.keys(DEPTS));
     var groups = order.map(function (d) {
       return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
-               hint: d ? '' : 'общие для всех направлений',
                goals: list.filter(function (g) { return (g.dept || '') === d; }) };
-    }).filter(function (g) { return g.goals.length; });
+    }).filter(function (grp) {
+      if (state.taskDept) return grp.dept === state.taskDept;
+      // Пустой блок показываем, чтобы было куда завести цель; операционку и
+      // «вся компания» — только когда там что-то есть.
+      return grp.goals.length || (grp.dept && grp.dept !== 'ops' && !q);
+    });
 
     var body = groups.map(function (grp) {
-      var rows = grp.goals.map(function (g) {
-        var due = dueLabel(g);
-        var pct = g.steps_total ? Math.round(g.steps_done / g.steps_total * 100) : 0;
-        return '<div class="trow gl-row' + (g.overdue ? ' r-crit' : '') + '" data-goalopen="' + g.id + '">' +
-          '<div class="tr-name">' + esc(g.title) +
-            '<span class="t-sub">' + (g.assignee_name ? 'ведет ' + esc(g.assignee_name) : 'без ответственного') + '</span></div>' +
-          '<div class="tr-prog">' + progBar(g.steps_done, g.steps_total) + '</div>' +
-          '<span class="gl-pct num' + (pct === 100 ? ' full' : '') + '">' + pct + '%</span>' +
-          '<div class="tsk-due ' + due.cls + '">' + esc(due.text) + '</div>' +
-          '<span class="tr-go">' + ic('go', 14) + '</span>' +
-        '</div>';
-      }).join('');
       var steps = grp.goals.reduce(function (a, g) { return a + (g.steps_total || 0); }, 0);
       var done = grp.goals.reduce(function (a, g) { return a + (g.steps_done || 0); }, 0);
-      return '<div class="gl-sec' + (grp.dept ? '' : ' gl-company') + '">' +
-        '<span class="gl-sl">' + esc(grp.label) +
-          (grp.hint ? '<i class="gl-hint">' + esc(grp.hint) + '</i>' : '') + '</span>' +
-        '<span class="gl-sn num">' + grp.goals.length + ' ' +
-          plural(grp.goals.length, 'цель', 'цели', 'целей') +
-        (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') + '</span></div>' + rows;
+      var adding = state.glNew === (grp.dept || '~');
+      var addRow = adding
+        ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
+            '<select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select>' +
+            '<button class="qchip gl-goal-x" type="button">Отмена</button></div>'
+        : '';
+      return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
+        '<div class="gl-dh"><span class="gl-dl">' + esc(grp.label) + '</span>' +
+          '<span class="gl-dn num">' + (grp.goals.length ? grp.goals.length + ' ' + plural(grp.goals.length, 'цель', 'цели', 'целей') +
+            (steps ? ' · ' + done + ' из ' + steps + ' шагов' : '') : 'целей нет') + '</span>' +
+          (grp.dept !== 'ops' && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
+        '</div>' + addRow +
+        grp.goals.map(glGoalCard).join('') +
+      '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools">' +
-        '<div class="searchwrap' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+    view.innerHTML = '<div class="gl-tools">' + deptChips() +
+        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        '<span class="list-count"><b>' + list.length + '</b> ' +
-          plural(list.length, 'цель', 'цели', 'целей') + '</span>' +
         '<button class="bp ghost sm" id="tsk-meet">' + ic('doc', 14) + 'Импорт встречи</button>' +
-        '<button class="bp sm" id="tsk-new">' + ic('plus', 14) + 'Новая цель</button>' +
       '</div>' +
-      '<div class="list-body">' +
-        (list.length ? body
-          : '<div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.'
-              : 'Целей пока нет. Заведи первую: цель это большой результат, к которому потом добавляются шаги.') + '</div>') +
-      '</div></div>';
+      (groups.length ? body
+        : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
 
-    // На экране целей кнопка заводит цель, а не задачу: за задачей человек идет
-    // в «Сегодня», а сюда приходит ставить направление работы.
-    el('tsk-new').addEventListener('click', function () { openNewTask({ goal: true }); });
-    // Протокол встречи — второй способ завести работу: не по одной задаче руками,
-    // а разом весь список договоренностей, с проверкой перед заведением.
+    wireDeptChips(view);
     el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
-      state.taskQ = qi.value;
-      var pos = qi.selectionStart;
-      renderView();
-      var again = el('tsk-q');
-      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
     el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
-    // Клик по цели ведет в ее шаги — тем же экраном, что и в дереве, чтобы у
-    // одной сущности не было двух разных представлений.
-    Array.prototype.forEach.call(view.querySelectorAll('[data-goalopen]'), function (r) {
-      var id = +r.getAttribute('data-goalopen');
-      r.addEventListener('click', function () {
-        // Карточка цели показывает шаги и кто их ведет — отдельного дерева больше нет.
-        openTask(id);
+
+    // Кольца: от прошлого значения к новому, чтобы закрытый шаг было видно движением.
+    Array.prototype.forEach.call(view.querySelectorAll('.gl-ring'), function (r) {
+      var gid = +r.closest('.gl-card').getAttribute('data-gid');
+      var now = +r.getAttribute('data-p'), prev = state.glPct[gid];
+      r.style.setProperty('--p', prev == null ? now : prev);
+      state.glPct[gid] = now;
+      if (prev != null && prev !== now) requestAnimationFrame(function () { r.style.setProperty('--p', now); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gtoggle]'), function (h) {
+      h.addEventListener('click', function (e) {
+        if (e.target.closest('[data-gopen],[data-gdone]')) return;
+        var id = +h.getAttribute('data-gtoggle');
+        state.glOpen[id] = !state.glOpen[id];
+        renderView();
+        if (state.glOpen[id]) { var inp = view.querySelector('[data-step-for="' + id + '"]'); if (inp && window.innerWidth > 720) inp.focus(); }
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gopen]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-gopen')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gdone]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); b.disabled = true;
+        apiSend('/admin/api/tasks/' + b.getAttribute('data-gdone') + '/status', 'POST', { status: 'done' }, function () {
+          showToast('Цель закрыта'); state.tasks = null; loadTaskSummary(); renderView();
+        }, function () { b.disabled = false; showToast('Не закрылось — проверь сеть'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.gl-step[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-done]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); taskDone(+b.getAttribute('data-done'), b); });
+    });
+    // Новый шаг: одна строка. Кому и срок — от цели, отдел сервер берет у цели сам.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-step-for]'), function (inp) {
+      inp.addEventListener('click', function (e) { e.stopPropagation(); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var title = inp.value.trim(); if (!title) return;
+        var gid = +inp.getAttribute('data-step-for');
+        var g = (state.tasks || []).filter(function (x) { return x.id === gid; })[0] || {};
+        inp.disabled = true;
+        apiSend('/admin/api/tasks', 'POST', { title: title, parent_id: gid, assignee_id: g.assignee_id || state.taskMe || null,
+                                              due_at: g.due_at || null }, function () {
+          state.tasks = null; loadTaskSummary(); renderView();
+          var again = view.querySelector('[data-step-for="' + gid + '"]'); if (again) again.focus();
+        }, function (err) { inp.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+      });
+    });
+    // Новая цель: название и месяц. Ведет тот, кто завел; поправить можно в карточке.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-newgoal]'), function (b) {
+      b.addEventListener('click', function () {
+        state.glNew = b.getAttribute('data-newgoal'); renderView();
+        var inp = view.querySelector('.gl-goal-in'); if (inp) inp.focus();
+      });
+    });
+    var gx = view.querySelector('.gl-goal-x');
+    if (gx) gx.addEventListener('click', function () { state.glNew = ''; renderView(); });
+    var gi = view.querySelector('.gl-goal-in');
+    if (gi) {
+      gi.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { state.glNew = ''; renderView(); return; }
+        if (e.key !== 'Enter') return;
+        var title = gi.value.trim(); if (!title) return;
+        var dept = gi.getAttribute('data-goal-for') || '';
+        var mon = view.querySelector('.gl-goal-mon').value;
+        gi.disabled = true;
+        apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: state.taskMe || null,
+                                              due_at: new Date(mon + 'T23:59:59').toISOString() }, function (r) {
+          state.glNew = ''; state.tasks = null;
+          if (r && r.task) state.glOpen[r.task.id] = true;
+          showToast('Цель заведена, добавь шаги'); renderView();
+        }, function (err) { gi.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
+      });
+    }
   }
 
   /* ── Срез «По ученикам» ────────────────────────────────────────────────────
@@ -6761,10 +6893,11 @@
               }).join('') + '</span>' +
               '<input id="nt-due" class="al-in" type="date" value="' +
                 esc(preset.due || isoDay(isGoal ? 30 : 1)) + '"></div>' +
-            // Важность — вторая ось матрицы, поэтому стоит вплотную к сроку:
-            // человек в один момент решает «когда» и «насколько это вообще
-            // стоит делать». Спрашиваем одним переключателем: шкала приоритета
-            // из пяти делений через месяц вся состоит из четверок и пятерок.
+            // Дальше — уточнения. По умолчанию свернуты (Павел 04.09.2026: форма
+            // перегружена): что-кому-когда хватает, чтобы записать; важность,
+            // направление, цель и описания открываются одной кнопкой.
+            '<button type="button" class="qchip nt-moreb" id="nt-moreb">' + ic('go', 11) + 'Подробнее: важность, направление, описание</button>' +
+            '<div id="nt-more"' + (preset.parent_id || preset.goal ? '' : ' hidden') + '>' +
             '<div class="al-f nt-impf">' +
               '<button type="button" class="qchip nt-imp" id="nt-imp">' + ic('bolt', 13) +
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
@@ -6788,6 +6921,7 @@
               '<textarea id="nt-res" class="al-in al-ta" rows="2" placeholder="' +
                 (isGoal ? 'Измеримый признак: цифра, документ, запущенный процесс'
                         : 'По чему поймем, что задача закрыта') + '"></textarea></label>' +
+            '</div>' +
           '</div>' +
           '<div class="al-foot">' +
             '<button class="al-cancel" id="nt-cancel">Отмена</button>' +
@@ -6797,6 +6931,10 @@
         '</div>';
       document.body.appendChild(ov);
       requestAnimationFrame(function () { ov.classList.add('show'); });
+      var moreB = ov.querySelector('#nt-moreb'), moreD = ov.querySelector('#nt-more');
+      if (moreD.hidden) {
+        moreB.addEventListener('click', function () { moreD.hidden = false; moreB.hidden = true; });
+      } else moreB.hidden = true;
       var closed = false;
       var close = function () {
         if (closed) return; closed = true;
