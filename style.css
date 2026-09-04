@@ -7507,6 +7507,33 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mo-stat b { font-size: 22px; }
 }
 
+/* ── Команда: итоги и архив отчетов ──────────────────────────────────────────
+   Таблица дашборда — та же строка .trow с числами .brd-n, что у недели; процент
+   зеленеет от 80 и краснеет ниже 50 при непустом плане. Отделы — вторая
+   таблица ниже. Архив — полосы недель на .tsk-band и строки на .trow. */
+.ts-grid { grid-template-columns: minmax(180px, 300px) repeat(8, minmax(56px, 1fr)); cursor: pointer; }
+.ts-grid .th:nth-child(n+2), .ts-grid .brd-n { text-align: right; }
+.ts-dgrid { grid-template-columns: minmax(160px, 1fr) repeat(4, minmax(64px, 120px)); }
+.ts-dgrid .th:nth-child(n+2), .ts-dgrid .brd-n { text-align: right; }
+.ts-depts { margin-top: 16px; }
+.ts-depts .dy-h { padding: 14px 24px 4px; }
+.brd-n i { font-style: normal; color: var(--ink-3); font-weight: 600; }
+.brd-n.ts-pct { font-weight: 800; }
+.rp-grid { grid-template-columns: minmax(200px, 1fr) 80px 70px 70px 200px; cursor: pointer; }
+.rp-grid .brd-n { text-align: right; }
+.rp-grid .brd-nm .t-sub { white-space: normal; }
+.rp-grid .rh-c { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+@media (max-width: 720px) {
+  .trow.ts-grid, .trow.ts-dgrid, .trow.rp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; height: auto;
+    padding-top: 12px; padding-bottom: 12px; row-gap: 10px; }
+  .trow.ts-grid.thead, .trow.ts-dgrid.thead { display: none; }
+  .trow.ts-grid .brd-who, .trow.rp-grid .brd-who, .trow.ts-dgrid .brd-nm { grid-column: 1 / -1; }
+  .trow.ts-grid .brd-n, .trow.ts-dgrid .brd-n, .trow.rp-grid .brd-n, .trow.rp-grid .rh-c { display: flex; flex-direction: column;
+    align-items: flex-start; gap: 3px; text-align: left; }
+  .trow.ts-grid .brd-n::before, .trow.ts-dgrid .brd-n::before, .trow.rp-grid .brd-n::before, .trow.rp-grid .rh-c::before { content: attr(data-l);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+}
+
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
