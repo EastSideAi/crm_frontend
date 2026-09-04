@@ -17523,14 +17523,50 @@
       '<span class="po-lt"><b>' + esc(l.title) + '</b><small>' + esc(l.note || '') + '</small></span>' +
       '<span class="po-lu">' + esc(l.label || l.href) + ic('ext', 13) + '</span></a>';
   }
+  /* План направления на вкладках «Продажи» и «Маркетинг»: что готовим к запуску,
+     на ком и к какому сроку. Живет в json до тех пор, пока Павел не доделает
+     раздел задач — потом переедет туда, а здесь останется ссылка. Блокер пишем
+     строкой под задачей: «заблокировано» без причины не действие, а тупик. */
+  var PLAN_ST = {
+    todo:    { cls: 'st-wait',  label: 'не начато' },
+    doing:   { cls: 'st-doing', label: 'в работе' },
+    blocked: { cls: 'st-block', label: 'ждет решения' },
+    done:    { cls: 'st-done',  label: 'готово' },
+  };
+  function portalPlan(plan) {
+    if (!plan || !(plan.groups || []).length) return '';
+    var groups = plan.groups.map(function (g) {
+      var rows = (g.items || []).map(function (it) {
+        var st = PLAN_ST[it.status] || PLAN_ST.todo;
+        var meta = [it.who, it.due].filter(Boolean).join(' · ');
+        return '<div class="po-plr">' +
+          '<span class="po-plt"><b>' + esc(it.t) + '</b>' +
+            (meta ? '<small>' + esc(meta) + '</small>' : '') +
+            (it.note ? '<span class="po-pln">' + esc(it.note) + '</span>' : '') +
+          '</span>' +
+          '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
+        '</div>';
+      }).join('');
+      return '<div class="po-fsec"><div class="po-flbl">' + esc(g.label) + '</div>' +
+        '<div class="po-plan">' + rows + '</div></div>';
+    }).join('');
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('check', 14) + '</span>' +
+        '<div><div class="t">' + esc(plan.title || 'Что готовим') + '</div>' +
+        (plan.sub ? '<div class="s">' + esc(plan.sub) + '</div>' : '') + '</div></div>' +
+      groups +
+      (plan.note ? '<div class="po-note">' + esc(plan.note) + '</div>' : '') +
+    '</div>';
+  }
   function portalMaterials(block, title, icon) {
     block = block || {};
     var links = (block.links || []).map(portalLinkCard).join('');
-    return links + (block.soon
+    var plan = portalPlan(block.plan);
+    return plan + links + (block.soon
       ? '<div class="card po-card"><div class="sec-head"><span class="ic">' + ic(icon, 14) + '</span>' +
         '<div><div class="t">' + esc(title) + '</div></div></div>' +
         '<div class="po-note">' + esc(block.soon) + '</div></div>'
-      : (links ? '' : '<div class="card"><div class="empty">Материалов пока нет.</div></div>'));
+      : (links || plan ? '' : '<div class="card"><div class="empty">Материалов пока нет.</div></div>'));
   }
   function portalLinksTab(p) {
     var links = (p.links || []).map(portalLinkCard).join('');
