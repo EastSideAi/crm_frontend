@@ -4892,8 +4892,8 @@
       }).join('');
       var free = people.filter(function (x) { return ids.indexOf(x.id) === -1 && x.id !== opts.except; });
       var sel = free.length
-        ? '<select class="al-sel pp-add"><option value="">+ ' + (ids.length ? 'еще' : 'участник') + '</option>' +
-            free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select>'
+        ? '<span class="al-selwrap pp-addw"><select class="al-sel sm pp-add"><option value="">+ ' + (ids.length ? 'еще' : 'участник') + '</option>' +
+            free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select></span>'
         : '';
       box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
       Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
@@ -4912,10 +4912,13 @@
     return { get: function () { return ids.slice(); } };
   }
   function loadTaskPeople(cb) {
-    if (state.taskPeople) { cb(state.taskPeople); return; }
+    if (state.taskPeople && state.taskPeople.length) { cb(state.taskPeople); return; }
     api('/admin/api/tasks/people').then(function (r) {
-      state.taskPeople = (r && r.people) || [];
-      cb(state.taskPeople);
+      // Пустой или упавший ответ не кэшируем: иначе все пикеры до перезагрузки
+      // страницы останутся пустыми.
+      var people = (r && r.people) || [];
+      if (people.length) state.taskPeople = people;
+      cb(people);
     }).catch(function () { cb([]); });
   }
   function progBar(done, total) {
@@ -5068,8 +5071,15 @@
     return wd + ', ' + d.getDate() + ' ' + DY_MON[d.getMonth()];
   }
   /* Строка дня: галочка, название, справа только отклонение от нормы. */
-  function dyAv(name, cls) {
-    return '<span class="dy-av' + (cls ? ' ' + cls : '') + '" title="' + esc(name) + '">' + esc(initials(name)) + '</span>';
+  // Кружки людей — из семьи модуля: исполнитель на градиенте (.tsk-av), участники
+  // на --fill с белым кольцом (.stu-av), только меньше.
+  function dyAv(name) {
+    return '<span class="tsk-av dy-av" title="' + esc(name) + '">' + esc(initials(name)) + '</span>';
+  }
+  function dyAvs(people) {
+    return '<span class="dy-m dy-avs" title="' + esc(people.map(function (x) { return x.name; }).join(', ')) + '">' +
+      people.slice(0, 3).map(function (x) { return '<span class="stu-av dy-avp" title="' + esc(x.name) + '">' + esc(initials(x.name)) + '</span>'; }).join('') +
+      (people.length > 3 ? '<span class="stu-av dy-avp more">+' + (people.length - 3) + '</span>' : '') + '</span>';
   }
   /* Строка задачи: два яруса. Сверху название, снизу — кто делает, кто поставил,
      кто участвует (Павел 04.09.2026: исполнитель, постановщик и участники видны
@@ -5107,7 +5117,7 @@
       ? '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>'
       : (canTick
           ? '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>'
-          : (opts.tickSlot ? '<span class="tsk-chk quiet"></span>' : ''));
+          : (opts.tickSlot !== false && !opts.readOnly ? '<span class="tsk-chk quiet"></span>' : ''));
     var meta = [];
     if (t.assignee_name && (opts.who || opts.accept || t.assignee_id !== me)) {
       meta.push('<span class="dy-m">' + dyAv(t.assignee_name) + '<b>' + esc(t.assignee_name) + '</b></span>');
@@ -5115,14 +5125,9 @@
       meta.push('<span class="dy-m dy-none">без исполнителя</span>');
     }
     if (t.author_name && t.author_id !== me && t.author_id !== t.assignee_id) {
-      meta.push('<span class="dy-m">поставил ' + esc(t.author_name) + '</span>');
+      meta.push('<span class="dy-m dy-from">поставил <b>' + esc(t.author_name) + '</b></span>');
     }
-    var parts = t.participants || [];
-    if (parts.length) {
-      meta.push('<span class="dy-m dy-avs" title="' + esc(parts.map(function (x) { return x.name; }).join(', ')) + '">' +
-        parts.slice(0, 3).map(function (x) { return dyAv(x.name, 'part'); }).join('') +
-        (parts.length > 3 ? '<span class="dy-av part">+' + (parts.length - 3) + '</span>' : '') + '</span>');
-    }
+    if ((t.participants || []).length) meta.push(dyAvs(t.participants));
     if (t.client_name) meta.push('<span class="dy-m dy-cl">' + esc(t.client_name) + '</span>');
     // Шаг цели носит метку цели: план и цели — одна сущность; клик открывает цель.
     if (!opts.noGoal && t.parent_id && t.parent_title) {
@@ -6039,11 +6044,15 @@
     var pct = total ? Math.round(done / total * 100) : 0;
     var open = !!state.glOpen[g.id];
     var due = g.due_at ? dueLabel(g) : null;
+    // Мета цели тем же носителем, что у шага: ведущий кружком и именем, команда
+    // кружками, срок — .tsk-due. Иначе родитель тише детей.
     var meta = [];
-    meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
-    if ((g.team || []).length) meta.push('с ' + g.team.join(', '));
-    if (!total) meta.push('шагов нет');
-    if (due) meta.push('до ' + due.text.replace(/^сегодня$/, 'сегодня'));
+    meta.push(g.assignee_name
+      ? '<span class="dy-m">' + dyAv(g.assignee_name) + '<b>' + esc(g.assignee_name) + '</b></span>'
+      : '<span class="dy-m dy-none">без ответственного</span>');
+    if ((g.team || []).length) meta.push(dyAvs(g.team.map(function (n) { return { name: n }; })));
+    if (!total) meta.push('<span class="dy-m">шагов нет</span>');
+    if (due) meta.push('<span class="tsk-due">до ' + esc(due.text) + '</span>');
     var complete = total && done === total && g.status !== 'done';
     var steps = open
       ? '<div class="gl-steps">' + (g.steps || []).map(function (st) { return glStepRow(st, g); }).join('') +
@@ -6051,9 +6060,13 @@
           // участники (Павел 04.09.2026: шаг ставится сразу с людьми и сроком).
           '<div class="gl-add" data-add-for="' + g.id + '"><input class="al-in sm gl-add-in" data-step-for="' + g.id + '" maxlength="200" placeholder="Новый шаг" autocomplete="off">' +
             '<div class="gl-add-more" hidden>' +
-              '<label class="gl-add-f"><span>Кому</span><select class="al-sel sm gl-add-who"></select></label>' +
-              '<label class="gl-add-f"><span>День</span><input type="date" class="al-in sm gl-add-day" value="' + (g.due_at ? dyDayOf(g.due_at) : '') + '"></label>' +
-              '<div class="gl-add-f gl-add-part"><span>Участники</span><div class="gl-add-pp"></div></div>' +
+              '<label class="gl-add-f"><span class="al-l">Кому</span><span class="al-selwrap"><select class="al-sel sm gl-add-who"></select></span></label>' +
+              '<div class="gl-add-f"><span class="al-l">День</span><div class="gl-add-dayrow">' +
+                '<span class="due-seg"><button type="button" data-day="' + isoDay(0) + '">сегодня</button>' +
+                  '<button type="button" data-day="' + isoDay(1) + '">завтра</button>' +
+                  (g.due_at ? '<button type="button" class="on" data-day="' + dyDayOf(g.due_at) + '">срок цели</button>' : '') + '</span>' +
+                '<input type="date" class="al-in sm gl-add-day" value="' + (g.due_at ? dyDayOf(g.due_at) : '') + '"></div></div>' +
+              '<div class="gl-add-f gl-add-part"><span class="al-l">Участники</span><div class="gl-add-pp"></div></div>' +
               '<button type="button" class="bp sm gl-add-go">Добавить</button>' +
             '</div></div>' +
         '</div>'
@@ -6062,7 +6075,7 @@
       '<div class="gl-head" data-gtoggle="' + g.id + '">' +
         '<span class="gl-ring" data-p="' + pct + '"><b class="num">' + pct + '</b></span>' +
         '<div class="gl-main"><div class="gl-title">' + esc(g.title) + '</div>' +
-          '<div class="gl-meta">' + esc(meta.join(' · ')) +
+          '<div class="gl-meta">' + meta.join('') +
             (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
           '</div></div>' +
         '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('doc', 14) + '</button>' +
@@ -6166,7 +6179,9 @@
       function open() {
         if (!more.hidden) return;
         more.hidden = false;
+        if (!who.options.length) who.innerHTML = '<option value="">…</option>';
         loadTaskPeople(function (people) {
+          if (!people.length) { who.innerHTML = '<option value="">не загрузилось</option>'; return; }
           var def = g.assignee_id || state.taskMe;
           who.innerHTML = people.map(function (x) {
             return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
@@ -6192,6 +6207,16 @@
           var again = view.querySelector('[data-step-for="' + gid + '"]'); if (again) again.focus();
         }, function (err) { inp.disabled = false; go.disabled = false; showToast((err && err.body && err.body.detail) || 'Не сохранилось — проверь сеть'); });
       }
+      // Быстрые сроки: чип пишет дату в поле, поле правится и само.
+      Array.prototype.forEach.call(box.querySelectorAll('.due-seg button'), function (b) {
+        b.addEventListener('click', function () {
+          day.value = b.getAttribute('data-day');
+          Array.prototype.forEach.call(box.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x === b); });
+        });
+      });
+      day.addEventListener('input', function () {
+        Array.prototype.forEach.call(box.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x.getAttribute('data-day') === day.value); });
+      });
       inp.addEventListener('focus', open);
       // Ушел из композера с пустой строкой — поля сворачиваются: раскрытый
       // пустой композер под каждой открытой целью это шум.
