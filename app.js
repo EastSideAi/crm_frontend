@@ -5730,7 +5730,7 @@
     var right = '';
     // Срок у шага показываем, только если он свой: унаследованный от цели на
     // каждой строке — это тот же срок, повторенный пять раз.
-    var ownDue = st.due_at && !(g && g.due_at && String(st.due_at).slice(0, 10) === String(g.due_at).slice(0, 10));
+    var ownDue = st.due_at && !(g && g.due_at && dyDayOf(st.due_at) === dyDayOf(g.due_at));
     if (st.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(st).text) + '</span>';
     else if (ownDue && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
     if (st.status === 'review' || st.status === 'return' || st.status === 'block') {
@@ -5753,8 +5753,8 @@
     var due = g.due_at ? dueLabel(g) : null;
     var meta = [];
     meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
-    if (total) meta.push(done + ' из ' + total + ' ' + (total === 1 ? 'шага' : 'шагов')); else meta.push('шагов нет');
-    if (due) meta.push(due.text);
+    if (!total) meta.push('шагов нет');
+    if (due) meta.push('до ' + due.text.replace(/^сегодня$/, 'сегодня'));
     var complete = total && done === total && g.status !== 'done';
     var steps = open
       ? '<div class="gl-steps">' + (g.steps || []).map(function (st) { return glStepRow(st, g); }).join('') +
@@ -5768,7 +5768,8 @@
           '<div class="gl-meta">' + esc(meta.join(' · ')) +
             (complete ? ' <button class="qchip gl-close" data-gdone="' + g.id + '">' + ic('check', 11) + 'Цель достигнута, закрыть</button>' : '') +
           '</div></div>' +
-        '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('go', 14) + '</button>' +
+        '<button class="icobtn sm gl-more" data-gopen="' + g.id + '" title="Карточка цели">' + ic('doc', 14) + '</button>' +
+        '<span class="gl-chev">' + ic('go', 14) + '</span>' +
       '</div>' + steps + '</div>';
   }
   function renderGoals(view) {
