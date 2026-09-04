@@ -17251,13 +17251,12 @@
     var a = t.adds;
     if (!a || !(a.items || []).length) return '';
     var label = a.from ? 'Все из тарифа «' + a.from + '», плюс' : (a.label || 'Что вы получаете');
-    return '<div class="po-tadd">' +
-      '<div class="po-flbl">' + esc(label) + '</div>' +
-      a.items.map(function (it) {
-        return '<div class="po-taddi">' + (a.from ? '<i>+</i>' : ic('check', 13)) +
+    return '<div class="po-fsec po-tsec"><div class="po-flbl">' + esc(label) + '</div>' +
+      '<div class="po-feats">' + a.items.map(function (it) {
+        return '<div class="po-feat' + (a.from ? ' up' : '') + '">' +
+          (a.from ? '<i>+</i>' : ic('check', 13)) +
           '<span>' + esc(it) + '</span></div>';
-      }).join('') +
-    '</div>';
+      }).join('') + '</div></div>';
   }
 
   /* ── тарифы ────────────────────────────────────────────────────────────────

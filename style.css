@@ -6250,7 +6250,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-scope b { display: block; font-size: 21px; font-weight: 800; letter-spacing: -.035em;
   line-height: 1.1; }
 .po-scope small { display: block; margin-top: 5px; min-height: 51px; font-size: 11.5px;
-  color: var(--ink-3); line-height: 1.45; }
+  color: var(--ink-2); line-height: 1.45; }
 .po-tdrs { margin-top: 2px; }
 .po-tdr { display: flex; align-items: center; justify-content: space-between; gap: 10px;
   min-height: 42px; padding: 8px 0; border-top: 1px solid var(--line-2);
@@ -6258,16 +6258,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tdr b { font-size: 12.5px; font-weight: 700; color: var(--ink); text-align: right;
   letter-spacing: -.01em; }
 
-/* «все из тарифа ниже, плюс» — единственный блок карточки, где плюсы синие:
-   это и есть ответ на «за что доплата», и он должен ловиться взглядом раньше
-   состава по этапам. У младшего тарифа плюсов нет, там галочки-маркеры. */
-.po-tadd { margin-top: 17px; padding-top: 16px; border-top: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: 9px; }
-.po-tadd .po-flbl { margin-bottom: 1px; }
-.po-taddi { display: flex; gap: 9px; font-size: 12.5px; color: var(--ink); line-height: 1.42; }
-.po-taddi i { flex: none; width: 13px; font-style: normal; font-weight: 800; color: var(--blue);
+/* «все из тарифа ниже, плюс» — тот же .po-feat, что и состав, с одним
+   модификатором: синий плюс вместо маркера и полные чернила. Это ответ на «за
+   что доплата», он должен ловиться взглядом раньше состава по этапам, но
+   заводить под него третий рецепт отбивки секции незачем. */
+.po-feat.up { color: var(--ink); }
+.po-feat i { flex: none; width: 13px; font-style: normal; font-weight: 800; color: var(--blue);
   text-align: center; }
-.po-taddi svg { flex: none; margin-top: 2px; color: var(--ink-3); }
 /* «не входит» — не предупреждение и не ошибка, а граница услуги: тише состава
    на один уровень чернил, без красного. Красный тут читался бы как поломка. */
 .po-tcard .po-tsec { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
@@ -6505,7 +6502,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-tariffs { grid-template-columns: 1fr; }
   .po-route { min-width: 1010px; }
   /* в одну колонку выравнивать нечего: min-height превращается в пустоты */
-  .po-tpos, .po-tfmt, .po-tpr, .po-scope { min-height: 0; }
+  .po-tpos, .po-tfmt, .po-tpr, .po-scope, .po-scope small, .po-tdr { min-height: 0; }
+  /* карточка растягивается на всю ширину, и пара «что : сколько» разъехалась бы
+     по краям на полэкрана — перестав читаться парой */
+  .po-tdr { max-width: 420px; }
   .po-pay { grid-template-columns: 1fr; }
   .po-pcards { grid-template-columns: 1fr; }
 }
