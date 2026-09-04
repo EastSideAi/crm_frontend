@@ -6207,8 +6207,13 @@
         }, function () { b.disabled = false; showToast('Не закрылось — проверь сеть'); });
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('.gl-step[data-tid]'), function (row) {
-      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    // Шаг под целью — та же строка dyRow (.dy-row), клик открывает карточку;
+    // галочка и метка цели внутри строки обрабатываются сами.
+    Array.prototype.forEach.call(view.querySelectorAll('.gl-steps .dy-row[data-tid]'), function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('[data-done],[data-submit],[data-goalid],[data-today]')) return;
+        openTask(+row.getAttribute('data-tid'));
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-done]'), function (b) {
       b.addEventListener('click', function (e) { e.stopPropagation(); taskDone(+b.getAttribute('data-done'), b); });
