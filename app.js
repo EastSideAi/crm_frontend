@@ -4591,6 +4591,10 @@
     hr:        'Команда',
     ops:       'Операционка',
   };
+  // Отделы планера — четыре (Павел 04.09.2026): сопровождение живет во вкладке
+  // «Ученики», операционка доживает со старыми целями, пока их не разложат.
+  var DEPT_LIVE = ['product', 'marketing', 'sales', 'hr'];
+  function deptLive(d) { return DEPT_LIVE.indexOf(d) !== -1; }
   function deptLabel(d) { return DEPTS[d] || ''; }
   function taskSegs() {
     return Object.keys(TASK_SEGS).filter(function (k) {
@@ -5925,10 +5929,8 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
-  function deptChips(hideOps) {
-    // На «Целях» операционку не предлагаем: целей туда не заводят, и чип вел бы
-    // в пустой блок без единого действия.
-    var all = [''].concat(Object.keys(DEPTS).filter(function (d) { return !(hideOps && d === 'ops'); }));
+  function deptChips() {
+    var all = [''].concat(DEPT_LIVE);
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
       return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
@@ -6015,7 +6017,7 @@
       if (state.taskDept) return grp.dept === state.taskDept;
       // Пустой блок показываем, чтобы было куда завести цель; операционку и
       // «вся компания» — только когда там что-то есть.
-      return grp.goals.length || (grp.dept && grp.dept !== 'ops' && !q);
+      return grp.goals.length || (deptLive(grp.dept) && !q);
     });
 
     var body = groups.map(function (grp) {
@@ -6028,13 +6030,13 @@
       return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
         '<div class="gl-dh"><span class="gl-dl">' + esc(grp.label) + '</span>' +
           '<span class="gl-dn num">' + (grp.goals.length ? grp.goals.length + ' ' + plural(grp.goals.length, 'цель', 'цели', 'целей') : 'целей нет') + '</span>' +
-          (grp.dept !== 'ops' && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
+          (deptLive(grp.dept) && !adding ? '<button class="qchip gl-newbtn" data-newgoal="' + (grp.dept || '~') + '">' + ic('plus', 11) + 'Цель</button>' : '') +
         '</div>' + addRow +
         grp.goals.map(glGoalCard).join('') +
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="gl-tools">' + deptChips(true) +
+    view.innerHTML = '<div class="gl-tools">' + deptChips() +
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -7071,7 +7073,7 @@
       // Одно и то же значение, но человеку это разные вещи, и подписи разные.
       var dopts = '<option value="">' +
           (isGoal ? 'Вся компания — общая цель' : '— без направления —') + '</option>' +
-        Object.keys(DEPTS).map(function (d) {
+        Object.keys(DEPTS).filter(function (d) { return deptLive(d) || dept0 === d; }).map(function (d) {
           return '<option value="' + d + '"' + (dept0 === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
         }).join('');
       // Цель, из карточки которой пришли, могла появиться после того, как список
@@ -7555,7 +7557,7 @@
         }).join('');
       };
       var deptOpts = function (sel) {
-        return '<option value="">— без направления —</option>' + Object.keys(DEPTS).map(function (d) {
+        return '<option value="">— без направления —</option>' + Object.keys(DEPTS).filter(function (d) { return deptLive(d) || sel === d; }).map(function (d) {
           return '<option value="' + d + '"' + (sel === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
         }).join('');
       };
