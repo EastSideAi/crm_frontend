@@ -4815,7 +4815,7 @@
       state.tasksLoading = false;
       state.myweek = { tasks: (rs[0] && rs[0].tasks) || [], r: rs[1] || null,
                        accept: (rs[2] && rs[2].tasks) || [], later: (rs[3] && rs[3].tasks) || [],
-                       gave: ((rs[4] && rs[4].tasks) || []).concat((rs[5] && rs[5].tasks) || []),
+                       gave: (rs[4] && rs[4].tasks) || [], part: (rs[5] && rs[5].tasks) || [],
                        starts: rs[0] && rs[0].week_starts, label: rs[0] && rs[0].week_label };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
       if (cb) cb(); else if (state.page === 'tasks') { renderHead(); renderView(); }
@@ -4877,6 +4877,39 @@
       state.cardCalls[id] = 'none';
       if (cb) cb();
     });
+  }
+  /* Участники задачи: чипы с крестиком и выбор «+ участник». Один компонент
+     для формы и карточки (Павел 04.09.2026: соисполнители и наблюдатели у цели
+     и у шага, ответственный один). onChange получает массив id. */
+  function peoplePick(box, ids, people, opts) {
+    opts = opts || {};
+    ids = (ids || []).slice();
+    function draw() {
+      var chips = ids.map(function (id) {
+        var p = people.filter(function (x) { return x.id === id; })[0];
+        return '<span class="pp-chip">' + esc(p ? (p.name || p.login) : '#' + id) +
+          '<button type="button" class="pp-x" data-ppx="' + id + '" title="Убрать">' + ic('x', 10) + '</button></span>';
+      }).join('');
+      var free = people.filter(function (x) { return ids.indexOf(x.id) === -1 && x.id !== opts.except; });
+      var sel = free.length
+        ? '<select class="al-sel pp-add"><option value="">+ ' + (ids.length ? 'еще' : 'участник') + '</option>' +
+            free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select>'
+        : '';
+      box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
+        b.addEventListener('click', function () {
+          ids = ids.filter(function (x) { return x !== +b.getAttribute('data-ppx'); });
+          draw(); if (opts.onChange) opts.onChange(ids);
+        });
+      });
+      var add = box.querySelector('.pp-add');
+      if (add) add.addEventListener('change', function () {
+        if (!add.value) return;
+        ids.push(+add.value); draw(); if (opts.onChange) opts.onChange(ids);
+      });
+    }
+    draw();
+    return { get: function () { return ids.slice(); } };
   }
   function loadTaskPeople(cb) {
     if (state.taskPeople) { cb(state.taskPeople); return; }
@@ -5148,13 +5181,16 @@
       '<div class="dy-body">' + (tomorrowL.length
         ? tomorrowL.map(function (t) { return dyRow(t, { today: true }); }).join('')
         : '<div class="dy-empty">Пока пусто</div>') + '</div></div>';
-    // На контроле: поставил не себе или наблюдаю. Свернуто — это контроль, а
-    // не мой день (Ольга, 04.09.2026: «негде посмотреть»).
-    var seen = {};
-    var gave = (w.gave || []).filter(function (t) {
-      if (t.assignee_id === state.taskMe || seen[t.id]) return false;
-      seen[t.id] = true; return true;
-    });
+    // Участвую: чужие задачи, где я соисполнитель или наблюдатель — видны
+    // сразу, это и моя работа. На контроле: поставил не себе — свернуто, это
+    // контроль, а не мой день (Ольга, 04.09.2026: «негде посмотреть»).
+    var part = (w.part || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
+    if (part.length) {
+      side += '<div class="card dy-card"><div class="dy-h"><span class="t">Участвую</span>' +
+        '<span class="dy-h-n num"><b>' + part.length + '</b></span></div><div class="dy-body">' +
+        part.map(function (t) { return dyRow(t, { readOnly: true, who: true }); }).join('') + '</div></div>';
+    }
+    var gave = (w.gave || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
     if (gave.length) {
       var gOpen = !!state.dyGave;
       side += '<div class="card dy-card"><div class="dy-h"><span class="t">На контроле</span>' +
@@ -6737,12 +6773,15 @@
             : (t.important ? '<span class="tsk-mimp on">' + ic('bolt', 12) + 'важная</span>' : '')) +
           '<span class="tsk-mwho">' + ic('leads', 12) + esc(t.assignee_name || 'не назначена') + '</span>' +
           (t.author_name ? '<span class="tsk-mwho dim">поставил ' + esc(t.author_name) + '</span>' : '') +
-          // Наблюдатель: чип становится кнопкой у постановщика, исполнителя и
-          // руководителя — клик открывает выбор человека прямо на месте.
-          (isAuthor || isAssignee || can('tasks_all')
-            ? '<button class="tsk-mwho dim tsk-watch" id="tk-watch" title="Получает в бот движение задачи">' + ic('leads', 12) +
-                (t.watcher_name ? 'наблюдает ' + esc(t.watcher_name) : 'наблюдатель') + '</button>'
-            : (t.watcher_name ? '<span class="tsk-mwho dim">' + ic('leads', 12) + 'наблюдает ' + esc(t.watcher_name) + '</span>' : '')) +
+          // Участники: чип становится кнопкой у постановщика, исполнителя и
+          // руководителя — клик открывает чипы с выбором прямо на месте.
+          (function () {
+            var names = (t.participants || []).map(function (x) { return x.name; });
+            var label = names.length ? 'с ' + esc(names.join(', ')) : 'участники';
+            return (isAuthor || isAssignee || can('tasks_all'))
+              ? '<button class="tsk-mwho dim tsk-watch" id="tk-watch" title="Соисполнители и наблюдатели">' + ic('leads', 12) + label + '</button>'
+              : (names.length ? '<span class="tsk-mwho dim">' + ic('leads', 12) + label + '</span>' : '');
+          })() +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
@@ -6973,24 +7012,17 @@
       var wB = el('tk-watch');
       if (wB) wB.addEventListener('click', function () {
         loadTaskPeople(function (people) {
-          var sel = document.createElement('select');
-          sel.className = 'al-sel tsk-watch-sel';
-          sel.innerHTML = '<option value="">— никто —</option>' + people.filter(function (p) { return p.id !== t.assignee_id; }).map(function (p) {
-            return '<option value="' + p.id + '"' + (p.id === t.watcher_id ? ' selected' : '') + '>' + esc(p.name || p.login) + '</option>';
-          }).join('');
-          wB.parentNode.replaceChild(sel, wB);
-          sel.focus();
-          sel.addEventListener('change', function () {
-            var v = sel.value;
-            sel.disabled = true;
-            apiSend('/admin/api/tasks/' + id, 'PATCH', v ? { watcher_id: +v } : { watcher_clear: true }, function () {
-              state.tasks = null; state.myweek = null;
-              api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
-              showToast(v ? 'Наблюдатель назначен' : 'Наблюдатель снят');
-            }, function () { sel.disabled = false; showToast('Не получилось поменять наблюдателя'); });
-          });
-          sel.addEventListener('blur', function () {
-            if (sel.parentNode && !sel.disabled) sel.parentNode.replaceChild(wB, sel);
+          var box = document.createElement('span');
+          box.className = 'tsk-part-box';
+          wB.parentNode.replaceChild(box, wB);
+          peoplePick(box, (t.participants || []).map(function (x) { return x.id; }), people, {
+            except: t.assignee_id,
+            onChange: function (ids) {
+              apiSend('/admin/api/tasks/' + id, 'PATCH', { participants: ids }, function () {
+                state.tasks = null; state.myweek = null;
+                showToast('Участники обновлены');
+              }, function () { showToast('Не получилось поменять участников'); });
+            }
           });
         });
       });
@@ -7217,11 +7249,10 @@
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
               '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
             '</div>' +
-            // Наблюдатель — второй человек в курсе, ответственный один (Павел
-            // 04.09.2026): получает в бот движение задачи и видит ее в «На контроле».
-            '<label class="al-f"><span class="al-l">Наблюдатель</span><span class="al-selwrap">' +
-              '<select id="nt-watch" class="al-sel"><option value="">— никто —</option>' +
-                opts.replace(/ selected/g, '').replace(/^<option value="">[^<]*<\/option>/, '') + '</select></span></label>' +
+            // Участники — соисполнители и наблюдатели при одном ответственном
+            // (Павел 04.09.2026): видят задачу в «Участвую», получают движение в бот.
+            '<div class="al-f"><span class="al-l">Участники</span><div id="nt-part"></div>' +
+              '<span class="al-hint">Соисполнители и наблюдатели: видят задачу у себя и получают ее движение в бот. Ответственный один — тот, кому.</span></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -7286,6 +7317,12 @@
       dueI.addEventListener('change', markWhen);
       markWhen();
 
+      // Участники: ответственный из списка исключается, при смене «кому» —
+      // пересобирается.
+      var partPick = el('nt-part') ? peoplePick(el('nt-part'), [], people, { except: +el('nt-who').value || null }) : null;
+      el('nt-who').addEventListener('change', function () {
+        if (partPick) partPick = peoplePick(el('nt-part'), partPick.get().filter(function (x) { return x !== +el('nt-who').value; }), people, { except: +el('nt-who').value || null });
+      });
       var impB = el('nt-imp');
       impB.addEventListener('click', function () { impB.classList.toggle('on'); });
 
@@ -7387,7 +7424,7 @@
           parent_id: goal ? +goal : null,
           is_goal: isGoal,
           important: impB.classList.contains('on'),
-          watcher_id: el('nt-watch') && el('nt-watch').value ? +el('nt-watch').value : null,
+          participants: partPick ? partPick.get().filter(function (x) { return x !== +who; }) : [],
         }, function (r) {
           close();
           state.tasks = null;
