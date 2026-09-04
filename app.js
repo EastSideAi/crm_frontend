@@ -21034,6 +21034,7 @@
   var MODAL_SECTIONS = [
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
+    { id: 'consult',   label: 'Консультации', icon: 'phone' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'apply',     label: 'Подача',       icon: 'send' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
@@ -21971,6 +21972,8 @@
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
       if (sct.id === 'pay') return can('finance');
+      // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
+      if (sct.id === 'consult') return can('clients');
       // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
       // пункт, который открывается только отказом, хуже отсутствующего пункта.
       if (sct.id === 'dialog') return can('inbox');
@@ -22067,10 +22070,12 @@
     // Секцию оплат без финансовой роли не открыть даже прямым переключением
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
+    if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
+    else if (s === 'consult') host.innerHTML = buildConsultSection(id);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
@@ -22109,6 +22114,7 @@
       renderModalContent();
     });
     attachContentHandlers(id, ctx);
+    if (s === 'consult') wireConsultSection(id);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     if (s === 'apply') wireApplySection(id);
@@ -24279,6 +24285,204 @@
       '</div></details>';
   }
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
+  /* ── РАЗДЕЛ «Консультации»: воронка продаж ДО оплаты ──
+     Записан → провёл → результат. «Купил» тут не помечаем — деньги видно в «Оплатах»
+     (решение Романа 05.09.2026). Результат ставим только у тех, кто ещё НЕ купил:
+     «думает» (с ожидаемым чеком — это потенциал) или «отказ». Отсюда собирается
+     план продаж: записанные + проведённые + потенциал; реальные деньги — из «Оплат».
+     Бэкенд — /admin/api/leads/{id}/consultations (cap clients, миграция 135). */
+  var CONSULT = {};        // id лида -> массив консультаций
+  var CONSULT_BUSY = {};   // id лида -> идёт загрузка
+
+  // Пилюли — общая семья .sev + модификатор (не свой рецепт): записана = в работе
+  // (st-doing, синий), проведена = успех (st-done, зелёный), не пришёл = внимание
+  // (st-block, амбер), отмена = выбыла (st-cancel, серый).
+  var CNS_STATUS = { booked: ['Записана', 'st-doing'], held: ['Проведена', 'st-done'],
+                     no_show: ['Не пришёл', 'st-block'], canceled: ['Отмена', 'st-cancel'] };
+  var CNS_RESULT = { thinking: 'Думает', declined: 'Отказ', rebook: 'Перенос' };
+  var CNS_ROLE = { manager: 'Менеджер', curator: 'Тьютор', teacher: 'Преподаватель' };
+
+  function cnsWhen(iso) {
+    if (!iso) return 'без даты';
+    var d = new Date(iso);
+    if (isNaN(d)) return 'без даты';
+    var dd = ('0' + d.getDate()).slice(-2), mm = ('0' + (d.getMonth() + 1)).slice(-2);
+    var hh = ('0' + d.getHours()).slice(-2), mi = ('0' + d.getMinutes()).slice(-2);
+    return dd + '.' + mm + ' · ' + hh + ':' + mi;
+  }
+
+  function loadConsult(id, force) {
+    if (CONSULT_BUSY[id]) return;
+    if (force) delete CONSULT[id];
+    if (CONSULT[id]) { renderConsultBody(id); return; }
+    CONSULT_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/consultations').then(function (r) {
+      CONSULT_BUSY[id] = false; CONSULT[id] = (r && r.consultations) || [];
+      renderConsultBody(id);
+    }).catch(function () { CONSULT_BUSY[id] = false; });
+  }
+
+  function consultSummary(rows) {
+    var booked = rows.filter(function (c) { return c.status === 'booked'; }).length;
+    var held = rows.filter(function (c) { return c.status === 'held'; }).length;
+    var pot = rows.filter(function (c) { return c.result === 'thinking' && c.amount_rub; })
+      .reduce(function (s, c) { return s + c.amount_rub; }, 0);
+    return '<div class="pay-board">' +
+      '<div class="pay-cell"><div class="pc-l">Записаны</div><div class="pc-v num">' + booked + '</div></div>' +
+      '<div class="pay-cell"><div class="pc-l">Проведены</div><div class="pc-v num">' + held + '</div></div>' +
+      '<div class="pay-cell' + (pot ? ' warn' : ' muted') + '"><div class="pc-l">Потенциал</div>' +
+        '<div class="pc-v num">' + fmtMoney(pot) + ' ₽</div></div>' +
+    '</div>';
+  }
+
+  function consultRowHtml(c) {
+    var st = CNS_STATUS[c.status] || CNS_STATUS.booked;
+    var role = c.lead_role ? '<span class="cns-role">' + esc(CNS_ROLE[c.lead_role] || c.lead_role) + '</span>' : '';
+    // Результат — та же семья .sev: думает = ожидание (n-wait, амбер), отказ = выбыл
+    // (n-off, серый), перенос = в работе (st-doing, синий). Зелёный НЕ ставим — он под
+    // реальные оплаты, а «думает» это ещё надежда.
+    var res = '';
+    if (c.status === 'held') {
+      if (c.result === 'thinking') {
+        res = '<span class="sev n-wait">Думает</span>' +
+          '<span class="cns-amt"><input type="text" inputmode="numeric" class="al-in sm num" ' +
+            'data-amount="' + c.id + '" value="' + (c.amount_rub || '') + '" placeholder="чек ₽"></span>';
+      } else if (c.result === 'declined') {
+        res = '<span class="sev n-off">Отказ</span>';
+      } else if (c.result) {
+        res = '<span class="sev st-doing">' + esc(CNS_RESULT[c.result] || c.result) + '</span>';
+      }
+    }
+    // Действия зависят от стадии: записанную — провести/не пришёл/отмена;
+    // проведённую — поставить исход (кто не купил); купившего тут не трогаем.
+    var acts = '';
+    if (c.status === 'booked') {
+      acts = '<button class="bp sm" data-act="held" data-id="' + c.id + '">Провёл</button>' +
+        '<button class="bp sm ghost" data-act="no_show" data-id="' + c.id + '">Не пришёл</button>' +
+        '<button class="bp sm ghost" data-act="canceled" data-id="' + c.id + '">Отмена</button>';
+    } else if (c.status === 'held' && !c.result) {
+      acts = '<button class="bp sm ghost" data-act="thinking" data-id="' + c.id + '">Думает</button>' +
+        '<button class="bp sm ghost" data-act="declined" data-id="' + c.id + '">Отказ</button>';
+    } else if (c.status === 'held' && c.result === 'declined') {
+      acts = '<button class="bp sm ghost" data-act="thinking" data-id="' + c.id + '">Вернуть в «думает»</button>';
+    }
+    return '<div class="cns-row">' +
+      '<div class="cns-row-top">' +
+        '<span class="cns-when num">' + cnsWhen(c.scheduled_at) + '</span>' +
+        '<span class="sev ' + st[1] + '">' + st[0] + '</span>' + role + res +
+        '<button class="cns-del" data-act="del" data-id="' + c.id + '" title="Удалить">' + ic('x', 12) + '</button>' +
+      '</div>' +
+      (c.note ? '<div class="cns-note">' + esc(c.note) + '</div>' : '') +
+      (acts ? '<div class="cns-acts">' + acts + '</div>' : '') +
+    '</div>';
+  }
+
+  function consultBodyHtml(id) {
+    var rows = CONSULT[id] || [];
+    if (!rows.length) {
+      return consultSummary(rows) +
+        '<div class="cns-empty">Пока ни одной консультации. Запиши первую — она попадёт в план продаж.</div>';
+    }
+    return consultSummary(rows) + '<div class="cns-list">' +
+      rows.map(consultRowHtml).join('') + '</div>';
+  }
+
+  function renderConsultBody(id) {
+    var host = el('cns-body');
+    if (!host || state.modalSection !== 'consult' || String(state.drawerId) !== String(id)) return;
+    host.innerHTML = consultBodyHtml(id);
+    bindConsultRows(id, host);
+  }
+
+  function consultAddForm() {
+    var roles = Object.keys(CNS_ROLE).map(function (k) {
+      return '<option value="' + k + '">' + CNS_ROLE[k] + '</option>';
+    }).join('');
+    // Время — селект с шагом 30 минут (09:00–21:00). Нативный datetime-local/time
+    // показывает часть команды в формате AM/PM — 24-часовой селект однозначен всем.
+    var times = '<option value="">время</option>';
+    for (var h = 9; h <= 21; h++) {
+      for (var m = 0; m < 60; m += 30) {
+        var t = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        times += '<option value="' + t + '">' + t + '</option>';
+      }
+    }
+    return '<div class="cns-add">' +
+      '<input type="date" id="cns-date" class="al-in sm">' +
+      '<select id="cns-time" class="al-in sm">' + times + '</select>' +
+      '<select id="cns-role" class="al-in sm"><option value="">кто ведёт</option>' + roles + '</select>' +
+      '<input type="text" id="cns-note" class="al-in sm cns-note-in" placeholder="о чём (по желанию)">' +
+      '<button class="bp sm" id="cns-add-btn">Записать</button>' +
+    '</div>';
+  }
+
+  function buildConsultSection(id) {
+    return '<div class="m-ctitle">Консультации</div>' +
+      '<div class="m-csub">Записан → провёл → результат. Отсюда собирается план продаж; ' +
+        'оплаты живут в разделе «Оплаты».</div>' +
+      consultAddForm() +
+      '<div id="cns-body" class="cns-wrap">' +
+        (CONSULT[id] ? consultBodyHtml(id) : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>') +
+      '</div>';
+  }
+
+  function consultPatch(id, cid, patch) {
+    api('/admin/api/consultations/' + cid, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).then(function () { loadConsult(id, true); })
+      .catch(function () { showToast('Не удалось сохранить'); });
+  }
+
+  function bindConsultRows(id, host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-act]'), function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+        if (act === 'del') {
+          api('/admin/api/consultations/' + cid, { method: 'DELETE' })
+            .then(function () { loadConsult(id, true); })
+            .catch(function () { showToast('Не удалось удалить'); });
+        } else if (act === 'held' || act === 'no_show' || act === 'canceled') {
+          consultPatch(id, cid, { status: act });
+        } else if (act === 'thinking' || act === 'declined') {
+          consultPatch(id, cid, { result: act });
+        }
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-amount]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var cid = inp.getAttribute('data-amount');
+        var n = parseInt(inp.value.replace(/\D/g, ''), 10);
+        consultPatch(id, cid, { amount_rub: isNaN(n) ? 0 : n });
+      });
+    });
+  }
+
+  function wireConsultSection(id) {
+    loadConsult(id);
+    var btn = el('cns-add-btn');
+    if (btn) btn.addEventListener('click', function () {
+      var date = el('cns-date'), time = el('cns-time'), role = el('cns-role'), note = el('cns-note');
+      var body = {};
+      if (date && date.value) {
+        var t = (time && time.value) ? time.value : '12:00';   // без времени — полдень
+        var dt = new Date(date.value + 'T' + t);
+        if (!isNaN(dt)) body.scheduled_at = dt.toISOString();
+      }
+      if (role && role.value) body.lead_role = role.value;
+      if (note && note.value.trim()) body.note = note.value.trim();
+      btn.disabled = true;
+      api('/admin/api/leads/' + id + '/consultations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function () {
+        btn.disabled = false;
+        if (date) date.value = ''; if (time) time.value = ''; if (note) note.value = '';
+        loadConsult(id, true);
+      }).catch(function () { btn.disabled = false; showToast('Не удалось записать'); });
+    });
+  }
+
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);

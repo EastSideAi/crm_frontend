@@ -1007,6 +1007,27 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-ctitle { font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
 .m-csub { font-size: 13px; color: var(--ink-2); margin-top: 6px; margin-bottom: 26px; line-height: 1.5; }
 
+/* Консультации — воронка продаж на карточке. Собрано ИЗ системных компонентов:
+   свод — .pay-board/.pay-cell, пилюли — .sev, поля — .al-in.sm, кнопки — .bp.sm.
+   Тут только раскладка раздела, своих рецептов не заводим. */
+.pay-cell.warn { background: var(--amber-soft); }
+.pay-cell.warn .pc-l, .pay-cell.warn .pc-v { color: var(--amber-ink); }
+.cns-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+.cns-add .al-in { width: auto; }
+.cns-note-in { flex: 1; min-width: 150px; }
+.cns-list { display: flex; flex-direction: column; gap: 10px; }
+.cns-row { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.cns-row-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cns-when { font-size: 13px; font-weight: 600; color: var(--ink); }
+.cns-role { font-size: 12px; color: var(--ink-3); }
+.cns-amt .al-in { width: 106px; }
+.cns-del { margin-left: auto; flex: none; border: 0; background: transparent; color: var(--ink-3);
+  cursor: pointer; padding: 4px; border-radius: 8px; display: inline-flex; }
+.cns-del:hover { color: var(--red); background: var(--fill); }
+.cns-note { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+.cns-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+.cns-empty { font-size: 13px; color: var(--ink-3); padding: 22px 0; text-align: center; line-height: 1.5; }
+
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 22px; background: #fff;
   display: flex; gap: 10px; justify-content: flex-end; }
 .modal.chat-open .m-foot { display: none; }
