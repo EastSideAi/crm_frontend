@@ -7618,3 +7618,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .tgg-num { width: 64px; text-align: center; }
+
+/* ── Роли в строке и карточке (Павел 04.09.2026: подпись роли, а не «участник») ── */
+.dy-k { font-style: normal; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-right: 2px; white-space: nowrap; }
+.dy-m b + .tsk-av.dy-av { margin-left: 6px; }
+.dy-m .dy-avs { margin-left: 1px; }
+.tsk-mwho i { font-style: normal; font-weight: 500; color: var(--ink-3); margin-right: 1px; }
+.tsk-part-box { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 10px; border-radius: var(--r-sm, 8px); background: var(--fill); }
+.tsk-role { display: flex; flex-direction: column; gap: 4px; }
+.tsk-role .al-l { margin: 0; }
+/* Галочка «сдать»: тот же кружок, но синий контур — это не «сделано», а «отдать на проверку». */
+.tsk-chk.submit { border-color: var(--blue); color: var(--blue); }
+.tsk-chk.submit:hover { background: var(--blue-tint); }
+/* Файлы в карточке: кнопка-лейбл рядом с заголовком секции. */
+.tsk-filesec .tsk-attach { color: var(--blue); }
+/* Ученики: группы по этапам плана, строки те же, что в целях. */
+.stu-g .dy-row { padding-left: 0; padding-right: 0; }
+.stu-g .stu-gl { margin-bottom: 2px; }
