@@ -5694,8 +5694,11 @@
     var own = isOwnTask(st) || can('tasks_all');
     var closed = st.status === 'done' || st.status === 'cancel';
     var right = '';
+    // Срок у шага показываем, только если он свой: унаследованный от цели на
+    // каждой строке — это тот же срок, повторенный пять раз.
+    var ownDue = st.due_at && !(g && g.due_at && String(st.due_at).slice(0, 10) === String(g.due_at).slice(0, 10));
     if (st.overdue) right += '<span class="tsk-due due-over">' + esc(dueLabel(st).text) + '</span>';
-    else if (st.due_at && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
+    else if (ownDue && !closed) right += '<span class="tsk-due">' + esc(dueLabel(st).text) + '</span>';
     if (st.status === 'review' || st.status === 'return' || st.status === 'block') {
       right += '<span class="sev ' + TASK_ST[st.status].cls + '">' + TASK_ST[st.status].label + '</span>';
     }
@@ -5716,7 +5719,7 @@
     var due = g.due_at ? dueLabel(g) : null;
     var meta = [];
     meta.push(g.assignee_name ? 'ведет ' + g.assignee_name : 'без ответственного');
-    if (total) meta.push(done + ' из ' + total + ' ' + plural(total, 'шаг', 'шага', 'шагов')); else meta.push('шагов нет');
+    if (total) meta.push(done + ' из ' + total + ' ' + (total === 1 ? 'шага' : 'шагов')); else meta.push('шагов нет');
     if (due) meta.push(due.text);
     var complete = total && done === total && g.status !== 'done';
     var steps = open
