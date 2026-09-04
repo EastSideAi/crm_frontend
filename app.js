@@ -5592,7 +5592,10 @@
   }
   function renderTeamStats(view) {
     if (state.teamStats === null) { view.innerHTML = dashSkeleton(); loadTeamStats(); return; }
-    if (state.teamStats === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать итоги. Обнови страницу.</div></div>'; return; }
+    if (state.teamStats === 'none') {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось собрать итоги. Обнови страницу.</div></div>';
+      wireTeamMode(view); return;
+    }
     var d = state.teamStats, t = d.totals || {};
     var per = '<div class="pay-seg plan-seg">' + [['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
       return '<button type="button" class="' + (state.teamPeriod === m[0] ? 'on' : '') + '" data-teamper="' + m[0] + '">' + m[1] + '</button>';
@@ -5660,7 +5663,10 @@
   }
   function renderTeamReports(view) {
     if (state.teamReports === null) { view.innerHTML = dashSkeleton(); loadTeamReports(); return; }
-    if (state.teamReports === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить отчеты. Обнови страницу.</div></div>'; return; }
+    if (state.teamReports === 'none') {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось загрузить отчеты. Обнови страницу.</div></div>';
+      wireTeamMode(view); return;
+    }
     var list = (state.teamReports.reports || []);
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
