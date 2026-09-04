@@ -528,6 +528,16 @@
     var p = String(name).trim().split(/\s+/);
     return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || (p[0] || '')[1] || '');
   }
+  /* Цвет аватарки — от самого человека, а не от канала: в списке диалогов надо
+     мгновенно ловить глазами, кто есть кто. Палитра подобрана под наш язык
+     (насыщенность и светлота ровные, белый текст читается на каждом), стабильна
+     на один id — у клиента всегда один цвет. Канал остаётся бейджем в углу. */
+  var AVA_PALETTE = ['#e8506b', '#e06a30', '#c98a1e', '#3f9d5b', '#1fa6a0',
+    '#2f8ad6', '#3f6bd6', '#6b5cd6', '#9b58c8', '#c0559b', '#5a7a8c', '#d0663f',
+    '#4a8f7b', '#7a6cc4'];
+  function avaColor(seed) {
+    return AVA_PALETTE[hashId(seed == null ? '' : seed) % AVA_PALETTE.length];
+  }
   function notifOn() {
     return ('Notification' in window) && Notification.permission === 'granted' &&
       localStorage.getItem('eastside_crm_notif') === '1';
@@ -20397,7 +20407,7 @@
       var cm = chMeta(c.channel);
       var st = inboxTag(c);
       return '<button class="tg-row' + (String(c.id) === String(state.inboxSel) ? ' on' : '') + (c.unread ? ' unread' : '') + '" data-id="' + esc(c.id) + '">' +
-        '<span class="tg-ava" style="--c:' + cm.c + '">' + esc(initials(c.name)) +
+        '<span class="tg-ava" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) +
           '<span class="tg-ch" style="background:' + cm.c + '">' + ic(cm.icon, 8) + '</span></span>' +
         '<span class="tg-rb"><span class="tg-r1"><span class="tg-nm' + (c.anon ? ' anon' : '') + '">' + esc(c.name) + '</span>' +
           '<span class="tg-tm num">' + fmtWhen(c.last_at) + '</span></span>' +
@@ -20708,7 +20718,6 @@
       return;
     }
     inboxMarkSeen(c);
-    var cm = chMeta(c.channel);
     var aiOn = c.ai_on !== false;  // источник правды — ai_enabled; taken_by = просто «кто вёл»
     var msgs = convoMessages(c);
     if (msgs === null) {
@@ -20741,7 +20750,7 @@
     host.innerHTML =
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
-        '<span class="tg-ava sm" style="--c:' + cm.c + '">' + esc(initials(c.name)) + '</span>' +
+        '<span class="tg-ava sm" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
         '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
         '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
