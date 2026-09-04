@@ -7680,6 +7680,7 @@
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
               'placeholder="Скопируй протокол сюда, если файла нет"></textarea></label>' +
           '<div class="al-ai-note" id="mu-note"></div>' +
+          '<div class="mu-drafts" id="mu-drafts" hidden></div>' +
         '</div>' +
         '<div class="al-foot">' +
           '<button class="al-cancel" id="mu-cancel">Отмена</button>' +
@@ -7738,6 +7739,37 @@
     };
     drop.addEventListener('click', function () { fileI.click(); });
     fileI.addEventListener('change', function () { take(fileI.files); });
+
+    // Разборы, до которых не дошли руки. Встречи из Fathom приходят сами, без
+    // человека у экрана, и до сих пор к ним вела только ссылка из бота.
+    var drafts = el('mu-drafts');
+    var srcLabel = function (d) {
+      return d.source === 'fathom' ? 'Fathom' : d.source === 'text' ? 'текст' : 'файл';
+    };
+    api('/admin/api/meetings?status=draft&limit=20').then(function (r) {
+      var list = (r && r.imports) || [];
+      if (!list.length || closed) return;
+      drafts.innerHTML =
+        '<div class="mu-drafts-h">Не заведены <b>' + list.length + '</b></div>' +
+        list.map(function (d) {
+          var bits = [srcLabel(d), fmtWhen(d.at)];
+          if (d.goals) bits.push(d.goals + ' ' + plural(d.goals, 'цель', 'цели', 'целей'));
+          if (d.by_name) bits.push(d.by_name);
+          return '<button class="mu-draft" data-id="' + d.id + '">' +
+            '<span class="mu-draft-i">' + ic(d.source === 'fathom' ? 'mic' : 'doc', 15) + '</span>' +
+            '<span class="mu-draft-b"><span class="mu-draft-t">' + esc(d.file_name || 'Протокол встречи') + '</span>' +
+            '<span class="mu-draft-m">' + esc(bits.join(' · ')) + '</span></span>' +
+            ic('go', 14) + '</button>';
+        }).join('');
+      drafts.hidden = false;
+    }).catch(function () {});
+    drafts.addEventListener('click', function (e) {
+      var b = e.target.closest('.mu-draft');
+      if (!b) return;
+      close();
+      // Экран проверки открываем после ухода формы, как и после разбора файла.
+      setTimeout(function () { openMeetingImport([+b.getAttribute('data-id')]); }, 200);
+    });
     ['dragenter', 'dragover'].forEach(function (ev) {
       drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
     });
