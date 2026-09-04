@@ -5188,14 +5188,14 @@
     if (part.length) {
       side += '<div class="card dy-card"><div class="dy-h"><span class="t">Участвую</span>' +
         '<span class="dy-h-n num"><b>' + part.length + '</b></span></div><div class="dy-body">' +
-        part.map(function (t) { return dyRow(t, { readOnly: true, who: true }); }).join('') + '</div></div>';
+        part.map(function (t) { return dyRow(t, { readOnly: true, who: true, noGoal: true }); }).join('') + '</div></div>';
     }
     var gave = (w.gave || []).filter(function (t) { return t.assignee_id !== state.taskMe; });
     if (gave.length) {
       var gOpen = !!state.dyGave;
       side += '<div class="card dy-card"><div class="dy-h"><span class="t">На контроле</span>' +
         '<span class="dy-h-n num"><b>' + gave.length + '</b></span></div><div class="dy-body">' +
-        (gOpen ? gave.map(function (t) { return dyRow(t, { readOnly: true, who: true }); }).join('') : '') +
+        (gOpen ? gave.map(function (t) { return dyRow(t, { readOnly: true, who: true, noGoal: true }); }).join('') : '') +
         '<button class="stu-more dy-more' + (gOpen ? ' open' : '') + '" id="dy-gave">' + (gOpen ? 'Свернуть' : 'Показать') + '</button></div></div>';
     }
     var doneN = doneToday.length + review.length;
