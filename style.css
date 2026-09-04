@@ -4427,11 +4427,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .pchat-go:hover:not(:disabled) { background: var(--blue-d); }
 .pchat-go:disabled { background: var(--line-2); color: var(--ink-3); cursor: default; }
 
-/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы */
+/* Кнопка «План с AI» в секции и крестик в шапке чата живут только на узком экране:
+   на широком чат стоит рядом с доской и закрывать его незачем. */
+.m-side-open { display: none; }
+.pchat-x { display: none; }
+/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы.
+   Открывается кнопкой из секции, закрывается крестиком: путь назад есть всегда. */
 @media (max-width: 1180px) {
   .modal.pchat-open { width: 1020px; }
   .modal.pchat-open .m-content, .modal.pchat-open .m-nav { display: none; }
   .pchat { flex: 1; border-left: 0; }
+  .pchat-x { display: grid; }
+  .m-side-open { display: inline-flex; margin-bottom: 14px; }
 }
 @keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes rmDot { 0%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }

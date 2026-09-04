@@ -18379,11 +18379,28 @@
      Точечно — потому что пересборка плана целиком стёрла бы прогресс ученика. */
   /* Правый столбец карточки лида: у «Поступления» — чат по плану, у «Витрины» — чат
      по продуктам. Один и тот же материал (.pchat), разные предметные области. */
-  function hasSidePanel() {
+  /* Правый столбец (чат плана, чат витрины) есть у двух секций. На широком экране он
+     стоит рядом с доской всегда. На узком (до 1180px) рядом не помещается: раньше он
+     занимал место доски вместе с навигацией, и выйти из него было нельзя, только
+     закрыть карточку (Павел 04.09.2026, телефон). Теперь на узком экране столбец
+     открывается кнопкой в секции и закрывается крестиком в своей шапке. */
+  function sideSection() {
     return state.modalSection === 'admission' || state.modalSection === 'offers';
+  }
+  function narrowModal() {
+    return !!(window.matchMedia && window.matchMedia('(max-width: 1180px)').matches);
+  }
+  function hasSidePanel() {
+    return sideSection() && (!narrowModal() || !!state.sideOpen);
+  }
+  function sideOpenButton() {
+    if (!sideSection() || !narrowModal() || state.sideOpen) return '';
+    return '<button class="bp sm m-side-open" id="m-side-open">' + ic('spark', 13) +
+      (state.modalSection === 'offers' ? 'Витрина с AI' : 'План с AI') + '</button>';
   }
 
   function drawerChatPanel(id) {
+    if (!hasSidePanel()) return '';
     if (state.modalSection === 'admission') return planChatPanel(id);
     if (state.modalSection === 'offers') return offersChatPanel(id);
     return '';
@@ -18433,6 +18450,7 @@
     return '<aside class="pchat" id="pchat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
         '<span class="pchat-title">План с AI</span>' +
+        '<button class="pchat-x" data-side-close title="К карточке">' + ic('x', 14) + '</button>' +
       '</div>' +
       '<div class="pchat-list" id="pchat-list">' + body + '</div>' +
       '<div class="pchat-foot">' +
@@ -21886,6 +21904,7 @@
   }
   function setModalSection(s) {
     state.modalSection = s;
+    state.sideOpen = false;
     RM_CHAT = null;
     // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
     if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
@@ -22063,6 +22082,19 @@
     if (side) side.innerHTML = drawerChatPanel(id);
     var mdl = el('modal');
     if (mdl) mdl.classList.toggle('pchat-open', hasSidePanel());
+    var openBtn = sideOpenButton();
+    if (openBtn) {
+      host.insertAdjacentHTML('afterbegin', openBtn);
+      el('m-side-open').addEventListener('click', function () {
+        state.sideOpen = true;
+        renderModalContent();
+      });
+    }
+    var sideX = side && side.querySelector('[data-side-close]');
+    if (sideX) sideX.addEventListener('click', function () {
+      state.sideOpen = false;
+      renderModalContent();
+    });
     attachContentHandlers(id, ctx);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
@@ -25808,6 +25840,7 @@
     return '<aside class="pchat" id="ochat">' +
       '<div class="pchat-head">' + ic('spark', 14) +
         '<span class="pchat-title">Витрина с AI</span>' +
+        '<button class="pchat-x" data-side-close title="К карточке">' + ic('x', 14) + '</button>' +
       '</div>' +
       '<div class="pchat-list" id="ochat-list">' + body + '</div>' +
       '<div class="pchat-foot">' +
