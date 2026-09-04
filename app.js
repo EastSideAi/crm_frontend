@@ -20028,7 +20028,11 @@
   function inboxConvos() {
     if (state.bot.source !== 'api') return [];
     return (state.bot.list || []).map(function (c) {
-      return { id: c.user_id, api: true, channel: c.channel, name: c.name, anon: !c.username,
+      /* anon = про человека не знаем ничего: ни имени из мессенджера, ни ника.
+         Имя теперь приходит и без ника (в MAX ников нет вовсе), и такой диалог
+         подписан именем, а не приглушенным «Гость». */
+      return { id: c.user_id, api: true, channel: c.channel, name: c.name,
+        anon: !c.username && !c.full_name,
         last_text: (c.last_text || '').replace(/<[^>]+>/g, ''), last_role: c.last_role, last_at: c.last_at,
         unread: c.unread, ai_on: c.ai_enabled, handoff: c.handoff_requested, taken_by: c.taken_by, msgs: c.msgs };
     });
