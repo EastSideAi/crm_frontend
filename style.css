@@ -2755,6 +2755,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .stu-h:hover .stu-n { color: var(--blue); }
 .stu-n { font-size: 15.5px; font-weight: 700; color: var(--ink); letter-spacing: -.02em;
   transition: .12s; }
+.stu-own { font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
 .stu-stage { font: 700 11px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
 /* Кто ведет ученика — аватары исполнителей его открытых задач: отвечает на «не

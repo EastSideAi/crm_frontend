@@ -5060,9 +5060,13 @@
     var quick = '';
     if (closed) quick = '<span class="tsk-chk done' + (t.status === 'review' ? ' rv' : '') + '">' + ic('check', 12) + '</span>';
     else if (own && !opts.readOnly) quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
-    var tail = (opts.accept || opts.who) && t.assignee_name
+    // Шаг цели носит метку цели: план и цели — одна сущность, и это должно
+    // быть видно в строке (Павел 04.09.2026); клик открывает цель.
+    var goalTag = !opts.noGoal && t.parent_id && t.parent_title
+      ? '<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>' : '';
+    var tail = ((opts.accept || opts.who) && t.assignee_name
       ? '<span class="dy-who">' + esc(t.assignee_name) + '</span>'
-      : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '');
+      : (t.client_name ? '<span class="dy-cl">' + esc(t.client_name) + '</span>' : '')) + goalTag;
     return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' + tail + '</div>' +
       '<div class="dy-r">' + right + '</div>' +
@@ -6376,6 +6380,10 @@
       var head = '<button class="stu-h" data-exp="' + esc(s.session_id) + '" aria-expanded="' + opened + '">' +
         '<span class="stu-chev' + (opened ? ' on' : '') + '">' + ic('go', 14) + '</span>' +
         '<span class="stu-n">' + esc(s.client_name) + '</span>' +
+        // Кто ведет ученика — ответственный из карточки клиента и его роль:
+        // тьютор это или администратор (Павел 04.09.2026).
+        (s.owner_name ? '<span class="stu-own">ведет ' + esc(s.owner_name) +
+          (s.owner_role_label ? ' · ' + esc(s.owner_role_label.toLowerCase()) : '') + '</span>' : '') +
         (s.stage ? '<span class="stu-stage">' + esc(s.stage) +
           (s.stages_total ? ' · этап ' + (s.stage_idx + 1) + ' из ' + s.stages_total : '') + '</span>' : '') +
         '<span class="stu-av-row">' + avs + '</span>' +
