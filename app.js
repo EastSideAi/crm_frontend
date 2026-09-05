@@ -15695,10 +15695,13 @@
   var MK_KINDS = [
     { id: 'tg', label: 'В бот · Telegram', short: 'TG' },
     { id: 'vk', label: 'В бот · VK', short: 'VK' },
+    // Одна ссылка на оба мессенджера: /go/{код} спрашивает, где человеку удобнее.
+    // Нужна там, где ссылку пересылают друг другу — родитель ребенку, например.
+    { id: 'both', label: 'В бот · на выбор', short: 'TG+VK' },
     { id: 'page', label: 'На страницу', short: 'WEB' },
   ];
   var MK_KIND_INFO = {
-    tg: MK_KINDS[0], vk: MK_KINDS[1], page: MK_KINDS[2],
+    tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
   var MK_SOURCE_NAMES = {
