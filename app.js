@@ -63,7 +63,7 @@
     convSchool: {},     // чей это чат на странице учета уроков { user_id: {links:[…]} | 'load' }
     schoolPick: null,   // открытый выбор ученика: { uid, q, list, busy }
     drawerId: null, drawerList: [], modalSection: 'now',
-    details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
+    details: {}, detailAt: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, planBlock: {}, assignees: null,
     _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
@@ -547,6 +547,12 @@
       return raw ? (JSON.parse(raw).d || null) : null;
     } catch (e) { return null; }
   }
+  function cacheAt(id) {
+    try {
+      var raw = localStorage.getItem(DC_PREF + id);
+      return raw ? (JSON.parse(raw).t || 0) : 0;
+    } catch (e) { return 0; }
+  }
   function cacheSet(id, d) {
     try { localStorage.setItem(DC_PREF + id, JSON.stringify({ t: Date.now(), d: d })); trimCache(); } catch (e) {}
   }
@@ -602,6 +608,7 @@
     state.inflight[id] = cb ? [cb] : [];
     api('/admin/api/leads/' + id).then(function (d) {
       state.details[id] = d;
+      state.detailAt[id] = Date.now();
       cacheSet(id, d);
       var cbs = state.inflight[id] || []; delete state.inflight[id];
       cbs.forEach(function (f) { f(d); });
@@ -654,8 +661,31 @@
   function warm(id) {
     if (state.details[id] || state.inflight[id]) return;
     var cached = cacheGet(id);
-    if (cached) { state.details[id] = cached; return; }
+    if (cached) { state.details[id] = cached; state.detailAt[id] = cacheAt(id); return; }
     fetchDetail(id);
+  }
+  /* Карточка показывает то, что загрузила, а сервер тем временем дописывает в нее
+     сам: консультации из Fathom, PDF для семьи, задачи от бота. Павел 06.09.2026
+     открыл карточку в ту минуту, когда файл только собирался, и во вкладке
+     «Документы» увидел пустоту. Поэтому при открытии и при смене вкладки карточка
+     тихо перечитывает себя с сервера: старое показываем сразу, свежее подменяем,
+     когда придет. Не перерисовываем, пока человек что-то печатает в карточке. */
+  var DETAIL_FRESH_MS = 10000;
+  function revalidateDetail(id) {
+    if (!id || state.inflight[id]) return;
+    if (Date.now() - (state.detailAt[id] || 0) < DETAIL_FRESH_MS) return;
+    state.inflight[id] = [];
+    api('/admin/api/leads/' + id).then(function (d) {
+      delete state.inflight[id];
+      var changed = JSON.stringify(d) !== JSON.stringify(state.details[id] || null);
+      state.details[id] = d;
+      state.detailAt[id] = Date.now();
+      cacheSet(id, d);
+      if (!changed || state.drawerId !== id) return;
+      var a = document.activeElement;
+      var typing = a && el('modal').contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+      if (!typing) renderDrawer(true);
+    }).catch(function () { delete state.inflight[id]; });
   }
   /* сбросить кэш детали и перезагрузить (после правки документов/оплат) */
   function refreshDetail(id, cb) {
@@ -21881,6 +21911,7 @@
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
+    revalidateDetail(id);
     // список сотрудников нужен доске плана (исполнитель задачи) — тянем на
     // открытии карточки, а не в каждой секции
     if (!state.assignees) fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
@@ -21912,6 +21943,7 @@
       syncHash(next);
       renderDrawer(false);
       warm(next);
+      revalidateDetail(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
         if (state.drawerId === next && got) renderDrawer(true);
       });
@@ -21923,6 +21955,7 @@
     RM_CHAT = null;
     // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
     if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
+    revalidateDetail(state.drawerId);
     var nav = el('modal').querySelector('.m-nav');
     if (nav) Array.prototype.forEach.call(nav.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-s') === s);
