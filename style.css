@@ -6518,7 +6518,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .po-h1 { font-size: 23px; }
   .po-cols { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .po-search { flex-basis: 100%; max-width: none; }
-  .po-card { padding: 17px 16px; }
+  .po-card, .po-tcard { padding: 17px 16px; }
+  /* карточки стоят стопкой: внешний зазор должен быть больше, чем отбивки
+     секций внутри карточки (17-18px), иначе пять карточек читаются лентой */
+  .po-tariffs { gap: 26px; }
   .po-rl { width: 140px; }
   /* на телефоне содержимое продукта идет во всю ширину: отступ под иконку
      съедал бы треть строки, а читать надо текст, а не поле слева */
