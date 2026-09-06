@@ -2629,9 +2629,8 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-mwho.dim { color: var(--ink-3); font-weight: 500; }
 /* Наблюдатель: чип-кнопка в той же строке, что исполнитель и постановщик;
    по клику на его месте встает выбор человека. */
-.tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--ink-3); }
+.tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
-.tsk-part-box { display: inline-flex; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
@@ -2792,18 +2791,6 @@ button.tr-crumb:hover { color: var(--blue); }
   color: var(--ink-3); margin-bottom: 4px; }
 /* Работа, которую никто не взял, — состояние «внимание», а не поломка: красный
    в этом экране занят просрочкой. */
-.stu-g.nobody .stu-gl { color: var(--amber-ink); }
-.stu-t { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap: 10px;
-  align-items: center; padding: 8px 10px; margin: 0 -10px; border-radius: 10px;
-  cursor: pointer; transition: .12s; }
-.stu-t:hover { background: #FBFBFC; }
-.stu-tt { font-size: 13.5px; font-weight: 600; color: var(--ink); letter-spacing: -.01em;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stu-tw { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.stu-td { font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
-.stu-td.due-none { color: var(--ink-3); font-weight: 500; }
-.stu-td.due-now { color: var(--amber-ink); }
-.stu-td.due-over { color: var(--red-ink); }
 /* Раскрытая часть: воздух сверху отделяет ее от свернутой шапки. */
 .stu-body-in { margin-top: 4px; animation: stu-open .18s var(--ease); }
 @keyframes stu-open { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
@@ -2858,7 +2845,25 @@ button.tr-crumb:hover { color: var(--blue); }
 .cl-st { font: 600 10.5px 'Manrope', sans-serif; padding: 2px 7px; border-radius: var(--r-pill); }
 .cl-st.transcribing { color: var(--blue); background: var(--blue-tint); }
 .cl-st.failed { color: var(--red-ink); background: var(--red-soft); }
-.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.cl-sum { margin-top: 7px; font-size: 13px; line-height: 1.5; color: var(--ink);
+  display: flex; flex-direction: column; gap: 10px; }
+.cl-sum .cl-p { margin: 0; }
+/* Что продавали и главное обещание — единственный акцент конспекта: тонированная
+   плашка без рамки, подписи мелким капсом, значения обычным весом. */
+.cl-deal { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  border-radius: 12px; background: var(--blue-tint); }
+.cl-kv { display: grid; grid-template-columns: 128px 1fr; gap: 2px 12px; align-items: baseline; }
+.cl-k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); line-height: 1.4; }
+.cl-kv .cl-k { padding-top: 2px; }
+.cl-kv.promise .cl-v { font-weight: 600; color: var(--navy); }
+.cl-sec { display: flex; flex-direction: column; gap: 3px; }
+.cl-ul { margin: 0; padding-left: 16px; }
+.cl-ul li { margin: 0; padding-left: 2px; }
+.cl-ul li::marker { color: var(--ink-3); }
+@media (max-width: 520px) {
+  .cl-kv { grid-template-columns: 1fr; gap: 1px; }
+}
 .cl-empty { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 .cl-acts { display: flex; gap: 8px; margin-top: 8px; }
 
@@ -3015,13 +3020,6 @@ button.tr-crumb:hover { color: var(--blue); }
   /* «По ученикам» на телефоне: название задачи во всю ширину, под ним человек и
      срок, статус справа. В четыре колонки на 390px имя схлопывается в «Ть…». */
   .stu { padding: 14px 16px 12px; }
-  .stu-t { grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px; align-items: start;
-    padding: 10px; }
-  .stu-tt { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35; }
-  .stu-t .stu-tw { grid-column: 1; grid-row: 2; font-size: 12px; }
-  .stu-t .stu-td { grid-column: 2; grid-row: 2; justify-self: end; font-size: 12px; }
-  .stu-t > div:last-child { grid-column: 2; grid-row: 1; justify-self: end; }
   .stu-cs { margin-left: 0; width: 100%; }
   /* Обрезанное название шага на телефоне не читается — переносим в две строки,
      как и название задачи в строке списка. */
@@ -4429,11 +4427,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .pchat-go:hover:not(:disabled) { background: var(--blue-d); }
 .pchat-go:disabled { background: var(--line-2); color: var(--ink-3); cursor: default; }
 
-/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы */
+/* Кнопка «План с AI» в секции и крестик в шапке чата живут только на узком экране:
+   на широком чат стоит рядом с доской и закрывать его незачем. */
+.m-side-open { display: none; }
+.pchat-x { display: none; }
+/* узкий экран: чат вместо доски, а не рядом — иначе обе колонки нечитаемы.
+   Открывается кнопкой из секции, закрывается крестиком: путь назад есть всегда. */
 @media (max-width: 1180px) {
   .modal.pchat-open { width: 1020px; }
   .modal.pchat-open .m-content, .modal.pchat-open .m-nav { display: none; }
   .pchat { flex: 1; border-left: 0; }
+  .pchat-x { display: grid; }
+  .m-side-open { display: inline-flex; margin-bottom: 14px; }
 }
 @keyframes rmPop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 @keyframes rmDot { 0%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
@@ -6562,6 +6567,29 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mu-drop-t { font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--navy);
   overflow-wrap: anywhere; }
 .mu-drop-s { font-size: 11.5px; color: var(--ink-2); }
+/* Черновики, которые еще не завели: строки на языке списка — ховер фоном и левой
+   полоской, без рамок. Отдельный блок с воздухом сверху: это другая сущность, чем
+   загрузка нового файла. */
+.mu-drafts { display: flex; flex-direction: column; margin: 6px -8px 0; }
+.mu-drafts-h { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em;
+  padding: 0 8px 6px; }
+.mu-drafts-h b { color: var(--navy); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mu-draft { position: relative; display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 9px 8px; border: 0; border-radius: 12px; background: none; text-align: left;
+  font: inherit; color: var(--ink); cursor: pointer; transition: background .14s; }
+.mu-draft::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 2px; background: var(--blue); opacity: 0; transition: opacity .14s; }
+.mu-draft:hover { background: #FBFBFC; }
+.mu-draft:hover::before { opacity: 1; }
+.mu-draft > svg:last-child { flex: none; color: var(--ink-3); transition: transform .15s, color .15s; }
+.mu-draft:hover > svg:last-child { color: var(--blue); transform: translateX(2px); }
+.mu-draft-i { flex: none; width: 30px; height: 30px; border-radius: 10px; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--blue-tint); color: var(--blue); }
+.mu-draft-b { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mu-draft-t { font-size: 13px; font-weight: 600; letter-spacing: -.01em; color: var(--navy);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mu-draft-m { font-size: 11.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 
 /* Экран проверки */
 .mi-card { max-width: 720px; }
@@ -7618,3 +7646,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .tgg-num { width: 64px; text-align: center; }
+
+/* ── Роли в строке и карточке (Павел 04.09.2026: подпись роли, а не «участник») ── */
+.dy-row .dy-meta { min-width: 0; }
+.dy-m b { overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.dy-k { font-style: normal; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-right: 2px; white-space: nowrap; }
+.dy-m b + .tsk-av.dy-av { margin-left: 6px; }
+.dy-m .dy-avs { margin-left: 1px; }
+.tsk-mwho i { font-style: normal; font-weight: 500; color: var(--ink-3); margin-right: 1px; }
+.tsk-part-box { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 10px; background: var(--fill); }
+.tsk-role { display: flex; flex-direction: column; gap: 4px; }
+.tsk-role .al-l { margin: 0; }
+/* Галочка «сдать»: тот же кружок, но синий контур — это не «сделано», а «отдать на проверку». */
+.tsk-chk.submit { border-color: var(--blue); color: var(--blue); }
+.tsk-chk.submit:hover { background: var(--blue-tint); }
+/* Ученики: группы по этапам плана, строки те же, что в целях. */
+.stu-g .dy-row { padding-left: 0; padding-right: 0; }
+.stu-g .stu-gl { margin-bottom: 2px; }
