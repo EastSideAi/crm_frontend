@@ -89,7 +89,9 @@
     return '<div class="card po-card po-routec lp-route">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
         '<div><div class="t">' + esc(r.title || '') + '</div>' +
-        (r.sub ? '<div class="s">' + esc(r.sub) + '</div>' : '') + '</div></div>' +
+        (r.sub || r.legend ? '<div class="s">' + esc(r.sub || '') +
+          (r.legend ? '<span class="po-rleg">; ' + esc(r.legend) + '</span>' : '') + '</div>' : '') +
+        '</div></div>' +
       '<div class="po-routew"><div class="po-route">' + pts + '</div></div>' +
       (r.note || r.note_strong ? '<div class="po-lede">' + esc(r.note || '') +
         (r.note_strong ? ' <b>' + esc(r.note_strong) + '</b>' : '') + '</div>' : '') +
@@ -113,7 +115,9 @@
     var label = a.from ? 'Все из тарифа «' + a.from + '», плюс' : (a.label || 'Что вы получаете');
     return '<div class="po-fsec po-tsec"><div class="po-flbl">' + esc(label) + '</div>' +
       '<div class="po-feats">' + a.items.map(function (it) {
-        return '<div class="po-feat' + (a.from ? ' up' : '') + '">' +
+        /* полные чернила и на младшем тарифе: рядом идет «Не входит» теми же
+           12.5px, и без этого «чего нет» звучит наравне с «что даем» */
+        return '<div class="po-feat up">' +
           (a.from ? '<i>+</i>' : ic('check', 13)) + '<span>' + esc(it) + '</span></div>';
       }).join('') + '</div></div>';
   }
@@ -196,7 +200,7 @@
       document.title = p.title + ' — тарифы ИстСайд';
       root.innerHTML =
         '<header class="lp-head">' +
-          '<div class="lp-brand">ИстСайд</div>' +
+          '<div class="al-eyebrow">ИстСайд</div>' +
           '<h1 class="lp-h1">' + esc(p.title) + '</h1>' +
           /* подзаголовок берем из landing.sub, а НЕ из note или lead: те написаны
              для команды («флагман», «продаем вероятность»), и на странице,

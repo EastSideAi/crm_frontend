@@ -9,21 +9,21 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2303081C'/%3E%3Cpath d='M32 12l5.5 14.5L52 32l-14.5 5.5L32 52l-5.5-14.5L12 32l14.5-5.5L32 12z' fill='%232B8FFF'/%3E%3C/svg%3E">
 <!-- те же ?v=, что у CRM: страница живет на общем style.css, и своя метка версии
      развела бы кэш двух страниц одного сайта -->
-<link rel="stylesheet" href="style.css?v=20260906a">
+<link rel="stylesheet" href="style.css?v=20260906b">
 <style>
   /* Оболочка лендинга. Внутри — те же карточки тарифов, что в портале, поэтому
      своих рецептов тут ровно два: шапка страницы и раскрытие состава. */
   body { background: var(--main); }
   .lp { max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }
   .lp-head { margin-bottom: 26px; }
-  .lp-brand { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--blue); }
   .lp-h1 { margin-top: 12px; font-size: 34px; font-weight: 800; letter-spacing: -.035em;
     line-height: 1.12; text-wrap: balance; }
   .lp-sub { margin-top: 10px; max-width: 640px; font-size: 14.5px; color: var(--ink-2);
     line-height: 1.5; }
   .lp .po-card, .lp .po-tcard { margin-bottom: 16px; }
   .lp .po-tariffs { margin-bottom: 16px; }
+  /* легенда ленты объясняет цвет точек: ленты нет — легенды тоже */
+  .lp-route .po-rleg { display: none; }
   /* раскрытие состава: строка-кнопка, а не серая плашка — на телефоне по ней
      попадают пальцем, поэтому высота честные 44px */
   .lp-more { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
@@ -51,12 +51,13 @@
        мысль словами, она стоит прямо под ней */
     .lp-route .po-routew { display: none; }
     .lp-route .po-lede { margin-top: 14px; }
+    .lp .po-card, .lp .po-tcard { margin-bottom: 26px; }
     .lp .po-tprice { font-size: 26px; }
   }
 </style>
 </head>
 <body>
 <div class="lp" id="lp"><div class="card lp-err">Загружаем тарифы…</div></div>
-<script src="tariffs.js?v=20260906a"></script>
+<script src="tariffs.js?v=20260906b"></script>
 </body>
 </html>

@@ -17367,7 +17367,11 @@
     return '<div class="card po-card po-routec">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
         '<div><div class="t">' + esc(r.title || '') + '</div>' +
-        (r.sub ? '<div class="s">' + esc(r.sub) + '</div>' : '') + '</div></div>' +
+        /* легенда ленты — отдельным спаном: там, где ленту прячут (мини-лендинг
+           на телефоне), подпись не должна ссылаться на несуществующий элемент */
+        (r.sub || r.legend ? '<div class="s">' + esc(r.sub || '') +
+          (r.legend ? '<span class="po-rleg">; ' + esc(r.legend) + '</span>' : '') + '</div>' : '') +
+        '</div></div>' +
       '<div class="po-routew"><div class="po-route">' + pts + '</div></div>' +
       (r.note || r.note_strong ? '<div class="po-lede">' + esc(r.note || '') +
         (r.note_strong ? ' <b>' + esc(r.note_strong) + '</b>' : '') + '</div>' : '') +
@@ -17462,7 +17466,7 @@
     var label = a.from ? 'Все из тарифа «' + a.from + '», плюс' : (a.label || 'Что вы получаете');
     return '<div class="po-fsec po-tsec"><div class="po-flbl">' + esc(label) + '</div>' +
       '<div class="po-feats">' + a.items.map(function (it) {
-        return '<div class="po-feat' + (a.from ? ' up' : '') + '">' +
+        return '<div class="po-feat up">' +
           (a.from ? '<i>+</i>' : ic('check', 13)) +
           '<span>' + esc(it) + '</span></div>';
       }).join('') + '</div></div>';
