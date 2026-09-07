@@ -25339,7 +25339,13 @@
               ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
               '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
             '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
-          if (!isInst || !open) return head;
+          /* Ссылка на оплату: менеджер отправляет ее в переписку, и платит человек
+             без входа в кабинет. Родители за детей платят чаще всего именно так. */
+          var payable = o.status !== 'paid' && o.status !== 'canceled';
+          var linkBox = payable ? '<div class="ord-link" data-linkbox="' + o.id + '">' +
+            '<button class="oi-mark" data-getlink="' + o.id + '">получить ссылку на оплату</button>' +
+            '</div>' : '';
+          if (!isInst || !open) return head + linkBox;
           // раскрытый график: каждый взнос со статусом и ручной отметкой
           var rows = inst.map(function (i) {
             var s = IST[i.status] || IST.scheduled;
@@ -25359,7 +25365,7 @@
               '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
               act + '</div>';
           }).join('');
-          return head + '<div class="oi-box">' +
+          return head + linkBox + '<div class="oi-box">' +
             '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
             rows + '</div>';
         }).join('');
@@ -25367,6 +25373,38 @@
         Array.prototype.forEach.call(ordList.querySelectorAll('.ord-oh'), function (h) {
           h.addEventListener('click', function () {
             var oid = h.getAttribute('data-oid'); ordOpen[oid] = !ordOpen[oid]; renderOrders(orders);
+          });
+        });
+        // ссылка на оплату: получаем у бэкенда и сразу показываем с кнопкой копирования
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-getlink]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var oid = b.getAttribute('data-getlink');
+            var box = ordList.querySelector('[data-linkbox="' + oid + '"]');
+            b.disabled = true; b.textContent = 'готовлю…';
+            apiSend('/admin/api/orders/' + oid + '/pay-link', 'POST', null, function (r) {
+              /* Ссылку показываем в поле только для чтения: ее копируют и уносят в
+                 переписку, а не правят руками. */
+              box.innerHTML = '<input class="ord-link-i" readonly value="' + esc(r.url) + '">' +
+                '<button class="oi-mark" data-copy="' + oid + '">копировать</button>' +
+                '<div class="oi-hint">Ссылка работает, пока счет не оплачен или не снят. ' +
+                'Человек откроет ее без входа в кабинет, введет почту для чека и заплатит. ' +
+                'Деньги привяжутся к этому счету.</div>';
+              var inp = box.querySelector('.ord-link-i');
+              box.querySelector('[data-copy]').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                inp.select();
+                var done = function () { showToast('Ссылка скопирована'); };
+                if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, done);
+                else { try { document.execCommand('copy'); } catch (x) {} done(); }
+              });
+            }, function (code, err) {
+              b.disabled = false; b.textContent = 'получить ссылку на оплату';
+              var d = (err && err.body && err.body.detail) || '';
+              if (code === 409) return showToast(d || 'По этому счету ссылку выдать нельзя');
+              if (code === 403) return showToast('Ссылку на оплату выдает только сотрудник с доступом к финансам');
+              showToast('Не получилось — проверь сеть');
+            });
           });
         });
         // отметка взноса
