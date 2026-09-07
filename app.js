@@ -77,6 +77,8 @@
     taskWho: null,
     // недельный цикл: моя неделя, неделя команды, сдвиг недель, чью неделю смотрю
     myweek: null, teamWeek: null, weekShift: 0, teamWho: null,
+    // фокус недели: цели, у которых есть шаги в этой неделе (лист руководителя)
+    focus: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     cardCalls: {},
@@ -2098,6 +2100,10 @@
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
+    // «Фокус недели» — управленческий взгляд: во что команда целится на этой
+    // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
+    // одного человека, а этот вопрос про всю компанию (и cap другой).
+    { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor', 'senior_tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
@@ -2643,6 +2649,20 @@
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
     }
+    if (state.page === 'focus') {
+      var fw = state.focus && state.focus !== 'none' ? state.focus : null;
+      var fwt = fw ? (fw.tasks || []).filter(function (t) { return t.status !== 'cancel'; }) : [];
+      var fwb = fwt.filter(function (t) { return t.overdue; }).length;
+      var fwd = fwt.filter(function (t) { return t.status === 'done'; }).length;
+      var fphr = !fw ? 'Собираю неделю…'
+        : !fwt.length ? 'Неделя пустая: ни одна задача не взята в работу.'
+        : fwb ? '<b>' + fwb + ' ' + plural(fwb, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
+                '.</b> Это первое, что стоит разобрать с людьми.'
+        : 'Просрочки нет. Закрыто ' + fwd + ' из ' + fwt.length + '.';
+      html = '<div><h2>Фокус недели' + (fw && fw.label ? ' · ' + esc(fw.label) : '') + '</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('target', 13) + '</span><span>' + fphr + '</span></div></div>' +
+        wkNav(fw ? fw.label : '');
+    }
     if (state.page === 'prospects') {
       var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
       html = '<div><h2>Лиды</h2>' +
@@ -3039,6 +3059,7 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
+    else if (state.page === 'focus') renderFocus(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -4985,6 +5006,7 @@
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
     state.myweek = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
+    state.focus = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -5002,6 +5024,150 @@
     if (el('wk-prev')) el('wk-prev').addEventListener('click', function () { go(-1); });
     if (el('wk-next')) el('wk-next').addEventListener('click', function () { go(1); });
     if (el('wk-now')) el('wk-now').addEventListener('click', function () { state.weekShift = 0; wkReload(); });
+  }
+
+
+  /* ── Фокус недели: лист руководителя ────────────────────────────────────────
+     Один экран, отвечающий на вопрос «во что компания целится на этой неделе и
+     что из этого уже сделано». Фокус — не новая сущность в базе: это цель, у
+     которой есть шаги, взятые в текущую неделю. Поэтому лист не надо вести
+     руками и он не устаревает: собрали неделю — фокус появился сам, закрыли
+     шаг — он позеленел, кончилась неделя — лист собрался заново.
+     Отдельным разделом, а не пятой вкладкой «Задач»: там срезы работы одного
+     человека (мой план, мои ученики), а тут вся компания сверху. */
+  function loadFocus(cb) {
+    var sh = wkShift();
+    state.tasksLoading = true;
+    Promise.all([
+      api('/admin/api/tasks?view=week&scope=all&shift=' + sh),
+      api('/admin/api/tasks?view=goals&scope=all'),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      state.focus = {
+        tasks: (rs[0] && rs[0].tasks) || [],
+        goals: (rs[1] && rs[1].tasks) || [],
+        label: (rs[0] && rs[0].week_label) || '',
+      };
+      state.taskMe = rs[0] ? rs[0].me : state.taskMe;
+      if (cb) cb(); else if (state.page === 'focus') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.focus = 'none';
+      if (state.page === 'focus') renderView();
+    });
+  }
+
+  /* Порядок фокусов. Если руководитель проставил приоритет первой строкой
+     описания цели («Приоритет 2 из 4. …»), считаем его; иначе цель идет ниже, по
+     объему работы в неделе. Читаем текст, а не заводим колонку: приоритет живет
+     неделю, а поле в базе — вечно, и через месяц никто не помнит, что оно значит. */
+  function focusRank(g) {
+    var m = /^\s*Приоритет\s+(\d+)/i.exec((g && g.details) || '');
+    return m ? +m[1] : 90;
+  }
+  function focusWhy(g) {
+    var line = (((g && g.details) || '').split('\n')[0] || '').trim();
+    return line.length > 240 ? line.slice(0, 239) + '…' : line;
+  }
+  function focusLive(t) { return t.status !== 'cancel'; }
+  function focusDone(t) { return t.status === 'done'; }
+
+  function renderFocus(view) {
+    if (state.focus === null) { view.innerHTML = dashSkeleton(); loadFocus(); return; }
+    if (state.focus === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
+      return;
+    }
+    var f = state.focus;
+    var tasks = (f.tasks || []).filter(focusLive);
+    var goalById = {};
+    (f.goals || []).forEach(function (g) { goalById[g.id] = g; });
+
+    var byGoal = {}, loose = [];
+    tasks.forEach(function (t) {
+      if (t.parent_id) (byGoal[t.parent_id] = byGoal[t.parent_id] || []).push(t);
+      else loose.push(t);
+    });
+    var focuses = Object.keys(byGoal).map(function (id) {
+      var g = goalById[id] || { id: +id, title: (byGoal[id][0] || {}).parent_title || 'Цель' };
+      return { g: g, steps: byGoal[id] };
+    }).sort(function (a, b) {
+      var d = focusRank(a.g) - focusRank(b.g);
+      return d || b.steps.length - a.steps.length;
+    });
+
+    var done = tasks.filter(focusDone).length;
+    var burn = tasks.filter(function (t) { return t.overdue; }).length;
+    var bar = statBar([
+      { label: 'Фокусов', value: focuses.length, sub: 'целей в работе' },
+      { label: 'Задач в неделе', value: tasks.length, sub: 'у всей команды' },
+      { label: 'Закрыто', value: done, sub: tasks.length ? Math.round(done / tasks.length * 100) + '% недели' : '' },
+      { label: 'Горит', value: burn, sub: burn ? 'просрочено' : 'просрочки нет' },
+    ]);
+
+    var dayOf = function (t) {
+      if (!t.due_at) return '';
+      var d = new Date(t.due_at);
+      return WDAYS_RU[d.getDay()] + ' ' + d.getDate();
+    };
+
+    var blocks = focuses.map(function (fx, i) {
+      var g = fx.g;
+      var why = focusWhy(g);
+      var steps = fx.steps.slice().sort(function (a, b) {
+        return (a.due_at || '').localeCompare(b.due_at || '');
+      });
+      var sdone = steps.filter(focusDone).length;
+      return '<div class="card fw">' +
+        '<div class="fw-h">' +
+          '<span class="fw-n num">' + (i + 1) + '</span>' +
+          '<div class="fw-hm">' +
+            '<button class="fw-t" data-goalid="' + g.id + '">' + esc(g.title) + '</button>' +
+            '<div class="fw-sub">' +
+              (g.dept ? '<span>' + esc(deptLabel(g.dept)) + '</span>' : '') +
+              (g.assignee_name ? '<span>ведет ' + esc(g.assignee_name) + '</span>'
+                               : '<span class="fw-nobody">без ответственного</span>') +
+              '<span>' + sdone + ' из ' + steps.length + ' на этой неделе</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="fw-prog">' + progBar(g.steps_done || sdone, g.steps_total || steps.length) + '</div>' +
+        '</div>' +
+        (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
+        '<div class="fw-rows">' + steps.map(function (t) {
+          return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
+            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+        }).join('') + '</div>' +
+      '</div>';
+    }).join('');
+
+    var looseBlock = loose.length
+      ? '<div class="card fw fw-loose">' +
+          '<div class="tsk-band"><span class="tsk-band-t">Вне фокусов</span>' +
+            '<span class="tsk-band-h">задачи недели, не привязанные к цели</span>' +
+            '<span class="tsk-band-n num">' + loose.length + '</span></div>' +
+          '<div class="fw-rows">' + loose.sort(function (a, b) {
+            return (a.due_at || '').localeCompare(b.due_at || '');
+          }).map(function (t) {
+            return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
+              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+          }).join('') + '</div>' +
+        '</div>'
+      : '';
+
+    view.innerHTML = bar +
+      (focuses.length
+        ? blocks
+        : '<div class="card"><div class="empty">На этой неделе ни одна цель не взята в работу. ' +
+          'Неделя собирается в разделе «Задачи»: там люди берут задачи из «Потом».</div></div>') +
+      looseBlock;
+
+    wkWireNav(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-goalid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
   }
 
   /* Строка задачи в неделе. Колонки: задача, день, статус. Исполнителя нет —
