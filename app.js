@@ -39,6 +39,9 @@
   }
 
   var KEY_LS = 'eastside_crm_key';
+  // Предел недели на максимуме настройки (50) считается выключенным: полоски и
+  // «не больше N» прячем. Число совпадает с max у PUT /rhythm/caps.
+  var WK_CAP_OFF = 50;
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
   var UI_LS = 'eastside_crm_ui3';
@@ -63,7 +66,7 @@
     convSchool: {},     // чей это чат на странице учета уроков { user_id: {links:[…]} | 'load' }
     schoolPick: null,   // открытый выбор ученика: { uid, q, list, busy }
     drawerId: null, drawerList: [], modalSection: 'now',
-    details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
+    details: {}, detailAt: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, planBlock: {}, assignees: null,
     _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
@@ -557,6 +560,12 @@
       return raw ? (JSON.parse(raw).d || null) : null;
     } catch (e) { return null; }
   }
+  function cacheAt(id) {
+    try {
+      var raw = localStorage.getItem(DC_PREF + id);
+      return raw ? (JSON.parse(raw).t || 0) : 0;
+    } catch (e) { return 0; }
+  }
   function cacheSet(id, d) {
     try { localStorage.setItem(DC_PREF + id, JSON.stringify({ t: Date.now(), d: d })); trimCache(); } catch (e) {}
   }
@@ -612,6 +621,7 @@
     state.inflight[id] = cb ? [cb] : [];
     api('/admin/api/leads/' + id).then(function (d) {
       state.details[id] = d;
+      state.detailAt[id] = Date.now();
       cacheSet(id, d);
       var cbs = state.inflight[id] || []; delete state.inflight[id];
       cbs.forEach(function (f) { f(d); });
@@ -664,8 +674,31 @@
   function warm(id) {
     if (state.details[id] || state.inflight[id]) return;
     var cached = cacheGet(id);
-    if (cached) { state.details[id] = cached; return; }
+    if (cached) { state.details[id] = cached; state.detailAt[id] = cacheAt(id); return; }
     fetchDetail(id);
+  }
+  /* Карточка показывает то, что загрузила, а сервер тем временем дописывает в нее
+     сам: консультации из Fathom, PDF для семьи, задачи от бота. Павел 06.09.2026
+     открыл карточку в ту минуту, когда файл только собирался, и во вкладке
+     «Документы» увидел пустоту. Поэтому при открытии и при смене вкладки карточка
+     тихо перечитывает себя с сервера: старое показываем сразу, свежее подменяем,
+     когда придет. Не перерисовываем, пока человек что-то печатает в карточке. */
+  var DETAIL_FRESH_MS = 10000;
+  function revalidateDetail(id) {
+    if (!id || state.inflight[id]) return;
+    if (Date.now() - (state.detailAt[id] || 0) < DETAIL_FRESH_MS) return;
+    state.inflight[id] = [];
+    api('/admin/api/leads/' + id).then(function (d) {
+      delete state.inflight[id];
+      var changed = JSON.stringify(d) !== JSON.stringify(state.details[id] || null);
+      state.details[id] = d;
+      state.detailAt[id] = Date.now();
+      cacheSet(id, d);
+      if (!changed || state.drawerId !== id) return;
+      var a = document.activeElement;
+      var typing = a && el('modal').contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+      if (!typing) renderDrawer(true);
+    }).catch(function () { delete state.inflight[id]; });
   }
   /* сбросить кэш детали и перезагрузить (после правки документов/оплат) */
   function refreshDetail(id, cb) {
@@ -681,7 +714,9 @@
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
-      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      // Вторым аргументом — сама ошибка: в e.body.detail сервер объясняет, что
+      // именно мешает (предел недели, нет исполнителя). Код один на все случаи.
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0, e);
       if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
@@ -3200,7 +3235,7 @@
       lead: 'Ритм один — неделя. В понедельник собираете ее, в пятницу закрываете. Три минуты на каждое, зато никто ничего не теряет.',
       art: function () { return gdWin(1, 'Задачи', []); },
       dos: [
-        'Понедельник: откройте «Неделя», нажмите «Собрать неделю» и отметьте, что берете из «Потом». Не больше предела — он показан полоской.',
+        'Понедельник: откройте «Неделя», нажмите «Собрать неделю» и отметьте, что берете из «Потом». Берите столько, сколько реально закроете.',
         'Задача со сроком на этой неделе попадает в неделю сама. Дальний срок — это ориентир, задача ждет в «Потом».',
         'Сделали — сдайте сразу, а не в пятницу. Приемка тоже занимает время.',
         'Пятница: «Закрыть неделю». По каждой открытой задаче — перенести с причиной или убрать в «Потом». Это и есть отчет, ничего писать не нужно.',
@@ -4013,12 +4048,20 @@
     report: 'Вечером: заселён и на связи, план на завтра',
     route: 'Расписал студенту маршрут из аэропорта',
     sim_online: 'Помог с симкой и оплатой в переписке',
-    settled: 'К вечеру студент заселён и на связи'
+    settled: 'К вечеру студент заселён и на связи',
+    c_meet: 'Встретил на кампусе, познакомился с учеником',
+    c_reg: 'Помог пройти регистрацию в университете',
+    c_house: 'Помог с заселением в общежитие',
+    c_cards: 'Помог оформить студенческую и банковскую карту',
+    c_money: 'Проверил симку и деньги: WeChat/Alipay',
+    c_tour: 'Показал кампус: где учёба и что где находится',
+    c_report: 'Отчитался родителям, оставил контакт для вопросов'
   };
   var AR_SERVICE = {
     meet: { label: 'Встреча в аэропорту', rate: 3000 },
     full_day: { label: 'Полный день заезда', rate: 7000 },
-    online: { label: 'Онлайн-сопровождение', rate: 1500 }
+    online: { label: 'Онлайн-сопровождение', rate: 1500 },
+    campus: { label: 'Встреча на кампусе', rate: 5000 }
   };
   var AR_STATUS = {
     draft: { label: 'Черновик', cls: 'gray' },
@@ -5374,7 +5417,10 @@
     } else if (sh <= 0) {
       act = '<button class="qchip" id="wk-close">Закрыть заново</button>';
     }
-    var meter = cap
+    // 50 — потолок настройки, при нем предел выключен (решение Павла 07.09.2026):
+    // полоску и «не больше N» не показываем, иначе «7 из 50» читается как норма.
+    var capOn = cap && cap < WK_CAP_OFF;
+    var meter = capOn
       ? '<div class="wk-cap' + (load >= cap ? ' full' : '') + '" title="Предел задач на неделю">' +
           '<span class="wk-cap-bar"><i style="width:' + Math.min(100, Math.round(load / cap * 100)) + '%"></i></span>' +
           '<span class="num">' + load + ' из ' + cap + '</span></div>'
@@ -5392,7 +5438,7 @@
       body = '<div class="wk-empty">' +
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
-          ? '<div class="wk-empty-s">Возьми задачи из «Потом» — не больше ' + cap + ' — и нажми «Собрать неделю». ' +
+          ? '<div class="wk-empty-s">Возьми задачи из «Потом»' + (capOn ? ' — не больше ' + cap + ' — ' : ' ') + 'и нажми «Собрать неделю». ' +
             'Задача со сроком на этой неделе попадает сюда сама.</div>' +
             '<button class="bp sm" id="wk-collect2">' + ic('plus', 14) + 'Собрать неделю</button>'
           : '') +
@@ -5549,6 +5595,7 @@
   function openWeekCollect(w) {
     if (document.querySelector('.al-ov')) return;
     var r = w.r || {}, cap = r.cap || 7, load = r.load || 0;
+    var capOn = cap < WK_CAP_OFF;
     var starts = w.starts || wkMondayIso(wkShift());
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -5556,13 +5603,13 @@
       '<div class="al-head"><div><div class="al-eyebrow">Неделя · ' + esc(w.label || r.label || '') + '</div>' +
         '<div class="al-title">Собрать неделю</div></div>' +
         '<button class="al-x" id="wkp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-      '<div class="al-sub">Отметь, что берешь в неделю. Не больше <b>' + cap + '</b> — остальное подождет в «Потом».</div>' +
+      '<div class="al-sub">Отметь, что берешь в неделю.' + (capOn ? ' Не больше <b>' + cap + '</b> — остальное подождет в «Потом».' : '') + '</div>' +
       '<div class="al-body">' +
         '<div class="wk-state wait" id="wkp-full" hidden>' + ic('bell', 13) + '<span>Предел набран: ' + cap + ' из ' + cap + '. Чтобы взять другую задачу, сними галочку или закрой неделю с переносом.</span></div>' +
         '<div id="wkp-body">' + dashSkeleton() + '</div>' +
       '</div>' +
       '<div class="al-foot wkp-foot">' +
-        '<div class="wk-cap" id="wkp-cap"><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
+        '<div class="wk-cap" id="wkp-cap"' + (capOn ? '' : ' hidden') + '><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
         '<div class="ct-err" id="wkp-err"></div>' +
         '<button class="bp al-save" id="wkp-ok">' + ic('check', 14) + 'Собрать</button>' +
       '</div></div>';
@@ -5582,6 +5629,7 @@
 
     var picked = {};
     function meter() {
+      if (!capOn) return;               // предел выключен: ни полоски, ни отказа
       var n = load + Object.keys(picked).length;
       el('wkp-n').textContent = n + ' из ' + cap;
       el('wkp-cap').classList.toggle('full', n >= cap);
@@ -6000,7 +6048,7 @@
       '<div class="card listcard">' +
       '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
       idle +
-      (b.caps ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
+      (b.caps && b.caps.cap < WK_CAP_OFF ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
     '</div>' +
       (can('team') ? '<div class="card rh-sched-card"><div class="rh-sched" id="rh-sched"></div></div>' : '');
 
@@ -7249,7 +7297,9 @@
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
-          if (to === 'return') { setRet(true); return; }
+          // Поле возврата уже открыто и текст набран — «Вернуть» отправляет его,
+          // а не открывает поле второй раз (Павел 07.09.2026: «не могу вернуть»).
+          if (to === 'return') { if (retMode && (say.value || '').trim()) send(); else setRet(true); return; }
           // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
           // чего приемка превращалась в спор.
           if (to === 'review' && isAssignee) { setRes('review'); return; }
@@ -7646,9 +7696,12 @@
           // Цель без шагов — просто надпись. Сразу открываем ее карточку: там
           // кнопка «добавить шаг», и первый шаг ставится, пока думают о цели.
           if (isGoal && r && r.task) openTask(r.task.id);
-        }, function () {
+        }, function (code, e) {
           save.disabled = false; save.classList.remove('loading');
-          showToast(isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу');
+          // 409 — не сбой, а отказ с причиной («на этой неделе уже 7 задач, предел 7»):
+          // без нее человек жмет еще раз и не понимает, что не так (07.09.2026).
+          var why = e && e.body && typeof e.body.detail === 'string' ? e.body.detail : '';
+          showToast(why || (isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу'));
         });
       });
      });
@@ -15583,6 +15636,7 @@
           '<label class="tgg-wl">тьюторам' +
             '<input id="wk-cap-t" class="al-in sm tgg-num" type="number" min="1" max="50" value="' + (c.cap_tutor || 5) + '"></label>' +
           '<button class="tgg-b" id="wk-cap-save">Сохранить</button>' +
+          '<div class="s">50 — без предела: полоска и отказ «предел набран» не показываются</div>' +
         '</div>' +
         '<div class="tgg-week">' +
           '<button type="button" class="tm-tp-b' + (g.daily_digest ? ' on' : '') + '" id="wk-digest">Утренняя и вечерняя сводки</button>' +
@@ -15799,10 +15853,13 @@
   var MK_KINDS = [
     { id: 'tg', label: 'В бот · Telegram', short: 'TG' },
     { id: 'vk', label: 'В бот · VK', short: 'VK' },
+    // Одна ссылка на оба мессенджера: /go/{код} спрашивает, где человеку удобнее.
+    // Нужна там, где ссылку пересылают друг другу — родитель ребенку, например.
+    { id: 'both', label: 'В бот · на выбор', short: 'TG+VK' },
     { id: 'page', label: 'На страницу', short: 'WEB' },
   ];
   var MK_KIND_INFO = {
-    tg: MK_KINDS[0], vk: MK_KINDS[1], page: MK_KINDS[2],
+    tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
   var MK_SOURCE_NAMES = {
@@ -17438,7 +17495,11 @@
     return '<div class="card po-card po-routec">' +
       '<div class="sec-head"><span class="ic">' + ic('path', 14) + '</span>' +
         '<div><div class="t">' + esc(r.title || '') + '</div>' +
-        (r.sub ? '<div class="s">' + esc(r.sub) + '</div>' : '') + '</div></div>' +
+        /* легенда ленты — отдельным спаном: там, где ленту прячут (мини-лендинг
+           на телефоне), подпись не должна ссылаться на несуществующий элемент */
+        (r.sub || r.legend ? '<div class="s">' + esc(r.sub || '') +
+          (r.legend ? '<span class="po-rleg">; ' + esc(r.legend) + '</span>' : '') + '</div>' : '') +
+        '</div></div>' +
       '<div class="po-routew"><div class="po-route">' + pts + '</div></div>' +
       (r.note || r.note_strong ? '<div class="po-lede">' + esc(r.note || '') +
         (r.note_strong ? ' <b>' + esc(r.note_strong) + '</b>' : '') + '</div>' : '') +
@@ -17533,7 +17594,7 @@
     var label = a.from ? 'Все из тарифа «' + a.from + '», плюс' : (a.label || 'Что вы получаете');
     return '<div class="po-fsec po-tsec"><div class="po-flbl">' + esc(label) + '</div>' +
       '<div class="po-feats">' + a.items.map(function (it) {
-        return '<div class="po-feat' + (a.from ? ' up' : '') + '">' +
+        return '<div class="po-feat up">' +
           (a.from ? '<i>+</i>' : ic('check', 13)) +
           '<span>' + esc(it) + '</span></div>';
       }).join('') + '</div></div>';
@@ -17741,7 +17802,7 @@
      Чип «семья сама» намеренно амбер: это ровно те места, где идет допродажа,
      и их должно быть видно, не читая текст. */
   var PO_WHO = { 'семья сама': 'po-w-self', 'платформа': 'po-w-plat', 'команда': 'po-w-team',
-                 'платформа и куратор': 'po-w-team', 'платформа и диагност': 'po-w-team',
+                 'платформа и тьютор': 'po-w-team', 'платформа и диагност': 'po-w-team',
                  'платформа и семья': 'po-w-self' };
   /* same:true — «то же, что тарифом ниже»: текст не дублируем в json, чтобы
      правка одного описания не разъезжалась по трем копиям */
@@ -21982,6 +22043,7 @@
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
+    revalidateDetail(id);
     // список сотрудников нужен доске плана (исполнитель задачи) — тянем на
     // открытии карточки, а не в каждой секции
     if (!state.assignees) fetchPeople(function () { if (state.drawerId === id) renderDrawer(true); });
@@ -22013,6 +22075,7 @@
       syncHash(next);
       renderDrawer(false);
       warm(next);
+      revalidateDetail(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
         if (state.drawerId === next && got) renderDrawer(true);
       });
@@ -22024,6 +22087,7 @@
     RM_CHAT = null;
     // Открыли «Поступление» — статус публикации всегда свежий с бэка (не кэш).
     if (s === 'admission' && state.drawerId) ensurePlanStatus(state.drawerId, true);
+    revalidateDetail(state.drawerId);
     var nav = el('modal').querySelector('.m-nav');
     if (nav) Array.prototype.forEach.call(nav.children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-s') === s);

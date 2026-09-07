@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Тарифы — ИстСайд</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Тарифы сопровождения поступления на грант в вузы Китая: состав, цены и что делает семья сама.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2303081C'/%3E%3Cpath d='M32 12l5.5 14.5L52 32l-14.5 5.5L32 52l-5.5-14.5L12 32l14.5-5.5L32 12z' fill='%232B8FFF'/%3E%3C/svg%3E">
+<!-- те же ?v=, что у CRM: страница живет на общем style.css, и своя метка версии
+     развела бы кэш двух страниц одного сайта -->
+<link rel="stylesheet" href="style.css?v=20260906b">
+<style>
+  /* Оболочка лендинга. Внутри — те же карточки тарифов, что в портале, поэтому
+     своих рецептов тут ровно два: шапка страницы и раскрытие состава. */
+  body { background: var(--main); }
+  .lp { max-width: 1180px; margin: 0 auto; padding: 40px 24px 64px; }
+  .lp-head { margin-bottom: 26px; }
+  .lp-h1 { margin-top: 12px; font-size: 34px; font-weight: 800; letter-spacing: -.035em;
+    line-height: 1.12; text-wrap: balance; }
+  .lp-sub { margin-top: 10px; max-width: 640px; font-size: 14.5px; color: var(--ink-2);
+    line-height: 1.5; }
+  .lp .po-card, .lp .po-tcard { margin-bottom: 16px; }
+  .lp .po-tariffs { margin-bottom: 16px; }
+  /* легенда ленты объясняет цвет точек: ленты нет — легенды тоже */
+  .lp-route .po-rleg { display: none; }
+  /* раскрытие состава: строка-кнопка, а не серая плашка — на телефоне по ней
+     попадают пальцем, поэтому высота честные 44px */
+  .lp-more { margin-top: 17px; padding-top: 17px; border-top: 1px solid var(--line); }
+  .lp-more > summary { display: flex; align-items: center; justify-content: space-between;
+    min-height: 44px; cursor: pointer; list-style: none; font-size: 12.5px; font-weight: 700;
+    color: var(--blue); letter-spacing: -.01em; }
+  .lp-more > summary::-webkit-details-marker { display: none; }
+  .lp-more > summary::after { content: ''; width: 8px; height: 8px; margin-right: 3px;
+    border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor;
+    transform: rotate(45deg) translate(-2px, -2px); transition: transform .18s var(--ease); }
+  .lp-more[open] > summary::after { transform: rotate(-135deg) translate(-3px, -3px); }
+  .lp-more > summary:hover { color: var(--blue-d); }
+  .lp-more .po-srlede { margin-top: 9px; }
+  .lp-foot { margin-top: 26px; font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+  .lp-err { padding: 22px; text-align: center; color: var(--ink-2); }
+  @media (max-width: 960px) {
+    .lp { padding: 30px 18px 48px; }
+    .lp-h1 { font-size: 27px; }
+  }
+  @media (max-width: 620px) {
+    .lp { padding: 24px 14px 40px; }
+    .lp-h1 { font-size: 23px; }
+    .lp-sub { font-size: 13.5px; }
+    /* лента маршрута шире экрана вчетверо: на телефоне ее место занимает та же
+       мысль словами, она стоит прямо под ней */
+    .lp-route .po-routew { display: none; }
+    .lp-route .po-lede { margin-top: 14px; }
+    .lp .po-card, .lp .po-tcard { margin-bottom: 26px; }
+    .lp .po-tprice { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+<div class="lp" id="lp"><div class="card lp-err">Загружаем тарифы…</div></div>
+<script src="tariffs.js?v=20260906b"></script>
+</body>
+</html>
