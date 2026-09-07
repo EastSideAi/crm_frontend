@@ -145,6 +145,7 @@
     course_access_granted: 'открыт доступ к курсу',
     course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    csca_access: 'доступ к тренажеру CSCA',
     // Раньше эти события показывались в ленте сырым английским именем: человек читал
     // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
     lead_created_bot: 'написал боту',
@@ -191,6 +192,12 @@
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
+    if (e.type === 'csca_access') {
+      label = (p.days ? 'Открыт тренажер CSCA: ' : 'Закрыт тренажер CSCA: ') +
+        (p.subject_name || p.subject || '') +
+        (p.days ? (p.days === 30 ? ' на месяц' : p.days === 365 ? ' на год' : ' на ' + p.days + ' дней') : '') +
+        (p.by ? ' · ' + p.by : '');
+    }
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -22572,7 +22579,15 @@
     if (CSCA_BUSY[id]) return;
     if (force) delete CSCA[id];
     CSCA_BUSY[id] = true;
-    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+    // Попытки лежат у нас, замок тренажера — на его хостинге. Спрашиваем обе ручки
+    // сразу: карточке нужно и «как сдавал», и «что открыто», это один вопрос.
+    Promise.all([
+      api('/admin/api/leads/' + id + '/csca'),
+      api('/admin/api/leads/' + id + '/csca/access').catch(function () { return null; }),
+    ]).then(function (rr) {
+      var r = rr[0];
+      r.access = (rr[1] && rr[1].access) || [];
+      r.access_reason = rr[1] && rr[1].reason;
       CSCA_BUSY[id] = false; CSCA[id] = r;
       if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
     }).catch(function (e) {
@@ -22667,11 +22682,41 @@
           }).join('')
         : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
           'дает лендинг экзамена, результат придет сюда сам.</div>';
+      // Доступ к тренажеру — по предметам: экзамен обычно сдают один, и открытая
+      // математика не должна тащить за собой физику с химией.
+      var byS = {};
+      (c.access || []).forEach(function (a) { byS[a.subject] = a; });
+      var accessRows = CSCA_SUBJ.map(function (sj) {
+        var a = byS[sj[0]] || {};
+        var st = !a.open
+          ? (a.trial_used ? 'Закрыт, неделя израсходована' : 'Закрыт')
+          : (a.kind === 'trial' ? 'Бесплатная неделя до ' + esc(fmtWhen(a.until))
+                                : 'Открыт до ' + esc(fmtWhen(a.until)));
+        return '<div class="det-term">' +
+          '<div class="det-term-s"><b>' + esc(sj[1]) + '</b> · ' + st + '</div>' +
+          '<div class="det-term-b">' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="30">+ месяц</button>' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="365">+ год</button>' +
+            (a.open && a.kind === 'paid'
+              ? '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="0">закрыть</button>'
+              : '') +
+          '</div></div>';
+      }).join('');
+      var accessBlock = c.access_reason === 'no_contact'
+        ? '<div class="field-empty">В карточке нет почты и телефона — тренажер не узнает ' +
+          'человека, открывать нечего. Добавьте контакт.</div>'
+        : accessRows;
+
       csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
         '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
         'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
-        board + '<div class="det-prl">' + rows + '</div></div>';
+        board + '<div class="det-prl">' + rows + '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Доступ к тренажеру CSCA</div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Тест и разбор слабых тем бесплатны ' +
+        'всем. Тренажер — неделя бесплатно, дальше платно, и по каждому предмету ' +
+        'отдельно. Открытие продлевает срок, остаток не сгорает.</div>' +
+        accessBlock + '</div>';
     }
 
     return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
@@ -24768,6 +24813,24 @@
     });
     var exr = el('ex-refresh');
     if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-csca-open]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        b.disabled = true; b.style.opacity = '.55';
+        var days = parseInt(b.getAttribute('data-days'), 10) || 0;
+        api('/admin/api/leads/' + id + '/csca/access', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: b.getAttribute('data-csca-open'), days: days }),
+        }).then(function (r) {
+          if (CSCA[id] && r.access) CSCA[id].access = r.access;
+          if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+          showToast(days ? (days === 30 ? 'Открыт на месяц' : 'Открыт на год') : 'Доступ закрыт');
+        }).catch(function (e) {
+          b.disabled = false; b.style.opacity = '';
+          if (e.message !== '403') showToast('Тренажер не ответил, попробуйте еще раз');
+        });
+      });
+    });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
