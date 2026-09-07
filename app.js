@@ -5130,7 +5130,8 @@
               '<span>' + sdone + ' из ' + steps.length + ' на этой неделе</span>' +
             '</div>' +
           '</div>' +
-          '<div class="fw-prog">' + progBar(g.steps_done || sdone, g.steps_total || steps.length) + '</div>' +
+          '<div class="fw-prog">' + progBar(g.steps_done || sdone, g.steps_total || steps.length) +
+            '<span class="fw-plab">вся цель</span></div>' +
         '</div>' +
         (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
         '<div class="fw-rows">' + steps.map(function (t) {

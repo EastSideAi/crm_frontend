@@ -7688,7 +7688,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .fw-t:hover { color: var(--blue); }
 .fw-sub { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px; font-size: 12.5px; color: var(--ink-2); }
 .fw-nobody { color: var(--amber-ink); }
-.fw-prog { flex: none; width: 150px; padding-top: 4px; }
+.fw-prog { flex: none; width: 176px; padding-top: 4px; }
+.fw-prog .tsk-prog-n { white-space: nowrap; }
+.fw-plab {
+  display: block; margin-top: 5px; text-align: right;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
 .fw-why {
   margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--fill);
   font-size: 13px; line-height: 1.5; color: var(--ink-2);
@@ -7707,5 +7712,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .fw { padding: 14px 14px 8px; }
   .fw-h { flex-wrap: wrap; }
   .fw-prog { width: 100%; padding-top: 0; }
-  .fw-day { width: 38px; padding-top: 15px; }
+  .fw-plab { text-align: left; }
+  /* День уходит НАД строкой: боковая колонка на 390px отъедала ширину у
+     названия, и задачи обрывались на середине слова. */
+  .fw-day-wrap { flex-direction: column; gap: 0; }
+  .fw-day { width: auto; padding: 12px 0 0 2px; }
 }

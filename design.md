@@ -187,6 +187,7 @@ CRM — рабочий инструмент команды. Ценности п�
 | Контролы | кнопки, инпуты, селекты, сегменты | `design/controls.html` | `.bp .icobtn .ed-input .al-in .dperiod .task-chk` |
 | Чипы и статусы | статус, бейдж, тег, дельта | `design/chips.html` | `.sev .kd .pt-node .uz-tag .bdg .cnt` |
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |
+| Фокус недели | лист руководителя: цели с шагами недели | `design/focus.html` | `.fw .fw-h .fw-n .fw-why .fw-day-wrap .fw-loose` |
 | Оверлеи | модалка-форма, баг-панель, тост, меню | `design/overlays.html` | `.al-* .bug-* #toast #smenu` |
 | Диктовка | микрофон в блоке помощника (форма задачи) | витрины нет (см. `style.css` «Помощник в форме постановки») | `.al-mic .al-mic-dot .al-mic.rec .al-mic.busy` |
 | Мой день | список дел после диктовки, галочка и перенос в строке | витрины нет (см. `style.css` «Мой день») | `.dp-list .dp-row .dp-mark .dp-in .dp-when .tsk-chk .tsk-move` |
