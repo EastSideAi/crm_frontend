@@ -5192,7 +5192,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    Сводка — тот же компонент .mo-stats/.mo-stat, что на «Месяце» (не третий рецепт
    тайла); остаток синий модификатором .rep-accent — цифра, ради которой открывают
    отчет. Ниже — таблица по людям, числа табличные, своих цветов нет, только токены. */
-.rep-accent b { color: var(--blue-d); }
+.mo-stat.rep-accent b { color: var(--blue-d); }
 
 .rep-grid { grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, .9fr)); }
 .rep-row { cursor: pointer; }
