@@ -4092,6 +4092,7 @@
     api('/admin/api/arrivals?scope=' + scope).then(function (r) {
       state.arr = state.arr || {};
       if (scope === 'review') state.arr.review = r.arrivals || [];
+      else if (scope === 'all') state.arr.all = r.arrivals || [];
       else state.arr.mine = r.arrivals || [];
       state.arr.canReview = !!r.can_review;
       if (cb) cb(r);
@@ -4103,7 +4104,9 @@
     if (A.mine == null) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return arLoad('mine', function () {
-        if (A.canReview) arLoad('review', function () { if (state.page === 'zaezdy') arDraw(view); });
+        if (A.canReview) arLoad('review', function () {
+          arLoad('all', function () { if (state.page === 'zaezdy') arDraw(view); });
+        });
         else if (state.page === 'zaezdy') arDraw(view);
       });
     }
@@ -4117,6 +4120,7 @@
           '<button class="zz-tab' + (tab === 'mine' ? ' on' : '') + '" data-tab="mine">Мои заезды</button>' +
           '<button class="zz-tab' + (tab === 'review' ? ' on' : '') + '" data-tab="review">' +
             'На проверке' + (A.review && A.review.length ? ' <span class="zz-badge">' + A.review.length + '</span>' : '') + '</button>' +
+          '<button class="zz-tab' + (tab === 'all' ? ' on' : '') + '" data-tab="all">Все заезды</button>' +
         '</div>'
       : '';
     var right = (tab === 'mine')
@@ -4128,6 +4132,8 @@
       body = arDetail(A.open, tab === 'review');
     } else if (A.creating) {
       body = arCreateForm();
+    } else if (tab === 'all') {
+      body = arAllHTML(A.all || []);
     } else {
       var items = tab === 'review' ? (A.review || []) : (A.mine || []);
       body = arListHTML(items, tab === 'review');
@@ -4157,6 +4163,61 @@
     }).join('') + '</div>';
   }
 
+  // Реестр всех заездов для руководителя, сгруппированный по тьютору: видно, кто какой
+  // заезд провёл и с кем. Фильтр периода — по дате заезда, считаем на клиенте.
+  function arInPeriod(dateStr, period) {
+    if (period === 'all' || !period) return true;
+    if (!dateStr) return false;
+    var d = dateStr.slice(0, 7);           // YYYY-MM
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    var cur = y + '-' + ('0' + (m + 1)).slice(-2);
+    if (period === 'month') return d === cur;
+    var pm = m === 0 ? 11 : m - 1, py = m === 0 ? y - 1 : y;
+    return d === (py + '-' + ('0' + (pm + 1)).slice(-2));
+  }
+
+  function arAllHTML(all) {
+    var A = state.arr, period = A.period || 'all';
+    var sel = '<div class="zz-filter"><label class="zz-flbl">Период</label>' +
+      '<select class="zz-in" id="zz-period">' +
+        [['all', 'Всё время'], ['month', 'Этот месяц'], ['prev', 'Прошлый месяц']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (period === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select></div>';
+    var items = all.filter(function (a) { return arInPeriod(a.arrival_date, period); });
+    if (!items.length) {
+      return sel + '<div class="zz-empty">' + ic('flight', 26) + '<div>За этот период заездов нет.</div></div>';
+    }
+    // группируем по тьютору, сохраняя порядок (бэкенд уже отсортировал по имени)
+    var groups = [], byId = {};
+    items.forEach(function (a) {
+      var key = a.tutor_id;
+      if (!byId[key]) { byId[key] = { name: a.tutor_name || 'Без тьютора', rows: [], paid: 0 }; groups.push(byId[key]); }
+      byId[key].rows.push(a);
+      if (a.status === 'accepted' || a.paid_at) byId[key].paid += (a.payout_rub || 0);
+    });
+    var html = groups.map(function (g) {
+      var rows = g.rows.map(function (a) {
+        var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
+        var svc = AR_SERVICE[a.service] || { label: a.service };
+        return '<button class="zz-card" data-open="' + a.id + '">' +
+          '<div class="zz-card-main">' +
+            '<div class="zz-card-t">' + esc(a.student || 'Без имени') + '</div>' +
+            '<div class="zz-card-m">' + esc(svc.label) + (a.city ? ' · ' + esc(a.city) : '') + (a.arrival_date ? ' · ' + arDate(a.arrival_date) : '') + '</div>' +
+          '</div>' +
+          '<div class="zz-card-side">' +
+            (a.status === 'accepted' ? '<span class="zz-pay">' + arMoney(a.payout_rub) + '</span>' : '') +
+            '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span>' +
+          '</div></button>';
+      }).join('');
+      return '<div class="zz-group">' +
+        '<div class="zz-group-h"><span class="zz-group-n">' + esc(g.name) + '</span>' +
+          '<span class="zz-group-s">' + g.rows.length + ' ' + plural(g.rows.length, 'заезд', 'заезда', 'заездов') +
+            (g.paid ? ' · ' + arMoney(g.paid) : '') + '</span></div>' +
+        '<div class="zz-list">' + rows + '</div></div>';
+    }).join('');
+    return sel + html;
+  }
+
   function arCreateForm() {
     var opts = Object.keys(AR_SERVICE).map(function (k) {
       return '<option value="' + k + '">' + esc(AR_SERVICE[k].label) + ' · ' + arMoney(AR_SERVICE[k].rate) + '</option>';
@@ -4172,7 +4233,7 @@
   }
 
   function arFind(id) {
-    var all = (state.arr.mine || []).concat(state.arr.review || []);
+    var all = (state.arr.mine || []).concat(state.arr.review || [], state.arr.all || []);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
@@ -4237,6 +4298,7 @@
     });
     var nw = el('zz-new'); if (nw) nw.addEventListener('click', function () { A.creating = true; A.open = null; arDraw(view); });
     var back = el('zz-back'); if (back) back.addEventListener('click', function () { A.open = null; A.creating = false; arDraw(view); });
+    var per = el('zz-period'); if (per) per.addEventListener('change', function () { A.period = per.value; arDraw(view); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-open]'), function (c) {
       c.addEventListener('click', function () { A.open = +c.getAttribute('data-open'); A.creating = false; arDraw(view); });
     });

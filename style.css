@@ -7205,6 +7205,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .zaezdy .zz-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--zz-ink-3); text-align:center; padding:60px 20px; }
 .zaezdy .zz-empty svg { opacity:.5; }
 
+/* Реестр «Все заезды»: фильтр периода + группы по тьютору */
+.zaezdy .zz-filter { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.zaezdy .zz-flbl { font-size:13px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-filter select { width:auto; font:inherit; font-size:13px; font-weight:600; padding:7px 11px; border-radius:9px; border:1px solid var(--zz-line); background:var(--zz-card); color:var(--zz-ink); cursor:pointer; }
+.zaezdy .zz-group { margin-bottom:24px; }
+.zaezdy .zz-group-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 2px 11px; padding-bottom:8px; border-bottom:1px solid var(--zz-line); }
+.zaezdy .zz-group-n { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--zz-ink); }
+.zaezdy .zz-group-s { font-size:12.5px; font-weight:600; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
 .zaezdy .zz-panel { background:var(--zz-card); border:1px solid var(--zz-line); border-radius:16px; padding:22px 24px; max-width:680px; }
 .zaezdy .zz-back { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; margin-bottom:16px; }
 .zaezdy .zz-back:hover { color:var(--zz-ink); }
