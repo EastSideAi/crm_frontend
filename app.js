@@ -39,6 +39,9 @@
   }
 
   var KEY_LS = 'eastside_crm_key';
+  // Предел недели на максимуме настройки (50) считается выключенным: полоски и
+  // «не больше N» прячем. Число совпадает с max у PUT /rhythm/caps.
+  var WK_CAP_OFF = 50;
   var SEEN_LS = 'eastside_crm_seen';
   var DC_PREF = 'eastside_crm_d_';
   var UI_LS = 'eastside_crm_ui3';
@@ -3220,7 +3223,7 @@
       lead: 'Ритм один — неделя. В понедельник собираете ее, в пятницу закрываете. Три минуты на каждое, зато никто ничего не теряет.',
       art: function () { return gdWin(1, 'Задачи', []); },
       dos: [
-        'Понедельник: откройте «Неделя», нажмите «Собрать неделю» и отметьте, что берете из «Потом». Не больше предела — он показан полоской.',
+        'Понедельник: откройте «Неделя», нажмите «Собрать неделю» и отметьте, что берете из «Потом». Берите столько, сколько реально закроете.',
         'Задача со сроком на этой неделе попадает в неделю сама. Дальний срок — это ориентир, задача ждет в «Потом».',
         'Сделали — сдайте сразу, а не в пятницу. Приемка тоже занимает время.',
         'Пятница: «Закрыть неделю». По каждой открытой задаче — перенести с причиной или убрать в «Потом». Это и есть отчет, ничего писать не нужно.',
@@ -5402,7 +5405,10 @@
     } else if (sh <= 0) {
       act = '<button class="qchip" id="wk-close">Закрыть заново</button>';
     }
-    var meter = cap
+    // 50 — потолок настройки, при нем предел выключен (решение Павла 07.09.2026):
+    // полоску и «не больше N» не показываем, иначе «7 из 50» читается как норма.
+    var capOn = cap && cap < WK_CAP_OFF;
+    var meter = capOn
       ? '<div class="wk-cap' + (load >= cap ? ' full' : '') + '" title="Предел задач на неделю">' +
           '<span class="wk-cap-bar"><i style="width:' + Math.min(100, Math.round(load / cap * 100)) + '%"></i></span>' +
           '<span class="num">' + load + ' из ' + cap + '</span></div>'
@@ -5420,7 +5426,7 @@
       body = '<div class="wk-empty">' +
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
-          ? '<div class="wk-empty-s">Возьми задачи из «Потом» — не больше ' + cap + ' — и нажми «Собрать неделю». ' +
+          ? '<div class="wk-empty-s">Возьми задачи из «Потом»' + (capOn ? ' — не больше ' + cap + ' — ' : ' ') + 'и нажми «Собрать неделю». ' +
             'Задача со сроком на этой неделе попадает сюда сама.</div>' +
             '<button class="bp sm" id="wk-collect2">' + ic('plus', 14) + 'Собрать неделю</button>'
           : '') +
@@ -5577,6 +5583,7 @@
   function openWeekCollect(w) {
     if (document.querySelector('.al-ov')) return;
     var r = w.r || {}, cap = r.cap || 7, load = r.load || 0;
+    var capOn = cap < WK_CAP_OFF;
     var starts = w.starts || wkMondayIso(wkShift());
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -5584,13 +5591,13 @@
       '<div class="al-head"><div><div class="al-eyebrow">Неделя · ' + esc(w.label || r.label || '') + '</div>' +
         '<div class="al-title">Собрать неделю</div></div>' +
         '<button class="al-x" id="wkp-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-      '<div class="al-sub">Отметь, что берешь в неделю. Не больше <b>' + cap + '</b> — остальное подождет в «Потом».</div>' +
+      '<div class="al-sub">Отметь, что берешь в неделю.' + (capOn ? ' Не больше <b>' + cap + '</b> — остальное подождет в «Потом».' : '') + '</div>' +
       '<div class="al-body">' +
         '<div class="wk-state wait" id="wkp-full" hidden>' + ic('bell', 13) + '<span>Предел набран: ' + cap + ' из ' + cap + '. Чтобы взять другую задачу, сними галочку или закрой неделю с переносом.</span></div>' +
         '<div id="wkp-body">' + dashSkeleton() + '</div>' +
       '</div>' +
       '<div class="al-foot wkp-foot">' +
-        '<div class="wk-cap" id="wkp-cap"><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
+        '<div class="wk-cap" id="wkp-cap"' + (capOn ? '' : ' hidden') + '><span class="wk-cap-bar"><i></i></span><span class="num" id="wkp-n"></span></div>' +
         '<div class="ct-err" id="wkp-err"></div>' +
         '<button class="bp al-save" id="wkp-ok">' + ic('check', 14) + 'Собрать</button>' +
       '</div></div>';
@@ -5610,6 +5617,7 @@
 
     var picked = {};
     function meter() {
+      if (!capOn) return;               // предел выключен: ни полоски, ни отказа
       var n = load + Object.keys(picked).length;
       el('wkp-n').textContent = n + ' из ' + cap;
       el('wkp-cap').classList.toggle('full', n >= cap);
@@ -6028,7 +6036,7 @@
       '<div class="card listcard">' +
       '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
       idle +
-      (b.caps ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
+      (b.caps && b.caps.cap < WK_CAP_OFF ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
     '</div>' +
       (can('team') ? '<div class="card rh-sched-card"><div class="rh-sched" id="rh-sched"></div></div>' : '');
 
@@ -7277,7 +7285,9 @@
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
-          if (to === 'return') { setRet(true); return; }
+          // Поле возврата уже открыто и текст набран — «Вернуть» отправляет его,
+          // а не открывает поле второй раз (Павел 07.09.2026: «не могу вернуть»).
+          if (to === 'return') { if (retMode && (say.value || '').trim()) send(); else setRet(true); return; }
           // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
           // чего приемка превращалась в спор.
           if (to === 'review' && isAssignee) { setRes('review'); return; }
@@ -15514,6 +15524,7 @@
           '<label class="tgg-wl">тьюторам' +
             '<input id="wk-cap-t" class="al-in sm tgg-num" type="number" min="1" max="50" value="' + (c.cap_tutor || 5) + '"></label>' +
           '<button class="tgg-b" id="wk-cap-save">Сохранить</button>' +
+          '<div class="s">50 — без предела: полоска и отказ «предел набран» не показываются</div>' +
         '</div>' +
         '<div class="tgg-week">' +
           '<button type="button" class="tm-tp-b' + (g.daily_digest ? ' on' : '') + '" id="wk-digest">Утренняя и вечерняя сводки</button>' +
