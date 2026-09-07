@@ -5617,6 +5617,7 @@
 
     var picked = {};
     function meter() {
+      if (!capOn) return;               // предел выключен: ни полоски, ни отказа
       var n = load + Object.keys(picked).length;
       el('wkp-n').textContent = n + ' из ' + cap;
       el('wkp-cap').classList.toggle('full', n >= cap);
