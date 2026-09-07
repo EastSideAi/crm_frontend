@@ -701,7 +701,9 @@
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
-      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      // Вторым аргументом — сама ошибка: в e.body.detail сервер объясняет, что
+      // именно мешает (предел недели, нет исполнителя). Код один на все случаи.
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0, e);
       if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
@@ -7672,9 +7674,12 @@
           // Цель без шагов — просто надпись. Сразу открываем ее карточку: там
           // кнопка «добавить шаг», и первый шаг ставится, пока думают о цели.
           if (isGoal && r && r.task) openTask(r.task.id);
-        }, function () {
+        }, function (code, e) {
           save.disabled = false; save.classList.remove('loading');
-          showToast(isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу');
+          // 409 — не сбой, а отказ с причиной («на этой неделе уже 7 задач, предел 7»):
+          // без нее человек жмет еще раз и не понимает, что не так (07.09.2026).
+          var why = e && e.body && typeof e.body.detail === 'string' ? e.body.detail : '';
+          showToast(why || (isGoal ? 'Не получилось завести цель' : 'Не получилось поставить задачу'));
         });
       });
      });
