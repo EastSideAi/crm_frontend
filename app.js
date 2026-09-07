@@ -2123,6 +2123,7 @@
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
+    { id: 'czreport', label: 'Отчеты', icon: 'chart', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Ввод разложен на три места, а не свален в один экран (правки Романа 17.08.2026,
@@ -3038,6 +3039,7 @@
     else if (state.page === 'czpay') renderCzPay(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czrisks') renderCzRisks(view);
+    else if (state.page === 'czreport') renderCzReport(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
     else if (state.page === 'finfund') renderFinFund(view);
@@ -10468,6 +10470,106 @@
       '</div>';
     el('rsk-back').addEventListener('click', function () { RISK.open = null; renderAll(); });
     var oc = el('rsk-card'); if (oc) oc.addEventListener('click', function () { openCz(id); });
+  }
+
+  // ── Отчет план-факт по самозанятым ──────────────────────────────────────
+  // Сводит по каждому исполнителю назначенную работу (задания), принятое документом
+  // (подписанные акты) и ушедшие деньги (выплаты). По нему видно работу и принимают ее.
+  var REP = { data: null, month: '', err: '' };
+  var REP_MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
+                 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  function repMonths() {
+    // «Все время» + последние шесть месяцев; год в ярлыке только у чужого года, чтобы
+    // подписи не гудели одинаковым «2026».
+    var out = [['', 'Все время']];
+    var d = new Date(); var yNow = d.getFullYear();
+    for (var i = 0; i < 6; i++) {
+      var y = d.getFullYear(); var m = d.getMonth();          // 0..11
+      var key = y + '-' + ('0' + (m + 1)).slice(-2);
+      out.push([key, REP_MON[m] + (y !== yNow ? ' ' + y : '')]);
+      d.setMonth(m - 1);
+    }
+    return out;
+  }
+  function repLoad() {
+    var p = REP.month ? '?month=' + encodeURIComponent(REP.month) : '';
+    api('/admin/api/contractor-reports/plan-fact' + p).then(function (r) {
+      REP.data = r; REP.err = '';
+      if (state.page === 'czreport') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      REP.data = REP.data || { rows: [], total: {} };
+      REP.err = 'Не удалось собрать отчет. Обновите страницу.';
+      if (state.page === 'czreport') renderView();
+    });
+  }
+  function repMoney(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
+  function repCol(label, val, n) {
+    // data-l — подпись для телефона: там шапка спрятана, и колонка называет себя сама.
+    return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) +
+      (n ? '<i>' + n + '</i>' : '') + '</span>';
+  }
+  function repRow(r) {
+    // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
+    // у имени, а не отдельной колонкой, чтобы таблица не разрослась.
+    var due = r.due > 0
+      ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
+    var flag = r.blocked ? '<span class="rep-block">заблокирован</span>' : '';
+    return '<div class="trow rep-grid rep-row" data-repc="' + esc(r.contractor_id) + '">' +
+      '<span class="rep-name">' + esc(r.full_name) +
+        (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') + flag + due + '</span>' +
+      repCol('Назначено', r.plan, r.plan_n) + repCol('Акты', r.acts, r.acts_n) +
+      repCol('Выплачено', r.paid, r.paid_n) +
+      '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
+        repMoney(r.left) + '</span>' +
+      '</div>';
+  }
+  function repTile(label, val, hint) {
+    return '<div class="rep-tile"><div class="rep-t-l">' + label + '</div>' +
+      '<div class="rep-t-v">' + repMoney(val) + '</div>' +
+      (hint ? '<div class="rep-t-h">' + hint + '</div>' : '') + '</div>';
+  }
+  function renderCzReport(view) {
+    if (REP.data === null) { view.innerHTML = dashSkeleton(); repLoad(); return; }
+    var d = REP.data; var t = d.total || {};
+    var rows = (d.rows || []).slice().sort(function (a, b) { return b.plan - a.plan; });
+    var chips = repMonths().map(function (m) {
+      return '<button class="qchip' + (REP.month === m[0] ? ' on' : '') +
+        '" data-repm="' + m[0] + '">' + m[1] + '</button>';
+    }).join('');
+    var body = REP.err
+      ? '<div class="empty">' + esc(REP.err) + '</div>'
+      : (!rows.length
+        ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
+        : rows.map(repRow).join(''));
+    view.innerHTML =
+      '<div class="card rep-sumcard">' +
+        '<div class="rep-sum">' +
+          repTile('Назначено', t.plan, 'задания в работе') +
+          repTile('Принято актами', t.acts, 'подписанные акты') +
+          repTile('Выплачено', t.paid, 'деньги ушли') +
+          repTile('Остаток', t.left, 'назначено минус выплачено') +
+        '</div>' +
+      '</div>' +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<span class="list-hint">План — назначенная работа, факт — подписанные акты и проведенные выплаты. Нажмите на строку, чтобы открыть карточку исполнителя.</span>' +
+        '</div>' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow rep-grid thead">' +
+          '<span class="th">Исполнитель</span>' +
+          '<span class="th r">Назначено</span><span class="th r">Акты</span>' +
+          '<span class="th r">Выплачено</span><span class="th r">Остаток</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repm]'), function (b) {
+      b.addEventListener('click', function () {
+        REP.month = b.getAttribute('data-repm'); REP.data = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repc]'), function (r) {
+      r.addEventListener('click', function () { openCz(r.getAttribute('data-repc')); });
+    });
   }
 
   function renderCzPay(view) {

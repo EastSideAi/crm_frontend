@@ -2976,6 +2976,17 @@ button.tr-crumb:hover { color: var(--blue); }
     gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
   .trow.rsk-grid.thead { display: none; }
   .trow.rsk-grid .rsk-flags { grid-column: 1 / -1; }
+  /* Отчет план-факт на телефоне: имя во всю ширину, под ним числа в две колонки —
+     шапка спрятана, поэтому каждое число называет себя из data-l. Тайлы сводки в 2×2. */
+  .rep-sum { grid-template-columns: repeat(2, 1fr); }
+  .trow.rep-grid { grid-template-columns: 1fr 1fr !important; gap: 12px 14px;
+    height: auto; padding: 14px 16px; align-items: start; }
+  .trow.rep-grid.thead { display: none; }
+  .trow.rep-grid .rep-name { grid-column: 1 / -1; }
+  .trow.rep-grid .rep-num { text-align: left; }
+  .trow.rep-grid .rep-num::before { content: attr(data-l); display: block;
+    font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 2px; }
   /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
      строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
      число обязано назвать себя само — подпись берется из data-l. */
@@ -5176,6 +5187,37 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rcp-a:hover { background: var(--fill); color: var(--ink-1); }
 .rcp-a.p { border-color: var(--blue); color: var(--blue-d); }
 .rcp-a.p:hover { background: var(--blue-tint); }
+
+/* ── отчет план-факт по самозанятым (раздел «Отчеты») ──
+   Сводка — четыре тайла (назначено / принято актами / выплачено / остаток), под ней
+   таблица по людям. Числа табличные; своих цветов нет, только токены. Якорь остатка —
+   синий, это цифра, ради которой открывают отчет. */
+.rep-sumcard { padding: 18px 20px; }
+.rep-sum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.rep-tile { border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.rep-t-l { font: 600 11px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.rep-t-v { font-size: 23px; font-weight: 800; letter-spacing: -.035em; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.rep-t-h { font-size: 12px; color: var(--ink-3); }
+.rep-tile:last-child .rep-t-v { color: var(--blue-d); }
+
+.rep-grid { grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, .9fr)); }
+.rep-row { cursor: pointer; }
+.rep-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.rep-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.rep-block { font-size: 11.5px; color: var(--red-ink); background: var(--red-soft);
+  border-radius: var(--r-pill); padding: 2px 9px; white-space: nowrap; }
+.rep-due { font-size: 11.5px; color: var(--amber-ink); background: var(--amber-soft);
+  border-radius: var(--r-pill); padding: 2px 9px; white-space: nowrap; }
+.rep-num { text-align: right; font-size: 14px; color: var(--ink); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.rep-num i { font-style: normal; font-size: 11px; color: var(--ink-3); margin-left: 5px; }
+.rep-left { font-weight: 700; }
+.rep-left.hot { color: var(--blue-d); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
