@@ -7285,7 +7285,9 @@
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
-          if (to === 'return') { setRet(true); return; }
+          // Поле возврата уже открыто и текст набран — «Вернуть» отправляет его,
+          // а не открывает поле второй раз (Павел 07.09.2026: «не могу вернуть»).
+          if (to === 'return') { if (retMode && (say.value || '').trim()) send(); else setRet(true); return; }
           // Сдача идет через артефакт: «сделал» на словах — это ровно то, из-за
           // чего приемка превращалась в спор.
           if (to === 'review' && isAssignee) { setRes('review'); return; }
