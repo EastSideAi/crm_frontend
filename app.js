@@ -10557,10 +10557,11 @@
     });
   }
   function repMoney(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
-  function repCol(label, val, n) {
+  function repCol(label, val) {
     // data-l — подпись для телефона: там шапка спрятана, и колонка называет себя сама.
-    return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) +
-      (n ? '<i>' + n + '</i>' : '') + '</span>';
+    // Счетчик заданий/актов из строки убран: якорь строки — деньги, а сноска у суммы
+    // читалась мусором (арт-директор 07.09.2026).
+    return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) + '</span>';
   }
   function repRow(r) {
     // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
@@ -10571,16 +10572,16 @@
     return '<div class="trow rep-grid rep-row" data-repc="' + esc(r.contractor_id) + '">' +
       '<span class="rep-name">' + esc(r.full_name) +
         (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') + flag + due + '</span>' +
-      repCol('Назначено', r.plan, r.plan_n) + repCol('Акты', r.acts, r.acts_n) +
-      repCol('Выплачено', r.paid, r.paid_n) +
+      repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
       '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
         repMoney(r.left) + '</span>' +
       '</div>';
   }
-  function repTile(label, val, hint) {
-    return '<div class="rep-tile"><div class="rep-t-l">' + label + '</div>' +
-      '<div class="rep-t-v">' + repMoney(val) + '</div>' +
-      (hint ? '<div class="rep-t-h">' + hint + '</div>' : '') + '</div>';
+  // Тайл сводки — тот же компонент, что на «Месяце» и в срезе команды (.mo-stat), а не
+  // третий рецепт: hero 26px, лейбл снизу. Остаток — синий модификатором (якорь).
+  function repTile(label, val, accent) {
+    return '<div class="mo-stat' + (accent ? ' rep-accent' : '') + '"><b>' +
+      repMoney(val) + '</b><span>' + label + '</span></div>';
   }
   function renderCzReport(view) {
     if (REP.data === null) { view.innerHTML = dashSkeleton(); repLoad(); return; }
@@ -10596,13 +10597,11 @@
         ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
         : rows.map(repRow).join(''));
     view.innerHTML =
-      '<div class="card rep-sumcard">' +
-        '<div class="rep-sum">' +
-          repTile('Назначено', t.plan, 'задания в работе') +
-          repTile('Принято актами', t.acts, 'подписанные акты') +
-          repTile('Выплачено', t.paid, 'деньги ушли') +
-          repTile('Остаток', t.left, 'назначено минус выплачено') +
-        '</div>' +
+      '<div class="mo-stats">' +
+        repTile('Назначено', t.plan) +
+        repTile('Принято актами', t.acts) +
+        repTile('Выплачено', t.paid) +
+        repTile('Остаток', t.left, true) +
       '</div>' +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
