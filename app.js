@@ -22367,10 +22367,13 @@
     }
     if (!it.found) {
       return head +
-        '<div class="int-none">Этого человека на интенсиве не нашли. Ищем по телефону, ' +
-        'телеграм-нику и почте из карточки — если контакта тут нет, найдите его в списке сами.</div>' +
-        '<div class="int-find"><button class="bp ghost sm" id="int-find">' + ic('search', 13) +
-          'Найти на интенсиве</button></div>' +
+        '<div class="int-none">Этого человека на интенсиве пока нет. «Открыть интенсив» ' +
+        'заведёт его по контакту из карточки, откроет доступ и пришлёт ссылку в мессенджер ' +
+        '(или на почту, если мессенджер не подключён).</div>' +
+        '<div class="int-find">' +
+          '<button class="bp sm" id="int-open">' + ic('send', 13) + 'Открыть интенсив</button>' +
+          '<button class="bp ghost sm" id="int-find">' + ic('search', 13) +
+            'Найти вручную</button></div>' +
         '<div id="int-list"></div></div>';
     }
     return head +
@@ -22386,6 +22389,10 @@
         '<button type="button" class="pd-sw' + (it.has_access ? ' on' : '') + '" id="int-sw">' +
           '<span class="pd-sw-l">' + (it.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="int-find"><button class="bp' + (it.has_access ? ' ghost' : '') +
+        ' sm" id="int-open">' + ic('send', 13) +
+        (it.has_access ? 'Отправить ссылку ещё раз' : 'Открыть и прислать ссылку') +
+        '</button></div>' +
       '<div class="det-sw-by">' + esc(INT_MATCH[it.match] || 'сведено автоматически') +
         ' · <button class="int-unlink" id="int-unlink">это не он</button></div></div>';
   }
@@ -24613,6 +24620,30 @@
         ifind.disabled = false;
         host2.innerHTML = '<div class="field-empty">Список не загрузился' +
           (e && e.message === '403' ? '' : ' — попробуйте еще раз') + '.</div>';
+      });
+    });
+
+    var iopen = el('int-open');
+    if (iopen) iopen.addEventListener('click', function () {
+      iopen.disabled = true;
+      var CHAN_RU = { telegram: 'телеграм', vk: 'вк', whatsapp: 'вотсап', max: 'макс' };
+      api('/admin/api/leads/' + id + '/intensive/open', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      }).then(function (r) {
+        var d = (r && r.delivery) || {};
+        var msg = 'Доступ к интенсиву открыт';
+        if (d.channels && d.channels.length) {
+          msg += ' · ссылка ушла в ' + d.channels.map(function (c) { return CHAN_RU[c] || c; }).join(' и ');
+        } else if (d.email) {
+          msg += ' · ссылка ушла на почту';
+        } else {
+          msg += ' · но ссылку отправить не удалось, напишите человеку сами';
+        }
+        showToast(msg);
+        reload();
+      }).catch(function (e) {
+        iopen.disabled = false;
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
       });
     });
 
