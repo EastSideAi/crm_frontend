@@ -7332,6 +7332,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   padding: 10px 14px; border-radius: 12px; background: var(--fill);
   font-size: 12.5px; line-height: 1.45; font-weight: 500; color: var(--ink-2); }
 .wk-state svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+/* display:flex у .wk-state и inline-flex у .wk-cap сильнее атрибута hidden: без
+   этого «Предел набран» висел в окне сбора недели всегда, даже при 7 из 50. */
+.wk-state[hidden], .wk-cap[hidden] { display: none; }
 .wk-state.ok   { background: var(--green-soft); color: var(--green-ink); }
 .wk-state.ok svg { color: var(--green-ink); }
 .wk-state.wait { background: var(--amber-soft); color: var(--amber-ink); }
