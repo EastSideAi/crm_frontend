@@ -1053,6 +1053,30 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   font-weight: 600; transition: .15s; letter-spacing: -.01em; }
 .bpwide:hover { background: #0A0B0F; }
 
+/* ── Быстрый счёт (вкладка «Оплаты») ── */
+.qi-form { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.qi-grid { grid-template-columns: 130px 1fr; }
+.qi-form input { width: 100%; }
+.qi-row .qi-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; }
+.qi-done { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+  color: var(--green-ink); }
+/* Красная пульсирующая «Отправить клиенту»: счёт выставлен, но клиенту ещё не ушёл —
+   кнопку нельзя пропустить. Пульс «в такт сердцебиению» (просьба Веры 07.09.2026). */
+.qi-send { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px;
+  background: var(--red); color: #fff; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 0 0 0 rgba(229, 72, 77, .5); animation: qi-heartbeat 1.4s ease-in-out infinite; }
+.qi-send:hover { background: var(--red-ink); }
+.qi-send:disabled { opacity: .6; animation: none; }
+@keyframes qi-heartbeat {
+  0%   { transform: scale(1);     box-shadow: 0 0 0 0 rgba(229, 72, 77, .5); }
+  14%  { transform: scale(1.045); box-shadow: 0 0 0 4px rgba(229, 72, 77, .18); }
+  28%  { transform: scale(1);     box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); }
+  42%  { transform: scale(1.045); box-shadow: 0 0 0 5px rgba(229, 72, 77, .12); }
+  56%  { transform: scale(1);     box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); }
+  100% { transform: scale(1);     box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .qi-send { animation: none; } }
+
 /* ── «Сейчас»: херо «что делать» ── */
 .now-do { border-radius: 16px; padding: 20px 22px; position: relative; overflow: hidden;
   background: var(--blue-tint); border: 1px solid #DCE7FF; }

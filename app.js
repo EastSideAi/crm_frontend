@@ -24450,6 +24450,8 @@
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
+    // Контакт для чека: берём известный из карточки, менеджер при нужде поправит.
+    var qiContact = (ctx.d && (ctx.d.email || (ctx.d.booking && ctx.d.booking.contact))) || '';
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var pending = pays.filter(function (p) { return p.status === 'pending'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var refunded = pays.filter(function (p) { return p.status === 'refunded'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
@@ -24485,6 +24487,22 @@
     return '<div class="m-ctitle">Оплаты</div>' +
       '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
       board +
+      /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
+         позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
+         и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
+         (защита от отправки не туда, просьба Веры 07.09.2026). */
+      '<div class="m-sec"><div class="m-sec-h">Быстрый счёт' +
+        '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Сумма и назначение — получите ссылку на оплату, живёт до оплаты. Клиенту уйдёт только после кнопки «Отправить клиенту».</div>' +
+        '<div id="qi-list"><div class="field-empty">Загружаю счета…</div></div>' +
+        '<div class="qi-form">' +
+          '<div class="pay-grid qi-grid">' +
+            '<input id="qi-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+            '<input id="qi-desc" placeholder="Назначение (Консультационное сопровождение)">' +
+          '</div>' +
+          '<input id="qi-contact" placeholder="Почта или телефон для чека" value="' + esc(qiContact) + '">' +
+          '<button class="bp sm" id="qi-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить счёт</button>' +
+        '</div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
@@ -25540,6 +25558,93 @@
         }).catch(function (e) {
           ordBtn.disabled = false;
           if (e.message !== '403') showToast('Счет не выставился — проверьте сеть');
+        });
+      });
+    }
+
+    /* ── Быстрый счёт (invoices): сумма → долгая ссылка, отправка клиенту отдельной
+       красной кнопкой. Отдельно от заказов выше: тут не разбор на позиции, а один
+       платёж-ссылка, как у общего скрипта агента. */
+    var qiList = el('qi-list');
+    if (qiList) {
+      var QI_ST = {
+        issued:   { label: 'выставлен',         sev: 'contacted' },
+        sent:     { label: 'отправлен клиенту',  sev: 'call_scheduled' },
+        paid:     { label: 'оплачен',            sev: 'client' },
+        canceled: { label: 'снят',               sev: 'rejected' },
+      };
+      var loadQI = function () {
+        api('/admin/api/leads/' + id + '/invoices').then(function (r) { renderQI(r.invoices); })
+          .catch(function (e) { if (e.message !== '403') qiList.innerHTML = '<div class="field-empty">Не загрузились — обновите.</div>'; });
+      };
+      var renderQI = function (list) {
+        if (!list || !list.length) {
+          qiList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте ниже.</div>';
+          return;
+        }
+        qiList.innerHTML = list.map(function (v) {
+          var st = QI_ST[v.status] || QI_ST.issued;
+          var meta = [fmtWhen(v.sent_at || v.created_at), v.created_by].filter(Boolean).map(esc).join(' · ');
+          var act = '';
+          if (v.status === 'issued') {
+            // красная пульсирующая «Отправить клиенту» — её нельзя не заметить (просьба Веры)
+            act = '<button class="qi-send" data-qisend="' + v.id + '">' + ic('card', 13) + 'Отправить клиенту</button>';
+          } else if (v.status === 'sent') {
+            act = '<span class="qi-done">' + ic('check', 12) + 'отправлен</span>';
+          }
+          if (v.url && v.status !== 'paid') act += '<button class="pay-rcpt" data-qicopy="' + esc(v.url) + '">' + ic('copy', 12) + 'ссылка</button>';
+          if (v.status !== 'paid') act += '<button class="icobtn del" data-qicancel="' + v.id + '" title="Снять счёт">' + ic('x', 14) + '</button>';
+          return '<div class="pay-row qi-row">' +
+            '<div class="doc-b"><div class="doc-n">' + esc(v.description) +
+              ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
+              '<div class="doc-m">' + meta + '</div></div>' +
+            '<span class="pay-amt num">' + fmtMoney(v.amount) + ' ₽</span>' +
+            '<div class="qi-acts">' + act + '</div></div>';
+        }).join('');
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qisend]'), function (b) {
+          b.addEventListener('click', function () {
+            b.disabled = true;
+            api('/admin/api/invoices/' + b.getAttribute('data-qisend') + '/send', { method: 'POST' })
+              .then(function () { showToast('Счёт отправлен клиенту в бота'); loadQI(); })
+              .catch(function (e) {
+                b.disabled = false;
+                if (e.status === 409) showToast((e.body && e.body.detail) || 'Отправить некому');
+                else if (e.message !== '403') showToast('Не отправилось — проверьте сеть');
+              });
+          });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicopy]'), function (b) {
+          b.addEventListener('click', function () { copyText(b.getAttribute('data-qicopy'), b); });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicancel]'), function (b) {
+          b.addEventListener('click', function () {
+            apiSend('/admin/api/invoices/' + b.getAttribute('data-qicancel') + '/cancel', 'POST', null, loadQI);
+          });
+        });
+      };
+      loadQI();
+      var qiRefresh = el('qi-refresh');
+      if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
+      var qiBtn = el('qi-btn');
+      if (qiBtn) qiBtn.addEventListener('click', function () {
+        var amt = parseInt((el('qi-amt').value || '').replace(/\D/g, ''), 10) || 0;
+        if (!amt) { el('qi-amt').focus(); return; }
+        var contact = (el('qi-contact').value || '').trim();
+        if (!contact) { showToast('Впишите почту или телефон клиента — он нужен для чека'); el('qi-contact').focus(); return; }
+        qiBtn.disabled = true;
+        api('/admin/api/leads/' + id + '/invoice', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: String(amt), description: (el('qi-desc').value || '').trim(), contact: contact }),
+        }).then(function () {
+          qiBtn.disabled = false;
+          el('qi-amt').value = ''; el('qi-desc').value = '';
+          showToast('Счёт выставлен — теперь нажмите красную «Отправить клиенту»');
+          loadQI();
+        }).catch(function (e) {
+          qiBtn.disabled = false;
+          if (e.status === 422) showToast((e.body && e.body.detail) || 'Проверьте сумму и назначение');
+          else if (e.status === 502) showToast('ЮKassa не создала счёт — попробуйте ещё раз');
+          else if (e.message !== '403') showToast('Счёт не выставился — проверьте сеть');
         });
       });
     }
