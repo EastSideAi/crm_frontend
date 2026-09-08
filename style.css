@@ -5888,6 +5888,19 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
 }
 
+/* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
+   Клик по нему помечает продажу полученной, не открывая форму — как чек-лист.
+   Строкам даём боковые поля под шапку (16px): иначе кружок липнет к краю, а сумма
+   упирается в правую грань карточки. */
+.rp-row { padding-left: 16px; padding-right: 16px; }
+.rp-row.rp-haschk { grid-template-columns: auto 1fr auto; column-gap: 12px; }
+.rp-chk { width: 22px; height: 22px; padding: 0; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; border: 1.5px solid var(--line-2);
+  background: transparent; border-radius: 50%; color: #fff; cursor: pointer;
+  transition: border-color .12s, background .12s; }
+.rp-chk:hover { border-color: var(--green); }
+.rp-chk.on { background: var(--green); border-color: var(--green); }
+
 /* ── Управление ведомостью ──────────────────────────────────────────────────
    Правка живет там, где видно ее последствие: правило фонда — в строке каскада,
    сверка — в строке счета. Отдельного «режима редактирования» нет: строка,

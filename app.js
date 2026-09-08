@@ -14719,6 +14719,23 @@
           items.forEach(function (x) { if (x.id === id) finRevForm(x, x.kind); });
         });
       });
+      // Кружок-галочка: помечаем строку полученной, не открывая форму. Клик по кружку
+      // не должен всплыть до строки (иначе поверх откроется форма).
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rpgot]'), function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = b.getAttribute('data-rpgot');
+          items.forEach(function (x) {
+            if (x.id !== id) return;
+            var next = x.status === 'получено' ? 'ожидается' : 'получено';
+            finDo('/admin/api/fin/revenue-plan', 'POST', {
+              id: x.id, period_id: FIN.id, kind: x.kind,
+              client: x.client, item: x.item, amount: x.amount,
+              status: next, due_on: x.due_on || null, comment: x.comment || '',
+            }, next === 'получено' ? 'Отмечено: деньги пришли' : 'Снята отметка');
+          });
+        });
+      });
     }
     // Строка дебиторки из рассрочки ведёт в карточку клиента (новая вкладка, чтобы не
     // терять ведомость). Доступна всем, кто видит план, а не только с правом правки.
@@ -14765,10 +14782,20 @@
     var body = rows.map(function (x) {
       var st = RP_STATUS[x.status] || 'cz-wait';
       var muted = x.status !== 'ожидается';
+      // Быстрая отметка «пришло» кружком слева — только для ожидается/получено.
+      // Отменённую строку через кружок не оживляем, для этого форма.
+      var hasChk = canFix && (x.status === 'ожидается' || x.status === 'получено');
+      var got = x.status === 'получено';
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '', x.comment]
         .filter(Boolean).map(esc).join(' · ');
-      return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') + (canFix ? ' click' : '') +
+      return '<div class="fl-row fl-2 rp-row' + (muted ? ' muted' : '') +
+        (hasChk ? ' rp-haschk' : '') + (canFix ? ' click' : '') +
         '" data-rp="' + x.id + '">' +
+        (hasChk ? '<button class="rp-chk' + (got ? ' on' : '') + '" data-rpgot="' + x.id +
+          '" title="' + (got ? 'Убрать отметку — деньги ещё не пришли'
+                             : 'Отметить, что деньги пришли') + '" aria-label="' +
+          (got ? 'Убрать отметку' : 'Пришло') + '">' + (got ? ic('check', 13) : '') +
+          '</button>' : '') +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
           '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
