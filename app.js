@@ -24528,11 +24528,13 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
   function openZoomForm(o) {
-    if (document.querySelector('.al-ov')) return;
+    // Карточка задачи сама лежит в .al-ov, поэтому «уже открыто» проверяем только
+    // по своей форме, а не по любому оверлею.
+    if (document.querySelector('.al-ov.zm-ov')) return;
     zoomAccounts(function (accs) {
       if (!accs.length) { showToast('Зум не подключен: ключи аккаунтов еще не заведены'); return; }
       var ov = document.createElement('div');
-      ov.className = 'al-ov over';
+      ov.className = 'al-ov over zm-ov';
       ov.innerHTML =
         '<div class="al-card" role="dialog" aria-modal="true">' +
           '<div class="al-head">' +
@@ -24568,11 +24570,13 @@
       var close = function () {
         if (closed) return; closed = true;
         ov.classList.remove('show');
-        document.removeEventListener('keydown', onKey);
+        document.removeEventListener('keydown', onKey, true);
         setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
       };
+      // Escape ловим на захвате: иначе первым сработает обработчик карточки под формой
+      // и закроет ее вместо формы.
       var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
-      document.addEventListener('keydown', onKey);
+      document.addEventListener('keydown', onKey, true);
       el('zm-x').addEventListener('click', close);
       el('zm-cancel').addEventListener('click', close);
       ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
