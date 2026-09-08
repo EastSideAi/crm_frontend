@@ -13573,6 +13573,8 @@
           '<span class="fo-st">' +
             (it.status === 'план' ? '<span class="fst wait">план</span>' : '') +
             finDirectBadge(it.origin, it.role) +
+            (editable ? '<button class="fd-del" data-ddel="' + it.id +
+              '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>' : '') +
           '</span>' +
         '</div>';
       }).join('');
@@ -13599,6 +13601,25 @@
         r.addEventListener('click', function () {
           var hit = finDirectFind(r.getAttribute('data-dline'));
           if (hit) finLineForm(finDirectToLine(hit.it, hit.block), { form: 'прямой' });
+        });
+      });
+      // Удаление прямо из строки, мимо формы правки: клик по крестику не должен
+      // заодно открывать эту форму, поэтому глушим всплытие.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-ddel]'), function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var did = btn.getAttribute('data-ddel');
+          var hit = finDirectFind(did);
+          var nm = hit ? (hit.it.counterparty || hit.it.item || 'строку') : 'строку';
+          finConfirm('Удалить расход?',
+            nm + (hit ? ' на ' + finRub(hit.it.amount) : '') +
+            '. Строка исчезнет из ведомости, каскад пересчитается сам.',
+            'Удалить', function () {
+              czSend('/admin/api/fin/operation?id=' + encodeURIComponent(did) +
+                     '&period_id=' + encodeURIComponent(FIN.id), 'DELETE')
+                .then(function () { finForget(true); renderAll(); showToast('Строка убрана'); })
+                .catch(function (e2) { showToast(finLineErr(e2)); });
+            });
         });
       });
     }
