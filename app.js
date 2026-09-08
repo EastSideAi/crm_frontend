@@ -145,6 +145,7 @@
     course_access_granted: 'открыт доступ к курсу',
     course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    csca_access: 'доступ к тренажеру CSCA',
     // Раньше эти события показывались в ленте сырым английским именем: человек читал
     // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
     lead_created_bot: 'написал боту',
@@ -191,6 +192,12 @@
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
+    if (e.type === 'csca_access') {
+      label = (p.days ? 'Открыт тренажер CSCA: ' : 'Закрыт тренажер CSCA: ') +
+        (p.subject_name || p.subject || '') +
+        (p.days ? (p.days === 30 ? ' на месяц' : p.days === 365 ? ' на год' : ' на ' + p.days + ' дней') : '') +
+        (p.by ? ' · ' + p.by : '');
+    }
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -4083,6 +4090,7 @@
     api('/admin/api/arrivals?scope=' + scope).then(function (r) {
       state.arr = state.arr || {};
       if (scope === 'review') state.arr.review = r.arrivals || [];
+      else if (scope === 'all') state.arr.all = r.arrivals || [];
       else state.arr.mine = r.arrivals || [];
       state.arr.canReview = !!r.can_review;
       if (cb) cb(r);
@@ -4094,7 +4102,9 @@
     if (A.mine == null) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return arLoad('mine', function () {
-        if (A.canReview) arLoad('review', function () { if (state.page === 'zaezdy') arDraw(view); });
+        if (A.canReview) arLoad('review', function () {
+          arLoad('all', function () { if (state.page === 'zaezdy') arDraw(view); });
+        });
         else if (state.page === 'zaezdy') arDraw(view);
       });
     }
@@ -4108,6 +4118,7 @@
           '<button class="zz-tab' + (tab === 'mine' ? ' on' : '') + '" data-tab="mine">Мои заезды</button>' +
           '<button class="zz-tab' + (tab === 'review' ? ' on' : '') + '" data-tab="review">' +
             'На проверке' + (A.review && A.review.length ? ' <span class="zz-badge">' + A.review.length + '</span>' : '') + '</button>' +
+          '<button class="zz-tab' + (tab === 'all' ? ' on' : '') + '" data-tab="all">Все заезды</button>' +
         '</div>'
       : '';
     var right = (tab === 'mine')
@@ -4119,6 +4130,8 @@
       body = arDetail(A.open, tab === 'review');
     } else if (A.creating) {
       body = arCreateForm();
+    } else if (tab === 'all') {
+      body = arAllHTML(A.all || []);
     } else {
       var items = tab === 'review' ? (A.review || []) : (A.mine || []);
       body = arListHTML(items, tab === 'review');
@@ -4148,6 +4161,61 @@
     }).join('') + '</div>';
   }
 
+  // Реестр всех заездов для руководителя, сгруппированный по тьютору: видно, кто какой
+  // заезд провёл и с кем. Фильтр периода — по дате заезда, считаем на клиенте.
+  function arInPeriod(dateStr, period) {
+    if (period === 'all' || !period) return true;
+    if (!dateStr) return false;
+    var d = dateStr.slice(0, 7);           // YYYY-MM
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    var cur = y + '-' + ('0' + (m + 1)).slice(-2);
+    if (period === 'month') return d === cur;
+    var pm = m === 0 ? 11 : m - 1, py = m === 0 ? y - 1 : y;
+    return d === (py + '-' + ('0' + (pm + 1)).slice(-2));
+  }
+
+  function arAllHTML(all) {
+    var A = state.arr, period = A.period || 'all';
+    var sel = '<div class="zz-filter"><label class="zz-flbl">Период</label>' +
+      '<select class="zz-in" id="zz-period">' +
+        [['all', 'Всё время'], ['month', 'Этот месяц'], ['prev', 'Прошлый месяц']].map(function (o) {
+          return '<option value="' + o[0] + '"' + (period === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+        }).join('') + '</select></div>';
+    var items = all.filter(function (a) { return arInPeriod(a.arrival_date, period); });
+    if (!items.length) {
+      return sel + '<div class="zz-empty">' + ic('flight', 26) + '<div>За этот период заездов нет.</div></div>';
+    }
+    // группируем по тьютору, сохраняя порядок (бэкенд уже отсортировал по имени)
+    var groups = [], byId = {};
+    items.forEach(function (a) {
+      var key = a.tutor_id;
+      if (!byId[key]) { byId[key] = { name: a.tutor_name || 'Без тьютора', rows: [], paid: 0 }; groups.push(byId[key]); }
+      byId[key].rows.push(a);
+      if (a.status === 'accepted' || a.paid_at) byId[key].paid += (a.payout_rub || 0);
+    });
+    var html = groups.map(function (g) {
+      var rows = g.rows.map(function (a) {
+        var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
+        var svc = AR_SERVICE[a.service] || { label: a.service };
+        return '<button class="zz-card" data-open="' + a.id + '">' +
+          '<div class="zz-card-main">' +
+            '<div class="zz-card-t">' + esc(a.student || 'Без имени') + '</div>' +
+            '<div class="zz-card-m">' + esc(svc.label) + (a.city ? ' · ' + esc(a.city) : '') + (a.arrival_date ? ' · ' + arDate(a.arrival_date) : '') + '</div>' +
+          '</div>' +
+          '<div class="zz-card-side">' +
+            (a.status === 'accepted' ? '<span class="zz-pay">' + arMoney(a.payout_rub) + '</span>' : '') +
+            '<span class="zz-pill ' + st.cls + '">' + esc(st.label) + '</span>' +
+          '</div></button>';
+      }).join('');
+      return '<div class="zz-group">' +
+        '<div class="zz-group-h"><span class="zz-group-n">' + esc(g.name) + '</span>' +
+          '<span class="zz-group-s">' + g.rows.length + ' ' + plural(g.rows.length, 'заезд', 'заезда', 'заездов') +
+            (g.paid ? ' · ' + arMoney(g.paid) : '') + '</span></div>' +
+        '<div class="zz-list">' + rows + '</div></div>';
+    }).join('');
+    return sel + html;
+  }
+
   function arCreateForm() {
     var opts = Object.keys(AR_SERVICE).map(function (k) {
       return '<option value="' + k + '">' + esc(AR_SERVICE[k].label) + ' · ' + arMoney(AR_SERVICE[k].rate) + '</option>';
@@ -4163,7 +4231,7 @@
   }
 
   function arFind(id) {
-    var all = (state.arr.mine || []).concat(state.arr.review || []);
+    var all = (state.arr.mine || []).concat(state.arr.review || [], state.arr.all || []);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
@@ -4228,6 +4296,7 @@
     });
     var nw = el('zz-new'); if (nw) nw.addEventListener('click', function () { A.creating = true; A.open = null; arDraw(view); });
     var back = el('zz-back'); if (back) back.addEventListener('click', function () { A.open = null; A.creating = false; arDraw(view); });
+    var per = el('zz-period'); if (per) per.addEventListener('change', function () { A.period = per.value; arDraw(view); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-open]'), function (c) {
       c.addEventListener('click', function () { A.open = +c.getAttribute('data-open'); A.creating = false; arDraw(view); });
     });
@@ -22421,10 +22490,13 @@
     }
     if (!it.found) {
       return head +
-        '<div class="int-none">Этого человека на интенсиве не нашли. Ищем по телефону, ' +
-        'телеграм-нику и почте из карточки — если контакта тут нет, найдите его в списке сами.</div>' +
-        '<div class="int-find"><button class="bp ghost sm" id="int-find">' + ic('search', 13) +
-          'Найти на интенсиве</button></div>' +
+        '<div class="int-none">Этого человека на интенсиве пока нет. «Открыть интенсив» ' +
+        'заведёт его по контакту из карточки, откроет доступ и пришлёт ссылку в мессенджер ' +
+        '(или на почту, если мессенджер не подключён).</div>' +
+        '<div class="int-find">' +
+          '<button class="bp sm" id="int-open">' + ic('send', 13) + 'Открыть интенсив</button>' +
+          '<button class="bp ghost sm" id="int-find">' + ic('search', 13) +
+            'Найти вручную</button></div>' +
         '<div id="int-list"></div></div>';
     }
     return head +
@@ -22440,6 +22512,10 @@
         '<button type="button" class="pd-sw' + (it.has_access ? ' on' : '') + '" id="int-sw">' +
           '<span class="pd-sw-l">' + (it.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      '<div class="int-find"><button class="bp' + (it.has_access ? ' ghost' : '') +
+        ' sm" id="int-open">' + ic('send', 13) +
+        (it.has_access ? 'Отправить ссылку ещё раз' : 'Открыть и прислать ссылку') +
+        '</button></div>' +
       '<div class="det-sw-by">' + esc(INT_MATCH[it.match] || 'сведено автоматически') +
         ' · <button class="int-unlink" id="int-unlink">это не он</button></div></div>';
   }
@@ -22681,7 +22757,15 @@
     if (CSCA_BUSY[id]) return;
     if (force) delete CSCA[id];
     CSCA_BUSY[id] = true;
-    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+    // Попытки лежат у нас, замок тренажера — на его хостинге. Спрашиваем обе ручки
+    // сразу: карточке нужно и «как сдавал», и «что открыто», это один вопрос.
+    Promise.all([
+      api('/admin/api/leads/' + id + '/csca'),
+      api('/admin/api/leads/' + id + '/csca/access').catch(function () { return null; }),
+    ]).then(function (rr) {
+      var r = rr[0];
+      r.access = (rr[1] && rr[1].access) || [];
+      r.access_reason = rr[1] && rr[1].reason;
       CSCA_BUSY[id] = false; CSCA[id] = r;
       if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
     }).catch(function (e) {
@@ -22776,11 +22860,41 @@
           }).join('')
         : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
           'дает лендинг экзамена, результат придет сюда сам.</div>';
+      // Доступ к тренажеру — по предметам: экзамен обычно сдают один, и открытая
+      // математика не должна тащить за собой физику с химией.
+      var byS = {};
+      (c.access || []).forEach(function (a) { byS[a.subject] = a; });
+      var accessRows = CSCA_SUBJ.map(function (sj) {
+        var a = byS[sj[0]] || {};
+        var st = !a.open
+          ? (a.trial_used ? 'Закрыт, неделя израсходована' : 'Закрыт')
+          : (a.kind === 'trial' ? 'Бесплатная неделя до ' + esc(fmtWhen(a.until))
+                                : 'Открыт до ' + esc(fmtWhen(a.until)));
+        return '<div class="det-term">' +
+          '<div class="det-term-s"><b>' + esc(sj[1]) + '</b> · ' + st + '</div>' +
+          '<div class="det-term-b">' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="30">+ месяц</button>' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="365">+ год</button>' +
+            (a.open && a.kind === 'paid'
+              ? '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="0">закрыть</button>'
+              : '') +
+          '</div></div>';
+      }).join('');
+      var accessBlock = c.access_reason === 'no_contact'
+        ? '<div class="field-empty">В карточке нет почты и телефона — тренажер не узнает ' +
+          'человека, открывать нечего. Добавьте контакт.</div>'
+        : accessRows;
+
       csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
         '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
         'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
-        board + '<div class="det-prl">' + rows + '</div></div>';
+        board + '<div class="det-prl">' + rows + '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Доступ к тренажеру CSCA</div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Тест и разбор слабых тем бесплатны ' +
+        'всем. Тренажер — неделя бесплатно, дальше платно, и по каждому предмету ' +
+        'отдельно. Открытие продлевает срок, остаток не сгорает.</div>' +
+        accessBlock + '</div>';
     }
 
     return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
@@ -24878,6 +24992,30 @@
       });
     });
 
+    var iopen = el('int-open');
+    if (iopen) iopen.addEventListener('click', function () {
+      iopen.disabled = true;
+      var CHAN_RU = { telegram: 'телеграм', vk: 'вк', whatsapp: 'вотсап', max: 'макс' };
+      api('/admin/api/leads/' + id + '/intensive/open', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      }).then(function (r) {
+        var d = (r && r.delivery) || {};
+        var msg = 'Доступ к интенсиву открыт';
+        if (d.channels && d.channels.length) {
+          msg += ' · ссылка ушла в ' + d.channels.map(function (c) { return CHAN_RU[c] || c; }).join(' и ');
+        } else if (d.email) {
+          msg += ' · ссылка ушла на почту';
+        } else {
+          msg += ' · но ссылку отправить не удалось, напишите человеку сами';
+        }
+        showToast(msg);
+        reload();
+      }).catch(function (e) {
+        iopen.disabled = false;
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
+      });
+    });
+
     var tsel = el('det-teacher');
     if (tsel) {
       // Список преподавателей грузим один раз на сессию и перерисовываем поле.
@@ -25061,6 +25199,24 @@
     });
     var exr = el('ex-refresh');
     if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-csca-open]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        b.disabled = true; b.style.opacity = '.55';
+        var days = parseInt(b.getAttribute('data-days'), 10) || 0;
+        api('/admin/api/leads/' + id + '/csca/access', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: b.getAttribute('data-csca-open'), days: days }),
+        }).then(function (r) {
+          if (CSCA[id] && r.access) CSCA[id].access = r.access;
+          if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+          showToast(days ? (days === 30 ? 'Открыт на месяц' : 'Открыт на год') : 'Доступ закрыт');
+        }).catch(function (e) {
+          b.disabled = false; b.style.opacity = '';
+          if (e.message !== '403') showToast('Тренажер не ответил, попробуйте еще раз');
+        });
+      });
+    });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
