@@ -890,6 +890,87 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .kb-score { font-weight: 700; }
 .kb-when { margin-left: auto; color: var(--ink-3); }
 
+/* Встречи (Задачи → Встречи): журнал записей. Строка — время, название с
+   подписью, справа состояние или действие. Дни — тонкими подзаголовками. */
+.mt-day { padding: 14px 24px 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mt-row { grid-template-columns: 52px minmax(0, 1fr) auto; height: auto; min-height: 58px; padding: 10px 24px; }
+.mt-when { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.mt-main { min-width: 0; }
+.mt-title { display: block; max-width: 100%; text-align: left; font-size: 14px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 6px; margin-left: -6px; border-radius: 7px; }
+.mt-title:hover { background: var(--fill); }
+.mt-title-in { width: 100%; max-width: 420px; font-size: 14px; font-weight: 600; }
+.mt-sub { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.mt-sub a { color: var(--blue); }
+.mt-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.mt-right .qchip { display: inline-flex; align-items: center; gap: 6px; }
+.mt-drafts { font-size: 12.5px; font-weight: 600; color: var(--amber-ink); }
+.mt-rec { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+.mt-fold { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600;
+  color: var(--ink-2); padding: 4px 6px; border-radius: 8px; }
+.mt-fold svg { transition: transform .15s var(--ease); }
+.mt-fold.open svg { transform: rotate(90deg); }
+.mt-fold:hover { background: var(--fill); }
+/* Задачи из встречи: раскрытый список под строкой, шаги с отступом от цели. */
+.mt-tasks { padding: 2px 24px 12px 88px; display: flex; flex-direction: column; gap: 2px;
+  border-bottom: 1px solid var(--line); }
+.mt-task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 7px 10px; border-radius: 10px; font-size: 13px; color: var(--ink); }
+.mt-task:hover { background: var(--fill); }
+.mt-task.step { padding-left: 28px; }
+.mt-task .sev.mini { margin-left: 0; flex: none; }
+.mt-task-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-task-who { margin-left: auto; flex: none; font-size: 12px; color: var(--ink-3); }
+.mt-task .tb-due { margin-left: 0; flex: none; }
+@media (max-width: 760px) {
+  .mt-row { grid-template-columns: 44px minmax(0, 1fr); padding: 10px 16px; }
+  .mt-right { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+  .mt-day { padding: 12px 16px 4px; }
+  .mt-tasks { padding: 2px 16px 12px 16px; }
+  .mt-task-who { display: none; }
+}
+
+/* Доска задач (План → Доска): колонки-статусы на рецепте канбана лидов. Карточка
+   тише лидовой: заголовок до трех строк, под ним ученик (.dy-cl) или исполнитель
+   кружком (.dy-av), срок справа; просрочка — красной полоской слева, а не рамкой. */
+.tb-wrap { padding-top: 2px; }
+/* Четыре колонки делят ширину экрана: на ноутбуке доска видна целиком, без
+   горизонтальной прокрутки; на узком экране колонки фиксированные и листаются. */
+.tb-col { flex: 1 1 0; width: auto; min-width: 200px; min-height: 220px; }
+.tb-col.nodrop { cursor: not-allowed; }
+.tb-col.nodrop .kb-cards { opacity: .55; }
+.tb-card { padding: 12px 14px 11px; position: relative; }
+.tb-card.over::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--red); }
+.tb-title { font-weight: 600; font-size: 13.5px; line-height: 1.35; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-title .tsk-imp { margin-right: 5px; vertical-align: -1px; }
+.tb-cl { margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-asg { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+.tb-asg span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-card .kb-meta { margin-top: 8px; gap: 6px; }
+.tb-card .kb-meta .sev.mini { margin-left: 0; }
+.tb-card .kb-meta:empty { display: none; }
+.tb-due { margin-left: auto; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tb-due.due-over { color: var(--red-ink); font-weight: 600; }
+.tb-due.due-now { color: var(--amber-ink); font-weight: 600; }
+.tb-empty { padding: 18px 10px 12px; font-size: 12.5px; color: var(--ink-3); text-align: center; }
+.tb-how { margin: -2px 0 14px; }
+.tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.tb-how-m { display: none; }
+.tb-who-seg { margin-left: 2px; }
+@media (max-width: 760px) {
+  .tb-col { flex: none; width: 232px; min-width: 0; }
+  /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
+  .tb-top .tb-who-seg { flex: none; }
+  .tb-top .wk-spacer { display: none; }
+  .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
+  .tb-how-d { display: none; }
+  .tb-how-m { display: block; }
+}
+
 /* ════ МОДАЛКА (карточка клиента) — центр + левая навигация ════ */
 .mbg { position: fixed; inset: 0; background: rgba(15,19,32,.42);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
@@ -7205,6 +7286,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .zaezdy .zz-empty { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--zz-ink-3); text-align:center; padding:60px 20px; }
 .zaezdy .zz-empty svg { opacity:.5; }
 
+/* Реестр «Все заезды»: фильтр периода + группы по тьютору */
+.zaezdy .zz-filter { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+.zaezdy .zz-flbl { font-size:13px; font-weight:600; color:var(--zz-ink-2); }
+.zaezdy .zz-filter select { width:auto; font:inherit; font-size:13px; font-weight:600; padding:7px 11px; border-radius:9px; border:1px solid var(--zz-line); background:var(--zz-card); color:var(--zz-ink); cursor:pointer; }
+.zaezdy .zz-group { margin-bottom:24px; }
+.zaezdy .zz-group-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 2px 11px; padding-bottom:8px; border-bottom:1px solid var(--zz-line); }
+.zaezdy .zz-group-n { font-size:15px; font-weight:800; letter-spacing:-.01em; color:var(--zz-ink); }
+.zaezdy .zz-group-s { font-size:12.5px; font-weight:600; color:var(--zz-ink-3); font-variant-numeric:tabular-nums; white-space:nowrap; }
+
 .zaezdy .zz-panel { background:var(--zz-card); border:1px solid var(--zz-line); border-radius:16px; padding:22px 24px; max-width:680px; }
 .zaezdy .zz-back { font:inherit; font-size:13px; font-weight:600; color:var(--zz-ink-2); background:transparent; border:0; padding:0; cursor:pointer; display:inline-flex; align-items:center; gap:6px; margin-bottom:16px; }
 .zaezdy .zz-back:hover { color:var(--zz-ink); }
@@ -7332,6 +7422,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   padding: 10px 14px; border-radius: 12px; background: var(--fill);
   font-size: 12.5px; line-height: 1.45; font-weight: 500; color: var(--ink-2); }
 .wk-state svg { flex: none; margin-top: 2px; color: var(--ink-3); }
+/* display:flex у .wk-state и inline-flex у .wk-cap сильнее атрибута hidden: без
+   этого «Предел набран» висел в окне сбора недели всегда, даже при 7 из 50. */
+.wk-state[hidden], .wk-cap[hidden] { display: none; }
 .wk-state.ok   { background: var(--green-soft); color: var(--green-ink); }
 .wk-state.ok svg { color: var(--green-ink); }
 .wk-state.wait { background: var(--amber-soft); color: var(--amber-ink); }
