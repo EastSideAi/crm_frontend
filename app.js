@@ -7447,7 +7447,8 @@
           (files.length || (canFiles && t.status !== 'cancel')
             ? '<div class="tsk-sec tsk-filesec"><div class="tsk-l tsk-lrow">Файлы' +
                 (canFiles && t.status !== 'cancel'
-                  ? '<label class="tsk-addstep tsk-attach">' + ic('plus', 12) + 'Прикрепить' +
+                  ? '<button class="tsk-addstep tsk-zoom" id="tk-zoom" type="button">' + ic('play', 12) + 'Зум</button>' +
+                    '<label class="tsk-addstep tsk-attach">' + ic('plus', 12) + 'Прикрепить' +
                     '<input type="file" id="tk-anyfile" multiple hidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"></label>'
                   : '') + '</div>' +
                 (files.length ? '<div class="tsk-files">' + files.map(function (f) {
@@ -7621,6 +7622,13 @@
       });
       var resAdd = el('tk-resadd');
       if (resAdd) resAdd.addEventListener('click', function () { setRes('add'); });
+      var zoomB = el('tk-zoom');
+      if (zoomB) zoomB.addEventListener('click', function () {
+        openZoomForm({ task_id: id, topic: t.title || '', after: function () {
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+        } });
+      });
       var anyF = el('tk-anyfile');
       if (anyF) anyF.addEventListener('change', function (e) {
         readFiles(e.target.files, function (got) {
@@ -24459,13 +24467,15 @@
     var meta = [when, c.minutes ? c.minutes + ' мин' : '', c.created_by || ''].filter(Boolean).join(' · ');
     var st = CALL_ST[c.status];
     var body = (c.summary || '').trim();
+    // Ссылка на зум это приглашение на встречу, а не запись: значок и подпись другие.
+    var isZoom = /(^|\.)zoom\.us\//.test(c.link || '');
     return '<div class="cl-row" data-clid="' + c.id + '">' +
       '<div class="cl-h">' +
-        '<span class="cl-ic">' + ic('phone', 15) + '</span>' +
+        '<span class="cl-ic">' + ic(isZoom ? 'play' : 'phone', 15) + '</span>' +
         '<div class="cl-m">' + esc(meta) + '</div>' +
         (st ? '<span class="cl-st ' + c.status + '">' + st + '</span>' : '') +
         (c.link ? '<a class="icobtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" ' +
-                  'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
+                  'title="' + (isZoom ? 'Открыть зум' : 'Открыть запись') + '">' + ic('ext', 14) + '</a>' : '') +
         '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
       '</div>' +
       (body ? '<div class="cl-sum">' + callSummaryHtml(body) + '</div>'
@@ -24489,10 +24499,115 @@
     else body = loaded.map(callRow).join('');
     return '<div class="m-sec"><div class="m-sec-h">Консультации</div>' +
       '<div id="m-calls">' + body + '</div>' +
-      '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+      '<div class="ct-acts">' +
+        '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+        '<button class="bp sm ghost ct-add" id="m-zoom">' + ic('play', 13) + 'Ссылка на зум</button>' +
+      '</div>' +
       '<div class="ct-hint">Запись разбираем в конспект и храним текстом. Само видео остается там, ' +
         'где лежит: файл сюда только звуком и до 60 МБ, иначе ссылкой.</div>' +
       '</div>';
+  }
+
+  // ── Ссылка на зум ──────────────────────────────────────────────────────────
+  // Встречу создает сервер в рабочем аккаунте Zoom (Server-to-Server OAuth) и сам
+  // кладет ссылку туда, откуда позвали: файлом в задачу или консультацией в карточку
+  // ученика. Здесь только форма: аккаунт, название, время, длительность.
+  var ZOOM_ACCS = null;
+  function zoomAccounts(cb) {
+    if (ZOOM_ACCS) { cb(ZOOM_ACCS); return; }
+    api('/admin/api/zoom/accounts').then(function (r) {
+      ZOOM_ACCS = (r && r.accounts) || [];
+      cb(ZOOM_ACCS);
+    }).catch(function () { cb([]); });
+  }
+  function zoomNextHour() {
+    var d = new Date();
+    d.setMinutes(0, 0, 0);
+    d.setHours(d.getHours() + 1);
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function openZoomForm(o) {
+    if (document.querySelector('.al-ov')) return;
+    zoomAccounts(function (accs) {
+      if (!accs.length) { showToast('Зум не подключен: ключи аккаунтов еще не заведены'); return; }
+      var ov = document.createElement('div');
+      ov.className = 'al-ov over';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head">' +
+            '<div><div class="al-eyebrow">Zoom</div><div class="al-title">Ссылка на встречу</div></div>' +
+            '<button class="al-x" id="zm-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+          '</div>' +
+          '<div class="al-sub">Создам встречу в нашем зуме и приложу ссылку ' +
+            (o.task_id ? 'к задаче' : 'в карточку ученика') + '. Войти можно до ведущего, без зала ожидания.</div>' +
+          '<div class="al-body">' +
+            (accs.length > 1
+              ? '<label class="al-f"><span class="al-l">Аккаунт</span><select id="zm-acc" class="al-in">' +
+                  accs.map(function (a) { return '<option value="' + esc(a.slot) + '">' + esc(a.name) + '</option>'; }).join('') +
+                '</select></label>'
+              : '') +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="zm-topic" class="al-in" type="text" maxlength="200" value="' + esc(o.topic || '') + '"></label>' +
+            '<div class="al-row">' +
+              '<label class="al-f"><span class="al-l">Когда</span>' +
+                '<input id="zm-when" class="al-in" type="datetime-local" value="' + zoomNextHour() + '"></label>' +
+              '<label class="al-f"><span class="al-l">Длительность</span><select id="zm-min" class="al-in">' +
+                '<option value="30">30 минут</option><option value="45">45 минут</option>' +
+                '<option value="60" selected>1 час</option><option value="90">1,5 часа</option>' +
+                '<option value="120">2 часа</option></select></label>' +
+            '</div>' +
+            '<div class="ct-err" id="zm-err"></div>' +
+          '</div>' +
+          '<div class="al-foot"><button class="al-cancel" id="zm-cancel">Отмена</button>' +
+            '<button class="bp al-save" id="zm-ok">Создать ссылку</button></div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey);
+      el('zm-x').addEventListener('click', close);
+      el('zm-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var err = el('zm-err');
+      el('zm-ok').addEventListener('click', function () {
+        var topic = ((el('zm-topic') || {}).value || '').trim();
+        var when = (el('zm-when') || {}).value || '';
+        var acc = el('zm-acc');
+        err.textContent = '';
+        if (!topic) { err.textContent = 'Нужно название встречи'; el('zm-topic').focus(); return; }
+        var ok = el('zm-ok');
+        ok.disabled = true;
+        // Время уходит с зоной браузера: коллега в Китае ставит встречу по своим часам,
+        // и «в 12» должно значить его 12, а не московские.
+        apiSend('/admin/api/zoom/meetings', 'POST', {
+          topic: topic, slot: acc ? acc.value : '',
+          start_at: when ? new Date(when).toISOString() : null,
+          minutes: +((el('zm-min') || {}).value || 60),
+          task_id: o.task_id || null, session_id: o.session_id || null
+        }, function (r) {
+          var m = r && r.meeting;
+          close();
+          var link = m && m.join_url;
+          if (link && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).catch(function () {});
+          }
+          showToast(link ? 'Ссылка на зум готова и скопирована' : 'Встреча создана');
+          if (o.after) o.after(m);
+        }, function (code, e) {
+          ok.disabled = false;
+          err.textContent = (e && e.body && e.body.detail) || 'Не получилось создать встречу, проверь интернет';
+        });
+      });
+      setTimeout(function () { var t = el('zm-topic'); if (t) { t.focus(); t.select(); } }, 60);
+    });
   }
 
   function openCallForm(id, after, call) {
@@ -25789,6 +25904,15 @@
     }
     var callAdd = el('m-call-add');
     if (callAdd) callAdd.addEventListener('click', function () { openCallForm(id); });
+    var zoomAdd = el('m-zoom');
+    if (zoomAdd) zoomAdd.addEventListener('click', function () {
+      var who = ov(ctx, 'name') || (ctx.lead ? leadName(ctx.lead) : '');
+      openZoomForm({ session_id: id, topic: 'Консультация' + (who ? ': ' + who : ''), after: function () {
+        loadCardCalls(id, function () {
+          if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+        });
+      } });
+    });
     Array.prototype.forEach.call(host.querySelectorAll('[data-editcall]'), function (b) {
       b.addEventListener('click', function () {
         var list = state.cardCalls[id];
