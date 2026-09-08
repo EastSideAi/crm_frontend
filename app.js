@@ -209,7 +209,11 @@
     { key: 'viewed',    label: 'Открыли разбор',        hint: 'увидели результат',       test: function (l) { return hasEv(l, 'viewed_result'); } },
     { key: 'cta',       label: 'Нажали «записаться»',   hint: 'клик по CTA',             test: function (l) { return hasEv(l, 'clicked_book_call') || hasEv(l, 'clicked_messenger'); } },
     { key: 'booked',    label: 'Оставили заявку',       hint: 'контакт + слот',          test: function (l) { return !!l.booking; } },
-    { key: 'client',    label: 'Стали клиентами',       hint: 'статус в CRM',            test: function (l) { return !!l.paid; } },
+    /* Последняя ступень считается по факту оплаты, а не по статусу в карточке:
+       статус «клиент» менеджер ставит рукой, деньги — факт. Подпись раньше врала
+       про «статус в CRM», и было непонятно, почему человек со статусом «клиент»
+       не виден во вкладке «Клиенты» — она фильтрует по этому же признаку. */
+    { key: 'client',    label: 'Стали клиентами',       hint: 'есть оплата в карточке',  test: function (l) { return !!l.paid; } },
   ];
   function hasEv(l, t) { return (l.events || []).indexOf(t) !== -1; }
 
