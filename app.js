@@ -5529,9 +5529,10 @@
           return '<div class="zw-day' + (isToday ? ' today' : '') + '">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></div>' +
             data.map(function (a) {
               var ms = (a.meetings || []).filter(function (m) { var s = new Date(m.start); return s.getFullYear() === d.getFullYear() && s.getMonth() === d.getMonth() && s.getDate() === d.getDate(); });
+              // Аккаунт без доступа не «свободен», про него просто ничего не известно.
               return '<div class="zw-cell' + (isToday ? ' today' : '') + '">' + (ms.length ? ms.map(function (m) {
                 return '<span class="zw-chip" title="' + esc(m.topic) + '"><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>';
-              }).join('') : '<span class="zw-none">свободно</span>') + '</div>';
+              }).join('') : '<span class="zw-none">' + (a.error ? 'нет данных' : 'свободно') + '</span>') + '</div>';
             }).join('');
         }).join('') + '</div>';
     }
