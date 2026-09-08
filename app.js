@@ -311,6 +311,15 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  /* Ссылка в человеческом виде. Боевые домены записаны в punycode
+     (xn--80aikf2bag.xn--p1ai) — так их хранит бэкенд, и менеджер видел в карточке
+     набор символов, который стыдно отправить клиенту (замечание Веры 05.09.2026).
+     Показываем и копируем «истсайд.рф»: браузер и телеграм открывают такую ссылку
+     ровно так же. Машинные адреса через эту функцию не идут — в настройках ВК и в
+     возвратах кассы punycode обязателен, поэтому глобальной подмены тут нет. */
+  function humanUrl(u) {
+    return String(u == null ? '' : u).replace(/xn--80aikf2bag\.xn--p1ai/g, 'истсайд.рф');
+  }
   /* лёгкий markdown для пузырей чата: бот отвечает с **жирным**, списками и переносами —
      рендерим их, а не показываем сырой текст. Сначала экранируем HTML, потом размечаем. */
   function mdMsg(s) {
@@ -413,6 +422,7 @@
     return null;
   }
   function copyText(text, btn) {
+    text = humanUrl(text);
     var done = function () {
       if (!btn) return;
       // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
@@ -9073,10 +9083,10 @@
           ? ' Действующая ссылка есть, до ' + czDate(cab.link_alive_until) + '.' : '') +
       '</div>' +
       (cabLink
-        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(cabLink.url) + '</span>' +
+        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(humanUrl(cabLink.url)) + '</span>' +
             '<button class="hr" id="cz-cabcopy">' + ic('copy', 13) + 'Скопировать</button></div>' +
           '<div class="cz-inv-h">' +
-            (cabLink.tg_url ? 'Для телеграма: ' + esc(cabLink.tg_url) + '. ' : '') +
+            (cabLink.tg_url ? 'Для телеграма: ' + esc(humanUrl(cabLink.tg_url)) + '. ' : '') +
             'Ссылка одноразовая: она не открывает доступ сама по себе, а связывает ' +
             'телеграм того, кто ее откроет, с этой карточкой. Дальше он заходит без нее.' +
           '</div>'
@@ -23053,7 +23063,7 @@
     // поэтому primary она получает только когда ссылки еще нет.
     var link = '<div class="det-link">' +
       (inv
-        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(inv.url) + '">' +
+        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(humanUrl(inv.url)) + '">' +
           '<button class="bp sm" id="det-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="det-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылки нет — создайте, и отправьте ее человеку</span>' +
@@ -23302,7 +23312,7 @@
     var link = CRS_LINK[id];
     var linkRow = '<div class="det-link">' +
       (link
-        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(humanUrl(link)) + '">' +
           '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
@@ -23423,11 +23433,11 @@
     var links = inv
       ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(humanUrl(inv.test_url)) + '">' +
             '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
         '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(humanUrl(inv.trainer_url)) + '">' +
             '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
             '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
         '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
@@ -25121,6 +25131,8 @@
 
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
+    // Контакт для чека: берём известный из карточки, менеджер при нужде поправит.
+    var qiContact = (ctx.d && (ctx.d.email || (ctx.d.booking && ctx.d.booking.contact))) || '';
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var pending = pays.filter(function (p) { return p.status === 'pending'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var refunded = pays.filter(function (p) { return p.status === 'refunded'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
@@ -25156,6 +25168,22 @@
     return '<div class="m-ctitle">Оплаты</div>' +
       '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
       board +
+      /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
+         позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
+         и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
+         (защита от отправки не туда, просьба Веры 07.09.2026). */
+      '<div class="m-sec"><div class="m-sec-h">Быстрый счёт' +
+        '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Сумма и назначение — получите ссылку на оплату, живёт до оплаты. Клиенту уйдёт только после кнопки «Отправить клиенту».</div>' +
+        '<div id="qi-list"><div class="field-empty">Загружаю счета…</div></div>' +
+        '<div class="qi-form">' +
+          '<div class="pay-grid qi-grid">' +
+            '<input id="qi-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+            '<input id="qi-desc" placeholder="Назначение (Консультационное сопровождение)">' +
+          '</div>' +
+          '<input id="qi-contact" placeholder="Почта или телефон для чека" value="' + esc(qiContact) + '">' +
+          '<button class="bp sm" id="qi-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить счёт</button>' +
+        '</div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
@@ -26211,6 +26239,93 @@
         }).catch(function (e) {
           ordBtn.disabled = false;
           if (e.message !== '403') showToast('Счет не выставился — проверьте сеть');
+        });
+      });
+    }
+
+    /* ── Быстрый счёт (invoices): сумма → долгая ссылка, отправка клиенту отдельной
+       красной кнопкой. Отдельно от заказов выше: тут не разбор на позиции, а один
+       платёж-ссылка, как у общего скрипта агента. */
+    var qiList = el('qi-list');
+    if (qiList) {
+      var QI_ST = {
+        issued:   { label: 'выставлен',         sev: 'contacted' },
+        sent:     { label: 'отправлен клиенту',  sev: 'call_scheduled' },
+        paid:     { label: 'оплачен',            sev: 'client' },
+        canceled: { label: 'снят',               sev: 'rejected' },
+      };
+      var loadQI = function () {
+        api('/admin/api/leads/' + id + '/invoices').then(function (r) { renderQI(r.invoices); })
+          .catch(function (e) { if (e.message !== '403') qiList.innerHTML = '<div class="field-empty">Не загрузились — обновите.</div>'; });
+      };
+      var renderQI = function (list) {
+        if (!list || !list.length) {
+          qiList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте ниже.</div>';
+          return;
+        }
+        qiList.innerHTML = list.map(function (v) {
+          var st = QI_ST[v.status] || QI_ST.issued;
+          var meta = [fmtWhen(v.sent_at || v.created_at), v.created_by].filter(Boolean).map(esc).join(' · ');
+          var act = '';
+          if (v.status === 'issued') {
+            // красная пульсирующая «Отправить клиенту» — её нельзя не заметить (просьба Веры)
+            act = '<button class="qi-send" data-qisend="' + v.id + '">' + ic('card', 13) + 'Отправить клиенту</button>';
+          } else if (v.status === 'sent') {
+            act = '<span class="qi-done">' + ic('check', 12) + 'отправлен</span>';
+          }
+          if (v.url && v.status !== 'paid') act += '<button class="pay-rcpt" data-qicopy="' + esc(v.url) + '">' + ic('copy', 12) + 'ссылка</button>';
+          if (v.status !== 'paid') act += '<button class="icobtn del" data-qicancel="' + v.id + '" title="Снять счёт">' + ic('x', 14) + '</button>';
+          return '<div class="pay-row qi-row">' +
+            '<div class="doc-b"><div class="doc-n">' + esc(v.description) +
+              ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
+              '<div class="doc-m">' + meta + '</div></div>' +
+            '<span class="pay-amt num">' + fmtMoney(v.amount) + ' ₽</span>' +
+            '<div class="qi-acts">' + act + '</div></div>';
+        }).join('');
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qisend]'), function (b) {
+          b.addEventListener('click', function () {
+            b.disabled = true;
+            api('/admin/api/invoices/' + b.getAttribute('data-qisend') + '/send', { method: 'POST' })
+              .then(function () { showToast('Счёт отправлен клиенту в бота'); loadQI(); })
+              .catch(function (e) {
+                b.disabled = false;
+                if (e.status === 409) showToast((e.body && e.body.detail) || 'Отправить некому');
+                else if (e.message !== '403') showToast('Не отправилось — проверьте сеть');
+              });
+          });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicopy]'), function (b) {
+          b.addEventListener('click', function () { copyText(b.getAttribute('data-qicopy'), b); });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicancel]'), function (b) {
+          b.addEventListener('click', function () {
+            apiSend('/admin/api/invoices/' + b.getAttribute('data-qicancel') + '/cancel', 'POST', null, loadQI);
+          });
+        });
+      };
+      loadQI();
+      var qiRefresh = el('qi-refresh');
+      if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
+      var qiBtn = el('qi-btn');
+      if (qiBtn) qiBtn.addEventListener('click', function () {
+        var amt = parseInt((el('qi-amt').value || '').replace(/\D/g, ''), 10) || 0;
+        if (!amt) { el('qi-amt').focus(); return; }
+        var contact = (el('qi-contact').value || '').trim();
+        if (!contact) { showToast('Впишите почту или телефон клиента — он нужен для чека'); el('qi-contact').focus(); return; }
+        qiBtn.disabled = true;
+        api('/admin/api/leads/' + id + '/invoice', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: String(amt), description: (el('qi-desc').value || '').trim(), contact: contact }),
+        }).then(function () {
+          qiBtn.disabled = false;
+          el('qi-amt').value = ''; el('qi-desc').value = '';
+          showToast('Счёт выставлен — теперь нажмите красную «Отправить клиенту»');
+          loadQI();
+        }).catch(function (e) {
+          qiBtn.disabled = false;
+          if (e.status === 422) showToast((e.body && e.body.detail) || 'Проверьте сумму и назначение');
+          else if (e.status === 502) showToast('ЮKassa не создала счёт — попробуйте ещё раз');
+          else if (e.message !== '403') showToast('Счёт не выставился — проверьте сеть');
         });
       });
     }
