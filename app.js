@@ -74,7 +74,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine',
+    myboard: null, boardWho: 'mine', meetLog: null,
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -4682,6 +4682,9 @@
     stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
     goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
     team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'у кого как идет неделя: собрана, сделано, застряло' },
+    // Записи встреч (Fathom и загруженные протоколы) и что с каждой стало: до
+    // 08.09.2026 черновики жили только за ссылкой из бота (Павел: «не могу найти»).
+    meet:  { label: 'Встречи', view: 'meetings', scope: 'all', cap: 'tasks_all', hint: 'все записи встреч: черновики задач, консультации в карточках, что не разобралось' },
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
@@ -4884,6 +4887,7 @@
     var v = TASK_SEGS[taskSeg()].view;
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
+    if (v === 'meetings') { renderMeetings(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
     if (state.tasks === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
@@ -5403,6 +5407,89 @@
     });
   }
 
+
+
+  /* ── Встречи: журнал записей и что с каждой стало ───────────────────────────
+     Одна строка на запись: когда, что, кто вел, и справа состояние-действие —
+     «разобрать» (черновик с числом целей), «задачи заведены», «консультация:
+     ученик» (в карточку), «не разобралась: причина» (с ссылкой на запись). */
+  function loadMeetLog() {
+    api('/admin/api/meetings/log?days=45').then(function (r) {
+      state.meetLog = (r && r.meetings) || [];
+      if (state.page === 'tasks') renderView();
+    }).catch(function () { state.meetLog = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function meetRow(m) {
+    var kind = m.kind === 'client' ? 'консультация' : m.kind === 'team' ? 'рабочая' : m.kind === 'manual' ? 'протокол' : 'встреча';
+    var right = '', cls = '';
+    if (m.state === 'draft') {
+      right = '<button class="bp sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
+        (m.goals ? ' <span class="num">' + m.goals + '</span>' : '') + '</button>';
+    } else if (m.state === 'applied') {
+      right = '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
+    } else if (m.state === 'call') {
+      right = '<button class="qchip" data-mcard="' + esc(m.session_id || '') + '">' + ic('card', 13) +
+        (m.client_name ? esc(m.client_name) : 'карточка ученика') + '</button>';
+      cls = ' is-call';
+    } else if (m.state === 'failed') {
+      right = '<span class="sev st-wait" title="' + esc(m.error || '') + '">' + esc(m.error || 'не разобралась') + '</span>';
+    } else if (m.state === 'cancel') {
+      right = '<span class="sev n-off">разбор снят</span>';
+    } else {
+      right = '<span class="sev n-off">разбирается</span>';
+    }
+    return '<div class="trow mt-row' + cls + '">' +
+      '<div class="mt-when num">' + fmtTime(m.at) + '</div>' +
+      '<div class="mt-main"><div class="mt-title">' + esc(m.title || 'Без названия') + '</div>' +
+        '<div class="mt-sub">' + kind + (m.by ? ' · ' + esc(m.by) : '') +
+          (m.url ? ' · <a href="' + esc(m.url) + '" target="_blank" rel="noopener">запись</a>' : '') + '</div></div>' +
+      '<div class="mt-right">' + right + '</div>' +
+    '</div>';
+  }
+  function renderMeetings(view) {
+    if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
+    if (state.meetLog === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
+      return;
+    }
+    var list = state.meetLog;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) list = list.filter(function (m) { return ((m.title || '') + ' ' + (m.client_name || '') + ' ' + (m.by || '')).toLowerCase().indexOf(q) !== -1; });
+    var days = {}, order = [];
+    list.forEach(function (m) {
+      var k = m.at ? m.at.slice(0, 10) : '';
+      if (!days[k]) { days[k] = []; order.push(k); }
+      days[k].push(m);
+    });
+    var drafts = state.meetLog.filter(function (m) { return m.state === 'draft'; }).length;
+    var body = order.length ? order.map(function (k) {
+      return '<div class="mt-day">' + esc(dayLabel(days[k][0].at)) + '</div>' + days[k].map(meetRow).join('');
+    }).join('') : '<div class="empty">За полтора месяца записей нет. Fathom кладет их сюда сам, протокол можно загрузить кнопкой.</div>';
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти встречу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        (drafts ? '<span class="mt-drafts">' + drafts + ' ' + plural(drafts, 'черновик ждет', 'черновика ждут', 'черновиков ждут') + '</span>' : '') +
+        '<button class="bp ghost sm" id="mt-upload">' + ic('plus', 14) + 'Загрузить протокол</button>' +
+      '</div>' +
+      '<div class="list-body">' + body + '</div></div>';
+    var qi = el('tsk-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    }
+    if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
+      b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mcard]'), function (b) {
+      b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
+    });
+  }
 
   /* ── Доска: мои задачи по статусам (Павел 08.09.2026, «как в битриксе») ──────
      Четыре колонки и есть статусы задачи: поставлена, в работе, на приемке,
