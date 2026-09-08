@@ -75,6 +75,7 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
+    zoomWeek: {}, zoomWeekOff: 0,
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -5483,6 +5484,61 @@
       '<div class="mt-right">' + fold + rec + right + '</div>' +
     '</div>' + list;
   }
+  // ── Зумы на неделю ─────────────────────────────────────────────────────────
+  // Источник — сам зум: сюда попадает все, что назначено на аккаунтах, хоть из CRM,
+  // хоть из приложения. Так команда, продажники и преподаватели видят, когда какой
+  // зум свободен (Павел 08.09.2026).
+  function zoomWeekStart(off) {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
+    return d;
+  }
+  function loadZoomWeek(off) {
+    var lo = zoomWeekStart(off), hi = new Date(lo.getTime() + 7 * 86400000);
+    var key = lo.toISOString().slice(0, 10);
+    state.zoomWeek[key] = 'loading';
+    api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
+      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function zoomWeekBlock() {
+    var off = state.zoomWeekOff || 0;
+    var lo = zoomWeekStart(off), key = lo.toISOString().slice(0, 10);
+    var data = state.zoomWeek[key];
+    if (data === undefined) { loadZoomWeek(off); data = 'loading'; }
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
+    var range = days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
+    var head = '<div class="zw-head"><div class="zw-title">Зумы на неделю</div>' +
+      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
+      '<span class="zw-range">' + esc(range) + '</span>' +
+      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div></div>';
+    var body;
+    if (data === 'loading') body = '<div class="zw-empty">Спрашиваю у зума…</div>';
+    else if (data === 'none') body = '<div class="zw-empty">Зум не ответил. Обнови страницу.</div>';
+    else if (!data.length) body = '<div class="zw-empty">Аккаунты зума еще не подключены.</div>';
+    else {
+      var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      body = '<div class="zw-grid" style="--zw-cols:' + data.length + '">' +
+        '<div class="zw-corner"></div>' + data.map(function (a) {
+          return '<div class="zw-acc">' + esc(a.name) + (a.error ? '<span class="zw-err" title="' + esc(a.error) + '">нет доступа</span>' : '') + '</div>';
+        }).join('') +
+        days.map(function (d) {
+          var k = d.toISOString().slice(0, 10), isToday = d.getTime() === today.getTime();
+          return '<div class="zw-day' + (isToday ? ' today' : '') + '">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></div>' +
+            data.map(function (a) {
+              var ms = (a.meetings || []).filter(function (m) { var s = new Date(m.start); return s.getFullYear() === d.getFullYear() && s.getMonth() === d.getMonth() && s.getDate() === d.getDate(); });
+              return '<div class="zw-cell' + (isToday ? ' today' : '') + '">' + (ms.length ? ms.map(function (m) {
+                return '<span class="zw-chip" title="' + esc(m.topic) + '"><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>';
+              }).join('') : '<span class="zw-none">свободно</span>') + '</div>';
+            }).join('');
+        }).join('') + '</div>';
+    }
+    return '<div class="card zw">' + head + body +
+      '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
+  }
+
   function renderMeetings(view) {
     if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
     if (state.meetLog === 'none') {
@@ -5502,7 +5558,7 @@
     var body = order.length ? order.map(function (k) {
       return '<div class="mt-day">' + esc(dayLabel(days[k][0].at)) + '</div>' + days[k].map(meetRow).join('');
     }).join('') : '<div class="empty">За полтора месяца записей нет. Fathom кладет их сюда сам, протокол можно загрузить кнопкой.</div>';
-    view.innerHTML = '<div class="card listcard">' +
+    view.innerHTML = zoomWeekBlock() + '<div class="card listcard">' +
       '<div class="list-tools brd-tools">' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти встречу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
@@ -5520,6 +5576,9 @@
       el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
     }
     if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zw]'), function (b) {
+      b.addEventListener('click', function () { state.zoomWeekOff = (state.zoomWeekOff || 0) + (+b.getAttribute('data-zw')); renderView(); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
       b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
     });
@@ -24559,6 +24618,7 @@
                 '<option value="60" selected>1 час</option><option value="90">1,5 часа</option>' +
                 '<option value="120">2 часа</option></select></label>' +
             '</div>' +
+            '<div class="zm-free" id="zm-free"></div>' +
             '<div class="ct-err" id="zm-err"></div>' +
           '</div>' +
           '<div class="al-foot"><button class="al-cancel" id="zm-cancel">Отмена</button>' +
@@ -24581,6 +24641,38 @@
       el('zm-cancel').addEventListener('click', close);
       ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
       var err = el('zm-err');
+      // Занятость спрашиваем у зума живьем при смене аккаунта, времени или длительности:
+      // человек видит «занято: урок 12:30–13:30» до нажатия, а не после отказа.
+      var freeT = null, freeSeq = 0;
+      var checkFree = function () {
+        var box = el('zm-free'); if (!box) return;
+        var when = (el('zm-when') || {}).value || '';
+        if (!when) { box.textContent = ''; box.className = 'zm-free'; return; }
+        var acc = el('zm-acc'), slot = acc ? acc.value : accs[0].slot;
+        var mins = +((el('zm-min') || {}).value || 60);
+        var lo = new Date(when), hi = new Date(lo.getTime() + mins * 60000);
+        var seq = ++freeSeq;
+        box.textContent = 'Смотрю, свободно ли…'; box.className = 'zm-free';
+        api('/admin/api/zoom/busy?slot=' + encodeURIComponent(slot) + '&from=' + encodeURIComponent(lo.toISOString()) +
+            '&to=' + encodeURIComponent(hi.toISOString())).then(function (r) {
+          if (seq !== freeSeq) return;
+          var a = ((r && r.accounts) || [])[0];
+          if (!a) { box.textContent = ''; return; }
+          if (a.error) { box.textContent = a.error; box.className = 'zm-free warn'; return; }
+          if (!a.meetings.length) { box.textContent = 'В это время свободно'; box.className = 'zm-free ok'; return; }
+          var m = a.meetings[0];
+          box.textContent = 'Занято: ' + m.topic + ', ' + hhmm(m.start) + '–' + hhmm(m.end) +
+            (a.meetings.length > 1 ? ' и еще ' + (a.meetings.length - 1) : '');
+          box.className = 'zm-free busy';
+        }).catch(function () { box.textContent = ''; });
+      };
+      var hhmm = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
+      ['zm-acc', 'zm-when', 'zm-min'].forEach(function (i) {
+        var n = el(i); if (!n) return;
+        n.addEventListener('change', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 250); });
+        n.addEventListener('input', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 500); });
+      });
+      checkFree();
       el('zm-ok').addEventListener('click', function () {
         var topic = ((el('zm-topic') || {}).value || '').trim();
         var when = (el('zm-when') || {}).value || '';
