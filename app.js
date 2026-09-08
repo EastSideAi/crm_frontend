@@ -5522,7 +5522,8 @@
     var head = '<div class="sec-head zw-head"><div class="t">Зумы на неделю</div>' +
       '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
       '<span class="zw-range">' + esc(range) + '</span>' +
-      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div></div>';
+      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button>' +
+      '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div></div>';
     var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
     var sameDay = function (iso, d) { var x = new Date(iso); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
     var body;
@@ -5606,6 +5607,11 @@
     if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zw]'), function (b) {
       b.addEventListener('click', function () { state.zoomWeekOff = (state.zoomWeekOff || 0) + (+b.getAttribute('data-zw')); renderView(); });
+    });
+    if (el('zw-new')) el('zw-new').addEventListener('click', function () {
+      // Встреча без задачи и без семьи: ссылка в буфере, а в сетке она появится
+      // сразу, для этого кэш недели сбрасываем.
+      openZoomForm({ after: function () { state.zoomWeek = {}; renderView(); } });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
       b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
@@ -24637,8 +24643,9 @@
             '<div><div class="al-eyebrow">Zoom</div><div class="al-title">Ссылка на встречу</div></div>' +
             '<button class="al-x" id="zm-x" title="Закрыть">' + ic('x', 16) + '</button>' +
           '</div>' +
-          '<div class="al-sub">Создам встречу в нашем зуме и приложу ссылку ' +
-            (o.task_id ? 'к задаче' : 'в карточку ученика') + '. Войти можно до ведущего, без зала ожидания.</div>' +
+          '<div class="al-sub">Создам встречу в нашем зуме и ' +
+            (o.task_id ? 'приложу ссылку к задаче' : o.session_id ? 'приложу ссылку в карточку ученика' : 'скопирую ссылку, в сетке недели она появится сразу') +
+            '. Войти можно до ведущего, без зала ожидания.</div>' +
           '<div class="al-body">' +
             (accs.length > 1
               ? '<label class="al-f"><span class="al-l">Аккаунт</span><span class="al-selwrap"><select id="zm-acc" class="al-sel">' +
