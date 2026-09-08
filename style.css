@@ -890,6 +890,87 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .kb-score { font-weight: 700; }
 .kb-when { margin-left: auto; color: var(--ink-3); }
 
+/* Встречи (Задачи → Встречи): журнал записей. Строка — время, название с
+   подписью, справа состояние или действие. Дни — тонкими подзаголовками. */
+.mt-day { padding: 14px 24px 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.mt-row { grid-template-columns: 52px minmax(0, 1fr) auto; height: auto; min-height: 58px; padding: 10px 24px; }
+.mt-when { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.mt-main { min-width: 0; }
+.mt-title { display: block; max-width: 100%; text-align: left; font-size: 14px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 6px; margin-left: -6px; border-radius: 7px; }
+.mt-title:hover { background: var(--fill); }
+.mt-title-in { width: 100%; max-width: 420px; font-size: 14px; font-weight: 600; }
+.mt-sub { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.mt-sub a { color: var(--blue); }
+.mt-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.mt-right .qchip { display: inline-flex; align-items: center; gap: 6px; }
+.mt-drafts { font-size: 12.5px; font-weight: 600; color: var(--amber-ink); }
+.mt-rec { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+.mt-fold { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600;
+  color: var(--ink-2); padding: 4px 6px; border-radius: 8px; }
+.mt-fold svg { transition: transform .15s var(--ease); }
+.mt-fold.open svg { transform: rotate(90deg); }
+.mt-fold:hover { background: var(--fill); }
+/* Задачи из встречи: раскрытый список под строкой, шаги с отступом от цели. */
+.mt-tasks { padding: 2px 24px 12px 88px; display: flex; flex-direction: column; gap: 2px;
+  border-bottom: 1px solid var(--line); }
+.mt-task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 7px 10px; border-radius: 10px; font-size: 13px; color: var(--ink); }
+.mt-task:hover { background: var(--fill); }
+.mt-task.step { padding-left: 28px; }
+.mt-task .sev.mini { margin-left: 0; flex: none; }
+.mt-task-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-task-who { margin-left: auto; flex: none; font-size: 12px; color: var(--ink-3); }
+.mt-task .tb-due { margin-left: 0; flex: none; }
+@media (max-width: 760px) {
+  .mt-row { grid-template-columns: 44px minmax(0, 1fr); padding: 10px 16px; }
+  .mt-right { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+  .mt-day { padding: 12px 16px 4px; }
+  .mt-tasks { padding: 2px 16px 12px 16px; }
+  .mt-task-who { display: none; }
+}
+
+/* Доска задач (План → Доска): колонки-статусы на рецепте канбана лидов. Карточка
+   тише лидовой: заголовок до трех строк, под ним ученик (.dy-cl) или исполнитель
+   кружком (.dy-av), срок справа; просрочка — красной полоской слева, а не рамкой. */
+.tb-wrap { padding-top: 2px; }
+/* Четыре колонки делят ширину экрана: на ноутбуке доска видна целиком, без
+   горизонтальной прокрутки; на узком экране колонки фиксированные и листаются. */
+.tb-col { flex: 1 1 0; width: auto; min-width: 200px; min-height: 220px; }
+.tb-col.nodrop { cursor: not-allowed; }
+.tb-col.nodrop .kb-cards { opacity: .55; }
+.tb-card { padding: 12px 14px 11px; position: relative; }
+.tb-card.over::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--red); }
+.tb-title { font-weight: 600; font-size: 13.5px; line-height: 1.35; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-title .tsk-imp { margin-right: 5px; vertical-align: -1px; }
+.tb-cl { margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-asg { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+.tb-asg span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-card .kb-meta { margin-top: 8px; gap: 6px; }
+.tb-card .kb-meta .sev.mini { margin-left: 0; }
+.tb-card .kb-meta:empty { display: none; }
+.tb-due { margin-left: auto; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.tb-due.due-over { color: var(--red-ink); font-weight: 600; }
+.tb-due.due-now { color: var(--amber-ink); font-weight: 600; }
+.tb-empty { padding: 18px 10px 12px; font-size: 12.5px; color: var(--ink-3); text-align: center; }
+.tb-how { margin: -2px 0 14px; }
+.tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.tb-how-m { display: none; }
+.tb-who-seg { margin-left: 2px; }
+@media (max-width: 760px) {
+  .tb-col { flex: none; width: 232px; min-width: 0; }
+  /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
+  .tb-top .tb-who-seg { flex: none; }
+  .tb-top .wk-spacer { display: none; }
+  .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
+  .tb-how-d { display: none; }
+  .tb-how-m { display: block; }
+}
+
 /* ════ МОДАЛКА (карточка клиента) — центр + левая навигация ════ */
 .mbg { position: fixed; inset: 0; background: rgba(15,19,32,.42);
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
@@ -1006,6 +1087,27 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-content::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
 .m-ctitle { font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
 .m-csub { font-size: 13px; color: var(--ink-2); margin-top: 6px; margin-bottom: 26px; line-height: 1.5; }
+
+/* Консультации — воронка продаж на карточке. Собрано ИЗ системных компонентов:
+   свод — .pay-board/.pay-cell, пилюли — .sev, поля — .al-in.sm, кнопки — .bp.sm.
+   Тут только раскладка раздела, своих рецептов не заводим. */
+.pay-cell.warn { background: var(--amber-soft); }
+.pay-cell.warn .pc-l, .pay-cell.warn .pc-v { color: var(--amber-ink); }
+.cns-add { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+.cns-add .al-in { width: auto; }
+.cns-note-in { flex: 1; min-width: 150px; }
+.cns-list { display: flex; flex-direction: column; gap: 10px; }
+.cns-row { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.cns-row-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cns-when { font-size: 13px; font-weight: 600; color: var(--ink); }
+.cns-role { font-size: 12px; color: var(--ink-3); }
+.cns-amt .al-in { width: 106px; }
+.cns-del { margin-left: auto; flex: none; border: 0; background: transparent; color: var(--ink-3);
+  cursor: pointer; padding: 4px; border-radius: 8px; display: inline-flex; }
+.cns-del:hover { color: var(--red); background: var(--fill); }
+.cns-note { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+.cns-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
+.cns-empty { font-size: 13px; color: var(--ink-3); padding: 22px 0; text-align: center; line-height: 1.5; }
 
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 22px; background: #fff;
   display: flex; gap: 10px; justify-content: flex-end; }
@@ -2979,6 +3081,17 @@ button.tr-crumb:hover { color: var(--blue); }
     gap: 8px 12px; height: auto; padding: 14px 16px; align-items: center; }
   .trow.rsk-grid.thead { display: none; }
   .trow.rsk-grid .rsk-flags { grid-column: 1 / -1; }
+  /* Отчет план-факт на телефоне: имя во всю ширину, под ним числа в две колонки —
+     шапка спрятана, поэтому каждое число называет себя из data-l. Сводка сворачивается
+     в 2×2 сама — это .mo-stats. */
+  .trow.rep-grid { grid-template-columns: 1fr 1fr !important; gap: 12px 14px;
+    height: auto; padding: 14px 16px; align-items: start; }
+  .trow.rep-grid.thead { display: none; }
+  .trow.rep-grid .rep-name { grid-column: 1 / -1; }
+  .trow.rep-grid .rep-num { text-align: left; }
+  .trow.rep-grid .rep-num::before { content: attr(data-l); display: block;
+    font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 2px; }
   /* Табло на телефоне: шесть колонок не влезают, поэтому человек занимает всю
      строку, а числа идут под ним в три колонки. Шапку прячем, значит каждое
      число обязано назвать себя само — подпись берется из data-l. */
@@ -3548,7 +3661,8 @@ button.tsk-mimp { cursor: pointer; }
 .tg-row:hover { background: #F7F8FA; }
 .tg-row.on { background: var(--blue-tint); }
 .tg-ava { position: relative; width: 46px; height: 46px; border-radius: 50%; flex: none; display: grid; place-items: center;
-  color: #fff; font-weight: 700; font-size: 15px; background: linear-gradient(140deg, color-mix(in srgb, var(--c,#2F6BFF) 78%, #fff), var(--c, #2F6BFF)); }
+  color: #fff; font-weight: 700; font-size: 15px; letter-spacing: .01em;
+  background: linear-gradient(150deg, color-mix(in srgb, var(--c,#2F6BFF) 92%, #fff), var(--c, #2F6BFF) 55%, color-mix(in srgb, var(--c,#2F6BFF) 86%, #000)); }
 .tg-ava.sm { width: 38px; height: 38px; font-size: 13px; }
 .tg-ch { position: absolute; right: -2px; bottom: -2px; width: 17px; height: 17px; border-radius: 50%;
   display: grid; place-items: center; color: #fff; border: 2px solid #fff; }
@@ -5178,6 +5292,27 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .rcp-a:hover { background: var(--fill); color: var(--ink-1); }
 .rcp-a.p { border-color: var(--blue); color: var(--blue-d); }
 .rcp-a.p:hover { background: var(--blue-tint); }
+
+/* ── отчет план-факт по самозанятым (раздел «Отчеты») ──
+   Сводка — тот же компонент .mo-stats/.mo-stat, что на «Месяце» (не третий рецепт
+   тайла); остаток синий модификатором .rep-accent — цифра, ради которой открывают
+   отчет. Ниже — таблица по людям, числа табличные, своих цветов нет, только токены. */
+.mo-stat.rep-accent b { color: var(--blue-d); }
+
+.rep-grid { grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, .9fr)); }
+.rep-row { cursor: pointer; }
+.rep-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.rep-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.rep-block { font-size: 11.5px; color: var(--red-ink); background: var(--red-soft);
+  border-radius: var(--r-pill); padding: 2px 9px; white-space: nowrap; }
+.rep-due { font-size: 11.5px; color: var(--amber-ink); background: var(--amber-soft);
+  border-radius: var(--r-pill); padding: 2px 9px; white-space: nowrap; }
+.rep-num { text-align: right; font-size: 14px; color: var(--ink); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.rep-left { font-weight: 700; }
+.rep-left.hot { color: var(--blue-d); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
