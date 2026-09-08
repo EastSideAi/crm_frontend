@@ -311,6 +311,15 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  /* Ссылка в человеческом виде. Боевые домены записаны в punycode
+     (xn--80aikf2bag.xn--p1ai) — так их хранит бэкенд, и менеджер видел в карточке
+     набор символов, который стыдно отправить клиенту (замечание Веры 05.09.2026).
+     Показываем и копируем «истсайд.рф»: браузер и телеграм открывают такую ссылку
+     ровно так же. Машинные адреса через эту функцию не идут — в настройках ВК и в
+     возвратах кассы punycode обязателен, поэтому глобальной подмены тут нет. */
+  function humanUrl(u) {
+    return String(u == null ? '' : u).replace(/xn--80aikf2bag\.xn--p1ai/g, 'истсайд.рф');
+  }
   /* лёгкий markdown для пузырей чата: бот отвечает с **жирным**, списками и переносами —
      рендерим их, а не показываем сырой текст. Сначала экранируем HTML, потом размечаем. */
   function mdMsg(s) {
@@ -413,6 +422,7 @@
     return null;
   }
   function copyText(text, btn) {
+    text = humanUrl(text);
     var done = function () {
       if (!btn) return;
       // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
@@ -9073,10 +9083,10 @@
           ? ' Действующая ссылка есть, до ' + czDate(cab.link_alive_until) + '.' : '') +
       '</div>' +
       (cabLink
-        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(cabLink.url) + '</span>' +
+        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(humanUrl(cabLink.url)) + '</span>' +
             '<button class="hr" id="cz-cabcopy">' + ic('copy', 13) + 'Скопировать</button></div>' +
           '<div class="cz-inv-h">' +
-            (cabLink.tg_url ? 'Для телеграма: ' + esc(cabLink.tg_url) + '. ' : '') +
+            (cabLink.tg_url ? 'Для телеграма: ' + esc(humanUrl(cabLink.tg_url)) + '. ' : '') +
             'Ссылка одноразовая: она не открывает доступ сама по себе, а связывает ' +
             'телеграм того, кто ее откроет, с этой карточкой. Дальше он заходит без нее.' +
           '</div>'
@@ -23053,7 +23063,7 @@
     // поэтому primary она получает только когда ссылки еще нет.
     var link = '<div class="det-link">' +
       (inv
-        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(inv.url) + '">' +
+        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(humanUrl(inv.url)) + '">' +
           '<button class="bp sm" id="det-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="det-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылки нет — создайте, и отправьте ее человеку</span>' +
@@ -23302,7 +23312,7 @@
     var link = CRS_LINK[id];
     var linkRow = '<div class="det-link">' +
       (link
-        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(humanUrl(link)) + '">' +
           '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
@@ -23423,11 +23433,11 @@
     var links = inv
       ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(humanUrl(inv.test_url)) + '">' +
             '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
         '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(humanUrl(inv.trainer_url)) + '">' +
             '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
             '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
         '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
