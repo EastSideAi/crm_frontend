@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Аналитика запусков</title>
+<!-- Аналитика запусков. Макет будущей страницы `launch` (вкладка на каждое мероприятие).
+     Собран на ЖИВЫХ цифрах прода на 08.09.2026, чтобы обсуждать не рыбу, а картину:
+     где пусто в макете — там пусто и в базе. Классы взяты из библиотеки:
+     .statbar/.stat (dashboard.md), .lad-row (dashboard.md), .mkd-gap (marketing),
+     .tabs/.tab (layout.md), .card/.sec-head. Ничего нового не заведено. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background: #E5E7EC; margin: 0; }
+  .sc-wrap { max-width: 1080px; margin: 0 auto; padding: 44px 28px 96px; }
+  .sc-h1 { font-size: 28px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); margin: 0; }
+  .sc-sub { color: var(--ink-2); font-size: 13.5px; margin: 8px 0 0; max-width: 66ch; line-height: 1.55; }
+  .sc-lbl { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+            color: var(--ink-3); margin: 30px 2px 12px; }
+  .sc-pad { padding: 20px 24px 22px; }
+  .sc-two { display: grid; grid-template-columns: 7fr 5fr; gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .sc-two { grid-template-columns: 1fr; } }
+  .note { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.55; color: var(--amber-ink);
+          background: var(--amber-soft); border-radius: var(--r-lg); padding: 12px 15px; margin: 18px 0 0;
+          box-shadow: inset 0 0 0 1px rgba(154,91,18,.14); }
+  /* разбивки: имя слева, число справа — четырехколоночная сетка лестницы тут лишняя */
+  .brk .lad-row { grid-template-columns: minmax(0,1fr) auto; }
+  .hd { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 22px 0 16px; }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+
+  <h1 class="sc-h1">Аналитика запусков</h1>
+  <p class="sc-sub">Один запуск — одна вкладка. Цифры на макете настоящие, снятые 8 сентября:
+     где стоит прочерк, там данных пока нет и в базе.</p>
+
+  <div class="hd">
+    <div class="tabs">
+      <a class="tab on">Интенсив 16–17 сентября</a>
+      <a class="tab">Прошлые запуски<span class="n">3</span></a>
+    </div>
+  </div>
+
+  <div class="card statbar five">
+    <div class="stat"><div class="sl"><span class="sdot blue"></span>Регистрации</div>
+      <div class="sv">8</div><div class="sd"><span class="smut">бесплатно 5 · платно 3</span></div></div>
+    <div class="stat"><div class="sl"><span class="sdot amber"></span>Счет на 690</div>
+      <div class="sv">4</div><div class="sd"><span class="smut">выставлен, ждет оплаты</span></div></div>
+    <div class="stat"><div class="sl"><span class="sdot green"></span>Оплачено</div>
+      <div class="sv">0 ₽</div><div class="sd"><span class="kd bad">0 из 4 счетов</span></div></div>
+    <div class="stat"><div class="sl"><span class="sdot navy"></span>В закрытом канале</div>
+      <div class="sv">2</div><div class="sd"><span class="smut">вышел 1</span></div></div>
+    <div class="stat"><div class="sl"><span class="sdot"></span>До эфира</div>
+      <div class="sv">8</div><div class="sd"><span class="smut">дней</span></div></div>
+  </div>
+
+  <div class="sc-lbl">Путь запуска · где теряем людей</div>
+  <div class="card">
+    <div class="sec-head" style="padding:20px 24px 16px">
+      <div><div class="t">От показа до оплаты</div>
+      <div class="s">красная полоса — самая большая потеря</div></div>
+    </div>
+    <div style="border-top:1px solid var(--line)">
+
+      <div class="lad-row">
+        <div class="lad-nm">Посетители страницы<small>знает только Метрика</small></div>
+        <div class="lad-track"></div>
+        <div class="lad-n num">—</div>
+        <div class="lad-right"><span class="lad-conv">нет данных</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Клики по нашим ссылкам<small>коды заведены, не розданы</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:0"></div></div>
+        <div class="lad-n num">0</div>
+        <div class="lad-right"><span class="lad-conv">ждет раздачи</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Зарегистрировались<small>форма на истсайд.рф/intensive</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:100%"></div></div>
+        <div class="lad-n num">8</div>
+        <div class="lad-right"><span class="lad-conv">все</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Выбрали расширенный<small>тариф в форме</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:38%"></div></div>
+        <div class="lad-n num">3</div>
+        <div class="lad-right"><span class="lad-conv num">38% с шага</span>
+          <span class="lad-drop num">− 5 здесь</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Получили счет на 690<small>нажали оплату</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:50%"></div></div>
+        <div class="lad-n num">4</div>
+        <div class="lad-right"><span class="lad-conv num">счетов больше</span></div>
+      </div>
+
+      <div class="lad-row worst">
+        <div class="lad-nm">Оплатили 690<small>счета отменились</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:2%"></div></div>
+        <div class="lad-n num">0</div>
+        <div class="lad-right"><span class="lad-conv num">0% с шага</span>
+          <span class="lad-drop num">− 4 здесь</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Вступили в закрытый канал<small>телеграм, по ссылке</small></div>
+        <div class="lad-track"><div class="lad-fill" style="width:25%"></div></div>
+        <div class="lad-n num">2</div>
+        <div class="lad-right"><span class="lad-conv num">25% от реги</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Смотрели эфир<small>16 и 17 сентября</small></div>
+        <div class="lad-track"></div>
+        <div class="lad-n num">—</div>
+        <div class="lad-right"><span class="lad-conv">еще не было</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Заявка на диагностику<small>ради чего зовем на эфир</small></div>
+        <div class="lad-track"></div>
+        <div class="lad-n num">—</div>
+        <div class="lad-right"><span class="lad-conv">после эфира</span></div>
+      </div>
+
+      <div class="lad-row">
+        <div class="lad-nm">Оплата диагностики<small>деньги запуска</small></div>
+        <div class="lad-track"></div>
+        <div class="lad-n num">—</div>
+        <div class="lad-right"><span class="lad-conv">после эфира</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="sc-two" style="margin-top:16px">
+
+    <div class="card">
+      <div class="sec-head" style="padding:20px 24px 16px">
+        <div><div class="t">Диагностический тест</div>
+        <div class="s">зашли и дошли до конца, по соцсетям</div></div>
+      </div>
+      <div class="brk" style="border-top:1px solid var(--line)">
+        <div class="lad-row gf-flat"><div class="lad-nm">Телеграм<small>зашли 3 · дошли 2</small></div>
+          <div class="lad-n num">2</div></div>
+        <div class="lad-row gf-flat"><div class="lad-nm">ВКонтакте<small>зашли 1 · дошли 1</small></div>
+          <div class="lad-n num">1</div></div>
+        <div class="lad-row gf-flat"><div class="lad-nm">MAX<small>зашли 1 · дошли 1</small></div>
+          <div class="lad-n num">1</div></div>
+        <div class="lad-row gf-flat"><div class="lad-nm">Инстаграм<small>заходов не было</small></div>
+          <div class="lad-n num">0</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-head" style="padding:20px 24px 16px">
+        <div><div class="t">Откуда пришли на регистрацию</div>
+        <div class="s">по меткам ссылок</div></div>
+      </div>
+      <div class="brk" style="border-top:1px solid var(--line)">
+        <div class="lad-row gf-flat"><div class="lad-nm">Источник не размечен<small>ссылки раздавались без меток</small></div>
+          <div class="lad-n num">8</div></div>
+      </div>
+      <div class="note" style="margin:0;border-radius:0 0 var(--r-xl) var(--r-xl);box-shadow:none">
+        <span>⚠</span><span>Как раздадим короткие ссылки, здесь появится разбивка по каналам.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="sc-lbl">Чего в этих цифрах нет</div>
+  <div class="card">
+    <div style="border-top:1px solid var(--line)">
+      <div class="mkd-gap"><div><b>Посетители страницы регистрации</b>
+        <small>знает только Метрика. Подключаем ее ключом — появится верхняя ступенька воронки</small></div>
+        <span class="sev n-wait">не в цифрах</span></div>
+      <div class="mkd-gap"><div><b>Охваты постов в телеграме и инстаграме</b>
+        <small>телеграм не отдает просмотры ботам, инстаграм требует бизнес-доступ. Вносим руками</small></div>
+        <span class="sev n-wait">не в цифрах</span></div>
+      <div class="mkd-gap"><div><b>Подписки в закрытые ВК и MAX</b>
+        <small>в телеграме бот админ и видит вступления, в ВК и Максе только отвечает в комментариях</small></div>
+        <span class="sev n-wait">не в цифрах</span></div>
+      <div class="mkd-gap"><div><b>Подарки первого и второго дня</b>
+        <small>считать сможем, когда решим, как человек их забирает</small></div>
+        <span class="sev n-wait">не в цифрах</span></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
