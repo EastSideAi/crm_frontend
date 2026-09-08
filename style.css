@@ -891,33 +891,43 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .kb-when { margin-left: auto; color: var(--ink-3); }
 
 /* Доска задач (План → Доска): колонки-статусы на рецепте канбана лидов. Карточка
-   тише лидовой: заголовок в две строки, под ним ученик или исполнитель, срок
-   справа; просрочка — красной полоской слева, а не рамкой. */
+   тише лидовой: заголовок до трех строк, под ним ученик (.dy-cl) или исполнитель
+   кружком (.dy-av), срок справа; просрочка — красной полоской слева, а не рамкой. */
 .tb-wrap { padding-top: 2px; }
 /* Четыре колонки делят ширину экрана: на ноутбуке доска видна целиком, без
    горизонтальной прокрутки; на узком экране колонки фиксированные и листаются. */
 .tb-col { flex: 1 1 0; width: auto; min-width: 200px; min-height: 220px; }
+.tb-col.nodrop { cursor: not-allowed; }
+.tb-col.nodrop .kb-cards { opacity: .55; }
 .tb-card { padding: 12px 14px 11px; position: relative; }
 .tb-card.over::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
   border-radius: 0 3px 3px 0; background: var(--red); }
 .tb-title { font-weight: 600; font-size: 13.5px; line-height: 1.35; color: var(--ink);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.tb-who { margin-top: 4px; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-title .tsk-imp { margin-right: 5px; vertical-align: -1px; }
+.tb-cl { margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-asg { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); min-width: 0; }
+.tb-asg span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-card .kb-meta { margin-top: 8px; gap: 6px; }
+.tb-card .kb-meta .sev.mini { margin-left: 0; }
 .tb-card .kb-meta:empty { display: none; }
 .tb-due { margin-left: auto; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .tb-due.due-over { color: var(--red-ink); font-weight: 600; }
 .tb-due.due-now { color: var(--amber-ink); font-weight: 600; }
-.tb-chip { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: var(--fill); color: var(--ink-2); }
-.tb-chip.ret { background: var(--amber-soft); color: var(--amber-ink); }
-.tb-chip.blk { background: var(--red-soft); color: var(--red-ink); }
-.tb-chip.imp { background: var(--blue-tint); color: var(--blue); }
 .tb-empty { padding: 18px 10px 12px; font-size: 12.5px; color: var(--ink-3); text-align: center; }
-.tb-hint { font-size: 12.5px; color: var(--ink-3); margin: -6px 0 12px 2px; }
+.tb-how { margin: -2px 0 14px; }
+.tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
-  .tb-hint { display: none; }
+  /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
+  .tb-top .tb-who-seg { flex: none; }
+  .tb-top .wk-spacer { display: none; }
+  .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
+  .tb-how-d { display: none; }
+  .tb-how-m { display: block; }
 }
 
 /* ════ МОДАЛКА (карточка клиента) — центр + левая навигация ════ */

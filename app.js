@@ -5421,9 +5421,9 @@
     Promise.all([
       api('/admin/api/tasks?view=week&scope=my&shift=0' + deptQ()),
       api('/admin/api/tasks?view=later&scope=my' + deptQ()),
-      api('/admin/api/tasks?view=open&scope=author'),
-      api('/admin/api/tasks?view=review&scope=author'),
-      api('/admin/api/tasks?view=done&scope=author&period=week&shift=0'),
+      api('/admin/api/tasks?view=open&scope=author' + deptQ()),
+      api('/admin/api/tasks?view=review&scope=author' + deptQ()),
+      api('/admin/api/tasks?view=done&scope=author&period=week&shift=0' + deptQ()),
     ]).then(function (rs) {
       state.tasksLoading = false;
       var seen = {};
@@ -5447,13 +5447,14 @@
   }
   function boardCard(t, gave) {
     var due = dueLabel(t);
-    var chip = t.status === 'return' ? '<span class="tb-chip ret">вернули</span>'
-      : t.status === 'block' ? '<span class="tb-chip blk">заблокирована</span>'
-      : t.important ? '<span class="tb-chip imp">важная</span>' : '';
+    // Статусные чипы — системные .sev (вернули красным, блок амбером, как в списках);
+    // важность — тем же значком, что в строке дня и недели.
+    var chip = t.status === 'return' ? '<span class="sev mini st-return">вернули</span>'
+      : t.status === 'block' ? '<span class="sev mini st-block">заблокирована</span>' : '';
     return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
-      '<div class="tb-title">' + esc(t.title) + '</div>' +
-      (t.client_name ? '<div class="tb-who">' + esc(t.client_name) + '</div>' : '') +
-      (gave && t.assignee_name ? '<div class="tb-who">' + esc(t.assignee_name) + '</div>' : '') +
+      '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
+      (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
+      (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
       '<div class="kb-meta">' + chip +
         (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
       '</div></div>';
@@ -5487,13 +5488,24 @@
     var hint = gave
       ? 'Что я поручил. Из «На приемке» в «Сделано» — принять; вернуть с комментарием — в карточке.'
       : 'Тащи карточку между колонками. Сдать — только с результатом, откроется карточка; «Сделано» ставит постановщик.';
-    view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
+    var hintM = gave ? 'Что я поручил. Принять или вернуть — в карточке задачи.'
+      : 'Колонки — статусы. Поменять статус — в карточке задачи.';
+    var howOff = false;
+    try { howOff = localStorage.getItem('tb_how_off') === '1'; } catch (e) {}
+    var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
+      '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
+      '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
-      '<div class="tb-hint">' + hint + '</div>' +
+      how +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
     wirePlanMode(view); wireDeptChips(view);
+    if (el('tb-how-x')) el('tb-how-x').addEventListener('click', function () {
+      try { localStorage.setItem('tb_how_off', '1'); } catch (e) {}
+      renderView();
+    });
     var qi = el('tsk-q');
     if (qi) {
       qi.addEventListener('input', function () {
@@ -5563,10 +5575,19 @@
       cardEl.addEventListener('dragend', function () { dragging = null; cardEl.classList.remove('dragging'); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('.tb-col'), function (colEl) {
-      colEl.addEventListener('dragover', function (e) { e.preventDefault(); colEl.classList.add('dragover'); });
-      colEl.addEventListener('dragleave', function () { colEl.classList.remove('dragover'); });
+      // Подсвечиваем только колонку, куда бросить можно: обещать зону, а потом
+      // отказать тостом — хуже, чем сразу показать «сюда нельзя».
+      colEl.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        var col = colEl.getAttribute('data-col');
+        var ok = dragging && typeof drop(dragging, col) === 'function';
+        colEl.classList.toggle('dragover', !!ok);
+        colEl.classList.toggle('nodrop', !ok);
+        try { e.dataTransfer.dropEffect = ok ? 'move' : 'none'; } catch (err) {}
+      });
+      colEl.addEventListener('dragleave', function () { colEl.classList.remove('dragover'); colEl.classList.remove('nodrop'); });
       colEl.addEventListener('drop', function (e) {
-        e.preventDefault(); colEl.classList.remove('dragover');
+        e.preventDefault(); colEl.classList.remove('dragover'); colEl.classList.remove('nodrop');
         var t = dragging || byId[+(e.dataTransfer ? e.dataTransfer.getData('text/plain') : 0)];
         if (!t) return;
         var col = colEl.getAttribute('data-col');
