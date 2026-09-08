@@ -5522,8 +5522,8 @@
     var head = '<div class="sec-head zw-head"><div class="t">Зумы на неделю</div>' +
       '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
       '<span class="zw-range">' + esc(range) + '</span>' +
-      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button>' +
-      '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div></div>';
+      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div>' +
+      '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div>';
     var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
     var sameDay = function (iso, d) { var x = new Date(iso); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
     var body;
