@@ -74,7 +74,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine', meetLog: null,
+    myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -5439,13 +5439,30 @@
     } else {
       right = '<span class="sev n-off">разбирается</span>';
     }
-    return '<div class="trow mt-row' + cls + '">' +
+    // Запись — кнопкой, а не словом в подписи: за ней ходят чаще всего (Павел 08.09.2026).
+    var rec = m.url ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>' : '';
+    var tasks = m.tasks || [];
+    var open = !!state.meetOpen[m.key];
+    var fold = tasks.length
+      ? '<button class="mt-fold' + (open ? ' open' : '') + '" data-mfold="' + esc(m.key) + '">' + ic('go', 12) +
+        tasks.length + ' ' + plural(tasks.length, 'задача', 'задачи', 'задач') + '</button>' : '';
+    var list = open && tasks.length
+      ? '<div class="mt-tasks">' + tasks.map(function (t) {
+          var due = dueLabel(t);
+          return '<button class="mt-task' + (t.is_goal ? ' goal' : '') + (t.parent_id ? ' step' : '') + '" data-mtask="' + t.id + '">' +
+            '<span class="sev mini ' + (t.status === 'done' ? 'st-done' : t.status === 'doing' ? 'st-doing' : t.status === 'review' ? 'st-review' : t.status === 'return' ? 'st-return' : t.status === 'block' ? 'st-block' : 'st-wait') + '">' +
+              (t.is_goal ? 'цель' : PCHAT_STATUS_RU[t.status] || t.status) + '</span>' +
+            '<span class="mt-task-t">' + esc(t.title) + '</span>' +
+            (t.assignee_name ? '<span class="mt-task-who">' + esc(t.assignee_name) + '</span>' : '') +
+            (t.is_goal || !t.due_at ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
+          '</button>';
+        }).join('') + '</div>' : '';
+    return '<div class="trow mt-row' + cls + (open ? ' open' : '') + '">' +
       '<div class="mt-when num">' + fmtTime(m.at) + '</div>' +
-      '<div class="mt-main"><div class="mt-title">' + esc(m.title || 'Без названия') + '</div>' +
-        '<div class="mt-sub">' + kind + (m.by ? ' · ' + esc(m.by) : '') +
-          (m.url ? ' · <a href="' + esc(m.url) + '" target="_blank" rel="noopener">запись</a>' : '') + '</div></div>' +
-      '<div class="mt-right">' + right + '</div>' +
-    '</div>';
+      '<div class="mt-main"><button class="mt-title" data-mname="' + esc(m.key) + '" title="Переименовать">' + esc(m.title || 'Без названия') + '</button>' +
+        '<div class="mt-sub">' + kind + (m.by ? ' · ' + esc(m.by) : '') + '</div></div>' +
+      '<div class="mt-right">' + fold + rec + right + '</div>' +
+    '</div>' + list;
   }
   function renderMeetings(view) {
     if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
@@ -5489,6 +5506,49 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mcard]'), function (b) {
       b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mfold]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-mfold');
+        state.meetOpen[k] = !state.meetOpen[k];
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mtask]'), function (b) {
+      b.addEventListener('click', function () { openTask(+b.getAttribute('data-mtask')); });
+    });
+    // Название пишет человек: Fathom отдает все записи как «Zoom Meeting East Side».
+    // Клик по названию — поле на его месте; Enter или уход из поля сохраняет, Esc отменяет.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mname]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-mname');
+        var m = (state.meetLog || []).filter(function (x) { return x.key === key; })[0];
+        if (!m) return;
+        var inp = document.createElement('input');
+        inp.className = 'al-in sm mt-title-in';
+        inp.value = m.title || '';
+        inp.maxLength = 200;
+        inp.placeholder = 'Как назвать встречу';
+        b.replaceWith(inp);
+        inp.focus(); inp.select();
+        var done = false;
+        var finish = function (save) {
+          if (done) return; done = true;
+          var v = (inp.value || '').trim();
+          if (!save || !v || v === m.title) { renderView(); return; }
+          apiSend('/admin/api/meetings/log/' + encodeURIComponent(key), 'PATCH', { title: v }, function () {
+            m.title = v; renderView();
+          }, function (code, e) {
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не сохранилось — проверь сеть');
+            renderView();
+          });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+        inp.addEventListener('blur', function () { finish(true); });
+      });
     });
   }
 

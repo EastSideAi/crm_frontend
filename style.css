@@ -897,16 +897,38 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .mt-row { grid-template-columns: 52px minmax(0, 1fr) auto; height: auto; min-height: 58px; padding: 10px 24px; }
 .mt-when { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .mt-main { min-width: 0; }
-.mt-title { font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-title { display: block; max-width: 100%; text-align: left; font-size: 14px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 2px 6px; margin-left: -6px; border-radius: 7px; }
+.mt-title:hover { background: var(--fill); }
+.mt-title-in { width: 100%; max-width: 420px; font-size: 14px; font-weight: 600; }
 .mt-sub { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
 .mt-sub a { color: var(--blue); }
 .mt-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .mt-right .qchip { display: inline-flex; align-items: center; gap: 6px; }
 .mt-drafts { font-size: 12.5px; font-weight: 600; color: var(--amber-ink); }
+.mt-rec { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
+.mt-fold { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600;
+  color: var(--ink-2); padding: 4px 6px; border-radius: 8px; }
+.mt-fold svg { transition: transform .15s var(--ease); }
+.mt-fold.open svg { transform: rotate(90deg); }
+.mt-fold:hover { background: var(--fill); }
+/* Задачи из встречи: раскрытый список под строкой, шаги с отступом от цели. */
+.mt-tasks { padding: 2px 24px 12px 88px; display: flex; flex-direction: column; gap: 2px;
+  border-bottom: 1px solid var(--line); }
+.mt-task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 7px 10px; border-radius: 10px; font-size: 13px; color: var(--ink); }
+.mt-task:hover { background: var(--fill); }
+.mt-task.step { padding-left: 28px; }
+.mt-task .sev.mini { margin-left: 0; flex: none; }
+.mt-task-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-task-who { margin-left: auto; flex: none; font-size: 12px; color: var(--ink-3); }
+.mt-task .tb-due { margin-left: 0; flex: none; }
 @media (max-width: 760px) {
   .mt-row { grid-template-columns: 44px minmax(0, 1fr); padding: 10px 16px; }
-  .mt-right { grid-column: 2; justify-content: flex-start; }
+  .mt-right { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
   .mt-day { padding: 12px 16px 4px; }
+  .mt-tasks { padding: 2px 16px 12px 16px; }
+  .mt-task-who { display: none; }
 }
 
 /* Доска задач (План → Доска): колонки-статусы на рецепте канбана лидов. Карточка
