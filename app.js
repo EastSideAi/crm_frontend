@@ -2942,9 +2942,9 @@
         // а не одна с вычитанием — иначе цифры выглядят как ошибка счета.
         var fhand = fd && (fd.periods || []).some(function (p) { return p.opening_by_hand; });
         ph = fd
-          ? 'За все время отложено <b>' + finRub(fd.totals.added, 0) + '</b>, потрачено <b>' +
-            finRub(fd.totals.spent, 0) + '</b>. Сейчас на фонде <b>' +
-            finRub(fd.totals.balance, 0) + '</b> — по последней ведомости' +
+          ? 'За все время отложено <b>' + finRub(fd.totals.added) + '</b>, потрачено <b>' +
+            finRub(fd.totals.spent) + '</b>. Сейчас на фонде <b>' +
+            finRub(fd.totals.balance) + '</b> — по последней ведомости' +
             (fhand ? ', остаток правился руками по выписке.' : '.')
           : 'Считаю фонд за все время…';
       }
@@ -2955,7 +2955,7 @@
         ph = pg
           ? 'Выгодна ли программа: доход по каждой тянется сам из чеков ЮKassa, расход — ' +
             'из P&L. Прибыль это разница, сквозь все периоды. Всего прибыль <b>' +
-            finRub(pg.total.profit, 0) + '</b>' +
+            finRub(pg.total.profit) + '</b>' +
             (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
           : 'Считаю программы по чекам…';
       }
@@ -12455,11 +12455,11 @@
     var vtb = null;
     (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
     var bar = statBar([
-      { label: 'Доход к зачислению', value: finRub(c.income, 0), sub: 'уже за вычетом комиссии' },
-      { label: 'Дивиденды', value: finRub(c.dividends, 0), sub: 'после всех отчислений' },
-      { label: 'Денег в фондах', value: finRub(m.in_funds, 0), sub: 'по всем фондам сразу' },
-      { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb, 0),
-        sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening, 0) + ' с прошлого'
+      { label: 'Доход к зачислению', value: finRub(c.income), sub: 'уже за вычетом комиссии' },
+      { label: 'Дивиденды', value: finRub(c.dividends), sub: 'после всех отчислений' },
+      { label: 'Денег в фондах', value: finRub(m.in_funds), sub: 'по всем фондам сразу' },
+      { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb),
+        sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening) + ' с прошлого'
                                 : 'сколько реально на ВТБ' },
     ]);
 
@@ -12570,8 +12570,8 @@
       (Math.abs(cashGap) >= 0.01
         ? '<div class="fin-note">' + ic('alert', 13) +
           'Остаток на счете не равен прибыли. На счете ' +
-          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
-          '. Разница ' + finRub(Math.abs(cashGap), 0) + ' — деньги, что лежат на счете, ' +
+          finRub(vtb ? vtb.live : cash.flow) + ', чистая прибыль ' + finRub(c.profit) +
+          '. Разница ' + finRub(Math.abs(cashGap)) + ' — деньги, что лежат на счете, ' +
           'но уже обещаны фондам, плюс остаток с прошлых периодов.</div>'
         : '') +
     '</div>';
@@ -12694,8 +12694,8 @@
         var diff = a.actual === null ? null : a.actual - a.closing;
         var sub = a.actual === null ? 'с банком не сверяли'
           : (Math.abs(diff) < 0.01 ? 'сошлось с выпиской ' + finDate(String(a.actual_at || '').slice(0, 10))
-             : (diff > 0 ? 'в банке больше на ' + finRub(diff, 0) + ' — что-то не внесли'
-                         : 'в банке меньше на ' + finRub(-diff, 0) + ' — лишняя строка или потеря'));
+             : (diff > 0 ? 'в банке больше на ' + finRub(diff) + ' — что-то не внесли'
+                         : 'в банке меньше на ' + finRub(-diff) + ' — лишняя строка или потеря'));
         var held = a.live - a.closing;
         return '<div class="fl-row fl-2' +
           (diff !== null && Math.abs(diff) >= 0.01 ? ' warn' : '') +
@@ -12704,7 +12704,7 @@
           '<div class="fl-main"><span class="fl-name">' + esc(a.name) + '</span>' +
           '<span class="fl-sub">' + esc(sub) +
           (Math.abs(held) >= 0.01
-            ? ' · ' + finRub(Math.abs(held), 0) +
+            ? ' · ' + finRub(Math.abs(held)) +
               (held < 0 ? ' уже начислено фондам' : ' придет с отчислениями')
             : '') + '</span></div>' +
           '<div class="fl-v num">' + finRub(a.closing) + '</div></div>';
@@ -12787,7 +12787,7 @@
           : 'Услуги не выбраны — процент считать не от чего, отчисление будет нулевым.';
       } else {
         var part = b * pct / 100;
-        prev.textContent = finRub(b, 0) + ' × ' + finNum(pct, pct % 1 ? 2 : 0) + '% = ' +
+        prev.textContent = finRub(b) + ' × ' + finNum(pct, pct % 1 ? 2 : 0) + '% = ' +
           finRub(part) + (mode.value === 'сумма+процент'
             ? ', плюс ' + finRub(fix) + ' — итого ' + finRub(part + fix) : '');
       }
@@ -12931,9 +12931,9 @@
     offs.forEach(function (o) { if (o.id) named.push(o); else noOff = o; });
 
     var bar = statBar([
-      { label: 'Отложено всего', value: finRub(t.added, 0), sub: 'по правилу ведомости' },
-      { label: 'Потрачено с фонда', value: finRub(t.spent, 0), sub: 'факт, все ведомости' },
-      { label: 'Остаток', value: finRub(t.balance, 0), sub: 'уедет в следующий период' },
+      { label: 'Отложено всего', value: finRub(t.added), sub: 'по правилу ведомости' },
+      { label: 'Потрачено с фонда', value: finRub(t.spent), sub: 'факт, все ведомости' },
+      { label: 'Остаток', value: finRub(t.balance), sub: 'уедет в следующий период' },
       { label: 'Ведомостей', value: String(t.periods),
         sub: t.periods < 2 ? 'период всего один' : 'учтено в расчете' },
     ]);
@@ -12949,9 +12949,9 @@
             var w = maxInc ? Math.max(2, Math.round(o.income / maxInc * 100)) : 0;
             return '<div class="fl-row"><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.name || o.id) + '</span>' +
-              '<span class="fl-sub">с фонда ' + finRub(o.spent, 0) + '</span></div>' +
+              '<span class="fl-sub">с фонда ' + finRub(o.spent) + '</span></div>' +
               '<div class="fl-bar"><i style="width:' + w + '%"></i></div>' +
-              '<div class="fl-v num">' + finRub(o.income, 0) + '</div></div>';
+              '<div class="fl-v num">' + finRub(o.income) + '</div></div>';
           }).join('') + '</div>'
         : '<div class="empty">Ни у одной операции не проставлена программа, поэтому ' +
           'разбивки нет. Справочник программ в ведомости заведен — не заполнено поле ' +
@@ -12959,9 +12959,9 @@
       (noOff && (noOff.income || noOff.spent)
         ? '<div class="fin-list"><div class="fl-row fl-2 warn"><div class="fl-main">' +
           '<span class="fl-name">Без программы</span>' +
-          '<span class="fl-sub">продажи ' + finRub(noOff.income, 0) + ' · ' + noOff.count + ' ' +
+          '<span class="fl-sub">продажи ' + finRub(noOff.income) + ' · ' + noOff.count + ' ' +
           plural(noOff.count, 'расход', 'расхода', 'расходов') + ' с фонда</span></div>' +
-          '<div class="fl-v num">' + finRub(noOff.spent, 0) + '</div></div></div>'
+          '<div class="fl-v num">' + finRub(noOff.spent) + '</div></div></div>'
         : '') +
       '</div>';
 
@@ -12999,13 +12999,13 @@
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
             (p.open ? ' · открыт' : '') + '</span>' +
-            '<span class="ff-v num">' + finRub(p.next, 0) + '</span></div>' +
+            '<span class="ff-v num">' + finRub(p.next) + '</span></div>' +
           /* «Было» — с копейками, в отличие от соседей: это единственная цифра
              строки, которую человек сверяет с банковской выпиской и вводит руками.
              Округление «для красоты» тут превращается в расхождение с банком. */
           '<div class="ff-sub"><span>было ' + finNum(p.opening) + '</span>' +
-            '<span>отложили ' + finNum(p.added, 0) + '</span>' +
-            '<span>потратили ' + finNum(p.spent, 0) + '</span>' +
+            '<span>отложили ' + finNum(p.added) + '</span>' +
+            '<span>потратили ' + finNum(p.spent) + '</span>' +
             (p.open && canFix && !editing
               ? '<button class="ff-fix" id="ff-fix">поправить остаток</button>' : '') +
           '</div>' +
@@ -13206,10 +13206,10 @@
     var point = t.fixed / (t.gross / t.revenue);
     var gap = t.revenue - point;
     return '<div class="fin-note calm">' + ic('chart', 13) +
-      'Точка безубыточности ' + finRub(point, 0) + ' выручки: столько нужно, чтобы ' +
+      'Точка безубыточности ' + finRub(point) + ' выручки: столько нужно, чтобы ' +
       'покрыть постоянные расходы при нынешней валовой марже ' + finPct(t.gross_pct) + '. ' +
-      (gap >= 0 ? 'Сейчас выручка выше нее на ' + finRub(gap, 0) + '.'
-                : 'Сейчас выручка ниже нее на ' + finRub(-gap, 0) + '.') + '</div>';
+      (gap >= 0 ? 'Сейчас выручка выше нее на ' + finRub(gap) + '.'
+                : 'Сейчас выручка ниже нее на ' + finRub(-gap) + '.') + '</div>';
   }
 
   /* Карта операций: все, что внесено, одной лентой. Новое сверху. */
@@ -13437,7 +13437,7 @@
         L.form === 'лист-продаж' && it.payout_to ? 'выплата: ' + it.payout_to : '',
         L.form === 'лист-продаж' ? '' : it.item,
         L.form === 'лист-продаж' && it.sale_amount
-          ? finRub(it.sale_amount, 0) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
+          ? finRub(it.sale_amount) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
           : '',
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
@@ -13465,15 +13465,15 @@
     var isIncome = (page === 'finincome');
     var avg = factN ? Math.round(fact / factN) : 0;
     var statTiles = isIncome ? [
-      { label: 'Пришло на счет', value: finRub(fact, 0), sub: 'зачислено по факту' },
+      { label: 'Пришло на счет', value: finRub(fact), sub: 'зачислено по факту' },
       { label: 'Записей', value: String(items.length), sub: 'строк дохода' },
-      { label: 'Средний доход', value: finRub(avg, 0), sub: 'в среднем на строку' },
-      { label: 'Крупнейший', value: finRub(biggest, 0), sub: 'самая большая сумма' },
+      { label: 'Средний доход', value: finRub(avg), sub: 'в среднем на строку' },
+      { label: 'Крупнейший', value: finRub(biggest), sub: 'самая большая сумма' },
     ] : [
-      { label: 'Списано по факту', value: finRub(fact, 0), sub: 'уже ушло со счета' },
-      { label: 'В плане', value: finRub(plan, 0), sub: 'намечено, не списано' },
+      { label: 'Списано по факту', value: finRub(fact), sub: 'уже ушло со счета' },
+      { label: 'В плане', value: finRub(plan), sub: 'намечено, не списано' },
       { label: 'Строк', value: String(items.length), sub: 'записей в листе' },
-      { label: 'Средняя строка', value: finRub(avg, 0), sub: 'по факту' },
+      { label: 'Средняя строка', value: finRub(avg), sub: 'по факту' },
     ];
     view.innerHTML = statBar(statTiles) +
       '<div class="card listcard">' +
@@ -13551,8 +13551,8 @@
     var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
 
     var bar = statBar([
-      { label: 'Прямые расходы, факт', value: finRub(D.fact, 0), sub: 'ушло с расчетного счета' },
-      { label: 'В плане', value: finRub(D.plan, 0), sub: 'намечено, еще не списано' },
+      { label: 'Прямые расходы, факт', value: finRub(D.fact), sub: 'ушло с расчетного счета' },
+      { label: 'В плане', value: finRub(D.plan), sub: 'намечено, еще не списано' },
       { label: 'Блоков', value: String(blocks.length), sub: 'направлений трат' },
       { label: 'Строк', value: String(nRows), sub: 'всего по прямым расходам' },
     ]);
@@ -13579,8 +13579,8 @@
       return '<div class="card listcard fd-block">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
           '<div><div class="t">' + esc(b.name) + '</div>' +
-          '<div class="s">' + esc(b.desc) + ' · факт ' + finRub(b.fact, 0) +
-            (b.plan ? ' · план ' + finRub(b.plan, 0) : '') + '</div></div>' +
+          '<div class="s">' + esc(b.desc) + ' · факт ' + finRub(b.fact) +
+            (b.plan ? ' · план ' + finRub(b.plan) : '') + '</div></div>' +
           (canFix ? '<button class="qchip add" data-dadd="' + esc(b.id) + '">' +
             ic('plus', 12) + 'Добавить расход</button>' : '') + '</div>' +
         (rows || '<div class="empty">В этом блоке пока пусто.</div>') +
@@ -13636,16 +13636,16 @@
     if (!hits.length) return '';
     var li = hits.map(function (h) {
       if (ch.key === 'cash_gap') {
-        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned, 0) +
-          ', свободно ' + finRub(h.available, 0) +
-          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short, 0) + '</span></li>';
+        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned) +
+          ', свободно ' + finRub(h.available) +
+          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short) + '</span></li>';
       }
       if (ch.key === 'dup') {
-        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount) +
           ' · ' + finDate(h.date) +
           '<span class="rsk-hit-hint">' + h.count + ' раза</span></li>';
       }
-      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount) +
         ' · ' + finDate(h.date) + '</li>';
     }).join('');
     return '<ul class="rsk-hits">' + li + '</ul>';
@@ -13654,7 +13654,7 @@
     return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
       '<div class="rsk-c-head">' + riskChip(ch.level) +
         '<span class="rsk-c-title">' + esc(ch.title) + '</span>' +
-        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount, 0) + '</span>' : '') +
+        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount) + '</span>' : '') +
       '</div>' +
       '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
       (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
@@ -13674,13 +13674,13 @@
     function fc(s) { return (sum[s] && sum[s].count) || 0; }
 
     var bar = statBar([
-      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден'), 0),
+      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден')),
         sub: 'ушло по расходам' },
-      { label: 'Подтверждено', value: finRub(fa('подтвержден'), 0),
+      { label: 'Подтверждено', value: finRub(fa('подтвержден')),
         sub: fc('подтвержден') + ' закрыто документом' },
-      { label: 'Без документа', value: finRub(fa('проведен'), 0),
+      { label: 'Без документа', value: finRub(fa('проведен')),
         sub: fc('проведен') + ' закрыть нечем' },
-      { label: 'Запланировано', value: finRub(fa('запланирован'), 0),
+      { label: 'Запланировано', value: finRub(fa('запланирован')),
         sub: 'намечено, еще не ушло' },
     ]);
 
@@ -13721,8 +13721,8 @@
           '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
         '</div>';
       }).join('');
-      var tots = 'план ' + finRub(a['запланирован'], 0) + ' · факт ' +
-        finRub(a['проведен'] + a['подтвержден'], 0);
+      var tots = 'план ' + finRub(a['запланирован']) + ' · факт ' +
+        finRub(a['проведен'] + a['подтвержден']);
       return '<div class="card listcard fd-block">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
           '<div><div class="t">' + esc(a.label) + '</div>' +
@@ -13953,7 +13953,7 @@
         var sale = Number(el('fl-sale').value) || 0, pct = Number(el('fl-pct').value) || 0;
         calc.textContent = sale && pct
           ? 'К выплате ' + finRub(sale * pct / 100) + ' — это ' + finNum(pct, pct % 1 ? 2 : 0) +
-            '% от ' + finRub(sale, 0)
+            '% от ' + finRub(sale)
           : 'Выплата посчитается сама';
       };
       el('fl-sale').addEventListener('input', recalc);
@@ -14083,12 +14083,12 @@
     var bar = statBar([
       { label: 'Сервисов в работе', value: String(live.length),
         sub: 'списываются сами по сроку' },
-      { label: 'План на ведомость', value: finRub(plan, 0), sub: 'сколько ждем к списанию' },
-      { label: 'Уже списалось', value: finRub(paid, 0),
-        sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan, 0) : 'по факту' },
-      { label: 'Долгов к погашению', value: finRub(left, 0),
+      { label: 'План на ведомость', value: finRub(plan), sub: 'сколько ждем к списанию' },
+      { label: 'Уже списалось', value: finRub(paid),
+        sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan) : 'по факту' },
+      { label: 'Долгов к погашению', value: finRub(left),
         sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') +
-             ' · платеж ' + finRub(oplan, 0) },
+             ' · платеж ' + finRub(oplan) },
     ]);
 
     /* Платежи ведомости: план и факт правятся раздельно и на месте. Пока факт пуст,
@@ -14099,7 +14099,7 @@
         : (x.fact === null
             ? (x.next_on ? 'ждем ' + finDate(x.next_on) : 'еще не списалось')
             : (Math.abs(diff) >= 0.01
-                ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff), 0) + ' к плану'
+                ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff)) + ' к плану'
                 : 'как в плане'));
       return '<div class="trow fin-grid fsv-grid' + (x.fact !== null ? ' done' : '') +
         (x.auto ? ' warn' : '') + '">' +
@@ -14125,7 +14125,7 @@
       // многоточие на узком экране, и строка теряет смысл.
       var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) +
         (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
-        (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact, 0) : '') +
+        (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact) : '') +
         (soon ? ' · пора платить' : '');
       // Дату следующего списания правим прямо в строке, как на старом сайте (пункт 5
       // Романа): открывать ради даты модалку — лишний шаг, а дату двигают часто.
@@ -14151,9 +14151,9 @@
         '<div class="fl-main"><span class="fl-name">' + esc(o.title || o.kind) + '</span>' +
           '<span class="fl-sub">' + (done ? 'погашен · ' : '') +
           esc(o.counterparty || o.kind) +
-          ' · всего ' + finRub(o.principal, 0) + ' · погашено ' + finRub(o.paid, 0) +
-          (o.payment > 0 ? ' · по ' + finRub(o.payment, 0) + ' за ведомость' : ' · все разом') +
-          (o.interest > 0 ? ' · проценты ' + finRub(o.interest, 0) : '') + '</span>' +
+          ' · всего ' + finRub(o.principal) + ' · погашено ' + finRub(o.paid) +
+          (o.payment > 0 ? ' · по ' + finRub(o.payment) + ' за ведомость' : ' · все разом') +
+          (o.interest > 0 ? ' · проценты ' + finRub(o.interest) : '') + '</span>' +
           // Погашенному полоса не нужна: она всегда полная и читается как разделитель.
           (done ? '' : '<div class="obl-bar"><i style="width:' + w + '%"></i></div>') +
           '</div>' +
@@ -14311,14 +14311,14 @@
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
-      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
+      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
         sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
-      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
+      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
         sub: (receiv.length + autoReceiv.length) + ' ' +
           plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
-      { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
+      { label: 'Планируемая выручка', value: finRub(t.planned_revenue),
         sub: 'продажи и дебиторка' },
-      { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
+      { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
     ]);
 
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
@@ -14377,9 +14377,9 @@
         '<div class="fpf-pct num ' + cls + '">' + pct + '<span>%</span></div></div>' +
       '<div class="fpf-track"><div class="fpf-fill ' + cls + '" style="width:' + fillPct + '%"></div></div>' +
       '<div class="fpf-legend">' +
-        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned, 0) + '</span>' +
+        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned) + '</span>' +
         '<span class="fpf-v">' + esc(verdict) + '</span>' +
-        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact, 0) + '</span>' +
+        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact) + '</span>' +
       '</div></div>';
   }
 
@@ -14394,7 +14394,7 @@
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
           '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     // Дебиторка из рассрочки: строки собираются сами из графиков заказов, руками их не
     // правят — клик ведёт в карточку клиента, а не в форму. Просроченный взнос помечен.
@@ -14409,7 +14409,7 @@
       return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
       '<div class="list-tools sec-head"><span class="ic">' +
@@ -14510,18 +14510,18 @@
     var after = cash === null ? null : cash + c.net;
 
     var bar = statBar([
-      { label: 'Ждем получить', value: finRub(inc.total, 0),
+      { label: 'Ждем получить', value: finRub(inc.total),
         sub: 'новые продажи и дебиторка' },
-      { label: 'Должны выплатить', value: finRub(out.total, 0),
+      { label: 'Должны выплатить', value: finRub(out.total),
         sub: 'плановые расходы, фонды, кредиты' },
-      { label: 'Прогноз движения', value: finRub(c.net, 0),
+      { label: 'Прогноз движения', value: finRub(c.net),
         sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
       cash === null
         // Остаток еще грузится или ведомости нет: плитку гасим (тихий текст вместо
         // числа-героя), чтобы пустой прочерк не читался как сломанные данные.
         ? { label: 'После нагрузки', value: '<span class="stat-idle">считаю остаток…</span>',
             sub: 'остаток из «Ведомости»' }
-        : { label: 'После нагрузки', value: finRub(after, 0),
+        : { label: 'После нагрузки', value: finRub(after),
             sub: after < 0 ? 'приход не покрывает выплаты' : 'если план сойдется' },
     ]);
 
@@ -14572,15 +14572,15 @@
       '<div class="fbal-head"><div><div class="t">Хватает ли на период</div>' +
         '<div class="s">ожидаемый приход против плановых выплат</div></div>' +
         '<div class="fbal-net num ' + (ok ? 'ok' : 'bad') + '">' +
-          (ok ? '+' : '') + finRub(net, 0) +
+          (ok ? '+' : '') + finRub(net) +
           '<span>' + (ok ? 'остается' : 'не хватает') + '</span></div></div>' +
       '<div class="fbal-rows">' +
         '<div class="fbal-r"><span class="fbal-l">Приход</span>' +
           '<div class="fbal-track"><div class="fbal-fill inc" style="width:' + incW + '%"></div></div>' +
-          '<span class="fbal-v num">' + finRub(income, 0) + '</span></div>' +
+          '<span class="fbal-v num">' + finRub(income) + '</span></div>' +
         '<div class="fbal-r"><span class="fbal-l">Выплаты</span>' +
           '<div class="fbal-track"><div class="fbal-fill out" style="width:' + outW + '%"></div></div>' +
-          '<span class="fbal-v num">' + finRub(outflow, 0) + '</span></div>' +
+          '<span class="fbal-v num">' + finRub(outflow) + '</span></div>' +
       '</div></div>';
   }
 
@@ -14588,11 +14588,11 @@
     var body = rows.map(function (p) {
       return '<div class="fl-row fl-2 cal-row"><div class="fl-main">' +
         '<span class="fl-name">' + esc(p[0]) + '</span></div>' +
-        '<div class="fl-v num">' + finRub(p[1] || 0, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(p[1] || 0) + '</div></div>';
     }).join('');
     return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
       '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
-      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+      '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
   }
 
   /* Плановые платежи клиентов наперёд: та же дебиторка из рассрочки, но не только за
@@ -14612,14 +14612,14 @@
       '<div class="list-tools sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
         '<div><div class="t">Плановые платежи клиентов наперёд</div>' +
         '<div class="s">ожидаемые взносы по рассрочке помесячно, не только текущий период · ' +
-        'всего наперёд ' + finRub(f.total_ahead || 0, 0) + '</div></div></div>' +
+        'всего наперёд ' + finRub(f.total_ahead || 0) + '</div></div></div>' +
       body + '</div>';
   }
 
   function finFcGroup(label, total, rows, warn) {
     var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
       '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
-      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+      '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
     var body = (rows || []).map(function (x) {
       var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
                            : '<span class="sev mini cz-wait">рассрочка</span>';
@@ -14629,7 +14629,7 @@
       return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return head + body;
   }
@@ -14648,10 +14648,10 @@
     var progs = r.programs || [];
 
     var bar = statBar([
-      { label: 'Доход по программам', value: finRub(t.income, 0),
+      { label: 'Доход по программам', value: finRub(t.income),
         sub: 'из чеков ЮKassa' + (r.since ? ', с ' + finDate(r.since) : '') },
-      { label: 'Расход', value: finRub(t.expense, 0), sub: 'из P&L программ' },
-      { label: 'Прибыль', value: finRub(t.profit, 0),
+      { label: 'Расход', value: finRub(t.expense), sub: 'из P&L программ' },
+      { label: 'Прибыль', value: finRub(t.profit),
         sub: (t.profit >= 0 ? 'доход минус расход' : 'программы в минусе') },
       { label: 'Общая маржа', value: (t.margin != null ? t.margin + '%' : '—'),
         sub: 'по всем программам сразу' },
@@ -14734,8 +14734,8 @@
     // Состав дохода: основная и экскурсии — из чего сложилась выручка программы.
     var parts = [];
     if (p.income_exc > 0) {
-      parts.push('основная ' + finRub(p.income_base, 0));
-      parts.push('экскурсии ' + finRub(p.income_exc, 0));
+      parts.push('основная ' + finRub(p.income_base));
+      parts.push('экскурсии ' + finRub(p.income_exc));
     }
     parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
     if (p.count_excursions === false) parts.push('экскурсии мимо компании');
@@ -14767,9 +14767,9 @@
       '</div>' +
       finProgBar(p.income, p.expense) +
       '<div class="prg-stats">' +
-        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income, 0) + '</span></div>' +
-        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense, 0) + '</span></div>' +
-        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit) + '</span></div>' +
       '</div>' +
       '<div class="prg-sub">' + esc(sub) + '</div>' +
     '</div>';
@@ -14790,9 +14790,9 @@
     return '<div class="prg-track' + (loss ? ' loss' : '') + '">' +
       '<div class="prg-exp" style="width:' + expPct + '%"></div></div>' +
       '<div class="prg-legend">' +
-        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense, 0) + '</span>' +
+        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense) + '</span>' +
         '<span><i class="prg-dot' + (loss ? ' bad' : ' prof') + '"></i>' +
-          (loss ? 'Убыток ' + finRub(income - expense, 0) : 'Прибыль ' + finRub(income - expense, 0)) +
+          (loss ? 'Убыток ' + finRub(income - expense) : 'Прибыль ' + finRub(income - expense)) +
         '</span>' +
       '</div>';
   }
@@ -15019,11 +15019,11 @@
       if (!items.length) { host.textContent = 'Платежей еще не было.'; return; }
       host.innerHTML = '<b>История</b>' + items.slice(0, 8).map(function (h) {
         return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
-          '<span class="num">план ' + finRub(h.planned, 0) + '</span>' +
-          '<span class="num">' + (h.fact === null ? 'ждем' : 'факт ' + finRub(h.fact, 0)) + '</span>' +
+          '<span class="num">план ' + finRub(h.planned) + '</span>' +
+          '<span class="num">' + (h.fact === null ? 'ждем' : 'факт ' + finRub(h.fact)) + '</span>' +
           (h.diff && Math.abs(h.diff) >= 0.01
             ? '<span class="num ' + (h.diff > 0 ? 'up' : '') + '">' +
-              (h.diff > 0 ? '+' : '−') + finRub(Math.abs(h.diff), 0) + '</span>'
+              (h.diff > 0 ? '+' : '−') + finRub(Math.abs(h.diff)) + '</span>'
             : '<span></span>') + '</div>';
       }).join('');
     }).catch(function () {
@@ -15110,9 +15110,9 @@
       }
       host.innerHTML = '<b>История погашения</b>' + items.slice(0, 8).map(function (h) {
         return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
-          '<span class="num">было ' + finRub(h.was, 0) + '</span>' +
-          '<span class="num">−' + finRub(h.paid, 0) + '</span>' +
-          '<span class="num">' + finRub(h.left, 0) +
+          '<span class="num">было ' + finRub(h.was) + '</span>' +
+          '<span class="num">−' + finRub(h.paid) + '</span>' +
+          '<span class="num">' + finRub(h.left) +
           (h.status === 'факт' ? '' : ' <i>план</i>') + '</span></div>';
       }).join('');
     }).catch(function () {
@@ -15141,9 +15141,9 @@
     (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
 
     var bar = statBar([
-      { label: 'Выручка за период', value: finRub(m.revenue, 0), sub: 'доход, пришедший за ведомость' },
+      { label: 'Выручка за период', value: finRub(m.revenue), sub: 'доход, пришедший за ведомость' },
       { label: 'Маржинальность', value: finPct(m.margin_pct), sub: 'операционная прибыль к выручке' },
-      { label: 'Чистая прибыль', value: finRub(m.profit, 0), sub: 'после всех расходов и фондов' },
+      { label: 'Чистая прибыль', value: finRub(m.profit), sub: 'после всех расходов и фондов' },
       { label: 'Рентабельность', value: finPct(m.profit_pct), sub: 'чистая прибыль к выручке' },
     ]);
 
@@ -15186,7 +15186,7 @@
             '<div class="fb-l"><span>' + esc(x.n) + '</span>' +
               (x.why ? '<i>' + esc(x.why) + '</i>' : '') + '</div>' +
             '<div class="fb-bar"><i style="width:' + w + '%"></i></div>' +
-            '<div class="fb-v num">' + finRub(x.v, 0) + '</div></div>';
+            '<div class="fb-v num">' + finRub(x.v) + '</div></div>';
         }).join('') + '</div></div>';
     }
 
@@ -15213,8 +15213,8 @@
       (Math.abs(gap) >= 0.01
         ? '<div class="fin-note">' + ic('alert', 13) +
           'Остаток на счете и прибыль — разные вещи. На счете ' +
-          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
-          '. Разница ' + finRub(Math.abs(gap), 0) + ' — это деньги, которые лежат на счете, ' +
+          finRub(vtb ? vtb.live : cash.flow) + ', чистая прибыль ' + finRub(c.profit) +
+          '. Разница ' + finRub(Math.abs(gap)) + ' — это деньги, которые лежат на счете, ' +
           'но уже обещаны фондам, и остаток с прошлых периодов.</div>'
         : '') +
     '</div>';
