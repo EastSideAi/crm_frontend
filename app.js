@@ -146,6 +146,7 @@
     course_access_granted: 'открыт доступ к курсу',
     course_access_closed: 'доступ к курсу закрыт',
     csca_result: 'прошел пробный тест CSCA',
+    csca_access: 'доступ к тренажеру CSCA',
     // Раньше эти события показывались в ленте сырым английским именем: человек читал
     // «dormant_no_anketa_sent» и шел спрашивать, что это такое.
     lead_created_bot: 'написал боту',
@@ -192,6 +193,12 @@
     }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
+    if (e.type === 'csca_access') {
+      label = (p.days ? 'Открыт тренажер CSCA: ' : 'Закрыт тренажер CSCA: ') +
+        (p.subject_name || p.subject || '') +
+        (p.days ? (p.days === 30 ? ' на месяц' : p.days === 365 ? ' на год' : ' на ' + p.days + ' дней') : '') +
+        (p.by ? ' · ' + p.by : '');
+    }
     if (e.type === 'csca_result') {
       /* «CSCA: Математика ур.2 — 70%». Балла нет, когда в тесте есть задания с ручной
          проверкой: нулем это подменять нельзя, пишем «ждет проверки». */
@@ -531,6 +538,16 @@
     if (!name) return 'ES';
     var p = String(name).trim().split(/\s+/);
     return ((p[0] || '')[0] || '') + ((p[1] || '')[0] || (p[0] || '')[1] || '');
+  }
+  /* Цвет аватарки — от самого человека, а не от канала: в списке диалогов надо
+     мгновенно ловить глазами, кто есть кто. Палитра сочная и с далеко разведёнными
+     тонами, чтобы соседние строки не сливались; светлота держит контраст под белый
+     текст. Цвет стабилен на один id — у клиента всегда один. Канал — бейдж в углу. */
+  var AVA_PALETTE = ['#e02434', '#ea5a13', '#c98207', '#3f9a1e', '#0b8f6b',
+    '#0aa0b0', '#1782e6', '#2f4fe0', '#6a34e0', '#a01fce', '#d81f8e', '#e5385f',
+    '#7a6a1a', '#c04a12', '#2f7d5a', '#5a52d8'];
+  function avaColor(seed) {
+    return AVA_PALETTE[hashId(seed == null ? '' : seed) % AVA_PALETTE.length];
   }
   function notifOn() {
     return ('Notification' in window) && Notification.permission === 'granted' &&
@@ -2149,6 +2166,7 @@
     { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
+    { id: 'czreport', label: 'Отчеты', icon: 'chart', cap: 'contractors', space: 'cz' },
     { id: 'czservices', label: 'Услуги', icon: 'box', cap: 'contractors', space: 'cz' },
     { id: 'finsheet', label: 'Ведомость', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Ввод разложен на три места, а не свален в один экран (правки Романа 17.08.2026,
@@ -2925,9 +2943,9 @@
         // а не одна с вычитанием — иначе цифры выглядят как ошибка счета.
         var fhand = fd && (fd.periods || []).some(function (p) { return p.opening_by_hand; });
         ph = fd
-          ? 'За все время отложено <b>' + finRub(fd.totals.added, 0) + '</b>, потрачено <b>' +
-            finRub(fd.totals.spent, 0) + '</b>. Сейчас на фонде <b>' +
-            finRub(fd.totals.balance, 0) + '</b> — по последней ведомости' +
+          ? 'За все время отложено <b>' + finRub(fd.totals.added) + '</b>, потрачено <b>' +
+            finRub(fd.totals.spent) + '</b>. Сейчас на фонде <b>' +
+            finRub(fd.totals.balance) + '</b> — по последней ведомости' +
             (fhand ? ', остаток правился руками по выписке.' : '.')
           : 'Считаю фонд за все время…';
       }
@@ -2938,7 +2956,7 @@
         ph = pg
           ? 'Выгодна ли программа: доход по каждой тянется сам из чеков ЮKassa, расход — ' +
             'из P&L. Прибыль это разница, сквозь все периоды. Всего прибыль <b>' +
-            finRub(pg.total.profit, 0) + '</b>' +
+            finRub(pg.total.profit) + '</b>' +
             (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
           : 'Считаю программы по чекам…';
       }
@@ -3064,6 +3082,7 @@
     else if (state.page === 'czpay') renderCzPay(view);
     else if (state.page === 'czdocs') renderCzDocs(view);
     else if (state.page === 'czrisks') renderCzRisks(view);
+    else if (state.page === 'czreport') renderCzReport(view);
     else if (state.page === 'czservices') renderCzServices(view);
     else if (state.page === 'finsheet') renderFinSheet(view);
     else if (state.page === 'finfund') renderFinFund(view);
@@ -10922,6 +10941,105 @@
     var oc = el('rsk-card'); if (oc) oc.addEventListener('click', function () { openCz(id); });
   }
 
+  // ── Отчет план-факт по самозанятым ──────────────────────────────────────
+  // Сводит по каждому исполнителю назначенную работу (задания), принятое документом
+  // (подписанные акты) и ушедшие деньги (выплаты). По нему видно работу и принимают ее.
+  var REP = { data: null, month: '', err: '' };
+  var REP_MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн',
+                 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  function repMonths() {
+    // «Все время» + последние шесть месяцев; год в ярлыке только у чужого года, чтобы
+    // подписи не гудели одинаковым «2026».
+    var out = [['', 'Все время']];
+    var d = new Date(); var yNow = d.getFullYear();
+    for (var i = 0; i < 6; i++) {
+      var y = d.getFullYear(); var m = d.getMonth();          // 0..11
+      var key = y + '-' + ('0' + (m + 1)).slice(-2);
+      out.push([key, REP_MON[m] + (y !== yNow ? ' ' + y : '')]);
+      d.setMonth(m - 1);
+    }
+    return out;
+  }
+  function repLoad() {
+    var p = REP.month ? '?month=' + encodeURIComponent(REP.month) : '';
+    api('/admin/api/contractor-reports/plan-fact' + p).then(function (r) {
+      REP.data = r; REP.err = '';
+      if (state.page === 'czreport') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      REP.data = REP.data || { rows: [], total: {} };
+      REP.err = 'Не удалось собрать отчет. Обновите страницу.';
+      if (state.page === 'czreport') renderView();
+    });
+  }
+  function repMoney(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
+  function repCol(label, val) {
+    // data-l — подпись для телефона: там шапка спрятана, и колонка называет себя сама.
+    // Счетчик заданий/актов из строки убран: якорь строки — деньги, а сноска у суммы
+    // читалась мусором (арт-директор 07.09.2026).
+    return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) + '</span>';
+  }
+  function repRow(r) {
+    // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
+    // у имени, а не отдельной колонкой, чтобы таблица не разрослась.
+    var due = r.due > 0
+      ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
+    var flag = r.blocked ? '<span class="rep-block">заблокирован</span>' : '';
+    return '<div class="trow rep-grid rep-row" data-repc="' + esc(r.contractor_id) + '">' +
+      '<span class="rep-name">' + esc(r.full_name) +
+        (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') + flag + due + '</span>' +
+      repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
+      '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
+        repMoney(r.left) + '</span>' +
+      '</div>';
+  }
+  // Тайл сводки — тот же компонент, что на «Месяце» и в срезе команды (.mo-stat), а не
+  // третий рецепт: hero 26px, лейбл снизу. Остаток — синий модификатором (якорь).
+  function repTile(label, val, accent) {
+    return '<div class="mo-stat' + (accent ? ' rep-accent' : '') + '"><b>' +
+      repMoney(val) + '</b><span>' + label + '</span></div>';
+  }
+  function renderCzReport(view) {
+    if (REP.data === null) { view.innerHTML = dashSkeleton(); repLoad(); return; }
+    var d = REP.data; var t = d.total || {};
+    var rows = (d.rows || []).slice().sort(function (a, b) { return b.plan - a.plan; });
+    var chips = repMonths().map(function (m) {
+      return '<button class="qchip' + (REP.month === m[0] ? ' on' : '') +
+        '" data-repm="' + m[0] + '">' + m[1] + '</button>';
+    }).join('');
+    var body = REP.err
+      ? '<div class="empty">' + esc(REP.err) + '</div>'
+      : (!rows.length
+        ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
+        : rows.map(repRow).join(''));
+    view.innerHTML =
+      '<div class="mo-stats">' +
+        repTile('Назначено', t.plan) +
+        repTile('Принято актами', t.acts) +
+        repTile('Выплачено', t.paid) +
+        repTile('Остаток', t.left, true) +
+      '</div>' +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<span class="list-hint">План — назначенная работа, факт — подписанные акты и проведенные выплаты. Нажмите на строку, чтобы открыть карточку исполнителя.</span>' +
+        '</div>' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow rep-grid thead">' +
+          '<span class="th">Исполнитель</span>' +
+          '<span class="th r">Назначено</span><span class="th r">Акты</span>' +
+          '<span class="th r">Выплачено</span><span class="th r">Остаток</span>' +
+        '</div>' + body +
+      '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repm]'), function (b) {
+      b.addEventListener('click', function () {
+        REP.month = b.getAttribute('data-repm'); REP.data = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repc]'), function (r) {
+      r.addEventListener('click', function () { openCz(r.getAttribute('data-repc')); });
+    });
+  }
+
   function renderCzPay(view) {
     if (PY.reg === null) { view.innerHTML = dashSkeleton(); pyLoad(); return; }
     if (PY.tab === 'hist' && PY.hist === null) { pyHist(); }
@@ -12684,11 +12802,11 @@
     var vtb = null;
     (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
     var bar = statBar([
-      { label: 'Доход к зачислению', value: finRub(c.income, 0), sub: 'уже за вычетом комиссии' },
-      { label: 'Дивиденды', value: finRub(c.dividends, 0), sub: 'после всех отчислений' },
-      { label: 'Денег в фондах', value: finRub(m.in_funds, 0), sub: 'по всем фондам сразу' },
-      { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb, 0),
-        sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening, 0) + ' с прошлого'
+      { label: 'Доход к зачислению', value: finRub(c.income), sub: 'уже за вычетом комиссии' },
+      { label: 'Дивиденды', value: finRub(c.dividends), sub: 'после всех отчислений' },
+      { label: 'Денег в фондах', value: finRub(m.in_funds), sub: 'по всем фондам сразу' },
+      { label: 'Остаток на р/с', value: finRub(vtb ? vtb.live : m.on_vtb),
+        sub: vtb && vtb.opening ? 'с учетом ' + finRub(vtb.opening) + ' с прошлого'
                                 : 'сколько реально на ВТБ' },
     ]);
 
@@ -12799,8 +12917,8 @@
       (Math.abs(cashGap) >= 0.01
         ? '<div class="fin-note">' + ic('alert', 13) +
           'Остаток на счете не равен прибыли. На счете ' +
-          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
-          '. Разница ' + finRub(Math.abs(cashGap), 0) + ' — деньги, что лежат на счете, ' +
+          finRub(vtb ? vtb.live : cash.flow) + ', чистая прибыль ' + finRub(c.profit) +
+          '. Разница ' + finRub(Math.abs(cashGap)) + ' — деньги, что лежат на счете, ' +
           'но уже обещаны фондам, плюс остаток с прошлых периодов.</div>'
         : '') +
     '</div>';
@@ -12923,8 +13041,8 @@
         var diff = a.actual === null ? null : a.actual - a.closing;
         var sub = a.actual === null ? 'с банком не сверяли'
           : (Math.abs(diff) < 0.01 ? 'сошлось с выпиской ' + finDate(String(a.actual_at || '').slice(0, 10))
-             : (diff > 0 ? 'в банке больше на ' + finRub(diff, 0) + ' — что-то не внесли'
-                         : 'в банке меньше на ' + finRub(-diff, 0) + ' — лишняя строка или потеря'));
+             : (diff > 0 ? 'в банке больше на ' + finRub(diff) + ' — что-то не внесли'
+                         : 'в банке меньше на ' + finRub(-diff) + ' — лишняя строка или потеря'));
         var held = a.live - a.closing;
         return '<div class="fl-row fl-2' +
           (diff !== null && Math.abs(diff) >= 0.01 ? ' warn' : '') +
@@ -12933,7 +13051,7 @@
           '<div class="fl-main"><span class="fl-name">' + esc(a.name) + '</span>' +
           '<span class="fl-sub">' + esc(sub) +
           (Math.abs(held) >= 0.01
-            ? ' · ' + finRub(Math.abs(held), 0) +
+            ? ' · ' + finRub(Math.abs(held)) +
               (held < 0 ? ' уже начислено фондам' : ' придет с отчислениями')
             : '') + '</span></div>' +
           '<div class="fl-v num">' + finRub(a.closing) + '</div></div>';
@@ -13016,7 +13134,7 @@
           : 'Услуги не выбраны — процент считать не от чего, отчисление будет нулевым.';
       } else {
         var part = b * pct / 100;
-        prev.textContent = finRub(b, 0) + ' × ' + finNum(pct, pct % 1 ? 2 : 0) + '% = ' +
+        prev.textContent = finRub(b) + ' × ' + finNum(pct, pct % 1 ? 2 : 0) + '% = ' +
           finRub(part) + (mode.value === 'сумма+процент'
             ? ', плюс ' + finRub(fix) + ' — итого ' + finRub(part + fix) : '');
       }
@@ -13160,9 +13278,9 @@
     offs.forEach(function (o) { if (o.id) named.push(o); else noOff = o; });
 
     var bar = statBar([
-      { label: 'Отложено всего', value: finRub(t.added, 0), sub: 'по правилу ведомости' },
-      { label: 'Потрачено с фонда', value: finRub(t.spent, 0), sub: 'факт, все ведомости' },
-      { label: 'Остаток', value: finRub(t.balance, 0), sub: 'уедет в следующий период' },
+      { label: 'Отложено всего', value: finRub(t.added), sub: 'по правилу ведомости' },
+      { label: 'Потрачено с фонда', value: finRub(t.spent), sub: 'факт, все ведомости' },
+      { label: 'Остаток', value: finRub(t.balance), sub: 'уедет в следующий период' },
       { label: 'Ведомостей', value: String(t.periods),
         sub: t.periods < 2 ? 'период всего один' : 'учтено в расчете' },
     ]);
@@ -13178,9 +13296,9 @@
             var w = maxInc ? Math.max(2, Math.round(o.income / maxInc * 100)) : 0;
             return '<div class="fl-row"><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.name || o.id) + '</span>' +
-              '<span class="fl-sub">с фонда ' + finRub(o.spent, 0) + '</span></div>' +
+              '<span class="fl-sub">с фонда ' + finRub(o.spent) + '</span></div>' +
               '<div class="fl-bar"><i style="width:' + w + '%"></i></div>' +
-              '<div class="fl-v num">' + finRub(o.income, 0) + '</div></div>';
+              '<div class="fl-v num">' + finRub(o.income) + '</div></div>';
           }).join('') + '</div>'
         : '<div class="empty">Ни у одной операции не проставлена программа, поэтому ' +
           'разбивки нет. Справочник программ в ведомости заведен — не заполнено поле ' +
@@ -13188,9 +13306,9 @@
       (noOff && (noOff.income || noOff.spent)
         ? '<div class="fin-list"><div class="fl-row fl-2 warn"><div class="fl-main">' +
           '<span class="fl-name">Без программы</span>' +
-          '<span class="fl-sub">продажи ' + finRub(noOff.income, 0) + ' · ' + noOff.count + ' ' +
+          '<span class="fl-sub">продажи ' + finRub(noOff.income) + ' · ' + noOff.count + ' ' +
           plural(noOff.count, 'расход', 'расхода', 'расходов') + ' с фонда</span></div>' +
-          '<div class="fl-v num">' + finRub(noOff.spent, 0) + '</div></div></div>'
+          '<div class="fl-v num">' + finRub(noOff.spent) + '</div></div></div>'
         : '') +
       '</div>';
 
@@ -13228,13 +13346,13 @@
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
             (p.open ? ' · открыт' : '') + '</span>' +
-            '<span class="ff-v num">' + finRub(p.next, 0) + '</span></div>' +
+            '<span class="ff-v num">' + finRub(p.next) + '</span></div>' +
           /* «Было» — с копейками, в отличие от соседей: это единственная цифра
              строки, которую человек сверяет с банковской выпиской и вводит руками.
              Округление «для красоты» тут превращается в расхождение с банком. */
           '<div class="ff-sub"><span>было ' + finNum(p.opening) + '</span>' +
-            '<span>отложили ' + finNum(p.added, 0) + '</span>' +
-            '<span>потратили ' + finNum(p.spent, 0) + '</span>' +
+            '<span>отложили ' + finNum(p.added) + '</span>' +
+            '<span>потратили ' + finNum(p.spent) + '</span>' +
             (p.open && canFix && !editing
               ? '<button class="ff-fix" id="ff-fix">поправить остаток</button>' : '') +
           '</div>' +
@@ -13435,10 +13553,10 @@
     var point = t.fixed / (t.gross / t.revenue);
     var gap = t.revenue - point;
     return '<div class="fin-note calm">' + ic('chart', 13) +
-      'Точка безубыточности ' + finRub(point, 0) + ' выручки: столько нужно, чтобы ' +
+      'Точка безубыточности ' + finRub(point) + ' выручки: столько нужно, чтобы ' +
       'покрыть постоянные расходы при нынешней валовой марже ' + finPct(t.gross_pct) + '. ' +
-      (gap >= 0 ? 'Сейчас выручка выше нее на ' + finRub(gap, 0) + '.'
-                : 'Сейчас выручка ниже нее на ' + finRub(-gap, 0) + '.') + '</div>';
+      (gap >= 0 ? 'Сейчас выручка выше нее на ' + finRub(gap) + '.'
+                : 'Сейчас выручка ниже нее на ' + finRub(-gap) + '.') + '</div>';
   }
 
   /* Карта операций: все, что внесено, одной лентой. Новое сверху. */
@@ -13666,7 +13784,7 @@
         L.form === 'лист-продаж' && it.payout_to ? 'выплата: ' + it.payout_to : '',
         L.form === 'лист-продаж' ? '' : it.item,
         L.form === 'лист-продаж' && it.sale_amount
-          ? finRub(it.sale_amount, 0) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
+          ? finRub(it.sale_amount) + ' × ' + finNum(it.percent, it.percent % 1 ? 2 : 0) + '%'
           : '',
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
@@ -13694,15 +13812,15 @@
     var isIncome = (page === 'finincome');
     var avg = factN ? Math.round(fact / factN) : 0;
     var statTiles = isIncome ? [
-      { label: 'Пришло на счет', value: finRub(fact, 0), sub: 'зачислено по факту' },
+      { label: 'Пришло на счет', value: finRub(fact), sub: 'зачислено по факту' },
       { label: 'Записей', value: String(items.length), sub: 'строк дохода' },
-      { label: 'Средний доход', value: finRub(avg, 0), sub: 'в среднем на строку' },
-      { label: 'Крупнейший', value: finRub(biggest, 0), sub: 'самая большая сумма' },
+      { label: 'Средний доход', value: finRub(avg), sub: 'в среднем на строку' },
+      { label: 'Крупнейший', value: finRub(biggest), sub: 'самая большая сумма' },
     ] : [
-      { label: 'Списано по факту', value: finRub(fact, 0), sub: 'уже ушло со счета' },
-      { label: 'В плане', value: finRub(plan, 0), sub: 'намечено, не списано' },
+      { label: 'Списано по факту', value: finRub(fact), sub: 'уже ушло со счета' },
+      { label: 'В плане', value: finRub(plan), sub: 'намечено, не списано' },
       { label: 'Строк', value: String(items.length), sub: 'записей в листе' },
-      { label: 'Средняя строка', value: finRub(avg, 0), sub: 'по факту' },
+      { label: 'Средняя строка', value: finRub(avg), sub: 'по факту' },
     ];
     view.innerHTML = statBar(statTiles) +
       '<div class="card listcard">' +
@@ -13780,8 +13898,8 @@
     var nRows = blocks.reduce(function (s, b) { return s + b.items.length; }, 0);
 
     var bar = statBar([
-      { label: 'Прямые расходы, факт', value: finRub(D.fact, 0), sub: 'ушло с расчетного счета' },
-      { label: 'В плане', value: finRub(D.plan, 0), sub: 'намечено, еще не списано' },
+      { label: 'Прямые расходы, факт', value: finRub(D.fact), sub: 'ушло с расчетного счета' },
+      { label: 'В плане', value: finRub(D.plan), sub: 'намечено, еще не списано' },
       { label: 'Блоков', value: String(blocks.length), sub: 'направлений трат' },
       { label: 'Строк', value: String(nRows), sub: 'всего по прямым расходам' },
     ]);
@@ -13808,8 +13926,8 @@
       return '<div class="card listcard fd-block">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
           '<div><div class="t">' + esc(b.name) + '</div>' +
-          '<div class="s">' + esc(b.desc) + ' · факт ' + finRub(b.fact, 0) +
-            (b.plan ? ' · план ' + finRub(b.plan, 0) : '') + '</div></div>' +
+          '<div class="s">' + esc(b.desc) + ' · факт ' + finRub(b.fact) +
+            (b.plan ? ' · план ' + finRub(b.plan) : '') + '</div></div>' +
           (canFix ? '<button class="qchip add" data-dadd="' + esc(b.id) + '">' +
             ic('plus', 12) + 'Добавить расход</button>' : '') + '</div>' +
         (rows || '<div class="empty">В этом блоке пока пусто.</div>') +
@@ -13865,16 +13983,16 @@
     if (!hits.length) return '';
     var li = hits.map(function (h) {
       if (ch.key === 'cash_gap') {
-        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned, 0) +
-          ', свободно ' + finRub(h.available, 0) +
-          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short, 0) + '</span></li>';
+        return '<li><b>' + esc(h.account_id) + '</b>: план ' + finRub(h.planned) +
+          ', свободно ' + finRub(h.available) +
+          '<span class="rsk-hit-hint">не хватает ' + finRub(h.short) + '</span></li>';
       }
       if (ch.key === 'dup') {
-        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+        return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount) +
           ' · ' + finDate(h.date) +
           '<span class="rsk-hit-hint">' + h.count + ' раза</span></li>';
       }
-      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount, 0) +
+      return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount) +
         ' · ' + finDate(h.date) + '</li>';
     }).join('');
     return '<ul class="rsk-hits">' + li + '</ul>';
@@ -13883,7 +14001,7 @@
     return '<div class="rsk-check lv-' + esc(ch.level) + '">' +
       '<div class="rsk-c-head">' + riskChip(ch.level) +
         '<span class="rsk-c-title">' + esc(ch.title) + '</span>' +
-        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount, 0) + '</span>' : '') +
+        (ch.amount ? '<span class="fsp-c-sum">' + finRub(ch.amount) + '</span>' : '') +
       '</div>' +
       '<div class="rsk-c-reason">' + esc(ch.reason) + '</div>' +
       (ch.action ? '<div class="rsk-c-act">' + ic('go', 12) + '<span>' + esc(ch.action) +
@@ -13903,13 +14021,13 @@
     function fc(s) { return (sum[s] && sum[s].count) || 0; }
 
     var bar = statBar([
-      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден'), 0),
+      { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден')),
         sub: 'ушло по расходам' },
-      { label: 'Подтверждено', value: finRub(fa('подтвержден'), 0),
+      { label: 'Подтверждено', value: finRub(fa('подтвержден')),
         sub: fc('подтвержден') + ' закрыто документом' },
-      { label: 'Без документа', value: finRub(fa('проведен'), 0),
+      { label: 'Без документа', value: finRub(fa('проведен')),
         sub: fc('проведен') + ' закрыть нечем' },
-      { label: 'Запланировано', value: finRub(fa('запланирован'), 0),
+      { label: 'Запланировано', value: finRub(fa('запланирован')),
         sub: 'намечено, еще не ушло' },
     ]);
 
@@ -13950,8 +14068,8 @@
           '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
         '</div>';
       }).join('');
-      var tots = 'план ' + finRub(a['запланирован'], 0) + ' · факт ' +
-        finRub(a['проведен'] + a['подтвержден'], 0);
+      var tots = 'план ' + finRub(a['запланирован']) + ' · факт ' +
+        finRub(a['проведен'] + a['подтвержден']);
       return '<div class="card listcard fd-block">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
           '<div><div class="t">' + esc(a.label) + '</div>' +
@@ -14182,7 +14300,7 @@
         var sale = Number(el('fl-sale').value) || 0, pct = Number(el('fl-pct').value) || 0;
         calc.textContent = sale && pct
           ? 'К выплате ' + finRub(sale * pct / 100) + ' — это ' + finNum(pct, pct % 1 ? 2 : 0) +
-            '% от ' + finRub(sale, 0)
+            '% от ' + finRub(sale)
           : 'Выплата посчитается сама';
       };
       el('fl-sale').addEventListener('input', recalc);
@@ -14312,12 +14430,12 @@
     var bar = statBar([
       { label: 'Сервисов в работе', value: String(live.length),
         sub: 'списываются сами по сроку' },
-      { label: 'План на ведомость', value: finRub(plan, 0), sub: 'сколько ждем к списанию' },
-      { label: 'Уже списалось', value: finRub(paid, 0),
-        sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan, 0) : 'по факту' },
-      { label: 'Долгов к погашению', value: finRub(left, 0),
+      { label: 'План на ведомость', value: finRub(plan), sub: 'сколько ждем к списанию' },
+      { label: 'Уже списалось', value: finRub(paid),
+        sub: paid > plan ? 'дороже плана на ' + finRub(paid - plan) : 'по факту' },
+      { label: 'Долгов к погашению', value: finRub(left),
         sub: debts.length + ' ' + plural(debts.length, 'обязательство', 'обязательства', 'обязательств') +
-             ' · платеж ' + finRub(oplan, 0) },
+             ' · платеж ' + finRub(oplan) },
     ]);
 
     /* Платежи ведомости: план и факт правятся раздельно и на месте. Пока факт пуст,
@@ -14328,7 +14446,7 @@
         : (x.fact === null
             ? (x.next_on ? 'ждем ' + finDate(x.next_on) : 'еще не списалось')
             : (Math.abs(diff) >= 0.01
-                ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff), 0) + ' к плану'
+                ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff)) + ' к плану'
                 : 'как в плане'));
       return '<div class="trow fin-grid fsv-grid' + (x.fact !== null ? ' done' : '') +
         (x.auto ? ' warn' : '') + '">' +
@@ -14354,7 +14472,7 @@
       // многоточие на узком экране, и строка теряет смысл.
       var sub = (x.active ? '' : 'отключен · ') + esc(finEvery(x)) +
         (x.counterparty ? ' · ' + esc(x.counterparty) : '') +
-        (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact, 0) : '') +
+        (row && row.fact !== null ? ' · в этой ведомости списано ' + finRub(row.fact) : '') +
         (soon ? ' · пора платить' : '');
       // Дату следующего списания правим прямо в строке, как на старом сайте (пункт 5
       // Романа): открывать ради даты модалку — лишний шаг, а дату двигают часто.
@@ -14380,9 +14498,9 @@
         '<div class="fl-main"><span class="fl-name">' + esc(o.title || o.kind) + '</span>' +
           '<span class="fl-sub">' + (done ? 'погашен · ' : '') +
           esc(o.counterparty || o.kind) +
-          ' · всего ' + finRub(o.principal, 0) + ' · погашено ' + finRub(o.paid, 0) +
-          (o.payment > 0 ? ' · по ' + finRub(o.payment, 0) + ' за ведомость' : ' · все разом') +
-          (o.interest > 0 ? ' · проценты ' + finRub(o.interest, 0) : '') + '</span>' +
+          ' · всего ' + finRub(o.principal) + ' · погашено ' + finRub(o.paid) +
+          (o.payment > 0 ? ' · по ' + finRub(o.payment) + ' за ведомость' : ' · все разом') +
+          (o.interest > 0 ? ' · проценты ' + finRub(o.interest) : '') + '</span>' +
           // Погашенному полоса не нужна: она всегда полная и читается как разделитель.
           (done ? '' : '<div class="obl-bar"><i style="width:' + w + '%"></i></div>') +
           '</div>' +
@@ -14540,14 +14658,14 @@
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
-      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected, 0),
+      { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
         sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
-      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected, 0),
+      { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
         sub: (receiv.length + autoReceiv.length) + ' ' +
           plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
-      { label: 'Планируемая выручка', value: finRub(t.planned_revenue, 0),
+      { label: 'Планируемая выручка', value: finRub(t.planned_revenue),
         sub: 'продажи и дебиторка' },
-      { label: 'Факт дохода', value: finRub(t.income_fact, 0), sub: planFact },
+      { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
     ]);
 
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
@@ -14606,9 +14724,9 @@
         '<div class="fpf-pct num ' + cls + '">' + pct + '<span>%</span></div></div>' +
       '<div class="fpf-track"><div class="fpf-fill ' + cls + '" style="width:' + fillPct + '%"></div></div>' +
       '<div class="fpf-legend">' +
-        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned, 0) + '</span>' +
+        '<span><i class="fpf-dot plan"></i>План ' + finRub(planned) + '</span>' +
         '<span class="fpf-v">' + esc(verdict) + '</span>' +
-        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact, 0) + '</span>' +
+        '<span><i class="fpf-dot fact ' + cls + '"></i>Факт ' + finRub(fact) + '</span>' +
       '</div></div>';
   }
 
@@ -14623,7 +14741,7 @@
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') +
           '<span class="sev mini ' + st + '">' + esc(x.status) + '</span></span>' +
           '<span class="fl-sub">' + (line || '—') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     // Дебиторка из рассрочки: строки собираются сами из графиков заказов, руками их не
     // правят — клик ведёт в карточку клиента, а не в форму. Просроченный взнос помечен.
@@ -14638,7 +14756,7 @@
       return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
       '<div class="list-tools sec-head"><span class="ic">' +
@@ -14739,18 +14857,18 @@
     var after = cash === null ? null : cash + c.net;
 
     var bar = statBar([
-      { label: 'Ждем получить', value: finRub(inc.total, 0),
+      { label: 'Ждем получить', value: finRub(inc.total),
         sub: 'новые продажи и дебиторка' },
-      { label: 'Должны выплатить', value: finRub(out.total, 0),
+      { label: 'Должны выплатить', value: finRub(out.total),
         sub: 'плановые расходы, фонды, кредиты' },
-      { label: 'Прогноз движения', value: finRub(c.net, 0),
+      { label: 'Прогноз движения', value: finRub(c.net),
         sub: c.net >= 0 ? 'приход больше выплат' : 'выплат больше прихода' },
       cash === null
         // Остаток еще грузится или ведомости нет: плитку гасим (тихий текст вместо
         // числа-героя), чтобы пустой прочерк не читался как сломанные данные.
         ? { label: 'После нагрузки', value: '<span class="stat-idle">считаю остаток…</span>',
             sub: 'остаток из «Ведомости»' }
-        : { label: 'После нагрузки', value: finRub(after, 0),
+        : { label: 'После нагрузки', value: finRub(after),
             sub: after < 0 ? 'приход не покрывает выплаты' : 'если план сойдется' },
     ]);
 
@@ -14801,15 +14919,15 @@
       '<div class="fbal-head"><div><div class="t">Хватает ли на период</div>' +
         '<div class="s">ожидаемый приход против плановых выплат</div></div>' +
         '<div class="fbal-net num ' + (ok ? 'ok' : 'bad') + '">' +
-          (ok ? '+' : '') + finRub(net, 0) +
+          (ok ? '+' : '') + finRub(net) +
           '<span>' + (ok ? 'остается' : 'не хватает') + '</span></div></div>' +
       '<div class="fbal-rows">' +
         '<div class="fbal-r"><span class="fbal-l">Приход</span>' +
           '<div class="fbal-track"><div class="fbal-fill inc" style="width:' + incW + '%"></div></div>' +
-          '<span class="fbal-v num">' + finRub(income, 0) + '</span></div>' +
+          '<span class="fbal-v num">' + finRub(income) + '</span></div>' +
         '<div class="fbal-r"><span class="fbal-l">Выплаты</span>' +
           '<div class="fbal-track"><div class="fbal-fill out" style="width:' + outW + '%"></div></div>' +
-          '<span class="fbal-v num">' + finRub(outflow, 0) + '</span></div>' +
+          '<span class="fbal-v num">' + finRub(outflow) + '</span></div>' +
       '</div></div>';
   }
 
@@ -14817,11 +14935,11 @@
     var body = rows.map(function (p) {
       return '<div class="fl-row fl-2 cal-row"><div class="fl-main">' +
         '<span class="fl-name">' + esc(p[0]) + '</span></div>' +
-        '<div class="fl-v num">' + finRub(p[1] || 0, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(p[1] || 0) + '</div></div>';
     }).join('');
     return body + '<div class="fl-row fl-2 cal-row total"><div class="fl-main">' +
       '<span class="fl-name">' + esc(totalLabel) + '</span></div>' +
-      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+      '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
   }
 
   /* Плановые платежи клиентов наперёд: та же дебиторка из рассрочки, но не только за
@@ -14841,14 +14959,14 @@
       '<div class="list-tools sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
         '<div><div class="t">Плановые платежи клиентов наперёд</div>' +
         '<div class="s">ожидаемые взносы по рассрочке помесячно, не только текущий период · ' +
-        'всего наперёд ' + finRub(f.total_ahead || 0, 0) + '</div></div></div>' +
+        'всего наперёд ' + finRub(f.total_ahead || 0) + '</div></div></div>' +
       body + '</div>';
   }
 
   function finFcGroup(label, total, rows, warn) {
     var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
       '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
-      '<div class="fl-v num">' + finRub(total || 0, 0) + '</div></div>';
+      '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
     var body = (rows || []).map(function (x) {
       var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
                            : '<span class="sev mini cz-wait">рассрочка</span>';
@@ -14858,7 +14976,7 @@
       return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
           '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
-        '<div class="fl-v num">' + finRub(x.amount, 0) + '</div></div>';
+        '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return head + body;
   }
@@ -14877,10 +14995,10 @@
     var progs = r.programs || [];
 
     var bar = statBar([
-      { label: 'Доход по программам', value: finRub(t.income, 0),
+      { label: 'Доход по программам', value: finRub(t.income),
         sub: 'из чеков ЮKassa' + (r.since ? ', с ' + finDate(r.since) : '') },
-      { label: 'Расход', value: finRub(t.expense, 0), sub: 'из P&L программ' },
-      { label: 'Прибыль', value: finRub(t.profit, 0),
+      { label: 'Расход', value: finRub(t.expense), sub: 'из P&L программ' },
+      { label: 'Прибыль', value: finRub(t.profit),
         sub: (t.profit >= 0 ? 'доход минус расход' : 'программы в минусе') },
       { label: 'Общая маржа', value: (t.margin != null ? t.margin + '%' : '—'),
         sub: 'по всем программам сразу' },
@@ -14963,8 +15081,8 @@
     // Состав дохода: основная и экскурсии — из чего сложилась выручка программы.
     var parts = [];
     if (p.income_exc > 0) {
-      parts.push('основная ' + finRub(p.income_base, 0));
-      parts.push('экскурсии ' + finRub(p.income_exc, 0));
+      parts.push('основная ' + finRub(p.income_base));
+      parts.push('экскурсии ' + finRub(p.income_exc));
     }
     parts.push(p.income_count + ' ' + plural(p.income_count, 'платеж', 'платежа', 'платежей'));
     if (p.count_excursions === false) parts.push('экскурсии мимо компании');
@@ -14996,9 +15114,9 @@
       '</div>' +
       finProgBar(p.income, p.expense) +
       '<div class="prg-stats">' +
-        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income, 0) + '</span></div>' +
-        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense, 0) + '</span></div>' +
-        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit, 0) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Доход</span><span class="v num">' + finRub(p.income) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Расход</span><span class="v num">' + finRub(p.expense) + '</span></div>' +
+        '<div class="prg-stat"><span class="k">Прибыль</span><span class="v num ' + (loss ? 'bad' : 'ok') + '">' + finRub(p.profit) + '</span></div>' +
       '</div>' +
       '<div class="prg-sub">' + esc(sub) + '</div>' +
     '</div>';
@@ -15019,9 +15137,9 @@
     return '<div class="prg-track' + (loss ? ' loss' : '') + '">' +
       '<div class="prg-exp" style="width:' + expPct + '%"></div></div>' +
       '<div class="prg-legend">' +
-        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense, 0) + '</span>' +
+        '<span><i class="prg-dot exp"></i>Расход ' + finRub(expense) + '</span>' +
         '<span><i class="prg-dot' + (loss ? ' bad' : ' prof') + '"></i>' +
-          (loss ? 'Убыток ' + finRub(income - expense, 0) : 'Прибыль ' + finRub(income - expense, 0)) +
+          (loss ? 'Убыток ' + finRub(income - expense) : 'Прибыль ' + finRub(income - expense)) +
         '</span>' +
       '</div>';
   }
@@ -15248,11 +15366,11 @@
       if (!items.length) { host.textContent = 'Платежей еще не было.'; return; }
       host.innerHTML = '<b>История</b>' + items.slice(0, 8).map(function (h) {
         return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
-          '<span class="num">план ' + finRub(h.planned, 0) + '</span>' +
-          '<span class="num">' + (h.fact === null ? 'ждем' : 'факт ' + finRub(h.fact, 0)) + '</span>' +
+          '<span class="num">план ' + finRub(h.planned) + '</span>' +
+          '<span class="num">' + (h.fact === null ? 'ждем' : 'факт ' + finRub(h.fact)) + '</span>' +
           (h.diff && Math.abs(h.diff) >= 0.01
             ? '<span class="num ' + (h.diff > 0 ? 'up' : '') + '">' +
-              (h.diff > 0 ? '+' : '−') + finRub(Math.abs(h.diff), 0) + '</span>'
+              (h.diff > 0 ? '+' : '−') + finRub(Math.abs(h.diff)) + '</span>'
             : '<span></span>') + '</div>';
       }).join('');
     }).catch(function () {
@@ -15339,9 +15457,9 @@
       }
       host.innerHTML = '<b>История погашения</b>' + items.slice(0, 8).map(function (h) {
         return '<div class="sv-h"><span>' + esc(h.period) + '</span>' +
-          '<span class="num">было ' + finRub(h.was, 0) + '</span>' +
-          '<span class="num">−' + finRub(h.paid, 0) + '</span>' +
-          '<span class="num">' + finRub(h.left, 0) +
+          '<span class="num">было ' + finRub(h.was) + '</span>' +
+          '<span class="num">−' + finRub(h.paid) + '</span>' +
+          '<span class="num">' + finRub(h.left) +
           (h.status === 'факт' ? '' : ' <i>план</i>') + '</span></div>';
       }).join('');
     }).catch(function () {
@@ -15370,9 +15488,9 @@
     (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
 
     var bar = statBar([
-      { label: 'Выручка за период', value: finRub(m.revenue, 0), sub: 'доход, пришедший за ведомость' },
+      { label: 'Выручка за период', value: finRub(m.revenue), sub: 'доход, пришедший за ведомость' },
       { label: 'Маржинальность', value: finPct(m.margin_pct), sub: 'операционная прибыль к выручке' },
-      { label: 'Чистая прибыль', value: finRub(m.profit, 0), sub: 'после всех расходов и фондов' },
+      { label: 'Чистая прибыль', value: finRub(m.profit), sub: 'после всех расходов и фондов' },
       { label: 'Рентабельность', value: finPct(m.profit_pct), sub: 'чистая прибыль к выручке' },
     ]);
 
@@ -15415,7 +15533,7 @@
             '<div class="fb-l"><span>' + esc(x.n) + '</span>' +
               (x.why ? '<i>' + esc(x.why) + '</i>' : '') + '</div>' +
             '<div class="fb-bar"><i style="width:' + w + '%"></i></div>' +
-            '<div class="fb-v num">' + finRub(x.v, 0) + '</div></div>';
+            '<div class="fb-v num">' + finRub(x.v) + '</div></div>';
         }).join('') + '</div></div>';
     }
 
@@ -15442,8 +15560,8 @@
       (Math.abs(gap) >= 0.01
         ? '<div class="fin-note">' + ic('alert', 13) +
           'Остаток на счете и прибыль — разные вещи. На счете ' +
-          finRub(vtb ? vtb.live : cash.flow, 0) + ', чистая прибыль ' + finRub(c.profit, 0) +
-          '. Разница ' + finRub(Math.abs(gap), 0) + ' — это деньги, которые лежат на счете, ' +
+          finRub(vtb ? vtb.live : cash.flow) + ', чистая прибыль ' + finRub(c.profit) +
+          '. Разница ' + finRub(Math.abs(gap)) + ' — это деньги, которые лежат на счете, ' +
           'но уже обещаны фондам, и остаток с прошлых периодов.</div>'
         : '') +
     '</div>';
@@ -20867,7 +20985,7 @@
       var cm = chMeta(c.channel);
       var st = inboxTag(c);
       return '<button class="tg-row' + (String(c.id) === String(state.inboxSel) ? ' on' : '') + (c.unread ? ' unread' : '') + '" data-id="' + esc(c.id) + '">' +
-        '<span class="tg-ava" style="--c:' + cm.c + '">' + esc(initials(c.name)) +
+        '<span class="tg-ava" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) +
           '<span class="tg-ch" style="background:' + cm.c + '">' + ic(cm.icon, 8) + '</span></span>' +
         '<span class="tg-rb"><span class="tg-r1"><span class="tg-nm' + (c.anon ? ' anon' : '') + '">' + esc(c.name) + '</span>' +
           '<span class="tg-tm num">' + fmtWhen(c.last_at) + '</span></span>' +
@@ -21178,7 +21296,6 @@
       return;
     }
     inboxMarkSeen(c);
-    var cm = chMeta(c.channel);
     var aiOn = c.ai_on !== false;  // источник правды — ai_enabled; taken_by = просто «кто вёл»
     var msgs = convoMessages(c);
     if (msgs === null) {
@@ -21211,7 +21328,7 @@
     host.innerHTML =
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
-        '<span class="tg-ava sm" style="--c:' + cm.c + '">' + esc(initials(c.name)) + '</span>' +
+        '<span class="tg-ava sm" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
         '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
         '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
@@ -21495,6 +21612,7 @@
   var MODAL_SECTIONS = [
     { id: 'main',      label: 'Главное',     icon: 'target' },
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
+    { id: 'consult',   label: 'Консультации', icon: 'phone' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'apply',     label: 'Подача',       icon: 'send' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
@@ -22435,6 +22553,8 @@
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
     var navHtml = MODAL_SECTIONS.filter(function (sct) {
       if (sct.id === 'pay') return can('finance');
+      // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
+      if (sct.id === 'consult') return can('clients');
       // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
       // пункт, который открывается только отказом, хуже отсутствующего пункта.
       if (sct.id === 'dialog') return can('inbox');
@@ -22531,10 +22651,12 @@
     // Секцию оплат без финансовой роли не открыть даже прямым переключением
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
+    if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
     else if (s === 'now') host.innerHTML = buildNow(ctx);
+    else if (s === 'consult') host.innerHTML = buildConsultSection(id);
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
@@ -22573,6 +22695,7 @@
       renderModalContent();
     });
     attachContentHandlers(id, ctx);
+    if (s === 'consult') wireConsultSection(id);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     if (s === 'apply') wireApplySection(id);
@@ -22981,7 +23104,15 @@
     if (CSCA_BUSY[id]) return;
     if (force) delete CSCA[id];
     CSCA_BUSY[id] = true;
-    api('/admin/api/leads/' + id + '/csca').then(function (r) {
+    // Попытки лежат у нас, замок тренажера — на его хостинге. Спрашиваем обе ручки
+    // сразу: карточке нужно и «как сдавал», и «что открыто», это один вопрос.
+    Promise.all([
+      api('/admin/api/leads/' + id + '/csca'),
+      api('/admin/api/leads/' + id + '/csca/access').catch(function () { return null; }),
+    ]).then(function (rr) {
+      var r = rr[0];
+      r.access = (rr[1] && rr[1].access) || [];
+      r.access_reason = rr[1] && rr[1].reason;
       CSCA_BUSY[id] = false; CSCA[id] = r;
       if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
     }).catch(function (e) {
@@ -23076,11 +23207,41 @@
           }).join('')
         : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
           'дает лендинг экзамена, результат придет сюда сам.</div>';
+      // Доступ к тренажеру — по предметам: экзамен обычно сдают один, и открытая
+      // математика не должна тащить за собой физику с химией.
+      var byS = {};
+      (c.access || []).forEach(function (a) { byS[a.subject] = a; });
+      var accessRows = CSCA_SUBJ.map(function (sj) {
+        var a = byS[sj[0]] || {};
+        var st = !a.open
+          ? (a.trial_used ? 'Закрыт, неделя израсходована' : 'Закрыт')
+          : (a.kind === 'trial' ? 'Бесплатная неделя до ' + esc(fmtWhen(a.until))
+                                : 'Открыт до ' + esc(fmtWhen(a.until)));
+        return '<div class="det-term">' +
+          '<div class="det-term-s"><b>' + esc(sj[1]) + '</b> · ' + st + '</div>' +
+          '<div class="det-term-b">' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="30">+ месяц</button>' +
+            '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="365">+ год</button>' +
+            (a.open && a.kind === 'paid'
+              ? '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="0">закрыть</button>'
+              : '') +
+          '</div></div>';
+      }).join('');
+      var accessBlock = c.access_reason === 'no_contact'
+        ? '<div class="field-empty">В карточке нет почты и телефона — тренажер не узнает ' +
+          'человека, открывать нечего. Добавьте контакт.</div>'
+        : accessRows;
+
       csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
         '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
         'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
-        board + '<div class="det-prl">' + rows + '</div></div>';
+        board + '<div class="det-prl">' + rows + '</div></div>' +
+        '<div class="m-sec"><div class="m-sec-h">Доступ к тренажеру CSCA</div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Тест и разбор слабых тем бесплатны ' +
+        'всем. Тренажер — неделя бесплатно, дальше платно, и по каждому предмету ' +
+        'отдельно. Открытие продлевает срок, остаток не сгорает.</div>' +
+        accessBlock + '</div>';
     }
 
     return head + '<div class="ex-list">' + det + hsk + '</div>' + csca;
@@ -24750,6 +24911,214 @@
       '</div></details>';
   }
   /* режим/отправка/лог — подключаются в attachContentHandlers (когда модалка в DOM) */
+  /* ── РАЗДЕЛ «Консультации»: воронка продаж ДО оплаты ──
+     Записан → провёл → результат. «Купил» тут не помечаем — деньги видно в «Оплатах»
+     (решение Романа 05.09.2026). Результат ставим только у тех, кто ещё НЕ купил:
+     «думает» (с ожидаемым чеком — это потенциал) или «отказ». Отсюда собирается
+     план продаж: записанные + проведённые + потенциал; реальные деньги — из «Оплат».
+     Бэкенд — /admin/api/leads/{id}/consultations (cap clients, миграция 135). */
+  var CONSULT = {};        // id лида -> массив консультаций
+  var CONSULT_BUSY = {};   // id лида -> идёт загрузка
+
+  // Пилюли — общая семья .sev + модификатор (не свой рецепт): записана = в работе
+  // (st-doing, синий), проведена = успех (st-done, зелёный), не пришёл = внимание
+  // (st-block, амбер), отмена = выбыла (st-cancel, серый).
+  var CNS_STATUS = { booked: ['Записана', 'st-doing'], held: ['Проведена', 'st-done'],
+                     no_show: ['Не пришёл', 'st-block'], canceled: ['Отмена', 'st-cancel'] };
+  var CNS_RESULT = { thinking: 'Думает', declined: 'Отказ', rebook: 'Перенос' };
+
+  function cnsWhen(iso) {
+    if (!iso) return 'без даты';
+    var d = new Date(iso);
+    if (isNaN(d)) return 'без даты';
+    var dd = ('0' + d.getDate()).slice(-2), mm = ('0' + (d.getMonth() + 1)).slice(-2);
+    var hh = ('0' + d.getHours()).slice(-2), mi = ('0' + d.getMinutes()).slice(-2);
+    return dd + '.' + mm + ' · ' + hh + ':' + mi;
+  }
+
+  function loadConsult(id, force) {
+    if (CONSULT_BUSY[id]) return;
+    if (force) delete CONSULT[id];
+    if (CONSULT[id]) { renderConsultBody(id); return; }
+    CONSULT_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/consultations').then(function (r) {
+      CONSULT_BUSY[id] = false; CONSULT[id] = (r && r.consultations) || [];
+      renderConsultBody(id);
+    }).catch(function () { CONSULT_BUSY[id] = false; });
+  }
+
+  function consultSummary(rows) {
+    var booked = rows.filter(function (c) { return c.status === 'booked'; }).length;
+    var held = rows.filter(function (c) { return c.status === 'held'; }).length;
+    var pot = rows.filter(function (c) { return c.result === 'thinking' && c.amount_rub; })
+      .reduce(function (s, c) { return s + c.amount_rub; }, 0);
+    return '<div class="pay-board">' +
+      '<div class="pay-cell"><div class="pc-l">Записаны</div><div class="pc-v num">' + booked + '</div></div>' +
+      '<div class="pay-cell"><div class="pc-l">Проведены</div><div class="pc-v num">' + held + '</div></div>' +
+      '<div class="pay-cell' + (pot ? ' warn' : ' muted') + '"><div class="pc-l">Потенциал</div>' +
+        '<div class="pc-v num">' + fmtMoney(pot) + ' ₽</div></div>' +
+    '</div>';
+  }
+
+  function consultRowHtml(c) {
+    var st = CNS_STATUS[c.status] || CNS_STATUS.booked;
+    var role = c.lead_name ? '<span class="cns-role">' + esc(c.lead_name) + '</span>' : '';
+    // Результат — та же семья .sev: думает = ожидание (n-wait, амбер), отказ = выбыл
+    // (n-off, серый), перенос = в работе (st-doing, синий). Зелёный НЕ ставим — он под
+    // реальные оплаты, а «думает» это ещё надежда.
+    var res = '';
+    if (c.status === 'held') {
+      if (c.result === 'thinking') {
+        res = '<span class="sev n-wait">Думает</span>' +
+          '<span class="cns-amt"><input type="text" inputmode="numeric" class="al-in sm num" ' +
+            'data-amount="' + c.id + '" value="' + (c.amount_rub || '') + '" placeholder="чек ₽"></span>';
+      } else if (c.result === 'declined') {
+        res = '<span class="sev n-off">Отказ</span>';
+      } else if (c.result) {
+        res = '<span class="sev st-doing">' + esc(CNS_RESULT[c.result] || c.result) + '</span>';
+      }
+    }
+    // Действия зависят от стадии: записанную — провести/не пришёл/отмена;
+    // проведённую — поставить исход (кто не купил); купившего тут не трогаем.
+    var acts = '';
+    if (c.status === 'booked') {
+      acts = '<button class="bp sm" data-act="held" data-id="' + c.id + '">Провёл</button>' +
+        '<button class="bp sm ghost" data-act="no_show" data-id="' + c.id + '">Не пришёл</button>' +
+        '<button class="bp sm ghost" data-act="canceled" data-id="' + c.id + '">Отмена</button>';
+    } else if (c.status === 'held' && !c.result) {
+      acts = '<button class="bp sm ghost" data-act="thinking" data-id="' + c.id + '">Думает</button>' +
+        '<button class="bp sm ghost" data-act="declined" data-id="' + c.id + '">Отказ</button>';
+    } else if (c.status === 'held' && c.result === 'declined') {
+      acts = '<button class="bp sm ghost" data-act="thinking" data-id="' + c.id + '">Вернуть в «думает»</button>';
+    }
+    return '<div class="cns-row">' +
+      '<div class="cns-row-top">' +
+        '<span class="cns-when num">' + cnsWhen(c.scheduled_at) + '</span>' +
+        '<span class="sev ' + st[1] + '">' + st[0] + '</span>' + role + res +
+        '<button class="cns-del" data-act="del" data-id="' + c.id + '" title="Удалить">' + ic('x', 12) + '</button>' +
+      '</div>' +
+      (c.note ? '<div class="cns-note">' + esc(c.note) + '</div>' : '') +
+      (acts ? '<div class="cns-acts">' + acts + '</div>' : '') +
+    '</div>';
+  }
+
+  function consultBodyHtml(id) {
+    var rows = CONSULT[id] || [];
+    if (!rows.length) {
+      return consultSummary(rows) +
+        '<div class="cns-empty">Пока ни одной консультации. Запиши первую — она попадёт в план продаж.</div>';
+    }
+    return consultSummary(rows) + '<div class="cns-list">' +
+      rows.map(consultRowHtml).join('') + '</div>';
+  }
+
+  function renderConsultBody(id) {
+    var host = el('cns-body');
+    if (!host || state.modalSection !== 'consult' || String(state.drawerId) !== String(id)) return;
+    host.innerHTML = consultBodyHtml(id);
+    bindConsultRows(id, host);
+  }
+
+  function consultAddForm() {
+    // Время — селект с шагом 30 минут (09:00–21:00). Нативный datetime-local/time
+    // показывает часть команды в формате AM/PM — 24-часовой селект однозначен всем.
+    var times = '<option value="">время</option>';
+    for (var h = 9; h <= 21; h++) {
+      for (var m = 0; m < 60; m += 30) {
+        var t = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        times += '<option value="' + t + '">' + t + '</option>';
+      }
+    }
+    // «Кто ведёт» — живой человек, а не роль: через час после встречи бот напомнит
+    // ему загрузить запись. Список подтянем в wireConsultSection (loadAssignees).
+    return '<div class="cns-add">' +
+      '<input type="date" id="cns-date" class="al-in sm">' +
+      '<select id="cns-time" class="al-in sm">' + times + '</select>' +
+      '<select id="cns-lead" class="al-in sm"><option value="">кто ведёт</option></select>' +
+      '<input type="text" id="cns-note" class="al-in sm cns-note-in" placeholder="о чём (по желанию)">' +
+      '<button class="bp sm" id="cns-add-btn">Записать</button>' +
+    '</div>';
+  }
+
+  function buildConsultSection(id) {
+    return '<div class="m-ctitle">Консультации</div>' +
+      '<div class="m-csub">Записан → провёл → результат. Отсюда собирается план продаж; ' +
+        'оплаты живут в разделе «Оплаты».</div>' +
+      consultAddForm() +
+      '<div id="cns-body" class="cns-wrap">' +
+        (CONSULT[id] ? consultBodyHtml(id) : '<div class="sk-rows"><div class="sk row"></div><div class="sk row"></div></div>') +
+      '</div>';
+  }
+
+  function consultPatch(id, cid, patch) {
+    api('/admin/api/consultations/' + cid, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }).then(function () { loadConsult(id, true); })
+      .catch(function () { showToast('Не удалось сохранить'); });
+  }
+
+  function bindConsultRows(id, host) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-act]'), function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+        if (act === 'del') {
+          api('/admin/api/consultations/' + cid, { method: 'DELETE' })
+            .then(function () { loadConsult(id, true); })
+            .catch(function () { showToast('Не удалось удалить'); });
+        } else if (act === 'held' || act === 'no_show' || act === 'canceled') {
+          consultPatch(id, cid, { status: act });
+        } else if (act === 'thinking' || act === 'declined') {
+          consultPatch(id, cid, { result: act });
+        }
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-amount]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var cid = inp.getAttribute('data-amount');
+        var n = parseInt(inp.value.replace(/\D/g, ''), 10);
+        consultPatch(id, cid, { amount_rub: isNaN(n) ? 0 : n });
+      });
+    });
+  }
+
+  function wireConsultSection(id) {
+    loadConsult(id);
+    // Заполняем «кто ведёт» живыми сотрудниками. По умолчанию — Лиана: сейчас
+    // консультации ведёт она; появятся диагносты — выберут их, и напоминание уйдёт им.
+    var lead = el('cns-lead');
+    if (lead) fetchPeople(function (people) {
+      if (!lead || lead.options.length > 1) return;
+      (people || []).forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p.id; o.textContent = p.name || p.login;
+        if (/лиан/i.test(p.name || '')) o.selected = true;
+        lead.appendChild(o);
+      });
+    });
+    var btn = el('cns-add-btn');
+    if (btn) btn.addEventListener('click', function () {
+      var date = el('cns-date'), time = el('cns-time'), lead = el('cns-lead'), note = el('cns-note');
+      var body = {};
+      if (date && date.value) {
+        var t = (time && time.value) ? time.value : '12:00';   // без времени — полдень
+        var dt = new Date(date.value + 'T' + t);
+        if (!isNaN(dt)) body.scheduled_at = dt.toISOString();
+      }
+      if (lead && lead.value) body.lead_user_id = parseInt(lead.value, 10);
+      if (note && note.value.trim()) body.note = note.value.trim();
+      btn.disabled = true;
+      api('/admin/api/leads/' + id + '/consultations', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function () {
+        btn.disabled = false;
+        if (date) date.value = ''; if (time) time.value = ''; if (note) note.value = '';
+        loadConsult(id, true);
+      }).catch(function () { btn.disabled = false; showToast('Не удалось записать'); });
+    });
+  }
+
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
@@ -25177,6 +25546,24 @@
     });
     var exr = el('ex-refresh');
     if (exr) exr.addEventListener('click', function () { loadCsca(id, true); });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-csca-open]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        b.disabled = true; b.style.opacity = '.55';
+        var days = parseInt(b.getAttribute('data-days'), 10) || 0;
+        api('/admin/api/leads/' + id + '/csca/access', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: b.getAttribute('data-csca-open'), days: days }),
+        }).then(function (r) {
+          if (CSCA[id] && r.access) CSCA[id].access = r.access;
+          if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
+          showToast(days ? (days === 30 ? 'Открыт на месяц' : 'Открыт на год') : 'Доступ закрыт');
+        }).catch(function (e) {
+          b.disabled = false; b.style.opacity = '';
+          if (e.message !== '403') showToast('Тренажер не ответил, попробуйте еще раз');
+        });
+      });
+    });
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
