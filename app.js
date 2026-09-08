@@ -74,6 +74,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
+    myboard: null, boardWho: 'mine',
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -2450,7 +2451,7 @@
           state.guideOn = false; state.guideSkip = true;
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
-          state.myweek = null; state.teamWeek = null; state.teamWho = null;
+          state.myweek = null; state.myboard = null; state.teamWeek = null; state.teamWho = null;
           state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
           saveUi();
           renderTopbar(); renderHead(); renderView();
@@ -4762,7 +4763,7 @@
     var row = btn.closest ? btn.closest('.trow') : null;
     if (row) row.classList.add('done');
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
-      state.tasks = null; state.myweek = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       setTimeout(renderView, 420);
     }, function () {
@@ -4780,7 +4781,7 @@
     var id = +b.getAttribute('data-submit');
     b.disabled = true;
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'review' }, function () {
-      state.tasks = null; state.myweek = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       showToast('Сдана на проверку');
       renderView();
@@ -4792,7 +4793,7 @@
     btn.disabled = true;
     apiSend('/admin/api/tasks/' + id, 'PATCH',
             { due_at: new Date(isoDay(0) + 'T23:59:59').toISOString() }, function () {
-      state.tasks = null; state.myweek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
       renderView();
       showToast('Перенес на сегодня');
     }, function () { btn.disabled = false; showToast('Не перенеслось — проверь сеть'); });
@@ -5051,7 +5052,7 @@
 
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
-    state.myweek = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
+    state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -5402,11 +5403,187 @@
     });
   }
 
+
+  /* ── Доска: мои задачи по статусам (Павел 08.09.2026, «как в битриксе») ──────
+     Четыре колонки и есть статусы задачи: поставлена, в работе, на приемке,
+     сделано. Перетащил карточку в колонку — статус поменялся, правила те же,
+     что у кнопок в карточке: сдать можно только с результатом (откроется
+     карточка), принять — только постановщик. Второй режим «Выдал» — то, что я
+     поручил другим: тут перетаскивание только принять из приемки. */
+  var BOARD_COLS = [
+    ['todo', 'Поставлена', ['wait', 'return', 'block']],
+    ['doing', 'В работе', ['doing']],
+    ['review', 'На приемке', ['review']],
+    ['done', 'Сделано', ['done']],
+  ];
+  function loadMyBoard() {
+    state.tasksLoading = true;
+    Promise.all([
+      api('/admin/api/tasks?view=week&scope=my&shift=0' + deptQ()),
+      api('/admin/api/tasks?view=later&scope=my' + deptQ()),
+      api('/admin/api/tasks?view=open&scope=author'),
+      api('/admin/api/tasks?view=review&scope=author'),
+      api('/admin/api/tasks?view=done&scope=author&period=week&shift=0'),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      var seen = {};
+      function uniq(list) {
+        return list.filter(function (t) { if (seen[t.id]) return false; seen[t.id] = 1; return true; });
+      }
+      var me = rs[0] ? rs[0].me : state.taskMe;
+      state.taskMe = me || state.taskMe;
+      var mine = uniq(((rs[0] && rs[0].tasks) || []).concat((rs[1] && rs[1].tasks) || []))
+        .filter(function (t) { return !t.is_goal && t.status !== 'cancel'; });
+      seen = {};
+      var gave = uniq(((rs[2] && rs[2].tasks) || []).concat((rs[3] && rs[3].tasks) || [], (rs[4] && rs[4].tasks) || []))
+        .filter(function (t) { return !t.is_goal && t.status !== 'cancel' && t.assignee_id !== state.taskMe; });
+      state.myboard = { mine: mine, gave: gave };
+      if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.myboard = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  function boardCard(t, gave) {
+    var due = dueLabel(t);
+    var chip = t.status === 'return' ? '<span class="tb-chip ret">вернули</span>'
+      : t.status === 'block' ? '<span class="tb-chip blk">заблокирована</span>'
+      : t.important ? '<span class="tb-chip imp">важная</span>' : '';
+    return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
+      '<div class="tb-title">' + esc(t.title) + '</div>' +
+      (t.client_name ? '<div class="tb-who">' + esc(t.client_name) + '</div>' : '') +
+      (gave && t.assignee_name ? '<div class="tb-who">' + esc(t.assignee_name) + '</div>' : '') +
+      '<div class="kb-meta">' + chip +
+        (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
+      '</div></div>';
+  }
+  function renderMyBoard(view) {
+    if (state.myboard === null) { view.innerHTML = dashSkeleton(); loadMyBoard(); return; }
+    if (state.myboard === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить доску. Обнови страницу.</div></div>';
+      return;
+    }
+    var gave = state.boardWho === 'gave';
+    var list = gave ? state.myboard.gave : state.myboard.mine;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
+    var order = function (a, b) {
+      if (!!a.overdue !== !!b.overdue) return a.overdue ? -1 : 1;
+      if (!a.due_at || !b.due_at) return a.due_at ? -1 : b.due_at ? 1 : 0;
+      return new Date(a.due_at) - new Date(b.due_at);
+    };
+    var cols = BOARD_COLS.map(function (c) {
+      var items = list.filter(function (t) { return c[2].indexOf(t.status) !== -1; }).sort(order);
+      return '<div class="kb-col tb-col" data-col="' + c[0] + '">' +
+        '<div class="kb-head"><span class="kb-title">' + c[1] + '</span><span class="kb-n num">' + (items.length || '') + '</span></div>' +
+        '<div class="kb-cards">' + (items.length ? items.map(function (t) { return boardCard(t, gave); }).join('')
+          : '<div class="tb-empty">' + (c[0] === 'done' ? 'На этой неделе пока ничего' : 'Пусто') + '</div>') + '</div>' +
+      '</div>';
+    }).join('');
+    var whoSeg = '<div class="pay-seg tb-who-seg">' +
+      '<button type="button" class="' + (gave ? '' : 'on') + '" data-boardwho="mine">Мои</button>' +
+      '<button type="button" class="' + (gave ? 'on' : '') + '" data-boardwho="gave">Выдал другим</button></div>';
+    var hint = gave
+      ? 'Что я поручил. Из «На приемке» в «Сделано» — принять; вернуть с комментарием — в карточке.'
+      : 'Тащи карточку между колонками. Сдать — только с результатом, откроется карточка; «Сделано» ставит постановщик.';
+    view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
+      '<div class="tb-hint">' + hint + '</div>' +
+      '<div class="kb-wrap tb-wrap">' + cols + '</div>';
+    wirePlanMode(view); wireDeptChips(view);
+    var qi = el('tsk-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-boardwho]'), function (b) {
+      b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); renderView(); });
+    });
+    wireBoardDrag(view, list, gave);
+  }
+  function wireBoardDrag(view, list, gave) {
+    var byId = {};
+    list.forEach(function (t) { byId[t.id] = t; });
+    var dragging = null;
+    var after = function () {
+      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+      loadTaskSummary();
+      renderView();
+    };
+    var move = function (t, to, okText) {
+      apiSend('/admin/api/tasks/' + t.id + '/status', 'POST', { status: to, text: '' }, function () {
+        showToast(okText);
+        after();
+      }, function (code, e) {
+        showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                  (code === 403 ? 'Это может только тот, кто поставил задачу' : 'Не получилось'));
+      });
+    };
+    // Куда можно тащить и что при этом случится. null — нельзя, строка — почему.
+    var drop = function (t, col) {
+      var mineTask = t.assignee_id === state.taskMe, author = t.author_id === state.taskMe;
+      if (gave) {
+        if (col === 'done') {
+          if (t.status === 'review') return function () { move(t, 'done', 'Задача принята'); };
+          return 'Принять можно то, что сдано на приемку';
+        }
+        if (col === 'todo' && t.status === 'review') {
+          return function () { openTask(t.id); showToast('Вернуть — с комментарием, в карточке'); };
+        }
+        return 'В работу берет и сдает исполнитель';
+      }
+      if (col === 'doing') return function () { move(t, 'doing', 'В работе'); };
+      if (col === 'todo') {
+        if (t.status === 'review' && !author) return 'Сданное снимает с приемки постановщик';
+        return function () { move(t, 'wait', 'Отложена: снова «поставлена»'); };
+      }
+      if (col === 'review') {
+        if (author) return 'Свою задачу закрываешь сразу — тащи в «Сделано»';
+        return function () { openTask(t.id); showToast('Сдать — с результатом: напиши, что сделано'); };
+      }
+      if (col === 'done') {
+        if (author || !mineTask) return function () { move(t, 'done', 'Сделано'); };
+        return 'Сделано ставит тот, кто поставил задачу: сдай на приемку';
+      }
+      return null;
+    };
+    Array.prototype.forEach.call(view.querySelectorAll('.tb-card'), function (cardEl) {
+      var id = +cardEl.getAttribute('data-id');
+      cardEl.addEventListener('click', function () { openTask(id); });
+      cardEl.addEventListener('dragstart', function (e) {
+        dragging = byId[id]; cardEl.classList.add('dragging');
+        try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+      });
+      cardEl.addEventListener('dragend', function () { dragging = null; cardEl.classList.remove('dragging'); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.tb-col'), function (colEl) {
+      colEl.addEventListener('dragover', function (e) { e.preventDefault(); colEl.classList.add('dragover'); });
+      colEl.addEventListener('dragleave', function () { colEl.classList.remove('dragover'); });
+      colEl.addEventListener('drop', function (e) {
+        e.preventDefault(); colEl.classList.remove('dragover');
+        var t = dragging || byId[+(e.dataTransfer ? e.dataTransfer.getData('text/plain') : 0)];
+        if (!t) return;
+        var col = colEl.getAttribute('data-col');
+        var cur = BOARD_COLS.filter(function (c) { return c[2].indexOf(t.status) !== -1; })[0];
+        if (cur && cur[0] === col) return;
+        var act = drop(t, col);
+        if (typeof act === 'function') act();
+        else if (act) showToast(act);
+      });
+    });
+  }
+
   /* Переключатель вида плана: Сегодня / Неделя / Месяц (Павел 04.09.2026). Один
      экран, три глубины: день — что делаю, неделя — что обещал, месяц — план/факт
      по неделям. Фильтр отдела режет все три. */
   function planModeSeg() {
-    return '<div class="pay-seg plan-seg">' + [['day', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц']].map(function (m) {
+    return '<div class="pay-seg plan-seg">' + [['day', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц'], ['board', 'Доска']].map(function (m) {
       return '<button type="button" class="' + (state.planMode === m[0] ? 'on' : '') + '" data-planmode="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
   }
@@ -5444,6 +5621,7 @@
   }
   function renderMyWeek(view) {
     if (state.planMode === 'month') { renderMyMonth(view); return; }
+    if (state.planMode === 'board') { renderMyBoard(view); return; }
     if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
     if (state.myweek === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
@@ -5896,7 +6074,7 @@
     });
     el('rh-save').addEventListener('click', function () {
       apiSend('/admin/api/rhythm/schedule', 'PUT', { schedule: s }, function (r) {
-        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null;
+        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null; state.myboard = null;
         showToast('Сроки сохранены'); renderView();
       }, function () { showToast('Не удалось сохранить сроки'); });
     });
@@ -6174,7 +6352,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.mymonth = null; state.teamStats = null;
+        state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null;
         saveUi(); renderHead(); renderView();
       });
     });
@@ -6580,7 +6758,7 @@
       }).then(function () {
         close();
         showToast(action === 'accept' ? (period === 'week' ? 'Неделя принята' : 'Отчет принят') : 'Вернул на доработку');
-        state.teamWeek = null; state.myweek = null;
+        state.teamWeek = null; state.myweek = null; state.myboard = null;
         if (after) after(); else renderView();
       }).catch(function (e) {
         el('rv-err').textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить';
@@ -7314,7 +7492,7 @@
           wB.parentNode.replaceChild(box, wB);
           var save = function (patch, ok) {
             apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
-              state.tasks = null; state.myweek = null;
+              state.tasks = null; state.myweek = null; state.myboard = null;
               showToast(ok);
             }, function () { showToast('Не получилось поменять роли'); });
           };
