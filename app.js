@@ -74,6 +74,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
+    myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -2468,7 +2469,7 @@
           state.guideOn = false; state.guideSkip = true;
           state.taskSeg = t.getAttribute('data-tseg');
           state.tasks = null;
-          state.myweek = null; state.teamWeek = null; state.teamWho = null;
+          state.myweek = null; state.myboard = null; state.teamWeek = null; state.teamWho = null;
           state.taskWho = null;   // фильтр по человеку живет ровно до смены вкладки
           saveUi();
           renderTopbar(); renderHead(); renderView();
@@ -4700,6 +4701,9 @@
     stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
     goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
     team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'у кого как идет неделя: собрана, сделано, застряло' },
+    // Записи встреч (Fathom и загруженные протоколы) и что с каждой стало: до
+    // 08.09.2026 черновики жили только за ссылкой из бота (Павел: «не могу найти»).
+    meet:  { label: 'Встречи', view: 'meetings', scope: 'all', cap: 'tasks_all', hint: 'все записи встреч: черновики задач, консультации в карточках, что не разобралось' },
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
@@ -4781,7 +4785,7 @@
     var row = btn.closest ? btn.closest('.trow') : null;
     if (row) row.classList.add('done');
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
-      state.tasks = null; state.myweek = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       setTimeout(renderView, 420);
     }, function () {
@@ -4799,7 +4803,7 @@
     var id = +b.getAttribute('data-submit');
     b.disabled = true;
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'review' }, function () {
-      state.tasks = null; state.myweek = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       showToast('Сдана на проверку');
       renderView();
@@ -4811,7 +4815,7 @@
     btn.disabled = true;
     apiSend('/admin/api/tasks/' + id, 'PATCH',
             { due_at: new Date(isoDay(0) + 'T23:59:59').toISOString() }, function () {
-      state.tasks = null; state.myweek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
       renderView();
       showToast('Перенес на сегодня');
     }, function () { btn.disabled = false; showToast('Не перенеслось — проверь сеть'); });
@@ -4902,6 +4906,7 @@
     var v = TASK_SEGS[taskSeg()].view;
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
+    if (v === 'meetings') { renderMeetings(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
     if (state.tasks === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
@@ -5070,7 +5075,7 @@
 
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
-    state.myweek = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
+    state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -5421,11 +5426,352 @@
     });
   }
 
+
+
+  /* ── Встречи: журнал записей и что с каждой стало ───────────────────────────
+     Одна строка на запись: когда, что, кто вел, и справа состояние-действие —
+     «разобрать» (черновик с числом целей), «задачи заведены», «консультация:
+     ученик» (в карточку), «не разобралась: причина» (с ссылкой на запись). */
+  function loadMeetLog() {
+    api('/admin/api/meetings/log?days=45').then(function (r) {
+      state.meetLog = (r && r.meetings) || [];
+      if (state.page === 'tasks') renderView();
+    }).catch(function () { state.meetLog = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function meetRow(m) {
+    var kind = m.kind === 'client' ? 'консультация' : m.kind === 'team' ? 'рабочая' : m.kind === 'manual' ? 'протокол' : 'встреча';
+    var right = '', cls = '';
+    if (m.state === 'draft') {
+      // Тихая кнопка: черновиков в списке много, синяя на каждой строке = «все важно».
+      right = '<button class="bp ghost sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
+        (m.goals ? ' <span class="num">' + m.goals + '</span>' : '') + '</button>';
+    } else if (m.state === 'applied') {
+      right = '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
+    } else if (m.state === 'call') {
+      right = '<button class="qchip" data-mcard="' + esc(m.session_id || '') + '">' + ic('card', 13) +
+        (m.client_name ? esc(m.client_name) : 'карточка ученика') + '</button>';
+      cls = ' is-call';
+    } else if (m.state === 'failed') {
+      right = '<span class="sev st-wait" title="' + esc(m.error || '') + '">' + esc(m.error || 'не разобралась') + '</span>';
+    } else if (m.state === 'cancel') {
+      right = '<span class="sev n-off">разбор снят</span>';
+    } else {
+      right = '<span class="sev n-off">разбирается</span>';
+    }
+    // Запись — кнопкой, а не словом в подписи: за ней ходят чаще всего (Павел 08.09.2026).
+    var rec = m.url ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>' : '';
+    var tasks = m.tasks || [];
+    var open = !!state.meetOpen[m.key];
+    var fold = tasks.length
+      ? '<button class="mt-fold' + (open ? ' open' : '') + '" data-mfold="' + esc(m.key) + '">' + ic('go', 12) +
+        tasks.length + ' ' + plural(tasks.length, 'задача', 'задачи', 'задач') + '</button>' : '';
+    var list = open && tasks.length
+      ? '<div class="mt-tasks">' + tasks.map(function (t) {
+          var due = dueLabel(t);
+          return '<button class="mt-task' + (t.is_goal ? ' goal' : '') + (t.parent_id ? ' step' : '') + '" data-mtask="' + t.id + '">' +
+            '<span class="sev mini ' + (t.status === 'done' ? 'st-done' : t.status === 'doing' ? 'st-doing' : t.status === 'review' ? 'st-review' : t.status === 'return' ? 'st-return' : t.status === 'block' ? 'st-block' : 'st-wait') + '">' +
+              (t.is_goal ? 'цель' : PCHAT_STATUS_RU[t.status] || t.status) + '</span>' +
+            '<span class="mt-task-t">' + esc(t.title) + '</span>' +
+            (t.assignee_name ? '<span class="mt-task-who">' + esc(t.assignee_name) + '</span>' : '') +
+            (t.is_goal || !t.due_at ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
+          '</button>';
+        }).join('') + '</div>' : '';
+    return '<div class="trow mt-row' + cls + (open ? ' open' : '') + '">' +
+      '<div class="mt-when num">' + fmtTime(m.at) + '</div>' +
+      '<div class="mt-main"><button class="mt-title" data-mname="' + esc(m.key) + '" title="Переименовать">' + esc(m.title || 'Без названия') + '</button>' +
+        '<div class="mt-sub">' + kind + (m.by ? ' · ' + esc(m.by) : '') + '</div></div>' +
+      '<div class="mt-right">' + fold + rec + right + '</div>' +
+    '</div>' + list;
+  }
+  function renderMeetings(view) {
+    if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
+    if (state.meetLog === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
+      return;
+    }
+    var list = state.meetLog;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) list = list.filter(function (m) { return ((m.title || '') + ' ' + (m.client_name || '') + ' ' + (m.by || '')).toLowerCase().indexOf(q) !== -1; });
+    var days = {}, order = [];
+    list.forEach(function (m) {
+      var k = m.at ? m.at.slice(0, 10) : '';
+      if (!days[k]) { days[k] = []; order.push(k); }
+      days[k].push(m);
+    });
+    var drafts = state.meetLog.filter(function (m) { return m.state === 'draft'; }).length;
+    var body = order.length ? order.map(function (k) {
+      return '<div class="mt-day">' + esc(dayLabel(days[k][0].at)) + '</div>' + days[k].map(meetRow).join('');
+    }).join('') : '<div class="empty">За полтора месяца записей нет. Fathom кладет их сюда сам, протокол можно загрузить кнопкой.</div>';
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти встречу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        (drafts ? '<span class="mt-drafts">' + drafts + ' ' + plural(drafts, 'черновик ждет', 'черновика ждут', 'черновиков ждут') + '</span>' : '') +
+        '<button class="bp ghost sm" id="mt-upload">' + ic('plus', 14) + 'Загрузить протокол</button>' +
+      '</div>' +
+      '<div class="list-body">' + body + '</div></div>';
+    var qi = el('tsk-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    }
+    if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
+      b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mcard]'), function (b) {
+      b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mfold]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-mfold');
+        state.meetOpen[k] = !state.meetOpen[k];
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mtask]'), function (b) {
+      b.addEventListener('click', function () { openTask(+b.getAttribute('data-mtask')); });
+    });
+    // Название пишет человек: Fathom отдает все записи как «Zoom Meeting East Side».
+    // Клик по названию — поле на его месте; Enter или уход из поля сохраняет, Esc отменяет.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mname]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-mname');
+        var m = (state.meetLog || []).filter(function (x) { return x.key === key; })[0];
+        if (!m) return;
+        var inp = document.createElement('input');
+        inp.className = 'al-in sm mt-title-in';
+        inp.value = m.title || '';
+        inp.maxLength = 200;
+        inp.placeholder = 'Как назвать встречу';
+        b.replaceWith(inp);
+        inp.focus(); inp.select();
+        var done = false;
+        var finish = function (save) {
+          if (done) return; done = true;
+          var v = (inp.value || '').trim();
+          if (!save || !v || v === m.title) { renderView(); return; }
+          apiSend('/admin/api/meetings/log/' + encodeURIComponent(key), 'PATCH', { title: v }, function () {
+            m.title = v; renderView();
+          }, function (code, e) {
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не сохранилось — проверь сеть');
+            renderView();
+          });
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+        inp.addEventListener('blur', function () { finish(true); });
+      });
+    });
+  }
+
+  /* ── Доска: мои задачи по статусам (Павел 08.09.2026, «как в битриксе») ──────
+     Четыре колонки и есть статусы задачи: поставлена, в работе, на приемке,
+     сделано. Перетащил карточку в колонку — статус поменялся, правила те же,
+     что у кнопок в карточке: сдать можно только с результатом (откроется
+     карточка), принять — только постановщик. Второй режим «Выдал» — то, что я
+     поручил другим: тут перетаскивание только принять из приемки. */
+  var BOARD_COLS = [
+    ['todo', 'Поставлена', ['wait', 'return', 'block']],
+    ['doing', 'В работе', ['doing']],
+    ['review', 'На приемке', ['review']],
+    ['done', 'Сделано', ['done']],
+  ];
+  function loadMyBoard() {
+    state.tasksLoading = true;
+    Promise.all([
+      api('/admin/api/tasks?view=week&scope=my&shift=0' + deptQ()),
+      api('/admin/api/tasks?view=later&scope=my' + deptQ()),
+      api('/admin/api/tasks?view=open&scope=author' + deptQ()),
+      api('/admin/api/tasks?view=review&scope=author' + deptQ()),
+      api('/admin/api/tasks?view=done&scope=author&period=week&shift=0' + deptQ()),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      var seen = {};
+      function uniq(list) {
+        return list.filter(function (t) { if (seen[t.id]) return false; seen[t.id] = 1; return true; });
+      }
+      var me = rs[0] ? rs[0].me : state.taskMe;
+      state.taskMe = me || state.taskMe;
+      var mine = uniq(((rs[0] && rs[0].tasks) || []).concat((rs[1] && rs[1].tasks) || []))
+        .filter(function (t) { return !t.is_goal && t.status !== 'cancel'; });
+      seen = {};
+      var gave = uniq(((rs[2] && rs[2].tasks) || []).concat((rs[3] && rs[3].tasks) || [], (rs[4] && rs[4].tasks) || []))
+        .filter(function (t) { return !t.is_goal && t.status !== 'cancel' && t.assignee_id !== state.taskMe; });
+      state.myboard = { mine: mine, gave: gave };
+      if (state.page === 'tasks') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.myboard = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  function boardCard(t, gave) {
+    var due = dueLabel(t);
+    // Статусные чипы — системные .sev (вернули красным, блок амбером, как в списках);
+    // важность — тем же значком, что в строке дня и недели.
+    var chip = t.status === 'return' ? '<span class="sev mini st-return">вернули</span>'
+      : t.status === 'block' ? '<span class="sev mini st-block">заблокирована</span>' : '';
+    return '<div class="kb-card tb-card' + (t.overdue ? ' over' : '') + '" draggable="true" data-id="' + t.id + '">' +
+      '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
+      (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
+      (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
+      '<div class="kb-meta">' + chip +
+        (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
+      '</div></div>';
+  }
+  function renderMyBoard(view) {
+    if (state.myboard === null) { view.innerHTML = dashSkeleton(); loadMyBoard(); return; }
+    if (state.myboard === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить доску. Обнови страницу.</div></div>';
+      return;
+    }
+    var gave = state.boardWho === 'gave';
+    var list = gave ? state.myboard.gave : state.myboard.mine;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
+    var order = function (a, b) {
+      if (!!a.overdue !== !!b.overdue) return a.overdue ? -1 : 1;
+      if (!a.due_at || !b.due_at) return a.due_at ? -1 : b.due_at ? 1 : 0;
+      return new Date(a.due_at) - new Date(b.due_at);
+    };
+    var cols = BOARD_COLS.map(function (c) {
+      var items = list.filter(function (t) { return c[2].indexOf(t.status) !== -1; }).sort(order);
+      return '<div class="kb-col tb-col" data-col="' + c[0] + '">' +
+        '<div class="kb-head"><span class="kb-title">' + c[1] + '</span><span class="kb-n num">' + (items.length || '') + '</span></div>' +
+        '<div class="kb-cards">' + (items.length ? items.map(function (t) { return boardCard(t, gave); }).join('')
+          : '<div class="tb-empty">' + (c[0] === 'done' ? 'На этой неделе пока ничего' : 'Пусто') + '</div>') + '</div>' +
+      '</div>';
+    }).join('');
+    var whoSeg = '<div class="pay-seg tb-who-seg">' +
+      '<button type="button" class="' + (gave ? '' : 'on') + '" data-boardwho="mine">Мои</button>' +
+      '<button type="button" class="' + (gave ? 'on' : '') + '" data-boardwho="gave">Выдал другим</button></div>';
+    var hint = gave
+      ? 'Что я поручил. Из «На приемке» в «Сделано» — принять; вернуть с комментарием — в карточке.'
+      : 'Тащи карточку между колонками. Сдать — только с результатом, откроется карточка; «Сделано» ставит постановщик.';
+    var hintM = gave ? 'Что я поручил. Принять или вернуть — в карточке задачи.'
+      : 'Колонки — статусы. Поменять статус — в карточке задачи.';
+    var howOff = false;
+    try { howOff = localStorage.getItem('tb_how_off') === '1'; } catch (e) {}
+    var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
+      '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
+      '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
+      how +
+      '<div class="kb-wrap tb-wrap">' + cols + '</div>';
+    wirePlanMode(view); wireDeptChips(view);
+    if (el('tb-how-x')) el('tb-how-x').addEventListener('click', function () {
+      try { localStorage.setItem('tb_how_off', '1'); } catch (e) {}
+      renderView();
+    });
+    var qi = el('tsk-q');
+    if (qi) {
+      qi.addEventListener('input', function () {
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+      });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-boardwho]'), function (b) {
+      b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); renderView(); });
+    });
+    wireBoardDrag(view, list, gave);
+  }
+  function wireBoardDrag(view, list, gave) {
+    var byId = {};
+    list.forEach(function (t) { byId[t.id] = t; });
+    var dragging = null;
+    var after = function () {
+      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+      loadTaskSummary();
+      renderView();
+    };
+    var move = function (t, to, okText) {
+      apiSend('/admin/api/tasks/' + t.id + '/status', 'POST', { status: to, text: '' }, function () {
+        showToast(okText);
+        after();
+      }, function (code, e) {
+        showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                  (code === 403 ? 'Это может только тот, кто поставил задачу' : 'Не получилось'));
+      });
+    };
+    // Куда можно тащить и что при этом случится. null — нельзя, строка — почему.
+    var drop = function (t, col) {
+      var mineTask = t.assignee_id === state.taskMe, author = t.author_id === state.taskMe;
+      if (gave) {
+        if (col === 'done') {
+          if (t.status === 'review') return function () { move(t, 'done', 'Задача принята'); };
+          return 'Принять можно то, что сдано на приемку';
+        }
+        if (col === 'todo' && t.status === 'review') {
+          return function () { openTask(t.id); showToast('Вернуть — с комментарием, в карточке'); };
+        }
+        return 'В работу берет и сдает исполнитель';
+      }
+      if (col === 'doing') return function () { move(t, 'doing', 'В работе'); };
+      if (col === 'todo') {
+        if (t.status === 'review' && !author) return 'Сданное снимает с приемки постановщик';
+        return function () { move(t, 'wait', 'Отложена: снова «поставлена»'); };
+      }
+      if (col === 'review') {
+        if (author) return 'Свою задачу закрываешь сразу — тащи в «Сделано»';
+        return function () { openTask(t.id); showToast('Сдать — с результатом: напиши, что сделано'); };
+      }
+      if (col === 'done') {
+        if (author || !mineTask) return function () { move(t, 'done', 'Сделано'); };
+        return 'Сделано ставит тот, кто поставил задачу: сдай на приемку';
+      }
+      return null;
+    };
+    Array.prototype.forEach.call(view.querySelectorAll('.tb-card'), function (cardEl) {
+      var id = +cardEl.getAttribute('data-id');
+      cardEl.addEventListener('click', function () { openTask(id); });
+      cardEl.addEventListener('dragstart', function (e) {
+        dragging = byId[id]; cardEl.classList.add('dragging');
+        try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch (err) {}
+      });
+      cardEl.addEventListener('dragend', function () { dragging = null; cardEl.classList.remove('dragging'); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.tb-col'), function (colEl) {
+      // Подсвечиваем только колонку, куда бросить можно: обещать зону, а потом
+      // отказать тостом — хуже, чем сразу показать «сюда нельзя».
+      colEl.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        var col = colEl.getAttribute('data-col');
+        var ok = dragging && typeof drop(dragging, col) === 'function';
+        colEl.classList.toggle('dragover', !!ok);
+        colEl.classList.toggle('nodrop', !ok);
+        try { e.dataTransfer.dropEffect = ok ? 'move' : 'none'; } catch (err) {}
+      });
+      colEl.addEventListener('dragleave', function () { colEl.classList.remove('dragover'); colEl.classList.remove('nodrop'); });
+      colEl.addEventListener('drop', function (e) {
+        e.preventDefault(); colEl.classList.remove('dragover'); colEl.classList.remove('nodrop');
+        var t = dragging || byId[+(e.dataTransfer ? e.dataTransfer.getData('text/plain') : 0)];
+        if (!t) return;
+        var col = colEl.getAttribute('data-col');
+        var cur = BOARD_COLS.filter(function (c) { return c[2].indexOf(t.status) !== -1; })[0];
+        if (cur && cur[0] === col) return;
+        var act = drop(t, col);
+        if (typeof act === 'function') act();
+        else if (act) showToast(act);
+      });
+    });
+  }
+
   /* Переключатель вида плана: Сегодня / Неделя / Месяц (Павел 04.09.2026). Один
      экран, три глубины: день — что делаю, неделя — что обещал, месяц — план/факт
      по неделям. Фильтр отдела режет все три. */
   function planModeSeg() {
-    return '<div class="pay-seg plan-seg">' + [['day', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц']].map(function (m) {
+    return '<div class="pay-seg plan-seg">' + [['day', 'Сегодня'], ['week', 'Неделя'], ['month', 'Месяц'], ['board', 'Доска']].map(function (m) {
       return '<button type="button" class="' + (state.planMode === m[0] ? 'on' : '') + '" data-planmode="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
   }
@@ -5463,6 +5809,7 @@
   }
   function renderMyWeek(view) {
     if (state.planMode === 'month') { renderMyMonth(view); return; }
+    if (state.planMode === 'board') { renderMyBoard(view); return; }
     if (state.myweek === null) { view.innerHTML = dashSkeleton(); loadMyWeek(); return; }
     if (state.myweek === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
@@ -5915,7 +6262,7 @@
     });
     el('rh-save').addEventListener('click', function () {
       apiSend('/admin/api/rhythm/schedule', 'PUT', { schedule: s }, function (r) {
-        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null;
+        state.rhythmSched = (r && r.schedule) || s; state.teamWeek = null; state.myweek = null; state.myboard = null;
         showToast('Сроки сохранены'); renderView();
       }, function () { showToast('Не удалось сохранить сроки'); });
     });
@@ -6193,7 +6540,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.mymonth = null; state.teamStats = null;
+        state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null;
         saveUi(); renderHead(); renderView();
       });
     });
@@ -6599,7 +6946,7 @@
       }).then(function () {
         close();
         showToast(action === 'accept' ? (period === 'week' ? 'Неделя принята' : 'Отчет принят') : 'Вернул на доработку');
-        state.teamWeek = null; state.myweek = null;
+        state.teamWeek = null; state.myweek = null; state.myboard = null;
         if (after) after(); else renderView();
       }).catch(function (e) {
         el('rv-err').textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить';
@@ -7333,7 +7680,7 @@
           wB.parentNode.replaceChild(box, wB);
           var save = function (patch, ok) {
             apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
-              state.tasks = null; state.myweek = null;
+              state.tasks = null; state.myweek = null; state.myboard = null;
               showToast(ok);
             }, function () { showToast('Не получилось поменять роли'); });
           };
