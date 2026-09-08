@@ -5423,7 +5423,8 @@
     var kind = m.kind === 'client' ? 'консультация' : m.kind === 'team' ? 'рабочая' : m.kind === 'manual' ? 'протокол' : 'встреча';
     var right = '', cls = '';
     if (m.state === 'draft') {
-      right = '<button class="bp sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
+      // Тихая кнопка: черновиков в списке много, синяя на каждой строке = «все важно».
+      right = '<button class="bp ghost sm" data-mopen="' + m.import_id + '">' + ic('task', 13) + 'Разобрать' +
         (m.goals ? ' <span class="num">' + m.goals + '</span>' : '') + '</button>';
     } else if (m.state === 'applied') {
       right = '<button class="qchip" data-mopen="' + m.import_id + '"><span class="sev st-done">задачи заведены</span></button>';
