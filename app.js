@@ -5797,7 +5797,11 @@
           '<button class="bp" id="nw-send">' + (it && it.sent ? 'Сохранить' : 'Отправить') + '</button>' +
         '</div></div>';
     document.body.appendChild(ov);
-    var close = function () { document.removeEventListener('keydown', onKey, true); ov.remove(); };
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      document.removeEventListener('keydown', onKey, true);
+      ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180);
+    };
     var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
     document.addEventListener('keydown', onKey, true);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
