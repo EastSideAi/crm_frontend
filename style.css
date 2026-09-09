@@ -635,12 +635,13 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:hover { color: var(--ink); }
 .tm-tp-b.on { background: var(--blue); color: #fff; }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
-/* Две группы чипов (темы клиентов и виды уведомлений бота) стоят столбиком: в одну
-   строку с почтой и ролью они не влезают даже на широком экране. */
-.tm-tps { flex: 0 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 220px; max-width: 100%; }
-.tm-row > .tm-i { flex: 1 1 300px; min-width: 260px; }
-.tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-.tm-tps .tm-tp::-webkit-scrollbar { display: none; }
+/* Две группы чипов (темы клиентов и виды уведомлений бота) идут отдельной строкой под
+   именем на всю ширину: в одну строку с почтой и ролью они не влезают, а прятать чипы
+   за прокруткой нельзя — раскладка должна читаться одним взглядом. */
+.tm-row { flex-wrap: wrap; row-gap: 8px; }
+.tm-tps { flex: 1 1 100%; order: 9; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding-left: 54px; }
+@media (max-width: 960px) { .tm-tps { padding-left: 0; } }
 .tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
 .tm-tp.bot svg { flex: none; margin-right: 2px; }
 .tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
