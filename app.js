@@ -3042,6 +3042,8 @@
     });
     var gs = el('tsk-guide-skip');
     if (gs) gs.addEventListener('click', guideExit);
+    var nw = el('nw-new');
+    if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
