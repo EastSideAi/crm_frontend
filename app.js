@@ -6903,10 +6903,10 @@
   }
   function pulseTask(t, when) {
     // Строка задачи внутри колонки: название и тихое время. Клик — карточка.
-    var meta = when ? '<i class="pl-when num">' + esc(when) + '</i>' : '';
+    var meta = [when ? '<i class="num">' + esc(when) + '</i>' : '', t.client_name ? esc(t.client_name) : ''].filter(Boolean).join(' · ');
     return '<button type="button" class="pl-t' + (t.important ? ' imp' : '') + '" data-plt="' + t.id + '" title="' + esc(t.title) + '">' +
-      '<span class="pl-tt">' + esc(t.title) + '</span>' + meta +
-      (t.client_name ? '<span class="pl-cl">' + esc(t.client_name) + '</span>' : '') + '</button>';
+      '<span class="pl-tt">' + esc(t.title) + '</span>' +
+      (meta ? '<span class="pl-meta">' + meta + '</span>' : '') + '</button>';
   }
   function pulseMore(n, shown) {
     return n > shown ? '<span class="pl-more num">и еще ' + (n - shown) + '</span>' : '';
@@ -6996,10 +6996,10 @@
         '</div>';
       }).join('');
     }
-    var idleAll = d.idle || [];
+    var idleAll = d.idle || [], idleN = d.idle_n || idleAll.length;
     var idle = idleAll.length
       ? '<div class="brd-idle"><span class="brd-il">' + (week ? 'Пустая неделя' : 'Без задач и движения') + '</span>' + esc(idleAll.slice(0, 10).join(', ')) +
-        (idleAll.length > 10 ? ' <span class="brd-more num">и еще ' + (idleAll.length - 10) + '</span>' : '') + '</div>'
+        (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div>'
       : '';
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
       '<div class="card listcard pl-card">' + strip +
