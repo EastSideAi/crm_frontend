@@ -8505,8 +8505,9 @@
           '<div class="mi-line">' +
             // Заголовок — textarea, а не input: формулировку надо видеть целиком,
             // а на телефоне в одну строку влезает треть. Высота растет по тексту.
-            '<textarea class="al-in mi-title" rows="1" maxlength="200"' +
-              (made ? ' disabled' : '') + '>' + esc(it.title || '') + '</textarea>' +
+            // Заведенный пункт остается правимым (Павел, 09.09.2026): название,
+            // исполнитель и срок уходят в саму задачу при «Сохранить правки».
+            '<textarea class="al-in mi-title" rows="1" maxlength="200">' + esc(it.title || '') + '</textarea>' +
             (made
               ? '<a class="mi-made" href="#task/' + it.task_id + '">' + ic('check', 13) + 'в задачнике</a>'
               : '<button type="button" class="mi-skip" title="' +
@@ -8519,14 +8520,13 @@
               ? '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
                   goalOpts(it.existing_goal_id) + '</select></span>'
               : '') +
-            '<span class="al-selwrap mi-who"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
+            '<span class="al-selwrap mi-who"><select class="al-sel sm">' +
               whoOpts(it.assignee_id) + '</select></span>' +
             (si === null
               ? '<span class="al-selwrap mi-dept"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
                   deptOpts(it.dept || '') + '</select></span>'
               : '') +
-            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '"' +
-              (made ? ' disabled' : '') + '>' +
+            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '">' +
           '</div>' +
         '</div>';
       };
@@ -8612,11 +8612,14 @@
         var made = card.querySelectorAll('.mi-item.made').length;
         count.textContent = n
           ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
-          : !off ? 'Все пункты уже в задачнике'
+          : !off ? (made ? 'Все пункты в задачнике. Правки названия, исполнителя и срока уйдут в задачи' : 'Все пункты уже в задачнике')
           : made ? 'Заведено все, кроме снятого'
           : 'Все пункты сняты';
-        save.disabled = !n;
-        save.classList.toggle('off', !n);
+        // Новых пунктов нет, но заведенные можно править — кнопка остается,
+        // только называется по делу.
+        save.disabled = !n && !made;
+        save.classList.toggle('off', !n && !made);
+        save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить правки';
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
@@ -8688,15 +8691,17 @@
         // из трех файлов — это три независимых разбора, и упавший третий не
         // должен отменять два заведенных.
         var boxes = Array.prototype.slice.call(card.querySelectorAll('.mi-imp'));
-        var fresh = [], total = 0, broke = false;
+        var fresh = [], total = 0, upd = 0, broke = false;
         var step = function (i) {
           if (i >= boxes.length) {
             state.tasks = null;
             state.taskGoals = null;
             loadTaskSummary();
+            var updTxt = upd ? 'поправил ' + upd + ' ' + plural(upd, 'задачу', 'задачи', 'задач') : '';
             showToast(total
-              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач')
-              : broke ? 'Не получилось завести, попробуй еще раз' : 'Новых задач не было');
+              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач') + (updTxt ? ', ' + updTxt : '')
+              : upd ? updTxt.charAt(0).toUpperCase() + updTxt.slice(1)
+              : broke ? 'Не получилось сохранить, попробуй еще раз' : 'Ничего не изменилось');
             if (state.page === 'tasks') renderView();
             if (fresh.length === boxes.length) draw(fresh, people, goals);
             else { save.disabled = false; save.classList.remove('loading'); }
@@ -8707,6 +8712,7 @@
             { goals: collect(box) },
             function (r) {
               total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
+              upd += (r && r.updated) || 0;
               if (r && r.import) fresh.push(r.import);
               step(i + 1);
             },
