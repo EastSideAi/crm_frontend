@@ -15853,7 +15853,7 @@
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
             (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
           '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
-        tmTopicChips(u) + tmBotChips(u) +
+        '<span class="tm-tps">' + tmTopicChips(u) + tmBotChips(u) + '</span>' +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
