@@ -7981,14 +7981,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nw-card { max-width: 640px; }
 .nw-who { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .nw-who-l { flex: 0 0 44px; padding-top: 7px; font-size: 12px; color: var(--ink-3); }
-.nw-roles { flex: 1 1 auto; flex-wrap: wrap; }
+.nw-roles { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .nw-search { flex: 1 1 200px; }
 .nw-people { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 54px; }
 .nw-people:empty { display: none; }
-.nw-p { background: var(--fill); }
 .nw-none { font-size: 12px; color: var(--ink-3); padding: 4px 0; }
 .nw-sum { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
 .nw-del { margin-right: auto; color: var(--red-ink); }
+.nw-p { background: var(--fill); }
+.nw-p.on { background: var(--blue); }
 @media (max-width: 960px) {
   .nw-item { padding: 14px 14px 16px; }
   .nw-edit { opacity: 1; }

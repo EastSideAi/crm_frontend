@@ -5783,18 +5783,18 @@
           '<label class="al-f"><span class="al-l">Как этим пользоваться</span>' +
             '<textarea id="nw-body" class="al-in al-ta" rows="6" maxlength="4000" placeholder="Простыми словами: где найти, что нажать, что изменилось">' + esc(it ? it.body : '') + '</textarea></label>' +
           '<div class="al-f"><span class="al-l">Кому</span>' +
-            '<div class="nw-who"><span class="nw-who-l">Роли</span><span class="tm-tp nw-roles">' +
-              roles.map(function (r) { return '<button type="button" class="tm-tp-b' + (sel.roles.indexOf(r.id) >= 0 ? ' on' : '') + '" data-nwr="' + esc(r.id) + '">' + esc(r.label) + '</button>'; }).join('') +
+            '<div class="nw-who"><span class="nw-who-l">Роли</span><span class="nw-roles">' +
+              roles.map(function (r) { return '<button type="button" class="tm-tp-b nw-p' + (sel.roles.indexOf(r.id) >= 0 ? ' on' : '') + '" data-nwr="' + esc(r.id) + '">' + esc(r.label) + '</button>'; }).join('') +
             '</span></div>' +
             '<div class="nw-who"><span class="nw-who-l">Люди</span>' +
               '<div class="searchwrap nw-search"><input id="nw-q" class="search" type="search" placeholder="Найти человека" autocomplete="off"></div>' +
               '<div class="nw-people" id="nw-people"></div></div>' +
             '<div class="nw-sum" id="nw-sum"></div></div>' +
         '</div>' +
-        '<div class="al-actions">' +
-          (it && it.sent ? '' : '<button class="bp ghost" id="nw-draft">' + (it ? 'Сохранить черновик' : 'В черновики') + '</button>') +
-          (it ? '<button class="bp ghost nw-del" id="nw-del">Удалить</button>' : '') +
-          '<button class="bp" id="nw-send">' + (it && it.sent ? 'Сохранить' : 'Отправить') + '</button>' +
+        '<div class="al-foot">' +
+          (it ? '<button class="al-cancel nw-del" id="nw-del">Удалить</button>' : '') +
+          (it && it.sent ? '' : '<button class="al-cancel" id="nw-draft">' + (it ? 'Сохранить черновик' : 'В черновики') + '</button>') +
+          '<button class="bp al-save" id="nw-send">' + (it && it.sent ? 'Сохранить' : 'Отправить') + '</button>' +
         '</div></div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -5839,7 +5839,7 @@
     var payload = function () {
       return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users };
     };
-    var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-actions .bp'), function (b) { b.disabled = on; }); };
+    var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-foot button'), function (b) { b.disabled = on; }); };
     var fail = function (e) { busy(false); showToast((e && e.message) || 'Не сохранилось, попробуй еще раз'); };
     var save = function (send) {
       var p = payload();
