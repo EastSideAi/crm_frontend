@@ -641,7 +641,12 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-row { flex-wrap: wrap; row-gap: 8px; }
 .tm-tps { flex: 1 1 100%; order: 9; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
   padding-left: 54px; }
-@media (max-width: 960px) { .tm-tps { padding-left: 0; } }
+@media (max-width: 960px) {
+  .tm-tps { padding-left: 0; }
+  /* Группа шире экрана телефона: листается внутри себя, страницу вбок не тянет. */
+  .tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tm-tps .tm-tp::-webkit-scrollbar { display: none; }
+}
 .tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
 .tm-tp.bot svg { flex: none; margin-right: 2px; }
 .tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
