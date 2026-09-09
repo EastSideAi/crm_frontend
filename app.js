@@ -77,7 +77,8 @@
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     news: null, newsUnread: 0,
-    teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
+    teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
+    pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
     taskWho: null,
@@ -5103,7 +5104,7 @@
 
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
-    state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null;
+    state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null; state.pulse = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -6651,13 +6652,16 @@
      строки по имени, цифры без сравнения людей между собой (planner-research.md,
      §7). Серия — сколько недель подряд закрыто, нейтральная информация. */
   function teamModeSeg() {
-    return '<div class="pay-seg plan-seg">' + [['week', 'Неделя'], ['stats', 'Итоги'], ['reports', 'Отчеты']].map(function (m) {
+    /* День / Неделя / Месяц (Павел 10.09.2026: «непонятно, для чего итоги и
+       отчеты»). Архив закрытых недель остался, но ссылкой из недели, а не
+       вкладкой: это справочник, а не ежедневный экран. */
+    return '<div class="pay-seg plan-seg">' + [['day', 'День'], ['week', 'Неделя'], ['stats', 'Месяц']].map(function (m) {
       return '<button type="button" class="' + (state.teamMode === m[0] ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
   }
   function wireTeamMode(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-teammode]'), function (b) {
-      b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; renderView(); });
+      b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; state.pulse = null; renderView(); });
     });
   }
   /* Сроки недели — договоренность команды, правит cap team, лежит под срезом
@@ -6837,95 +6841,200 @@
     });
   }
   function renderTeamWeek(view) {
+    pulseStop();
+    if (state.teamWho) {
+      // Неделя одного человека — старый экран приемки, он живет за строкой пульса.
+      if (state.teamWeek === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
+      if (state.teamWeek === 'none') {
+        view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
+        return;
+      }
+      renderTeamPerson(view, state.teamWeek); return;
+    }
     if (state.teamMode === 'stats') { renderTeamStats(view); return; }
     if (state.teamMode === 'reports') { renderTeamReports(view); return; }
-    if (state.teamWeek === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
-    if (state.teamWeek === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
-      return;
+    renderPulse(view);
+  }
+
+  /* ── Пульс команды ──────────────────────────────────────────────────────────
+     Три вопроса руководителя (Павел 10.09.2026): кто над чем работает сейчас,
+     кто что сделал сегодня, что на завтра. Строка на человека, три колонки,
+     под именем часы движения. Кто сегодня ничего не двигал — наверху с серой
+     точкой: экран читают ради этого сигнала. Ничего сдавать не нужно, все
+     собирается из движения задач. Сегодняшний день обновляется сам раз в минуту. */
+  function pulseStop() {
+    if (state.pulseTimer) { clearInterval(state.pulseTimer); state.pulseTimer = null; }
+  }
+  function pulseDate() {
+    if (state.teamMode === 'week') {
+      var d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + 7 * wkShift());
+      return zoomYmd(d);
     }
-    var b = state.teamWeek;
-    if (state.teamWho) { renderTeamPerson(view, b); return; }
-
-    var people = (b.people || []).slice();
-    // Сначала исключения: без плана, застряло, просрочено; потом по имени.
-    people.sort(function (x, y) {
-      var xs = (x.plan.state === 'wait' || x.plan.state === 'miss' ? 4 : 0) + (x.stuck ? 2 : 0) + (x.overdue ? 1 : 0);
-      var ys = (y.plan.state === 'wait' || y.plan.state === 'miss' ? 4 : 0) + (y.stuck ? 2 : 0) + (y.overdue ? 1 : 0);
-      return ys - xs || x.name.localeCompare(y.name, 'ru');
+    return state.pulseDate || zoomYmd(new Date());
+  }
+  function loadPulse(silent) {
+    var mode = state.teamMode === 'week' ? 'week' : 'day';
+    var q = '/admin/api/team/pulse?mode=' + mode + '&date=' + pulseDate() + deptQ();
+    if (!silent) state.tasksLoading = true;
+    api(q).then(function (r) {
+      state.tasksLoading = false;
+      if (state.page !== 'tasks' || state.taskSeg !== 'team' || state.teamWho) return;
+      // Тихое обновление: перерисовываем, только если что-то изменилось — иначе
+      // раз в минуту дергается экран, на котором человек ничего не трогал.
+      var next = JSON.stringify(r);
+      if (silent && state.pulse && JSON.stringify(state.pulse) === next) return;
+      state.pulse = r || 'none';
+      renderView();
+    }).catch(function () {
+      state.tasksLoading = false;
+      if (silent) return;
+      state.pulse = 'none';
+      if (state.page === 'tasks') renderView();
     });
-
-    var head = '<div class="trow wk-grid thead"><span class="th">Сотрудник</span>' +
-      '<span class="th">Неделя</span><span class="th">Взял</span><span class="th">Сделано</span>' +
-      '<span class="th">Застряло</span><span class="th">Не взял</span><span class="th">Итог</span></div>';
-    var rows = people.map(function (p) {
-      var pl = WK_PLAN[p.plan.state] || WK_PLAN.wait;
-      var rp = WK_REP[p.report.state] || WK_REP.wait;
-      var repGiven = p.report.state === 'done' || p.report.state === 'late';
-      var rv = RH_REVIEW[(p.report.review || {}).state] || RH_REVIEW.pending;
-      // Приемка — настоящая кнопка, а не чип: это главное действие руководителя
-      // на экране, и оно обязано отличаться от некликабельных чипов рядом.
-      var rvs = (p.report.review || {}).state;
-      var itog = repGiven
-        ? (rvs === 'pending'
-            ? '<button class="qchip wk-accept-btn" data-review="' + p.id + '">' + ic('check', 12) + 'Принять' + chev() + '</button>'
-            : '<button class="rh-rv-btn" data-review="' + p.id + '" title="Открыть неделю">' +
-                '<span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
-        : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
-      var said = (p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '');
-      function n(v, cls, l) {
-        return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>';
-      }
-      return '<div class="trow wk-grid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
-        '<div class="brd-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
-          '<span class="brd-nm">' + esc(p.name) + '<span class="t-sub">' + esc(p.role_label || '') + '</span></span></div>' +
-        '<div class="rh-c" data-l="Неделя"><span class="sev ' + pl.cls + '">' + pl.label + '</span></div>' +
-        n(p.plan_count, '', 'Взял') + n(p.done, 'ok', 'Сделано') + n(p.stuck, 'bad', 'Застряло') + n(p.unplanned, 'bad', 'Не взял') +
-        '<div class="rh-c" data-l="Итог">' + itog + '</div>' + said +
+  }
+  function pulseNav(d) {
+    var isToday = !!d.is_today || !!d.is_current;
+    var back = state.teamMode === 'week' ? wkNav(d.label) : '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="pl-prev" title="Предыдущий день">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(d.label || '') + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="pl-next" title="Следующий день">' + ic('go', 15) + '</button>' +
+      (isToday ? '' : '<button class="qchip" id="pl-today">Сегодня</button>') + '</div>';
+    return back;
+  }
+  function pulseTask(t, when) {
+    // Строка задачи внутри колонки: название и тихое время. Клик — карточка.
+    var meta = when ? '<i class="pl-when num">' + esc(when) + '</i>' : '';
+    return '<button type="button" class="pl-t' + (t.important ? ' imp' : '') + '" data-plt="' + t.id + '" title="' + esc(t.title) + '">' +
+      '<span class="pl-tt">' + esc(t.title) + '</span>' + meta +
+      (t.client_name ? '<span class="pl-cl">' + esc(t.client_name) + '</span>' : '') + '</button>';
+  }
+  function pulseMore(n, shown) {
+    return n > shown ? '<span class="pl-more num">и еще ' + (n - shown) + '</span>' : '';
+  }
+  function pulseHours(hours, active) {
+    // Часы 8–20: точка на каждый час, где человек что-то делал. Это и есть
+    // «пульс»: видно не только «двигал / не двигал», а когда именно.
+    var set = {}; (hours || []).forEach(function (h) { set[h] = 1; });
+    var out = '';
+    for (var h = 8; h <= 20; h++) out += '<i class="' + (set[h] ? 'on' : '') + '"' + (h % 4 === 0 ? ' data-h="' + h + '"' : '') + '></i>';
+    return '<span class="pl-hrs' + (active ? '' : ' off') + '" title="' + (active ? 'Часы, когда двигал задачи' : 'Сегодня задачи не двигал') + '">' + out + '</span>';
+  }
+  function pulseDays(days) {
+    var set = {}; (days || []).forEach(function (d) { set[d] = 1; });
+    return '<span class="pl-hrs days">' + [1, 2, 3, 4, 5].map(function (d) {
+      return '<i class="' + (set[d] ? 'on' : '') + '" data-h="' + WDAYS_RU[d] + '"></i>';
+    }).join('') + '</span>';
+  }
+  function renderPulse(view) {
+    if (state.pulse === null) { view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton(); loadPulse(); return; }
+    if (state.pulse === 'none') {
+      view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
+      wireTeamMode(view); return;
+    }
+    var d = state.pulse, week = d.mode === 'week';
+    var people = (d.people || []).slice();
+    var t = d.totals || {};
+    var body, head, strip;
+    if (!week) {
+      // Тихие наверх: экран открывают, чтобы найти, у кого встало.
+      people.sort(function (a, b) { return (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru'); });
+      var moved = t.active || 0, all = moved + (t.quiet || 0);
+      strip = '<div class="pl-sum">' +
+        '<span><b class="num">' + (t.done || 0) + '</b> ' + plural(t.done || 0, 'задача сделана', 'задачи сделано', 'задач сделано') + '</span>' +
+        '<span><b class="num">' + moved + '</b> из <b class="num">' + all + '</b> двигали задачи</span>' +
+        '<span><b class="num">' + (t.tomorrow || 0) + '</b> на ' + esc(d.tomorrow_label || 'завтра') + '</span>' +
+        (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
       '</div>';
-    }).join('');
-
-    var idleAll = b.idle || [];
+      head = '<div class="trow pl-grid thead"><span class="th">Сотрудник</span><span class="th">Сейчас</span>' +
+        '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
+      body = people.map(function (p) {
+        var nowCell = p.now
+          ? pulseTask(p.now, p.now.how === 'doing' ? 'в работе' : fmtTime(p.now.at))
+          : '<span class="pl-none">' + (p.active_at ? 'ничего не взял в работу' : 'не двигал задачи') + '</span>';
+        var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length)
+          || '<span class="pl-none">' + (p.today_left ? '<b class="num">' + p.today_left + '</b> ' + plural(p.today_left, 'осталась на сегодня', 'остались на сегодня', 'осталось на сегодня') : '—') + '</span>';
+        var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length)
+          || '<span class="pl-none">—</span>';
+        return '<div class="trow pl-grid' + (p.active_at ? '' : ' quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
+          '<div class="brd-who pl-who"><span class="tsk-av' + (p.active_at ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+            '<span class="brd-nm"><span class="pl-nm">' + esc(p.name) +
+              (p.overdue ? '<span class="sev pl-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
+              '<span class="t-sub pl-sub">' + (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') + '</span>' +
+              pulseHours(p.hours, !!p.active_at) + '</span></div>' +
+          '<div class="pl-c" data-l="Сейчас">' + nowCell + '</div>' +
+          '<div class="pl-c" data-l="Сделано">' + doneCell + '</div>' +
+          '<div class="pl-c" data-l="' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label) + '">' + tmrCell + '</div>' +
+        '</div>';
+      }).join('');
+    } else {
+      people.sort(function (a, b) { return (b.overdue + b.stuck) - (a.overdue + a.stuck) || a.name.localeCompare(b.name, 'ru'); });
+      strip = '<div class="pl-sum">' +
+        '<span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + (t.plan || 0) + '</b> сделано</span>' +
+        (t.stuck ? '<span class="bad"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
+        (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
+        (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
+      '</div>';
+      head = '<div class="trow pl-wgrid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+        '<span class="th">Застряло</span><span class="th">Просрочено</span><span class="th">Неделя</span></div>';
+      function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
+      body = people.map(function (p) {
+        var rp = WK_REP[p.report.state] || WK_REP.wait;
+        var given = p.report.state === 'done' || p.report.state === 'late';
+        var rvs = (p.report.review || {}).state, rv = RH_REVIEW[rvs] || RH_REVIEW.pending;
+        var itog = given
+          ? (rvs === 'pending'
+              ? '<button class="qchip wk-accept-btn" data-review="' + p.id + '">' + ic('check', 12) + 'Принять' + chev() + '</button>'
+              : '<button class="rh-rv-btn" data-review="' + p.id + '"><span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
+          : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
+        var said = p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '';
+        return '<div class="trow pl-wgrid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+          '<div class="brd-who pl-who"><span class="tsk-av' + (p.moves ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+            '<span class="brd-nm"><span class="pl-nm">' + esc(p.name) + '</span>' +
+              '<span class="t-sub pl-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
+          n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'bad', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
+          '<div class="rh-c" data-l="Неделя">' + itog + '</div>' + said +
+        '</div>';
+      }).join('');
+    }
+    var idleAll = d.idle || [];
     var idle = idleAll.length
-      ? '<div class="brd-idle"><span class="brd-il">Пустая неделя</span>' + esc(idleAll.slice(0, 8).join(', ')) +
-        (idleAll.length > 8 ? ' <span class="brd-more num">и еще ' + (idleAll.length - 8) + '</span>' : '') + '</div>'
+      ? '<div class="brd-idle"><span class="brd-il">' + (week ? 'Пустая неделя' : 'Без задач и движения') + '</span>' + esc(idleAll.slice(0, 10).join(', ')) +
+        (idleAll.length > 10 ? ' <span class="brd-more num">и еще ' + (idleAll.length - 10) + '</span>' : '') + '</div>'
       : '';
-
-    // Полоса действий руководителя. Амбер — очередь на приемку, красный — тревога.
-    // Сколько ждет приемки — уже в шапке раздела; здесь только то, чего там нет.
-    var flags = [];
-    if (b.no_plan && wkShift() >= 0) flags.push('без плана <b class="num">' + b.no_plan + '</b>');
-    if (b.stuck) flags.push('застряло <b class="num">' + b.stuck + '</b>');
-    if (b.unplanned) flags.push('не взяли в неделю <b class="num">' + b.unplanned + '</b>');
-    var strip = flags.length
-      ? '<div class="rh-await quiet">' + ic('spark', 13) + '<span>' + flags.join(' · ') + '</span></div>'
-      : '';
-
-    view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '<span class="wk-spacer"></span>' + wkNav(b.label) + '</div>' +
-      '<div class="card listcard">' +
-      '<div class="list-body">' + strip + (rows ? head + rows : '<div class="empty">На этой неделе ни у кого ничего нет.</div>') + '</div>' +
-      idle +
-      (b.caps && b.caps.cap < WK_CAP_OFF ? '<div class="dy-foot">предел ' + b.caps.cap + ', тьюторам ' + b.caps.cap_tutor + '</div>' : '') +
-    '</div>' +
-      (can('team') ? '<div class="card rh-sched-card"><div class="rh-sched" id="rh-sched"></div></div>' : '');
-
-    wkWireNav(view); wireTeamMode(view);
-    if (el('rh-sched')) loadRhSched(function (s) { if (el('rh-sched')) renderRhSched(s); });
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
+      '<div class="card listcard pl-card">' + strip +
+        '<div class="list-body">' + (body ? head + body : '<div class="empty">' + (week ? 'На этой неделе ни у кого ничего нет.' : 'В этот день никто ничего не двигал.') + '</div>') + '</div>' +
+        idle +
+        (week ? '<div class="dy-foot pl-foot"><button type="button" class="pl-link" id="pl-archive">Архив закрытых недель</button></div>' : '') +
+      '</div>';
+    wireTeamMode(view); wireDeptChips(view);
+    if (week) wkWireNav(view);
+    var pv = el('pl-prev'), nx = el('pl-next'), td = el('pl-today');
+    function shiftDay(n) { var x = new Date(pulseDate() + 'T12:00:00'); x.setDate(x.getDate() + n); state.pulseDate = zoomYmd(x); state.pulse = null; renderView(); }
+    if (pv) pv.addEventListener('click', function () { shiftDay(-1); });
+    if (nx) nx.addEventListener('click', function () { shiftDay(1); });
+    if (td) td.addEventListener('click', function () { state.pulseDate = ''; state.pulse = null; renderView(); });
+    if (el('pl-archive')) el('pl-archive').addEventListener('click', function () { state.teamMode = 'reports'; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-plt]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-plt')); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
-        openReportReview(+btn.getAttribute('data-review'), 'week', b.starts, function () { wkReload(); });
+        openReportReview(+btn.getAttribute('data-review'), 'week', d.starts, function () { state.pulse = null; renderView(); });
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-uid]'), function (row) {
-      row.addEventListener('click', function () {
-        var uid = +row.getAttribute('data-uid');
-        var who = (b.people || []).filter(function (x) { return x.id === uid; })[0];
+    Array.prototype.forEach.call(view.querySelectorAll('.pl-who'), function (w) {
+      w.addEventListener('click', function () {
+        var row = w.closest('[data-uid]'); var uid = +row.getAttribute('data-uid');
+        var who = people.filter(function (x) { return x.id === uid; })[0];
         state.teamWho = { id: uid, name: who ? who.name : '' };
         state.teamWeek = null; state.tasks = null;
         renderView();
       });
     });
+    // Сегодняшний день живет: раз в минуту тихо подтягиваем свежее.
+    if (!week && d.is_today) state.pulseTimer = setInterval(function () { loadPulse(true); }, 60000);
   }
 
   /* Неделя одного человека глазами руководителя: те же полосы, что у него
