@@ -2992,11 +2992,36 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-nav .icobtn:first-child svg { transform: rotate(180deg); }
 .zw-new { margin-left: 6px; white-space: nowrap; }
 .zw-range { white-space: nowrap; }
+.zw-seg { margin-left: 12px; }
+.zw-seg button { border: 0; background: none; }
+.zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
+.zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
+.zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.zw-fltrow .zw-flt { margin: 0; }
+.zw-acc { margin-left: auto; min-width: 180px; }
+.zw-acc .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* День по часам: тонкие строки, час слева табличными цифрами, текущий час — той же
+   заливкой, что «сегодня» в недельной сетке. Окна людей — тихим текстом, без чипов:
+   чип здесь только у зума, по нему кликают. */
+.zd-row { display: flex; align-items: flex-start; gap: 12px; padding: 5px 0; min-height: 30px; border-top: 1px solid var(--line); }
+.zd-row:first-child { border-top: 0; }
+.zd-row.now { background: var(--blue-tint); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; border-top-color: transparent; }
+.zd-row.now + .zd-row { border-top-color: transparent; }
+.zd-h { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.zd-row.now .zd-h { color: var(--blue); font-weight: 700; }
+.zd-c { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.zd-acc { margin-left: 6px; opacity: .6; font-weight: 500; }
+.zd-win { font-size: 12px; line-height: 1.5; color: var(--ink-3); padding: 3px 0; }
+.zd-win b { font-weight: 600; color: var(--ink-2); }
+.zd-win.busy { color: var(--ink-2); }
 /* Узкий экран: заголовок и кнопка в одной строке, навигация по неделям под ними. */
 @media (max-width: 960px) {
   .zw-head { flex-wrap: wrap; row-gap: 8px; }
   .zw-new { order: 2; margin-left: auto; }
   .zw-nav { order: 3; margin-left: 0; width: 100%; }
+  .zw-seg { margin-left: 0; order: 1; }
+  .zw-acc { margin-left: 0; width: 100%; }
+  .zd-h { flex-basis: 42px; }
 }
 .zw-range { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .zw-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
