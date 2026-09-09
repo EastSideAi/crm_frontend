@@ -2322,7 +2322,8 @@
           extra = '<span class="bdg num" title="просрочено">' + state.taskSum.overdue + '</span>';
         else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
           extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
-        else if (it.id === 'news' && state.newsUnread) extra = '<span class="bdg num" title="непрочитано">' + state.newsUnread + '</span>';
+        // Новое в CRM — не тревога: нейтральный счетчик, красное здесь только у просрочки.
+        else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
@@ -2374,7 +2375,8 @@
       var hoM = inboxAttention();
       var mBadge = function (it) {
         return (it.id === 'leads' && c.hot) ? c.hot
-          : (it.id === 'inbox' && hoM) ? hoM : mwBadge(it.id);
+          : (it.id === 'inbox' && hoM) ? hoM
+          : (it.id === 'news') ? (state.newsUnread || 0) : mwBadge(it.id);
       };
       // На телефоне левой колонки нет, поэтому переход в другое пространство живет
       // отдельной вкладкой в начале ленты — иначе с телефона туда не попасть.
@@ -5742,10 +5744,10 @@
       var meta = [dayLabel(it.at), it.author].filter(Boolean);
       var tags = '';
       if (n.editor) {
-        tags += '<span class="nw-tag">' + esc(newsWho(it)) + '</span>';
-        if (!it.sent) tags += '<span class="nw-tag draft">черновик</span>';
+        tags += '<span class="sev">' + esc(newsWho(it)) + '</span>';
+        if (!it.sent) tags += '<span class="sev nw-draft">черновик</span>';
       }
-      return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + (n.editor ? ' can-edit' : '') + '" data-nw="' + it.id + '">' +
+      return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + '" data-nw="' + it.id + '">' +
         '<div class="nw-top"><h3 class="nw-title">' + esc(it.title) + '</h3>' +
           (n.editor ? '<button class="icobtn nw-edit" data-nwe="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') + '</div>' +
         '<div class="nw-meta">' + esc(meta.join(' · ')) + tags + '</div>' +

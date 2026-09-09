@@ -504,6 +504,8 @@ a { color: inherit; text-decoration: none; }
 .sev.st-done         { color: var(--green-ink); background: var(--green-soft); }
 .sev.st-return       { color: var(--red-ink);   background: var(--red-soft); }
 .sev.st-cancel       { color: var(--ink-3);     background: var(--fill); }
+/* «Что нового»: неотправленная запись — та же пара, что у блокировки: она ждет. */
+.sev.nw-draft        { color: var(--amber-ink); background: var(--amber-soft); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -7970,17 +7972,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nw-item.unread::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 18px; width: 3px; border-radius: 2px; background: var(--blue); }
 .nw-top { display: flex; align-items: flex-start; gap: 10px; }
 .nw-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em; color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
-.nw-edit { flex: none; width: 28px; height: 28px; min-width: 28px; opacity: 0; transition: opacity .15s var(--ease); }
+.nw-edit { flex: none; position: relative; opacity: 0; transition: opacity .15s var(--ease); }
 .nw-item:hover .nw-edit, .nw-edit:focus-visible { opacity: 1; }
 .nw-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.nw-tag { padding: 2px 8px; border-radius: 999px; background: var(--fill); color: var(--ink-2); font-weight: 600; font-size: 11.5px; }
-.nw-tag.draft { background: var(--amber-soft); color: var(--amber-ink); }
-.nw-body { margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; }
+.nw-body { margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; overflow-wrap: anywhere; }
 .nw-body a { color: var(--blue); text-decoration: none; }
 .nw-body a:hover { text-decoration: underline; }
 .nw-card { max-width: 640px; }
 .nw-who { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-.nw-who-l { flex: 0 0 44px; padding-top: 7px; font-size: 12px; color: var(--ink-3); }
+.nw-who-l { flex: 0 0 44px; padding-top: 8px; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); }
 .nw-roles { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .nw-search { flex: 1 1 200px; }
 .nw-people { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 54px; }
@@ -7992,6 +7992,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .nw-p.on { background: var(--blue); }
 @media (max-width: 960px) {
   .nw-item { padding: 14px 14px 16px; }
+  /* Ховера нет: карандаш виден всегда, а зона нажатия шире самой кнопки. */
   .nw-edit { opacity: 1; }
+  .nw-edit::before { content: ''; position: absolute; inset: -6px; }
   .nw-people { padding-left: 0; }
 }
