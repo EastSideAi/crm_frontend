@@ -76,6 +76,7 @@
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
+    news: null, newsUnread: 0,
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -2158,6 +2159,8 @@
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
+    // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
+    { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2319,6 +2322,7 @@
           extra = '<span class="bdg num" title="просрочено">' + state.taskSum.overdue + '</span>';
         else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
           extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
+        else if (it.id === 'news' && state.newsUnread) extra = '<span class="bdg num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
@@ -2767,6 +2771,14 @@
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
     }
+    if (state.page === 'news') {
+      var nu = state.newsUnread;
+      html = '<div><h2>Что нового</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' +
+        (nu ? 'Непрочитанных: <b>' + nu + '</b>. ' : '') + 'Что изменилось в CRM и как этим пользоваться. Записи приходят и в бот задач.' +
+        '</span></div></div>' +
+        (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
+    }
     if (state.page === 'analytics') {
       html = '<div><h2>Аналитика бота</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('bolt', 13) + '</span><span>' +
@@ -3074,6 +3086,7 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
+    else if (state.page === 'news') renderNews(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -5678,6 +5691,175 @@
     }
     return '<div class="card zw">' + head + fltRow + body + tail +
       '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
+  }
+
+
+  /* ── Что нового: обновления CRM для команды, с адресатом ─────────────────────
+     Запись пишет руководитель или агент после выкатки; адресат — все, роли или
+     люди. Точка в меню гаснет, когда человек открыл раздел: у кого бот не
+     привязан, узнает отсюда. */
+  function newsLoad(cb) {
+    api('/admin/api/news').then(function (r) {
+      state.news = r || { items: [], unread: 0 };
+      state.newsUnread = (r && r.unread) || 0;
+      renderSide();
+      if (cb) cb(r);
+    }).catch(function () { state.news = state.news || { items: [], unread: 0, none: true }; if (cb) cb(null); });
+  }
+  function newsText(t) {
+    // Ссылки кликабельны: запись часто говорит «открой вот тут».
+    return esc(t || '').replace(/(https?:\/\/[^\s<]+)/g, function (u) {
+      return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>';
+    }).replace(/\n/g, '<br>');
+  }
+  function newsWho(it) {
+    var n = state.news || {};
+    var roles = (it.roles || []).map(function (r) {
+      var x = (n.roles || []).filter(function (y) { return y.id === r; })[0]; return x ? x.label : r;
+    });
+    var people = (it.users || []).map(function (id) {
+      var x = (n.people || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name.split(' ')[0] : '#' + id;
+    });
+    if (!roles.length && !people.length) return 'всем';
+    return roles.concat(people).join(', ');
+  }
+  function renderNews(view) {
+    if (!state.news) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return newsLoad(function () { if (state.page === 'news') { renderHead(); renderNews(view); } });
+    }
+    var n = state.news, items = n.items || [];
+    if (n.none) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить записи. Обнови страницу.</div></div>';
+      return;
+    }
+    var body = items.length ? items.map(function (it) {
+      var meta = [dayLabel(it.at), it.author].filter(Boolean);
+      var tags = '';
+      if (n.editor) {
+        tags += '<span class="nw-tag">' + esc(newsWho(it)) + '</span>';
+        if (!it.sent) tags += '<span class="nw-tag draft">черновик</span>';
+      }
+      return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + (n.editor ? ' can-edit' : '') + '" data-nw="' + it.id + '">' +
+        '<div class="nw-top"><h3 class="nw-title">' + esc(it.title) + '</h3>' +
+          (n.editor ? '<button class="icobtn nw-edit" data-nwe="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') + '</div>' +
+        '<div class="nw-meta">' + esc(meta.join(' · ')) + tags + '</div>' +
+        (it.body ? '<div class="nw-body">' + newsText(it.body) + '</div>' : '') +
+      '</article>';
+    }).join('') : '<div class="empty">' + (n.editor ? 'Записей пока нет. Первую напиши кнопкой «Написать» сверху.' : 'Пока ничего нового. Записи об обновлениях будут появляться здесь и в боте.') + '</div>';
+    view.innerHTML = '<div class="card nw">' + body + '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-nwe]'), function (b) {
+      b.addEventListener('click', function () {
+        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-nwe'); })[0];
+        if (it) openNewsForm(it);
+      });
+    });
+    // Открыл раздел — прочитал. Отмечаем на сервере и гасим точку, подсветка
+    // непрочитанного на этом экране остается до следующего захода.
+    var unread = items.filter(function (x) { return x.mine && !x.read; }).map(function (x) { return x.id; });
+    if (unread.length) {
+      apiSend('/admin/api/news/read', 'POST', { ids: unread }, function () {
+        items.forEach(function (x) { if (unread.indexOf(x.id) >= 0) x.read = true; });
+        state.newsUnread = 0; renderSide(); if (state.page === 'news') renderHead();
+      }, function () {});
+    }
+  }
+  function openNewsForm(it) {
+    if (document.querySelector('.al-ov.nw-ov')) return;
+    var n = state.news || {}, roles = n.roles || [], people = n.people || [];
+    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice() };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over nw-ov';
+    ov.innerHTML =
+      '<div class="al-card nw-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Что нового</div><div class="al-title">' + (it ? 'Поправить запись' : 'Новая запись') + '</div></div>' +
+          '<button class="al-x" id="nw-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Заголовок</span>' +
+            '<input id="nw-title" class="al-in" type="text" maxlength="200" placeholder="Что появилось, одной строкой" value="' + esc(it ? it.title : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">Как этим пользоваться</span>' +
+            '<textarea id="nw-body" class="al-in al-ta" rows="6" maxlength="4000" placeholder="Простыми словами: где найти, что нажать, что изменилось">' + esc(it ? it.body : '') + '</textarea></label>' +
+          '<div class="al-f"><span class="al-l">Кому</span>' +
+            '<div class="nw-who"><span class="nw-who-l">Роли</span><span class="tm-tp nw-roles">' +
+              roles.map(function (r) { return '<button type="button" class="tm-tp-b' + (sel.roles.indexOf(r.id) >= 0 ? ' on' : '') + '" data-nwr="' + esc(r.id) + '">' + esc(r.label) + '</button>'; }).join('') +
+            '</span></div>' +
+            '<div class="nw-who"><span class="nw-who-l">Люди</span>' +
+              '<div class="searchwrap nw-search"><input id="nw-q" class="search" type="search" placeholder="Найти человека" autocomplete="off"></div>' +
+              '<div class="nw-people" id="nw-people"></div></div>' +
+            '<div class="nw-sum" id="nw-sum"></div></div>' +
+        '</div>' +
+        '<div class="al-actions">' +
+          (it && it.sent ? '' : '<button class="bp ghost" id="nw-draft">' + (it ? 'Сохранить черновик' : 'В черновики') + '</button>') +
+          (it ? '<button class="bp ghost nw-del" id="nw-del">Удалить</button>' : '') +
+          '<button class="bp" id="nw-send">' + (it && it.sent ? 'Сохранить' : 'Отправить') + '</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    var close = function () { document.removeEventListener('keydown', onKey, true); ov.remove(); };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('nw-x').addEventListener('click', close);
+    var sum = function () {
+      var who = [];
+      sel.roles.forEach(function (id) { var r = roles.filter(function (x) { return x.id === id; })[0]; who.push(r ? r.label : id); });
+      sel.users.forEach(function (id) { var p = people.filter(function (x) { return x.id === id; })[0]; who.push(p ? p.name : '#' + id); });
+      el('nw-sum').innerHTML = who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>' : 'Получит <b>вся команда</b>. Выбери роли или людей, чтобы сузить.';
+    };
+    var renderPeople = function () {
+      var q = (el('nw-q').value || '').toLowerCase().trim();
+      var list = people.filter(function (p) { return sel.users.indexOf(p.id) >= 0 || (q && p.name.toLowerCase().indexOf(q) >= 0); });
+      el('nw-people').innerHTML = list.length
+        ? list.map(function (p) { return '<button type="button" class="tm-tp-b nw-p' + (sel.users.indexOf(p.id) >= 0 ? ' on' : '') + '" data-nwp="' + p.id + '">' + esc(p.name) + '</button>'; }).join('')
+        : (q ? '<span class="nw-none">Никого с таким именем</span>' : '');
+      Array.prototype.forEach.call(el('nw-people').querySelectorAll('[data-nwp]'), function (b) {
+        b.addEventListener('click', function () {
+          var id = +b.getAttribute('data-nwp'), i = sel.users.indexOf(id);
+          if (i >= 0) sel.users.splice(i, 1); else sel.users.push(id);
+          renderPeople(); sum();
+        });
+      });
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-nwr]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-nwr'), i = sel.roles.indexOf(id);
+        if (i >= 0) sel.roles.splice(i, 1); else sel.roles.push(id);
+        b.classList.toggle('on', i < 0); sum();
+      });
+    });
+    el('nw-q').addEventListener('input', renderPeople);
+    renderPeople(); sum();
+    setTimeout(function () { el('nw-title').focus(); }, 30);
+    var payload = function () {
+      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users };
+    };
+    var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-actions .bp'), function (b) { b.disabled = on; }); };
+    var fail = function (e) { busy(false); showToast((e && e.message) || 'Не сохранилось, попробуй еще раз'); };
+    var save = function (send) {
+      var p = payload();
+      if (!p.title) { showToast('Нужен заголовок'); el('nw-title').focus(); return; }
+      busy(true);
+      var done = function (r) {
+        close();
+        var nn = r && r.news;
+        showToast(send ? (nn && nn.delivered ? 'Отправил, дошло ' + nn.delivered + ' ' + plural(nn.delivered, 'человеку', 'людям', 'людям') : 'Отправил') : 'Сохранил');
+        state.news = null; newsLoad(function () { if (state.page === 'news') { renderHead(); renderView(); } });
+      };
+      if (!it) { p.send = !!send; apiSend('/admin/api/news', 'POST', p, done, fail); return; }
+      apiSend('/admin/api/news/' + it.id, 'PATCH', p, function () {
+        if (send && !it.sent) apiSend('/admin/api/news/' + it.id + '/send', 'POST', {}, done, fail);
+        else done(null);
+      }, fail);
+    };
+    el('nw-send').addEventListener('click', function () { save(!(it && it.sent)); });
+    if (el('nw-draft')) el('nw-draft').addEventListener('click', function () { save(false); });
+    if (el('nw-del')) el('nw-del').addEventListener('click', function () {
+      if (!confirm('Убрать запись? У тех, кому она уже ушла в бот, сообщение останется.')) return;
+      busy(true);
+      apiSend('/admin/api/news/' + it.id, 'DELETE', null, function () {
+        close(); showToast('Убрал'); state.news = null; newsLoad(function () { if (state.page === 'news') { renderHead(); renderView(); } });
+      }, fail);
+    });
   }
 
   function renderMeetings(view) {
@@ -15857,7 +16039,7 @@
   }
   /* Регулятор бота задач (Павел, 09.09.2026): какие уведомления бота человек получает.
      Сервер хранит ВЫКЛЮЧЕННЫЕ виды (bot_mute), чип горит, когда вид включен. */
-  var TM_BOT_SHORT = { tasks: 'Задачи', digest: 'Утро', evening: 'Вечер', meetings: 'Встречи', rhythm: 'Ритм', chat: 'Чат' };
+  var TM_BOT_SHORT = { tasks: 'Задачи', digest: 'Утро', evening: 'Вечер', meetings: 'Встречи', rhythm: 'Ритм', chat: 'Чат', updates: 'Новое' };
   function tmBotChips(u) {
     var off = u.bot_mute || [];
     if (!(state._teamBotKinds || []).length) return '';
@@ -28096,6 +28278,8 @@
     loadTaskSummary();
     // и прогресс обучения — пока курс не пройден, счетчик шагов висит в меню
     guideLoad();
+    // и непрочитанные записи «Что нового» — точка в меню с первого экрана
+    newsLoad();
     if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
     else if (hashReviewParts()) openReportReviewFromHash();
