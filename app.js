@@ -5513,8 +5513,14 @@
   }
   // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
   // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
+  // Ключ дня — по местным числам, не через toISOString: московская полночь в UTC
+  // еще вчера, и окна расписания на «сегодня» не совпадали бы с днем на экране.
+  function zoomYmd(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
   function loadZoomWin(d) {
-    var key = d.toISOString().slice(0, 10), hi = new Date(d.getTime() + 86400000);
+    var key = zoomYmd(d), hi = new Date(d.getTime() + 86400000);
     state.zoomWin[key] = 'loading';
     api('/admin/api/zoom/windows?from=' + encodeURIComponent(d.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
       .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (state.page === 'tasks') renderView(); })
@@ -5541,7 +5547,7 @@
     var days = [];
     for (var i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
     var today = new Date(); today.setHours(0, 0, 0, 0);
-    var day = zoomDay(), dayKey = day.toISOString().slice(0, 10);
+    var day = zoomDay(), dayKey = zoomYmd(day);
     var range = dayView
       ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] + (day.getTime() === today.getTime() ? ' · сегодня' : '')
       : days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
