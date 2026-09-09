@@ -8124,15 +8124,39 @@
         loadTaskPeople(function (people) {
           var box = document.createElement('div');
           box.className = 'tsk-part-box';
-          box.innerHTML = '<div class="tsk-role"><span class="al-l">Еще исполнители</span><div class="tsk-role-ex"></div></div>' +
+          // Ответственного меняет постановщик или руководитель (Павел
+          // 10.09.2026: «не могу поменять ответственного на Машу полноценно»).
+          // Исполнитель себе замену не назначает — иначе задача уходит
+          // по кругу без ведома того, кто ее ставил.
+          var canOwner = (isAuthor || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel';
+          box.innerHTML = (canOwner
+              ? '<div class="tsk-role"><span class="al-l">Ответственный</span><span class="al-selwrap pp-addw"><select class="al-sel sm" id="tk-owner">' +
+                  (t.assignee_id ? '' : '<option value="">не назначена</option>') +
+                  people.map(function (x) { return '<option value="' + x.id + '"' + (x.id === t.assignee_id ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>'; }).join('') +
+                '</select></span></div>'
+              : '') +
+            '<div class="tsk-role"><span class="al-l">Еще исполнители</span><div class="tsk-role-ex"></div></div>' +
             '<div class="tsk-role"><span class="al-l">Наблюдатели</span><div class="tsk-role-w"></div></div>';
           wB.parentNode.replaceChild(box, wB);
-          var save = function (patch, ok) {
+          var save = function (patch, ok, then) {
             apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
               state.tasks = null; state.myweek = null; state.myboard = null;
               showToast(ok);
+              if (then) then();
             }, function () { showToast('Не получилось поменять роли'); });
           };
+          var ownerSel = box.querySelector('#tk-owner');
+          if (ownerSel) ownerSel.addEventListener('change', function () {
+            var to = +ownerSel.value;
+            if (!to || to === t.assignee_id) return;
+            ownerSel.disabled = true;
+            var who = people.filter(function (x) { return x.id === to; })[0];
+            // Новый ответственный уходит из «еще исполнителей», прежний — из
+            // задачи совсем: «полноценно» значит один главный, а не двое.
+            save({ assignee_id: to, executors: execIds.filter(function (x) { return x !== to; }) },
+              'Ответственный теперь ' + ((who && (who.name || who.login)) || 'другой'),
+              function () { api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); }); if (state.page === 'tasks') renderView(); });
+          });
           peoplePick(box.querySelector('.tsk-role-ex'), execIds, people, {
             except: t.assignee_id, word: 'исполнитель',
             onChange: function (ids) { save({ executors: ids }, 'Исполнители обновлены'); }
