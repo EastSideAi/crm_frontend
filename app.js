@@ -75,7 +75,7 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
-    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '',
+    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -5503,81 +5503,180 @@
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
     return d;
   }
-  function loadZoomWeek(off) {
-    var lo = zoomWeekStart(off), hi = new Date(lo.getTime() + 7 * 86400000);
+  function loadZoomWeek(lo) {
+    var hi = new Date(lo.getTime() + 7 * 86400000);
     var key = lo.toISOString().slice(0, 10);
     state.zoomWeek[key] = 'loading';
     api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
       .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
       .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
   }
+  // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
+  // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
+  // Ключ дня — по местным числам, не через toISOString: московская полночь в UTC
+  // еще вчера, и окна расписания на «сегодня» не совпадали бы с днем на экране.
+  function zoomYmd(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+  function loadZoomWin(d) {
+    var key = zoomYmd(d), hi = new Date(d.getTime() + 86400000);
+    state.zoomWin[key] = 'loading';
+    api('/admin/api/zoom/windows?from=' + encodeURIComponent(d.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
+      .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.zoomWin[key] = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function zoomDay() {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + (state.zoomDayOff || 0));
+    return d;
+  }
+  // Понедельник недели, которую показывает текущий вид: неделя — по своему сдвигу,
+  // день — та, куда день попадает. Кэш зумов один на оба вида, по этому ключу.
+  function zoomRangeStart() {
+    if (state.zoomView !== 'day') return zoomWeekStart(state.zoomWeekOff || 0);
+    var d = zoomDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+  var ZOOM_DAY_FROM = 8, ZOOM_DAY_TO = 22;
   function zoomWeekBlock() {
-    var off = state.zoomWeekOff || 0;
-    var lo = zoomWeekStart(off), key = lo.toISOString().slice(0, 10);
+    var dayView = state.zoomView === 'day';
+    var lo = zoomRangeStart(), key = lo.toISOString().slice(0, 10);
     var data = state.zoomWeek[key];
-    if (data === undefined) { loadZoomWeek(off); data = 'loading'; }
+    if (data === undefined) { loadZoomWeek(lo); data = 'loading'; }
     var days = [];
     for (var i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
-    var range = days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
-    var head = '<div class="sec-head zw-head"><div class="t">Зумы на неделю</div>' +
-      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
-      '<span class="zw-range">' + esc(range) + '</span>' +
-      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div>' +
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = zoomDay(), dayKey = zoomYmd(day);
+    var range = dayView
+      ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] + (day.getTime() === today.getTime() ? '<span class="zw-td"> · сегодня</span>' : '')
+      : days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
+    var atNow = dayView ? !(state.zoomDayOff || 0) : !(state.zoomWeekOff || 0);
+    var head = '<div class="sec-head zw-head"><div class="t">Зумы</div>' +
+      '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-zv="week">Неделя</button>' +
+        '<button type="button" class="' + (dayView ? 'on' : '') + '" data-zv="day">День</button></div>' +
+      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
+      '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-zw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
+      '<button class="icobtn" data-zw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
       '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div>';
     var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
     var sameDay = function (iso, d) { var x = new Date(iso); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
-    var flt = state.zoomKind || '';
+    var flt = state.zoomKind || '', accF = state.zoomAcc || '';
     var vis = function (m) { return !flt || m.kind === flt; };
+    var accVis = function (a) { return !accF || a.slot === accF; };
     var kcls = function (m) { return 'k-' + (m.kind || 'none'); };
-    var kttl = function (m) {
+    var kname = function (m) {
       var k = ZOOM_KINDS.filter(function (x) { return x[0] === m.kind; })[0];
-      return esc(m.topic) + ' · ' + (k ? k[1] : 'без типа');
+      return k ? k[1] : 'без типа';
     };
-    var fltRow = (data !== 'loading' && data !== 'none' && data.length)
-      ? '<nav class="tabs zw-flt"><a class="tab' + (!flt ? ' on' : '') + '" data-zk="">Все</a>' +
+    var kttl = function (m) { return esc(m.topic) + ' · ' + kname(m); };
+    var ready = data !== 'loading' && data !== 'none' && data.length;
+    var accs = ready ? data.filter(accVis) : [];
+    var fltRow = ready
+      ? '<div class="zw-fltrow"><nav class="tabs zw-flt"><a class="tab' + (!flt ? ' on' : '') + '" data-zk="">Все</a>' +
           ZOOM_KINDS.map(function (k) {
             return '<a class="tab' + (flt === k[0] ? ' on' : '') + '" data-zk="' + k[0] + '">' + k[2] + '</a>';
-          }).join('') + '</nav>'
+          }).join('') + '</nav>' +
+          (data.length > 1
+            ? '<label class="al-selwrap zw-acc"><select class="al-sel" id="zw-acc"><option value="">Все аккаунты</option>' +
+                data.map(function (a) { return '<option value="' + esc(a.slot) + '"' + (accF === a.slot ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') +
+              '</select></label>'
+            : '') + '</div>'
       : '';
-    var body;
+    var chip = function (a, m, withAcc) {
+      return '<button type="button" class="zw-chip ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '" title="' + kttl(m) + '"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) +
+        (withAcc ? '<span class="zd-acc">' + esc(a.name) + '</span>' : '') + '</button>';
+    };
+    var body, tail = '';
     if (data === 'loading') body = '<div class="zw-empty">Спрашиваю у зума…</div>';
     else if (data === 'none') body = '<div class="zw-empty">Зум не ответил. Обнови страницу.</div>';
     else if (!data.length) body = '<div class="zw-empty">Аккаунты зума еще не подключены.</div>';
-    else if (mqMobile.matches) {
+    else if (dayView) {
+      // День по часам: зумы всех аккаунтов одним столбцом, рядом окна людей из
+      // расписания команды. Неделя целиком при плотной сетке не читается, а
+      // «кто и когда сегодня» — первый вопрос, с которым сюда приходят.
+      var win = state.zoomWin[dayKey];
+      if (win === undefined) { loadZoomWin(day); win = 'loading'; }
+      // Фильтр по типу режет и окна людей: «Занятия» — окна преподавателей,
+      // «Консультации» — окна на разбор, командные типы — окон не бывает.
+      var winRole = !flt ? '' : flt === 'lesson' ? 'teacher' : flt === 'consult' ? 'curator' : 'none';
+      var slots = ((win && typeof win === 'object' && win.slots) || []).filter(function (x) {
+        return x.date === dayKey && (!winRole || x.role === winRole);
+      });
+      var dayMs = [];
+      accs.forEach(function (a) {
+        (a.meetings || []).filter(function (m) { return sameDay(m.start, day) && vis(m); }).forEach(function (m) { dayMs.push([a, m]); });
+      });
+      // Часы 8–22 по умолчанию, но ранний урок с Китаем или поздний созвон
+      // раздвигают сетку, а не выпадают из нее молча.
+      var hFrom = ZOOM_DAY_FROM, hTo = ZOOM_DAY_TO;
+      dayMs.forEach(function (am) { var h0 = new Date(am[1].start).getHours(); hFrom = Math.min(hFrom, h0); hTo = Math.max(hTo, h0); });
+      slots.forEach(function (x) { hFrom = Math.min(hFrom, x.hour); hTo = Math.max(hTo, x.hour); });
+      var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
+      var rows = [], seen = 0;
+      for (var h = hFrom; h <= hTo; h++) {
+        var cells = [];
+        dayMs.filter(function (am) { return new Date(am[1].start).getHours() === h; })
+          .sort(function (x, y) { return new Date(x[1].start) - new Date(y[1].start); })
+          .forEach(function (am) { cells.push(chip(am[0], am[1], accs.length > 1)); });
+        var here = slots.filter(function (x) { return x.hour === h; });
+        var busy = here.filter(function (x) { return x.booked; });
+        var free = here.filter(function (x) { return !x.booked; });
+        busy.forEach(function (x) {
+          cells.push('<span class="zd-win busy"><b>' + esc(x.person) + '</b> · ' + (x.role === 'teacher' ? 'урок' : 'разбор') + (x.client ? ' · ' + esc(x.client) : '') + '</span>');
+        });
+        if (free.length) {
+          var names = [];
+          free.forEach(function (x) { var n = x.person + (x.role === 'teacher' ? ' (урок)' : ''); if (names.indexOf(n) === -1) names.push(n); });
+          cells.push('<span class="zd-win">свободны: <b>' + names.map(esc).join('</b>, <b>') + '</b></span>');
+        }
+        if (cells.length) seen++;
+        rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span><span class="zd-c">' + cells.join('') + '</span></div>');
+      }
+      body = '<div class="zd-tbl">' + rows.join('') + '</div>';
+      if (!seen) body = '<div class="zw-empty">' + (flt || accF ? 'Таких встреч в этот день нет.' : 'На этот день ничего не назначено.') + '</div>' + body;
+      var off1 = accs.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
+      if (off1.length) tail += '<div class="zw-off">Нет доступа: ' + esc(off1.join(', ')) + '</div>';
+      if (win === 'loading') tail += '<div class="zw-off">Спрашиваю расписание команды…</div>';
+      else if (win === 'none') tail += '<div class="zw-off">Расписание команды не ответило, показываю только зумы.</div>';
+      else if (win && win.enabled === false) tail += '<div class="zw-off">Расписание команды не подключено, показываю только зумы.</div>';
+    } else if (mqMobile.matches) {
       // На телефоне матрица съедает экран, а журнал встреч уходит за фолд: только дни,
       // где что-то назначено, строкой «день · аккаунт · время · название».
-      var rows = [];
+      var mrows = [];
       days.forEach(function (d) {
-        data.forEach(function (a) {
-          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) {
-            rows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
-              '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
-              '<span class="zw-ma">' + esc(a.name) + '</span></button>');
-          });
+        var ms = [];
+        accs.forEach(function (a) {
+          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) { ms.push([a, m]); });
+        });
+        // По времени, а не по аккаунтам: день читается сверху вниз как расписание.
+        ms.sort(function (x, y) { return new Date(x[1].start) - new Date(y[1].start); });
+        ms.forEach(function (am) {
+          var a = am[0], m = am[1];
+          mrows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
+            '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
+            '<span class="zw-ma">' + esc(a.name) + '</span></button>');
         });
       });
-      var off2 = data.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
-      body = (rows.length ? rows.join('') : '<div class="zw-empty">' + (flt ? 'Таких встреч на этой неделе нет.' : 'На этой неделе в зумах ничего не назначено.') + '</div>') +
+      var off2 = accs.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
+      body = (mrows.length ? mrows.join('') : '<div class="zw-empty">' + (flt || accF ? 'Таких встреч на этой неделе нет.' : 'На этой неделе в зумах ничего не назначено.') + '</div>') +
         (off2.length ? '<div class="zw-off">Нет доступа: ' + esc(off2.join(', ')) + '</div>' : '');
     } else {
-      var today = new Date(); today.setHours(0, 0, 0, 0);
       body = '<div class="zw-tbl">' +
-        '<div class="zw-row head"><span class="zw-d"></span>' + data.map(function (a) {
+        '<div class="zw-row head"><span class="zw-d"></span>' + accs.map(function (a) {
           return '<span class="zw-c"><span class="th">' + esc(a.name) + '</span>' +
             (a.error ? '<span class="zw-err" title="' + esc(a.error) + '">нет доступа</span>' : '') + '</span>';
         }).join('') + '</div>' +
         days.map(function (d) {
           var isToday = d.getTime() === today.getTime();
           return '<div class="zw-row' + (isToday ? ' today' : '') + '"><span class="zw-d">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></span>' +
-            data.map(function (a) {
+            accs.map(function (a) {
               var ms = (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); });
-              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) {
-                return '<button type="button" class="zw-chip ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '" title="' + kttl(m) + '"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</button>';
-              }).join('') + '</span>';
+              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) { return chip(a, m, false); }).join('') + '</span>';
             }).join('') + '</div>';
         }).join('') + '</div>';
     }
-    return '<div class="card zw">' + head + fltRow + body +
+    return '<div class="card zw">' + head + fltRow + body + tail +
       '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
   }
 
@@ -5619,15 +5718,30 @@
     }
     if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zw]'), function (b) {
-      b.addEventListener('click', function () { state.zoomWeekOff = (state.zoomWeekOff || 0) + (+b.getAttribute('data-zw')); renderView(); });
+      b.addEventListener('click', function () {
+        var step = +b.getAttribute('data-zw');
+        if (state.zoomView === 'day') state.zoomDayOff = (state.zoomDayOff || 0) + step;
+        else state.zoomWeekOff = (state.zoomWeekOff || 0) + step;
+        renderView();
+      });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zw0]'), function (b) {
+      b.addEventListener('click', function () {
+        if (state.zoomView === 'day') state.zoomDayOff = 0; else state.zoomWeekOff = 0;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zv]'), function (b) {
+      b.addEventListener('click', function () { state.zoomView = b.getAttribute('data-zv') === 'day' ? 'day' : 'week'; renderView(); });
+    });
+    if (el('zw-acc')) el('zw-acc').addEventListener('change', function () { state.zoomAcc = el('zw-acc').value || ''; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zk]'), function (b) {
       b.addEventListener('click', function () { state.zoomKind = b.getAttribute('data-zk') || ''; renderView(); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zm]'), function (b) {
       b.addEventListener('click', function () {
         var p = (b.getAttribute('data-zm') || '').split('|');
-        var key = zoomWeekStart(state.zoomWeekOff || 0).toISOString().slice(0, 10);
+        var key = zoomRangeStart().toISOString().slice(0, 10);
         var accs = state.zoomWeek[key];
         if (!accs || typeof accs === 'string') return;
         var acc = accs.filter(function (a) { return a.slot === p[0]; })[0];
@@ -5638,7 +5752,7 @@
     if (el('zw-new')) el('zw-new').addEventListener('click', function () {
       // Встреча без задачи и без семьи: ссылка в буфере, а в сетке она появится
       // сразу, для этого кэш недели сбрасываем.
-      openZoomForm({ after: function () { state.zoomWeek = {}; renderView(); } });
+      openZoomForm({ after: function () { state.zoomWeek = {}; state.zoomWin = {}; renderView(); } });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
       b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
