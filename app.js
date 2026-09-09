@@ -6895,21 +6895,21 @@
   function pulseNav(d) {
     var isToday = !!d.is_today || !!d.is_current;
     var back = state.teamMode === 'week' ? wkNav(d.label) : '<div class="brd-nav">' +
-      '<button class="icobtn sm brd-arrow prev" id="pl-prev" title="Предыдущий день">' + ic('go', 15) + '</button>' +
+      '<button class="icobtn sm brd-arrow prev" id="tp-prev" title="Предыдущий день">' + ic('go', 15) + '</button>' +
       '<span class="brd-label">' + esc(d.label || '') + '</span>' +
-      '<button class="icobtn sm brd-arrow" id="pl-next" title="Следующий день">' + ic('go', 15) + '</button>' +
-      (isToday ? '' : '<button class="qchip" id="pl-today">Сегодня</button>') + '</div>';
+      '<button class="icobtn sm brd-arrow" id="tp-next" title="Следующий день">' + ic('go', 15) + '</button>' +
+      (isToday ? '' : '<button class="qchip" id="tp-today">Сегодня</button>') + '</div>';
     return back;
   }
   function pulseTask(t, when) {
     // Строка задачи внутри колонки: название и тихое время. Клик — карточка.
     var meta = [when ? '<i class="num">' + esc(when) + '</i>' : '', t.client_name ? esc(t.client_name) : ''].filter(Boolean).join(' · ');
-    return '<button type="button" class="pl-t' + (t.important ? ' imp' : '') + '" data-plt="' + t.id + '" title="' + esc(t.title) + '">' +
-      '<span class="pl-tt">' + esc(t.title) + '</span>' +
-      (meta ? '<span class="pl-meta">' + meta + '</span>' : '') + '</button>';
+    return '<button type="button" class="tp-t' + (t.important ? ' imp' : '') + '" data-tpt="' + t.id + '" title="' + esc(t.title) + '">' +
+      '<span class="tp-tt">' + esc(t.title) + '</span>' +
+      (meta ? '<span class="tp-meta">' + meta + '</span>' : '') + '</button>';
   }
   function pulseMore(n, shown) {
-    return n > shown ? '<span class="pl-more num">и еще ' + (n - shown) + '</span>' : '';
+    return n > shown ? '<span class="tp-more num">и еще ' + (n - shown) + '</span>' : '';
   }
   function pulseHours(hours, active) {
     // Часы 8–20: точка на каждый час, где человек что-то делал. Это и есть
@@ -6917,11 +6917,11 @@
     var set = {}; (hours || []).forEach(function (h) { set[h] = 1; });
     var out = '';
     for (var h = 8; h <= 20; h++) out += '<i class="' + (set[h] ? 'on' : '') + '"' + (h % 4 === 0 ? ' data-h="' + h + '"' : '') + '></i>';
-    return '<span class="pl-hrs' + (active ? '' : ' off') + '" title="' + (active ? 'Часы, когда двигал задачи' : 'Сегодня задачи не двигал') + '">' + out + '</span>';
+    return '<span class="tp-hrs' + (active ? '' : ' off') + '" title="' + (active ? 'Часы, когда двигал задачи' : 'Сегодня задачи не двигал') + '">' + out + '</span>';
   }
   function pulseDays(days) {
     var set = {}; (days || []).forEach(function (d) { set[d] = 1; });
-    return '<span class="pl-hrs days">' + [1, 2, 3, 4, 5].map(function (d) {
+    return '<span class="tp-hrs days">' + [1, 2, 3, 4, 5].map(function (d) {
       return '<i class="' + (set[d] ? 'on' : '') + '" data-h="' + WDAYS_RU[d] + '"></i>';
     }).join('') + '</span>';
   }
@@ -6939,42 +6939,42 @@
       // Тихие наверх: экран открывают, чтобы найти, у кого встало.
       people.sort(function (a, b) { return (a.active_at ? 1 : 0) - (b.active_at ? 1 : 0) || a.name.localeCompare(b.name, 'ru'); });
       var moved = t.active || 0, all = moved + (t.quiet || 0);
-      strip = '<div class="pl-sum">' +
+      strip = '<div class="tp-sum">' +
         '<span><b class="num">' + (t.done || 0) + '</b> ' + plural(t.done || 0, 'задача сделана', 'задачи сделано', 'задач сделано') + '</span>' +
         '<span><b class="num">' + moved + '</b> из <b class="num">' + all + '</b> двигали задачи</span>' +
         '<span><b class="num">' + (t.tomorrow || 0) + '</b> на ' + esc(d.tomorrow_label || 'завтра') + '</span>' +
         (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
       '</div>';
-      head = '<div class="trow pl-grid thead"><span class="th">Сотрудник</span><span class="th">Сейчас</span>' +
+      head = '<div class="trow tp-grid thead"><span class="th">Сотрудник</span><span class="th">Сейчас</span>' +
         '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
       body = people.map(function (p) {
         var nowCell = p.now
           ? pulseTask(p.now, p.now.how === 'doing' ? 'в работе' : fmtTime(p.now.at))
-          : '<span class="pl-none">' + (p.active_at ? 'ничего не взял в работу' : 'не двигал задачи') + '</span>';
+          : '<span class="tp-none">' + (p.active_at ? 'ничего не взял в работу' : 'не двигал задачи') + '</span>';
         var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length)
-          || '<span class="pl-none">' + (p.today_left ? '<b class="num">' + p.today_left + '</b> ' + plural(p.today_left, 'осталась на сегодня', 'остались на сегодня', 'осталось на сегодня') : '—') + '</span>';
+          || '<span class="tp-none">' + (p.today_left ? '<b class="num">' + p.today_left + '</b> ' + plural(p.today_left, 'осталась на сегодня', 'остались на сегодня', 'осталось на сегодня') : '—') + '</span>';
         var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length)
-          || '<span class="pl-none">—</span>';
-        return '<div class="trow pl-grid' + (p.active_at ? '' : ' quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who pl-who"><span class="tsk-av' + (p.active_at ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
-            '<span class="brd-nm"><span class="pl-nm">' + esc(p.name) +
-              (p.overdue ? '<span class="sev pl-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
-              '<span class="t-sub pl-sub">' + (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') + '</span>' +
+          || '<span class="tp-none">—</span>';
+        return '<div class="trow tp-grid' + (p.active_at ? '' : ' quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
+          '<div class="brd-who tp-who"><span class="tsk-av' + (p.active_at ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+            '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) +
+              (p.overdue ? '<span class="sev tp-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
+              '<span class="t-sub tp-sub">' + (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') + '</span>' +
               pulseHours(p.hours, !!p.active_at) + '</span></div>' +
-          '<div class="pl-c" data-l="Сейчас">' + nowCell + '</div>' +
-          '<div class="pl-c" data-l="Сделано">' + doneCell + '</div>' +
-          '<div class="pl-c" data-l="' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label) + '">' + tmrCell + '</div>' +
+          '<div class="tp-c" data-l="Сейчас">' + nowCell + '</div>' +
+          '<div class="tp-c" data-l="Сделано">' + doneCell + '</div>' +
+          '<div class="tp-c" data-l="' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label) + '">' + tmrCell + '</div>' +
         '</div>';
       }).join('');
     } else {
       people.sort(function (a, b) { return (b.overdue + b.stuck) - (a.overdue + a.stuck) || a.name.localeCompare(b.name, 'ru'); });
-      strip = '<div class="pl-sum">' +
+      strip = '<div class="tp-sum">' +
         '<span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + (t.plan || 0) + '</b> сделано</span>' +
         (t.stuck ? '<span class="bad"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
         (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
         (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
       '</div>';
-      head = '<div class="trow pl-wgrid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+      head = '<div class="trow tp-wgrid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
         '<span class="th">Застряло</span><span class="th">Просрочено</span><span class="th">Неделя</span></div>';
       function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
       body = people.map(function (p) {
@@ -6987,10 +6987,10 @@
               : '<button class="rh-rv-btn" data-review="' + p.id + '"><span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
           : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
         var said = p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '';
-        return '<div class="trow pl-wgrid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who pl-who"><span class="tsk-av' + (p.moves ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
-            '<span class="brd-nm"><span class="pl-nm">' + esc(p.name) + '</span>' +
-              '<span class="t-sub pl-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
+        return '<div class="trow tp-wgrid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+          '<div class="brd-who tp-who"><span class="tsk-av' + (p.moves ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+            '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) + '</span>' +
+              '<span class="t-sub tp-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
           n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'bad', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
           '<div class="rh-c" data-l="Неделя">' + itog + '</div>' + said +
         '</div>';
@@ -7002,21 +7002,21 @@
         (idleN > 10 ? ' <span class="brd-more num">и еще ' + (idleN - 10) + '</span>' : '') + '</div>'
       : '';
     view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + pulseNav(d) + '</div>' +
-      '<div class="card listcard pl-card">' + strip +
+      '<div class="card listcard tp-card">' + strip +
         '<div class="list-body">' + (body ? head + body : '<div class="empty">' + (week ? 'На этой неделе ни у кого ничего нет.' : 'В этот день никто ничего не двигал.') + '</div>') + '</div>' +
         idle +
-        (week ? '<div class="dy-foot pl-foot"><button type="button" class="pl-link" id="pl-archive">Архив закрытых недель</button></div>' : '') +
+        (week ? '<div class="dy-foot tp-foot"><button type="button" class="tp-link" id="tp-archive">Архив закрытых недель</button></div>' : '') +
       '</div>';
     wireTeamMode(view); wireDeptChips(view);
     if (week) wkWireNav(view);
-    var pv = el('pl-prev'), nx = el('pl-next'), td = el('pl-today');
+    var pv = el('tp-prev'), nx = el('tp-next'), td = el('tp-today');
     function shiftDay(n) { var x = new Date(pulseDate() + 'T12:00:00'); x.setDate(x.getDate() + n); state.pulseDate = zoomYmd(x); state.pulse = null; renderView(); }
     if (pv) pv.addEventListener('click', function () { shiftDay(-1); });
     if (nx) nx.addEventListener('click', function () { shiftDay(1); });
     if (td) td.addEventListener('click', function () { state.pulseDate = ''; state.pulse = null; renderView(); });
-    if (el('pl-archive')) el('pl-archive').addEventListener('click', function () { state.teamMode = 'reports'; renderView(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-plt]'), function (b) {
-      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-plt')); });
+    if (el('tp-archive')) el('tp-archive').addEventListener('click', function () { state.teamMode = 'reports'; renderView(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tpt]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-tpt')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-review]'), function (btn) {
       btn.addEventListener('click', function (e) {
@@ -7024,7 +7024,7 @@
         openReportReview(+btn.getAttribute('data-review'), 'week', d.starts, function () { state.pulse = null; renderView(); });
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('.pl-who'), function (w) {
+    Array.prototype.forEach.call(view.querySelectorAll('.tp-who'), function (w) {
       w.addEventListener('click', function () {
         var row = w.closest('[data-uid]'); var uid = +row.getAttribute('data-uid');
         var who = people.filter(function (x) { return x.id === uid; })[0];
