@@ -3025,7 +3025,8 @@ button.tr-crumb:hover { color: var(--blue); }
   .zw-nav { order: 3; width: auto; margin-left: auto; }
   .zw-acc { margin-left: 0; width: 100%; }
   .zd-h { flex-basis: 42px; }
-  .zd-row .zw-chip { white-space: normal; }
+  .zd-row .zw-chip { white-space: normal; flex-wrap: wrap; }
+  .zd-row .zd-acc { flex: 1 1 100%; margin-left: 0; padding-left: 12px; font-size: 11.5px; }
 }
 .zw-range { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .zw-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
