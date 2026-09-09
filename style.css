@@ -635,6 +635,25 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:hover { color: var(--ink); }
 .tm-tp-b.on { background: var(--blue); color: #fff; }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
+/* Две группы чипов (темы клиентов и виды уведомлений бота) идут отдельной строкой под
+   именем на всю ширину: в одну строку с почтой и ролью они не влезают, а прятать чипы
+   за прокруткой нельзя — раскладка должна читаться одним взглядом. */
+.tm-row { flex-wrap: wrap; row-gap: 8px; }
+.tm-tps { flex: 1 1 100%; order: 9; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding-left: 54px; }
+@media (max-width: 960px) {
+  .tm-tps { padding-left: 0; }
+  /* Группа шире экрана телефона: листается внутри себя, страницу вбок не тянет. */
+  .tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tm-tps .tm-tp::-webkit-scrollbar { display: none; }
+}
+.tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
+.tm-tp.bot svg { flex: none; margin-right: 2px; }
+.tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
+  padding: 4px 8px; border-radius: 8px; cursor: pointer; text-decoration: line-through; text-decoration-color: var(--line-2); }
+.tm-bt-b:hover { color: var(--ink); }
+.tm-bt-b.on { color: var(--ink); background: var(--card); text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-bt-b:disabled { opacity: .55; cursor: default; }
 /* тема отмечена, а мессенджер не подключен — доставки нет; предупреждение в самой строке */
 .tm-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--amber-ink); font-weight: 600; }
 .tm-warn svg { flex: none; }

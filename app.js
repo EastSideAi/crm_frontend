@@ -8258,7 +8258,7 @@
      потом нажимает «завести». Экран проверки существует именно поэтому: модель
      ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
      задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
-  var MEET_MAX_MB = 2;
+  var MEET_MAX_MB = 5;
   // Сколько протоколов принимаем за раз. Разбор каждого — отдельный запрос к
   // модели на полминуты, и десяток файлов человек все равно не вычитает за один
   // заход: он закроет экран на половине, а заведется первая половина.
@@ -8280,10 +8280,10 @@
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
             '<div class="mu-drop-t">Выбери файлы или перетащи сюда</div>' +
-            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ каждый, ' +
+            '<div class="mu-drop-s">txt, md, docx или pdf, до ' + MEET_MAX_MB + ' МБ каждый, ' +
               'до ' + MEET_MAX_FILES + ' за раз</div>' +
             '<input type="file" id="mu-file" multiple ' +
-              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx,.pdf" hidden>' +
           '</div>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
@@ -8403,7 +8403,7 @@
         if (i >= queue.length) {
           if (!done.length) {
             go.disabled = false; go.classList.remove('loading');
-            show('Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+            show('Не смог разобрать. Пришли txt, md, docx или pdf, либо вставь текст.', true);
             return;
           }
           if (failed.length) showToast('Не разобрал: ' + failed.join(', '));
@@ -8505,8 +8505,9 @@
           '<div class="mi-line">' +
             // Заголовок — textarea, а не input: формулировку надо видеть целиком,
             // а на телефоне в одну строку влезает треть. Высота растет по тексту.
-            '<textarea class="al-in mi-title" rows="1" maxlength="200"' +
-              (made ? ' disabled' : '') + '>' + esc(it.title || '') + '</textarea>' +
+            // Заведенный пункт остается правимым (Павел, 09.09.2026): название,
+            // исполнитель и срок уходят в саму задачу при «Сохранить правки».
+            '<textarea class="al-in mi-title" rows="1" maxlength="200">' + esc(it.title || '') + '</textarea>' +
             (made
               ? '<a class="mi-made" href="#task/' + it.task_id + '">' + ic('check', 13) + 'в задачнике</a>'
               : '<button type="button" class="mi-skip" title="' +
@@ -8519,14 +8520,13 @@
               ? '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
                   goalOpts(it.existing_goal_id) + '</select></span>'
               : '') +
-            '<span class="al-selwrap mi-who"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
+            '<span class="al-selwrap mi-who"><select class="al-sel sm">' +
               whoOpts(it.assignee_id) + '</select></span>' +
             (si === null
               ? '<span class="al-selwrap mi-dept"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
                   deptOpts(it.dept || '') + '</select></span>'
               : '') +
-            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '"' +
-              (made ? ' disabled' : '') + '>' +
+            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '">' +
           '</div>' +
         '</div>';
       };
@@ -8612,11 +8612,14 @@
         var made = card.querySelectorAll('.mi-item.made').length;
         count.textContent = n
           ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
-          : !off ? 'Все пункты уже в задачнике'
+          : !off ? (made ? 'Все пункты в задачнике. Правки названия, исполнителя и срока уйдут в задачи' : 'Все пункты уже в задачнике')
           : made ? 'Заведено все, кроме снятого'
           : 'Все пункты сняты';
-        save.disabled = !n;
-        save.classList.toggle('off', !n);
+        // Новых пунктов нет, но заведенные можно править — кнопка остается,
+        // только называется по делу.
+        save.disabled = !n && !made;
+        save.classList.toggle('off', !n && !made);
+        save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
@@ -8688,15 +8691,17 @@
         // из трех файлов — это три независимых разбора, и упавший третий не
         // должен отменять два заведенных.
         var boxes = Array.prototype.slice.call(card.querySelectorAll('.mi-imp'));
-        var fresh = [], total = 0, broke = false;
+        var fresh = [], total = 0, upd = 0, broke = false;
         var step = function (i) {
           if (i >= boxes.length) {
             state.tasks = null;
             state.taskGoals = null;
             loadTaskSummary();
+            var updTxt = upd ? 'поправил ' + upd + ' ' + plural(upd, 'задачу', 'задачи', 'задач') : '';
             showToast(total
-              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач')
-              : broke ? 'Не получилось завести, попробуй еще раз' : 'Новых задач не было');
+              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач') + (updTxt ? ', ' + updTxt : '')
+              : upd ? updTxt.charAt(0).toUpperCase() + updTxt.slice(1)
+              : broke ? 'Не получилось сохранить, попробуй еще раз' : 'Ничего не изменилось');
             if (state.page === 'tasks') renderView();
             if (fresh.length === boxes.length) draw(fresh, people, goals);
             else { save.disabled = false; save.classList.remove('loading'); }
@@ -8707,6 +8712,7 @@
             { goals: collect(box) },
             function (r) {
               total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
+              upd += (r && r.updated) || 0;
               if (r && r.import) fresh.push(r.import);
               step(i + 1);
             },
@@ -15735,6 +15741,20 @@
           esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
   }
+  /* Регулятор бота задач (Павел, 09.09.2026): какие уведомления бота человек получает.
+     Сервер хранит ВЫКЛЮЧЕННЫЕ виды (bot_mute), чип горит, когда вид включен. */
+  var TM_BOT_SHORT = { tasks: 'Задачи', digest: 'Утро', evening: 'Вечер', meetings: 'Встречи', rhythm: 'Ритм', chat: 'Чат' };
+  function tmBotChips(u) {
+    var off = u.bot_mute || [];
+    if (!(state._teamBotKinds || []).length) return '';
+    return '<span class="tm-tp bot" data-uid="' + u.id + '" title="Уведомления бота задач">' + ic('bell', 12) +
+      state._teamBotKinds.map(function (t) {
+        var on = off.indexOf(t.id) < 0;
+        return '<button type="button" class="tm-bt-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'title="' + esc((on ? 'Приходит: ' : 'Выключено: ') + t.label) + '">' +
+          esc(TM_BOT_SHORT[t.id] || t.label) + '</button>';
+      }).join('') + '</span>';
+  }
   /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
      отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
      до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
@@ -15765,6 +15785,7 @@
       api('/admin/api/team').then(function (r) {
         state._team = (r && r.users) || [];
         state._teamTopics = (r && r.topics) || [];
+        state._teamBotKinds = (r && r.bot_kinds) || [];
         state._teamShared = !r || r.shared_chat !== false;
         state._teamHier = !!(r && r.hierarchy_scope);
         if (state.page === 'team') renderView();
@@ -15832,7 +15853,7 @@
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
             (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
           '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
-        tmTopicChips(u) +
+        '<span class="tm-tps">' + tmTopicChips(u) + tmBotChips(u) + '</span>' +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
@@ -15963,6 +15984,31 @@
           b.disabled = false; u.full_team = !next;
           b.classList.toggle('on', !next);
           b.textContent = !next ? 'вся команда' : 'своя ветка';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
+      });
+    });
+    /* Вид уведомлений бота: чип горит = приходит. Та же схема, что у тем: красим сразу,
+       откатываем, если сервер не сохранил. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-bt-b'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.parentNode.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var t = b.getAttribute('data-t'), was = (u.bot_mute || []).slice();
+        var next = was.indexOf(t) >= 0
+          ? was.filter(function (x) { return x !== t; })
+          : was.concat([t]);
+        u.bot_mute = next;
+        b.classList.toggle('on');
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { bot_mute: next }, function () {
+          b.disabled = false;
+          showToast(next.length < was.length
+            ? (u.name || u.login) + ' снова получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase()
+            : (u.name || u.login) + ' больше не получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase());
+        }, function () {
+          b.disabled = false; u.bot_mute = was; b.classList.toggle('on');
           showToast('Не удалось сохранить — попробуйте еще раз');
         });
       });
