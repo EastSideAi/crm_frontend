@@ -22796,6 +22796,7 @@
       renderModalContent();
     });
     attachContentHandlers(id, ctx);
+    if (s === 'main') wireTrial(id);
     if (s === 'consult') wireConsultSection(id);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
@@ -23747,6 +23748,14 @@
         '<div class="r"><span class="k">Живой китайский</span><span class="v">' + esc(crsVal) + '</span></div>' +
         (crs.since ? '<div class="r"><span class="k">С какого дня</span><span class="v">' + esc(dayFull(crs.since)) + '</span></div>' : '') +
       '</div></div>';
+    }
+
+    /* пробный урок с преподавателем — запись прямо отсюда, без страницы школы */
+    if (can('clients')) {
+      html += '<div class="m-sec"><div class="m-sec-h">Пробный урок с преподавателем</div>' +
+        '<div id="trial-host" class="ab"><div class="field-empty">Загружаю…</div></div>' +
+        '<div style="margin-top:10px"><button class="bp sm" id="trial-add">' +
+          ic('cal', 14) + ' Записать на пробный урок</button></div></div>';
     }
 
     /* контакты (редактируемые) */
@@ -25389,6 +25398,130 @@
         loadConsult(id, true);
       }).catch(function () { btn.disabled = false; showToast('Не удалось записать'); });
     });
+  }
+
+  /* ── ПРОБНЫЙ УРОК С ПРЕПОДАВАТЕЛЕМ ─────────────────────────────────────────
+     Кнопка на «Главном»: выбрать преподавателя и время — и запись заводится в системе
+     учёта уроков (истсайд.рф/school) уже связанной с этой карточкой и с чатом бота.
+     Раньше менеджер делал это руками на странице школы, где ученик «Костя» повисал
+     текстом без связи с CRM (Вера, 08.09.2026). Бэкенд — POST /api/school/trial. */
+  var TRIALS = {}, TRIALS_BUSY = {};
+  function loadTrials(id, force) {
+    if (TRIALS_BUSY[id]) return;
+    if (force) delete TRIALS[id];
+    if (TRIALS[id]) { renderTrialBody(id); return; }
+    TRIALS_BUSY[id] = true;
+    api('/api/school/trials?session_id=' + encodeURIComponent(id)).then(function (r) {
+      TRIALS_BUSY[id] = false; TRIALS[id] = r || { lessons: [] }; renderTrialBody(id);
+    }).catch(function () {
+      TRIALS_BUSY[id] = false; TRIALS[id] = { lessons: [], err: true }; renderTrialBody(id);
+    });
+  }
+  function renderTrialBody(id) {
+    var host = el('trial-host'); if (!host) return;
+    var r = TRIALS[id];
+    if (!r) { host.innerHTML = '<div class="field-empty">Загружаю…</div>'; return; }
+    var ls = (r.lessons || []).filter(function (l) { return l.status !== 'canceled'; });
+    if (!ls.length) {
+      host.innerHTML = '<div class="field-empty">' +
+        (r.err ? 'Учёт уроков не отвечает — запись доступна на боевой CRM.'
+               : 'Пока не записан. Нажми «Записать», выбери преподавателя и время.') +
+      '</div>';
+      return;
+    }
+    host.innerHTML = ls.map(function (l) {
+      var done = l.status === 'done' || l.status === 'held';
+      return '<div class="r"><span class="k">' + cnsWhen(l.starts_at) + '</span>' +
+        '<span class="v">' + esc(l.teacher_name || 'преподаватель') +
+        (l.dur ? ', ' + l.dur + ' мин' : '') +
+        (done ? ' · проведён' : '') + '</span></div>';
+    }).join('');
+  }
+  function wireTrial(id) {
+    loadTrials(id);
+    var b = el('trial-add');
+    if (b) b.addEventListener('click', function () { openTrialDialog(id); });
+  }
+  function openTrialDialog(id) {
+    if (document.querySelector('.al-ov')) return;
+    var d = state.details[id] || {};
+    var name = (d.name || '').trim();
+    api('/api/school/teachers').then(function (r) {
+      var teachers = (r && r.teachers) || [];
+      var topts = teachers.map(function (t) {
+        return '<option value="' + esc(t.id) + '">' +
+          esc(t.name + (t.subject ? ' · ' + t.subject : '')) + '</option>';
+      }).join('');
+      var times = '<option value="">время</option>';
+      for (var h = 8; h <= 21; h++) for (var m = 0; m < 60; m += 30) {
+        var tt = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        times += '<option value="' + tt + '">' + tt + '</option>';
+      }
+      var today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+      var minDate = today.toISOString().slice(0, 10);
+      var ov = document.createElement('div');
+      ov.className = 'al-ov over';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head"><div>' +
+            '<div class="al-eyebrow">Карточка клиента</div>' +
+            '<div class="al-title">Пробный урок' + (name ? ' · ' + esc(name) : '') + '</div>' +
+          '</div><button class="al-x" id="tr-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+          '<div class="al-sub">Урок 30 минут. Запись появится в учёте уроков и, если человек писал боту, свяжется с его чатом.</div>' +
+          '<div class="al-body">' +
+            (teachers.length
+              ? '<label class="al-f"><span class="al-l">Преподаватель</span>' +
+                  '<select id="tr-teacher" class="al-in">' + topts + '</select></label>' +
+                '<label class="al-f"><span class="al-l">День</span>' +
+                  '<input id="tr-date" class="al-in" type="date" min="' + minDate + '" value="' + minDate + '"></label>' +
+                '<label class="al-f"><span class="al-l">Время (МСК)</span>' +
+                  '<select id="tr-time" class="al-in">' + times + '</select></label>'
+              : '<div class="field-empty">Преподаватели не заведены. Добавь их на странице учёта уроков — тогда появятся в списке.</div>') +
+            '<div class="ct-err" id="tr-err"></div>' +
+          '</div>' +
+          '<div class="al-foot"><button class="al-cancel" id="tr-cancel">Отмена</button>' +
+            (teachers.length ? '<button class="bp al-save" id="tr-ok">Записать</button>' : '') +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey);
+      el('tr-x').addEventListener('click', close);
+      el('tr-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var ok = el('tr-ok');
+      if (ok) ok.addEventListener('click', function () {
+        var teacher = el('tr-teacher'), date = el('tr-date'), time = el('tr-time');
+        var errEl = el('tr-err');
+        if (!teacher.value) { errEl.textContent = 'Выбери преподавателя'; return; }
+        if (!date.value) { errEl.textContent = 'Выбери день'; return; }
+        if (!time.value) { errEl.textContent = 'Выбери время'; return; }
+        var dt = new Date(date.value + 'T' + time.value);
+        if (isNaN(dt)) { errEl.textContent = 'Не разобрал дату'; return; }
+        ok.disabled = true;
+        api('/api/school/trial', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: id, teacher_id: teacher.value,
+            starts_at: dt.toISOString(), dur: 30, name: name }),
+        }).then(function (res) {
+          close();
+          showToast('Записан на пробный урок' + (res && res.bot_linked ? ' — чат бота связан' : ''));
+          loadTrials(id, true);
+        }).catch(function (e) {
+          ok.disabled = false;
+          errEl.textContent = (e && e.body && e.body.detail) || 'Не удалось записать';
+        });
+      });
+      setTimeout(function () { var f = el('tr-teacher'); if (f) f.focus(); }, 30);
+    }).catch(function () { showToast('Не удалось загрузить преподавателей'); });
   }
 
   function buildPaySection(ctx) {
