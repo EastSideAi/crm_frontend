@@ -16580,6 +16580,37 @@
       '</div>';
     }
 
+    /* Чаты направлений (Павел 10.09.2026): продажи — в чат продаж, маркетинг —
+       в чат маркетинга. Отбор по направлению задачи, а не по роли: продажами
+       занимается и руководитель, и ассистент. Сопровождение здесь не предлагаем —
+       это общий чат выше, он собирает по роли тьютора. */
+    var DEPT_CHATS = ['product', 'marketing', 'sales', 'hr', 'ops'];
+    function deptBlock(g) {
+      if (!g) return '';
+      var bound = g.dept_chats || {};
+      var groups = g.groups || [];
+      var rows = DEPT_CHATS.map(function (d) {
+        var cur = bound[d] ? bound[d].chat_id : '';
+        var known = groups.some(function (x) { return x.chat_id === cur; });
+        var opts = '<option value="">' + (groups.length ? 'не подключен' : 'нет групп с ботом') + '</option>' +
+          groups.map(function (x) {
+            return '<option value="' + esc(x.chat_id) + '"' + (x.chat_id === cur ? ' selected' : '') + '>' +
+              esc(x.title || x.chat_id) + '</option>';
+          }).join('') +
+          (cur && !known ? '<option value="' + esc(cur) + '" selected>' + esc((bound[d] && bound[d].title) || cur) + '</option>' : '');
+        return '<div class="tgd-row' + (cur ? ' on' : '') + '">' +
+          '<span class="tgd-l">' + esc(DEPTS[d]) + '</span>' +
+          '<span class="al-selwrap tgd-sel"><select class="al-sel sm" data-gd="' + d + '">' + opts + '</select></span>' +
+          (cur ? '<button class="tgg-b tgd-t" data-gdt="' + d + '">Проверить</button>' : '') +
+        '</div>';
+      }).join('');
+      return '<div class="tgg"><div class="tgg-h">Чаты направлений</div>' +
+        '<div class="tgg-s">Задача уходит в чат своего направления: новая, сдана на приемку, принята, плюс утренняя сводка с просрочками. Без направления или без исполнителя — никуда.</div>' +
+        '<div class="tgd">' + rows + '</div>' +
+        (groups.length ? '' : '<div class="tgg-s">' + (g.bot ? 'Добавь <b>@' + esc(g.bot) + '</b> в группу отдела и напиши там «/start» — группа появится здесь.' : 'Бот пока не подключен.') + '</div>') +
+      '</div>';
+    }
+
     Promise.all([
       api('/admin/api/tasks/tg/links'),
       api('/admin/api/tasks/tg/group').catch(function () { return null; }),
@@ -16630,7 +16661,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp, links) +
+        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -16674,6 +16705,31 @@
       });
       var gr = el('tgg-refresh');
       if (gr) gr.addEventListener('click', reopen);
+      /* Чат направления: выбрал группу — сохранили и перерисовали, чтобы
+         появилась кнопка проверки. Не сохранилось — вернули как было. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gd]'), function (sel) {
+        sel.addEventListener('change', function () {
+          var d = sel.getAttribute('data-gd'), was = (grp.dept_chats && grp.dept_chats[d]) ? grp.dept_chats[d].chat_id : '';
+          sel.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/dept', 'PUT', { dept: d, chat_id: sel.value }, function () {
+            showToast(sel.value ? DEPTS[d] + ': задачи пойдут в этот чат' : DEPTS[d] + ': чат отключен');
+            reopen();
+          }, function (code, e) {
+            sel.disabled = false; sel.value = was;
+            showToast((e && e.body && e.body.detail) || 'Не удалось сохранить — попробуй еще раз');
+          });
+        });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gdt]'), function (b) {
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/test', 'POST', { dept: b.getAttribute('data-gdt') }, function (resp) {
+            b.disabled = false;
+            showToast(resp && resp.ok ? 'Написал в группу — посмотри в телеграме'
+                                      : 'Бот не смог написать: проверь, что он в группе');
+          }, function () { b.disabled = false; showToast('Бот не смог написать в группу'); });
+        });
+      });
       /* Роль включают и выключают одним нажатием. Красим сразу, но правдой
          считаем ответ сервера: не сохранилось — возвращаем чип как был. */
       Array.prototype.forEach.call(ov.querySelectorAll('[data-gr]'), function (b) {
