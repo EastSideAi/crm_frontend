@@ -5632,12 +5632,17 @@
       // где что-то назначено, строкой «день · аккаунт · время · название».
       var mrows = [];
       days.forEach(function (d) {
+        var ms = [];
         accs.forEach(function (a) {
-          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) {
-            mrows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
-              '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
-              '<span class="zw-ma">' + esc(a.name) + '</span></button>');
-          });
+          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) { ms.push([a, m]); });
+        });
+        // По времени, а не по аккаунтам: день читается сверху вниз как расписание.
+        ms.sort(function (x, y) { return new Date(x[1].start) - new Date(y[1].start); });
+        ms.forEach(function (am) {
+          var a = am[0], m = am[1];
+          mrows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
+            '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
+            '<span class="zw-ma">' + esc(a.name) + '</span></button>');
         });
       });
       var off2 = accs.filter(function (a) { return a.error; }).map(function (a) { return a.name; });

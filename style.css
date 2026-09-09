@@ -3019,9 +3019,13 @@ button.tr-crumb:hover { color: var(--blue); }
   .zw-head { flex-wrap: wrap; row-gap: 8px; }
   .zw-new { order: 2; margin-left: auto; }
   .zw-nav { order: 3; margin-left: 0; width: 100%; }
-  .zw-seg { margin-left: 0; order: 1; }
+  /* Телефон: заголовок и кнопка в первой строке, сегмент и стрелки с датой — во второй. */
+  .zw-new { order: 1; }
+  .zw-seg { order: 2; margin-left: 0; }
+  .zw-nav { order: 3; width: auto; margin-left: auto; }
   .zw-acc { margin-left: 0; width: 100%; }
   .zd-h { flex-basis: 42px; }
+  .zd-row .zw-chip { white-space: normal; }
 }
 .zw-range { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .zw-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
