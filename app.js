@@ -75,7 +75,8 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
-    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '',
+    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
+    news: null, newsUnread: 0,
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -2158,6 +2159,8 @@
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
+    // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
+    { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2319,6 +2322,8 @@
           extra = '<span class="bdg num" title="просрочено">' + state.taskSum.overdue + '</span>';
         else if (it.id === 'tasks' && state.taskSum && state.taskSum.open)
           extra = '<span class="cnt num">' + state.taskSum.open + '</span>';
+        // Новое в CRM — не тревога: нейтральный счетчик, красное здесь только у просрочки.
+        else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
         return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
@@ -2370,7 +2375,8 @@
       var hoM = inboxAttention();
       var mBadge = function (it) {
         return (it.id === 'leads' && c.hot) ? c.hot
-          : (it.id === 'inbox' && hoM) ? hoM : mwBadge(it.id);
+          : (it.id === 'inbox' && hoM) ? hoM
+          : (it.id === 'news') ? (state.newsUnread || 0) : mwBadge(it.id);
       };
       // На телефоне левой колонки нет, поэтому переход в другое пространство живет
       // отдельной вкладкой в начале ленты — иначе с телефона туда не попасть.
@@ -2767,6 +2773,14 @@
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
     }
+    if (state.page === 'news') {
+      var nu = state.newsUnread;
+      html = '<div><h2>Что нового</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' +
+        (nu ? 'Непрочитанных: <b>' + nu + '</b>. ' : '') + 'Что изменилось в CRM и как этим пользоваться. Записи приходят и в бот задач.' +
+        '</span></div></div>' +
+        (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
+    }
     if (state.page === 'analytics') {
       html = '<div><h2>Аналитика бота</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('bolt', 13) + '</span><span>' +
@@ -3030,6 +3044,8 @@
     });
     var gs = el('tsk-guide-skip');
     if (gs) gs.addEventListener('click', guideExit);
+    var nw = el('nw-new');
+    if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
@@ -3074,6 +3090,7 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
+    else if (state.page === 'news') renderNews(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -5503,82 +5520,371 @@
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
     return d;
   }
-  function loadZoomWeek(off) {
-    var lo = zoomWeekStart(off), hi = new Date(lo.getTime() + 7 * 86400000);
+  function loadZoomWeek(lo) {
+    var hi = new Date(lo.getTime() + 7 * 86400000);
     var key = lo.toISOString().slice(0, 10);
     state.zoomWeek[key] = 'loading';
     api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
       .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
       .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
   }
+  // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
+  // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
+  // Ключ дня — по местным числам, не через toISOString: московская полночь в UTC
+  // еще вчера, и окна расписания на «сегодня» не совпадали бы с днем на экране.
+  function zoomYmd(d) {
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+  function loadZoomWin(d) {
+    var key = zoomYmd(d), hi = new Date(d.getTime() + 86400000);
+    state.zoomWin[key] = 'loading';
+    api('/admin/api/zoom/windows?from=' + encodeURIComponent(d.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
+      .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.zoomWin[key] = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function zoomDay() {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + (state.zoomDayOff || 0));
+    return d;
+  }
+  // Понедельник недели, которую показывает текущий вид: неделя — по своему сдвигу,
+  // день — та, куда день попадает. Кэш зумов один на оба вида, по этому ключу.
+  function zoomRangeStart() {
+    if (state.zoomView !== 'day') return zoomWeekStart(state.zoomWeekOff || 0);
+    var d = zoomDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+  var ZOOM_DAY_FROM = 8, ZOOM_DAY_TO = 22;
   function zoomWeekBlock() {
-    var off = state.zoomWeekOff || 0;
-    var lo = zoomWeekStart(off), key = lo.toISOString().slice(0, 10);
+    var dayView = state.zoomView === 'day';
+    var lo = zoomRangeStart(), key = lo.toISOString().slice(0, 10);
     var data = state.zoomWeek[key];
-    if (data === undefined) { loadZoomWeek(off); data = 'loading'; }
+    if (data === undefined) { loadZoomWeek(lo); data = 'loading'; }
     var days = [];
     for (var i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
-    var range = days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
-    var head = '<div class="sec-head zw-head"><div class="t">Зумы на неделю</div>' +
-      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
-      '<span class="zw-range">' + esc(range) + '</span>' +
-      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div>' +
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = zoomDay(), dayKey = zoomYmd(day);
+    var range = dayView
+      ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] + (day.getTime() === today.getTime() ? '<span class="zw-td"> · сегодня</span>' : '')
+      : days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
+    var atNow = dayView ? !(state.zoomDayOff || 0) : !(state.zoomWeekOff || 0);
+    var head = '<div class="sec-head zw-head"><div class="t">Зумы</div>' +
+      '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-zv="week">Неделя</button>' +
+        '<button type="button" class="' + (dayView ? 'on' : '') + '" data-zv="day">День</button></div>' +
+      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
+      '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-zw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
+      '<button class="icobtn" data-zw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
       '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div>';
     var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
     var sameDay = function (iso, d) { var x = new Date(iso); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
-    var flt = state.zoomKind || '';
+    var flt = state.zoomKind || '', accF = state.zoomAcc || '';
     var vis = function (m) { return !flt || m.kind === flt; };
+    var accVis = function (a) { return !accF || a.slot === accF; };
     var kcls = function (m) { return 'k-' + (m.kind || 'none'); };
-    var kttl = function (m) {
+    var kname = function (m) {
       var k = ZOOM_KINDS.filter(function (x) { return x[0] === m.kind; })[0];
-      return esc(m.topic) + ' · ' + (k ? k[1] : 'без типа');
+      return k ? k[1] : 'без типа';
     };
-    var fltRow = (data !== 'loading' && data !== 'none' && data.length)
-      ? '<nav class="tabs zw-flt"><a class="tab' + (!flt ? ' on' : '') + '" data-zk="">Все</a>' +
+    var kttl = function (m) { return esc(m.topic) + ' · ' + kname(m); };
+    var ready = data !== 'loading' && data !== 'none' && data.length;
+    var accs = ready ? data.filter(accVis) : [];
+    var fltRow = ready
+      ? '<div class="zw-fltrow"><nav class="tabs zw-flt"><a class="tab' + (!flt ? ' on' : '') + '" data-zk="">Все</a>' +
           ZOOM_KINDS.map(function (k) {
             return '<a class="tab' + (flt === k[0] ? ' on' : '') + '" data-zk="' + k[0] + '">' + k[2] + '</a>';
-          }).join('') + '</nav>'
+          }).join('') + '</nav>' +
+          (data.length > 1
+            ? '<label class="al-selwrap zw-acc"><select class="al-sel" id="zw-acc"><option value="">Все аккаунты</option>' +
+                data.map(function (a) { return '<option value="' + esc(a.slot) + '"' + (accF === a.slot ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') +
+              '</select></label>'
+            : '') + '</div>'
       : '';
-    var body;
+    var chip = function (a, m, withAcc) {
+      return '<button type="button" class="zw-chip ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '" title="' + kttl(m) + '"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) +
+        (withAcc ? '<span class="zd-acc">' + esc(a.name) + '</span>' : '') + '</button>';
+    };
+    var body, tail = '';
     if (data === 'loading') body = '<div class="zw-empty">Спрашиваю у зума…</div>';
     else if (data === 'none') body = '<div class="zw-empty">Зум не ответил. Обнови страницу.</div>';
     else if (!data.length) body = '<div class="zw-empty">Аккаунты зума еще не подключены.</div>';
-    else if (mqMobile.matches) {
+    else if (dayView) {
+      // День по часам: зумы всех аккаунтов одним столбцом, рядом окна людей из
+      // расписания команды. Неделя целиком при плотной сетке не читается, а
+      // «кто и когда сегодня» — первый вопрос, с которым сюда приходят.
+      var win = state.zoomWin[dayKey];
+      if (win === undefined) { loadZoomWin(day); win = 'loading'; }
+      // Фильтр по типу режет и окна людей: «Занятия» — окна преподавателей,
+      // «Консультации» — окна на разбор, командные типы — окон не бывает.
+      var winRole = !flt ? '' : flt === 'lesson' ? 'teacher' : flt === 'consult' ? 'curator' : 'none';
+      var slots = ((win && typeof win === 'object' && win.slots) || []).filter(function (x) {
+        return x.date === dayKey && (!winRole || x.role === winRole);
+      });
+      var dayMs = [];
+      accs.forEach(function (a) {
+        (a.meetings || []).filter(function (m) { return sameDay(m.start, day) && vis(m); }).forEach(function (m) { dayMs.push([a, m]); });
+      });
+      // Часы 8–22 по умолчанию, но ранний урок с Китаем или поздний созвон
+      // раздвигают сетку, а не выпадают из нее молча.
+      var hFrom = ZOOM_DAY_FROM, hTo = ZOOM_DAY_TO;
+      dayMs.forEach(function (am) { var h0 = new Date(am[1].start).getHours(); hFrom = Math.min(hFrom, h0); hTo = Math.max(hTo, h0); });
+      slots.forEach(function (x) { hFrom = Math.min(hFrom, x.hour); hTo = Math.max(hTo, x.hour); });
+      var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
+      var rows = [], seen = 0;
+      for (var h = hFrom; h <= hTo; h++) {
+        var cells = [];
+        dayMs.filter(function (am) { return new Date(am[1].start).getHours() === h; })
+          .sort(function (x, y) { return new Date(x[1].start) - new Date(y[1].start); })
+          .forEach(function (am) { cells.push(chip(am[0], am[1], accs.length > 1)); });
+        var here = slots.filter(function (x) { return x.hour === h; });
+        var busy = here.filter(function (x) { return x.booked; });
+        var free = here.filter(function (x) { return !x.booked; });
+        busy.forEach(function (x) {
+          cells.push('<span class="zd-win busy"><b>' + esc(x.person) + '</b> · ' + (x.role === 'teacher' ? 'урок' : 'разбор') + (x.client ? ' · ' + esc(x.client) : '') + '</span>');
+        });
+        if (free.length) {
+          var names = [];
+          free.forEach(function (x) { var n = x.person + (x.role === 'teacher' ? ' (урок)' : ''); if (names.indexOf(n) === -1) names.push(n); });
+          cells.push('<span class="zd-win">свободны: <b>' + names.map(esc).join('</b>, <b>') + '</b></span>');
+        }
+        if (cells.length) seen++;
+        rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span><span class="zd-c">' + cells.join('') + '</span></div>');
+      }
+      body = '<div class="zd-tbl">' + rows.join('') + '</div>';
+      if (!seen) body = '<div class="zw-empty">' + (flt || accF ? 'Таких встреч в этот день нет.' : 'На этот день ничего не назначено.') + '</div>' + body;
+      var off1 = accs.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
+      if (off1.length) tail += '<div class="zw-off">Нет доступа: ' + esc(off1.join(', ')) + '</div>';
+      if (win === 'loading') tail += '<div class="zw-off">Спрашиваю расписание команды…</div>';
+      else if (win === 'none') tail += '<div class="zw-off">Расписание команды не ответило, показываю только зумы.</div>';
+      else if (win && win.enabled === false) tail += '<div class="zw-off">Расписание команды не подключено, показываю только зумы.</div>';
+    } else if (mqMobile.matches) {
       // На телефоне матрица съедает экран, а журнал встреч уходит за фолд: только дни,
       // где что-то назначено, строкой «день · аккаунт · время · название».
-      var rows = [];
+      var mrows = [];
       days.forEach(function (d) {
-        data.forEach(function (a) {
-          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) {
-            rows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
-              '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
-              '<span class="zw-ma">' + esc(a.name) + '</span></button>');
-          });
+        var ms = [];
+        accs.forEach(function (a) {
+          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) { ms.push([a, m]); });
+        });
+        // По времени, а не по аккаунтам: день читается сверху вниз как расписание.
+        ms.sort(function (x, y) { return new Date(x[1].start) - new Date(y[1].start); });
+        ms.forEach(function (am) {
+          var a = am[0], m = am[1];
+          mrows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
+            '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
+            '<span class="zw-ma">' + esc(a.name) + '</span></button>');
         });
       });
-      var off2 = data.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
-      body = (rows.length ? rows.join('') : '<div class="zw-empty">' + (flt ? 'Таких встреч на этой неделе нет.' : 'На этой неделе в зумах ничего не назначено.') + '</div>') +
+      var off2 = accs.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
+      body = (mrows.length ? mrows.join('') : '<div class="zw-empty">' + (flt || accF ? 'Таких встреч на этой неделе нет.' : 'На этой неделе в зумах ничего не назначено.') + '</div>') +
         (off2.length ? '<div class="zw-off">Нет доступа: ' + esc(off2.join(', ')) + '</div>' : '');
     } else {
-      var today = new Date(); today.setHours(0, 0, 0, 0);
       body = '<div class="zw-tbl">' +
-        '<div class="zw-row head"><span class="zw-d"></span>' + data.map(function (a) {
+        '<div class="zw-row head"><span class="zw-d"></span>' + accs.map(function (a) {
           return '<span class="zw-c"><span class="th">' + esc(a.name) + '</span>' +
             (a.error ? '<span class="zw-err" title="' + esc(a.error) + '">нет доступа</span>' : '') + '</span>';
         }).join('') + '</div>' +
         days.map(function (d) {
           var isToday = d.getTime() === today.getTime();
           return '<div class="zw-row' + (isToday ? ' today' : '') + '"><span class="zw-d">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></span>' +
-            data.map(function (a) {
+            accs.map(function (a) {
               var ms = (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); });
-              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) {
-                return '<button type="button" class="zw-chip ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '" title="' + kttl(m) + '"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</button>';
-              }).join('') + '</span>';
+              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) { return chip(a, m, false); }).join('') + '</span>';
             }).join('') + '</div>';
         }).join('') + '</div>';
     }
-    return '<div class="card zw">' + head + fltRow + body +
+    return '<div class="card zw">' + head + fltRow + body + tail +
       '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
+  }
+
+
+  /* ── Что нового: обновления CRM для команды, с адресатом ─────────────────────
+     Запись пишет руководитель или агент после выкатки; адресат — все, роли или
+     люди. Точка в меню гаснет, когда человек открыл раздел: у кого бот не
+     привязан, узнает отсюда. */
+  function newsLoad(cb) {
+    api('/admin/api/news').then(function (r) {
+      state.news = r || { items: [], unread: 0 };
+      state.newsUnread = (r && r.unread) || 0;
+      renderSide();
+      if (cb) cb(r);
+    }).catch(function () { state.news = state.news || { items: [], unread: 0, none: true }; if (cb) cb(null); });
+  }
+  function newsText(t) {
+    // Ссылки кликабельны: запись часто говорит «открой вот тут».
+    return esc(t || '').replace(/(https?:\/\/[^\s<]+)/g, function (u) {
+      return '<a href="' + u + '" target="_blank" rel="noopener">' + u + '</a>';
+    }).replace(/\n/g, '<br>');
+  }
+  function newsWho(it) {
+    var n = state.news || {};
+    var roles = (it.roles || []).map(function (r) {
+      var x = (n.roles || []).filter(function (y) { return y.id === r; })[0]; return x ? x.label : r;
+    });
+    var people = (it.users || []).map(function (id) {
+      var x = (n.people || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name.split(' ')[0] : '#' + id;
+    });
+    var chats = (it.chats || []).map(function (id) {
+      var x = (n.chats || []).filter(function (y) { return y.id === id; })[0]; return 'чат ' + (x ? x.title : id);
+    });
+    var who = roles.concat(people);
+    return (who.length ? who.join(', ') : 'всем') + (chats.length ? ' + ' + chats.join(', ') : '');
+  }
+  function renderNews(view) {
+    if (!state.news) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return newsLoad(function () { if (state.page === 'news') { renderHead(); renderNews(view); } });
+    }
+    var n = state.news, items = n.items || [];
+    if (n.none) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить записи. Обнови страницу.</div></div>';
+      return;
+    }
+    var body = items.length ? items.map(function (it) {
+      var meta = [dayLabel(it.at), it.author].filter(Boolean);
+      var tags = '';
+      if (n.editor) {
+        tags += '<span class="sev">' + esc(newsWho(it)) + '</span>';
+        if (!it.sent) tags += '<span class="sev nw-draft">черновик</span>';
+      }
+      return '<article class="nw-item' + (it.mine && !it.read ? ' unread' : '') + '" data-nw="' + it.id + '">' +
+        '<div class="nw-top"><h3 class="nw-title">' + esc(it.title) + '</h3>' +
+          (n.editor ? '<button class="icobtn nw-edit" data-nwe="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') + '</div>' +
+        '<div class="nw-meta">' + esc(meta.join(' · ')) + tags + '</div>' +
+        (it.body ? '<div class="nw-body">' + newsText(it.body) + '</div>' : '') +
+      '</article>';
+    }).join('') : '<div class="empty">' + (n.editor ? 'Записей пока нет. Первую напиши кнопкой «Написать» сверху.' : 'Пока ничего нового. Записи об обновлениях будут появляться здесь и в боте.') + '</div>';
+    view.innerHTML = '<div class="card nw">' + body + '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-nwe]'), function (b) {
+      b.addEventListener('click', function () {
+        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-nwe'); })[0];
+        if (it) openNewsForm(it);
+      });
+    });
+    // Открыл раздел — прочитал. Отмечаем на сервере и гасим точку, подсветка
+    // непрочитанного на этом экране остается до следующего захода.
+    var unread = items.filter(function (x) { return x.mine && !x.read; }).map(function (x) { return x.id; });
+    if (unread.length) {
+      apiSend('/admin/api/news/read', 'POST', { ids: unread }, function () {
+        items.forEach(function (x) { if (unread.indexOf(x.id) >= 0) x.read = true; });
+        state.newsUnread = 0; renderSide(); if (state.page === 'news') renderHead();
+      }, function () {});
+    }
+  }
+  function openNewsForm(it) {
+    if (document.querySelector('.al-ov.nw-ov')) return;
+    var n = state.news || {}, roles = n.roles || [], people = n.people || [], chats = n.chats || [];
+    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice(), chats: (it && it.chats || []).slice() };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over nw-ov';
+    ov.innerHTML =
+      '<div class="al-card nw-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Что нового</div><div class="al-title">' + (it ? 'Поправить запись' : 'Новая запись') + '</div></div>' +
+          '<button class="al-x" id="nw-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Заголовок</span>' +
+            '<input id="nw-title" class="al-in" type="text" maxlength="200" placeholder="Что появилось, одной строкой" value="' + esc(it ? it.title : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">Как этим пользоваться</span>' +
+            '<textarea id="nw-body" class="al-in al-ta" rows="6" maxlength="4000" placeholder="Простыми словами: где найти, что нажать, что изменилось">' + esc(it ? it.body : '') + '</textarea></label>' +
+          '<div class="al-f"><span class="al-l">Кому</span>' +
+            '<div class="nw-who"><span class="nw-who-l">Роли</span><span class="nw-roles">' +
+              roles.map(function (r) { return '<button type="button" class="tm-tp-b nw-p' + (sel.roles.indexOf(r.id) >= 0 ? ' on' : '') + '" data-nwr="' + esc(r.id) + '">' + esc(r.label) + '</button>'; }).join('') +
+            '</span></div>' +
+            '<div class="nw-who"><span class="nw-who-l">Люди</span>' +
+              '<div class="searchwrap nw-search"><input id="nw-q" class="search" type="search" placeholder="Найти человека" autocomplete="off"></div>' +
+              '<div class="nw-people" id="nw-people"></div></div>' +
+            // Чаты появляются сами, как только бот задач добавлен в группу.
+            '<div class="nw-who"><span class="nw-who-l">Чаты</span><span class="nw-roles">' +
+              (chats.length ? chats.map(function (c) { return '<button type="button" class="tm-tp-b nw-p' + (sel.chats.indexOf(c.id) >= 0 ? ' on' : '') + '" data-nwc="' + esc(c.id) + '">' + esc(c.title) + '</button>'; }).join('')
+                : '<span class="nw-none">Бота задач нет ни в одной группе. Добавь его в чат, и чат появится здесь.</span>') +
+            '</span></div>' +
+            '<div class="nw-sum" id="nw-sum"></div></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (it ? '<button class="al-cancel nw-del" id="nw-del">Удалить</button>' : '') +
+          (it && it.sent ? '' : '<button class="al-cancel" id="nw-draft">' + (it ? 'Сохранить черновик' : 'В черновики') + '</button>') +
+          '<button class="bp al-save" id="nw-send">' + (it && it.sent ? 'Сохранить' : 'Отправить') + '</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      document.removeEventListener('keydown', onKey, true);
+      ov.classList.remove('show'); setTimeout(function () { ov.remove(); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('nw-x').addEventListener('click', close);
+    var sum = function () {
+      var who = [];
+      sel.roles.forEach(function (id) { var r = roles.filter(function (x) { return x.id === id; })[0]; who.push(r ? r.label : id); });
+      sel.users.forEach(function (id) { var p = people.filter(function (x) { return x.id === id; })[0]; who.push(p ? p.name : '#' + id); });
+      var ch = sel.chats.map(function (id) { var c = chats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : id; });
+      el('nw-sum').innerHTML = (who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>' : 'Получит <b>вся команда</b>. Выбери роли или людей, чтобы сузить.') +
+        (ch.length ? '<br>И в чаты: <b>' + esc(ch.join(', ')) + '</b>' : '');
+    };
+    var renderPeople = function () {
+      var q = (el('nw-q').value || '').toLowerCase().trim();
+      var list = people.filter(function (p) { return sel.users.indexOf(p.id) >= 0 || (q && p.name.toLowerCase().indexOf(q) >= 0); });
+      el('nw-people').innerHTML = list.length
+        ? list.map(function (p) { return '<button type="button" class="tm-tp-b nw-p' + (sel.users.indexOf(p.id) >= 0 ? ' on' : '') + '" data-nwp="' + p.id + '">' + esc(p.name) + '</button>'; }).join('')
+        : (q ? '<span class="nw-none">Никого с таким именем</span>' : '');
+      Array.prototype.forEach.call(el('nw-people').querySelectorAll('[data-nwp]'), function (b) {
+        b.addEventListener('click', function () {
+          var id = +b.getAttribute('data-nwp'), i = sel.users.indexOf(id);
+          if (i >= 0) sel.users.splice(i, 1); else sel.users.push(id);
+          renderPeople(); sum();
+        });
+      });
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-nwr]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-nwr'), i = sel.roles.indexOf(id);
+        if (i >= 0) sel.roles.splice(i, 1); else sel.roles.push(id);
+        b.classList.toggle('on', i < 0); sum();
+      });
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-nwc]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-nwc'), i = sel.chats.indexOf(id);
+        if (i >= 0) sel.chats.splice(i, 1); else sel.chats.push(id);
+        b.classList.toggle('on', i < 0); sum();
+      });
+    });
+    el('nw-q').addEventListener('input', renderPeople);
+    renderPeople(); sum();
+    setTimeout(function () { el('nw-title').focus(); }, 30);
+    var payload = function () {
+      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users, chats: sel.chats };
+    };
+    var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-foot button'), function (b) { b.disabled = on; }); };
+    var fail = function (e) { busy(false); showToast((e && e.message) || 'Не сохранилось, попробуй еще раз'); };
+    var save = function (send) {
+      var p = payload();
+      if (!p.title) { showToast('Нужен заголовок'); el('nw-title').focus(); return; }
+      busy(true);
+      var done = function (r) {
+        close();
+        var nn = r && r.news;
+        showToast(send ? (nn && nn.delivered ? 'Отправил, дошло ' + nn.delivered + ' ' + plural(nn.delivered, 'человеку', 'людям', 'людям') : 'Отправил') : 'Сохранил');
+        state.news = null; newsLoad(function () { if (state.page === 'news') { renderHead(); renderView(); } });
+      };
+      if (!it) { p.send = !!send; apiSend('/admin/api/news', 'POST', p, done, fail); return; }
+      apiSend('/admin/api/news/' + it.id, 'PATCH', p, function () {
+        if (send && !it.sent) apiSend('/admin/api/news/' + it.id + '/send', 'POST', {}, done, fail);
+        else done(null);
+      }, fail);
+    };
+    el('nw-send').addEventListener('click', function () { save(!(it && it.sent)); });
+    if (el('nw-draft')) el('nw-draft').addEventListener('click', function () { save(false); });
+    if (el('nw-del')) el('nw-del').addEventListener('click', function () {
+      if (!confirm('Убрать запись? У тех, кому она уже ушла в бот, сообщение останется.')) return;
+      busy(true);
+      apiSend('/admin/api/news/' + it.id, 'DELETE', null, function () {
+        close(); showToast('Убрал'); state.news = null; newsLoad(function () { if (state.page === 'news') { renderHead(); renderView(); } });
+      }, fail);
+    });
   }
 
   function renderMeetings(view) {
@@ -5619,15 +5925,30 @@
     }
     if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zw]'), function (b) {
-      b.addEventListener('click', function () { state.zoomWeekOff = (state.zoomWeekOff || 0) + (+b.getAttribute('data-zw')); renderView(); });
+      b.addEventListener('click', function () {
+        var step = +b.getAttribute('data-zw');
+        if (state.zoomView === 'day') state.zoomDayOff = (state.zoomDayOff || 0) + step;
+        else state.zoomWeekOff = (state.zoomWeekOff || 0) + step;
+        renderView();
+      });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zw0]'), function (b) {
+      b.addEventListener('click', function () {
+        if (state.zoomView === 'day') state.zoomDayOff = 0; else state.zoomWeekOff = 0;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zv]'), function (b) {
+      b.addEventListener('click', function () { state.zoomView = b.getAttribute('data-zv') === 'day' ? 'day' : 'week'; renderView(); });
+    });
+    if (el('zw-acc')) el('zw-acc').addEventListener('change', function () { state.zoomAcc = el('zw-acc').value || ''; renderView(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zk]'), function (b) {
       b.addEventListener('click', function () { state.zoomKind = b.getAttribute('data-zk') || ''; renderView(); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-zm]'), function (b) {
       b.addEventListener('click', function () {
         var p = (b.getAttribute('data-zm') || '').split('|');
-        var key = zoomWeekStart(state.zoomWeekOff || 0).toISOString().slice(0, 10);
+        var key = zoomRangeStart().toISOString().slice(0, 10);
         var accs = state.zoomWeek[key];
         if (!accs || typeof accs === 'string') return;
         var acc = accs.filter(function (a) { return a.slot === p[0]; })[0];
@@ -5638,7 +5959,7 @@
     if (el('zw-new')) el('zw-new').addEventListener('click', function () {
       // Встреча без задачи и без семьи: ссылка в буфере, а в сетке она появится
       // сразу, для этого кэш недели сбрасываем.
-      openZoomForm({ after: function () { state.zoomWeek = {}; renderView(); } });
+      openZoomForm({ after: function () { state.zoomWeek = {}; state.zoomWin = {}; renderView(); } });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
       b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
@@ -8258,7 +8579,7 @@
      потом нажимает «завести». Экран проверки существует именно поэтому: модель
      ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
      задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
-  var MEET_MAX_MB = 2;
+  var MEET_MAX_MB = 5;
   // Сколько протоколов принимаем за раз. Разбор каждого — отдельный запрос к
   // модели на полминуты, и десяток файлов человек все равно не вычитает за один
   // заход: он закроет экран на половине, а заведется первая половина.
@@ -8280,10 +8601,10 @@
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
             '<div class="mu-drop-t">Выбери файлы или перетащи сюда</div>' +
-            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ каждый, ' +
+            '<div class="mu-drop-s">txt, md, docx или pdf, до ' + MEET_MAX_MB + ' МБ каждый, ' +
               'до ' + MEET_MAX_FILES + ' за раз</div>' +
             '<input type="file" id="mu-file" multiple ' +
-              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx,.pdf" hidden>' +
           '</div>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
@@ -8403,7 +8724,7 @@
         if (i >= queue.length) {
           if (!done.length) {
             go.disabled = false; go.classList.remove('loading');
-            show('Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+            show('Не смог разобрать. Пришли txt, md, docx или pdf, либо вставь текст.', true);
             return;
           }
           if (failed.length) showToast('Не разобрал: ' + failed.join(', '));
@@ -8505,8 +8826,9 @@
           '<div class="mi-line">' +
             // Заголовок — textarea, а не input: формулировку надо видеть целиком,
             // а на телефоне в одну строку влезает треть. Высота растет по тексту.
-            '<textarea class="al-in mi-title" rows="1" maxlength="200"' +
-              (made ? ' disabled' : '') + '>' + esc(it.title || '') + '</textarea>' +
+            // Заведенный пункт остается правимым (Павел, 09.09.2026): название,
+            // исполнитель и срок уходят в саму задачу при «Сохранить правки».
+            '<textarea class="al-in mi-title" rows="1" maxlength="200">' + esc(it.title || '') + '</textarea>' +
             (made
               ? '<a class="mi-made" href="#task/' + it.task_id + '">' + ic('check', 13) + 'в задачнике</a>'
               : '<button type="button" class="mi-skip" title="' +
@@ -8519,14 +8841,13 @@
               ? '<span class="al-selwrap mi-link"><select class="al-sel sm mi-exist">' +
                   goalOpts(it.existing_goal_id) + '</select></span>'
               : '') +
-            '<span class="al-selwrap mi-who"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
+            '<span class="al-selwrap mi-who"><select class="al-sel sm">' +
               whoOpts(it.assignee_id) + '</select></span>' +
             (si === null
               ? '<span class="al-selwrap mi-dept"><select class="al-sel sm"' + (made ? ' disabled' : '') + '>' +
                   deptOpts(it.dept || '') + '</select></span>'
               : '') +
-            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '"' +
-              (made ? ' disabled' : '') + '>' +
+            '<input type="date" class="al-in sm mi-due" value="' + esc(it.due_date || '') + '">' +
           '</div>' +
         '</div>';
       };
@@ -8612,11 +8933,14 @@
         var made = card.querySelectorAll('.mi-item.made').length;
         count.textContent = n
           ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
-          : !off ? 'Все пункты уже в задачнике'
+          : !off ? (made ? 'Все пункты в задачнике. Правки названия, исполнителя и срока уйдут в задачи' : 'Все пункты уже в задачнике')
           : made ? 'Заведено все, кроме снятого'
           : 'Все пункты сняты';
-        save.disabled = !n;
-        save.classList.toggle('off', !n);
+        // Новых пунктов нет, но заведенные можно править — кнопка остается,
+        // только называется по делу.
+        save.disabled = !n && !made;
+        save.classList.toggle('off', !n && !made);
+        save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
@@ -8688,15 +9012,17 @@
         // из трех файлов — это три независимых разбора, и упавший третий не
         // должен отменять два заведенных.
         var boxes = Array.prototype.slice.call(card.querySelectorAll('.mi-imp'));
-        var fresh = [], total = 0, broke = false;
+        var fresh = [], total = 0, upd = 0, broke = false;
         var step = function (i) {
           if (i >= boxes.length) {
             state.tasks = null;
             state.taskGoals = null;
             loadTaskSummary();
+            var updTxt = upd ? 'поправил ' + upd + ' ' + plural(upd, 'задачу', 'задачи', 'задач') : '';
             showToast(total
-              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач')
-              : broke ? 'Не получилось завести, попробуй еще раз' : 'Новых задач не было');
+              ? 'Завел ' + total + ' ' + plural(total, 'задачу', 'задачи', 'задач') + (updTxt ? ', ' + updTxt : '')
+              : upd ? updTxt.charAt(0).toUpperCase() + updTxt.slice(1)
+              : broke ? 'Не получилось сохранить, попробуй еще раз' : 'Ничего не изменилось');
             if (state.page === 'tasks') renderView();
             if (fresh.length === boxes.length) draw(fresh, people, goals);
             else { save.disabled = false; save.classList.remove('loading'); }
@@ -8707,6 +9033,7 @@
             { goals: collect(box) },
             function (r) {
               total += ((r && r.goals) || 0) + ((r && r.steps) || 0);
+              upd += (r && r.updated) || 0;
               if (r && r.import) fresh.push(r.import);
               step(i + 1);
             },
@@ -15735,6 +16062,20 @@
           esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
   }
+  /* Регулятор бота задач (Павел, 09.09.2026): какие уведомления бота человек получает.
+     Сервер хранит ВЫКЛЮЧЕННЫЕ виды (bot_mute), чип горит, когда вид включен. */
+  var TM_BOT_SHORT = { tasks: 'Задачи', digest: 'Утро', evening: 'Вечер', meetings: 'Встречи', rhythm: 'Ритм', chat: 'Чат', updates: 'Новое' };
+  function tmBotChips(u) {
+    var off = u.bot_mute || [];
+    if (!(state._teamBotKinds || []).length) return '';
+    return '<span class="tm-tp bot" data-uid="' + u.id + '" title="Уведомления бота задач">' + ic('bell', 12) +
+      state._teamBotKinds.map(function (t) {
+        var on = off.indexOf(t.id) < 0;
+        return '<button type="button" class="tm-bt-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'title="' + esc((on ? 'Приходит: ' : 'Выключено: ') + t.label) + '">' +
+          esc(TM_BOT_SHORT[t.id] || t.label) + '</button>';
+      }).join('') + '</span>';
+  }
   /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
      отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
      до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
@@ -15765,6 +16106,7 @@
       api('/admin/api/team').then(function (r) {
         state._team = (r && r.users) || [];
         state._teamTopics = (r && r.topics) || [];
+        state._teamBotKinds = (r && r.bot_kinds) || [];
         state._teamShared = !r || r.shared_chat !== false;
         state._teamHier = !!(r && r.hierarchy_scope);
         if (state.page === 'team') renderView();
@@ -15832,7 +16174,7 @@
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
             (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
           '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
-        tmTopicChips(u) +
+        '<span class="tm-tps">' + tmTopicChips(u) + tmBotChips(u) + '</span>' +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
@@ -15963,6 +16305,31 @@
           b.disabled = false; u.full_team = !next;
           b.classList.toggle('on', !next);
           b.textContent = !next ? 'вся команда' : 'своя ветка';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
+      });
+    });
+    /* Вид уведомлений бота: чип горит = приходит. Та же схема, что у тем: красим сразу,
+       откатываем, если сервер не сохранил. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-bt-b'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.parentNode.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var t = b.getAttribute('data-t'), was = (u.bot_mute || []).slice();
+        var next = was.indexOf(t) >= 0
+          ? was.filter(function (x) { return x !== t; })
+          : was.concat([t]);
+        u.bot_mute = next;
+        b.classList.toggle('on');
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { bot_mute: next }, function () {
+          b.disabled = false;
+          showToast(next.length < was.length
+            ? (u.name || u.login) + ' снова получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase()
+            : (u.name || u.login) + ' больше не получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase());
+        }, function () {
+          b.disabled = false; u.bot_mute = was; b.classList.toggle('on');
           showToast('Не удалось сохранить — попробуйте еще раз');
         });
       });
@@ -16213,6 +16580,37 @@
       '</div>';
     }
 
+    /* Чаты направлений (Павел 10.09.2026): продажи — в чат продаж, маркетинг —
+       в чат маркетинга. Отбор по направлению задачи, а не по роли: продажами
+       занимается и руководитель, и ассистент. Сопровождение здесь не предлагаем —
+       это общий чат выше, он собирает по роли тьютора. */
+    var DEPT_CHATS = ['product', 'marketing', 'sales', 'hr', 'ops'];
+    function deptBlock(g) {
+      if (!g) return '';
+      var bound = g.dept_chats || {};
+      var groups = g.groups || [];
+      var rows = DEPT_CHATS.map(function (d) {
+        var cur = bound[d] ? bound[d].chat_id : '';
+        var known = groups.some(function (x) { return x.chat_id === cur; });
+        var opts = '<option value="">' + (groups.length ? 'не подключен' : 'нет групп с ботом') + '</option>' +
+          groups.map(function (x) {
+            return '<option value="' + esc(x.chat_id) + '"' + (x.chat_id === cur ? ' selected' : '') + '>' +
+              esc(x.title || x.chat_id) + '</option>';
+          }).join('') +
+          (cur && !known ? '<option value="' + esc(cur) + '" selected>' + esc((bound[d] && bound[d].title) || cur) + '</option>' : '');
+        return '<div class="tgd-row' + (cur ? ' on' : '') + '">' +
+          '<span class="tgd-l">' + esc(DEPTS[d]) + '</span>' +
+          '<span class="al-selwrap tgd-sel"><select class="al-sel sm" data-gd="' + d + '">' + opts + '</select></span>' +
+          (cur ? '<button class="tgg-b tgd-t" data-gdt="' + d + '">Проверить</button>' : '') +
+        '</div>';
+      }).join('');
+      return '<div class="tgg"><div class="tgg-h">Чаты направлений</div>' +
+        '<div class="tgg-s">Задача уходит в чат своего направления: новая, сдана на приемку, принята, плюс утренняя сводка с просрочками. Без направления или без исполнителя — никуда.</div>' +
+        '<div class="tgd">' + rows + '</div>' +
+        (groups.length ? '' : '<div class="tgg-s">' + (g.bot ? 'Добавь <b>@' + esc(g.bot) + '</b> в группу отдела и напиши там «/start» — группа появится здесь.' : 'Бот пока не подключен.') + '</div>') +
+      '</div>';
+    }
+
     Promise.all([
       api('/admin/api/tasks/tg/links'),
       api('/admin/api/tasks/tg/group').catch(function () { return null; }),
@@ -16263,7 +16661,7 @@
             ? 'Бот не может написать первым. ' + off.length + ' ' + plural(off.length, 'человек еще не нажал', 'человека еще не нажали', 'человек еще не нажали') +
               ' «Старт» — им напоминания не уходят. Скопируй личную ссылку и отправь каждому: ссылка у всех разная.'
             : 'Вся команда подключена — напоминания дойдут до каждого.') + '</div>' +
-        '<div class="al-body">' + groupBlock(grp, links) +
+        '<div class="al-body">' + groupBlock(grp, links) + deptBlock(grp) +
           '<div class="tgl-list' + (noBot ? ' nobot' : '') + '">' +
           (rows || '<div class="empty">Никого нет.</div>') + '</div></div>' +
         '<div class="al-foot"><button class="al-cancel" id="tg-close">Закрыть</button></div>';
@@ -16307,6 +16705,31 @@
       });
       var gr = el('tgg-refresh');
       if (gr) gr.addEventListener('click', reopen);
+      /* Чат направления: выбрал группу — сохранили и перерисовали, чтобы
+         появилась кнопка проверки. Не сохранилось — вернули как было. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gd]'), function (sel) {
+        sel.addEventListener('change', function () {
+          var d = sel.getAttribute('data-gd'), was = (grp.dept_chats && grp.dept_chats[d]) ? grp.dept_chats[d].chat_id : '';
+          sel.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/dept', 'PUT', { dept: d, chat_id: sel.value }, function () {
+            showToast(sel.value ? DEPTS[d] + ': задачи пойдут в этот чат' : DEPTS[d] + ': чат отключен');
+            reopen();
+          }, function (code, e) {
+            sel.disabled = false; sel.value = was;
+            showToast((e && e.body && e.body.detail) || 'Не удалось сохранить — попробуй еще раз');
+          });
+        });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-gdt]'), function (b) {
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          apiSend('/admin/api/tasks/tg/group/test', 'POST', { dept: b.getAttribute('data-gdt') }, function (resp) {
+            b.disabled = false;
+            showToast(resp && resp.ok ? 'Написал в группу — посмотри в телеграме'
+                                      : 'Бот не смог написать: проверь, что он в группе');
+          }, function () { b.disabled = false; showToast('Бот не смог написать в группу'); });
+        });
+      });
       /* Роль включают и выключают одним нажатием. Красим сразу, но правдой
          считаем ответ сервера: не сохранилось — возвращаем чип как был. */
       Array.prototype.forEach.call(ov.querySelectorAll('[data-gr]'), function (b) {
@@ -27936,6 +28359,8 @@
     loadTaskSummary();
     // и прогресс обучения — пока курс не пройден, счетчик шагов висит в меню
     guideLoad();
+    // и непрочитанные записи «Что нового» — точка в меню с первого экрана
+    newsLoad();
     if (hashTaskId()) openTaskFromHash();
     else if (hashMeetingId()) openMeetingFromHash();
     else if (hashReviewParts()) openReportReviewFromHash();

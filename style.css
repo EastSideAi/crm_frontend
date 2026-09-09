@@ -504,6 +504,8 @@ a { color: inherit; text-decoration: none; }
 .sev.st-done         { color: var(--green-ink); background: var(--green-soft); }
 .sev.st-return       { color: var(--red-ink);   background: var(--red-soft); }
 .sev.st-cancel       { color: var(--ink-3);     background: var(--fill); }
+/* «Что нового»: неотправленная запись — та же пара, что у блокировки: она ждет. */
+.sev.nw-draft        { color: var(--amber-ink); background: var(--amber-soft); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -635,6 +637,25 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:hover { color: var(--ink); }
 .tm-tp-b.on { background: var(--blue); color: #fff; }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
+/* Две группы чипов (темы клиентов и виды уведомлений бота) идут отдельной строкой под
+   именем на всю ширину: в одну строку с почтой и ролью они не влезают, а прятать чипы
+   за прокруткой нельзя — раскладка должна читаться одним взглядом. */
+.tm-row { flex-wrap: wrap; row-gap: 8px; }
+.tm-tps { flex: 1 1 100%; order: 9; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding-left: 54px; }
+@media (max-width: 960px) {
+  .tm-tps { padding-left: 0; }
+  /* Группа шире экрана телефона: листается внутри себя, страницу вбок не тянет. */
+  .tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tm-tps .tm-tp::-webkit-scrollbar { display: none; }
+}
+.tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
+.tm-tp.bot svg { flex: none; margin-right: 2px; }
+.tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
+  padding: 4px 8px; border-radius: 8px; cursor: pointer; text-decoration: line-through; text-decoration-color: var(--line-2); }
+.tm-bt-b:hover { color: var(--ink); }
+.tm-bt-b.on { color: var(--ink); background: var(--card); text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-bt-b:disabled { opacity: .55; cursor: default; }
 /* тема отмечена, а мессенджер не подключен — доставки нет; предупреждение в самой строке */
 .tm-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--amber-ink); font-weight: 600; }
 .tm-warn svg { flex: none; }
@@ -2973,11 +2994,47 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-nav .icobtn:first-child svg { transform: rotate(180deg); }
 .zw-new { margin-left: 6px; white-space: nowrap; }
 .zw-range { white-space: nowrap; }
+.zw-seg { margin-left: 12px; }
+.zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
+.zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
+.zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.zw-fltrow .zw-flt { margin: 0; }
+.zw-acc { margin-left: auto; min-width: 180px; }
+.zw-acc .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* День по часам: тонкие строки, час слева табличными цифрами, текущий час — той же
+   заливкой, что «сегодня» в недельной сетке. Окна людей — тихим текстом, без чипов:
+   чип здесь только у зума, по нему кликают. */
+.zd-row { display: flex; align-items: flex-start; gap: 12px; padding: 5px 0; min-height: 30px; border-top: 1px solid var(--line); }
+.zd-row:first-child { border-top: 0; }
+.zd-row.now { background: var(--blue-tint); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; border-top-color: transparent; }
+.zd-row.now + .zd-row { border-top-color: transparent; }
+.zd-h { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.zd-row.now .zd-h { color: var(--blue); font-weight: 700; }
+.zd-c { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.zd-acc { margin-left: 6px; color: var(--ink-3); font-weight: 500; }
+.zd-win { font-size: 12px; line-height: 1.5; color: var(--ink-3); padding: 3px 0; }
+.zd-win b { font-weight: 600; color: var(--ink-2); }
+.zd-win.busy { color: var(--ink-2); }
 /* Узкий экран: заголовок и кнопка в одной строке, навигация по неделям под ними. */
 @media (max-width: 960px) {
   .zw-head { flex-wrap: wrap; row-gap: 8px; }
   .zw-new { order: 2; margin-left: auto; }
   .zw-nav { order: 3; margin-left: 0; width: 100%; }
+  /* Телефон: два ряда шапки (заголовок с кнопкой; сегмент со стрелками и датой)
+     и один ряд фильтров (лента типов скроллится, селект аккаунта справа). */
+  .zw-new { order: 1; }
+  .zw-seg { order: 2; margin-left: 0; }
+  .zw-seg button { padding: 5px 9px; }
+  .zw-nav { order: 3; width: auto; margin-left: auto; gap: 4px; }
+  .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
+  .zw-range { padding: 4px 2px; }
+  .zw-td { display: none; }
+  .zw-fltrow { flex-wrap: nowrap; gap: 8px; }
+  .zw-fltrow .zw-flt { flex: 1 1 auto; min-width: 0; }
+  .zw-acc { margin-left: 0; flex: 0 0 132px; min-width: 0; }
+  .zd-h { flex-basis: 42px; }
+  .zd-row .zw-chip { white-space: normal; flex-wrap: wrap; }
+  .zd-row .zd-acc { flex: 1 1 100%; margin-left: 0; padding-left: 12px; font-size: 11.5px; }
 }
 .zw-range { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .zw-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
@@ -2992,6 +3049,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-err { font-size: 11px; font-weight: 600; color: var(--amber-ink); margin-left: 8px; }
 .zw-chip { display: inline-flex; align-items: center; border: 0; cursor: pointer; text-align: left; font-family: inherit; gap: 5px; max-width: 100%; padding: 3px 8px; border-radius: 7px; background: var(--fill); font-size: 12px; line-height: 1.3; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zw-chip:hover { background: var(--blue-tint); }
+.zw-row.today .zw-chip:hover, .zd-row.now .zw-chip:hover { background: #fff; }
 /* Точка типа: команда синяя, консультация зеленая, занятие янтарное, без типа пустая. */
 .zw-chip i, .zw-mm i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); opacity: .55; }
 .zw-mm i { display: inline-block; margin-right: 6px; vertical-align: middle; }
@@ -7886,6 +7944,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
+/* Чаты направлений: строка = подпись, выбор группы, проверка. Подпись держит
+   одну ширину, чтобы селекты стояли колонкой, а не плясали от длины слова. */
+.tgd { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tgd-row { display: flex; align-items: center; gap: 10px; }
+.tgd-l { flex: 0 0 104px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.tgd-row.on .tgd-l { color: var(--ink); }
+.tgd-sel { flex: 1 1 auto; min-width: 0; }
+.tgd-t { flex: none; margin-top: 0; }
+/* На телефоне подпись и «Проверить» делят первую строку, выбор группы — вторую:
+   кнопка под селектом тянула каждую строку на три этажа. */
+@media (max-width: 720px) {
+  .tgd { gap: 10px; }
+  .tgd-row { flex-wrap: wrap; row-gap: 6px; }
+  .tgd-l { flex: 1 1 auto; }
+  .tgd-t { order: 2; margin-left: auto; }
+  .tgd-sel { order: 3; flex-basis: 100%; }
+}
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .tgg-num { width: 64px; text-align: center; }
@@ -7906,3 +7981,38 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Ученики: группы по этапам плана, строки те же, что в целях. */
 .stu-g .dy-row { padding-left: 0; padding-right: 0; }
 .stu-g .stu-gl { margin-bottom: 2px; }
+
+/* ── Что нового ─────────────────────────────────────────────────────────── */
+.nw { padding: 4px 0; }
+.nw-item { padding: 16px 20px 18px 20px; border-top: 1px solid var(--line); position: relative; }
+.nw-item:first-child { border-top: 0; }
+.nw-item.unread::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 18px; width: 3px; border-radius: 2px; background: var(--blue); }
+.nw-top { display: flex; align-items: flex-start; gap: 10px; }
+.nw-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em; color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+.nw-edit { flex: none; position: relative; opacity: 0; transition: opacity .15s var(--ease); }
+.nw-item:hover .nw-edit, .nw-edit:focus-visible { opacity: 1; }
+.nw-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.nw-body { margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; overflow-wrap: anywhere; }
+.nw-body a { color: var(--blue); text-decoration: none; }
+.nw-body a:hover { text-decoration: underline; }
+.nw-card { max-width: 640px; }
+.nw-who { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.nw-who-l { flex: 0 0 44px; padding-top: 8px; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); }
+.nw-roles { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.nw-search { flex: 1 1 200px; }
+.nw-people { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 54px; }
+.nw-people:empty { display: none; }
+.nw-none { font-size: 12px; color: var(--ink-3); padding: 4px 0; }
+.nw-sum { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.nw-del { margin-right: auto; color: var(--red-ink); }
+.nw-p { background: var(--fill); }
+.nw-p.on { background: var(--blue); }
+@media (max-width: 960px) {
+  .nw-item { padding: 14px 14px 16px; }
+  /* Ховера нет: карандаш виден всегда, а зона нажатия шире самой кнопки. */
+  .nw-edit { opacity: 1; }
+  .nw-edit::before { content: ''; position: absolute; inset: -6px; }
+  .nw-people { padding-left: 0; }
+  /* Чипы адресата по ширине текста: мобильное правило «Команды» растягивает их на ряд. */
+  .nw-roles .tm-tp-b, .nw-people .tm-tp-b { flex: none; }
+}
