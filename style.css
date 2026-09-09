@@ -637,7 +637,8 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
 /* Две группы чипов (темы клиентов и виды уведомлений бота) стоят столбиком: в одну
    строку с почтой и ролью они не влезают даже на широком экране. */
-.tm-tps { flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; max-width: 100%; }
+.tm-tps { flex: 0 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 220px; max-width: 100%; }
+.tm-row > .tm-i { flex: 1 1 300px; min-width: 260px; }
 .tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .tm-tps .tm-tp::-webkit-scrollbar { display: none; }
 .tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }

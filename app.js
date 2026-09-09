@@ -8619,7 +8619,7 @@
         // только называется по делу.
         save.disabled = !n && !made;
         save.classList.toggle('off', !n && !made);
-        save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить правки';
+        save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
