@@ -5555,7 +5555,9 @@
     var d = zoomDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return d;
   }
-  var ZOOM_DAY_FROM = 8, ZOOM_DAY_TO = 22;
+  // Все сутки, а не 8–22 (Павел 10.09.2026): уроки с Китаем и созвоны с другими
+  // часовыми поясами стоят и рано утром, и ночью, рамка их прятала.
+  var ZOOM_DAY_FROM = 0, ZOOM_DAY_TO = 23;
   function zoomWeekBlock() {
     var dayView = state.zoomView === 'day';
     var lo = zoomRangeStart(), key = lo.toISOString().slice(0, 10);
@@ -5624,8 +5626,6 @@
       accs.forEach(function (a) {
         (a.meetings || []).filter(function (m) { return sameDay(m.start, day) && vis(m); }).forEach(function (m) { dayMs.push([a, m]); });
       });
-      // Часы 8–22 по умолчанию, но ранний урок с Китаем или поздний созвон
-      // раздвигают сетку, а не выпадают из нее молча.
       var hFrom = ZOOM_DAY_FROM, hTo = ZOOM_DAY_TO;
       dayMs.forEach(function (am) { var h0 = new Date(am[1].start).getHours(); hFrom = Math.min(hFrom, h0); hTo = Math.max(hTo, h0); });
       slots.forEach(function (x) { hFrom = Math.min(hFrom, x.hour); hTo = Math.max(hTo, x.hour); });
@@ -25091,13 +25091,13 @@
       cb(ZOOM_ACCS);
     }).catch(function () { cb([]); });
   }
-  // Время встречи: с 8:00 до 22:00 шагом 15 минут, по умолчанию ближайший круглый час.
+  // Время встречи: любые сутки шагом 15 минут (Павел 10.09.2026), по умолчанию
+  // ближайший круглый час.
   function zoomTimeOptions() {
     var d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
-    var def = Math.min(22, Math.max(8, d.getHours())) + ':00';
+    var def = d.getHours() + ':00';
     var out = [];
-    for (var h = 8; h <= 22; h++) for (var m = 0; m < 60; m += 15) {
-      if (h === 22 && m > 0) break;
+    for (var h = 0; h <= 23; h++) for (var m = 0; m < 60; m += 15) {
       var v = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
       out.push('<option value="' + v + '"' + (v === (def.length < 5 ? '0' + def : def) ? ' selected' : '') + '>' + v + '</option>');
     }
