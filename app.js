@@ -5722,8 +5722,11 @@
     var people = (it.users || []).map(function (id) {
       var x = (n.people || []).filter(function (y) { return y.id === id; })[0]; return x ? x.name.split(' ')[0] : '#' + id;
     });
-    if (!roles.length && !people.length) return 'всем';
-    return roles.concat(people).join(', ');
+    var chats = (it.chats || []).map(function (id) {
+      var x = (n.chats || []).filter(function (y) { return y.id === id; })[0]; return 'чат ' + (x ? x.title : id);
+    });
+    var who = roles.concat(people);
+    return (who.length ? who.join(', ') : 'всем') + (chats.length ? ' + ' + chats.join(', ') : '');
   }
   function renderNews(view) {
     if (!state.news) {
@@ -5768,8 +5771,8 @@
   }
   function openNewsForm(it) {
     if (document.querySelector('.al-ov.nw-ov')) return;
-    var n = state.news || {}, roles = n.roles || [], people = n.people || [];
-    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice() };
+    var n = state.news || {}, roles = n.roles || [], people = n.people || [], chats = n.chats || [];
+    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice(), chats: (it && it.chats || []).slice() };
     var ov = document.createElement('div');
     ov.className = 'al-ov over nw-ov';
     ov.innerHTML =
@@ -5789,6 +5792,11 @@
             '<div class="nw-who"><span class="nw-who-l">Люди</span>' +
               '<div class="searchwrap nw-search"><input id="nw-q" class="search" type="search" placeholder="Найти человека" autocomplete="off"></div>' +
               '<div class="nw-people" id="nw-people"></div></div>' +
+            // Чаты появляются сами, как только бот задач добавлен в группу.
+            '<div class="nw-who"><span class="nw-who-l">Чаты</span><span class="nw-roles">' +
+              (chats.length ? chats.map(function (c) { return '<button type="button" class="tm-tp-b nw-p' + (sel.chats.indexOf(c.id) >= 0 ? ' on' : '') + '" data-nwc="' + esc(c.id) + '">' + esc(c.title) + '</button>'; }).join('')
+                : '<span class="nw-none">Бота задач нет ни в одной группе. Добавь его в чат, и чат появится здесь.</span>') +
+            '</span></div>' +
             '<div class="nw-sum" id="nw-sum"></div></div>' +
         '</div>' +
         '<div class="al-foot">' +
@@ -5810,7 +5818,9 @@
       var who = [];
       sel.roles.forEach(function (id) { var r = roles.filter(function (x) { return x.id === id; })[0]; who.push(r ? r.label : id); });
       sel.users.forEach(function (id) { var p = people.filter(function (x) { return x.id === id; })[0]; who.push(p ? p.name : '#' + id); });
-      el('nw-sum').innerHTML = who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>' : 'Получит <b>вся команда</b>. Выбери роли или людей, чтобы сузить.';
+      var ch = sel.chats.map(function (id) { var c = chats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : id; });
+      el('nw-sum').innerHTML = (who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>' : 'Получит <b>вся команда</b>. Выбери роли или людей, чтобы сузить.') +
+        (ch.length ? '<br>И в чаты: <b>' + esc(ch.join(', ')) + '</b>' : '');
     };
     var renderPeople = function () {
       var q = (el('nw-q').value || '').toLowerCase().trim();
@@ -5833,11 +5843,18 @@
         b.classList.toggle('on', i < 0); sum();
       });
     });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-nwc]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-nwc'), i = sel.chats.indexOf(id);
+        if (i >= 0) sel.chats.splice(i, 1); else sel.chats.push(id);
+        b.classList.toggle('on', i < 0); sum();
+      });
+    });
     el('nw-q').addEventListener('input', renderPeople);
     renderPeople(); sum();
     setTimeout(function () { el('nw-title').focus(); }, 30);
     var payload = function () {
-      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users };
+      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users, chats: sel.chats };
     };
     var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-foot button'), function (b) { b.disabled = on; }); };
     var fail = function (e) { busy(false); showToast((e && e.message) || 'Не сохранилось, попробуй еще раз'); };
