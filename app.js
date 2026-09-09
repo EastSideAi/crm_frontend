@@ -8258,7 +8258,7 @@
      потом нажимает «завести». Экран проверки существует именно поэтому: модель
      ошибается в исполнителях и сроках чаще, чем в формулировках, а полсотни
      задач, заведенных мимо, чистить дороже, чем один раз прочитать список. */
-  var MEET_MAX_MB = 2;
+  var MEET_MAX_MB = 5;
   // Сколько протоколов принимаем за раз. Разбор каждого — отдельный запрос к
   // модели на полминуты, и десяток файлов человек все равно не вычитает за один
   // заход: он закроет экран на половине, а заведется первая половина.
@@ -8280,10 +8280,10 @@
           '<div class="mu-drop" id="mu-drop">' +
             '<div class="mu-drop-i">' + ic('doc', 22) + '</div>' +
             '<div class="mu-drop-t">Выбери файлы или перетащи сюда</div>' +
-            '<div class="mu-drop-s">txt, md или docx, до ' + MEET_MAX_MB + ' МБ каждый, ' +
+            '<div class="mu-drop-s">txt, md, docx или pdf, до ' + MEET_MAX_MB + ' МБ каждый, ' +
               'до ' + MEET_MAX_FILES + ' за раз</div>' +
             '<input type="file" id="mu-file" multiple ' +
-              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx" hidden>' +
+              'accept=".txt,.md,.markdown,.text,.log,.csv,.docx,.pdf" hidden>' +
           '</div>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
@@ -8403,7 +8403,7 @@
         if (i >= queue.length) {
           if (!done.length) {
             go.disabled = false; go.classList.remove('loading');
-            show('Не смог разобрать. Пришли txt, md или docx, либо вставь текст.', true);
+            show('Не смог разобрать. Пришли txt, md, docx или pdf, либо вставь текст.', true);
             return;
           }
           if (failed.length) showToast('Не разобрал: ' + failed.join(', '));
