@@ -75,6 +75,7 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
+    zoomWeek: {}, zoomWeekOff: 0, zoomKind: '',
     teamMode: 'week', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -315,6 +316,15 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  /* Ссылка в человеческом виде. Боевые домены записаны в punycode
+     (xn--80aikf2bag.xn--p1ai) — так их хранит бэкенд, и менеджер видел в карточке
+     набор символов, который стыдно отправить клиенту (замечание Веры 05.09.2026).
+     Показываем и копируем «истсайд.рф»: браузер и телеграм открывают такую ссылку
+     ровно так же. Машинные адреса через эту функцию не идут — в настройках ВК и в
+     возвратах кассы punycode обязателен, поэтому глобальной подмены тут нет. */
+  function humanUrl(u) {
+    return String(u == null ? '' : u).replace(/xn--80aikf2bag\.xn--p1ai/g, 'истсайд.рф');
+  }
   /* лёгкий markdown для пузырей чата: бот отвечает с **жирным**, списками и переносами —
      рендерим их, а не показываем сырой текст. Сначала экранируем HTML, потом размечаем. */
   function mdMsg(s) {
@@ -417,6 +427,7 @@
     return null;
   }
   function copyText(text, btn) {
+    text = humanUrl(text);
     var done = function () {
       if (!btn) return;
       // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
@@ -5487,6 +5498,93 @@
       '<div class="mt-right">' + fold + rec + right + '</div>' +
     '</div>' + list;
   }
+  // ── Зумы на неделю ─────────────────────────────────────────────────────────
+  // Источник — сам зум: сюда попадает все, что назначено на аккаунтах, хоть из CRM,
+  // хоть из приложения. Так команда, продажники и преподаватели видят, когда какой
+  // зум свободен (Павел 08.09.2026).
+  function zoomWeekStart(off) {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
+    return d;
+  }
+  function loadZoomWeek(off) {
+    var lo = zoomWeekStart(off), hi = new Date(lo.getTime() + 7 * 86400000);
+    var key = lo.toISOString().slice(0, 10);
+    state.zoomWeek[key] = 'loading';
+    api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
+      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  function zoomWeekBlock() {
+    var off = state.zoomWeekOff || 0;
+    var lo = zoomWeekStart(off), key = lo.toISOString().slice(0, 10);
+    var data = state.zoomWeek[key];
+    if (data === undefined) { loadZoomWeek(off); data = 'loading'; }
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
+    var range = days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
+    var head = '<div class="sec-head zw-head"><div class="t">Зумы на неделю</div>' +
+      '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="Прошлая неделя">' + ic('go', 14) + '</button>' +
+      '<span class="zw-range">' + esc(range) + '</span>' +
+      '<button class="icobtn" data-zw="1" title="Следующая неделя">' + ic('go', 14) + '</button></div>' +
+      '<button class="bp sm zw-new" id="zw-new">' + ic('plus', 14) + 'Создать ссылку</button></div>';
+    var hh = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
+    var sameDay = function (iso, d) { var x = new Date(iso); return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate(); };
+    var flt = state.zoomKind || '';
+    var vis = function (m) { return !flt || m.kind === flt; };
+    var kcls = function (m) { return 'k-' + (m.kind || 'none'); };
+    var kttl = function (m) {
+      var k = ZOOM_KINDS.filter(function (x) { return x[0] === m.kind; })[0];
+      return esc(m.topic) + ' · ' + (k ? k[1] : 'без типа');
+    };
+    var fltRow = (data !== 'loading' && data !== 'none' && data.length)
+      ? '<nav class="tabs zw-flt"><a class="tab' + (!flt ? ' on' : '') + '" data-zk="">Все</a>' +
+          ZOOM_KINDS.map(function (k) {
+            return '<a class="tab' + (flt === k[0] ? ' on' : '') + '" data-zk="' + k[0] + '">' + k[2] + '</a>';
+          }).join('') + '</nav>'
+      : '';
+    var body;
+    if (data === 'loading') body = '<div class="zw-empty">Спрашиваю у зума…</div>';
+    else if (data === 'none') body = '<div class="zw-empty">Зум не ответил. Обнови страницу.</div>';
+    else if (!data.length) body = '<div class="zw-empty">Аккаунты зума еще не подключены.</div>';
+    else if (mqMobile.matches) {
+      // На телефоне матрица съедает экран, а журнал встреч уходит за фолд: только дни,
+      // где что-то назначено, строкой «день · аккаунт · время · название».
+      var rows = [];
+      days.forEach(function (d) {
+        data.forEach(function (a) {
+          (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); }).forEach(function (m) {
+            rows.push('<button type="button" class="zw-mrow ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '"><span class="zw-md">' + WDAYS_RU[d.getDay()] + ' ' + d.getDate() + '</span>' +
+              '<span class="zw-mm"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</span>' +
+              '<span class="zw-ma">' + esc(a.name) + '</span></button>');
+          });
+        });
+      });
+      var off2 = data.filter(function (a) { return a.error; }).map(function (a) { return a.name; });
+      body = (rows.length ? rows.join('') : '<div class="zw-empty">' + (flt ? 'Таких встреч на этой неделе нет.' : 'На этой неделе в зумах ничего не назначено.') + '</div>') +
+        (off2.length ? '<div class="zw-off">Нет доступа: ' + esc(off2.join(', ')) + '</div>' : '');
+    } else {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      body = '<div class="zw-tbl">' +
+        '<div class="zw-row head"><span class="zw-d"></span>' + data.map(function (a) {
+          return '<span class="zw-c"><span class="th">' + esc(a.name) + '</span>' +
+            (a.error ? '<span class="zw-err" title="' + esc(a.error) + '">нет доступа</span>' : '') + '</span>';
+        }).join('') + '</div>' +
+        days.map(function (d) {
+          var isToday = d.getTime() === today.getTime();
+          return '<div class="zw-row' + (isToday ? ' today' : '') + '"><span class="zw-d">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></span>' +
+            data.map(function (a) {
+              var ms = (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); });
+              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) {
+                return '<button type="button" class="zw-chip ' + kcls(m) + '" data-zm="' + esc(a.slot) + '|' + esc(m.id) + '" title="' + kttl(m) + '"><i></i><b>' + hh(m.start) + '–' + hh(m.end) + '</b> ' + esc(m.topic) + '</button>';
+              }).join('') + '</span>';
+            }).join('') + '</div>';
+        }).join('') + '</div>';
+    }
+    return '<div class="card zw">' + head + fltRow + body +
+      '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
+  }
+
   function renderMeetings(view) {
     if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
     if (state.meetLog === 'none') {
@@ -5506,7 +5604,7 @@
     var body = order.length ? order.map(function (k) {
       return '<div class="mt-day">' + esc(dayLabel(days[k][0].at)) + '</div>' + days[k].map(meetRow).join('');
     }).join('') : '<div class="empty">За полтора месяца записей нет. Fathom кладет их сюда сам, протокол можно загрузить кнопкой.</div>';
-    view.innerHTML = '<div class="card listcard">' +
+    view.innerHTML = zoomWeekBlock() + '<div class="card listcard">' +
       '<div class="list-tools brd-tools">' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти встречу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
@@ -5524,6 +5622,28 @@
       el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
     }
     if (el('mt-upload')) el('mt-upload').addEventListener('click', function () { openMeetingUpload(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zw]'), function (b) {
+      b.addEventListener('click', function () { state.zoomWeekOff = (state.zoomWeekOff || 0) + (+b.getAttribute('data-zw')); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zk]'), function (b) {
+      b.addEventListener('click', function () { state.zoomKind = b.getAttribute('data-zk') || ''; renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zm]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = (b.getAttribute('data-zm') || '').split('|');
+        var key = zoomWeekStart(state.zoomWeekOff || 0).toISOString().slice(0, 10);
+        var accs = state.zoomWeek[key];
+        if (!accs || typeof accs === 'string') return;
+        var acc = accs.filter(function (a) { return a.slot === p[0]; })[0];
+        var m = acc && (acc.meetings || []).filter(function (x) { return String(x.id) === p[1]; })[0];
+        if (m) openZoomCard(acc, m);
+      });
+    });
+    if (el('zw-new')) el('zw-new').addEventListener('click', function () {
+      // Встреча без задачи и без семьи: ссылка в буфере, а в сетке она появится
+      // сразу, для этого кэш недели сбрасываем.
+      openZoomForm({ after: function () { state.zoomWeek = {}; renderView(); } });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mopen]'), function (b) {
       b.addEventListener('click', function () { openMeetingImport([+b.getAttribute('data-mopen')]); });
     });
@@ -7451,7 +7571,8 @@
           (files.length || (canFiles && t.status !== 'cancel')
             ? '<div class="tsk-sec tsk-filesec"><div class="tsk-l tsk-lrow">Файлы' +
                 (canFiles && t.status !== 'cancel'
-                  ? '<label class="tsk-addstep tsk-attach">' + ic('plus', 12) + 'Прикрепить' +
+                  ? '<button class="tsk-addstep tsk-zoom" id="tk-zoom" type="button">' + ic('ext', 12) + 'Зум</button>' +
+                    '<label class="tsk-addstep tsk-attach">' + ic('plus', 12) + 'Прикрепить' +
                     '<input type="file" id="tk-anyfile" multiple hidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"></label>'
                   : '') + '</div>' +
                 (files.length ? '<div class="tsk-files">' + files.map(function (f) {
@@ -7625,6 +7746,13 @@
       });
       var resAdd = el('tk-resadd');
       if (resAdd) resAdd.addEventListener('click', function () { setRes('add'); });
+      var zoomB = el('tk-zoom');
+      if (zoomB) zoomB.addEventListener('click', function () {
+        openZoomForm({ task_id: id, topic: t.title || '', after: function () {
+          state.tasks = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+        } });
+      });
       var anyF = el('tk-anyfile');
       if (anyF) anyF.addEventListener('change', function (e) {
         readFiles(e.target.files, function (got) {
@@ -9077,10 +9205,10 @@
           ? ' Действующая ссылка есть, до ' + czDate(cab.link_alive_until) + '.' : '') +
       '</div>' +
       (cabLink
-        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(cabLink.url) + '</span>' +
+        ? '<div class="cz-inv-l"><span class="cz-inv-u">' + esc(humanUrl(cabLink.url)) + '</span>' +
             '<button class="hr" id="cz-cabcopy">' + ic('copy', 13) + 'Скопировать</button></div>' +
           '<div class="cz-inv-h">' +
-            (cabLink.tg_url ? 'Для телеграма: ' + esc(cabLink.tg_url) + '. ' : '') +
+            (cabLink.tg_url ? 'Для телеграма: ' + esc(humanUrl(cabLink.tg_url)) + '. ' : '') +
             'Ссылка одноразовая: она не открывает доступ сама по себе, а связывает ' +
             'телеграм того, кто ее откроет, с этой карточкой. Дальше он заходит без нее.' +
           '</div>'
@@ -22699,6 +22827,7 @@
       renderModalContent();
     });
     attachContentHandlers(id, ctx);
+    if (s === 'main') wireTrial(id);
     if (s === 'consult') wireConsultSection(id);
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
@@ -23057,7 +23186,7 @@
     // поэтому primary она получает только когда ссылки еще нет.
     var link = '<div class="det-link">' +
       (inv
-        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(inv.url) + '">' +
+        ? '<input class="al-in det-url" id="det-url" readonly value="' + esc(humanUrl(inv.url)) + '">' +
           '<button class="bp sm" id="det-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="det-newlink">' + ic('plus', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылки нет — создайте, и отправьте ее человеку</span>' +
@@ -23306,7 +23435,7 @@
     var link = CRS_LINK[id];
     var linkRow = '<div class="det-link">' +
       (link
-        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(humanUrl(link)) + '">' +
           '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
           '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
         : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
@@ -23427,11 +23556,11 @@
     var links = inv
       ? '<div class="det-lbl det-linkh" style="margin-top:14px">Ссылка на тест</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(inv.test_url) + '">' +
+            '<input class="al-in det-url" id="hsk-test-url" readonly value="' + esc(humanUrl(inv.test_url)) + '">' +
             '<button class="bp sm" id="hsk-test-copy">' + ic('copy', 13) + 'Скопировать</button></div>' +
         '<div class="det-lbl det-linkh">Ссылка на тренажёр</div>' +
           '<div class="det-link">' +
-            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(inv.trainer_url) + '">' +
+            '<input class="al-in det-url" id="hsk-tr-url" readonly value="' + esc(humanUrl(inv.trainer_url)) + '">' +
             '<button class="bp sm" id="hsk-tr-copy">' + ic('copy', 13) + 'Скопировать</button>' +
             '<button class="bp ghost sm" id="hsk-newlink">' + ic('plus', 13) + 'Новая</button></div>' +
         '<div class="det-link-m">' + (inv.used_count ? 'открывали ' + inv.used_count + ' раз' : 'ещё не открывали') +
@@ -23650,6 +23779,14 @@
         '<div class="r"><span class="k">Живой китайский</span><span class="v">' + esc(crsVal) + '</span></div>' +
         (crs.since ? '<div class="r"><span class="k">С какого дня</span><span class="v">' + esc(dayFull(crs.since)) + '</span></div>' : '') +
       '</div></div>';
+    }
+
+    /* пробный урок с преподавателем — запись прямо отсюда, без страницы школы */
+    if (can('clients')) {
+      html += '<div class="m-sec"><div class="m-sec-h">Пробный урок с преподавателем</div>' +
+        '<div id="trial-host" class="ab"><div class="field-empty">Загружаю…</div></div>' +
+        '<div style="margin-top:10px"><button class="bp sm" id="trial-add">' +
+          ic('cal', 14) + ' Записать на пробный урок</button></div></div>';
     }
 
     /* контакты (редактируемые) */
@@ -24463,13 +24600,15 @@
     var meta = [when, c.minutes ? c.minutes + ' мин' : '', c.created_by || ''].filter(Boolean).join(' · ');
     var st = CALL_ST[c.status];
     var body = (c.summary || '').trim();
+    // Ссылка на зум это приглашение на встречу, а не запись: значок и подпись другие.
+    var isZoom = /(^|\.)zoom\.us\//.test(c.link || '');
     return '<div class="cl-row" data-clid="' + c.id + '">' +
       '<div class="cl-h">' +
-        '<span class="cl-ic">' + ic('phone', 15) + '</span>' +
+        '<span class="cl-ic">' + ic(isZoom ? 'play' : 'phone', 15) + '</span>' +
         '<div class="cl-m">' + esc(meta) + '</div>' +
         (st ? '<span class="cl-st ' + c.status + '">' + st + '</span>' : '') +
         (c.link ? '<a class="icobtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" ' +
-                  'title="Открыть запись">' + ic('ext', 14) + '</a>' : '') +
+                  'title="' + (isZoom ? 'Открыть зум' : 'Открыть запись') + '">' + ic('ext', 14) + '</a>' : '') +
         '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
       '</div>' +
       (body ? '<div class="cl-sum">' + callSummaryHtml(body) + '</div>'
@@ -24493,10 +24632,268 @@
     else body = loaded.map(callRow).join('');
     return '<div class="m-sec"><div class="m-sec-h">Консультации</div>' +
       '<div id="m-calls">' + body + '</div>' +
-      '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+      '<div class="ct-acts">' +
+        '<button class="bp sm ct-add" id="m-call-add">' + ic('plus', 13) + 'Добавить консультацию</button>' +
+        '<button class="bp sm ghost ct-add" id="m-zoom">' + ic('ext', 13) + 'Ссылка на зум</button>' +
+      '</div>' +
       '<div class="ct-hint">Запись разбираем в конспект и храним текстом. Само видео остается там, ' +
         'где лежит: файл сюда только звуком и до 60 МБ, иначе ссылкой.</div>' +
       '</div>';
+  }
+
+  // ── Ссылка на зум ──────────────────────────────────────────────────────────
+  // Встречу создает сервер в рабочем аккаунте Zoom (Server-to-Server OAuth) и сам
+  // кладет ссылку туда, откуда позвали: файлом в задачу или консультацией в карточку
+  // ученика. Здесь только форма: аккаунт, название, время, длительность.
+  // Типы встреч зума: ключ, подпись в форме, подпись в фильтре сетки. Ключи знает
+  // сервер (KINDS в routers/zoom.py), подписи только здесь.
+  var ZOOM_KINDS = [
+    ['team_product', 'Команда: продукт', 'Продукт'],
+    ['team_marketing', 'Команда: маркетинг', 'Маркетинг'],
+    ['team_sales', 'Команда: продажи', 'Продажи'],
+    ['consult', 'Продающая консультация', 'Консультации'],
+    ['lesson', 'Учебное занятие', 'Занятия']
+  ];
+  function zoomKindOptions(sel, withNone) {
+    return (withNone ? '<option value=""' + (sel ? '' : ' selected') + '>Без типа</option>' : '') +
+      ZOOM_KINDS.map(function (k) {
+        return '<option value="' + k[0] + '"' + (k[0] === sel ? ' selected' : '') + '>' + k[1] + '</option>';
+      }).join('');
+  }
+  function zoomHH(iso) {
+    var d = new Date(iso);
+    return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes();
+  }
+  var ZOOM_ACCS = null;
+  function zoomAccounts(cb) {
+    if (ZOOM_ACCS) { cb(ZOOM_ACCS); return; }
+    api('/admin/api/zoom/accounts').then(function (r) {
+      ZOOM_ACCS = (r && r.accounts) || [];
+      cb(ZOOM_ACCS);
+    }).catch(function () { cb([]); });
+  }
+  // Время встречи: с 8:00 до 22:00 шагом 15 минут, по умолчанию ближайший круглый час.
+  function zoomTimeOptions() {
+    var d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
+    var def = Math.min(22, Math.max(8, d.getHours())) + ':00';
+    var out = [];
+    for (var h = 8; h <= 22; h++) for (var m = 0; m < 60; m += 15) {
+      if (h === 22 && m > 0) break;
+      var v = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+      out.push('<option value="' + v + '"' + (v === (def.length < 5 ? '0' + def : def) ? ' selected' : '') + '>' + v + '</option>');
+    }
+    return out.join('');
+  }
+  function zoomWhen() {
+    var day = (el('zm-day') || {}).value || '', t = (el('zm-time') || {}).value || '';
+    return day && t ? new Date(day + 'T' + t) : null;
+  }
+  // Карточка встречи из сетки: ссылка, тип, удаление. Ссылку и тип держит сервер
+  // (busy отдает join_url и kind), здесь только показ и три действия.
+  function openZoomCard(acc, m) {
+    if (document.querySelector('.al-ov.zm-ov')) return;
+    var s = new Date(m.start);
+    var when = WDAYS_RU[s.getDay()] + ', ' + s.getDate() + ' ' + MONTHS_RU[s.getMonth()] + ' · ' + zoomHH(m.start) + '–' + zoomHH(m.end);
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over zm-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">' + esc(acc.name) + '</div><div class="al-title">' + esc(m.topic) + '</div></div>' +
+          '<button class="al-x" id="zc-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + esc(when) + '</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Тип встречи</span><span class="al-selwrap"><select id="zc-kind" class="al-sel">' +
+            zoomKindOptions(m.kind || '', true) + '</select></span></label>' +
+          (m.join_url
+            ? '<div class="al-f"><span class="al-l">Ссылка</span><div class="zc-link">' +
+                '<span class="zc-url">' + esc(m.join_url) + '</span>' +
+                '<button type="button" class="bp sm ghost" id="zc-copy">' + ic('copy', 13) + 'Скопировать</button></div></div>'
+            : '<div class="zc-nolink">Зум не отдал ссылку на эту встречу. Открой ее в приложении зума.</div>') +
+          '<div class="ct-err" id="zc-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button type="button" class="al-cancel zc-del" id="zc-del">Удалить встречу</button>' +
+          (m.join_url ? '<a class="bp al-save" href="' + esc(m.join_url) + '" target="_blank" rel="noopener">' + ic('ext', 14) + 'Открыть зум</a>' : '') +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey, true);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    el('zc-x').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var err = el('zc-err');
+    if (el('zc-copy')) el('zc-copy').addEventListener('click', function () { copyText(m.join_url, el('zc-copy')); });
+    el('zc-kind').addEventListener('change', function () {
+      var v = el('zc-kind').value;
+      apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id), 'PATCH', { kind: v, slot: acc.slot }, function () {
+        m.kind = v; err.textContent = ''; showToast('Тип встречи сохранен'); renderView();
+      }, function (code, e) {
+        err.textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить тип, проверь интернет';
+      });
+    });
+    el('zc-del').addEventListener('click', function () {
+      if (!confirm('Удалить встречу «' + m.topic + '»? Она пропадет из зума, ссылка перестанет работать.')) return;
+      el('zc-del').disabled = true;
+      apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id) + '?slot=' + encodeURIComponent(acc.slot), 'DELETE', null, function () {
+        close(); showToast('Встреча удалена');
+        state.zoomWeek = {}; renderView();
+      }, function (code, e) {
+        el('zc-del').disabled = false;
+        err.textContent = (e && e.body && e.body.detail) || 'Не удалось удалить, проверь интернет';
+      });
+    });
+  }
+
+  function openZoomForm(o) {
+    // Карточка задачи сама лежит в .al-ov, поэтому «уже открыто» проверяем только
+    // по своей форме, а не по любому оверлею.
+    if (document.querySelector('.al-ov.zm-ov')) return;
+    zoomAccounts(function (accs) {
+      if (!accs.length) { showToast('Зум не подключен: ключи аккаунтов еще не заведены'); return; }
+      var ov = document.createElement('div');
+      ov.className = 'al-ov over zm-ov';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head">' +
+            '<div><div class="al-eyebrow">Zoom</div><div class="al-title">Ссылка на встречу</div></div>' +
+            '<button class="al-x" id="zm-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+          '</div>' +
+          '<div class="al-sub">Создам встречу в нашем зуме и ' +
+            (o.task_id ? 'приложу ссылку к задаче' : o.session_id ? 'приложу ссылку в карточку ученика' : 'скопирую ссылку, в сетке недели она появится сразу') +
+            '. Войти можно до ведущего, без зала ожидания.</div>' +
+          '<div class="al-body">' +
+            (accs.length > 1
+              ? '<label class="al-f"><span class="al-l">Аккаунт</span><span class="al-selwrap"><select id="zm-acc" class="al-sel">' +
+                  accs.map(function (a) { return '<option value="' + esc(a.slot) + '">' + esc(a.name) + '</option>'; }).join('') +
+                '</select></span></label>'
+              : '') +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="zm-topic" class="al-in" type="text" maxlength="200" value="' + esc(o.topic || '') + '"></label>' +
+            // Тип нужен фильтру сетки «Зумы на неделю». Из карточки семьи это почти всегда
+            // консультация, из задачи и из самой сетки — командная встреча.
+            '<label class="al-f"><span class="al-l">Тип встречи</span><span class="al-selwrap"><select id="zm-kind" class="al-sel">' +
+              zoomKindOptions(o.kind || (o.session_id ? 'consult' : 'team_product')) + '</select></span></label>' +
+            // День и время раздельно, как срок в форме задачи (design.md §7): нативное
+            // поле даты-времени рисуется по локали браузера и части команды показало бы 04:00 PM.
+            '<div class="al-f"><span class="al-l">День</span><div class="zm-dayrow">' +
+              '<span class="due-seg"><button type="button" data-day="' + isoDay(0) + '" class="on">сегодня</button>' +
+                '<button type="button" data-day="' + isoDay(1) + '">завтра</button></span>' +
+              '<input id="zm-day" class="al-in sm" type="date" value="' + isoDay(0) + '"></div></div>' +
+            '<div class="al-row">' +
+              '<label class="al-f"><span class="al-l">Время</span><span class="al-selwrap"><select id="zm-time" class="al-sel">' +
+                zoomTimeOptions() + '</select></span></label>' +
+              '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="zm-min" class="al-sel">' +
+                '<option value="30">30 минут</option><option value="45">45 минут</option>' +
+                '<option value="60" selected>1 час</option><option value="90">1,5 часа</option>' +
+                '<option value="120">2 часа</option></select></span></label>' +
+            '</div>' +
+            '<div class="zm-free" id="zm-free"></div>' +
+            '<div class="ct-err" id="zm-err"></div>' +
+          '</div>' +
+          '<div class="al-foot"><button class="al-cancel" id="zm-cancel">Отмена</button>' +
+            '<button class="bp al-save" id="zm-ok">Создать ссылку</button></div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey, true);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      // Escape ловим на захвате: иначе первым сработает обработчик карточки под формой
+      // и закроет ее вместо формы.
+      var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey, true);
+      el('zm-x').addEventListener('click', close);
+      el('zm-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var err = el('zm-err');
+      // Занятость спрашиваем у зума живьем при смене аккаунта, времени или длительности:
+      // человек видит «занято: урок 12:30–13:30» до нажатия, а не после отказа.
+      var freeT = null, freeSeq = 0;
+      var checkFree = function () {
+        var box = el('zm-free'); if (!box) return;
+        var lo = zoomWhen();
+        if (!lo) { box.textContent = ''; box.className = 'zm-free'; return; }
+        var acc = el('zm-acc'), slot = acc ? acc.value : accs[0].slot;
+        var mins = +((el('zm-min') || {}).value || 60);
+        var hi = new Date(lo.getTime() + mins * 60000);
+        var seq = ++freeSeq;
+        box.textContent = 'Смотрю, свободно ли…'; box.className = 'zm-free';
+        api('/admin/api/zoom/busy?slot=' + encodeURIComponent(slot) + '&from=' + encodeURIComponent(lo.toISOString()) +
+            '&to=' + encodeURIComponent(hi.toISOString())).then(function (r) {
+          if (seq !== freeSeq) return;
+          var a = ((r && r.accounts) || [])[0];
+          if (!a) { box.textContent = ''; return; }
+          if (a.error) { box.textContent = a.error; box.className = 'zm-free warn'; return; }
+          if (!a.meetings.length) { box.textContent = 'В это время свободно'; box.className = 'zm-free ok'; return; }
+          var m = a.meetings[0];
+          box.textContent = 'Занято: ' + m.topic + ', ' + hhmm(m.start) + '–' + hhmm(m.end) +
+            (a.meetings.length > 1 ? ' и еще ' + (a.meetings.length - 1) : '');
+          box.className = 'zm-free busy';
+        }).catch(function () { box.textContent = ''; });
+      };
+      var hhmm = function (iso) { var d = new Date(iso); return (d.getHours() < 10 ? '0' : '') + d.getHours() + ':' + (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(); };
+      ['zm-acc', 'zm-day', 'zm-time', 'zm-min'].forEach(function (i) {
+        var n = el(i); if (!n) return;
+        n.addEventListener('change', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 250); });
+        n.addEventListener('input', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 500); });
+      });
+      Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (b) {
+        b.addEventListener('click', function () {
+          el('zm-day').value = b.getAttribute('data-day');
+          Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x === b); });
+          checkFree();
+        });
+      });
+      el('zm-day').addEventListener('input', function () {
+        Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x.getAttribute('data-day') === el('zm-day').value); });
+      });
+      checkFree();
+      el('zm-ok').addEventListener('click', function () {
+        var topic = ((el('zm-topic') || {}).value || '').trim();
+        var when = zoomWhen();
+        var acc = el('zm-acc');
+        err.textContent = '';
+        if (!topic) { err.textContent = 'Нужно название встречи'; el('zm-topic').focus(); return; }
+        if (!when) { err.textContent = 'Выбери день встречи'; return; }
+        var ok = el('zm-ok');
+        ok.disabled = true;
+        // Время уходит с зоной браузера: коллега в Китае ставит встречу по своим часам,
+        // и «в 12» должно значить его 12, а не московские.
+        apiSend('/admin/api/zoom/meetings', 'POST', {
+          topic: topic, slot: acc ? acc.value : '',
+          start_at: when.toISOString(),
+          minutes: +((el('zm-min') || {}).value || 60),
+          kind: (el('zm-kind') || {}).value || '',
+          task_id: o.task_id || null, session_id: o.session_id || null
+        }, function (r) {
+          var m = r && r.meeting;
+          close();
+          var link = m && m.join_url;
+          if (link && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).catch(function () {});
+          }
+          showToast(link ? 'Ссылка на зум готова и скопирована' : 'Встреча создана');
+          if (o.after) o.after(m);
+        }, function (code, e) {
+          ok.disabled = false;
+          err.textContent = (e && e.body && e.body.detail) || 'Не получилось создать встречу, проверь интернет';
+        });
+      });
+      setTimeout(function () { var t = el('zm-topic'); if (t) { t.focus(); t.select(); } }, 60);
+    });
   }
 
   function openCallForm(id, after, call) {
@@ -25123,8 +25520,134 @@
     });
   }
 
+  /* ── ПРОБНЫЙ УРОК С ПРЕПОДАВАТЕЛЕМ ─────────────────────────────────────────
+     Кнопка на «Главном»: выбрать преподавателя и время — и запись заводится в системе
+     учёта уроков (истсайд.рф/school) уже связанной с этой карточкой и с чатом бота.
+     Раньше менеджер делал это руками на странице школы, где ученик «Костя» повисал
+     текстом без связи с CRM (Вера, 08.09.2026). Бэкенд — POST /api/school/trial. */
+  var TRIALS = {}, TRIALS_BUSY = {};
+  function loadTrials(id, force) {
+    if (TRIALS_BUSY[id]) return;
+    if (force) delete TRIALS[id];
+    if (TRIALS[id]) { renderTrialBody(id); return; }
+    TRIALS_BUSY[id] = true;
+    api('/api/school/trials?session_id=' + encodeURIComponent(id)).then(function (r) {
+      TRIALS_BUSY[id] = false; TRIALS[id] = r || { lessons: [] }; renderTrialBody(id);
+    }).catch(function () {
+      TRIALS_BUSY[id] = false; TRIALS[id] = { lessons: [], err: true }; renderTrialBody(id);
+    });
+  }
+  function renderTrialBody(id) {
+    var host = el('trial-host'); if (!host) return;
+    var r = TRIALS[id];
+    if (!r) { host.innerHTML = '<div class="field-empty">Загружаю…</div>'; return; }
+    var ls = (r.lessons || []).filter(function (l) { return l.status !== 'canceled'; });
+    if (!ls.length) {
+      host.innerHTML = '<div class="field-empty">' +
+        (r.err ? 'Учёт уроков не отвечает — запись доступна на боевой CRM.'
+               : 'Пока не записан. Нажми «Записать», выбери преподавателя и время.') +
+      '</div>';
+      return;
+    }
+    host.innerHTML = ls.map(function (l) {
+      var done = l.status === 'done' || l.status === 'held';
+      return '<div class="r"><span class="k">' + cnsWhen(l.starts_at) + '</span>' +
+        '<span class="v">' + esc(l.teacher_name || 'преподаватель') +
+        (l.dur ? ', ' + l.dur + ' мин' : '') +
+        (done ? ' · проведён' : '') + '</span></div>';
+    }).join('');
+  }
+  function wireTrial(id) {
+    loadTrials(id);
+    var b = el('trial-add');
+    if (b) b.addEventListener('click', function () { openTrialDialog(id); });
+  }
+  function openTrialDialog(id) {
+    if (document.querySelector('.al-ov')) return;
+    var d = state.details[id] || {};
+    var name = (d.name || '').trim();
+    api('/api/school/teachers').then(function (r) {
+      var teachers = (r && r.teachers) || [];
+      var topts = teachers.map(function (t) {
+        return '<option value="' + esc(t.id) + '">' +
+          esc(t.name + (t.subject ? ' · ' + t.subject : '')) + '</option>';
+      }).join('');
+      var times = '<option value="">время</option>';
+      for (var h = 8; h <= 21; h++) for (var m = 0; m < 60; m += 30) {
+        var tt = ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+        times += '<option value="' + tt + '">' + tt + '</option>';
+      }
+      var today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+      var minDate = today.toISOString().slice(0, 10);
+      var ov = document.createElement('div');
+      ov.className = 'al-ov over';
+      ov.innerHTML =
+        '<div class="al-card" role="dialog" aria-modal="true">' +
+          '<div class="al-head"><div>' +
+            '<div class="al-eyebrow">Карточка клиента</div>' +
+            '<div class="al-title">Пробный урок' + (name ? ' · ' + esc(name) : '') + '</div>' +
+          '</div><button class="al-x" id="tr-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+          '<div class="al-sub">Урок 30 минут. Запись появится в учёте уроков и, если человек писал боту, свяжется с его чатом.</div>' +
+          '<div class="al-body">' +
+            (teachers.length
+              ? '<label class="al-f"><span class="al-l">Преподаватель</span>' +
+                  '<select id="tr-teacher" class="al-in">' + topts + '</select></label>' +
+                '<label class="al-f"><span class="al-l">День</span>' +
+                  '<input id="tr-date" class="al-in" type="date" min="' + minDate + '" value="' + minDate + '"></label>' +
+                '<label class="al-f"><span class="al-l">Время (МСК)</span>' +
+                  '<select id="tr-time" class="al-in">' + times + '</select></label>'
+              : '<div class="field-empty">Преподаватели не заведены. Добавь их на странице учёта уроков — тогда появятся в списке.</div>') +
+            '<div class="ct-err" id="tr-err"></div>' +
+          '</div>' +
+          '<div class="al-foot"><button class="al-cancel" id="tr-cancel">Отмена</button>' +
+            (teachers.length ? '<button class="bp al-save" id="tr-ok">Записать</button>' : '') +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function () { ov.classList.add('show'); });
+      var closed = false;
+      var close = function () {
+        if (closed) return; closed = true;
+        ov.classList.remove('show');
+        document.removeEventListener('keydown', onKey);
+        setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+      };
+      var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+      document.addEventListener('keydown', onKey);
+      el('tr-x').addEventListener('click', close);
+      el('tr-cancel').addEventListener('click', close);
+      ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+      var ok = el('tr-ok');
+      if (ok) ok.addEventListener('click', function () {
+        var teacher = el('tr-teacher'), date = el('tr-date'), time = el('tr-time');
+        var errEl = el('tr-err');
+        if (!teacher.value) { errEl.textContent = 'Выбери преподавателя'; return; }
+        if (!date.value) { errEl.textContent = 'Выбери день'; return; }
+        if (!time.value) { errEl.textContent = 'Выбери время'; return; }
+        var dt = new Date(date.value + 'T' + time.value);
+        if (isNaN(dt)) { errEl.textContent = 'Не разобрал дату'; return; }
+        ok.disabled = true;
+        api('/api/school/trial', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: id, teacher_id: teacher.value,
+            starts_at: dt.toISOString(), dur: 30, name: name }),
+        }).then(function (res) {
+          close();
+          showToast('Записан на пробный урок' + (res && res.bot_linked ? ' — чат бота связан' : ''));
+          loadTrials(id, true);
+        }).catch(function (e) {
+          ok.disabled = false;
+          errEl.textContent = (e && e.body && e.body.detail) || 'Не удалось записать';
+        });
+      });
+      setTimeout(function () { var f = el('tr-teacher'); if (f) f.focus(); }, 30);
+    }).catch(function () { showToast('Не удалось загрузить преподавателей'); });
+  }
+
   function buildPaySection(ctx) {
     var pays = (ctx.d && ctx.d.payments) || [];
+    // Контакт для чека: берём известный из карточки, менеджер при нужде поправит.
+    var qiContact = (ctx.d && (ctx.d.email || (ctx.d.booking && ctx.d.booking.contact))) || '';
     var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var pending = pays.filter(function (p) { return p.status === 'pending'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
     var refunded = pays.filter(function (p) { return p.status === 'refunded'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
@@ -25160,6 +25683,22 @@
     return '<div class="m-ctitle">Оплаты</div>' +
       '<div class="m-csub">Выставьте клиенту счет — он оплатит онлайн через ЮKassa, оплата зачтется сама. Итог по деньгам — в сводке ниже.</div>' +
       board +
+      /* Быстрый счёт: сумма + назначение → долгая ссылка ЮKassa (без разбора на
+         позиции, как в конструкторе ниже). Клиенту НЕ уходит сам — сначала «выставлен»,
+         и только по красной кнопке «Отправить клиенту» ссылка улетает ему в бота
+         (защита от отправки не туда, просьба Веры 07.09.2026). */
+      '<div class="m-sec"><div class="m-sec-h">Быстрый счёт' +
+        '<span class="hr" id="qi-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+        '<div class="m-csub" style="margin:0 0 10px">Сумма и назначение — получите ссылку на оплату, живёт до оплаты. Клиенту уйдёт только после кнопки «Отправить клиенту».</div>' +
+        '<div id="qi-list"><div class="field-empty">Загружаю счета…</div></div>' +
+        '<div class="qi-form">' +
+          '<div class="pay-grid qi-grid">' +
+            '<input id="qi-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
+            '<input id="qi-desc" placeholder="Назначение (Консультационное сопровождение)">' +
+          '</div>' +
+          '<input id="qi-contact" placeholder="Почта или телефон для чека" value="' + esc(qiContact) + '">' +
+          '<button class="bp sm" id="qi-btn" style="justify-content:center">' + ic('plus', 13) + 'Выставить счёт</button>' +
+        '</div></div>' +
       '<div class="m-sec"><div class="m-sec-h">Счета клиента' +
         '<span class="hr" id="ord-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div id="ord-list"><div class="field-empty">Загружаю счета…</div></div>' +
@@ -25793,6 +26332,15 @@
     }
     var callAdd = el('m-call-add');
     if (callAdd) callAdd.addEventListener('click', function () { openCallForm(id); });
+    var zoomAdd = el('m-zoom');
+    if (zoomAdd) zoomAdd.addEventListener('click', function () {
+      var who = ov(ctx, 'name') || (ctx.lead ? leadName(ctx.lead) : '');
+      openZoomForm({ session_id: id, topic: 'Консультация' + (who ? ': ' + who : ''), after: function () {
+        loadCardCalls(id, function () {
+          if (state.drawerId === id && state.modalSection === 'notes') renderDrawer(true);
+        });
+      } });
+    });
     Array.prototype.forEach.call(host.querySelectorAll('[data-editcall]'), function (b) {
       b.addEventListener('click', function () {
         var list = state.cardCalls[id];
@@ -26215,6 +26763,93 @@
         }).catch(function (e) {
           ordBtn.disabled = false;
           if (e.message !== '403') showToast('Счет не выставился — проверьте сеть');
+        });
+      });
+    }
+
+    /* ── Быстрый счёт (invoices): сумма → долгая ссылка, отправка клиенту отдельной
+       красной кнопкой. Отдельно от заказов выше: тут не разбор на позиции, а один
+       платёж-ссылка, как у общего скрипта агента. */
+    var qiList = el('qi-list');
+    if (qiList) {
+      var QI_ST = {
+        issued:   { label: 'выставлен',         sev: 'contacted' },
+        sent:     { label: 'отправлен клиенту',  sev: 'call_scheduled' },
+        paid:     { label: 'оплачен',            sev: 'client' },
+        canceled: { label: 'снят',               sev: 'rejected' },
+      };
+      var loadQI = function () {
+        api('/admin/api/leads/' + id + '/invoices').then(function (r) { renderQI(r.invoices); })
+          .catch(function (e) { if (e.message !== '403') qiList.innerHTML = '<div class="field-empty">Не загрузились — обновите.</div>'; });
+      };
+      var renderQI = function (list) {
+        if (!list || !list.length) {
+          qiList.innerHTML = '<div class="field-empty">Счетов пока нет — выставьте ниже.</div>';
+          return;
+        }
+        qiList.innerHTML = list.map(function (v) {
+          var st = QI_ST[v.status] || QI_ST.issued;
+          var meta = [fmtWhen(v.sent_at || v.created_at), v.created_by].filter(Boolean).map(esc).join(' · ');
+          var act = '';
+          if (v.status === 'issued') {
+            // красная пульсирующая «Отправить клиенту» — её нельзя не заметить (просьба Веры)
+            act = '<button class="qi-send" data-qisend="' + v.id + '">' + ic('card', 13) + 'Отправить клиенту</button>';
+          } else if (v.status === 'sent') {
+            act = '<span class="qi-done">' + ic('check', 12) + 'отправлен</span>';
+          }
+          if (v.url && v.status !== 'paid') act += '<button class="pay-rcpt" data-qicopy="' + esc(v.url) + '">' + ic('copy', 12) + 'ссылка</button>';
+          if (v.status !== 'paid') act += '<button class="icobtn del" data-qicancel="' + v.id + '" title="Снять счёт">' + ic('x', 14) + '</button>';
+          return '<div class="pay-row qi-row">' +
+            '<div class="doc-b"><div class="doc-n">' + esc(v.description) +
+              ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
+              '<div class="doc-m">' + meta + '</div></div>' +
+            '<span class="pay-amt num">' + fmtMoney(v.amount) + ' ₽</span>' +
+            '<div class="qi-acts">' + act + '</div></div>';
+        }).join('');
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qisend]'), function (b) {
+          b.addEventListener('click', function () {
+            b.disabled = true;
+            api('/admin/api/invoices/' + b.getAttribute('data-qisend') + '/send', { method: 'POST' })
+              .then(function () { showToast('Счёт отправлен клиенту в бота'); loadQI(); })
+              .catch(function (e) {
+                b.disabled = false;
+                if (e.status === 409) showToast((e.body && e.body.detail) || 'Отправить некому');
+                else if (e.message !== '403') showToast('Не отправилось — проверьте сеть');
+              });
+          });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicopy]'), function (b) {
+          b.addEventListener('click', function () { copyText(b.getAttribute('data-qicopy'), b); });
+        });
+        Array.prototype.forEach.call(qiList.querySelectorAll('[data-qicancel]'), function (b) {
+          b.addEventListener('click', function () {
+            apiSend('/admin/api/invoices/' + b.getAttribute('data-qicancel') + '/cancel', 'POST', null, loadQI);
+          });
+        });
+      };
+      loadQI();
+      var qiRefresh = el('qi-refresh');
+      if (qiRefresh) qiRefresh.addEventListener('click', loadQI);
+      var qiBtn = el('qi-btn');
+      if (qiBtn) qiBtn.addEventListener('click', function () {
+        var amt = parseInt((el('qi-amt').value || '').replace(/\D/g, ''), 10) || 0;
+        if (!amt) { el('qi-amt').focus(); return; }
+        var contact = (el('qi-contact').value || '').trim();
+        if (!contact) { showToast('Впишите почту или телефон клиента — он нужен для чека'); el('qi-contact').focus(); return; }
+        qiBtn.disabled = true;
+        api('/admin/api/leads/' + id + '/invoice', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: String(amt), description: (el('qi-desc').value || '').trim(), contact: contact }),
+        }).then(function () {
+          qiBtn.disabled = false;
+          el('qi-amt').value = ''; el('qi-desc').value = '';
+          showToast('Счёт выставлен — теперь нажмите красную «Отправить клиенту»');
+          loadQI();
+        }).catch(function (e) {
+          qiBtn.disabled = false;
+          if (e.status === 422) showToast((e.body && e.body.detail) || 'Проверьте сумму и назначение');
+          else if (e.status === 502) showToast('ЮKassa не создала счёт — попробуйте ещё раз');
+          else if (e.message !== '403') showToast('Счёт не выставился — проверьте сеть');
         });
       });
     }
