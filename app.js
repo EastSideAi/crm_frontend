@@ -15735,6 +15735,20 @@
           esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
   }
+  /* Регулятор бота задач (Павел, 09.09.2026): какие уведомления бота человек получает.
+     Сервер хранит ВЫКЛЮЧЕННЫЕ виды (bot_mute), чип горит, когда вид включен. */
+  var TM_BOT_SHORT = { tasks: 'Задачи', digest: 'Утро', evening: 'Вечер', meetings: 'Встречи', rhythm: 'Ритм', chat: 'Чат' };
+  function tmBotChips(u) {
+    var off = u.bot_mute || [];
+    if (!(state._teamBotKinds || []).length) return '';
+    return '<span class="tm-tp bot" data-uid="' + u.id + '" title="Уведомления бота задач">' + ic('bell', 12) +
+      state._teamBotKinds.map(function (t) {
+        var on = off.indexOf(t.id) < 0;
+        return '<button type="button" class="tm-bt-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'title="' + esc((on ? 'Приходит: ' : 'Выключено: ') + t.label) + '">' +
+          esc(TM_BOT_SHORT[t.id] || t.label) + '</button>';
+      }).join('') + '</span>';
+  }
   /* Подстрочник сотрудника. Про уведомления говорим только там, где есть о чем: тема
      отмечена, а мессенджер не подключен — это тишина, а не доставка, и знать об этом надо
      до того, как клиент повиснет. Без тем строка молчит — пустые чипы и так все сказали. */
@@ -15765,6 +15779,7 @@
       api('/admin/api/team').then(function (r) {
         state._team = (r && r.users) || [];
         state._teamTopics = (r && r.topics) || [];
+        state._teamBotKinds = (r && r.bot_kinds) || [];
         state._teamShared = !r || r.shared_chat !== false;
         state._teamHier = !!(r && r.hierarchy_scope);
         if (state.page === 'team') renderView();
@@ -15832,7 +15847,7 @@
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
             (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
           '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
-        tmTopicChips(u) +
+        tmTopicChips(u) + tmBotChips(u) +
         '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
           (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
         sel + '</div>';
@@ -15963,6 +15978,31 @@
           b.disabled = false; u.full_team = !next;
           b.classList.toggle('on', !next);
           b.textContent = !next ? 'вся команда' : 'своя ветка';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
+      });
+    });
+    /* Вид уведомлений бота: чип горит = приходит. Та же схема, что у тем: красим сразу,
+       откатываем, если сервер не сохранил. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-bt-b'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = b.parentNode.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        if (!u) return;
+        var t = b.getAttribute('data-t'), was = (u.bot_mute || []).slice();
+        var next = was.indexOf(t) >= 0
+          ? was.filter(function (x) { return x !== t; })
+          : was.concat([t]);
+        u.bot_mute = next;
+        b.classList.toggle('on');
+        b.disabled = true;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { bot_mute: next }, function () {
+          b.disabled = false;
+          showToast(next.length < was.length
+            ? (u.name || u.login) + ' снова получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase()
+            : (u.name || u.login) + ' больше не получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase());
+        }, function () {
+          b.disabled = false; u.bot_mute = was; b.classList.toggle('on');
           showToast('Не удалось сохранить — попробуйте еще раз');
         });
       });

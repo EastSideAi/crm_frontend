@@ -635,6 +635,13 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:hover { color: var(--ink); }
 .tm-tp-b.on { background: var(--blue); color: #fff; }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
+.tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
+.tm-tp.bot svg { flex: none; margin-right: 2px; }
+.tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
+  padding: 4px 8px; border-radius: 8px; cursor: pointer; text-decoration: line-through; text-decoration-color: var(--line-2); }
+.tm-bt-b:hover { color: var(--ink); }
+.tm-bt-b.on { color: var(--ink); background: var(--card); text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-bt-b:disabled { opacity: .55; cursor: default; }
 /* тема отмечена, а мессенджер не подключен — доставки нет; предупреждение в самой строке */
 .tm-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--amber-ink); font-weight: 600; }
 .tm-warn svg { flex: none; }
