@@ -5555,7 +5555,9 @@
     var d = zoomDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return d;
   }
-  var ZOOM_DAY_FROM = 8, ZOOM_DAY_TO = 22;
+  // Все сутки, а не 8–22 (Павел 10.09.2026): уроки с Китаем и созвоны с другими
+  // часовыми поясами стоят и рано утром, и ночью, рамка их прятала.
+  var ZOOM_DAY_FROM = 0, ZOOM_DAY_TO = 23;
   function zoomWeekBlock() {
     var dayView = state.zoomView === 'day';
     var lo = zoomRangeStart(), key = lo.toISOString().slice(0, 10);
@@ -5624,8 +5626,6 @@
       accs.forEach(function (a) {
         (a.meetings || []).filter(function (m) { return sameDay(m.start, day) && vis(m); }).forEach(function (m) { dayMs.push([a, m]); });
       });
-      // Часы 8–22 по умолчанию, но ранний урок с Китаем или поздний созвон
-      // раздвигают сетку, а не выпадают из нее молча.
       var hFrom = ZOOM_DAY_FROM, hTo = ZOOM_DAY_TO;
       dayMs.forEach(function (am) { var h0 = new Date(am[1].start).getHours(); hFrom = Math.min(hFrom, h0); hTo = Math.max(hTo, h0); });
       slots.forEach(function (x) { hFrom = Math.min(hFrom, x.hour); hTo = Math.max(hTo, x.hour); });
@@ -8124,15 +8124,39 @@
         loadTaskPeople(function (people) {
           var box = document.createElement('div');
           box.className = 'tsk-part-box';
-          box.innerHTML = '<div class="tsk-role"><span class="al-l">Еще исполнители</span><div class="tsk-role-ex"></div></div>' +
+          // Ответственного меняет постановщик или руководитель (Павел
+          // 10.09.2026: «не могу поменять ответственного на Машу полноценно»).
+          // Исполнитель себе замену не назначает — иначе задача уходит
+          // по кругу без ведома того, кто ее ставил.
+          var canOwner = (isAuthor || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel';
+          box.innerHTML = (canOwner
+              ? '<div class="tsk-role"><span class="al-l">Ответственный</span><span class="al-selwrap pp-addw"><select class="al-sel sm" id="tk-owner">' +
+                  (t.assignee_id ? '' : '<option value="">не назначена</option>') +
+                  people.map(function (x) { return '<option value="' + x.id + '"' + (x.id === t.assignee_id ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>'; }).join('') +
+                '</select></span></div>'
+              : '') +
+            '<div class="tsk-role"><span class="al-l">Еще исполнители</span><div class="tsk-role-ex"></div></div>' +
             '<div class="tsk-role"><span class="al-l">Наблюдатели</span><div class="tsk-role-w"></div></div>';
           wB.parentNode.replaceChild(box, wB);
-          var save = function (patch, ok) {
+          var save = function (patch, ok, then) {
             apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
               state.tasks = null; state.myweek = null; state.myboard = null;
               showToast(ok);
+              if (then) then();
             }, function () { showToast('Не получилось поменять роли'); });
           };
+          var ownerSel = box.querySelector('#tk-owner');
+          if (ownerSel) ownerSel.addEventListener('change', function () {
+            var to = +ownerSel.value;
+            if (!to || to === t.assignee_id) return;
+            ownerSel.disabled = true;
+            var who = people.filter(function (x) { return x.id === to; })[0];
+            // Новый ответственный уходит из «еще исполнителей», прежний — из
+            // задачи совсем: «полноценно» значит один главный, а не двое.
+            save({ assignee_id: to, executors: execIds.filter(function (x) { return x !== to; }) },
+              'Ответственный теперь ' + ((who && (who.name || who.login)) || 'другой'),
+              function () { api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); }); if (state.page === 'tasks') renderView(); });
+          });
           peoplePick(box.querySelector('.tsk-role-ex'), execIds, people, {
             except: t.assignee_id, word: 'исполнитель',
             onChange: function (ids) { save({ executors: ids }, 'Исполнители обновлены'); }
@@ -25091,13 +25115,13 @@
       cb(ZOOM_ACCS);
     }).catch(function () { cb([]); });
   }
-  // Время встречи: с 8:00 до 22:00 шагом 15 минут, по умолчанию ближайший круглый час.
+  // Время встречи: любые сутки шагом 15 минут (Павел 10.09.2026), по умолчанию
+  // ближайший круглый час.
   function zoomTimeOptions() {
     var d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
-    var def = Math.min(22, Math.max(8, d.getHours())) + ':00';
+    var def = d.getHours() + ':00';
     var out = [];
-    for (var h = 8; h <= 22; h++) for (var m = 0; m < 60; m += 15) {
-      if (h === 22 && m > 0) break;
+    for (var h = 0; h <= 23; h++) for (var m = 0; m < 60; m += 15) {
       var v = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
       out.push('<option value="' + v + '"' + (v === (def.length < 5 ? '0' + def : def) ? ' selected' : '') + '>' + v + '</option>');
     }
