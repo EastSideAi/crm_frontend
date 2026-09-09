@@ -7952,10 +7952,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tgd-row.on .tgd-l { color: var(--ink); }
 .tgd-sel { flex: 1 1 auto; min-width: 0; }
 .tgd-t { flex: none; margin-top: 0; }
+/* На телефоне подпись и «Проверить» делят первую строку, выбор группы — вторую:
+   кнопка под селектом тянула каждую строку на три этажа. */
 @media (max-width: 720px) {
-  .tgd-row { flex-wrap: wrap; }
-  .tgd-l { flex-basis: 100%; }
-  .tgd-t { margin-left: auto; }
+  .tgd { gap: 10px; }
+  .tgd-row { flex-wrap: wrap; row-gap: 6px; }
+  .tgd-l { flex: 1 1 auto; }
+  .tgd-t { order: 2; margin-left: auto; }
+  .tgd-sel { order: 3; flex-basis: 100%; }
 }
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
