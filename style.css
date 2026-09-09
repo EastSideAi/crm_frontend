@@ -2993,7 +2993,6 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-new { margin-left: 6px; white-space: nowrap; }
 .zw-range { white-space: nowrap; }
 .zw-seg { margin-left: 12px; }
-.zw-seg button { border: 0; background: none; }
 .zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
 .zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
 .zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -3010,7 +3009,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .zd-h { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); padding-top: 4px; font-variant-numeric: tabular-nums; }
 .zd-row.now .zd-h { color: var(--blue); font-weight: 700; }
 .zd-c { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
-.zd-acc { margin-left: 6px; opacity: .6; font-weight: 500; }
+.zd-acc { margin-left: 6px; color: var(--ink-3); font-weight: 500; }
 .zd-win { font-size: 12px; line-height: 1.5; color: var(--ink-3); padding: 3px 0; }
 .zd-win b { font-weight: 600; color: var(--ink-2); }
 .zd-win.busy { color: var(--ink-2); }
@@ -3019,11 +3018,18 @@ button.tr-crumb:hover { color: var(--blue); }
   .zw-head { flex-wrap: wrap; row-gap: 8px; }
   .zw-new { order: 2; margin-left: auto; }
   .zw-nav { order: 3; margin-left: 0; width: 100%; }
-  /* Телефон: заголовок и кнопка в первой строке, сегмент и стрелки с датой — во второй. */
+  /* Телефон: два ряда шапки (заголовок с кнопкой; сегмент со стрелками и датой)
+     и один ряд фильтров (лента типов скроллится, селект аккаунта справа). */
   .zw-new { order: 1; }
   .zw-seg { order: 2; margin-left: 0; }
-  .zw-nav { order: 3; width: auto; margin-left: auto; }
-  .zw-acc { margin-left: 0; width: 100%; }
+  .zw-seg button { padding: 5px 9px; }
+  .zw-nav { order: 3; width: auto; margin-left: auto; gap: 4px; }
+  .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
+  .zw-range { padding: 4px 2px; }
+  .zw-td { display: none; }
+  .zw-fltrow { flex-wrap: nowrap; gap: 8px; }
+  .zw-fltrow .zw-flt { flex: 1 1 auto; min-width: 0; }
+  .zw-acc { margin-left: 0; flex: 0 0 132px; min-width: 0; }
   .zd-h { flex-basis: 42px; }
   .zd-row .zw-chip { white-space: normal; flex-wrap: wrap; }
   .zd-row .zd-acc { flex: 1 1 100%; margin-left: 0; padding-left: 12px; font-size: 11.5px; }
@@ -3041,6 +3047,7 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-err { font-size: 11px; font-weight: 600; color: var(--amber-ink); margin-left: 8px; }
 .zw-chip { display: inline-flex; align-items: center; border: 0; cursor: pointer; text-align: left; font-family: inherit; gap: 5px; max-width: 100%; padding: 3px 8px; border-radius: 7px; background: var(--fill); font-size: 12px; line-height: 1.3; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .zw-chip:hover { background: var(--blue-tint); }
+.zw-row.today .zw-chip:hover, .zd-row.now .zw-chip:hover { background: #fff; }
 /* Точка типа: команда синяя, консультация зеленая, занятие янтарное, без типа пустая. */
 .zw-chip i, .zw-mm i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); opacity: .55; }
 .zw-mm i { display: inline-block; margin-right: 6px; vertical-align: middle; }
