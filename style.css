@@ -7996,4 +7996,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .nw-edit { opacity: 1; }
   .nw-edit::before { content: ''; position: absolute; inset: -6px; }
   .nw-people { padding-left: 0; }
+  /* Чипы адресата по ширине текста: мобильное правило «Команды» растягивает их на ряд. */
+  .nw-roles .tm-tp-b, .nw-people .tm-tp-b { flex: none; }
 }
