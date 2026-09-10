@@ -2538,12 +2538,14 @@
       var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
                     ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
+      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
+        (state.mkTab === 'launch' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
-        }).join('') + '</div>';
+        }).join('') + '</div>');
       Array.prototype.forEach.call(tb.querySelectorAll('[data-mktab]'), function (t) {
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
@@ -17479,7 +17481,7 @@
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">От клика до оплаты</div>' +
         '<div class="s">красная полоса — где теряем больше всего людей</div></div></div>' +
-        '<div style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
+        '<div class="lad-static" style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
       '<div class="card mkd-card sp5" style="padding:22px 26px">' +
         '<div class="sec-head"><span class="ic">' + ic('bolt', 14) + '</span>' +
         '<div><div class="t">По дням</div><div class="s">клики и входы в бота</div></div></div>' +
@@ -17728,7 +17730,7 @@
       : '';
 
     return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
-      '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+      '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
   }
 
 
@@ -17779,18 +17781,21 @@
     var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
     var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
 
+    var hasWorst = pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5;
     var chSmall = 'тг ' + (tg.members || 0) +
       ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
     var days = cur.days_to_event;
     var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
 
-    /* лестница: ширина полосы — от регистраций (первая ступень с настоящей цифрой) */
-    var base = reg.total || 1;
+    /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
+       регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
+       что 200 регистраций, и шкала врала бы. */
+    var base = Math.max(reg.total, clicksN) || 1;
     var ladder =
       ladRow('Посетители страницы', 'знает только Метрика', '—', null, convMut('нет данных')) +
       ladRow('Клики по нашим ссылкам', clicksN ? 'короткие ссылки в постах и письме' : 'коды заведены, ждут раздачи',
-        clicksN || 0, clicksN ? 100 : 0, clicksN ? '' : convMut('ждет раздачи')) +
-      ladRow('Зарегистрировались', 'форма на истсайд.рф/intensive и /diag', reg.total, 100, convMut('все')) +
+        clicksN || 0, pct(clicksN, base), clicksN ? '' : convMut('ждет раздачи')) +
+      ladRow('Зарегистрировались', 'форма на истсайд.рф/intensive', reg.total, pct(reg.total, base), convMut(clicksN ? pct(reg.total, clicksN) + '% от кликов' : 'все')) +
       ladRow('Выбрали бесплатное участие', '48 часов доступа после эфира',
         reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
       ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
@@ -17801,7 +17806,7 @@
         pay.paid, pct(pay.paid, base) || 2,
         conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
           (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
-        pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5 ? 'worst' : '') +
+        hasWorst ? 'worst' : '') +
       ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
         pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
       ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
@@ -17845,23 +17850,29 @@
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
       ], 'five') +
-      '<div class="card" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
-        '<div><div class="t">От показа до оплаты</div><div class="s">красная полоса — самая большая потеря</div></div></div>' +
-        '<div style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div><div class="t">От показа до оплаты</div><div class="s">' +
+          (hasWorst ? 'красным — шаг, где деньги не доходят' : 'путь запуска по ступеням') + '</div></div></div>' +
+        '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid" style="margin-top:16px">' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
-          '<div class="brk" style="border-top:1px solid var(--line)">' + diagRows + '</div></div>' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div class="brk">' + diagRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
-          '<div class="brk" style="border-top:1px solid var(--line)">' + srcRows + '</div></div>' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div class="brk">' + srcRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
-          '<div class="brk" style="border-top:1px solid var(--line)">' + chRows + '</div></div>' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div class="brk">' + chRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
-          (clickRows ? '<div class="brk" style="border-top:1px solid var(--line)">' + clickRows + '</div>'
-            : '<div class="empty">Кликов пока нет — ссылки еще не розданы.</div>') + '</div>' +
+          '<div class="brk">' + (clickRows || '<div class="empty">Кликов пока нет — ссылки еще не розданы.</div>') + '</div></div>' +
+        '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
+          '<div style="border-top:1px solid var(--line)">' +
+            '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сюда она не подключена</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+            '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+          '</div></div>' +
       '</div></div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
