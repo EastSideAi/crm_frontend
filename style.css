@@ -7739,7 +7739,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .trow.tp-grid.thead, .trow.tp-wgrid.thead { display: none; }
   .trow.tp-grid .tp-c { padding-right: 0; }
   /* Пустые клетки на телефоне не рисуем: у тихого остается только шапка с именем и точками. */
-  .trow.tp-grid .tp-c.empty { display: none; }
+  .trow.tp-grid .tp-c.tp-empty { display: none; }
   .trow.tp-grid .tp-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.tp-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .trow.tp-wgrid .brd-who { grid-column: 1 / -1; }

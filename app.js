@@ -6975,7 +6975,7 @@
         var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length) || dash;
         var sub = (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') +
           (p.today_left ? ' · на сегодня еще ' + p.today_left : '');
-        function cell(l, html, cls) { return '<div class="tp-c' + (cls ? ' ' + cls : '') + (html === dash ? ' empty' : '') + '" data-l="' + l + '">' + html + '</div>'; }
+        function cell(l, html, cls) { return '<div class="tp-c' + (cls ? ' ' + cls : '') + (html === dash ? ' tp-empty' : '') + '" data-l="' + l + '">' + html + '</div>'; }
         return '<div class="trow tp-grid' + (p.active_at ? '' : ' tp-quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
           '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
             '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) +
