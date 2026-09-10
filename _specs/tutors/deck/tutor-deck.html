@@ -33,9 +33,15 @@ body{font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased
   background:radial-gradient(900px 520px at 86% -12%,rgba(30,114,240,.17),transparent 60%),
              radial-gradient(720px 520px at -4% 112%,rgba(22,100,230,.13),transparent 60%)}
 .slide{position:absolute;inset:0;opacity:0;visibility:hidden;transition:opacity .34s ease;
-  display:flex;flex-direction:column;justify-content:center;
+  display:flex;flex-direction:column;
   padding:calc(var(--u)*11) calc(var(--u)*13) calc(var(--u)*11)}
+.slide > .cols,.slide > .flow,.slide > table,.slide > .tiers,.slide > .trio,
+.slide > .pts,.slide > .mets,.slide > .ladder,.slide > .tl,.slide > .years,
+.slide > .chart,.slide > .formula,.slide > .split,.slide > .lseg,.slide > .fkey,
+.slide > .final{margin-top:auto}
+.slide > :nth-last-child(2){margin-bottom:auto}
 .slide.on{opacity:1;visibility:visible}
+.slide > *{flex-shrink:0}
 .slide.mid{justify-content:center}
 
 /* Типографика — шкала канона, переведенная в vmin */
@@ -67,7 +73,8 @@ h2{font-size:calc(var(--u)*7);font-weight:600;letter-spacing:-.03em;line-height:
   width:calc(var(--u)*30);margin-top:calc(var(--u)*4)}
 
 /* Две колонки */
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*7);margin-top:calc(var(--u)*4)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*7);
+  margin-top:calc(var(--u)*4);align-items:start}
 .col h3{font-size:calc(var(--u)*2.2);font-weight:600;color:var(--ink-mute);
   margin-bottom:calc(var(--u)*2)}
 .col li{list-style:none;font-size:calc(var(--u)*2.6);line-height:1.4;
@@ -144,15 +151,15 @@ input[type=range]::-moz-range-thumb{width:calc(var(--u)*2);height:calc(var(--u)*
 .lseg button.on{background:var(--jade-soft);color:var(--jade-ink);box-shadow:var(--sh-md)}
 .ladder{margin-top:calc(var(--u)*3)}
 .lrow{display:grid;grid-template-columns:calc(var(--u)*36) 1fr calc(var(--u)*14);
-  gap:calc(var(--u)*2.6);align-items:center;padding:calc(var(--u)*.8) 0}
+  gap:calc(var(--u)*2.6);align-items:center;padding:calc(var(--u)*.6) 0}
 .lrow .lab{font-size:calc(var(--u)*2.4);color:var(--ink-mute);line-height:1.25}
 .lrow.top .lab{color:var(--ink);font-weight:600}
-.track{height:calc(var(--u)*3);background:rgba(255,255,255,.05);
+.track{height:calc(var(--u)*2.7);background:rgba(255,255,255,.05);
   border-radius:calc(var(--u)*.6);position:relative;overflow:hidden}
 .bar{position:absolute;inset:0 auto 0 0;width:0;border-radius:calc(var(--u)*.6);
   background:linear-gradient(90deg,rgba(43,143,255,.34),rgba(43,143,255,.62));
   transition:width .8s cubic-bezier(.22,.9,.28,1)}
-.lrow.top .bar{background:linear-gradient(90deg,var(--accent),var(--jade-bright))}
+.lrow.top .bar{background:linear-gradient(90deg,rgba(32,115,230,.85),rgba(43,143,255,.9))}
 .lrow .val{font-size:calc(var(--u)*2.8);font-weight:600;text-align:right;
   font-variant-numeric:tabular-nums;color:var(--ink-soft)}
 .lrow.top .val{color:var(--jade-ink)}
@@ -288,6 +295,28 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 .brk li:last-child{border-bottom:0}
 .col li:last-child{border-bottom:0}
+
+/* Вес метрики читается длиной дорожки: 25 — во всю ширину, 10 — меньше половины */
+.met[data-w="25"] .sl{width:100%}
+.met[data-w="20"] .sl{width:80%}
+.met[data-w="15"] .sl{width:60%}
+.met[data-w="10"] .sl{width:40%}
+
+/* 9. Цепочка чата: та же схема, другой рисунок, чтобы не повторять соседний слайд */
+.flow.chain{grid-template-columns:1fr 1fr 1fr;gap:calc(var(--u)*5)}
+.flow.chain .card{background:none;box-shadow:none;padding:calc(var(--u)*2.4) 0 0;
+  border-top:2px solid var(--line);border-radius:0}
+.flow.chain .card.on{background:none;border-top-color:var(--jade)}
+.flow.chain .arrow{display:none}
+
+/* 6. Итог сквозного примера — элемент слайда, а не служебная строка */
+.tl-sum{display:flex;justify-content:flex-end;align-items:baseline;gap:.6em;
+  margin-top:calc(var(--u)*2.6);font-size:calc(var(--u)*2.2);color:var(--ink-mute)}
+.tl-sum b{font-size:calc(var(--u)*4.2);font-weight:650;color:var(--jade-ink);
+  font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+
+/* 3. Финальный слайд занимает всю сетку */
+.final{display:grid;grid-template-columns:1fr 1.15fr;gap:calc(var(--u)*8);align-items:center}
 </style>
 </head><body>
 <div id="bar"></div>
@@ -353,7 +382,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
     <div class="arrow">→</div>
     <div class="card"><div class="who">Агент</div><div class="what">Отправляет в вуз, ведет статус заявки, тянет ответы</div></div>
   </div>
-  <p class="note" style="margin-top:calc(var(--u)*4);max-width:74ch">Вы отвечаете только за то, что приняли. Вернули на исправление, и ответственность на нас, контрольная точка при этом не сгорает. Устного «посмотрел» больше не существует: есть кнопка и есть запись, кто и когда нажал.</p>
+  <p class="note" style="margin-top:calc(var(--u)*4);max-width:74ch">Вы отвечаете только за то, что приняли. Устного «посмотрел» больше нет: есть кнопка и запись, кто и когда нажал.</p>
   <div class="foot"><span>05</span><span></span></div>
 </section>
 
@@ -366,7 +395,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
     <div class="tier b"><div class="let">Б</div><div class="cnt">3 вуза</div><p>Запасные с реальными шансами при среднем сценарии.</p><div class="ex">Проходим при языковом по плану и среднем CSCA</div></div>
     <div class="tier c"><div class="let">С</div><div class="cnt">сколько нужно</div><p>Страховка на плохой сценарий: слабый языковой, провал CSCA, отказы по А и Б.</p><div class="ex">Берут почти наверняка, скидка меньше</div></div>
   </div>
-  <p class="note" style="margin-top:calc(var(--u)*4);max-width:76ch">Семья должна услышать план на плохой сценарий до подач, а не в момент отказа. Тогда отказ по основному вузу становится переходом к плану Б, а не провалом года. Список фиксируется в карточке и пересматривается по факту: языковой сертификат, усиление профиля, результат CSCA.</p>
+  <p class="note" style="margin-top:calc(var(--u)*4);max-width:76ch">Семья слышит план на плохой сценарий до подач, а не в момент отказа.</p>
   <div class="foot"><span>06</span><span></span></div>
 </section>
 
@@ -407,11 +436,9 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 <section class="slide">
   <div class="kicker">Чаты с семьями</div>
   <h2>Бот отвечает первым. Вы правите, и он учится</h2>
-  <div class="flow" data-auto="1">
+  <div class="flow chain" data-auto="1">
     <div class="card"><div class="who">Семья спросила</div><div class="what">Вопрос приходит в чат в любом канале: телеграм, МАКС, ВК</div></div>
-    <div class="arrow">→</div>
     <div class="card"><div class="who">Бот</div><div class="what">Отвечает сразу по нашим памяткам. Сложное не берет и зовет вас</div></div>
-    <div class="arrow">→</div>
     <div class="card"><div class="who">Вы</div><div class="what">Подтверждаете или правите ответ. Правка уходит в базу знаний, дальше он отвечает так всем</div></div>
   </div>
   <p class="note" style="margin-top:calc(var(--u)*4);max-width:76ch">Тот же бот меряет скорость и качество ответов. Не для того, чтобы поймать: чтобы вы видели свои цифры каждый день и понимали, из чего складывается ваш коэффициент.</p>
@@ -430,8 +457,9 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
     <div class="st" data-i="3"><div class="w">май</div><div class="t">Результат</div><div class="m">12 750 ₽</div></div>
     <div class="st" data-i="4"><div class="w">сентябрь</div><div class="t">Заезд и первый месяц</div><div class="m">4 500 ₽</div></div>
   </div>
+  <div class="tl-sum">итого за ученика <b>27 750 ₽</b></div>
   <div class="tl-b" id="tlb"></div>
-  <div class="foot"><span>10 · нажмите на месяц · итого 27 750 ₽ за ученика</span><span></span></div>
+  <div class="foot"><span>10 · нажмите на месяц</span><span></span></div>
 </section>
 
 <!-- s11 -->
@@ -458,6 +486,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 <!-- s13 -->
 <section class="slide mid">
+  <div class="draft">предварительные условия</div>
   <div class="kicker">Формула</div>
   <h2>Половина за работу, половина за результат</h2>
   <div class="formula"><span class="p1">Работа</span> + <span class="p2">Результат × сила гранта</span><br><span style="color:var(--ink-faint)">все это ×</span> <span class="p3">коэффициент вовлеченности</span></div>
@@ -471,6 +500,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 <!-- s14 · КОНТРОЛЬНЫЕ ТОЧКИ -->
 <section class="slide">
+  <div class="draft">предварительные условия</div>
   <div class="kicker">Пять контрольных точек</div>
   <h2>Точка закрыта: деньги ушли</h2>
   <div class="pts" id="pts">
@@ -509,15 +539,16 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 <!-- s16 · ВОВЛЕЧЕННОСТЬ -->
 <section class="slide" id="s-eng">
+  <div class="draft">предварительные условия</div>
   <div class="kicker">Вовлеченность</div>
   <h2>Шесть цифр, которые считает система</h2>
   <div class="mets" id="mets">
-    <div class="met" data-w="25"><div class="met-h"><b>Контрольные точки в срок</b><i>вес 25</i></div><input type="range" min="0" max="100" value="100"></div>
-    <div class="met" data-w="20"><div class="met-h"><b>Прогресс профиля ученика</b><i>вес 20</i></div><input type="range" min="0" max="100" value="100"></div>
-    <div class="met" data-w="20"><div class="met-h"><b>Скорость первого ответа</b><i>вес 20</i></div><input type="range" min="0" max="100" value="100"></div>
-    <div class="met" data-w="15"><div class="met-h"><b>Нет зависших вопросов</b><i>вес 15</i></div><input type="range" min="0" max="100" value="100"></div>
-    <div class="met" data-w="10"><div class="met-h"><b>Оценка семьи</b><i>вес 10</i></div><input type="range" min="0" max="100" value="100"></div>
-    <div class="met" data-w="10"><div class="met-h"><b>Обучение агента</b><i>вес 10</i></div><input type="range" min="0" max="100" value="100"></div>
+    <div class="met" data-w="25"><div class="met-h"><b>Контрольные точки в срок</b><i>вес 25</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+    <div class="met" data-w="20"><div class="met-h"><b>Прогресс профиля ученика</b><i>вес 20</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+    <div class="met" data-w="20"><div class="met-h"><b>Скорость первого ответа</b><i>вес 20</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+    <div class="met" data-w="15"><div class="met-h"><b>Нет зависших вопросов</b><i>вес 15</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+    <div class="met" data-w="10"><div class="met-h"><b>Оценка семьи</b><i>вес 10</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+    <div class="met" data-w="10"><div class="met-h"><b>Обучение агента</b><i>вес 10</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
   </div>
   <p class="note" style="margin-top:calc(var(--u)*3)">90 баллов и выше дают 1,00. Дальше вниз: 0,95 · 0,90 · 0,80 · 0,70 с разбором. Одна плохая оценка семьи коэффициент не роняет, считается среднее.</p>
   <div class="mets-out">
@@ -587,6 +618,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 <!-- s20 -->
 <section class="slide">
+  <div class="draft">предварительные условия</div>
   <div class="kicker">Ваш кабинет</div>
   <h2>Никаких сюрпризов в день выплаты</h2>
   <div class="trio">
@@ -605,6 +637,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 
 <!-- s22 -->
 <section class="slide">
+  <div class="draft">предварительные условия</div>
   <div class="kicker">Условия отдела продаж</div>
   <h2>Две роли, и их можно совмещать</h2>
   <div class="cols">
@@ -625,8 +658,7 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
   <div class="split">
     <div>
       <div class="formula"><span class="p1">750 ₽ за смену</span> × <span class="p2">качество смены от 0,6 до 1,0</span><br><span style="color:var(--ink-faint)">40 смен в месяц =</span> <span class="p3">30 000 ₽</span></div>
-      <p class="note" style="margin-top:calc(var(--u)*3);max-width:40ch">Смена это половина рабочего дня. Вышли на полный день, получили две смены. В месяце 20 рабочих дней, то есть 40 смен, и 30 000 набираются полной загрузкой при хорошем качестве.</p>
-      <p class="note" style="margin-top:calc(var(--u)*2);max-width:40ch">Смены ставятся заранее и видны всем: у кого смена, тот и отвечает. Сейчас входящие разбираются, кто первый увидел, а в выходные не разбираются вовсе.</p>
+      <p class="note" style="margin-top:calc(var(--u)*3);max-width:40ch">Смена это половина рабочего дня. Вышли на полный день, получили две смены. Смены ставятся заранее и видны всем.</p>
     </div>
     <div>
       <table style="margin-top:0"><thead><tr><th>Из чего складывается качество смены</th><th class="num">Вес</th></tr></thead><tbody>
@@ -644,14 +676,14 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 <section class="slide">
   <div class="draft">предварительные условия</div>
   <div class="kicker">Проценты с продажи</div>
-  <h2>Целая сделка стоит 3,2 процента и делится, если работали двое</h2>
+  <h2>Как делится процент между чатом и диагностикой</h2>
   <table><thead><tr><th>Кто продал</th><th class="num">Процент</th><th class="num">Стандарт<br>159 000 ₽</th><th class="num">Плюс<br>299 990 ₽</th><th class="num">Премиум<br>399 990 ₽</th></tr></thead><tbody>
     <tr class="hi"><td>Вели чат и сами провели диагностику</td><td class="num">3,2%</td><td class="num">5 088</td><td class="num">9 600</td><td class="num">12 800</td></tr>
     <tr><td>Провели диагностику, лид с чужой смены</td><td class="num">2,2%</td><td class="num">3 498</td><td class="num">6 600</td><td class="num">8 800</td></tr>
     <tr><td>Довели с чата до записи, диагностику вел другой</td><td class="num">1,0%</td><td class="num">1 590</td><td class="num">3 000</td><td class="num">4 000</td></tr>
     <tr><td>Тьютор продал своей консультацией</td><td class="num">3,2%</td><td class="num">5 088</td><td class="num">9 600</td><td class="num">12 800</td></tr>
   </tbody></table>
-  <p class="note" style="margin-top:calc(var(--u)*3);max-width:80ch">Сумма всегда сходится в 3,2 процента, как бы сделку ни делили. Условия одни для всех тарифов и для всех, кто продает. Процент считается по факту поступления денег от семьи, а не по подписанию договора: рассрочка идет частями вслед за платежами.</p>
+  <p class="note" style="margin-top:calc(var(--u)*3);max-width:80ch">Процент считается по факту поступления денег от семьи. Рассрочка идет частями вслед за платежами.</p>
   <div class="foot"><span>24 · цены тарифов из портала</span><span></span></div>
 </section>
 
@@ -659,15 +691,13 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
 <section class="slide">
   <div class="draft">предварительные условия</div>
   <div class="kicker">Сколько выходит в месяц</div>
-  <h2>Полные смены плюс проценты, по трем тарифам портала</h2>
-  <table><thead><tr><th>Сделок в месяц</th><th class="num">Стандарт</th><th class="num">Плюс</th><th class="num">Премиум</th></tr></thead><tbody>
-    <tr><td>2</td><td class="num">40 176</td><td class="num">49 200</td><td class="num">55 600</td></tr>
-    <tr><td>4</td><td class="num">50 352</td><td class="num">68 400</td><td class="num">81 200</td></tr>
-    <tr class="hi"><td>6</td><td class="num">60 528</td><td class="num">87 600</td><td class="num">106 800</td></tr>
-    <tr><td>8</td><td class="num">70 704</td><td class="num">106 800</td><td class="num">132 400</td></tr>
-    <tr><td>10</td><td class="num">80 880</td><td class="num">126 000</td><td class="num">158 000</td></tr>
-  </tbody></table>
-  <p class="note" style="margin-top:calc(var(--u)*3);max-width:80ch">Внутри каждой цифры 30 000 за полный месяц смен и 3,2 процента с ваших сделок. Оплата диагностик идет сверх этого и в таблицу не входит.</p>
+  <h2>Шесть сделок в месяц при полных сменах</h2>
+  <div class="years">
+    <div class="year"><div class="n">Стандарт, 159 000 ₽</div><div class="big">60 528</div><div class="sub">30 000 смены плюс 5 088 с каждой сделки</div></div>
+    <div class="year mid"><div class="n">Плюс, 299 990 ₽</div><div class="big">87 600</div><div class="sub">30 000 смены плюс 9 600 с каждой сделки</div></div>
+    <div class="year"><div class="n">Премиум, 399 990 ₽</div><div class="big">106 800</div><div class="sub">30 000 смены плюс 12 800 с каждой сделки</div></div>
+  </div>
+  <p class="note" style="margin-top:calc(var(--u)*4);max-width:80ch">При двух сделках выходит 40 176, 49 200 и 55 600. При десяти: 80 880, 126 000 и 158 000. Оплата диагностик идет сверх этого.</p>
   <div class="foot"><span>25 · при полной загрузке смен и коэффициенте 1,0</span><span></span></div>
 </section>
 
@@ -702,27 +732,32 @@ h2 + .lseg{margin-top:calc(var(--u)*3)}
     <div class="year mid"><div class="n">30 учеников</div><div class="big">1 164 150</div><div class="sub">97 012 ₽ в месяц</div><div class="was">по старым условиям было 990 000</div></div>
     <div class="year"><div class="n">40 учеников</div><div class="big">1 552 200</div><div class="sub">129 350 ₽ в месяц</div><div class="was">по старым условиям было 1 320 000</div></div>
   </div>
-  <p class="note" style="margin-top:calc(var(--u)*4);max-width:78ch">Считано при вовлеченности 0,9, двух консультациях на ученика и проценте с доведенных договоров по тарифу Плюс. Сколько учеников реально потянуть с новыми инструментами, мы вместе проверим в этом сезоне.</p>
+  <p class="note" style="margin-top:calc(var(--u)*4);max-width:78ch">Вовлеченность 0,9, две консультации на ученика, процент с договоров по тарифу Плюс.</p>
   <div class="foot"><span>27</span><span></span></div>
 </section>
 
 <!-- s28 -->
 <section class="slide mid">
-  <div class="sect" style="align-items:stretch">
-    <div class="kicker">Что дальше</div>
-    <h1 style="max-width:14ch">До начала кампании</h1>
-    <ul class="brk" style="margin-top:calc(var(--u)*3.4);max-width:74ch;width:100%">
+  <div class="draft">предварительные условия</div>
+  <div class="final">
+    <div>
+      <div class="kicker">Что дальше</div>
+      <h1>До начала кампании</h1>
+      <div class="rule"></div>
+      <p class="note" style="margin-top:calc(var(--u)*3.4);max-width:26ch">Вопросы и несогласие разбираем сегодня на встрече, а не после первой выплаты.</p>
+    </div>
+    <ul class="brk">
       <li><span>Новый договор на подпись</span><span>эта неделя</span></li>
       <li><span>Курс в академии по новым инструментам</span><span>до конца месяца</span></li>
-      <li><span>Первые три месяца коэффициент не ниже 1,0</span><span>переходный период</span></li>
+      <li><span>Коэффициент не ниже 1,0</span><span>первые три месяца</span></li>
       <li><span>Текущие ученики доводятся по старым условиям</span><span>без пересчета</span></li>
     </ul>
   </div>
-  <div class="foot"><span>28 · условия предварительные, обсуждаем сегодня</span><span></span></div>
+  <div class="foot"><span>28</span><span></span></div>
 </section>
 
 </div>
-<div id="nav"><button id="prev">‹</button><button id="next">›</button><span id="pos"></span></div>
+<div id="nav"><button id="prev">‹</button><button id="next">›</button></div>
 <script>/* Дек тьюторства: навигация и живые расчеты.
    Все цифры считаются формулами прямо на слайде, чтобы на встрече можно было
    подвигать ползунок и показать ответ, а не спорить о том, откуда взялось число. */
@@ -737,7 +772,6 @@ function show(i){
   i = Math.max(0, Math.min(slides.length - 1, i));
   slides[cur].classList.remove('on'); cur = i; slides[cur].classList.add('on');
   bar.style.width = ((i + 1) / slides.length * 100) + '%';
-  pos.textContent = (i + 1) + '/' + slides.length;
   var flow = slides[cur].querySelector('.flow[data-auto]');
   if (flow) {
     var cards = flow.querySelectorAll('.card');
@@ -869,7 +903,7 @@ function drawChart(){
   var g = '';
   [0, 500000, 1000000, 1500000].forEach(function(v){
     g += '<line class="grid" x1="60" x2="980" y1="' + Y(v) + '" y2="' + Y(v) + '"/>' +
-         '<text class="axis" x="0" y="' + (Y(v) + 5) + '">' + (v ? v / 1000000 + ' млн' : '0') + '</text>';
+         '<text class="axis" x="0" y="' + (Y(v) + 5) + '">' + (v ? String(v / 1000000).replace('.', ',') + ' млн' : '0') + '</text>';
   });
   [10, 20, 30, 40].forEach(function(v){
     g += '<text class="axis" x="' + X(v) + '" y="418" text-anchor="middle">' + v + '</text>';

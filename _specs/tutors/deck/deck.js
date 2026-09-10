@@ -12,7 +12,6 @@ function show(i){
   i = Math.max(0, Math.min(slides.length - 1, i));
   slides[cur].classList.remove('on'); cur = i; slides[cur].classList.add('on');
   bar.style.width = ((i + 1) / slides.length * 100) + '%';
-  pos.textContent = (i + 1) + '/' + slides.length;
   var flow = slides[cur].querySelector('.flow[data-auto]');
   if (flow) {
     var cards = flow.querySelectorAll('.card');
@@ -144,7 +143,7 @@ function drawChart(){
   var g = '';
   [0, 500000, 1000000, 1500000].forEach(function(v){
     g += '<line class="grid" x1="60" x2="980" y1="' + Y(v) + '" y2="' + Y(v) + '"/>' +
-         '<text class="axis" x="0" y="' + (Y(v) + 5) + '">' + (v ? v / 1000000 + ' млн' : '0') + '</text>';
+         '<text class="axis" x="0" y="' + (Y(v) + 5) + '">' + (v ? String(v / 1000000).replace('.', ',') + ' млн' : '0') + '</text>';
   });
   [10, 20, 30, 40].forEach(function(v){
     g += '<text class="axis" x="' + X(v) + '" y="418" text-anchor="middle">' + v + '</text>';

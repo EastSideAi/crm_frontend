@@ -21,7 +21,7 @@ html = f"""<!doctype html>
 <div id="deck">
 {body}
 </div>
-<div id="nav"><button id="prev">‹</button><button id="next">›</button><span id="pos"></span></div>
+<div id="nav"><button id="prev">‹</button><button id="next">›</button></div>
 <script>{js}</script>
 </body></html>
 """
