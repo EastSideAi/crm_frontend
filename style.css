@@ -413,9 +413,10 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 50%, transparent);
   animation: shimmer 1.5s var(--ease) infinite; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
-@media (prefers-reduced-motion: reduce) { .shim::after { animation: none;
+@media (prefers-reduced-motion: reduce) {
+  .shim::after { animation: none; }
   .gl-ring { transition: none; }
-} }
+}
 
 /* dashboard-скелетон: повторяет layout (полоса KPI + карточки) */
 .sk-statbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 8px;
@@ -504,6 +505,8 @@ a { color: inherit; text-decoration: none; }
 .sev.st-done         { color: var(--green-ink); background: var(--green-soft); }
 .sev.st-return       { color: var(--red-ink);   background: var(--red-soft); }
 .sev.st-cancel       { color: var(--ink-3);     background: var(--fill); }
+/* «Что нового»: неотправленная запись — та же пара, что у блокировки: она ждет. */
+.sev.nw-draft        { color: var(--amber-ink); background: var(--amber-soft); }
 
 .t-cell { min-width: 0; }
 .t-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
@@ -635,6 +638,25 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tm-tp-b:hover { color: var(--ink); }
 .tm-tp-b.on { background: var(--blue); color: #fff; }
 .tm-tp-b:disabled { opacity: .55; cursor: default; }
+/* Две группы чипов (темы клиентов и виды уведомлений бота) идут отдельной строкой под
+   именем на всю ширину: в одну строку с почтой и ролью они не влезают, а прятать чипы
+   за прокруткой нельзя — раскладка должна читаться одним взглядом. */
+.tm-row { flex-wrap: wrap; row-gap: 8px; }
+.tm-tps { flex: 1 1 100%; order: 9; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding-left: 54px; }
+@media (max-width: 960px) {
+  .tm-tps { padding-left: 0; }
+  /* Группа шире экрана телефона: листается внутри себя, страницу вбок не тянет. */
+  .tm-tps .tm-tp { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tm-tps .tm-tp::-webkit-scrollbar { display: none; }
+}
+.tm-tp.bot { align-items: center; padding-left: 8px; color: var(--ink-3); }
+.tm-tp.bot svg { flex: none; margin-right: 2px; }
+.tm-bt-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); background: transparent; border: 0;
+  padding: 4px 8px; border-radius: 8px; cursor: pointer; text-decoration: line-through; text-decoration-color: var(--line-2); }
+.tm-bt-b:hover { color: var(--ink); }
+.tm-bt-b.on { color: var(--ink); background: var(--card); text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-bt-b:disabled { opacity: .55; cursor: default; }
 /* тема отмечена, а мессенджер не подключен — доставки нет; предупреждение в самой строке */
 .tm-warn { display: inline-flex; align-items: center; gap: 4px; color: var(--amber-ink); font-weight: 600; }
 .tm-warn svg { flex: none; }
@@ -960,12 +982,31 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
+/* Полоса целей над доской отдела: системный .qchip, свое только кольцо и ширина названия. */
+.tb-goals { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 12px; margin-top: -4px; scrollbar-width: none; }
+.tb-goals::-webkit-scrollbar { display: none; }
+.tb-gchip { flex: none; max-width: 260px; padding-left: 9px; }
+.tb-gchip .gl-ring { width: 18px; height: 18px; }
+.tb-gchip .gl-ring::before { inset: 3px; background: var(--fill); }
+.tb-gchip:hover .gl-ring::before { background: #EDEFF3; }
+.tb-gchip.on .gl-ring::before { background: var(--blue-tint); }
+.tb-gchip .gl-ring b { display: none; }
+.tb-gchip .tb-gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-gchip.on { background: var(--blue-tint); color: var(--blue); border-color: var(--blue); }
+.tb-gchip.on .qn { color: var(--blue); }
+.tb-top .tb-gsel { display: none; }
+.tb-goal { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); min-width: 0; }
+.tb-goal svg { flex: none; }
+.tb-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
   /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
   .tb-top .tb-who-seg { flex: none; }
   .tb-top .wk-spacer { display: none; }
   .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
+  .tb-goals { display: none; }
+  .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -2958,6 +2999,110 @@ button.tr-crumb:hover { color: var(--blue); }
   color: var(--ink-3); padding: 14px 0 2px; }
 .ct-skel { height: 44px; border-radius: 10px; background: var(--fill); margin-bottom: 6px; }
 .ct-add { margin-top: 12px; }
+.ct-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ct-acts .ct-add { margin-top: 12px; }
+
+/* ── Зум: форма и недельная сетка ─────────────────────────────────────────── */
+.zm-dayrow { display: flex; align-items: center; gap: 10px; }
+.zm-dayrow .al-in.sm { width: auto; flex: 1; min-width: 0; }
+.zm-free { min-height: 18px; font-size: 12.5px; line-height: 1.4; color: var(--ink-3); }
+.zm-free.ok { color: var(--ink-2); }
+.zm-free.busy, .zm-free.warn { color: var(--amber-ink); font-weight: 600; }
+.zw { padding: 18px 24px 14px; margin-bottom: 14px; }
+.zw-head { margin-bottom: 8px; }
+.zw-nav { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.zw-nav .icobtn:first-child svg { transform: rotate(180deg); }
+.zw-new { margin-left: 6px; white-space: nowrap; }
+.zw-range { white-space: nowrap; }
+.zw-seg { margin-left: 12px; }
+.zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
+.zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
+.zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.zw-fltrow .zw-flt { margin: 0; }
+.zw-acc { margin-left: auto; min-width: 180px; }
+.zw-acc .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* День по часам: тонкие строки, час слева табличными цифрами, текущий час — той же
+   заливкой, что «сегодня» в недельной сетке. Окна людей — тихим текстом, без чипов:
+   чип здесь только у зума, по нему кликают. */
+.zd-row { display: flex; align-items: flex-start; gap: 12px; padding: 5px 0; min-height: 30px; border-top: 1px solid var(--line); }
+.zd-row:first-child { border-top: 0; }
+.zd-row.now { background: var(--blue-tint); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; border-top-color: transparent; }
+.zd-row.now + .zd-row { border-top-color: transparent; }
+.zd-h { flex: 0 0 48px; font-size: 12px; color: var(--ink-3); padding-top: 4px; font-variant-numeric: tabular-nums; }
+.zd-row.now .zd-h { color: var(--blue); font-weight: 700; }
+.zd-c { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.zd-acc { margin-left: 6px; color: var(--ink-3); font-weight: 500; }
+.zd-win { font-size: 12px; line-height: 1.5; color: var(--ink-3); padding: 3px 0; }
+.zd-win b { font-weight: 600; color: var(--ink-2); }
+.zd-win.busy { color: var(--ink-2); }
+/* Узкий экран: заголовок и кнопка в одной строке, навигация по неделям под ними. */
+@media (max-width: 960px) {
+  .zw-head { flex-wrap: wrap; row-gap: 8px; }
+  .zw-new { order: 2; margin-left: auto; }
+  .zw-nav { order: 3; margin-left: 0; width: 100%; }
+  /* Телефон: два ряда шапки (заголовок с кнопкой; сегмент со стрелками и датой)
+     и один ряд фильтров (лента типов скроллится, селект аккаунта справа). */
+  .zw-new { order: 1; }
+  .zw-seg { order: 2; margin-left: 0; }
+  .zw-seg button { padding: 5px 9px; }
+  .zw-nav { order: 3; width: auto; margin-left: auto; gap: 4px; }
+  .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
+  .zw-range { padding: 4px 2px; }
+  .zw-td { display: none; }
+  .zw-fltrow { flex-wrap: nowrap; gap: 8px; }
+  .zw-fltrow .zw-flt { flex: 1 1 auto; min-width: 0; }
+  .zw-acc { margin-left: 0; flex: 0 0 132px; min-width: 0; }
+  .zd-h { flex-basis: 42px; }
+  .zd-row .zw-chip { white-space: normal; flex-wrap: wrap; }
+  .zd-row .zd-acc { flex: 1 1 100%; margin-left: 0; padding-left: 12px; font-size: 11.5px; }
+}
+.zw-range { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.zw-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-top: 1px solid var(--line); }
+.zw-row.head { border-top: 0; padding-bottom: 4px; }
+.zw-row.today { background: var(--blue-tint); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; }
+.zw-row.today + .zw-row { border-top-color: transparent; }
+.zw-d { flex: 0 0 56px; font-size: 12px; color: var(--ink-3); padding-top: 3px; }
+.zw-d b { color: var(--ink); font-weight: 700; }
+.zw-row.today .zw-d b { color: var(--blue); }
+.zw-c { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; min-height: 22px; align-items: center; }
+.zw-c.off { opacity: .45; }
+.zw-err { font-size: 11px; font-weight: 600; color: var(--amber-ink); margin-left: 8px; }
+.zw-chip { display: inline-flex; align-items: center; border: 0; cursor: pointer; text-align: left; font-family: inherit; gap: 5px; max-width: 100%; padding: 3px 8px; border-radius: 7px; background: var(--fill); font-size: 12px; line-height: 1.3; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zw-chip:hover { background: var(--blue-tint); }
+.zw-row.today .zw-chip:hover, .zd-row.now .zw-chip:hover { background: #fff; }
+/* Точка типа: команда синяя, консультация зеленая, занятие янтарное, без типа пустая. */
+.zw-chip i, .zw-mm i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); opacity: .55; }
+.zw-mm i { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.k-team_product i, .k-team_marketing i, .k-team_sales i { background: var(--blue); opacity: 1; }
+.k-consult i { background: var(--green); opacity: 1; }
+.k-lesson i { background: var(--amber); opacity: 1; }
+.k-none i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+.zw-flt { margin: 0 0 10px; align-self: flex-start; display: inline-flex; }
+.zw-flt .tab { padding: 6px 12px; font-size: 12.5px; }
+/* На телефоне фильтр шире экрана: листается пальцем, полосу прокрутки не рисуем. */
+@media (max-width: 960px) {
+  .zw-flt { display: flex; max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .zw-flt::-webkit-scrollbar { display: none; }
+  .zw-flt .tab { flex: none; white-space: nowrap; }
+}
+.zc-link { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.zc-url { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zc-nolink { font-size: 13px; color: var(--ink-2); }
+.zc-del { margin-right: auto; color: var(--red-ink); }
+.zc-del:hover { background: var(--red-soft); color: var(--red-ink); }
+.zw-chip b { font-weight: 700; flex: none; }
+/* Строка встречи на телефоне в две строки: день и аккаунт сверху, время и название целиком снизу. */
+.zw-mrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; width: 100%; padding: 8px 0; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; font-size: 13px; color: var(--ink); text-align: left; cursor: pointer; }
+.zw-mrow:first-child { border-top: 0; }
+.zw-md { font-size: 12px; color: var(--ink-3); }
+.zw-ma { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
+.zw-mm { flex: 1 1 100%; order: 3; min-width: 0; line-height: 1.35; }
+.zw-mm b { font-weight: 700; }
+.zw-off, .zw-hint { margin-top: 10px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
+.zw-empty { padding: 14px 0; font-size: 13px; color: var(--ink-3); }
+@media (max-width: 720px) {
+  .zw { padding: 14px 14px 12px; }
+}
 .ct-hint { margin-top: 8px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 /* ── Консультации в карточке: что осталось от встречи ──
    Запись живет ссылкой, а в системе остается конспект. Строка тихая: якорь секции
@@ -3038,6 +3183,8 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-attach { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
   font-size: 12.5px; font-weight: 700; color: var(--blue); }
 .tsk-attach:hover { color: var(--blue-d); }
+.tsk-zoom { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.tsk-zoom + .tsk-attach { margin-left: 14px; }
 .tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
 .tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
 .tsk-resrow .bp { height: 36px; }
@@ -7575,6 +7722,73 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .wk-pick .wk-state { margin: 0 0 12px; }
 .wkc-text { margin-top: 14px; }
 /* Команда: строка на человека. */
+/* ── Пульс команды (.tp-*, свой префикс: .pl-* занят планами работ) ─────────────────────────────────────────────────────────
+   Строка на человека: кто, сейчас, сделано, завтра. Якорь экрана — колонка
+   «Сейчас» чернилами и часы движения под именем; остальное тихое. Красное на
+   экране одно — просрочка (чип у имени и полоска строки .r-crit). */
+.tp-sum { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 14px 24px 12px; border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.tp-sum b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.tp-sum .bad, .tp-sum .bad b { color: var(--red-ink); }
+.tp-sum .warn, .tp-sum .warn b { color: var(--amber-ink); }
+.brd-n.warn { color: var(--amber-ink); }
+.tp-grid { grid-template-columns: minmax(200px, 300px) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
+.tp-wgrid { grid-template-columns: minmax(200px, 300px) repeat(4, minmax(64px, 1fr)) 210px; }
+.tp-wgrid .th:nth-child(n+2):nth-child(-n+5), .tp-wgrid .brd-n { text-align: right; }
+.trow.tp-grid, .trow.tp-wgrid { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; align-items: start; }
+.trow.tp-grid.thead, .trow.tp-wgrid.thead { min-height: 0; padding-top: 0; padding-bottom: 0; align-items: center; }
+.trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { padding-top: 4px; }
+.trow.tp-wgrid.has-note { padding-bottom: 12px; }
+.tp-who { cursor: pointer; align-self: start; }
+.tp-who:hover .tp-nm { color: var(--blue); }
+.tp-nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.01em; transition: color .12s var(--ease); }
+.tp-nm .sev { flex: none; }
+.sev.tp-over { background: var(--red-soft); color: var(--red-ink); }
+.trow.tp-grid.tp-quiet .tsk-av { background: var(--fill); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.tp-who .brd-nm { overflow: visible; }
+/* Часы движения: 13 точек, 8:00–20:00. Заполненная — в этот час человек что-то
+   делал с задачами. Подписи только у 8, 12, 16, 20 — иначе шкала шумит. */
+.tp-hrs { display: inline-flex; align-items: flex-end; gap: 3px; margin-top: 7px; height: 10px; margin-bottom: 13px; }
+.tp-hrs i { position: relative; width: 6px; height: 6px; border-radius: 2px; background: var(--line); transition: background .3s var(--ease); }
+.tp-hrs i.on { background: var(--blue); height: 10px; }
+.tp-hrs i[data-h]::after { content: attr(data-h); position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  margin-top: 3px; font-size: 10px; font-weight: 600; font-style: normal; line-height: 1; color: var(--ink-3); }
+.tp-hrs.off i { background: var(--line-2); }
+.tp-hrs.days { gap: 5px; margin-top: 8px; }
+.tp-hrs.days i { width: 14px; height: 6px; }
+.tp-hrs.days i.on { height: 6px; background: var(--blue); }
+.tp-hrs.days i[data-h]::after { margin-top: 4px; }
+.tp-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 14px; }
+.tp-t { display: block; width: 100%; text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.35;
+  transition: background .12s var(--ease), color .12s var(--ease); }
+.tp-t:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tp-tt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-meta { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-meta i { font-style: normal; font-weight: 600; }
+/* Якорь строки — «Сейчас»: крупнее и чернилами; «Сделано» и «Завтра» тише. */
+.tp-t { color: var(--ink-2); }
+.tp-c.now .tp-t { font-size: 14px; font-weight: 600; color: var(--ink); }
+.tp-none { font-size: 12.5px; color: var(--ink-3); padding: 3px 0; }
+.tp-none b { color: var(--ink-2); }
+.tp-more { display: inline-block; padding: 2px 0 0; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.tp-foot { display: flex; justify-content: flex-end; }
+.tp-link { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); transition: color .12s; }
+.tp-link:hover { color: var(--blue); }
+@media (max-width: 720px) {
+  .trow.tp-grid, .trow.tp-wgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
+  .trow.tp-grid.thead, .trow.tp-wgrid.thead { display: none; }
+  .trow.tp-grid .tp-c { padding-right: 0; }
+  /* Пустые клетки на телефоне не рисуем: у тихого остается только шапка с именем и точками. */
+  .trow.tp-grid .tp-c.tp-empty { display: none; }
+  .trow.tp-grid .tp-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.tp-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .trow.tp-wgrid .brd-who { grid-column: 1 / -1; }
+  .trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { display: flex; align-items: baseline; gap: 6px; text-align: left; font-size: 14px; }
+  .trow.tp-wgrid .brd-n::before, .trow.tp-wgrid .rh-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .tp-sum { padding: 12px 16px 10px; gap: 4px 16px; }
+}
 .wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }
 .wk-grid .th:nth-child(n+3):nth-child(-n+6), .wk-grid .brd-n { text-align: right; }
 /* Поле замечания раскрывается первым кликом по «Вернуть»: до него скрыто,
@@ -7839,6 +8053,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 
 /* Настройки недели в окне «Бот задач»: предел и сводки. */
+/* Чаты направлений: строка = подпись, выбор группы, проверка. Подпись держит
+   одну ширину, чтобы селекты стояли колонкой, а не плясали от длины слова. */
+.tgd { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.tgd-row { display: flex; align-items: center; gap: 10px; }
+.tgd-l { flex: 0 0 104px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.tgd-row.on .tgd-l { color: var(--ink); }
+.tgd-sel { flex: 1 1 auto; min-width: 0; }
+.tgd-t { flex: none; margin-top: 0; }
+/* На телефоне подпись и «Проверить» делят первую строку, выбор группы — вторую:
+   кнопка под селектом тянула каждую строку на три этажа. */
+@media (max-width: 720px) {
+  .tgd { gap: 10px; }
+  .tgd-row { flex-wrap: wrap; row-gap: 6px; }
+  .tgd-l { flex: 1 1 auto; }
+  .tgd-t { order: 2; margin-left: auto; }
+  .tgd-sel { order: 3; flex-basis: 100%; }
+}
 .tgg-week { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
 .tgg-wl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
 .tgg-num { width: 64px; text-align: center; }
@@ -7859,3 +8090,38 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Ученики: группы по этапам плана, строки те же, что в целях. */
 .stu-g .dy-row { padding-left: 0; padding-right: 0; }
 .stu-g .stu-gl { margin-bottom: 2px; }
+
+/* ── Что нового ─────────────────────────────────────────────────────────── */
+.nw { padding: 4px 0; }
+.nw-item { padding: 16px 20px 18px 20px; border-top: 1px solid var(--line); position: relative; }
+.nw-item:first-child { border-top: 0; }
+.nw-item.unread::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 18px; width: 3px; border-radius: 2px; background: var(--blue); }
+.nw-top { display: flex; align-items: flex-start; gap: 10px; }
+.nw-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em; color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+.nw-edit { flex: none; position: relative; opacity: 0; transition: opacity .15s var(--ease); }
+.nw-item:hover .nw-edit, .nw-edit:focus-visible { opacity: 1; }
+.nw-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.nw-body { margin-top: 10px; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; overflow-wrap: anywhere; }
+.nw-body a { color: var(--blue); text-decoration: none; }
+.nw-body a:hover { text-decoration: underline; }
+.nw-card { max-width: 640px; }
+.nw-who { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.nw-who-l { flex: 0 0 44px; padding-top: 8px; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); }
+.nw-roles { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.nw-search { flex: 1 1 200px; }
+.nw-people { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-left: 54px; }
+.nw-people:empty { display: none; }
+.nw-none { font-size: 12px; color: var(--ink-3); padding: 4px 0; }
+.nw-sum { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.nw-del { margin-right: auto; color: var(--red-ink); }
+.nw-p { background: var(--fill); }
+.nw-p.on { background: var(--blue); }
+@media (max-width: 960px) {
+  .nw-item { padding: 14px 14px 16px; }
+  /* Ховера нет: карандаш виден всегда, а зона нажатия шире самой кнопки. */
+  .nw-edit { opacity: 1; }
+  .nw-edit::before { content: ''; position: absolute; inset: -6px; }
+  .nw-people { padding-left: 0; }
+  /* Чипы адресата по ширине текста: мобильное правило «Команды» растягивает их на ряд. */
+  .nw-roles .tm-tp-b, .nw-people .tm-tp-b { flex: none; }
+}
