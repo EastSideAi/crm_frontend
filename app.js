@@ -6111,30 +6111,41 @@
       if (state.page === 'tasks') renderView();
     });
   }
-  function boardGoalStrip(dept, list) {
-    var live = function (arr) { return arr.filter(function (t) { return t.status !== 'done'; }).length; };
-    var noGoal = list.filter(function (t) { return !t.parent_id; });
-    var chip = function (id, title, n, pct, on) {
-      return '<button type="button" class="tb-gchip' + (on ? ' on' : '') + '" data-bgoal="' + id + '" title="' + esc(title) + '">' +
-        (pct == null ? '' : '<span class="gl-ring" style="--p:' + pct + '"></span>') +
-        '<span class="tb-gt">' + esc(title) + '</span>' +
-        (pct == null ? '' : '<i class="num">' + pct + '%</i>') +
-        '<b class="num">' + (n || '') + '</b></button>';
-    };
-    var goals = dept.goals.slice().sort(function (a, b) {
-      var an = live(list.filter(function (t) { return t.parent_id === a.id; }));
-      var bn = live(list.filter(function (t) { return t.parent_id === b.id; }));
-      return bn - an || String(a.title).localeCompare(String(b.title), 'ru');
+  /* Цели направления над доской. Чип — системный .qchip; число на нем — сколько
+     карточек он покажет (включая «Сделано»), а не «живых»: иначе чип и доска
+     считают разное. Прогресс по шагам — дугой, точное значение в подсказке.
+     Цель без единой задачи на доске — пустой фильтр, а не информация: чип не показываем. */
+  function boardGoalOpts(dept) {
+    var list = dept.tasks;
+    var of = function (id) { return list.filter(function (t) { return id === 'none' ? !t.parent_id : t.parent_id === id; }); };
+    var goals = dept.goals.filter(function (g) { return of(g.id).length; }).sort(function (a, b) {
+      return of(b.id).length - of(a.id).length || String(a.title).localeCompare(String(b.title), 'ru');
     });
-    return '<div class="tb-goals">' +
-      chip('', 'Все цели', live(list), null, !state.boardGoal) +
-      goals.map(function (g) {
-        var mine = list.filter(function (t) { return t.parent_id === g.id; });
-        var total = g.steps_total || 0, pct = total ? Math.round((g.steps_done || 0) / total * 100) : 0;
-        return chip(g.id, g.title, live(mine), pct, String(state.boardGoal) === String(g.id));
-      }).join('') +
-      (noGoal.length ? chip('none', 'Без цели', live(noGoal), null, state.boardGoal === 'none') : '') +
-    '</div>';
+    var opts = [{ id: '', title: 'Все цели', n: list.length, pct: null }].concat(goals.map(function (g) {
+      var total = g.steps_total || 0;
+      return { id: g.id, title: g.title, n: of(g.id).length, pct: total ? Math.round((g.steps_done || 0) / total * 100) : 0 };
+    }));
+    if (of('none').length) opts.push({ id: 'none', title: 'Без цели', n: of('none').length, pct: null });
+    return opts;
+  }
+  function boardGoalStrip(dept) {
+    var opts = boardGoalOpts(dept);
+    var on = function (o) { return String(state.boardGoal) === String(o.id); };
+    var chips = opts.map(function (o) {
+      return '<button type="button" class="qchip tb-gchip' + (on(o) ? ' on' : '') + '" data-bgoal="' + o.id + '"' +
+        ' title="' + esc(o.title) + (o.pct == null ? '' : ' · ' + o.pct + '% шагов') + '">' +
+        (o.pct == null ? '' : '<span class="gl-ring" style="--p:' + o.pct + '"></span>') +
+        '<span class="tb-gt">' + esc(o.title) + '</span>' +
+        (o.n ? '<span class="qn num">' + o.n + '</span>' : '') + '</button>';
+    }).join('');
+    return '<div class="tb-goals">' + chips + '</div>';
+  }
+  // На телефоне полоса целей не помещается в шапку — та же выборка одним селектом рядом с поиском.
+  function boardGoalSelect(dept) {
+    return '<span class="al-selwrap tb-gsel"><select class="al-sel sm" id="tb-gsel">' + boardGoalOpts(dept).map(function (o) {
+      return '<option value="' + o.id + '"' + (String(state.boardGoal) === String(o.id) ? ' selected' : '') + '>' +
+        esc(o.title) + (o.pct == null ? '' : ' · ' + o.pct + '%') + (o.n ? ' (' + o.n + ')' : '') + '</option>';
+    }).join('') + '</select></span>';
   }
   function boardCard(t, gave) {
     var due = dueLabel(t);
@@ -6188,7 +6199,7 @@
       '<button type="button" class="' + (gave === true ? 'on' : '') + '" data-boardwho="gave">Выдал другим</button>' +
       (can('tasks_all') ? '<button type="button" class="' + (dept ? 'on' : '') + '" data-boardwho="dept">Отдел</button>' : '') + '</div>';
     var hint = dept
-      ? 'Все задачи направления по людям. Цель сверху отбирает карточки. Принять сданное — из «На приемке» в «Сделано»; в работу берет и сдает исполнитель.'
+      ? 'Все задачи направления по людям. Цель сверху отбирает карточки.'
       : gave
       ? 'Что я поручил. Из «На приемке» в «Сделано» — принять; вернуть с комментарием — в карточке.'
       : 'Тащи карточку между колонками. Сдать — только с результатом, откроется карточка; «Сделано» ставит постановщик.';
@@ -6203,14 +6214,16 @@
     view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
-          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        (dept ? boardGoalSelect(state.myboard.dept) : '') + '</div>' +
       how +
-      (dept ? boardGoalStrip(state.myboard.dept, dept && state.boardGoal ? state.myboard.dept.tasks : list) : '') +
+      (dept ? boardGoalStrip(state.myboard.dept) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
     wirePlanMode(view); wireDeptChips(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
       b.addEventListener('click', function () { state.boardGoal = b.getAttribute('data-bgoal'); renderView(); });
     });
+    if (el('tb-gsel')) el('tb-gsel').addEventListener('change', function () { state.boardGoal = el('tb-gsel').value; renderView(); });
     if (el('tb-how-x')) el('tb-how-x').addEventListener('click', function () {
       try { localStorage.setItem('tb_how_off', '1'); } catch (e) {}
       renderView();
@@ -7249,6 +7262,7 @@
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
         state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null;
+        state.boardGoal = '';
         saveUi(); renderHead(); renderView();
       });
     });
