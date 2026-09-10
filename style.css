@@ -413,9 +413,10 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 50%, transparent);
   animation: shimmer 1.5s var(--ease) infinite; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
-@media (prefers-reduced-motion: reduce) { .shim::after { animation: none;
+@media (prefers-reduced-motion: reduce) {
+  .shim::after { animation: none; }
   .gl-ring { transition: none; }
-} }
+}
 
 /* dashboard-скелетон: повторяет layout (полоса KPI + карточки) */
 .sk-statbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 8px;
@@ -981,12 +982,31 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
+/* Полоса целей над доской отдела: системный .qchip, свое только кольцо и ширина названия. */
+.tb-goals { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 12px; margin-top: -4px; scrollbar-width: none; }
+.tb-goals::-webkit-scrollbar { display: none; }
+.tb-gchip { flex: none; max-width: 260px; padding-left: 9px; }
+.tb-gchip .gl-ring { width: 18px; height: 18px; }
+.tb-gchip .gl-ring::before { inset: 3px; background: var(--fill); }
+.tb-gchip:hover .gl-ring::before { background: #EDEFF3; }
+.tb-gchip.on .gl-ring::before { background: var(--blue-tint); }
+.tb-gchip .gl-ring b { display: none; }
+.tb-gchip .tb-gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-gchip.on { background: var(--blue-tint); color: var(--blue); border-color: var(--blue); }
+.tb-gchip.on .qn { color: var(--blue); }
+.tb-top .tb-gsel { display: none; }
+.tb-goal { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); min-width: 0; }
+.tb-goal svg { flex: none; }
+.tb-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
   /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
   .tb-top .tb-who-seg { flex: none; }
   .tb-top .wk-spacer { display: none; }
   .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
+  .tb-goals { display: none; }
+  .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
