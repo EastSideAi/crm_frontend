@@ -2750,7 +2750,7 @@
           var tsStuck = ts ? (ts.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0) : 0;
           tphr = !ts ? 'Собираю итоги.'
             : !tt.plan ? 'За ' + esc(ts.label || 'этот период') + ' задач в неделях ни у кого не было.'
-            : 'Сделано <b>' + (tt.done || 0) + '</b> из <b>' + tt.plan + '</b>' + (tsStuck ? ', застряло <b>' + tsStuck + '</b>' : '') + '. Клик по человеку — его задачи.';
+            : 'Сделано <b>' + (tt.done || 0) + '</b> из <b>' + tt.plan + '</b>' + (tsStuck ? ', застряло <b>' + tsStuck + '</b>' : '') + '. Клик по человеку открывает его задачи.';
         }
         else if (!state.teamWho && !pu) tphr = 'Смотрю, кто над чем работает.';
         else if (state.teamWho.period) {
