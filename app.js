@@ -77,7 +77,7 @@
     myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     news: null, newsUnread: 0,
-    teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null,
+    teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
     // «Все мои» и «Вся команда» умеют показываться матрицей Эйзенхауэра
     // табло руководителя: свод по людям за период (shift — сдвиг периодов назад)
@@ -2746,6 +2746,10 @@
             : 'Сделано <b>' + (pw.done || 0) + '</b> из <b>' + (pw.plan || 0) + '</b>, просрочек нет.';
         }
         else if (!state.teamWho && !pu) tphr = 'Смотрю, кто над чем работает.';
+        else if (state.teamWho.period) {
+          var tp = state.teamPerson && state.teamPerson !== 'none' ? state.teamPerson.totals : null;
+          tphr = tp ? 'Сделано <b>' + (tp.done || 0) + '</b> из <b>' + (tp.plan || 0) + '</b>' + (tp.overdue ? ', просрочено <b>' + tp.overdue + '</b>' : '') + '.' : 'Собираю задачи.';
+        }
         else if (!tw) tphr = 'Собираю неделю команды.';
         else if (tw.await_review) tphr = '<b>' + tw.await_review + ' ' + plural(tw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b> Прими или верни с замечанием.';
         else if (tw.no_plan && !wkShift()) tphr = '<b>' + tw.no_plan + '</b> ' + plural(tw.no_plan, 'человек без плана', 'человека без плана', 'человек без плана') + ' на неделю. Они сверху списка.';
@@ -6670,13 +6674,24 @@
     /* День / Неделя / Месяц (Павел 10.09.2026: «непонятно, для чего итоги и
        отчеты»). Архив закрытых недель остался, но ссылкой из недели, а не
        вкладкой: это справочник, а не ежедневный экран. */
-    return '<div class="pay-seg plan-seg">' + [['day', 'День'], ['week', 'Неделя'], ['stats', 'Месяц']].map(function (m) {
-      return '<button type="button" class="' + (state.teamMode === m[0] ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
+    // Месяц и квартал — один и тот же экран итогов с разным периодом; отдельный
+    // переключатель «Месяц / Квартал» рядом с «День / Неделя / Месяц» читался как
+    // два одинаковых (Павел 10.09.2026, скрин с двумя «Месяц» подряд).
+    function on(m) { return m === 'month' || m === 'quarter' ? state.teamMode === 'stats' && state.teamPeriod === m : state.teamMode === m; }
+    return '<div class="pay-seg plan-seg">' + [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
+      return '<button type="button" class="' + (on(m[0]) ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
     }).join('') + '</div>';
   }
   function wireTeamMode(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-teammode]'), function (b) {
-      b.addEventListener('click', function () { state.teamMode = b.getAttribute('data-teammode'); state.teamWho = null; state.pulse = null; renderView(); });
+      b.addEventListener('click', function () {
+        var m = b.getAttribute('data-teammode');
+        if (m === 'month' || m === 'quarter') {
+          if (state.teamPeriod !== m) { state.teamPeriod = m; state.teamShift = 0; state.teamStats = null; }
+          m = 'stats';
+        }
+        state.teamMode = m; state.teamWho = null; state.teamPerson = null; state.pulse = null; renderView();
+      });
     });
   }
   /* Сроки недели — договоренность команды, правит cap team, лежит под срезом
@@ -6742,9 +6757,6 @@
     }
     var d = state.teamStats, t = d.totals || {};
     var stuckN = (d.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0);
-    var per = '<div class="pay-seg plan-seg">' + [['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
-      return '<button type="button" class="' + (state.teamPeriod === m[0] ? 'on' : '') + '" data-teamper="' + m[0] + '">' + m[1] + '</button>';
-    }).join('') + '</div>';
     var nav = '<div class="brd-nav">' +
       '<button class="icobtn sm brd-arrow prev" id="ts-prev">' + ic('go', 15) + '</button>' +
       '<span class="brd-label">' + esc(d.label || '') + '</span>' +
@@ -6778,27 +6790,69 @@
             '<span class="brd-n num ts-pct" data-l="План">' + x.pct + '%</span>' + n(x.carried, 'bad', 'Переносы') + '</div>';
         }).join('') + '</div>'
       : '';
-    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + per + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
+    view.innerHTML = '<div class="wk-top ts-top">' + teamModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats +
       '<div class="card listcard"><div class="list-body">' + (rows ? head + rows : '<div class="empty">За этот период задач в неделях ни у кого не было.</div>') + '</div></div>' +
       depts;
     wireTeamMode(view); wireDeptChips(view);
-    Array.prototype.forEach.call(view.querySelectorAll('[data-teamper]'), function (b) {
-      b.addEventListener('click', function () { state.teamPeriod = b.getAttribute('data-teamper'); state.teamShift = 0; state.teamStats = null; renderView(); });
-    });
     function go(x) { state.teamShift = Math.max(-12, Math.min(4, (state.teamShift || 0) + x)); state.teamStats = null; renderView(); }
     if (el('ts-prev')) el('ts-prev').addEventListener('click', function () { go(-1); });
     if (el('ts-next')) el('ts-next').addEventListener('click', function () { go(1); });
     if (el('ts-now')) el('ts-now').addEventListener('click', function () { state.teamShift = 0; state.teamStats = null; renderView(); });
-    // Клик по человеку — его недели: та же карточка, что на «Неделе».
+    // Клик по человеку — задачи, из которых сложились его цифры за этот период.
     Array.prototype.forEach.call(view.querySelectorAll('.ts-grid[data-uid]'), function (row) {
       row.addEventListener('click', function () {
         var uid = +row.getAttribute('data-uid');
         var who = (d.people || []).filter(function (x) { return x.id === uid; })[0];
-        state.teamMode = 'week'; state.teamWho = { id: uid, name: who ? who.name : '' };
-        state.teamWeek = null; state.tasks = null; renderView();
+        state.teamWho = { id: uid, name: who ? who.name : '', period: true };
+        state.teamPerson = null; renderView();
       });
     });
+  }
+  function loadTeamPerson() {
+    var who = state.teamWho;
+    state.tasksLoading = true;
+    api('/admin/api/rhythm/team/stats/person?user_id=' + who.id + '&period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
+      state.tasksLoading = false; state.teamPerson = r || 'none';
+      if (state.page === 'tasks') renderView();
+    }).catch(function () { state.tasksLoading = false; state.teamPerson = 'none'; if (state.page === 'tasks') renderView(); });
+  }
+  /* Человек за месяц или квартал: две полосы, сделано и в работе. Перенос и
+     застревание — пометкой в строке, не отдельным списком (Павел 10.09.2026:
+     «какие задачи сделаны, в работе, а перенос просто в истории»). Сделанное
+     сверху и по дате закрытия — руководитель читает это как отчет. */
+  function renderTeamPersonPeriod(view) {
+    var who = state.teamWho;
+    if (state.teamPerson === null) { view.innerHTML = dashSkeleton(); loadTeamPerson(); return; }
+    var d = state.teamPerson;
+    var back = '<button class="qchip wk-back" id="wk-back">' + ic('go', 12) + 'Команда</button>';
+    if (d === 'none') {
+      view.innerHTML = '<div class="card listcard"><div class="list-tools brd-tools">' + back + '</div>' +
+        '<div class="empty">Не удалось собрать задачи. Обнови страницу.</div></div>';
+      el('wk-back').addEventListener('click', function () { state.teamWho = null; state.teamPerson = null; renderView(); });
+      return;
+    }
+    var t = d.totals || {}, tasks = d.tasks || [];
+    var done = tasks.filter(function (x) { return x.status === 'done'; });
+    var live = tasks.filter(function (x) { return x.status !== 'done'; });
+    var row = function (x) { return wkRow(x, { readOnly: true, hideAuthor: false }); };
+    var sum = t.plan
+      ? '<div class="tp-sum"><span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + t.plan + '</b> сделано</span>' +
+        (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
+        (t.carried ? '<span><b class="num">' + t.carried + '</b> ' + plural(t.carried, 'перенос', 'переноса', 'переносов') + '</span>' : '') +
+        (t.stuck ? '<span class="warn"><b class="num">' + t.stuck + '</b> ' + plural(t.stuck, 'застряла', 'застряли', 'застряло') + '</span>' : '') + '</div>'
+      : '';
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools brd-tools">' + back +
+        '<div class="brd-who"><span class="tsk-av">' + esc(initials(who.name)) + '</span>' +
+          '<span class="brd-nm">' + esc(who.name) + '<span class="t-sub">' + esc(d.label || '') + '</span></span></div>' +
+      '</div>' + sum +
+      '<div class="list-body">' + (tasks.length
+        ? wkBand('Сделано', 'по дате закрытия', done, row) + wkBand('В работе', 'что еще не закрыто', live, row)
+        : '<div class="empty">За ' + esc(d.label || 'этот период') + ' у ' + esc(who.name) + ' задач в неделях не было.</div>') + '</div>' +
+    '</div>';
+    el('wk-back').addEventListener('click', function () { state.teamWho = null; state.teamPerson = null; renderView(); });
+    wkWireRows(view);
   }
   function loadTeamReports() {
     state.tasksLoading = true;
@@ -6857,6 +6911,7 @@
   }
   function renderTeamWeek(view) {
     pulseStop();
+    if (state.teamWho && state.teamWho.period) { renderTeamPersonPeriod(view); return; }
     if (state.teamWho) {
       // Неделя одного человека — старый экран приемки, он живет за строкой пульса.
       if (state.teamWeek === null) { view.innerHTML = dashSkeleton(); loadTeamWeek(); return; }
@@ -7112,7 +7167,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null;
+        state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null;
         saveUi(); renderHead(); renderView();
       });
     });
