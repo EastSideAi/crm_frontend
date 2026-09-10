@@ -2228,7 +2228,7 @@
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
-      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'],
+      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
                     ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
@@ -2241,6 +2241,7 @@
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'spend') state._mkSpend = null;
+          if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -12825,8 +12826,150 @@
       '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
   }
 
+
+  /* ── ЗАПУСКИ — аналитика запуска от клика до оплаты ──
+     Один запуск — одна вкладка страницы; реестр запусков ведет бэкенд
+     (/admin/api/marketing/launch). Собрано по макету design/launch.html:
+     пять цифр сверху, лестница «где теряем людей», разбивки по каналам.
+     Период topbar сюда не применяется: запуск меряется нарастающим итогом. */
+
+  function fetchMkLaunch() {
+    api('/admin/api/marketing/launch').then(function (r) {
+      state._mkLaunch = (r && r.launches && r.launches.length) ? r : 'none';
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._mkLaunch = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function ladRow(name, small, n, track, right, cls) {
+    /* track: null = серой полосы нет (данных не бывает), число 0..100 = ширина */
+    return '<div class="lad-row' + (cls ? ' ' + cls : '') + '">' +
+      '<div class="lad-nm">' + esc(name) + (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
+      '<div class="lad-track">' + (track == null ? '' : '<div class="lad-fill" style="width:' + track + '%"></div>') + '</div>' +
+      '<div class="lad-n num">' + n + '</div>' +
+      '<div class="lad-right">' + (right || '') + '</div></div>';
+  }
+
+  function flatRow(name, small, n) {
+    return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
+      (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
+      '<div class="lad-n num">' + n + '</div></div>';
+  }
+
+  function renderMkLaunch(view) {
+    if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
+    if (state._mkLaunch === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры запуска — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var all = state._mkLaunch.launches;
+    var cur = all[Math.min(state._mkLaunchIdx || 0, all.length - 1)];
+    var reg = cur.registrations, pay = cur.payment, ch = cur.channels || {};
+    var tg = ch.tg || {};
+    var clicksN = (cur.clicks || []).reduce(function (n, c) { return n + c.n; }, 0);
+    var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
+    var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
+    var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
+
+    var chSmall = 'тг ' + (tg.members || 0) +
+      ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
+    var days = cur.days_to_event;
+    var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
+
+    /* лестница: ширина полосы — от регистраций (первая ступень с настоящей цифрой) */
+    var base = reg.total || 1;
+    var ladder =
+      ladRow('Посетители страницы', 'знает только Метрика', '—', null, convMut('нет данных')) +
+      ladRow('Клики по нашим ссылкам', clicksN ? 'короткие ссылки в постах и письме' : 'коды заведены, ждут раздачи',
+        clicksN || 0, clicksN ? 100 : 0, clicksN ? '' : convMut('ждет раздачи')) +
+      ladRow('Зарегистрировались', 'форма на истсайд.рф/intensive и /diag', reg.total, 100, convMut('все')) +
+      ladRow('Выбрали бесплатное участие', '48 часов доступа после эфира',
+        reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
+      ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
+        reg.vip, pct(reg.vip, base), conv(pct(reg.vip, base) + '% регистраций')) +
+      ladRow('Получили счет на 690', pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+        pay.invoiced, pct(pay.invoiced, base), conv(reg.vip && pay.invoiced >= reg.vip ? 'все, кто выбрал' : pct(pay.invoiced, reg.vip || base) + '% выбравших')) +
+      ladRow('Оплатили 690', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+        pay.paid, pct(pay.paid, base) || 2,
+        conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
+          (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
+        pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5 ? 'worst' : '') +
+      ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
+        pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
+      ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
+        reg.viewers || '—', reg.viewers ? pct(reg.viewers, base) : null,
+        reg.viewers ? conv(pct(reg.viewers, base) + '% от реги') : convMut(days > 0 ? 'еще не было' : 'нет данных')) +
+      ladRow('Заявка на диагностику', 'ради чего зовем на эфир', '—', null, convMut('после эфира')) +
+      ladRow('Оплата диагностики', 'деньги запуска', '—', null, convMut('после эфира'));
+
+    var diagRows = (cur.diag || []).map(function (d) {
+      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done, d.done);
+    }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
+
+    var srcRows = (reg.sources || []).map(function (s) {
+      return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
+        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n);
+    }).join('') || '<div class="empty">Регистраций пока нет.</div>';
+
+    var chRows =
+      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0) +
+      flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
+      flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
+
+    var clickRows = (cur.clicks || []).map(function (c) {
+      return flatRow(c.title || c.code, c.code, c.n);
+    }).join('');
+
+    var tabs = all.map(function (l, i) {
+      return '<a class="tab' + (i === (state._mkLaunchIdx || 0) ? ' on' : '') + '" data-launch="' + i + '">' + esc(l.title) + '</a>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      statBar([
+        { label: 'Регистрации', value: reg.total,
+          sub: 'бесплатно ' + reg.free + ' · платно ' + reg.vip },
+        { label: 'Счет на 690', value: pay.invoiced,
+          sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
+          sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        { label: 'В закрытом канале', value: tg.members || 0,
+          sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
+        { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
+      ], 'five') +
+      '<div class="card" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+        '<div><div class="t">От показа до оплаты</div><div class="s">красная полоса — самая большая потеря</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="grid" style="margin-top:16px">' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
+          '<div class="brk" style="border-top:1px solid var(--line)">' + diagRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
+          '<div class="brk" style="border-top:1px solid var(--line)">' + srcRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
+          '<div class="brk" style="border-top:1px solid var(--line)">' + chRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head" style="padding:20px 24px 16px">' +
+          '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
+          (clickRows ? '<div class="brk" style="border-top:1px solid var(--line)">' + clickRows + '</div>'
+            : '<div class="empty">Кликов пока нет — ссылки еще не розданы.</div>') + '</div>' +
+      '</div></div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
+      t.addEventListener('click', function () {
+        state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
+        renderView();
+      });
+    });
+  }
+
   function renderMarketing(view) {
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
+    if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
