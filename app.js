@@ -2745,6 +2745,13 @@
             : pw.overdue ? 'Просрочено <b>' + pw.overdue + '</b>, сделано <b>' + (pw.done || 0) + '</b> из <b>' + (pw.plan || 0) + '</b>.'
             : 'Сделано <b>' + (pw.done || 0) + '</b> из <b>' + (pw.plan || 0) + '</b>, просрочек нет.';
         }
+        else if (!state.teamWho && state.teamMode === 'stats') {
+          var ts = state.teamStats && state.teamStats !== 'none' ? state.teamStats : null, tt = ts ? (ts.totals || {}) : {};
+          var tsStuck = ts ? (ts.people || []).reduce(function (a, p) { return a + (p.stuck || 0); }, 0) : 0;
+          tphr = !ts ? 'Собираю итоги.'
+            : !tt.plan ? 'За ' + esc(ts.label || 'этот период') + ' задач в неделях ни у кого не было.'
+            : 'Сделано <b>' + (tt.done || 0) + '</b> из <b>' + tt.plan + '</b>' + (tsStuck ? ', застряло <b>' + tsStuck + '</b>' : '') + '. Клик по человеку — его задачи.';
+        }
         else if (!state.teamWho && !pu) tphr = 'Смотрю, кто над чем работает.';
         else if (state.teamWho.period) {
           var tp = state.teamPerson && state.teamPerson !== 'none' ? state.teamPerson.totals : null;
@@ -6746,7 +6753,7 @@
     state.tasksLoading = true;
     api('/admin/api/rhythm/team/stats?period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
       state.tasksLoading = false; state.teamStats = r || 'none';
-      if (state.page === 'tasks') renderView();
+      if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () { state.tasksLoading = false; state.teamStats = 'none'; if (state.page === 'tasks') renderView(); });
   }
   function renderTeamStats(view) {
@@ -6814,7 +6821,7 @@
     state.tasksLoading = true;
     api('/admin/api/rhythm/team/stats/person?user_id=' + who.id + '&period=' + state.teamPeriod + '&shift=' + (state.teamShift || 0) + deptQ()).then(function (r) {
       state.tasksLoading = false; state.teamPerson = r || 'none';
-      if (state.page === 'tasks') renderView();
+      if (state.page === 'tasks') { renderHead(); renderView(); }
     }).catch(function () { state.tasksLoading = false; state.teamPerson = 'none'; if (state.page === 'tasks') renderView(); });
   }
   /* Человек за месяц или квартал: две полосы, сделано и в работе. Перенос и
@@ -6954,7 +6961,7 @@
       var next = JSON.stringify(r);
       if (silent && state.pulse && JSON.stringify(state.pulse) === next) return;
       state.pulse = r || 'none';
-      renderView();
+      renderHead(); renderView();
     }).catch(function () {
       state.tasksLoading = false;
       if (silent) return;
@@ -6996,7 +7003,7 @@
     }).join('') + '</span>';
   }
   function renderPulse(view) {
-    if (state.pulse === null) { view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton(); loadPulse(); return; }
+    if (state.pulse === null) { view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div>' + dashSkeleton(); wireTeamMode(view); loadPulse(); return; }
     if (state.pulse === 'none') {
       view.innerHTML = '<div class="wk-top">' + teamModeSeg() + '</div><div class="card"><div class="empty">Не удалось собрать команду. Обнови страницу.</div></div>';
       wireTeamMode(view); return;
