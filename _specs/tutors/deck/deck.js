@@ -112,6 +112,8 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
   // пересчитываем после загрузки шрифтов: до нее панель ниже и кадр выходит шире окна
   fit();
   show(parseInt((location.hash || '#1').slice(1), 10) - 1 || 0);
+  // клик по интерактивному элементу может подскроллить кадр внутри overflow:hidden
+  frame.addEventListener('scroll', function(){ frame.scrollLeft = 0; frame.scrollTop = 0; });
   window.addEventListener('load', fit);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   setTimeout(fit, 400);
