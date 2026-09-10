@@ -413,9 +413,10 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 50%, transparent);
   animation: shimmer 1.5s var(--ease) infinite; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
-@media (prefers-reduced-motion: reduce) { .shim::after { animation: none;
+@media (prefers-reduced-motion: reduce) {
+  .shim::after { animation: none; }
   .gl-ring { transition: none; }
-} }
+}
 
 /* dashboard-скелетон: повторяет layout (полоса KPI + карточки) */
 .sk-statbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 8px;
@@ -981,12 +982,31 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
+/* Полоса целей над доской отдела: системный .qchip, свое только кольцо и ширина названия. */
+.tb-goals { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 12px; margin-top: -4px; scrollbar-width: none; }
+.tb-goals::-webkit-scrollbar { display: none; }
+.tb-gchip { flex: none; max-width: 260px; padding-left: 9px; }
+.tb-gchip .gl-ring { width: 18px; height: 18px; }
+.tb-gchip .gl-ring::before { inset: 3px; background: var(--fill); }
+.tb-gchip:hover .gl-ring::before { background: #EDEFF3; }
+.tb-gchip.on .gl-ring::before { background: var(--blue-tint); }
+.tb-gchip .gl-ring b { display: none; }
+.tb-gchip .tb-gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-gchip.on { background: var(--blue-tint); color: var(--blue); border-color: var(--blue); }
+.tb-gchip.on .qn { color: var(--blue); }
+.tb-top .tb-gsel { display: none; }
+.tb-goal { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); min-width: 0; }
+.tb-goal svg { flex: none; }
+.tb-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
   /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
   .tb-top .tb-who-seg { flex: none; }
   .tb-top .wk-spacer { display: none; }
   .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
+  .tb-goals { display: none; }
+  .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -7680,6 +7700,73 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .wk-pick .wk-state { margin: 0 0 12px; }
 .wkc-text { margin-top: 14px; }
 /* Команда: строка на человека. */
+/* ── Пульс команды (.tp-*, свой префикс: .pl-* занят планами работ) ─────────────────────────────────────────────────────────
+   Строка на человека: кто, сейчас, сделано, завтра. Якорь экрана — колонка
+   «Сейчас» чернилами и часы движения под именем; остальное тихое. Красное на
+   экране одно — просрочка (чип у имени и полоска строки .r-crit). */
+.tp-sum { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 14px 24px 12px; border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.tp-sum b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.tp-sum .bad, .tp-sum .bad b { color: var(--red-ink); }
+.tp-sum .warn, .tp-sum .warn b { color: var(--amber-ink); }
+.brd-n.warn { color: var(--amber-ink); }
+.tp-grid { grid-template-columns: minmax(200px, 300px) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
+.tp-wgrid { grid-template-columns: minmax(200px, 300px) repeat(4, minmax(64px, 1fr)) 210px; }
+.tp-wgrid .th:nth-child(n+2):nth-child(-n+5), .tp-wgrid .brd-n { text-align: right; }
+.trow.tp-grid, .trow.tp-wgrid { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; align-items: start; }
+.trow.tp-grid.thead, .trow.tp-wgrid.thead { min-height: 0; padding-top: 0; padding-bottom: 0; align-items: center; }
+.trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { padding-top: 4px; }
+.trow.tp-wgrid.has-note { padding-bottom: 12px; }
+.tp-who { cursor: pointer; align-self: start; }
+.tp-who:hover .tp-nm { color: var(--blue); }
+.tp-nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.01em; transition: color .12s var(--ease); }
+.tp-nm .sev { flex: none; }
+.sev.tp-over { background: var(--red-soft); color: var(--red-ink); }
+.trow.tp-grid.tp-quiet .tsk-av { background: var(--fill); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.tp-who .brd-nm { overflow: visible; }
+/* Часы движения: 13 точек, 8:00–20:00. Заполненная — в этот час человек что-то
+   делал с задачами. Подписи только у 8, 12, 16, 20 — иначе шкала шумит. */
+.tp-hrs { display: inline-flex; align-items: flex-end; gap: 3px; margin-top: 7px; height: 10px; margin-bottom: 13px; }
+.tp-hrs i { position: relative; width: 6px; height: 6px; border-radius: 2px; background: var(--line); transition: background .3s var(--ease); }
+.tp-hrs i.on { background: var(--blue); height: 10px; }
+.tp-hrs i[data-h]::after { content: attr(data-h); position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  margin-top: 3px; font-size: 10px; font-weight: 600; font-style: normal; line-height: 1; color: var(--ink-3); }
+.tp-hrs.off i { background: var(--line-2); }
+.tp-hrs.days { gap: 5px; margin-top: 8px; }
+.tp-hrs.days i { width: 14px; height: 6px; }
+.tp-hrs.days i.on { height: 6px; background: var(--blue); }
+.tp-hrs.days i[data-h]::after { margin-top: 4px; }
+.tp-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 14px; }
+.tp-t { display: block; width: 100%; text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.35;
+  transition: background .12s var(--ease), color .12s var(--ease); }
+.tp-t:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tp-tt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-meta { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-meta i { font-style: normal; font-weight: 600; }
+/* Якорь строки — «Сейчас»: крупнее и чернилами; «Сделано» и «Завтра» тише. */
+.tp-t { color: var(--ink-2); }
+.tp-c.now .tp-t { font-size: 14px; font-weight: 600; color: var(--ink); }
+.tp-none { font-size: 12.5px; color: var(--ink-3); padding: 3px 0; }
+.tp-none b { color: var(--ink-2); }
+.tp-more { display: inline-block; padding: 2px 0 0; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.tp-foot { display: flex; justify-content: flex-end; }
+.tp-link { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); transition: color .12s; }
+.tp-link:hover { color: var(--blue); }
+@media (max-width: 720px) {
+  .trow.tp-grid, .trow.tp-wgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
+  .trow.tp-grid.thead, .trow.tp-wgrid.thead { display: none; }
+  .trow.tp-grid .tp-c { padding-right: 0; }
+  /* Пустые клетки на телефоне не рисуем: у тихого остается только шапка с именем и точками. */
+  .trow.tp-grid .tp-c.tp-empty { display: none; }
+  .trow.tp-grid .tp-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.tp-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .trow.tp-wgrid .brd-who { grid-column: 1 / -1; }
+  .trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { display: flex; align-items: baseline; gap: 6px; text-align: left; font-size: 14px; }
+  .trow.tp-wgrid .brd-n::before, .trow.tp-wgrid .rh-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .tp-sum { padding: 12px 16px 10px; gap: 4px 16px; }
+}
 .wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }
 .wk-grid .th:nth-child(n+3):nth-child(-n+6), .wk-grid .brd-n { text-align: right; }
 /* Поле замечания раскрывается первым кликом по «Вернуть»: до него скрыто,
