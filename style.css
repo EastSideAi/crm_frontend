@@ -7689,6 +7689,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tp-sum b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
 .tp-sum .bad, .tp-sum .bad b { color: var(--red-ink); }
 .tp-sum .warn, .tp-sum .warn b { color: var(--amber-ink); }
+.brd-n.warn { color: var(--amber-ink); }
 .tp-grid { grid-template-columns: minmax(200px, 300px) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
 .tp-wgrid { grid-template-columns: minmax(200px, 300px) repeat(4, minmax(64px, 1fr)) 210px; }
 .tp-wgrid .th:nth-child(n+2):nth-child(-n+5), .tp-wgrid .brd-n { text-align: right; }
@@ -7701,32 +7702,32 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tp-nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
   letter-spacing: -.01em; transition: color .12s var(--ease); }
 .tp-nm .sev { flex: none; }
-.sev.tp-over { background: var(--coral-soft); color: var(--red-ink); }
-.tp-sub { font-size: 11.5px; font-weight: 500; }
-.trow.tp-grid.quiet .tsk-av { background: var(--fill); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
-.trow.tp-grid.quiet .tp-sub { color: var(--ink-3); }
+.sev.tp-over { background: var(--red-soft); color: var(--red-ink); }
+.trow.tp-grid.quiet .tsk-av { background: var(--fill); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.tp-who .brd-nm { overflow: visible; }
 /* Часы движения: 13 точек, 8:00–20:00. Заполненная — в этот час человек что-то
    делал с задачами. Подписи только у 8, 12, 16, 20 — иначе шкала шумит. */
-.tp-hrs { display: inline-flex; align-items: flex-end; gap: 3px; margin-top: 7px; height: 14px; }
+.tp-hrs { display: inline-flex; align-items: flex-end; gap: 3px; margin-top: 7px; height: 10px; margin-bottom: 13px; }
 .tp-hrs i { position: relative; width: 6px; height: 6px; border-radius: 2px; background: var(--line); transition: background .3s var(--ease); }
 .tp-hrs i.on { background: var(--blue); height: 10px; }
 .tp-hrs i[data-h]::after { content: attr(data-h); position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
-  margin-top: 3px; font: 600 8.5px 'Manrope', sans-serif; color: var(--ink-3); letter-spacing: 0; }
+  margin-top: 3px; font-size: 10px; font-weight: 600; line-height: 1; color: var(--ink-3); }
 .tp-hrs.off i { background: var(--line-2); }
 .tp-hrs.days { gap: 5px; margin-top: 8px; }
 .tp-hrs.days i { width: 14px; height: 6px; }
-.tp-hrs.days i.on { height: 6px; background: var(--green-ink); }
+.tp-hrs.days i.on { height: 6px; background: var(--blue); }
 .tp-hrs.days i[data-h]::after { margin-top: 4px; }
 .tp-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 14px; }
 .tp-t { display: block; width: 100%; text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 8px;
   font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.35;
   transition: background .12s var(--ease), color .12s var(--ease); }
 .tp-t:hover { background: var(--blue-tint); color: var(--blue-d); }
-.tp-t.imp .tp-tt::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber-ink); margin-right: 7px; vertical-align: 2px; }
 .tp-tt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tp-meta { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tp-meta i { font-style: normal; font-weight: 600; }
-.tp-grid .tp-c:first-of-type .tp-t { font-weight: 600; }
+/* Якорь строки — «Сейчас»: крупнее и чернилами; «Сделано» и «Завтра» тише. */
+.tp-t { color: var(--ink-2); }
+.tp-c.now .tp-t { font-size: 14px; font-weight: 600; color: var(--ink); }
 .tp-none { font-size: 12.5px; color: var(--ink-3); padding: 3px 0; }
 .tp-none b { color: var(--ink-2); }
 .tp-more { display: inline-block; padding: 2px 0 0; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
@@ -7737,6 +7738,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .trow.tp-grid, .trow.tp-wgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
   .trow.tp-grid.thead, .trow.tp-wgrid.thead { display: none; }
   .trow.tp-grid .tp-c { padding-right: 0; }
+  /* Пустые клетки на телефоне не рисуем: у тихого остается только шапка с именем и точками. */
+  .trow.tp-grid .tp-c.empty { display: none; }
   .trow.tp-grid .tp-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
   .trow.tp-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .trow.tp-wgrid .brd-who { grid-column: 1 / -1; }

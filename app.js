@@ -2731,7 +2731,22 @@
       // определению, и фраза «начни с них» указывала бы на другой экран.
       if (TASK_SEGS[taskSeg()].view === 'teamweek') {
         var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
-        if (!tw) tphr = 'Собираю неделю команды.';
+        var pu = state.pulse && state.pulse !== 'none' ? state.pulse : null;
+        if (!state.teamWho && pu && pu.mode === 'day') {
+          var pt = pu.totals || {};
+          tphr = pt.quiet
+            ? '<b>' + pt.quiet + '</b> ' + plural(pt.quiet, 'человек сегодня', 'человека сегодня', 'человек сегодня') + ' без движения по задачам, сделано <b>' + (pt.done || 0) + '</b>.'
+            : 'Все двигают задачи, сделано <b>' + (pt.done || 0) + '</b>' + (pt.tomorrow ? ', на ' + esc(pu.tomorrow_label || 'завтра') + ' <b>' + pt.tomorrow + '</b>' : '') + '.';
+        }
+        else if (!state.teamWho && pu && pu.mode === 'week') {
+          var pw = pu.totals || {};
+          tphr = pw.await_review
+            ? '<b>' + pw.await_review + ' ' + plural(pw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b>'
+            : pw.overdue ? 'Просрочено <b>' + pw.overdue + '</b>, сделано <b>' + (pw.done || 0) + '</b> из <b>' + (pw.plan || 0) + '</b>.'
+            : 'Сделано <b>' + (pw.done || 0) + '</b> из <b>' + (pw.plan || 0) + '</b>, просрочек нет.';
+        }
+        else if (!state.teamWho && !pu) tphr = 'Смотрю, кто над чем работает.';
+        else if (!tw) tphr = 'Собираю неделю команды.';
         else if (tw.await_review) tphr = '<b>' + tw.await_review + ' ' + plural(tw.await_review, 'неделя ждет', 'недели ждут', 'недель ждут') + ' твоей приемки.</b> Прими или верни с замечанием.';
         else if (tw.no_plan && !wkShift()) tphr = '<b>' + tw.no_plan + '</b> ' + plural(tw.no_plan, 'человек без плана', 'человека без плана', 'человек без плана') + ' на неделю. Они сверху списка.';
         else if (tw.stuck) tphr = 'Застряло <b>' + tw.stuck + '</b> ' + plural(tw.stuck, 'задача', 'задачи', 'задач') + ' — переносят второй раз подряд.';
@@ -6904,8 +6919,8 @@
   function pulseTask(t, when) {
     // Строка задачи внутри колонки: название и тихое время. Клик — карточка.
     var meta = [when ? '<i class="num">' + esc(when) + '</i>' : '', t.client_name ? esc(t.client_name) : ''].filter(Boolean).join(' · ');
-    return '<button type="button" class="tp-t' + (t.important ? ' imp' : '') + '" data-tpt="' + t.id + '" title="' + esc(t.title) + '">' +
-      '<span class="tp-tt">' + esc(t.title) + '</span>' +
+    return '<button type="button" class="tp-t" data-tpt="' + t.id + '" title="' + esc(t.title) + '">' +
+      '<span class="tp-tt">' + (t.important ? '<span class="tsk-imp" title="Важная">' + ic('bolt', 11) + '</span>' : '') + esc(t.title) + '</span>' +
       (meta ? '<span class="tp-meta">' + meta + '</span>' : '') + '</button>';
   }
   function pulseMore(n, shown) {
@@ -6948,29 +6963,35 @@
       head = '<div class="trow tp-grid thead"><span class="th">Сотрудник</span><span class="th">Сейчас</span>' +
         '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
       body = people.map(function (p) {
+        // Пустая клетка — прочерк, и только он: «осталось на сегодня» живет в
+        // подписи под именем, иначе жирная цифра под шапкой «Сделано» читается
+        // как «сделал одну». У тихого в «Сейчас» тоже прочерк: серый аватар,
+        // подпись и погашенные точки уже сказали, что движения не было.
+        var dash = '<span class="tp-none">—</span>';
         var nowCell = p.now
           ? pulseTask(p.now, p.now.how === 'doing' ? 'в работе' : fmtTime(p.now.at))
-          : '<span class="tp-none">' + (p.active_at ? 'ничего не взял в работу' : 'не двигал задачи') + '</span>';
-        var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length)
-          || '<span class="tp-none">' + (p.today_left ? '<b class="num">' + p.today_left + '</b> ' + plural(p.today_left, 'осталась на сегодня', 'остались на сегодня', 'осталось на сегодня') : '—') + '</span>';
-        var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length)
-          || '<span class="tp-none">—</span>';
+          : (p.active_at ? '<span class="tp-none">ничего не взял в работу</span>' : dash);
+        var doneCell = (p.done || []).map(function (x) { return pulseTask(x, fmtTime(x.at)); }).join('') + pulseMore(p.done_n, (p.done || []).length) || dash;
+        var tmrCell = (p.tomorrow || []).map(function (x) { return pulseTask(x, ''); }).join('') + pulseMore(p.tomorrow_n, (p.tomorrow || []).length) || dash;
+        var sub = (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') +
+          (p.today_left ? ' · на сегодня еще ' + p.today_left : '');
+        function cell(l, html, cls) { return '<div class="tp-c' + (cls ? ' ' + cls : '') + (html === dash ? ' empty' : '') + '" data-l="' + l + '">' + html + '</div>'; }
         return '<div class="trow tp-grid' + (p.active_at ? '' : ' quiet') + (p.overdue ? ' r-crit' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who tp-who"><span class="tsk-av' + (p.active_at ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+          '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
             '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) +
               (p.overdue ? '<span class="sev tp-over">' + p.overdue + ' ' + plural(p.overdue, 'просрочка', 'просрочки', 'просрочек') + '</span>' : '') + '</span>' +
-              '<span class="t-sub tp-sub">' + (p.active_at ? 'был в задачах в ' + fmtTime(p.active_at) : 'сегодня без движения') + '</span>' +
+              '<span class="t-sub">' + esc(sub) + '</span>' +
               pulseHours(p.hours, !!p.active_at) + '</span></div>' +
-          '<div class="tp-c" data-l="Сейчас">' + nowCell + '</div>' +
-          '<div class="tp-c" data-l="Сделано">' + doneCell + '</div>' +
-          '<div class="tp-c" data-l="' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label) + '">' + tmrCell + '</div>' +
+          cell('Сейчас', nowCell, 'now') +
+          cell('Сделано', doneCell) +
+          cell(esc(d.tomorrow_label === 'завтра' ? 'Завтра' : d.tomorrow_label), tmrCell) +
         '</div>';
       }).join('');
     } else {
       people.sort(function (a, b) { return (b.overdue + b.stuck) - (a.overdue + a.stuck) || a.name.localeCompare(b.name, 'ru'); });
       strip = '<div class="tp-sum">' +
         '<span><b class="num">' + (t.done || 0) + '</b> из <b class="num">' + (t.plan || 0) + '</b> сделано</span>' +
-        (t.stuck ? '<span class="bad"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
+        (t.stuck ? '<span class="warn"><b class="num">' + t.stuck + '</b> застряло</span>' : '') +
         (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
         (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
       '</div>';
@@ -6987,11 +7008,12 @@
               : '<button class="rh-rv-btn" data-review="' + p.id + '"><span class="sev ' + rv.cls + '">' + rv.label + '</span>' + chev() + '</button>')
           : '<span class="sev ' + rp.cls + '">' + rp.label + '</span>';
         var said = p.report.text ? '<div class="rh-note">' + ic('chat', 13) + '<span><b>Что мешало:</b> ' + esc(p.report.text) + '</span></div>' : '';
-        return '<div class="trow tp-wgrid' + (p.stuck || p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
-          '<div class="brd-who tp-who"><span class="tsk-av' + (p.moves ? ' live' : '') + '">' + esc(initials(p.name)) + '</span>' +
+        // Красное — только просрочка; застряло — амбер (заминка, а не потеря).
+        return '<div class="trow tp-wgrid' + (p.overdue ? ' r-crit' : '') + (said ? ' has-note' : '') + '" data-uid="' + p.id + '">' +
+          '<div class="brd-who tp-who"><span class="tsk-av">' + esc(initials(p.name)) + '</span>' +
             '<span class="brd-nm"><span class="tp-nm">' + esc(p.name) + '</span>' +
-              '<span class="t-sub tp-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
-          n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'bad', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
+              '<span class="t-sub">' + esc(p.role_label || '') + '</span>' + pulseDays(p.days) + '</span></div>' +
+          n(p.plan, '', 'Взял') + n(p.done + (p.review || 0), 'ok', 'Сделано') + n(p.stuck, 'warn', 'Застряло') + n(p.overdue, 'bad', 'Просрочено') +
           '<div class="rh-c" data-l="Неделя">' + itog + '</div>' + said +
         '</div>';
       }).join('');
