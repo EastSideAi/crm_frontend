@@ -46,8 +46,8 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
     var w = frame.clientWidth, h = frame.clientHeight;
     var k = Math.min(w / 1920, h / 1080);
     scaler.style.transform = 'scale(' + k + ')';
-    scaler.style.left = ((w - 1920 * k) / 2) + 'px';
-    scaler.style.top = ((h - 1080 * k) / 2) + 'px';
+    scaler.style.left = Math.max(0, (w - 1920 * k) / 2) + 'px';
+    scaler.style.top = Math.max(0, (h - 1080 * k) / 2) + 'px';
   }
   window.addEventListener('resize', fit);
 
@@ -109,8 +109,12 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
     x0 = null;
   }, {passive:true});
 
+  // пересчитываем после загрузки шрифтов: до нее панель ниже и кадр выходит шире окна
   fit();
   show(parseInt((location.hash || '#1').slice(1), 10) - 1 || 0);
+  window.addEventListener('load', fit);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  setTimeout(fit, 400);
 })();
 
 /* ---------- сквозной пример ---------- */
