@@ -39,3 +39,6 @@ files/
 # chat/ — сырая переписка, из которой собран _specs/finmodel/README.md.
 _specs/finmodel/finmodel-stage8.html
 _specs/finmodel/chat/
+
+# python-кэш от скриптов сборки шаблонов
+__pycache__/
