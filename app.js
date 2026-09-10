@@ -74,7 +74,7 @@
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine', meetLog: null, meetOpen: {},
+    myboard: null, boardWho: 'mine', boardGoal: '', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     news: null, newsUnread: 0,
     teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
@@ -6080,6 +6080,62 @@
       if (state.page === 'tasks') renderView();
     });
   }
+  /* Доска отдела (Ольга через Павла, 10.09.2026: «канбан по целям и задачам как в
+     Битрикс24»). Те же четыре колонки, но задачи всех людей направления, на карточке
+     кто делает и какая цель; полоса целей сверху с прогрессом по шагам отбирает
+     карточки. Нужен cap tasks_all. Грузится отдельно от «Мои» / «Выдал» и живет
+     внутри state.myboard — сбрасывается вместе с ней. */
+  function loadDeptBoard() {
+    state.tasksLoading = true;
+    var lim = '&limit=500';
+    Promise.all([
+      api('/admin/api/tasks?view=open&scope=all' + deptQ() + lim),
+      api('/admin/api/tasks?view=review&scope=all' + deptQ() + lim),
+      api('/admin/api/tasks?view=done&scope=all&period=week&shift=0' + deptQ() + lim),
+      api('/admin/api/tasks?view=goals&scope=all' + deptQ() + lim),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      var seen = {};
+      var tasks = ((rs[0] && rs[0].tasks) || []).concat((rs[1] && rs[1].tasks) || [], (rs[2] && rs[2].tasks) || [])
+        .filter(function (t) {
+          if (seen[t.id]) return false; seen[t.id] = 1;
+          return !t.is_goal && !(t.steps_total > 0) && t.status !== 'cancel';
+        });
+      if (state.myboard && state.myboard !== 'none') state.myboard.dept = { tasks: tasks, goals: (rs[3] && rs[3].tasks) || [] };
+      else state.myboard = { mine: [], gave: [], dept: { tasks: tasks, goals: (rs[3] && rs[3].tasks) || [] } };
+      if (state.page === 'tasks') renderView();
+    }).catch(function () {
+      state.tasksLoading = false;
+      if (state.myboard && state.myboard !== 'none') state.myboard.dept = 'none';
+      else state.myboard = { mine: [], gave: [], dept: 'none' };
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  function boardGoalStrip(dept, list) {
+    var live = function (arr) { return arr.filter(function (t) { return t.status !== 'done'; }).length; };
+    var noGoal = list.filter(function (t) { return !t.parent_id; });
+    var chip = function (id, title, n, pct, on) {
+      return '<button type="button" class="tb-gchip' + (on ? ' on' : '') + '" data-bgoal="' + id + '" title="' + esc(title) + '">' +
+        (pct == null ? '' : '<span class="gl-ring" style="--p:' + pct + '"></span>') +
+        '<span class="tb-gt">' + esc(title) + '</span>' +
+        (pct == null ? '' : '<i class="num">' + pct + '%</i>') +
+        '<b class="num">' + (n || '') + '</b></button>';
+    };
+    var goals = dept.goals.slice().sort(function (a, b) {
+      var an = live(list.filter(function (t) { return t.parent_id === a.id; }));
+      var bn = live(list.filter(function (t) { return t.parent_id === b.id; }));
+      return bn - an || String(a.title).localeCompare(String(b.title), 'ru');
+    });
+    return '<div class="tb-goals">' +
+      chip('', 'Все цели', live(list), null, !state.boardGoal) +
+      goals.map(function (g) {
+        var mine = list.filter(function (t) { return t.parent_id === g.id; });
+        var total = g.steps_total || 0, pct = total ? Math.round((g.steps_done || 0) / total * 100) : 0;
+        return chip(g.id, g.title, live(mine), pct, String(state.boardGoal) === String(g.id));
+      }).join('') +
+      (noGoal.length ? chip('none', 'Без цели', live(noGoal), null, state.boardGoal === 'none') : '') +
+    '</div>';
+  }
   function boardCard(t, gave) {
     var due = dueLabel(t);
     // Статусные чипы — системные .sev (вернули красным, блок амбером, как в списках);
@@ -6090,6 +6146,7 @@
       '<div class="tb-title">' + impMark(t) + esc(t.title) + '</div>' +
       (t.client_name ? '<div class="tb-cl">' + esc(t.client_name) + '</div>' : '') +
       (gave && t.assignee_name ? '<div class="tb-asg">' + dyAv(t.assignee_name) + '<span>' + esc(t.assignee_name) + '</span></div>' : '') +
+      (gave === 'dept' && !state.boardGoal && t.parent_title ? '<div class="tb-goal">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></div>' : '') +
       '<div class="kb-meta">' + chip +
         (t.status === 'done' ? '' : '<span class="tb-due ' + due.cls + '">' + due.text + '</span>') +
       '</div></div>';
@@ -6100,8 +6157,17 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить доску. Обнови страницу.</div></div>';
       return;
     }
-    var gave = state.boardWho === 'gave';
-    var list = gave ? state.myboard.gave : state.myboard.mine;
+    var dept = state.boardWho === 'dept' && can('tasks_all');
+    if (dept && !state.myboard.dept) { view.innerHTML = dashSkeleton(); loadDeptBoard(); return; }
+    if (dept && state.myboard.dept === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить доску отдела. Обнови страницу.</div></div>';
+      return;
+    }
+    var gave = dept ? 'dept' : state.boardWho === 'gave';
+    var list = dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine;
+    if (dept && state.boardGoal) {
+      list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
+    }
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var order = function (a, b) {
@@ -6118,12 +6184,16 @@
       '</div>';
     }).join('');
     var whoSeg = '<div class="pay-seg tb-who-seg">' +
-      '<button type="button" class="' + (gave ? '' : 'on') + '" data-boardwho="mine">Мои</button>' +
-      '<button type="button" class="' + (gave ? 'on' : '') + '" data-boardwho="gave">Выдал другим</button></div>';
-    var hint = gave
+      '<button type="button" class="' + (state.boardWho === 'mine' || (!dept && !gave) ? 'on' : '') + '" data-boardwho="mine">Мои</button>' +
+      '<button type="button" class="' + (gave === true ? 'on' : '') + '" data-boardwho="gave">Выдал другим</button>' +
+      (can('tasks_all') ? '<button type="button" class="' + (dept ? 'on' : '') + '" data-boardwho="dept">Отдел</button>' : '') + '</div>';
+    var hint = dept
+      ? 'Все задачи направления по людям. Цель сверху отбирает карточки. Принять сданное — из «На приемке» в «Сделано»; в работу берет и сдает исполнитель.'
+      : gave
       ? 'Что я поручил. Из «На приемке» в «Сделано» — принять; вернуть с комментарием — в карточке.'
       : 'Тащи карточку между колонками. Сдать — только с результатом, откроется карточка; «Сделано» ставит постановщик.';
-    var hintM = gave ? 'Что я поручил. Принять или вернуть — в карточке задачи.'
+    var hintM = dept ? 'Все задачи направления по людям. Цель сверху отбирает карточки.'
+      : gave ? 'Что я поручил. Принять или вернуть — в карточке задачи.'
       : 'Колонки — статусы. Поменять статус — в карточке задачи.';
     var howOff = false;
     try { howOff = localStorage.getItem('tb_how_off') === '1'; } catch (e) {}
@@ -6135,8 +6205,12 @@
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div></div>' +
       how +
+      (dept ? boardGoalStrip(state.myboard.dept, dept && state.boardGoal ? state.myboard.dept.tasks : list) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
     wirePlanMode(view); wireDeptChips(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
+      b.addEventListener('click', function () { state.boardGoal = b.getAttribute('data-bgoal'); renderView(); });
+    });
     if (el('tb-how-x')) el('tb-how-x').addEventListener('click', function () {
       try { localStorage.setItem('tb_how_off', '1'); } catch (e) {}
       renderView();
@@ -6150,7 +6224,7 @@
       el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
     }
     Array.prototype.forEach.call(view.querySelectorAll('[data-boardwho]'), function (b) {
-      b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); renderView(); });
+      b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); state.boardGoal = ''; renderView(); });
     });
     wireBoardDrag(view, list, gave);
   }
@@ -6175,7 +6249,7 @@
     // Куда можно тащить и что при этом случится. null — нельзя, строка — почему.
     var drop = function (t, col) {
       var mineTask = t.assignee_id === state.taskMe, author = t.author_id === state.taskMe;
-      if (gave) {
+      if (gave === true || (gave === 'dept' && !mineTask)) {
         if (col === 'done') {
           if (t.status === 'review') return function () { move(t, 'done', 'Задача принята'); };
           return 'Принять можно то, что сдано на приемку';

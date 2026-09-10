@@ -981,6 +981,25 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
+/* Полоса целей над доской отдела: чип = кольцо прогресса по шагам + название + живых задач. */
+.tb-goals { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 12px; margin-top: -4px; scrollbar-width: none; }
+.tb-goals::-webkit-scrollbar { display: none; }
+.tb-gchip { flex: none; display: inline-flex; align-items: center; gap: 7px; max-width: 260px; height: 32px; padding: 0 11px 0 8px;
+  border: 1px solid var(--line); border-radius: 99px; background: var(--card); color: var(--ink-2); font: inherit; font-size: 12.5px;
+  font-weight: 600; cursor: pointer; transition: border-color .15s var(--ease), background .15s var(--ease), color .15s var(--ease); }
+.tb-gchip:hover { border-color: var(--line-2); color: var(--ink); }
+.tb-gchip.on { border-color: var(--blue); background: var(--blue-tint); color: var(--blue); }
+.tb-gchip .gl-ring { width: 18px; height: 18px; }
+.tb-gchip .gl-ring::before { inset: 3px; }
+.tb-gchip .gl-ring b { display: none; }
+.tb-gchip .tb-gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-gchip i { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.tb-gchip.on i { color: var(--blue); opacity: .8; }
+.tb-gchip b { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.tb-gchip.on b { color: var(--blue); }
+.tb-goal { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); min-width: 0; }
+.tb-goal svg { flex: none; }
+.tb-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
   /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
