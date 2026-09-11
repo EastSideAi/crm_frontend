@@ -2108,6 +2108,10 @@
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
+    // Отвечает только за выплаты подрядчикам (Роман 11.09.2026): вносит выплаты в
+    // дашборд, они падают расходом фонда подрядчиков. Всю ведомость не видит. Зеркало
+    // ROLE_CAPS в backend/app/routers/admin.py.
+    contractor_payer: { label: 'Выплаты подрядчикам',  short: 'вносит выплаты',       caps: ['dash', 'tasks', 'finmodel_contractors'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
     manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
@@ -2208,7 +2212,8 @@
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
        есть строка расхода фонда. */
-    { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', cap: 'finmodel', space: 'fin' },
+    { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
+      cap: 'finmodel|finmodel_contractors' },
     /* Расходы одним экраном с тремя состояниями (запланирован → проведен →
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
@@ -14352,13 +14357,20 @@
     // Выплату с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
     // налоги, краткосрочка) это единственное место, где можно записать расход с фонда
     // (пункт 1 Романа). Уходит в открытую ведомость, фонд предвыбран.
-    var canPay = can('finmodel_edit');
+    // Фонд подрядчиков — исключение: выплаты подрядчикам вносят в отдельном дашборде
+    // «Выплаты подрядчикам» (с реквизитами и чеком/актом), и кнопку тут убрали, чтобы
+    // дверь в деньги была одна и не было задвоения (решение Романа 11.09.2026).
+    var isContractors = FIN.fundId === 'contractors';
+    var canPay = can('finmodel_edit') && !isContractors;
+    var toPayouts = isContractors && can('finmodel|finmodel_contractors')
+      ? '<button class="qchip" id="ff-topay">' + ic('card', 12) +
+        'Вносятся в «Выплаты подрядчикам»</button>' : '';
     var opsCard = '<div class="card fin-block">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">Расходы фонда</div>' +
         '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div>' +
         (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
-          'Добавить выплату</button>' : '') + '</div>' +
+          'Добавить выплату</button>' : toPayouts) + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
             return '<div class="fl-row fl-2"><div class="fl-main">' +
@@ -14443,6 +14455,9 @@
     if (pay) pay.addEventListener('click', function () {
       finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
+    // Фонд подрядчиков: выплаты вносят в своём дашборде, отсюда только ведём туда.
+    var topay = el('ff-topay');
+    if (topay) topay.addEventListener('click', function () { setPage('finpayouts'); });
     if (sum) sum.focus();
     pageAnim(view);
   }
@@ -15498,7 +15513,10 @@
     }
     if (FIN.payouts === 'none') return finErrView(view);
     var L = FIN.payouts, items = L.items || [], per = finPeriod();
-    var canFix = can('finmodel_edit');
+    // Вносит и правит выплаты финансист (finmodel_edit) ИЛИ ответственный за выплаты
+    // (finmodel_contractors). Тот, у кого ведомость только на просмотр (finmodel),
+    // список видит, но кнопок ввода нет.
+    var canFix = can('finmodel_edit|finmodel_contractors');
     var fact = 0, plan = 0, factN = 0, biggest = 0, noDoc = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
