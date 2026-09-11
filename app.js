@@ -2136,7 +2136,8 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
-    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor', 'senior_tutor'] },
+    // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
