@@ -72,6 +72,7 @@
     planChat: null,   // id лида, у которого открыт чат правок плана
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
+    _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', boardGoal: '', meetLog: null, meetOpen: {},
@@ -2073,7 +2074,7 @@
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy_review'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
     // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
     // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
@@ -2135,8 +2136,12 @@
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
-    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor', 'senior_tutor'] },
+    // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
+    { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
+    // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
+    // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
+    { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
@@ -3136,6 +3141,7 @@
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
+    else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
     else if (state.page === 'attestations') return renderAttestations(view);
@@ -9472,6 +9478,230 @@
       state.studentId = null; state._student = null; renderView();
     });
   }
+  /* ── ДОРОЖНАЯ КАРТА: кто из клиентов на каком этапе ───────────────────────
+     Этап человека система считала и раньше, но видно его было только внутри
+     карточки — окинуть взглядом всех сразу было нечем, и «кто застрял» узнавали
+     на планерке со слов. Здесь весь поток на одном экране: дорожка этапов сверху
+     (она же фильтр), под ней люди строками.
+
+     Клиент без плана стоит отдельным сегментом, а не на первом этапе: «мы ему еще
+     не собрали план» и «он только начал» — разные состояния, и смешивать их
+     значило бы прятать дыру, ради которой этот экран и заводился. */
+  var MAP_NONE = 'none';   // сегмент «без плана» — не этап, отдельная колонка
+  /* Тарифы на карту приходят из продуктового портала, а не из своего списка в коде:
+     портал — то место, где команда правит продукт (цены, наполнение, названия), и
+     второй список неизбежно разъехался бы с ним. Флагман у нас один, «Поступление
+     на грант»; появится второй — сюда добавится выбор продукта. */
+  var MAP_FLAGSHIP = 'grant';
+  function mapTariffs() {
+    var ps = (state._portal && state._portal.products) || [];
+    for (var i = 0; i < ps.length; i++) {
+      if (ps[i].id === MAP_FLAGSHIP) return ps[i].tariffs || [];
+    }
+    return [];
+  }
+  function mapTariffName(id) {
+    var list = mapTariffs();
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].name;
+    return id || '';
+  }
+
+  function mapLoad(force) {
+    if (state._map && !force) return;
+    state._map = null;
+    api('/admin/api/board').then(function (r) {
+      state._map = r || { clients: [], stages: [] };
+      if (state.page === 'roadmap') renderView();
+    }).catch(function () { state._map = 'none'; if (state.page === 'roadmap') renderView(); });
+  }
+  function mapSeg(c) { return c.stage_key || MAP_NONE; }
+  /* Кабинет семьи одной строкой: кто заходил последним. Молчание дольше двух
+     недель — повод обратить внимание, поэтому оно и подсвечено. */
+  function mapSeat(c) {
+    var best = null, who = '';
+    [['student', 'ученик'], ['parent', 'родитель']].forEach(function (pair) {
+      var s = c[pair[0]];
+      if (s && s.last_seen && (!best || s.last_seen > best)) { best = s.last_seen; who = pair[1]; }
+    });
+    if (!best) {
+      // кабинета нет вовсе — пустая клетка; кабинет есть, но в него не заходили —
+      // это уже сигнал, и он должен быть виден словами
+      return { text: (c.student || c.parent) ? 'ни разу не заходили' : '', cold: true };
+    }
+    var days = (Date.now() - new Date(best).getTime()) / 86400000;
+    return { text: who + ' ' + ago(best) + ' назад', cold: days > 14 };
+  }
+  function mapFiltered() {
+    var d = state._map || {}, list = (d.clients || []).slice();
+    var q = (state.mapQ || '').trim().toLowerCase();
+    return list.filter(function (c) {
+      if (state.mapSeg && mapSeg(c) !== state.mapSeg) return false;
+      if (state.mapTariff === '__none' ? c.tariff : (state.mapTariff && c.tariff !== state.mapTariff)) return false;
+      if (q && (c.name + ' ' + (c.owner_name || '')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  /* Дорожка этапов — якорь экрана: восемь сегментов пути плюс «без плана».
+     Цифра крупная, потому что на нее и смотрят; клик по сегменту фильтрует
+     список, повторный клик снимает фильтр. */
+  function mapRail(list, stages) {
+    var byKey = {};
+    list.forEach(function (c) { var k = mapSeg(c); byKey[k] = (byKey[k] || 0) + 1; });
+    var max = 1;
+    Object.keys(byKey).forEach(function (k) { max = Math.max(max, byKey[k]); });
+    var segs = stages.map(function (s) { return { key: s.key, title: s.title, n: byKey[s.key] || 0 }; });
+    segs.push({ key: MAP_NONE, title: 'Без плана', n: byKey[MAP_NONE] || 0, gap: true });
+    return '<div class="map-rail">' + segs.map(function (s, i) {
+      var on = state.mapSeg === s.key;
+      return '<button class="map-seg' + (on ? ' on' : '') + (s.gap ? ' gap' : '') +
+          (s.n ? '' : ' zero') + '" data-seg="' + esc(s.key) + '" type="button"' +
+          (s.n ? '' : ' disabled') + '>' +
+        '<span class="map-seg-n num">' + s.n + '</span>' +
+        '<span class="map-seg-t">' + esc(s.title) + '</span>' +
+        '<span class="map-seg-b"><i style="width:' + Math.round(s.n / max * 100) + '%"></i></span>' +
+        (s.gap ? '' : '<span class="map-seg-i num">' + (i + 1) + '</span>') +
+      '</button>';
+    }).join('') + '</div>';
+  }
+  /* Позиция человека на пути: восемь засечек. Пройденное залито, текущая засечка
+     крупнее — так этап читается без чтения подписи. */
+  function mapTrack(c, stages) {
+    if (!c.stage_pos) {
+      // план бывает собран по своим этапам (старые шаблоны) — тогда позиции на
+      // доске у человека нет, но и «плана нет» сказать нельзя, это разные вещи
+      return '<span class="map-track none">' + (c.has_plan ? 'этап не определен' : 'план не собран') + '</span>';
+    }
+    return '<span class="map-track">' + stages.map(function (s, i) {
+      var pos = i + 1, cls = pos < c.stage_pos ? ' done' : (pos === c.stage_pos ? ' now' : '');
+      return '<i class="map-dot' + cls + '" title="' + esc(s.title) + '"></i>';
+    }).join('') + '<b class="map-track-t">' + esc(c.stage_title || '') + '</b></span>';
+  }
+  /* Пустое значение — прочерк, а не фраза: под подписанной шапкой «кабинета нет ·
+     задач нет · нечего предложить» в каждой строке повторяет названия колонок и
+     топит то немногое, ради чего на экран и смотрят — просрочки и апсейл.
+     data-l — подпись яруса на телефоне, там шапки нет (прием из .tp-grid). */
+  var MAP_DASH = '<span class="map-none">—</span>';
+
+  function mapRow(c, stages) {
+    var seat = mapSeat(c);
+    var sell = (c.offers || []).slice(0, 2).map(function (o) { return esc(o.name); }).join(' · ');
+    return '<div class="trow map-grid" data-id="' + esc(c.session_id) + '" tabindex="0">' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(c.name) + '</div>' +
+        '<div class="t-sub">' + (c.grade ? esc(c.grade) : 'класс не указан') +
+        (c.owner_name ? ' · ' + esc(c.owner_name) : '') + '</div></div>' +
+      '<div class="map-c map-c-tar" data-l="Тариф">' + (c.tariff
+        ? '<span class="sev map-tar">' + esc(mapTariffName(c.tariff)) + '</span>'
+        : '<span class="sev map-tar off">не указан</span>') + '</div>' +
+      '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stages) + '</div>' +
+      '<div class="map-c map-c-seat' + (seat.text ? '' : ' map-empty') + '" data-l="Кабинет">' + (seat.text
+        ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + '">' + esc(seat.text) + '</span>'
+        : MAP_DASH) + '</div>' +
+      '<div class="map-c map-c-task' + (c.tasks_open ? '' : ' map-empty') + '" data-l="Задачи">' + (c.tasks_open
+        ? '<span class="map-task">' + c.tasks_open + ' задач' +
+          (c.tasks_overdue ? '<b class="map-over"> · ' + c.tasks_overdue + ' просроч.</b>' : '') + '</span>'
+        : MAP_DASH) + '</div>' +
+      '<div class="map-c map-sell' + (sell ? '' : ' map-empty') + '" data-l="Можно предложить">' +
+        (sell || MAP_DASH) + '</div>' +
+    '</div>';
+  }
+  function mapRows(list, stages) {
+    return list.length ? list.map(function (c) { return mapRow(c, stages); }).join('')
+                       : '<div class="empty">Под фильтр никто не попал.</div>';
+  }
+  /* «3 из 10» — иначе после клика по сегменту экран молчит о том, что показывает
+     срез: счетчик в шапке считает всех, а в списке остаются три строки. */
+  function mapCountHtml(shown, total) {
+    return shown === total ? '<b>' + total + '</b> клиентов'
+                           : '<b>' + shown + '</b> из ' + total;
+  }
+  function mapPaintRows(stages) {
+    var box = el('map-rows');
+    if (!box) return;
+    var list = mapFiltered();
+    box.innerHTML = mapRows(list, stages);
+    var cnt = el('map-count');
+    if (cnt) cnt.innerHTML = mapCountHtml(list.length, ((state._map || {}).clients || []).length);
+    mapWireRows(stages);
+  }
+  function mapWireRows() {
+    var box = el('map-rows');
+    if (!box) return;
+    var ids = Array.prototype.map.call(box.querySelectorAll('[data-id]'), function (r) {
+      return r.getAttribute('data-id');
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-id]'), function (row) {
+      var go = function () { openDrawer(row.getAttribute('data-id'), ids); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function renderRoadmap(view) {
+    if (!can('clients')) { noClientsStub(view, 'path'); return; }
+    // портал держит названия тарифов; без него карта живет, но чипы будут по id
+    if (!state._portal) fetchPortal();
+    if (!state._map) { mapLoad(); view.innerHTML = dashSkeleton(); return; }
+    if (state._map === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту. Проверьте сеть и обновите страницу.</div></div>';
+      return;
+    }
+    var d = state._map, stages = d.stages || [], all = d.clients || [];
+    if (!all.length) {
+      view.innerHTML = '<div class="card"><div class="empty">Клиентов пока нет. Сюда попадают те, у кого статус «клиент» ' +
+        'или уже собран план поступления.</div></div>';
+      return;
+    }
+    var list = mapFiltered();
+    var tabs = [{ id: '', label: 'Все тарифы' }]
+      .concat(mapTariffs().map(function (t) { return { id: t.id, label: t.name }; }))
+      .concat([{ id: '__none', label: 'Без тарифа' }]);
+
+    view.innerHTML =
+      '<div class="card map-top">' +
+        '<div class="sec-head"><span class="ic">' + ic('kanban', 14) + '</span>' +
+          '<div><div class="t">Где идут наши клиенты</div>' +
+          '<div class="s">этап считается по плану поступления: первый, где у семьи есть незакрытая задача</div></div>' +
+          '<span class="cnt num">' + all.length + '</span></div>' +
+        mapRail(all, stages) +
+      '</div>' +
+      '<div class="card listcard map-list">' +
+        '<div class="map-bar">' +
+          '<div class="searchwrap">' + ic('search', 15) +
+            '<input id="map-q" class="search" type="search" placeholder="Имя или тьютор" ' +
+            'autocomplete="off" value="' + esc(state.mapQ || '') + '"></div>' +
+          '<div class="map-chips">' + tabs.map(function (t) {
+            return '<button class="qchip' + ((state.mapTariff || '') === t.id ? ' on' : '') +
+              '" data-tar="' + esc(t.id) + '" type="button">' + esc(t.label) + '</button>';
+          }).join('') +
+          '</div>' +
+          '<span class="list-count" id="map-count">' + mapCountHtml(list.length, all.length) + '</span>' +
+        '</div>' +
+        '<div class="trow thead map-grid"><span class="th">Клиент</span><span class="th">Тариф</span>' +
+          '<span class="th">Этап пути</span><span class="th">Кабинет</span><span class="th">Задачи</span>' +
+          '<span class="th">Можно предложить</span></div>' +
+        '<div id="map-rows">' + mapRows(list, stages) + '</div>' +
+      '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-seg]'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-seg');
+        state.mapSeg = state.mapSeg === k ? '' : k;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tar]'), function (b) {
+      b.addEventListener('click', function () {
+        state.mapTariff = b.getAttribute('data-tar');
+        renderView();
+      });
+    });
+    var q = el('map-q');
+    if (q) q.addEventListener('input', function () {
+      state.mapQ = this.value;
+      mapPaintRows(stages);
+    });
+    mapWireRows(stages);
+  }
+
   function czLoad(cb) {
     api('/admin/api/contractors' + (CZ.archived ? '?archived=1' : '')).then(function (r) {
       CZ.list = r.contractors || []; CZ.stats = r.stats || null; CZ.err = '';
@@ -18837,8 +19067,14 @@
        от корня файл бы не нашелся */
     fetch('content/portal.json', { cache: 'no-cache' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
-      .then(function (d) { state._portal = d; if (state.page === 'portal') renderView(); })
-      .catch(function () { state._portal = 'none'; if (state.page === 'portal') renderView(); });
+      // портал ждут еще двое: карта берет оттуда названия тарифов, а карточка
+      // клиента — список для поля «Тариф»
+      .then(function (d) { state._portal = d; portalArrived(); })
+      .catch(function () { state._portal = 'none'; portalArrived(); });
+  }
+  function portalArrived() {
+    if (state.page === 'portal' || state.page === 'roadmap') renderView();
+    if (state.drawerId) renderDrawer(true);
   }
   function portalProduct(id) {
     var ps = (state._portal && state._portal.products) || [];
@@ -23661,6 +23897,7 @@
   }
 
   function openDrawer(id, listIds) {
+    if (!state._portal) fetchPortal();   // поле «Тариф» берет список из портала
     state.drawerId = id;
     if (listIds && listIds.length) state.drawerList = listIds;
     state.modalSection = 'main';
@@ -25049,6 +25286,18 @@
         qlSelect('goal', q.goal || mql.goal || '', QL_GOALS, 'не знаем', !q.goal && !!mql.goal) + '</label>' +
       '<label class="ql-f"><span class="ql-l">Волна подачи</span>' +
         qlSelect('wave', wave, waves.concat([['later', 'позже']]), 'не названа', false) + '</label>' +
+      /* Тариф ставится руками: в платежах у нас свободные названия («1/2 платеж за
+         поступление»), и вывести из них тариф нельзя. Список — из продуктового
+         портала, он же источник цен и наполнения. Значение пишется в карточку
+         (overrides.tariff), оттуда его читает «Карта». */
+      '<label class="ql-f"><span class="ql-l">Тариф</span>' +
+        '<select class="tm-sel" data-tariff="1">' +
+          '<option value="">не выбран</option>' +
+          mapTariffs().map(function (tf) {
+            return '<option value="' + esc(tf.id) + '"' +
+              (tf.id === (crm.overrides || {}).tariff ? ' selected' : '') + '>' + esc(tf.name) + '</option>';
+          }).join('') +
+        '</select></label>' +
     '</div>';
 
     var marks = q.sql || {};
@@ -27155,6 +27404,12 @@
           body[sel.getAttribute('data-qf')] = sel.value;
           patch(id, { qual: body });
         });
+      });
+      // тариф лежит не в qual, а в доп.полях карточки: пустое значение его стирает
+      var tarSel = qlHost.querySelector('select[data-tariff]');
+      if (tarSel) tarSel.addEventListener('change', function () {
+        patch(id, { overrides: { tariff: tarSel.value } });
+        state._map = null;   // карта считает по тарифам — пусть перечитает
       });
     }
 
