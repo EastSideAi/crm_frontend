@@ -14548,10 +14548,18 @@
           : '',
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
+      // Имя клиента в строке дохода — ссылка в его карточку (case_id даёт бэкенд только
+      // под cap clients; у зарплат и строк без клиента его нет). Клик по имени открывает
+      // карточку, клик по остальной строке — правку (см. обработчики ниже).
+      var nm = esc(it.counterparty || it.item || '—');
+      var nameHtml = it.case_id
+        ? '<b class="fin-lead" data-lead="' + esc(it.case_id) +
+          '" title="Открыть карточку клиента">' + nm + '</b>'
+        : '<b>' + nm + '</b>';
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+        '<span class="fo-what">' + nameHtml +
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
@@ -14616,6 +14624,16 @@
         });
       });
     }
+    // Клик по имени клиента открывает его карточку в новой вкладке. Глушим всплытие,
+    // чтобы у редактора заодно не открылась форма правки строки. Регистрируем всегда,
+    // а не только под canFix: посмотреть карточку может и тот, кто ведомость не правит.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-lead[data-lead]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 

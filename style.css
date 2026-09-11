@@ -5943,6 +5943,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
    отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
 .trow.click:hover .fo-what b { color: var(--blue); }
+/* Имя клиента в «Доходах» — ссылка в его карточку (data-lead). Отдельно от .trow.click:
+   тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
+.fin-lead { cursor: pointer; }
+.fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
