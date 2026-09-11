@@ -5980,7 +5980,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .tx-row .tx-inc, .tx-row .tx-tax { text-align: right; }
 .tx-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
 .tx-row:last-child { border-bottom: 0; }
-.tx-m { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+/* глобальный .empty (text-align:center) протекал в .tx-row.empty и центровал
+   месяц — держим название всегда по левому краю */
+.tx-m { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
 .tx-m i { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--blue);
   margin-left: 7px; text-transform: uppercase; letter-spacing: .03em; }
 .tx-bar { height: 6px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
