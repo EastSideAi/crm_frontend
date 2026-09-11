@@ -3047,6 +3047,11 @@
             (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
           : 'Считаю программы по чекам…';
       }
+      // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
+      else if (state.page === 'fintax') {
+        ph = 'Плановый налог АУСН 8% по месяцам за год: сколько дохода пришло и сколько ' +
+          'с него отложить на налог. Доход берется из ведомости сам, база — до эквайринга.';
+      }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
         // Остаток счета берем у самого счета: в «показателях центра» лежит движение
@@ -16004,9 +16009,9 @@
       now.getFullYear());
     var yPrev = yr > lo, yNext = yr < hi;
     var tiles = [
-      { label: 'Доход за год', value: finRub(t.income_total), sub: 'база налога, до эквайринга' },
-      { label: 'Отложить на налог', value: finRub(t.tax_total), sub: '8% АУСН за год' },
-      { label: 'В среднем за месяц', value: finRub(Math.round(t.tax_total / 12)),
+      { label: 'Доход за год', value: finRub(t.income_total, 0), sub: 'база налога, до эквайринга' },
+      { label: 'Отложить на налог', value: finRub(t.tax_total, 0), sub: '8% АУСН за год' },
+      { label: 'В среднем за месяц', value: finRub(Math.round(t.tax_total / 12), 0),
         sub: 'налог, если ровно' },
     ];
     var rows = t.months.map(function (m) {
