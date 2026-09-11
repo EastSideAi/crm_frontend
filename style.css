@@ -6014,7 +6014,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fe-grid { grid-template-columns: 92px 1.6fr 150px 150px; cursor: pointer; }
 .fe-t { font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
 .fe-s { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
-.fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; }
+.fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+/* Крестик удаления строки: тихий, проявляется по наведению на строку, краснеет на себе.
+   Всегда виден на тач-экранах — там наведения нет. */
+.fd-del { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: none; background: transparent;
+  color: var(--ink-3); border-radius: var(--r-sm, 6px); cursor: pointer;
+  opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.trow.fe-grid:hover .fd-del { opacity: .6; }
+.fd-del:hover { opacity: 1; background: var(--red-soft); color: var(--red); }
+@media (hover: none) { .fd-del { opacity: .5; } }
 /* Кнопка «добавить» стоит в одном ряду с чипами форм, но она действие, а не фильтр:
    синие чернила отделяют ее, не заводя третьего рецепта кнопки. */
 .qchip.add { display: inline-flex; align-items: center; gap: 5px; color: var(--blue);
@@ -6025,6 +6034,19 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .trow.fe-grid { grid-template-columns: 1fr auto !important; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
 }
+
+/* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
+   Клик по нему помечает продажу полученной, не открывая форму — как чек-лист.
+   Строкам даём боковые поля под шапку (16px): иначе кружок липнет к краю, а сумма
+   упирается в правую грань карточки. */
+.rp-row { padding-left: 16px; padding-right: 16px; }
+.rp-row.rp-haschk { grid-template-columns: auto 1fr auto; column-gap: 12px; }
+.rp-chk { width: 22px; height: 22px; padding: 0; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; border: 1.5px solid var(--line-2);
+  background: transparent; border-radius: 50%; color: #fff; cursor: pointer;
+  transition: border-color .12s, background .12s; }
+.rp-chk:hover { border-color: var(--green); }
+.rp-chk.on { background: var(--green); border-color: var(--green); }
 
 /* ── Управление ведомостью ──────────────────────────────────────────────────
    Правка живет там, где видно ее последствие: правило фонда — в строке каскада,
