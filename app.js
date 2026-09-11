@@ -2213,7 +2213,7 @@
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
        есть строка расхода фонда. */
     { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
-      cap: 'finmodel|finmodel_contractors' },
+      cap: 'finmodel|finmodel_contractors', hideCap: 'finmodel' },
     /* Расходы одним экраном с тремя состояниями (запланирован → проведен →
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
@@ -2271,6 +2271,10 @@
       // Пункт может быть скрыт для отдельных ролей, даже если cap подходит: тьютор
       // ведёт своих учеников, воронка входящих лидов не его работа (правило Павла).
       if (it.hideRole && it.hideRole.indexOf(state.role) >= 0) return false;
+      // hideCap прячет пункт у того, кто и так добирается до него другим путём: выплаты
+      // подрядчикам ведут внутри «Фондов», отдельным разделом в меню они торчат только у
+      // роли, у которой всей ведомости нет (решение Романа 11.09.2026).
+      if (it.hideCap && can(it.hideCap)) return false;
       return can(it.cap) && navSpace(it) === s;
     });
   }
@@ -14354,33 +14358,44 @@
         : '') +
       '</div>';
 
-    // Выплату с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
-    // налоги, краткосрочка) это единственное место, где можно записать расход с фонда
-    // (пункт 1 Романа). Уходит в открытую ведомость, фонд предвыбран.
-    // Фонд подрядчиков — исключение: выплаты подрядчикам вносят в отдельном дашборде
-    // «Выплаты подрядчикам» (с реквизитами и чеком/актом), и кнопку тут убрали, чтобы
-    // дверь в деньги была одна и не было задвоения (решение Романа 11.09.2026).
+    // Расход с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
+    // налоги, краткосрочка) это единственное место, где можно записать расход (пункт 1
+    // Романа). Уходит в открытую ведомость, фонд предвыбран.
+    // Фонд подрядчиков ведём тоже здесь, но своей формой выплаты (реквизиты + чек/акт):
+    // отдельного раздела в меню у выплат нет, они живут внутри своего фонда — выплата и
+    // есть расход этого фонда (решение Романа 11.09.2026). Открытая ведомость — куда
+    // ложится новая выплата; без неё вносить некуда.
     var isContractors = FIN.fundId === 'contractors';
-    var canPay = can('finmodel_edit') && !isContractors;
-    var toPayouts = isContractors && can('finmodel|finmodel_contractors')
-      ? '<button class="qchip" id="ff-topay">' + ic('card', 12) +
-        'Вносятся в «Выплаты подрядчикам»</button>' : '';
+    var openP = (f.periods || []).filter(function (x) { return x.open; })[0];
+    var canPay = can('finmodel_edit') && (!isContractors || !!openP);
     var opsCard = '<div class="card fin-block">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
-        '<div><div class="t">Расходы фонда</div>' +
-        '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div>' +
+        '<div><div class="t">' + (isContractors ? 'Выплаты подрядчикам' : 'Расходы фонда') +
+          '</div><div class="s">' + (isContractors
+            ? 'выплата с реквизитами и чеком/актом, сразу расход фонда в ведомости'
+            : 'каждая копейка, ушедшая с фонда, новое сверху') + '</div></div>' +
         (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
-          'Добавить выплату</button>' : toPayouts) + '</div>' +
+          'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
-            return '<div class="fl-row fl-2"><div class="fl-main">' +
+            // Выплата подрядчику (ручной расход фонда) открывается на правку по клику;
+            // автострока и чужая статья (продукт в этом же фонде) — только показ.
+            var payRow = isContractors && o.source === 'фонд' && !o.auto;
+            var docChip = !payRow ? ''
+              : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
+                    esc(o.doc.name || 'документ') + '</span>'
+                 : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
+            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') + '"' +
+              (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
               (o.offering ? ' · ' + esc(o.offering) : '') +
-              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + '</span></div>' +
+              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + docChip + '</span></div>' +
               '<div class="fl-v num">' + finRub(o.amount) + '</div></div>';
           }).join('') + '</div>'
-        : '<div class="empty">С этого фонда пока ничего не платили.</div>') +
+        : '<div class="empty">' + (isContractors
+            ? 'Выплат подрядчикам с этого фонда пока не было. Нажмите «Добавить выплату».'
+            : 'С этого фонда пока ничего не платили.') + '</div>') +
       '</div>';
 
     /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
@@ -14453,11 +14468,20 @@
     if (save) save.addEventListener('click', finSaveOpening);
     var pay = el('ff-pay');
     if (pay) pay.addEventListener('click', function () {
-      finLineForm(null, { form: 'фонд', section: FIN.fundId });
+      if (isContractors) finPayoutForm(null, { period_id: openP && openP.id });
+      else finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
-    // Фонд подрядчиков: выплаты вносят в своём дашборде, отсюда только ведём туда.
-    var topay = el('ff-topay');
-    if (topay) topay.addEventListener('click', function () { setPage('finpayouts'); });
+    // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
+    // в ведомости той строки (period_id), а не в текущей выбранной.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
+      r.addEventListener('click', function () {
+        var id = r.getAttribute('data-fpay');
+        var ops = (FIN.fund && FIN.fund.operations) || [];
+        for (var i = 0; i < ops.length; i++) {
+          if (ops[i].id === id) return finPayoutForm(ops[i], { period_id: ops[i].period_id });
+        }
+      });
+    });
     if (sum) sum.focus();
     pageAnim(view);
   }
@@ -15590,9 +15614,13 @@
     pageAnim(view);
   }
 
-  function finPayoutForm(line) {
+  function finPayoutForm(line, opts) {
     if (document.querySelector('.al-ov')) return;
     var isNew = !line, p = (line && line.payout) || {}, doc = (line && line.doc) || {};
+    // Период берём явно: со страницы фонда правим строку в её ведомости (line.period_id),
+    // а новую выплату вносим в открытую ведомость (opts.period_id). На самом дашборде
+    // период задаёт полоса сверху (FIN.id).
+    var payPeriod = (opts && opts.period_id) || (line && line.period_id) || FIN.id;
     var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '',
                       item: '', comment: '', amount: '' };
     var ov = document.createElement('div');
@@ -15688,7 +15716,7 @@
       var sum = Number(val('pp-sum'));
       if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
       var payload = {
-        id: line ? line.id : null, period_id: FIN.id, form: 'выплата-подрядчику',
+        id: line ? line.id : null, period_id: payPeriod, form: 'выплата-подрядчику',
         counterparty: who, item: val('pp-item'), comment: val('pp-note'),
         op_date: val('pp-date') || null, status: el('pp-st').value, amount: val('pp-sum'),
         pay_receiver: val('pp-rcv'), pay_inn: val('pp-inn'), pay_account: val('pp-acc'),
@@ -15714,7 +15742,7 @@
       if (FIN.payBusy) return;
       FIN.payBusy = true;
       czSend('/admin/api/fin/operation?id=' + encodeURIComponent(line.id) +
-             '&period_id=' + encodeURIComponent(FIN.id), 'DELETE')
+             '&period_id=' + encodeURIComponent(payPeriod), 'DELETE')
         .then(function () {
           close(); finForget(true); renderAll(); showToast('Выплата убрана');
         })
