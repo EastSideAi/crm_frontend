@@ -15781,12 +15781,8 @@
      но всей ведомости с зарплатами не видит. Трата — это сразу строка расхода в
      ведомости (form='операционный', флаг meta.ops на сервере), переносить ничего
      руками не нужно. У кого есть вся ведомость, вносит это на «Прямых расходах». */
-  var OPEX_CATS = [['сервисы', 'Сервисы, подписки'],
-                   ['администрирование', 'Административное, хозяйственное']];
-  function opexCatLabel(v) {
-    for (var i = 0; i < OPEX_CATS.length; i++) if (OPEX_CATS[i][0] === v) return OPEX_CATS[i][1];
-    return v || '';
-  }
+  // Категория одна — сервисы и подписки: админ вносит только это (решение Романа
+  // 13.09). Выбора в форме нет, все операционные расходы идут в статью «сервисы».
   function finLoadOpex() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadOpex(); });
     finBusy('opex', function (done) {
@@ -15822,7 +15818,7 @@
         sub: noDoc ? 'расход не закрыт документом' : 'все с чеком' },
     ];
     var rows = items.map(function (it) {
-      var sub = [opexCatLabel(it.section), it.comment || ''].filter(Boolean).map(esc).join(' · ');
+      var sub = it.comment ? esc(it.comment) : '';
       var docChip = it.doc
         ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'чек') + '</span>'
         : (it.status === 'факт' ? '<span class="fst wait">нет чека</span>' : '');
@@ -15881,10 +15877,6 @@
     };
     var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
     var num = function (x) { return x === '' || x === null || x === undefined ? '' : String(x); };
-    var cats = OPEX_CATS.map(function (c) {
-      return '<option value="' + c[0] + '"' + (s.section === c[0] ? ' selected' : '') + '>' +
-        esc(c[1]) + '</option>';
-    }).join('');
     ov.innerHTML =
       '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
@@ -15903,13 +15895,12 @@
               'step="0.01" value="' + num(s.amount) + '">') +
           '</div>' +
           '<div class="al-row">' +
-            f('Категория', '<select id="ox-cat" class="al-in">' + cats + '</select>') +
             f('Дата', '<input id="ox-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+            f('Это', '<select id="ox-st" class="al-in">' +
+              '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже оплатили</option>' +
+              '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>счёт, ещё не платили</option>' +
+              '</select>') +
           '</div>' +
-          f('Это', '<select id="ox-st" class="al-in">' +
-            '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже оплатили</option>' +
-            '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>счёт, ещё не платили</option>' +
-            '</select>') +
           f('Кому платим', '<input id="ox-who" class="al-in" maxlength="200" value="' +
             v(s.counterparty) + '" placeholder="поставщик или сервис">') +
           '<div class="fin-note calm">Чек или счёт — ссылкой. Закрывает расход документом.</div>' +
@@ -15955,7 +15946,7 @@
         id: line ? line.id : null, period_id: FIN.id, form: 'операционный',
         item: item, counterparty: val('ox-who'), comment: val('ox-note'),
         op_date: val('ox-date') || null, status: el('ox-st').value,
-        amount: val('ox-sum'), section: el('ox-cat').value,
+        amount: val('ox-sum'), section: 'сервисы',
         doc_name: val('ox-docn'), doc_link: val('ox-docl'),
       };
       FIN.opexBusy = true; err.textContent = '';
