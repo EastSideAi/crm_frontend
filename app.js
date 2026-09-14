@@ -75,7 +75,7 @@
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine', boardGoal: '', meetLog: null, meetOpen: {},
+    myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     news: null, newsUnread: 0,
     teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
@@ -96,7 +96,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -106,7 +106,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        mkTab: state.mkTab, mkDays: state.mkDays,
+        mkTab: state.mkTab, mkDays: state.mkDays, taskPrio: state.taskPrio || '',
       }));
     } catch (e) {}
   }
@@ -6185,6 +6185,7 @@
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
     }
+    list = list.filter(prioPass);
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var order = function (a, b) {
@@ -6217,7 +6218,7 @@
     var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
-    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -6225,7 +6226,7 @@
       how +
       (dept ? boardGoalStrip(state.myboard.dept) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
-    wirePlanMode(view); wireDeptChips(view);
+    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
       b.addEventListener('click', function () { state.boardGoal = b.getAttribute('data-bgoal'); renderView(); });
     });
@@ -6377,7 +6378,7 @@
       return;
     }
     var w = state.myweek, r = w.r || {};
-    var tasks = w.tasks || [];
+    var tasks = (w.tasks || []).filter(prioPass);
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
     var cap = r.cap || 0, load = r.load || 0;
@@ -6424,11 +6425,12 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    var head = planModeSeg() + deptChips();
+    var head = planModeSeg() + deptChips() + prioSeg();
     if (state.planMode === 'day' && sh === 0 && !q) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
-      renderMyDay(view, w, r, head + '<span class="wk-spacer"></span>' + meter + act +
+      var wd = state.taskPrio ? Object.assign({}, w, { tasks: tasks }) : w;
+      renderMyDay(view, wd, r, head + '<span class="wk-spacer"></span>' + meter + act +
         '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
       var dg = view.querySelector('.dy-grid');
       if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []));
@@ -6447,7 +6449,7 @@
       '</div>' + laterBand(w.later || []);
     }
 
-    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wireLater(view);
+    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view);
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -6514,7 +6516,7 @@
     }).join('');
     view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats + weeks;
-    wirePlanMode(view); wireDeptChips(view);
+    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
     function go(d) { state.monthShift = Math.max(-12, Math.min(3, (state.monthShift || 0) + d)); state.mymonth = null; renderView(); }
     if (el('mo-prev')) el('mo-prev').addEventListener('click', function () { go(-1); });
     if (el('mo-next')) el('mo-next').addEventListener('click', function () { go(1); });
@@ -7256,6 +7258,26 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
+  /* Важные и срочные первыми (Павел 14.09.2026). Две оси матрицы: важность —
+     молния, срочность — срок: просрочено, сегодня или завтра. Фильтр общий для
+     дня, недели и доски и запоминается, как срез направления. */
+  function prioPass(t) {
+    if (!state.taskPrio) return true;
+    if (state.taskPrio === 'imp') return !!t.important;
+    var c = dueLabel(t).cls;
+    return !!t.overdue || c === 'due-over' || c === 'due-now' || c === 'due-soon';
+  }
+  function prioSeg() {
+    return '<div class="pay-seg prio-seg">' + [['', 'Все'], ['imp', 'Важные'], ['urg', 'Срочные']].map(function (m) {
+      return '<button type="button" class="' + ((state.taskPrio || '') === m[0] ? 'on' : '') + '" data-prio="' + m[0] + '">' +
+        (m[0] === 'imp' ? ic('bolt', 11) : '') + m[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  function wirePrio(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-prio]'), function (b) {
+      b.addEventListener('click', function () { state.taskPrio = b.getAttribute('data-prio') || ''; saveUi(); renderView(); });
+    });
+  }
   function deptChips() {
     var all = [''].concat(DEPT_LIVE);
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
@@ -8145,6 +8167,11 @@
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
             ? '<button class="tsk-mwho tsk-watch" id="tk-watch" title="Исполнители и наблюдатели">' + ic('leads', 12) + 'роли' + chev() + '</button>'
             : '') +
+          // Название, суть и критерий правятся тут же (Павел 14.09.2026: «один раз
+          // поставил, потом тяжело отредактировать»). Закрытую не правим: история.
+          ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
+            ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('note', 12) + 'изменить</button>'
+            : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
@@ -8214,6 +8241,23 @@
           // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
           // это событие, и текст «что сделано» с файлом должны уехать вместе,
           // иначе постановщик принимает на слово.
+          '<div class="tsk-resform tsk-editform" id="tk-editf" hidden>' +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="tk-etitle" class="al-in" maxlength="200" value="' + esc(t.title || '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Что нужно сделать</span>' +
+              '<textarea id="tk-edetails" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Суть задачи: что и для кого">' + esc(t.details || '') + '</textarea></label>' +
+            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
+              '<textarea id="tk-eexpect" class="al-in al-ta" rows="2" maxlength="4000" placeholder="По чему поймем, что готово">' + esc(t.result_expect || '') + '</textarea></label>' +
+            (t.parent_id ? '' :
+              '<label class="al-f"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="tk-edept" class="al-sel">' + [''].concat(Object.keys(DEPTS)).map(function (d) {
+                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') + '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
+                }).join('') + '</select></span></label>') +
+            '<div class="tsk-resrow">' +
+              '<button class="al-cancel" id="tk-ecx">Отмена</button>' +
+              '<button class="bp" id="tk-eok">Сохранить</button>' +
+            '</div>' +
+          '</div>' +
           '<div class="tsk-resform" id="tk-resf" hidden>' +
             '<div class="tsk-l">Что сделано</div>' +
             '<textarea id="tk-restext" class="al-in al-ta" rows="2" maxlength="4000" ' +
@@ -8308,6 +8352,36 @@
         body.scrollTop = body.scrollHeight;
       };
       el('tk-rescx').addEventListener('click', function () { setRes(''); });
+
+      var editB = el('tk-edit'), editF = el('tk-editf');
+      if (editB) {
+        var setEdit = function (on) {
+          editF.hidden = !on;
+          var footActs = ov.querySelector('.tsk-acts');
+          if (footActs) footActs.hidden = !!on;
+          if (on) { setRes(''); el('tk-etitle').focus(); editF.scrollIntoView({ block: 'nearest' }); }
+        };
+        editB.addEventListener('click', function () { setEdit(editF.hidden); });
+        el('tk-ecx').addEventListener('click', function () { setEdit(false); });
+        el('tk-eok').addEventListener('click', function () {
+          var title = (el('tk-etitle').value || '').trim();
+          if (!title) { showToast('Название пустым быть не может'); el('tk-etitle').focus(); return; }
+          var patch = { title: title, details: (el('tk-edetails').value || '').trim(), result_expect: (el('tk-eexpect').value || '').trim() };
+          var dsel = el('tk-edept');
+          if (dsel && dsel.value !== (t.dept || '')) patch.dept = dsel.value;
+          var ok = el('tk-eok'); ok.disabled = true;
+          apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
+            showToast('Сохранено');
+            state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+            api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            ok.disabled = false;
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 403 ? 'Править может постановщик, исполнитель или руководитель' : 'Не удалось сохранить'));
+          });
+        });
+      }
       el('tk-resfile').addEventListener('change', function (e) {
         readFiles(e.target.files, function (got) {
           picked = picked.concat(got).slice(0, RES_MAX_FILES);
