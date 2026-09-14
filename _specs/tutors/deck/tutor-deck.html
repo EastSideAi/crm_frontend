@@ -166,6 +166,12 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .tbl.four th:last-child,.tbl.four td:last-child{padding-right:0}
 .tbl.four col.c1{width:17%}.tbl.four col.c2{width:30%}
 .tbl.four col.c3{width:33%}.tbl.four col.c4{width:20%}
+/* календарь выплат: своя раскладка, деньги узкой колонкой */
+.tbl.pay col.c1{width:20%}.tbl.pay col.c2{width:40%}
+.tbl.pay col.c3{width:16%}.tbl.pay col.c4{width:24%}
+.tbl .dim{color:#5C6E93;font-size:23px}
+.tbl.pay td{font-size:25px;padding-top:15px;padding-bottom:15px}
+.tbl.pay th{padding-bottom:15px}
 
 /* число-герой */
 .nums{display:flex;align-items:flex-end;gap:56px;margin-top:8px}
@@ -377,7 +383,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 
 <div class="top">
   <h1>Тьюторство 2026/27</h1>
-  <span class="note">31 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
+  <span class="note">33 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
 </div>
 
 <div class="tabs" role="tablist">
@@ -420,7 +426,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">02</div>
+  <div class="srcline">2</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Часть первая. Как устроена работа">
@@ -430,7 +436,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title rise d1">Как теперь устроена работа</h2>
     <div class="rule"></div>
   </div>
-  <div class="srcline">03</div>
+  <div class="srcline">3</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Что уходит в систему, что остается вам">
@@ -451,7 +457,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <li>Доведение до заезда</li></ul></div>
     </div>
   </div>
-  <div class="srcline">04</div>
+  <div class="srcline">4</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Приемка подачи в песочнице">
@@ -466,7 +472,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:64px">Вы отвечаете только за то, что приняли. Устного «посмотрел» больше нет: есть кнопка и запись, кто и когда нажал.</p>
   </div>
-  <div class="srcline">05</div>
+  <div class="srcline">5</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Вузы по трем уровням: А, Б, С">
@@ -481,7 +487,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:56px">Семья слышит план на плохой сценарий до подач, а не в момент отказа.</p>
   </div>
-  <div class="srcline">06</div>
+  <div class="srcline">6</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="План усиления профиля на год">
@@ -504,7 +510,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       </div>
     </div>
   </div>
-  <div class="srcline">07</div>
+  <div class="srcline">7</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Связь с вузом остается на тьюторе">
@@ -518,7 +524,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       <div class="card"><div class="n">03</div><h3>Очный визит</h3><p>В приемную комиссию, по необходимости и по согласованию</p></div>
     </div>
   </div>
-  <div class="srcline">08</div>
+  <div class="srcline">8</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Бот в чатах и обучение агента">
@@ -533,7 +539,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:64px">Тот же бот меряет скорость и качество ответов. Не для того, чтобы поймать: чтобы вы видели свои цифры каждый день.</p>
   </div>
-  <div class="srcline">09</div>
+  <div class="srcline">9</div>
 </section>
 
 <section class="slide" id="s-case" data-part="Работа" data-title="Сквозной пример: Артем, год целиком">
@@ -573,11 +579,12 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <table class="tbl rise d2"><thead><tr><th>За что</th><th class="n">Ставка, ₽</th></tr></thead><tbody>
       <tr><td>Бакалавриат на грант</td><td class="n">30 000</td></tr>
       <tr><td>Магистратура на грант</td><td class="n">30 000</td></tr>
-      <tr><td>Языковой год на грант</td><td class="n">20 000</td></tr>
+      <tr><td>Языковой год, потом бакалавриат — за оба года</td><td class="n">30 000</td></tr>
+      <tr><td>Языковой год отдельно</td><td class="n">20 000</td></tr>
       <tr><td>Платная консультация с подборкой</td><td class="n">3 000</td></tr>
       <tr><td>Подача в вуз для тех, кто идет на платное</td><td class="n">5 000</td></tr>
     </tbody></table>
-    <p class="small rise d3" style="margin-top:44px">Магистратуру подняли до 30 000 после вашей же правки на встрече: работы там не меньше, а иногда больше. Раньше эти деньги платились за любой грант, хоть за минимальную скидку, и за срыв сроков ничего не менялось.</p>
+    <p class="small rise d3" style="margin-top:28px">Магистратуру подняли до 30 000 после вашей же правки на встрече: работы там не меньше. Связка языковой плюс бакалавриат — те же 30 000, но за два года.</p>
   </div>
   <div class="plaque">предварительные условия</div>
   <div class="srcline">12</div>
@@ -704,21 +711,44 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
   <div class="srcline">18 · подвигайте ползунки · 90 баллов и выше дают 1,00</div>
 </section>
 
-<section class="slide" data-part="Деньги" data-title="Что двигает каждую метрику">
+<section class="slide" data-part="Деньги" data-title="Четкие критерии по каждой метрике">
   <div class="glow"></div><div class="vignette"></div>
   <div class="stage">
     <div class="kicker rise">По каждой метрике</div>
-    <h2 class="title sm rise d1">Что считает система и что делаете вы</h2>
-    <table class="tbl four rise d2"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup><thead><tr><th>Метрика</th><th>Что считает система</th><th>Ваше действие</th><th>Когда видно</th></tr></thead><tbody>
-      <tr><td>Точки в срок</td><td>доля точек, закрытых до плановой даты</td><td>закрыть чек-лист до даты, которую сами поставили в сентябре</td><td>в день закрытия точки</td></tr>
-      <tr><td>Скорость ответа</td><td>среднее время до первого ответа и доля вопросов, зависших дольше 12 часов</td><td>ответить в чате первым или подтвердить ответ бота</td><td>каждый день</td></tr>
-      <tr><td>Оценка семьи</td><td>средняя оценка из опроса после каждой точки</td><td>сказать семье, что происходит, раньше, чем они спросят</td><td>после каждой точки</td></tr>
-      <tr><td>Работа с агентом</td><td>ошибки агента, пойманные до отправки, и принятые правки в базу</td><td>вернуть заявку на исправление с причиной</td><td>в день приемки</td></tr>
+    <h2 class="title sm rise d1">Что считает система и с какого порога</h2>
+    <table class="tbl four rise d2"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup><thead><tr><th>Метрика</th><th>Что считает система</th><th>Сто процентов, если</th><th>Что НЕ входит</th></tr></thead><tbody>
+      <tr><td>Точки в срок<br><span class="dim">вес 40</span></td><td>доля точек, закрытых до плановой даты, которую вы сами поставили</td><td>закрыто до даты. Просрочка до трех дней — половина, дальше ноль</td><td>точка «результат»: ее дату назначает вуз</td></tr>
+      <tr><td>Скорость ответа<br><span class="dim">вес 30</span></td><td>доля сообщений семьи, отвеченных в норму</td><td>ответ за 3 часа. До 12 часов — половина, дальше ноль</td><td>ночь и выходные. Ожидание вуза, если вы об этом написали</td></tr>
+      <tr><td>Оценка семьи<br><span class="dim">вес 20</span></td><td>средняя оценка из опроса после каждой точки</td><td>пятерка. Четверка — 80, тройка — 60</td><td>молчание семьи: не ответили — в среднее не идет</td></tr>
+      <tr><td>Работа с агентом<br><span class="dim">вес 10</span></td><td>доля приемок, по которым вы приняли решение</td><td>решение за сутки. До трех суток — половина</td><td>сколько ошибок нашлось. Вернуть равно подтвердить</td></tr>
     </tbody></table>
-    <p class="small rise d3" style="margin-top:36px">Одна плохая оценка семьи коэффициент не роняет: считается среднее за период, а оценка ниже трех запускает разбор, а не минус.</p>
+    <p class="small rise d3" style="margin-top:32px">Коэффициент фиксируется на момент закрытия каждой точки и применяется к деньгам этой точки. Плохой месяц не портит весь год, хороший не выкупает год плохой работы.</p>
   </div>
   <div class="plaque">предварительные условия</div>
   <div class="srcline">19</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Чего в коэффициенте нет вовсе">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Чего в коэффициенте нет вовсе</div>
+    <h2 class="title sm rise d1">Ни одна метрика не смотрит на это</h2>
+    <div class="two-col rise d2">
+      <div><ul class="gone">
+        <li>Балл Duolingo и результат CSCA у ученика</li>
+        <li>Решение приемной комиссии</li>
+        <li>Поступил ученик в вуз уровня А или нет</li>
+      </ul></div>
+      <div><ul class="gone">
+        <li>Как ученик учится и делает ли домашние задания</li>
+        <li>Сроки вуза, визового центра и консульства</li>
+        <li>То, что делает или не делает семья</li>
+      </ul></div>
+    </div>
+    <p class="sub rise d3" style="margin-top:44px;max-width:1500px">Отвечали вовремя, закрывали точки в срок, держали семью в курсе и не тормозили приемки — коэффициент 1,00 даже у ученика, который никуда не поступил. Это 20 000 из 30 000, и ни рубля из них не снимает решение вуза.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">20</div>
 </section>
 
 <section class="slide" id="s-ladder" data-part="Деньги" data-title="Лестница заработка">
@@ -733,7 +763,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <div class="ladder rise d3" id="ladder"></div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">20 · бакалавриат, ставка 30 000, вовлеченность двигает только первые 20 000</div>
+  <div class="srcline">21 · бакалавриат, ставка 30 000, вовлеченность двигает только первые 20 000</div>
 </section>
 
 <section class="slide" id="s-chart" data-part="Деньги" data-title="График роста за сезон">
@@ -757,7 +787,26 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">21 · подвигайте ползунки</div>
+  <div class="srcline">22 · подвигайте ползунки</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Когда какая выплата">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Когда какая выплата</div>
+    <h2 class="title sm rise d1">Деньги идут по точкам</h2>
+    <table class="tbl four pay rise d2"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup><thead><tr><th>Точка</th><th>За что</th><th class="n">Сколько</th><th>Обычно закрывается</th></tr></thead><tbody>
+      <tr><td>1. Стратегия года</td><td>консультация, вузы А, Б и С в карточке, план профиля по месяцам</td><td class="n">4 000</td><td>сентябрь—октябрь</td></tr>
+      <tr><td>2. Профиль и документы</td><td>пакет и письма приняты, язык и CSCA идут по плану</td><td class="n">6 000</td><td>до конца января</td></tr>
+      <tr><td>3. Подачи приняты</td><td>все заявки подтверждены, ни одна не вернулась</td><td class="n">4 000</td><td>февраль—май</td></tr>
+      <tr><td>4. Результат</td><td>зачисление, JW202, письмо с условиями гранта</td><td class="n">до 10 000</td><td>май—июль</td></tr>
+      <tr><td>5. Заезд и первый месяц</td><td>виза, билеты, регистрация, заселение, связь через месяц</td><td class="n">6 000</td><td>сентябрь следующего года</td></tr>
+      <tr><td>Премия</td><td>грант в вуз, который вы записали в уровень А</td><td class="n">3 000</td><td>вместе с точкой 4</td></tr>
+    </tbody></table>
+    <p class="small rise d3" style="margin-top:28px">Не одним платежом в июле, как раньше. Расчет за прошлый месяц собирается до 3 числа, до 5 виден в кабинете построчно, до 10 приходят деньги: закрыли точку 28 января — получите до 10 февраля.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">23</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Бонус за скорость отменяется">
@@ -774,7 +823,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <div class="cap">тьюторов получили бонус за скорость за все время, что он существовал</div></div></div>
     </div>
   </div>
-  <div class="srcline">22</div>
+  <div class="srcline">24</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Кабинет тьютора">
@@ -789,7 +838,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">23</div>
+  <div class="srcline">25</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Часть третья. Вы можете продавать">
@@ -799,7 +848,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title rise d1">Продавать можно, но не обязательно</h2>
     <div class="rule"></div>
   </div>
-  <div class="srcline">24</div>
+  <div class="srcline">26</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Две роли: чаты и диагностика">
@@ -814,7 +863,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">Ваша платная консультация с подбором вузов и есть диагностика, только глубже. Отдельной сетки для тьюторов мы не заводим.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">25</div>
+  <div class="srcline">27</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Смены на чатах: 30 000 в месяц">
@@ -833,7 +882,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">26 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
+  <div class="srcline">28 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Как делится процент с продажи">
@@ -850,7 +899,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:40px">Процент считается по факту поступления денег от семьи. Рассрочка идет частями вслед за платежами.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">27 · цены тарифов из портала</div>
+  <div class="srcline">29 · цены тарифов из портала</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Сколько выходит в месяц">
@@ -866,7 +915,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">При двух сделках выходит 40 176, 49 200 и 55 600. При десяти: 80 880, 126 000 и 158 000. Оплата диагностик идет сверх этого.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">28 · при полной загрузке смен и коэффициенте 1,0</div>
+  <div class="srcline">30 · при полной загрузке смен и коэффициенте 1,0</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Оплата диагностик">
@@ -887,7 +936,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">29</div>
+  <div class="srcline">31</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что выходит за сезон у тьютора">
@@ -903,7 +952,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">Вовлеченность 0,9, две консультации на ученика, процент с договоров по тарифу Плюс. Тот, кто продажи не берет, за 20 учеников получает 534 000, это 44 500 в месяц: чтобы остаться при прошлогодних деньгах без продаж, надо вести примерно на четверть больше учеников.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">30</div>
+  <div class="srcline">32</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что дальше до начала кампании">
@@ -925,7 +974,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">31</div>
+  <div class="srcline">33</div>
 </section>
 
     </div></div></div>

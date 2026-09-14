@@ -162,6 +162,12 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .tbl.four th:last-child,.tbl.four td:last-child{padding-right:0}
 .tbl.four col.c1{width:17%}.tbl.four col.c2{width:30%}
 .tbl.four col.c3{width:33%}.tbl.four col.c4{width:20%}
+/* календарь выплат: своя раскладка, деньги узкой колонкой */
+.tbl.pay col.c1{width:20%}.tbl.pay col.c2{width:40%}
+.tbl.pay col.c3{width:16%}.tbl.pay col.c4{width:24%}
+.tbl .dim{color:#5C6E93;font-size:23px}
+.tbl.pay td{font-size:25px;padding-top:15px;padding-bottom:15px}
+.tbl.pay th{padding-bottom:15px}
 
 /* число-герой */
 .nums{display:flex;align-items:flex-end;gap:56px;margin-top:8px}
