@@ -8179,6 +8179,24 @@
           (t.parent_id ? '<button class="tsk-mwho tsk-up" id="tk-up">' + ic('target', 12) + esc(t.parent_title || 'к цели') + '</button>' : '') +
         '</div>' +
         '<div class="al-body">' +
+          // Редактор стоит у самого текста, который правит, а не в конце ленты.
+          '<div class="tsk-resform tsk-editform" id="tk-editf" hidden>' +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="tk-etitle" class="al-in" maxlength="200" value="' + esc(t.title || '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Что нужно сделать</span>' +
+              '<textarea id="tk-edetails" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Суть задачи: что и для кого">' + esc(t.details || '') + '</textarea></label>' +
+            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
+              '<textarea id="tk-eexpect" class="al-in al-ta" rows="2" maxlength="4000" placeholder="По чему поймем, что готово">' + esc(t.result_expect || '') + '</textarea></label>' +
+            (t.parent_id ? '' :
+              '<label class="al-f"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="tk-edept" class="al-sel">' + [''].concat(Object.keys(DEPTS)).map(function (d) {
+                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') + '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
+                }).join('') + '</select></span></label>') +
+            '<div class="tsk-resrow">' +
+              '<button class="al-cancel" id="tk-ecx">Отмена</button>' +
+              '<button class="bp" id="tk-eok">Сохранить</button>' +
+            '</div>' +
+          '</div>' +
           (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
           (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
           // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
@@ -8241,23 +8259,6 @@
           // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
           // это событие, и текст «что сделано» с файлом должны уехать вместе,
           // иначе постановщик принимает на слово.
-          '<div class="tsk-resform tsk-editform" id="tk-editf" hidden>' +
-            '<label class="al-f"><span class="al-l">Название</span>' +
-              '<input id="tk-etitle" class="al-in" maxlength="200" value="' + esc(t.title || '') + '"></label>' +
-            '<label class="al-f"><span class="al-l">Что нужно сделать</span>' +
-              '<textarea id="tk-edetails" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Суть задачи: что и для кого">' + esc(t.details || '') + '</textarea></label>' +
-            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
-              '<textarea id="tk-eexpect" class="al-in al-ta" rows="2" maxlength="4000" placeholder="По чему поймем, что готово">' + esc(t.result_expect || '') + '</textarea></label>' +
-            (t.parent_id ? '' :
-              '<label class="al-f"><span class="al-l">Направление</span><span class="al-selwrap">' +
-                '<select id="tk-edept" class="al-sel">' + [''].concat(Object.keys(DEPTS)).map(function (d) {
-                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') + '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
-                }).join('') + '</select></span></label>') +
-            '<div class="tsk-resrow">' +
-              '<button class="al-cancel" id="tk-ecx">Отмена</button>' +
-              '<button class="bp" id="tk-eok">Сохранить</button>' +
-            '</div>' +
-          '</div>' +
           '<div class="tsk-resform" id="tk-resf" hidden>' +
             '<div class="tsk-l">Что сделано</div>' +
             '<textarea id="tk-restext" class="al-in al-ta" rows="2" maxlength="4000" ' +
@@ -8359,7 +8360,7 @@
           editF.hidden = !on;
           var footActs = ov.querySelector('.tsk-acts');
           if (footActs) footActs.hidden = !!on;
-          if (on) { setRes(''); el('tk-etitle').focus(); editF.scrollIntoView({ block: 'nearest' }); }
+          if (on) { setRes(''); body.scrollTop = 0; el('tk-etitle').focus(); }
         };
         editB.addEventListener('click', function () { setEdit(editF.hidden); });
         el('tk-ecx').addEventListener('click', function () { setEdit(false); });
