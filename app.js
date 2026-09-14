@@ -6186,13 +6186,15 @@
     var gave = dept ? 'dept' : state.boardWho === 'gave';
     var q = (state.taskQ || '').toLowerCase().trim();
     // base — то, что доска покажет без отбора по цели: по нему же считают чипы целей.
-    var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine).filter(prioPass);
+    var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine);
     if (q) base = base.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var list = base;
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
     }
     var order = function (a, b) {
+      var p = prioCmp(a, b);
+      if (p) return p;
       if (!!a.overdue !== !!b.overdue) return a.overdue ? -1 : 1;
       if (!a.due_at || !b.due_at) return a.due_at ? -1 : b.due_at ? 1 : 0;
       return new Date(a.due_at) - new Date(b.due_at);
@@ -6222,7 +6224,7 @@
     var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
-    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips(true) + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -6382,7 +6384,7 @@
       return;
     }
     var w = state.myweek, r = w.r || {};
-    var tasks = (w.tasks || []).filter(prioPass);
+    var tasks = prioSort(w.tasks || []);
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
     var cap = r.cap || 0, load = r.load || 0;
@@ -6416,16 +6418,7 @@
       : '';
 
     var body;
-    // Фильтр важных/срочных спрятал все — это не «неделя пустая», и «Собрать
-    // неделю» тут предлагать нельзя: задачи есть, их прячет фильтр.
-    var prioEmpty = !!state.taskPrio && !tasks.length && (w.tasks || []).length > 0;
-    if (prioEmpty) {
-      act = '';
-      body = '<div class="wk-empty">' +
-        '<div class="wk-empty-t">' + (prioOn('imp') && prioOn('urg') ? 'Важных и срочных задач на этой неделе нет' : prioOn('imp') ? 'Важных задач на этой неделе нет' : 'Срочных задач на этой неделе нет') + '</div>' +
-        '<div class="wk-empty-s">Остальные задачи прячет фильтр.</div>' +
-        '<button class="qchip" id="wk-prio-off">Показать все</button></div>';
-    } else if (!tasks.length && !accept) {
+    if (!tasks.length && !accept) {
       body = '<div class="wk-empty">' +
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
@@ -6438,8 +6431,8 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    var head = planModeSeg() + deptChips(true) + prioSeg();
-    if (state.planMode === 'day' && sh === 0 && !q && !prioEmpty) {
+    var head = planModeSeg() + deptChips() + prioSeg();
+    if (state.planMode === 'day' && sh === 0 && !q) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
       var wd = state.taskPrio ? Object.assign({}, w, { tasks: tasks }) : w;
@@ -6463,7 +6456,6 @@
     }
 
     wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view);
-    if (el('wk-prio-off')) el('wk-prio-off').addEventListener('click', function () { state.taskPrio = ''; saveUi(); renderView(); });
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -7272,48 +7264,45 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
-  /* Важные и срочные первыми (Павел 14.09.2026). Две оси матрицы: важность —
-     молния, срочность — срок: просрочено, сегодня или завтра. Фильтр общий для
-     дня, недели и доски и запоминается, как срез направления. */
-  function prioSet() { return (state.taskPrio || '').split(',').filter(Boolean); }
-  function prioOn(k) { return prioSet().indexOf(k) >= 0; }
-  function prioPass(t) {
-    var on = prioSet();
-    if (!on.length) return true;
-    if (on.indexOf('imp') >= 0 && !t.important) return false;
-    if (on.indexOf('urg') >= 0) {
-      var c = dueLabel(t).cls;
-      if (!(t.overdue || c === 'due-over' || c === 'due-now' || c === 'due-soon')) return false;
-    }
-    return true;
+  /* Порядок в плане (Павел 14.09.2026: «сначала срочные, потом сначала важные
+     или обычные»). Это не фильтр, а сортировка: выбранная ось всплывает наверх,
+     остальное остается ниже, ничего не прячется. Срочность — срок: просрочено,
+     сегодня, завтра; важность — флаг. Общий для дня, недели и доски,
+     запоминается, как срез направления. */
+  var PRIO_MODES = [['', 'Обычный порядок'], ['urg', 'Сначала срочные'], ['imp', 'Сначала важные']];
+  function urgRank(t) {
+    var c = dueLabel(t).cls;
+    return t.overdue || c === 'due-over' ? 0 : c === 'due-now' ? 1 : c === 'due-soon' ? 2 : 3;
   }
-  // Два тумблера, а не сегмент (Павел 14.09.2026: «просто тумблер»): каждый
-  // включается сам по себе, оба вместе — «важные и срочные», четверка матрицы.
-  function prioBtns() {
-    return [['imp', 'Важные', 'bolt'], ['urg', 'Срочные', 'clock']].map(function (m) {
-      return '<button type="button" class="qchip prio-tg prio-' + m[0] + (prioOn(m[0]) ? ' on' : '') + '" data-prio="' + m[0] + '" aria-pressed="' + (prioOn(m[0]) ? 'true' : 'false') + '">' +
-        ic(m[2], 12) + m[1] + '</button>';
-    }).join('');
+  function prioKey(t) {
+    var m = state.taskPrio || '';
+    if (!m) return 0;
+    var u = urgRank(t), i = t.important ? 0 : 1;
+    return m === 'urg' ? u * 2 + i : i * 4 + u;
   }
-  function prioSeg() { return '<div class="prio-seg">' + prioBtns() + '</div>'; }
+  function prioCmp(a, b) { return prioKey(a) - prioKey(b); }
+  function prioSort(list) {
+    if (!state.taskPrio) return list;
+    return list.map(function (t, i) { return [t, i]; })
+      .sort(function (x, y) { return prioCmp(x[0], y[0]) || x[1] - y[1]; })
+      .map(function (p) { return p[0]; });
+  }
+  function prioSeg() {
+    return '<span class="al-selwrap prio-sel' + (state.taskPrio ? ' on' : '') + '"><select class="al-sel sm" id="prio-sel" aria-label="Порядок задач">' +
+      PRIO_MODES.map(function (m) {
+        return '<option value="' + m[0] + '"' + ((state.taskPrio || '') === m[0] ? ' selected' : '') + '>' + m[1] + '</option>';
+      }).join('') + '</select></span>';
+  }
   function wirePrio(view) {
-    Array.prototype.forEach.call(view.querySelectorAll('[data-prio]'), function (b) {
-      b.addEventListener('click', function () {
-        var k = b.getAttribute('data-prio'), on = prioSet();
-        if (on.indexOf(k) >= 0) on.splice(on.indexOf(k), 1); else on.push(k);
-        state.taskPrio = on.join(','); saveUi(); renderView();
-      });
-    });
+    var sel = view.querySelector('#prio-sel');
+    if (sel) sel.addEventListener('change', function () { state.taskPrio = sel.value; saveUi(); renderView(); });
   }
-  function deptChips(withPrio) {
+  function deptChips() {
     var all = [''].concat(DEPT_LIVE);
-    // withPrio: на телефоне кнопки важности едут в этой же прокручиваемой ленте
-    // (.dept-prio), чтобы не плодить ряды контролов; на десктопе их скрывает CSS,
-    // там стоит отдельный prioSeg().
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
       return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
-    }).join('') + (withPrio ? '<span class="dept-prio">' + prioBtns() + '</span>' : '') + '</div>';
+    }).join('') + '</div>';
   }
   function wireDeptChips(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
