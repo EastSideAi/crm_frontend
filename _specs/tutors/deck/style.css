@@ -193,7 +193,7 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .pt-x{font-size:30px;color:#5C6E93;text-align:right;transition:transform .25s}
 .pt.open .pt-x{transform:rotate(45deg)}
 .pt-b{max-height:0;overflow:hidden;transition:max-height .32s ease}
-.pt.open .pt-b{max-height:300px}
+.pt.open .pt-b{max-height:380px}
 .pt-b ul{padding:0 0 26px 144px}
 .pt-b li{list-style:none;font-size:27px;color:#8FA1C4;padding:7px 0;display:flex;gap:14px}
 .pt-b li::before{content:'✓';color:#2B8FFF}
@@ -374,3 +374,8 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 .crow label.chk input{accent-color:var(--sapphire);width:17px;height:17px;flex:none}
 .coef .seg{flex-wrap:wrap}
 @media (max-width:820px){.coef{grid-template-columns:1fr}}
+
+/* обязательный пункт чек-листа: сказать семье. Выделен, потому что именно
+   его раньше не делали, а брошенность у семьи берется отсюда */
+.pt-b li.say{color:#E6ECF7}
+.pt-b li.say::before{color:#F5C84C}

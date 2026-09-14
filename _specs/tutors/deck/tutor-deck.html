@@ -197,7 +197,7 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .pt-x{font-size:30px;color:#5C6E93;text-align:right;transition:transform .25s}
 .pt.open .pt-x{transform:rotate(45deg)}
 .pt-b{max-height:0;overflow:hidden;transition:max-height .32s ease}
-.pt.open .pt-b{max-height:300px}
+.pt.open .pt-b{max-height:380px}
 .pt-b ul{padding:0 0 26px 144px}
 .pt-b li{list-style:none;font-size:27px;color:#8FA1C4;padding:7px 0;display:flex;gap:14px}
 .pt-b li::before{content:'✓';color:#2B8FFF}
@@ -378,12 +378,17 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 .crow label.chk input{accent-color:var(--sapphire);width:17px;height:17px;flex:none}
 .coef .seg{flex-wrap:wrap}
 @media (max-width:820px){.coef{grid-template-columns:1fr}}
+
+/* обязательный пункт чек-листа: сказать семье. Выделен, потому что именно
+   его раньше не делали, а брошенность у семьи берется отсюда */
+.pt-b li.say{color:#E6ECF7}
+.pt-b li.say::before{color:#F5C84C}
 </style>
 </head><body>
 
 <div class="top">
   <h1>Тьюторство 2026/27</h1>
-  <span class="note">33 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
+  <span class="note">34 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
 </div>
 
 <div class="tabs" role="tablist">
@@ -634,19 +639,42 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title sm rise d1">Точка закрыта: деньги ушли</h2>
     <div class="pts rise d2" id="pts">
       <div class="pt open"><div class="pt-h"><div class="pt-n">13%</div><div class="pt-t">Стратегия года</div><div class="pt-s">4 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Консультация проведена, семья на связи</li><li>Вузы А, Б и С названы семье и внесены в карточку</li><li>План усиления профиля выставлен по месяцам</li></ul></div></div>
+        <div class="pt-b"><ul><li>Консультация проведена, семья на связи</li><li>Вузы А, Б и С названы семье и внесены в карточку</li><li>План усиления профиля выставлен по месяцам</li><li class="say">Семье сказано: что решили, что дальше, к какому числу</li></ul></div></div>
       <div class="pt"><div class="pt-h"><div class="pt-n">20%</div><div class="pt-t">Профиль и документы</div><div class="pt-s">6 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Пакет документов принят вами в песочнице</li><li>Мотивационное и рекомендательные письма приняты</li><li>Языковой и CSCA идут по вашему же плану</li></ul></div></div>
+        <div class="pt-b"><ul><li>Пакет документов принят вами в песочнице</li><li>Мотивационное и рекомендательные письма приняты</li><li>Языковой и CSCA идут по вашему же плану</li><li class="say">Семье сказано: пакет собран, чего не хватает, когда подаем</li></ul></div></div>
       <div class="pt"><div class="pt-h"><div class="pt-n">13%</div><div class="pt-t">Подачи приняты</div><div class="pt-s">4 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Все заявки проверены и подтверждены вами</li><li>Ни одна не вернулась из вуза на исправление</li><li>Сроки подач соблюдены</li></ul></div></div>
+        <div class="pt-b"><ul><li>Все заявки проверены и подтверждены вами</li><li>Ни одна не вернулась из вуза на исправление</li><li>Сроки подач соблюдены</li><li class="say">Семье сказано: куда подали, когда ждать ответ</li></ul></div></div>
       <div class="pt res"><div class="pt-h"><div class="pt-n">33%</div><div class="pt-t">Результат</div><div class="pt-s">до 10 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Зачисление и JW202 на руках</li><li>Письмо вуза с условиями гранта в карточке</li><li>Условия разобраны с семьей: что покрыто, что нет</li></ul></div></div>
+        <div class="pt-b"><ul><li>Зачисление и JW202 на руках</li><li>Письмо вуза с условиями гранта в карточке</li><li>Условия разобраны с семьей голосом: что покрыто, что нет</li><li class="say">Семье сказано: итог и что дальше по визе</li></ul></div></div>
       <div class="pt"><div class="pt-h"><div class="pt-n">20%</div><div class="pt-t">Заезд и первый месяц</div><div class="pt-s">6 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Виза, билеты, регистрация по прилету</li><li>Заселение подтверждено</li><li>Связь с учеником через месяц после заезда</li></ul></div></div>
+        <div class="pt-b"><ul><li>Виза, билеты, регистрация по прилету</li><li>Заселение подтверждено</li><li>Связь с учеником через месяц после заезда</li><li class="say">Семье сказано: ребенок на месте, вот контакты на месте</li></ul></div></div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">15 · нажмите на точку</div>
+  <div class="srcline">15 · нажмите на точку · золотом отмечен обязательный пункт</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Чек-лист есть и у администратора">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Не только у вас</div>
+    <h2 class="title sm rise d1">На каждом этапе два чек-листа, и агент следит за обоими</h2>
+    <div class="two-col rise d2">
+      <div><h4>Ваш чек-лист</h4><ul class="stay">
+        <li>Стратегия, решения, разговор с семьей</li>
+        <li>Приемка того, что сделал агент</li>
+        <li>Доведение до заезда и первый месяц</li>
+      </ul></div>
+      <div><h4>Чек-лист администратора</h4><ul class="stay">
+        <li>Документы, переводы, заверение, подрядчики</li>
+        <li>Кабинеты вузов, отправка заявок, сборы</li>
+        <li>Деньги семьи, визовый центр, страховка, общежитие</li>
+      </ul></div>
+    </div>
+    <p class="small rise d3" style="margin-top:40px">Агент закрывает только то, что видно в данных: документ загружен, заявка отправлена, сообщение семье ушло. «Разобрал условия голосом» за вас он не поставит. Два напоминания, потом руководителю — третьего сообщения подряд не будет.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">16</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Сила гранта">
@@ -664,7 +692,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:36px">Вуз уровня А из этой таблицы убран совсем: балл Duolingo ставите не вы. Он переехал в премию сверху, а спрос за балл переезжает к тем, кто готовит к Duolingo и CSCA.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">16 · при полной вовлеченности</div>
+  <div class="srcline">17 · при полной вовлеченности</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Когда решали не вы">
@@ -687,7 +715,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">17</div>
+  <div class="srcline">18</div>
 </section>
 
 <section class="slide" id="s-eng" data-part="Деньги" data-title="Вовлеченность: четыре метрики">
@@ -708,7 +736,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">18 · подвигайте ползунки · 90 баллов и выше дают 1,00</div>
+  <div class="srcline">19 · подвигайте ползунки · 90 баллов и выше дают 1,00</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Четкие критерии по каждой метрике">
@@ -725,7 +753,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:32px">Коэффициент фиксируется на момент закрытия каждой точки и применяется к деньгам этой точки. Плохой месяц не портит весь год, хороший не выкупает год плохой работы.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">19</div>
+  <div class="srcline">20</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Чего в коэффициенте нет вовсе">
@@ -748,7 +776,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="sub rise d3" style="margin-top:44px;max-width:1500px">Отвечали вовремя, закрывали точки в срок, держали семью в курсе и не тормозили приемки — коэффициент 1,00 даже у ученика, который никуда не поступил. Это 20 000 из 30 000, и ни рубля из них не снимает решение вуза.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">20</div>
+  <div class="srcline">21</div>
 </section>
 
 <section class="slide" id="s-ladder" data-part="Деньги" data-title="Лестница заработка">
@@ -763,7 +791,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <div class="ladder rise d3" id="ladder"></div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">21 · бакалавриат, ставка 30 000, вовлеченность двигает только первые 20 000</div>
+  <div class="srcline">22 · бакалавриат, ставка 30 000, вовлеченность двигает только первые 20 000</div>
 </section>
 
 <section class="slide" id="s-chart" data-part="Деньги" data-title="График роста за сезон">
@@ -787,7 +815,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">22 · подвигайте ползунки</div>
+  <div class="srcline">23 · подвигайте ползунки</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Когда какая выплата">
@@ -806,7 +834,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:28px">Не одним платежом в июле, как раньше. Расчет за прошлый месяц собирается до 3 числа, до 5 виден в кабинете построчно, до 10 приходят деньги: закрыли точку 28 января — получите до 10 февраля.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">23</div>
+  <div class="srcline">24</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Бонус за скорость отменяется">
@@ -823,7 +851,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <div class="cap">тьюторов получили бонус за скорость за все время, что он существовал</div></div></div>
     </div>
   </div>
-  <div class="srcline">24</div>
+  <div class="srcline">25</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Кабинет тьютора">
@@ -838,7 +866,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">25</div>
+  <div class="srcline">26</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Часть третья. Вы можете продавать">
@@ -848,7 +876,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title rise d1">Продавать можно, но не обязательно</h2>
     <div class="rule"></div>
   </div>
-  <div class="srcline">26</div>
+  <div class="srcline">27</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Две роли: чаты и диагностика">
@@ -863,7 +891,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">Ваша платная консультация с подбором вузов и есть диагностика, только глубже. Отдельной сетки для тьюторов мы не заводим.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">27</div>
+  <div class="srcline">28</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Смены на чатах: 30 000 в месяц">
@@ -882,7 +910,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">28 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
+  <div class="srcline">29 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Как делится процент с продажи">
@@ -899,7 +927,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:40px">Процент считается по факту поступления денег от семьи. Рассрочка идет частями вслед за платежами.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">29 · цены тарифов из портала</div>
+  <div class="srcline">30 · цены тарифов из портала</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Сколько выходит в месяц">
@@ -915,7 +943,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">При двух сделках выходит 40 176, 49 200 и 55 600. При десяти: 80 880, 126 000 и 158 000. Оплата диагностик идет сверх этого.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">30 · при полной загрузке смен и коэффициенте 1,0</div>
+  <div class="srcline">31 · при полной загрузке смен и коэффициенте 1,0</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Оплата диагностик">
@@ -936,7 +964,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">31</div>
+  <div class="srcline">32</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что выходит за сезон у тьютора">
@@ -952,7 +980,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">Вовлеченность 0,9, две консультации на ученика, процент с договоров по тарифу Плюс. Тот, кто продажи не берет, за 20 учеников получает 534 000, это 44 500 в месяц: чтобы остаться при прошлогодних деньгах без продаж, надо вести примерно на четверть больше учеников.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">32</div>
+  <div class="srcline">33</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что дальше до начала кампании">
@@ -974,7 +1002,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">33</div>
+  <div class="srcline">34</div>
 </section>
 
     </div></div></div>
