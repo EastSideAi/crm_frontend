@@ -1165,6 +1165,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-archive#m-hide:hover svg { color: var(--red); }
 .m-archive#m-unhide:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
 .m-archive#m-unhide:hover svg { color: var(--blue); }
+/* «Войти как» — кабинет клиента его глазами. Уводит из CRM, поэтому тон синий,
+   как у всего, что открывается на стороне клиента, а не красный, как архив. */
+.m-archive#m-sublogin { margin-right: auto; }
+.m-archive#m-sublogin:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
+.m-archive#m-sublogin:hover svg { color: var(--blue); }
 
 /* ── секции БЕЗ верхней полоски (воздух + подзаголовок) ── */
 .m-sec { margin-top: 30px; }
@@ -3544,6 +3549,7 @@ button.tr-crumb:hover { color: var(--blue); }
 @keyframes dotsAnim { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
 /* статус-меню (клик по пилюле в таблице) */
+#smenu.ddmenu--over-modal { z-index: 90; }   /* выпадашка из карточки — поверх нее (.modal z-index 81) */
 #smenu { position: fixed; z-index: 70; background: #fff; border: 1px solid var(--line-2);
   border-radius: 14px; padding: 6px; box-shadow: 0 14px 40px -16px rgba(15,19,32,.3);
   display: flex; flex-direction: column; gap: 1px; min-width: 188px; }
