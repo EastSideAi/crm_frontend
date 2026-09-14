@@ -15149,6 +15149,20 @@
       spendHits(ch) +
       '</div>';
   }
+  /* Пометка «чем платили»: с расчетного счета или с карты Виталия. На карточных
+     строках видно, что деньги надо вернуть Виталию. Клик переключает (только под
+     правом на ведомость); без права — тихий бейдж только у карточных, чтобы не шуметь. */
+  function spendViaChip(it, canFix) {
+    var card = it.paid_via === 'card';
+    var lbl = card ? 'с карты, вернуть Виталию' : 'с Р/С';
+    var cls = 'fsp-via' + (card ? ' card' : '');
+    if (canFix) {
+      return '<button class="qchip ' + cls + '" data-spvia="' + esc(it.id) +
+        '" data-via="' + (card ? 'card' : 'rs') + '" title="Переключить: чем платили">' +
+        esc(lbl) + '</button>';
+    }
+    return card ? '<span class="qchip ' + cls + '">' + esc(lbl) + '</span>' : '';
+  }
   function renderFinSpend(view) {
     if (!FIN.spend) {
       if (FIN.err) return finErrView(view);
@@ -15160,7 +15174,7 @@
     function fa(s) { return (sum[s] && sum[s].amount) || 0; }
     function fc(s) { return (sum[s] && sum[s].count) || 0; }
 
-    var bar = statBar([
+    var barItems = [
       { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден')),
         sub: 'ушло по расходам' },
       { label: 'Подтверждено', value: finRub(fa('подтвержден')),
@@ -15169,7 +15183,12 @@
         sub: fc('проведен') + ' закрыть нечем' },
       { label: 'Запланировано', value: finRub(fa('запланирован')),
         sub: 'намечено, еще не ушло' },
-    ]);
+    ];
+    // Показываем «вернуть Виталию», только когда есть карточные траты: он оплачивает
+    // часть с фонда своей картой, компания возвращает. Ноль читался бы как долг.
+    if (S.reimburse_card) barItems.push({ label: 'Вернуть Виталию',
+      value: finRub(S.reimburse_card), sub: 'оплачено с его карты' });
+    var bar = statBar(barItems);
 
     var inf;
     if (checks.length) {
@@ -15205,7 +15224,8 @@
           '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
-          '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
+          '<span class="fo-st">' + spendStateChip(it.state) + spendViaChip(it, canFix) +
+            act + '</span>' +
         '</div>';
       }).join('');
       var tots = 'план ' + finRub(a['запланирован']) + ' · факт ' +
@@ -15227,6 +15247,14 @@
     view.innerHTML = bar + inf + cards;
     Array.prototype.forEach.call(view.querySelectorAll('[data-spdoc]'), function (b) {
       b.addEventListener('click', function () { spendDocForm(b.getAttribute('data-spdoc')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
+      b.addEventListener('click', function () {
+        var next = b.getAttribute('data-via') === 'card' ? 'rs' : 'card';
+        finDo('/admin/api/fin/operation/' + b.getAttribute('data-spvia') + '/paid-via',
+          'POST', { via: next },
+          next === 'card' ? 'Отмечено: с карты Виталия.' : 'Отмечено: с расчетного счета.');
+      });
     });
     pageAnim(view);
   }

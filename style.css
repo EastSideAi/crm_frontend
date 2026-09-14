@@ -6021,6 +6021,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
+.fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
+.fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }
+button.fsp-via { cursor: pointer; }
 
 /* Прямые расходы: у блока свой заголовок с итогом и своей кнопкой, между блоками
    воздух больше, чем внутри — блоки читаются как отдельные направления. */
