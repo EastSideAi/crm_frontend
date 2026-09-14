@@ -1007,6 +1007,9 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
   .tb-goals { display: none; }
   .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
+  /* Важность на телефоне живет внутри прокручиваемой ленты направлений: один ряд вместо двух. */
+  .wk-top > .prio-seg { display: none; }
+  .dept-prio { display: inline-flex; gap: 3px; margin-left: 6px; padding-left: 9px; border-left: 1px solid var(--line-2); flex: none; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -2798,6 +2801,9 @@ button.tr-crumb:hover { color: var(--blue); }
    по клику на его месте встает выбор человека. */
 .tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
+.tsk-mwho.tsk-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
+.tsk-mwho.tsk-edit svg { color: var(--blue); }
+.tsk-sec[hidden] { display: none; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
@@ -3193,8 +3199,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-editform .al-sel { background: #fff; }
 .tsk-editform .tsk-resrow { justify-content: flex-end; }
 .tsk-editform .tsk-resrow .al-cancel { margin-left: 0; }
-.prio-seg button { display: inline-flex; align-items: center; gap: 5px; }
-.prio-seg button svg { width: 11px; height: 11px; color: var(--amber-ink); }
+.prio-seg button, .dept-prio button { display: inline-flex; align-items: center; gap: 5px; }
+.prio-seg button svg, .dept-prio button svg { width: 11px; height: 11px; color: var(--amber-ink); }
+/* Соседние сегменты в шапке плана: внешний зазор больше внутреннего, иначе восемь пилюль читаются одной лентой. */
+.wk-top > .pay-seg + .pay-seg { margin-left: 8px; }
+.dept-prio { display: none; }
 .tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .tsk-picked:empty { display: none; }
 .tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;

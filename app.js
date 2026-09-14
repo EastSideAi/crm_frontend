@@ -6121,8 +6121,7 @@
      карточек он покажет (включая «Сделано»), а не «живых»: иначе чип и доска
      считают разное. Прогресс по шагам — дугой, точное значение в подсказке.
      Цель без единой задачи на доске — пустой фильтр, а не информация: чип не показываем. */
-  function boardGoalOpts(dept) {
-    var list = dept.tasks;
+  function boardGoalOpts(dept, list) {
     var of = function (id) { return list.filter(function (t) { return id === 'none' ? !t.parent_id : t.parent_id === id; }); };
     var goals = dept.goals.filter(function (g) { return of(g.id).length; }).sort(function (a, b) {
       return of(b.id).length - of(a.id).length || String(a.title).localeCompare(String(b.title), 'ru');
@@ -6134,8 +6133,8 @@
     if (of('none').length) opts.push({ id: 'none', title: 'Без цели', n: of('none').length, pct: null });
     return opts;
   }
-  function boardGoalStrip(dept) {
-    var opts = boardGoalOpts(dept);
+  function boardGoalStrip(dept, list) {
+    var opts = boardGoalOpts(dept, list);
     var on = function (o) { return String(state.boardGoal) === String(o.id); };
     var chips = opts.map(function (o) {
       return '<button type="button" class="qchip tb-gchip' + (on(o) ? ' on' : '') + '" data-bgoal="' + o.id + '"' +
@@ -6147,8 +6146,8 @@
     return '<div class="tb-goals">' + chips + '</div>';
   }
   // На телефоне полоса целей не помещается в шапку — та же выборка одним селектом рядом с поиском.
-  function boardGoalSelect(dept) {
-    return '<span class="al-selwrap tb-gsel"><select class="al-sel sm" id="tb-gsel">' + boardGoalOpts(dept).map(function (o) {
+  function boardGoalSelect(dept, list) {
+    return '<span class="al-selwrap tb-gsel"><select class="al-sel sm" id="tb-gsel">' + boardGoalOpts(dept, list).map(function (o) {
       return '<option value="' + o.id + '"' + (String(state.boardGoal) === String(o.id) ? ' selected' : '') + '>' +
         esc(o.title) + (o.pct == null ? '' : ' · ' + o.pct + '%') + (o.n ? ' (' + o.n + ')' : '') + '</option>';
     }).join('') + '</select></span>';
@@ -6181,13 +6180,14 @@
       return;
     }
     var gave = dept ? 'dept' : state.boardWho === 'gave';
-    var list = dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    // base — то, что доска покажет без отбора по цели: по нему же считают чипы целей.
+    var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine).filter(prioPass);
+    if (q) base = base.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
+    var list = base;
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
     }
-    list = list.filter(prioPass);
-    var q = (state.taskQ || '').toLowerCase().trim();
-    if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var order = function (a, b) {
       if (!!a.overdue !== !!b.overdue) return a.overdue ? -1 : 1;
       if (!a.due_at || !b.due_at) return a.due_at ? -1 : b.due_at ? 1 : 0;
@@ -6218,13 +6218,13 @@
     var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
-    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips(true) + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        (dept ? boardGoalSelect(state.myboard.dept) : '') + '</div>' +
+        (dept ? boardGoalSelect(state.myboard.dept, base) : '') + '</div>' +
       how +
-      (dept ? boardGoalStrip(state.myboard.dept) : '') +
+      (dept ? boardGoalStrip(state.myboard.dept, base) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
     wirePlanMode(view); wireDeptChips(view); wirePrio(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
@@ -6412,7 +6412,16 @@
       : '';
 
     var body;
-    if (!tasks.length && !accept) {
+    // Фильтр важных/срочных спрятал все — это не «неделя пустая», и «Собрать
+    // неделю» тут предлагать нельзя: задачи есть, их прячет фильтр.
+    var prioEmpty = !!state.taskPrio && !tasks.length && (w.tasks || []).length > 0;
+    if (prioEmpty) {
+      act = '';
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">' + (state.taskPrio === 'imp' ? 'Важных задач на этой неделе нет' : 'Срочных задач на этой неделе нет') + '</div>' +
+        '<div class="wk-empty-s">Остальные задачи прячет фильтр.</div>' +
+        '<button class="qchip" id="wk-prio-off">Показать все</button></div>';
+    } else if (!tasks.length && !accept) {
       body = '<div class="wk-empty">' +
         '<div class="wk-empty-t">' + (sh < 0 ? 'На этой неделе ничего не было' : 'Неделя пустая') + '</div>' +
         (sh >= 0
@@ -6425,8 +6434,8 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    var head = planModeSeg() + deptChips() + prioSeg();
-    if (state.planMode === 'day' && sh === 0 && !q) {
+    var head = planModeSeg() + deptChips(true) + prioSeg();
+    if (state.planMode === 'day' && sh === 0 && !q && !prioEmpty) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
       var wd = state.taskPrio ? Object.assign({}, w, { tasks: tasks }) : w;
@@ -6450,6 +6459,7 @@
     }
 
     wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view);
+    if (el('wk-prio-off')) el('wk-prio-off').addEventListener('click', function () { state.taskPrio = ''; saveUi(); renderView(); });
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -7267,23 +7277,27 @@
     var c = dueLabel(t).cls;
     return !!t.overdue || c === 'due-over' || c === 'due-now' || c === 'due-soon';
   }
-  function prioSeg() {
-    return '<div class="pay-seg prio-seg">' + [['', 'Все'], ['imp', 'Важные'], ['urg', 'Срочные']].map(function (m) {
+  function prioBtns() {
+    return [['', 'Все'], ['imp', 'Важные'], ['urg', 'Срочные']].map(function (m) {
       return '<button type="button" class="' + ((state.taskPrio || '') === m[0] ? 'on' : '') + '" data-prio="' + m[0] + '">' +
         (m[0] === 'imp' ? ic('bolt', 11) : '') + m[1] + '</button>';
-    }).join('') + '</div>';
+    }).join('');
   }
+  function prioSeg() { return '<div class="pay-seg prio-seg">' + prioBtns() + '</div>'; }
   function wirePrio(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-prio]'), function (b) {
       b.addEventListener('click', function () { state.taskPrio = b.getAttribute('data-prio') || ''; saveUi(); renderView(); });
     });
   }
-  function deptChips() {
+  function deptChips(withPrio) {
     var all = [''].concat(DEPT_LIVE);
+    // withPrio: на телефоне кнопки важности едут в этой же прокручиваемой ленте
+    // (.dept-prio), чтобы не плодить ряды контролов; на десктопе их скрывает CSS,
+    // там стоит отдельный prioSeg().
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
       return '<button type="button" class="' + ((state.taskDept || '') === d ? 'on' : '') + '" data-dept="' + d + '">' +
         (d ? esc(DEPTS[d]) : 'Все') + '</button>';
-    }).join('') + '</div>';
+    }).join('') + (withPrio ? '<span class="dept-prio">' + prioBtns() + '</span>' : '') + '</div>';
   }
   function wireDeptChips(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
@@ -8170,7 +8184,7 @@
           // Название, суть и критерий правятся тут же (Павел 14.09.2026: «один раз
           // поставил, потом тяжело отредактировать»). Закрытую не правим: история.
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
-            ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('note', 12) + 'изменить</button>'
+            ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('pen', 12) + 'изменить</button>'
             : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
@@ -8197,8 +8211,8 @@
               '<button class="bp" id="tk-eok">Сохранить</button>' +
             '</div>' +
           '</div>' +
-          (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
-          (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          (t.details ? '<div class="tsk-sec" data-editsec><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
+          (t.result_expect ? '<div class="tsk-sec tsk-crit" data-editsec><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
           // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
           // приемка это сравнение двух блоков, а не поиск доказательств в ленте.
           (t.result_text || files.length || (isAssignee && t.status !== 'cancel')
@@ -8357,10 +8371,15 @@
       var editB = el('tk-edit'), editF = el('tk-editf');
       if (editB) {
         var setEdit = function (on) {
+          // setRes('') возвращает футер, поэтому сначала он, потом прячем.
+          if (on) setRes('');
           editF.hidden = !on;
           var footActs = ov.querySelector('.tsk-acts');
           if (footActs) footActs.hidden = !!on;
-          if (on) { setRes(''); body.scrollTop = 0; el('tk-etitle').focus(); }
+          // Пока правим, старые «Что нужно сделать» / «Что считается сделанным»
+          // прячем: два одинаковых текста рядом, и не видно, какой живой.
+          Array.prototype.forEach.call(ov.querySelectorAll('[data-editsec]'), function (x) { x.hidden = !!on; });
+          if (on) { body.scrollTop = 0; el('tk-etitle').focus(); }
         };
         editB.addEventListener('click', function () { setEdit(editF.hidden); });
         el('tk-ecx').addEventListener('click', function () { setEdit(false); });
