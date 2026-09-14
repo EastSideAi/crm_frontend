@@ -1007,6 +1007,7 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
   .tb-goals { display: none; }
   .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
+  .prio-sel { margin-left: 0; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -2803,6 +2804,9 @@ button.tr-crumb:hover { color: var(--blue); }
    по клику на его месте встает выбор человека. */
 .tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
+.tsk-mwho.tsk-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
+.tsk-mwho.tsk-edit svg { color: var(--blue); }
+.tsk-sec[hidden] { display: none; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
@@ -3193,6 +3197,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
 .tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
 .tsk-resrow .bp { height: 36px; }
+/* Редактор задачи: та же панель, что у сдачи результата, поля формы как в «Новой задаче». */
+.tsk-editform .al-f { gap: 5px; }
+.tsk-editform .al-sel { background: #fff; }
+.tsk-editform .tsk-resrow { justify-content: flex-end; }
+.tsk-editform .tsk-resrow .al-cancel { margin-left: 0; }
+/* Порядок задач: системный селект .al-sel.sm по содержимому, не во всю ширину.
+   Выбранный порядок подсвечен синим тинтом, как тумблер периода .rh-onoff. */
+.prio-sel { display: inline-block; width: auto; margin-left: 10px; }
+.prio-sel .al-sel { width: auto; }
+.prio-sel.on .al-sel { background: var(--blue-tint); color: var(--blue); }
+/* Соседние сегменты в шапке плана: внешний зазор больше внутреннего, иначе восемь пилюль читаются одной лентой. */
+.wk-top > .pay-seg + .pay-seg { margin-left: 8px; }
 .tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .tsk-picked:empty { display: none; }
 .tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
