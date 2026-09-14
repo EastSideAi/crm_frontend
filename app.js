@@ -2070,7 +2070,7 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy_review'] },
@@ -23664,6 +23664,76 @@
     return { id: id, lead: lead, d: d, base: base, crm: crm };
   }
 
+  /* ── «Войти как»: кабинет глазами клиента ─────────────────────────────────
+     Семья пишет «у меня ничего не видно», а мы видим только CRM — другой экран и
+     другие данные. Кнопка открывает платформу ровно в том виде, в каком ее видит
+     ученик или мама. Сервер выдает часовой токен ТОЛЬКО на просмотр и пишет каждый
+     заход в журнал (backend routers/sublogin.py) — менять в чужом кабинете нельзя
+     ничего, иначе от имени ребенка в чат тьютору ушло бы сообщение.
+
+     Список аккаунтов семьи держим готовым к нажатию (грузим при открытии карточки):
+     браузер режет window.open, случившийся ПОСЛЕ ответа сервера, и человек видел бы
+     «кнопка не работает». Холодный путь — открыть пустую вкладку сразу по жесту и
+     довести ее до адреса, когда сервер ответит. */
+  var slAccs = {};
+
+  function slLoad(id) {
+    if (slAccs[id]) return Promise.resolve(slAccs[id]);
+    return api('/admin/api/sublogin/case/' + id).then(function (r) {
+      slAccs[id] = (r && r.accounts) || [];
+      return slAccs[id];
+    });
+  }
+
+  function slClick(id, anchor) {
+    if (slAccs[id]) return slPick(id, anchor, null);
+    var w = window.open('', '_blank');
+    slLoad(id).then(function () { slPick(id, anchor, w); }).catch(function () {
+      if (w) w.close();
+      showToast('Не удалось открыть — проверь сеть');
+    });
+  }
+
+  function slPick(id, anchor, win) {
+    var accs = slAccs[id] || [];
+    if (!accs.length) {
+      if (win) win.close();
+      return showToast('Никто из семьи еще не завел кабинет', 'входить не под кем');
+    }
+    if (accs.length === 1) return slGo(id, accs[0], win || window.open('', '_blank'));
+    if (win) win.close();
+    openDropdown(anchor, accs.map(function (a) {
+      return { v: a.account_id, label: (a.name || 'без имени') + ' — ' + a.relation_ru };
+    }), '', function (v) {
+      var acc = accs.filter(function (a) { return a.account_id === v; })[0];
+      if (acc) slGo(id, acc, window.open('', '_blank'));
+    });
+    // Меню открыто ИЗ карточки, а она сама лежит поверх страницы (z-index 81):
+    // на своей обычной высоте выпадашка оказывалась под ней и выглядела как
+    // «кнопка не сработала». И раскрываем ее ВВЕРХ: кнопка стоит в подвале
+    // карточки, вниз места нет и меню ложилось прямо на нее.
+    var m = el('smenu');
+    if (m) {
+      m.classList.add('ddmenu--over-modal');
+      m.style.top = Math.max(8, anchor.getBoundingClientRect().top - m.offsetHeight - 6) + 'px';
+    }
+  }
+
+  function slGo(caseId, acc, win) {
+    apiSend('/admin/api/sublogin/start', 'POST',
+      { account_id: acc.account_id, case_id: caseId },
+      function (r) {
+        if (!r || !r.url) { if (win) win.close(); return showToast('Не удалось открыть кабинет'); }
+        if (win) win.location = r.url; else window.open(r.url, '_blank');
+        showToast('Кабинет открыт: ' + (acc.name || 'клиент'), 'только просмотр, менять нельзя');
+      },
+      function (code) {
+        if (win) win.close();
+        showToast(code === 403 ? 'Войти как клиент может только супер-админ'
+                               : 'Не удалось открыть кабинет');
+      });
+  }
+
   function renderDrawer(keepScroll) {
     var modal = el('modal');
     var id = state.drawerId;
@@ -23756,6 +23826,10 @@
         '<div id="m-side"></div>' +
       '</div>' +
       '<div class="m-foot">' +
+        (can('sublogin')
+          ? '<button class="m-archive" id="m-sublogin" title="Открыть кабинет глазами клиента — то же, что видит он. Только просмотр: менять там ничего нельзя">' +
+            ic('ext', 14) + 'Войти как</button>'
+          : '') +
         (crm.hidden
           ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
           : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
@@ -23768,6 +23842,13 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var slBtn = el('m-sublogin');
+    if (slBtn) {
+      // stopPropagation: общий обработчик документа гасит всплывающие меню по клику
+      // где угодно, и выбор «ученик/родитель» закрывался бы в тот же миг.
+      slBtn.addEventListener('click', function (e) { e.stopPropagation(); slClick(id, slBtn); });
+      slLoad(id).catch(function () {});   // к нажатию список уже на руках
+    }
     var lnk = el('m-link');
     if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
     var mp = el('m-prev'), mn = el('m-next');
