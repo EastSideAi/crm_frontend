@@ -6418,7 +6418,7 @@
     if (prioEmpty) {
       act = '';
       body = '<div class="wk-empty">' +
-        '<div class="wk-empty-t">' + (state.taskPrio === 'imp' ? 'Важных задач на этой неделе нет' : 'Срочных задач на этой неделе нет') + '</div>' +
+        '<div class="wk-empty-t">' + (prioOn('imp') && prioOn('urg') ? 'Важных и срочных задач на этой неделе нет' : prioOn('imp') ? 'Важных задач на этой неделе нет' : 'Срочных задач на этой неделе нет') + '</div>' +
         '<div class="wk-empty-s">Остальные задачи прячет фильтр.</div>' +
         '<button class="qchip" id="wk-prio-off">Показать все</button></div>';
     } else if (!tasks.length && !accept) {
@@ -7271,22 +7271,34 @@
   /* Важные и срочные первыми (Павел 14.09.2026). Две оси матрицы: важность —
      молния, срочность — срок: просрочено, сегодня или завтра. Фильтр общий для
      дня, недели и доски и запоминается, как срез направления. */
+  function prioSet() { return (state.taskPrio || '').split(',').filter(Boolean); }
+  function prioOn(k) { return prioSet().indexOf(k) >= 0; }
   function prioPass(t) {
-    if (!state.taskPrio) return true;
-    if (state.taskPrio === 'imp') return !!t.important;
-    var c = dueLabel(t).cls;
-    return !!t.overdue || c === 'due-over' || c === 'due-now' || c === 'due-soon';
+    var on = prioSet();
+    if (!on.length) return true;
+    if (on.indexOf('imp') >= 0 && !t.important) return false;
+    if (on.indexOf('urg') >= 0) {
+      var c = dueLabel(t).cls;
+      if (!(t.overdue || c === 'due-over' || c === 'due-now' || c === 'due-soon')) return false;
+    }
+    return true;
   }
+  // Два тумблера, а не сегмент (Павел 14.09.2026: «просто тумблер»): каждый
+  // включается сам по себе, оба вместе — «важные и срочные», четверка матрицы.
   function prioBtns() {
-    return [['', 'Все'], ['imp', 'Важные'], ['urg', 'Срочные']].map(function (m) {
-      return '<button type="button" class="' + ((state.taskPrio || '') === m[0] ? 'on' : '') + '" data-prio="' + m[0] + '">' +
-        (m[0] === 'imp' ? ic('bolt', 11) : '') + m[1] + '</button>';
+    return [['imp', 'Важные', 'bolt'], ['urg', 'Срочные', 'clock']].map(function (m) {
+      return '<button type="button" class="qchip prio-tg prio-' + m[0] + (prioOn(m[0]) ? ' on' : '') + '" data-prio="' + m[0] + '" aria-pressed="' + (prioOn(m[0]) ? 'true' : 'false') + '">' +
+        ic(m[2], 12) + m[1] + '</button>';
     }).join('');
   }
-  function prioSeg() { return '<div class="pay-seg prio-seg">' + prioBtns() + '</div>'; }
+  function prioSeg() { return '<div class="prio-seg">' + prioBtns() + '</div>'; }
   function wirePrio(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-prio]'), function (b) {
-      b.addEventListener('click', function () { state.taskPrio = b.getAttribute('data-prio') || ''; saveUi(); renderView(); });
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-prio'), on = prioSet();
+        if (on.indexOf(k) >= 0) on.splice(on.indexOf(k), 1); else on.push(k);
+        state.taskPrio = on.join(','); saveUi(); renderView();
+      });
     });
   }
   function deptChips(withPrio) {

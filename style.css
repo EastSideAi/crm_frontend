@@ -1009,7 +1009,8 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
   /* Важность на телефоне живет внутри прокручиваемой ленты направлений: один ряд вместо двух. */
   .wk-top > .prio-seg { display: none; }
-  .dept-seg .dept-prio { display: inline-flex; gap: 3px; margin-left: 6px; padding-left: 9px; border-left: 1px solid var(--line-2); flex: none; }
+  .dept-seg .dept-prio { display: inline-flex; gap: 5px; margin-left: 6px; padding-left: 9px; border-left: 1px solid var(--line-2); flex: none; align-items: center; }
+  .dept-seg .dept-prio .prio-tg { padding: 5px 10px; font-size: 12px; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -3199,8 +3200,17 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-editform .al-sel { background: #fff; }
 .tsk-editform .tsk-resrow { justify-content: flex-end; }
 .tsk-editform .tsk-resrow .al-cancel { margin-left: 0; }
-.prio-seg button, .dept-prio button { display: inline-flex; align-items: center; gap: 5px; }
-.prio-seg button svg, .dept-prio button svg { width: 11px; height: 11px; color: var(--amber-ink); }
+/* Тумблеры важности и срочности: системный .qchip, включенный — мягким тинтом
+   своей оси (амбер у важного, как чип в форме постановки; красный у срочного,
+   как срок «просрочена»), а не темной пилюлей: это фильтр, а не выбор. */
+.prio-seg { display: inline-flex; gap: 6px; align-self: center; margin-left: 10px; }
+.prio-tg { transition: background .15s, color .15s; }
+.prio-tg svg { width: 12px; height: 12px; }
+.prio-tg.prio-imp.on { background: var(--amber-soft); color: var(--amber-ink); border-color: transparent; }
+.prio-tg.prio-imp.on svg { color: var(--amber-ink); }
+.prio-tg.prio-urg.on { background: var(--red-soft); color: var(--red-ink); border-color: transparent; }
+.prio-tg.prio-urg.on svg { color: var(--red-ink); }
+.prio-tg.on:hover { filter: brightness(.97); }
 /* Соседние сегменты в шапке плана: внешний зазор больше внутреннего, иначе восемь пилюль читаются одной лентой. */
 .wk-top > .pay-seg + .pay-seg { margin-left: 8px; }
 .dept-prio { display: none; }
