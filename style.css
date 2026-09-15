@@ -7416,6 +7416,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   color: var(--ac-blue-d); display: grid; place-items: center; }
 .academy .ac-st { font-size: 15px; line-height: 1.65; color: #4A5160; }
 .academy .ac-st b { color: var(--ac-ink); font-weight: 700; }
+.academy .ac-sp { margin: 0; }
 .academy .ac-play { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 7px 14px 7px 11px;
   border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill); background: var(--ac-card);
   font: 600 13px 'Manrope', sans-serif; color: var(--ac-ink-2); cursor: pointer; transition: .15s; }

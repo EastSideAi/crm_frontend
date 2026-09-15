@@ -3968,7 +3968,7 @@
     var play = file ? '<button class="ac-play" type="button" data-src="' + esc(AC_VOICE_DIR + file) + '">' +
       ic('play', 15) + '<span>Слушать</span></button>' : '';
     return '<div class="ac-say"><div class="ac-sic">' + ic('chat', 14) + '</div>' +
-      '<div class="ac-st">' + sc.say + play + '</div></div>';
+      '<div class="ac-st"><p class="ac-sp">' + sc.say + '</p>' + play + '</div></div>';
   }
 
   function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
