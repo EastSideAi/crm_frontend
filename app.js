@@ -9995,7 +9995,8 @@
      Клиент без плана стоит отдельным сегментом, а не на первом этапе: «мы ему еще
      не собрали план» и «он только начал» — разные состояния, и смешивать их
      значило бы прятать дыру, ради которой этот экран и заводился. */
-  var MAP_NONE = 'none';   // сегмент «без плана» — не этап, отдельная колонка
+  var MAP_NONE = 'none';      // плана нет и этапа нет: мы этого человека не разложили
+  var MAP_NOPLAN = 'noplan';  // плана нет, а этап есть — по факту входа в кабинет
   /* Тарифы на карту приходят из продуктового портала, а не из своего списка в коде:
      портал — то место, где команда правит продукт (цены, наполнение, названия), и
      второй список неизбежно разъехался бы с ним. Флагман у нас один, «Поступление
@@ -10023,6 +10024,12 @@
     }).catch(function () { state._map = 'none'; if (state.page === 'roadmap') renderView(); });
   }
   function mapSeg(c) { return c.stage_key || MAP_NONE; }
+  /* «Плана нет» и «этапа нет» — разные дыры, и считать их надо по-разному.
+     Этап теперь стоит по факту входа в кабинет, поэтому человек без плана
+     спокойно попадает в «Доступ»: сводка, считавшая только бесэтапных, под
+     тарифным срезом показывала ноль, пока в списке под ней половина строк
+     помечена «плана нет». Считаем ровно тех, кого помечаем. */
+  function mapNoPlan(c) { return !c.has_plan; }
   /* Этапы под выбранный тариф: в Стандарте их 13, в Премиуме 16, и показывать
      команде этапы чужого тарифа — врать. Тариф не выбран — показываем все. */
   function mapStages() {
@@ -10030,6 +10037,20 @@
     var t = state.mapTariff;
     if (!t || t === '__none') return all;
     return all.filter(function (s) { return (s.tariffs || []).indexOf(t) >= 0; });
+  }
+  /* Путь строки меряется тарифом КЛИЕНТА, а не выбранным фильтром: на срезе
+     «все тарифы» стандартному клиенту иначе рисуется шестнадцать засечек, три из
+     которых к нему не относятся, и дошедший до конца выглядит недоделанным.
+     Раскладку держим в кэше: строк на экране сотни, а тарифов три. */
+  var _mapByTariff = {};
+  function stagesOf(c) {
+    var all = ((state._map || {}).stages) || [];
+    var t = c.tariff || '';
+    if (!t) return all;
+    if (_mapByTariff[t] && _mapByTariff[t].src === all) return _mapByTariff[t].list;
+    var list = all.filter(function (s) { return (s.tariffs || []).indexOf(t) >= 0; });
+    _mapByTariff[t] = { src: all, list: list };
+    return list;
   }
   /* Кабинет семьи одной строкой: кто заходил последним. Молчание дольше двух
      недель — повод обратить внимание, поэтому оно и подсвечено. */
@@ -10051,7 +10072,9 @@
     // тот момент, когда с ним говорят. Дольше суток гореть нельзя — через неделю
     // светилась бы половина таблицы, и гореть перестало бы значить что-либо.
     var fresh = first && (Date.now() - new Date(first).getTime()) < 86400000;
-    return { text: who + ' ' + ago(best) + ' назад', cold: days > 14, fresh: fresh };
+    // У свежего входа время не пишем: «впервые» и так значит «сегодня», а полная
+    // фраза рвала строку надвое. Точная минута есть в карточке.
+    return { text: fresh ? who : who + ' ' + ago(best) + ' назад', cold: days > 14, fresh: fresh };
   }
   /* skipSeg — тот же срез, но без фильтра по этапу: по нему считаются цифры на
      дорожке. Иначе клик по этапу схлопывал бы дорожку в один ненулевой сегмент. */
@@ -10059,7 +10082,9 @@
     var d = state._map || {}, list = (d.clients || []).slice();
     var q = (state.mapQ || '').trim().toLowerCase();
     return list.filter(function (c) {
-      if (!skipSeg && state.mapSeg && mapSeg(c) !== state.mapSeg) return false;
+      if (!skipSeg && state.mapSeg) {
+        if (state.mapSeg === MAP_NOPLAN ? !mapNoPlan(c) : mapSeg(c) !== state.mapSeg) return false;
+      }
       if (state.mapTariff === '__none' ? c.tariff : (state.mapTariff && c.tariff !== state.mapTariff)) return false;
       if (q && (c.name + ' ' + (c.owner_name || '')).toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -10088,14 +10113,24 @@
        пути, а те, кого мы по пути еще не разложили. В дорожке из шестнадцати
        сегментов он потерялся бы семнадцатым, и дыра в работе читалась бы как
        очередной этап. */
-    var gapN = byKey[MAP_NONE] || 0, gapOn = state.mapSeg === MAP_NONE;
+    var noPlanN = list.filter(mapNoPlan).length, noPlanOn = state.mapSeg === MAP_NOPLAN;
+    var lostN = byKey[MAP_NONE] || 0, lostOn = state.mapSeg === MAP_NONE;
     return '<div class="map-rail">' + rail + '</div>' +
-      '<button class="map-gap' + (gapOn ? ' on' : '') + (gapN ? '' : ' zero') +
-        '" data-seg="' + MAP_NONE + '" type="button"' + (gapN ? '' : ' disabled') + '>' +
-        '<span class="map-gap-n num">' + gapN + '</span>' +
+      '<button class="map-gap' + (noPlanOn ? ' on' : '') + (noPlanN ? '' : ' zero') +
+        '" data-seg="' + MAP_NOPLAN + '" type="button"' + (noPlanN ? '' : ' disabled') + '>' +
+        '<span class="map-gap-n num">' + noPlanN + '</span>' +
         '<span class="map-gap-t">без плана</span>' +
-        '<span class="map-gap-s">этап считать не по чему — план поступления еще не собран</span>' +
-      '</button>';
+        '<span class="map-gap-s">плана поступления нет; на дорожке они стоят по факту входа</span>' +
+      '</button>' +
+      /* Отдельная вещь: план есть, а этап по нему не читается (старый шаблон со
+         своими ключами). Таких обычно единицы, поэтому строка появляется только
+         когда они есть — иначе она каждый день объясняла бы пустоту. */
+      (lostN ? '<button class="map-gap lost' + (lostOn ? ' on' : '') +
+        '" data-seg="' + MAP_NONE + '" type="button">' +
+        '<span class="map-gap-n num">' + lostN + '</span>' +
+        '<span class="map-gap-t">этап не определен</span>' +
+        '<span class="map-gap-s">план собран по своим этапам — на дорожку не ложится</span>' +
+      '</button>' : '');
   }
   /* Путь человека засечками. Засечка знает не только «до» и «после» текущего
      этапа, но и что на этапе происходит: закрыт целиком, идет работа или к нему
@@ -10129,14 +10164,14 @@
   function mapRow(c, stages) {
     var seat = mapSeat(c);
     var sell = (c.offers || []).slice(0, 2).map(function (o) { return esc(o.name); }).join(' · ');
-    return '<div class="trow map-grid" data-id="' + esc(c.session_id) + '" tabindex="0">' +
+    return '<div class="trow map-grid" data-id="' + esc(c.session_id) + '" tabindex="0" role="button">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(c.name) + '</div>' +
         '<div class="t-sub">' + (c.grade ? esc(c.grade) : 'класс не указан') +
         (c.owner_name ? ' · ' + esc(c.owner_name) : '') + '</div></div>' +
       '<div class="map-c map-c-tar" data-l="Тариф">' + (c.tariff
         ? '<span class="sev map-tar">' + esc(mapTariffName(c.tariff)) + '</span>'
         : '<span class="sev map-tar off">не указан</span>') + '</div>' +
-      '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stages) + '</div>' +
+      '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stagesOf(c)) + '</div>' +
       '<div class="map-c map-c-seat' + (seat.text ? '' : ' map-empty') + '" data-l="Кабинет">' + (seat.text
         ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + (seat.fresh ? ' fresh' : '') + '">' +
           /* «Впервые» идет ПЕРЕД временем: это новость, а время — уточнение к ней.
@@ -10147,13 +10182,25 @@
         ? '<span class="map-task">' + c.tasks_open + ' задач' +
           (c.tasks_overdue ? '<b class="map-over"> · ' + c.tasks_overdue + ' просроч.</b>' : '') + '</span>'
         : MAP_DASH) + '</div>' +
-      '<div class="map-c map-sell' + (sell ? '' : ' map-empty') + '" data-l="Можно предложить">' +
+      // title — потому что строка узкая и апсейл почти всегда обрезан многоточием,
+      // а это одна из двух вещей, ради которых на колонку и смотрят
+      '<div class="map-c map-sell' + (sell ? '' : ' map-empty') + '" data-l="Можно предложить"' +
+        (sell ? ' title="' + sell.replace(/"/g, '&quot;') + '"' : '') + '>' +
         (sell || MAP_DASH) + '</div>' +
     '</div>';
   }
+  /* Список выдаем порциями, как в «Задачах по ученикам»: клиентов сотни, и рисовать
+     их все — это несколько десятков тысяч пикселей страницы и заметная пауза на
+     каждом нажатии фильтра. Порция и кнопка те же, что там, третьего варианта
+     заводить не надо. */
+  var MAP_PAGE = 25;
   function mapRows(list, stages) {
-    return list.length ? list.map(function (c) { return mapRow(c, stages); }).join('')
-                       : '<div class="empty">Под фильтр никто не попал.</div>';
+    if (!list.length) return '<div class="empty">Под фильтр никто не попал.</div>';
+    var show = Math.min(state.mapShow || MAP_PAGE, list.length);
+    var rest = list.length - show;
+    return list.slice(0, show).map(function (c) { return mapRow(c, stages); }).join('') +
+      (rest ? '<button class="stu-more" id="map-more">Показать еще ' +
+        Math.min(MAP_PAGE, rest) + ' из ' + rest + '</button>' : '');
   }
   /* «3 из 10» — иначе после клика по сегменту экран молчит о том, что показывает
      срез: счетчик в шапке считает всех, а в списке остаются три строки. */
@@ -10162,6 +10209,9 @@
       ? '<b>' + total + '</b> ' + plural(total, 'клиент', 'клиента', 'клиентов')
       : '<b>' + shown + '</b> из ' + total;
   }
+  // поиск и любой фильтр начинают список с первой порции: иначе человек ищет
+  // одного, а экран отдает ему двести открытых ранее строк
+  function mapResetShow() { state.mapShow = MAP_PAGE; }
   function mapPaintRows(stages) {
     var box = el('map-rows');
     if (!box) return;
@@ -10170,6 +10220,14 @@
     var cnt = el('map-count');
     if (cnt) cnt.innerHTML = mapCountHtml(list.length, mapFiltered(true).length);
     mapWireRows(stages);
+    mapWireMore(stages);
+  }
+  function mapWireMore(stages) {
+    var more = el('map-more');
+    if (more) more.addEventListener('click', function () {
+      state.mapShow = (state.mapShow || MAP_PAGE) + MAP_PAGE;
+      mapPaintRows(stages);
+    });
   }
   function mapWireRows() {
     var box = el('map-rows');
@@ -10235,6 +10293,7 @@
       b.addEventListener('click', function () {
         var k = b.getAttribute('data-seg');
         state.mapSeg = state.mapSeg === k ? '' : k;
+        mapResetShow();
         renderView();
       });
     });
@@ -10243,16 +10302,19 @@
         state.mapTariff = b.getAttribute('data-tar');
         // выбранного этапа в новом тарифе может не быть — фильтр по этапу снимаем,
         // иначе экран замирает пустым списком без видимой причины
-        if (state.mapSeg && state.mapSeg !== MAP_NONE) {
+        mapResetShow();
+        if (state.mapSeg && state.mapSeg !== MAP_NONE && state.mapSeg !== MAP_NOPLAN) {
           var keys = mapStages().map(function (x) { return x.key; });
           if (keys.indexOf(state.mapSeg) < 0) state.mapSeg = '';
         }
         renderView();
       });
     });
+    mapWireMore(stages);
     var q = el('map-q');
     if (q) q.addEventListener('input', function () {
       state.mapQ = this.value;
+      mapResetShow();
       mapPaintRows(stages);
     });
     mapWireRows(stages);
@@ -27151,7 +27213,11 @@
   function platSeat(p) {
     if (!p.last_seen) return { text: 'ни разу не заходил', cold: true };
     var days = (Date.now() - new Date(p.last_seen).getTime()) / 86400000;
-    return { text: 'заходил ' + ago(p.last_seen) + ' назад', cold: days > 14 };
+    // Тот же рецепт, что в строке карты: первый вход за сутки горит. Тьютор
+    // работает в карточке, и новость должна догонять его здесь, а не только
+    // в общем списке.
+    var fresh = p.first_seen && (Date.now() - new Date(p.first_seen).getTime()) < 86400000;
+    return { text: 'заходил ' + ago(p.last_seen) + ' назад', cold: days > 14, fresh: !!fresh };
   }
   function buildCabinet(id) {
     var p = state._plat[id];
@@ -27160,14 +27226,26 @@
       '<div class="shim c"></div></div>';
     if (p === 'none') return head + '<div class="cab-empty">Не удалось загрузить данные кабинета.</div>';
 
+    /* Кого в кабинете НЕТ — такой же ответ на вопрос «кто вошел», как и кто есть.
+       Пустое место читалось бы как «родителя у семьи нет», а это чаще всего значит
+       «мы его не завели»: родитель платит и тревожится, ему кабинет нужен. */
+    var have = {};
+    (p.people || []).forEach(function (m) { have[m.relation] = 1; });
+    var missing = ['self', 'parent'].filter(function (rel) { return !have[rel]; })
+      .map(function (rel) {
+        return '<div class="cab-seat off"><div class="cab-seat-r">' + PLAT_REL[rel] + '</div>' +
+          '<div class="cab-seat-n">не заведен</div>' +
+          '<div class="cab-seat-s">кабинета нет</div></div>';
+      }).join('');
     var seats = (p.people || []).length
       ? '<div class="cab-seats">' + p.people.map(function (m) {
           var s = platSeat(m);
-          return '<div class="cab-seat' + (s.cold ? ' cold' : '') + '">' +
+          return '<div class="cab-seat' + (s.cold ? ' cold' : '') + (s.fresh ? ' fresh' : '') + '">' +
             '<div class="cab-seat-r">' + (PLAT_REL[m.relation] || m.relation) + '</div>' +
             '<div class="cab-seat-n">' + esc(m.name || 'без имени') + '</div>' +
-            '<div class="cab-seat-s">' + esc(s.text) + '</div></div>';
-        }).join('') + '</div>'
+            '<div class="cab-seat-s">' + (s.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') +
+            esc(s.text) + '</div></div>';
+        }).join('') + missing + '</div>'
       // кабинета нет вовсе — это не «мало активности», это отсутствие доступа, и
       // говорить об этом надо прямо, а не пустым местом
       : '<div class="cab-warn">Кабинета нет ни у ученика, ни у родителя. Пока семью не завели в ' +
