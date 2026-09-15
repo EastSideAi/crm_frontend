@@ -22581,7 +22581,12 @@
      чужие документы незачем, — поэтому он показан строкой без ссылки. */
   function tgFileCard(a) {
     a = a || {};
-    var inner = ic('doc', 13) + '<span>' + esc(a.name || 'файл') + '</span>' +
+    // Длинное имя режем по основе, а расширение оставляем целым: «podborka-vuzov….pdf»
+    // говорит, что это за файл, а «podborka-vuzov….» — уже нет.
+    var nm = String(a.name || 'файл'), dot = nm.lastIndexOf('.');
+    var base = dot > 0 ? nm.slice(0, dot) : nm, ext = dot > 0 ? nm.slice(dot) : '';
+    var inner = ic('doc', 13) + '<span class="fnm"><span>' + esc(base) + '</span>' +
+      (ext ? '<i>' + esc(ext) + '</i>' : '') + '</span>' +
       (a.size ? '<i class="sz num">' + fmtSize(a.size) + '</i>' : '');
     return a.url
       ? '<a class="rm-catt file" href="' + esc(a.url) + '" target="_blank" rel="noopener">' + inner + '</a>'

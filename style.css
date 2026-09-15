@@ -3998,6 +3998,10 @@ button.tsk-mimp { cursor: pointer; }
   color: var(--ink-2); cursor: pointer; transition: background .15s, color .15s; }
 .tg-clip:hover { background: var(--fill); color: var(--blue); }
 .tg-compose .tg-clip, .m-dlg-compose .tg-clip { order: -1; }
+/* имя файла: основа сжимается, расширение остаётся целым */
+.rm-catt.file .fnm { display: flex; min-width: 0; align-items: baseline; }
+.rm-catt.file .fnm > span { min-width: 0; }
+.rm-catt.file .fnm > i { font-style: normal; flex: none; }
 /* размер файла рядом с именем — тише имени, цифры табличные */
 .rm-catt.file .sz { font-style: normal; font-size: 11px; color: var(--ink-3); flex: none; }
 .tg-msg.out .rm-catt.file .sz { color: rgba(255,255,255,.7); }
