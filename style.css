@@ -8528,6 +8528,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .cab-act:first-child { border-top: 0; }
 .cab-act-t { flex: 1; min-width: 0; color: var(--ink); }
 .cab-act-w { flex: none; color: var(--ink-3); font-size: 12px; }
+/* Пусто здесь — обычный факт, а не экран: общий .empty отбивает полсотни пикселей
+   сверху и снизу и рвет блок надвое. */
+.cab-empty { padding: 9px 0; font-size: 12.5px; color: var(--ink-3); }
 
 /* Этапы тарифа: засечка слева, состояние справа. Этап, которого никто не касался,
    держим совсем тихим — иначе шестнадцать одинаково заметных строк, и взгляду не
@@ -8552,22 +8555,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   padding: 13px 16px; border-bottom: 1px solid var(--line); }
 .map-bar .searchwrap { flex: 0 1 280px; }
 .map-chips { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.map-grid { grid-template-columns: minmax(150px, 1.2fr) 118px minmax(250px, 1.6fr) 140px 118px minmax(110px, .9fr); }
+.map-grid { grid-template-columns: minmax(150px, 1.2fr) 118px minmax(240px, 1.5fr) minmax(150px, 1.1fr) 112px minmax(110px, .9fr); }
 .map-grid.thead { height: 38px; }
 .map-c { min-width: 0; font-size: 12.5px; color: var(--ink-2); }
 .map-tar { font-size: 11.5px; }
 .map-tar.off { color: var(--ink-3); background: var(--fill); border: 1px dashed var(--line-2); }
 
 /* Позиция на пути: засечки вместо полосы. Пройденное чернильное, текущее синее и
-   крупнее — этап читается раньше, чем подпись рядом. Начатое, но не закрытое —
-   кольцо: на пути, где этапы идут внахлест, «идет работа» и «закрыт» нельзя
-   показывать одинаково. */
-.map-track { display: flex; align-items: center; gap: 3px; max-width: 100%; }
-.map-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(15,19,32,.12); flex: none; }
+   выше остальных — этап читается раньше, чем подпись рядом. Начатое, но не закрытое —
+   половинный тон: на пути, где этапы идут внахлест, «идет работа» и «закрыт» нельзя
+   показывать одинаково. Засечка узкая: шестнадцать кружков в строке — уже не шкала,
+   а рябь, и подписи рядом не остается места. */
+.map-track { display: flex; align-items: center; gap: 2px; max-width: 100%; }
+.map-dot { width: 4px; height: 9px; border-radius: 2px; background: rgba(15,19,32,.12); flex: none; }
 .map-dot.done { background: var(--navy); opacity: .45; }
-.map-dot.open { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(15,19,32,.34); }
-.map-dot.now { width: 9px; height: 9px; background: var(--blue); }
-.map-track-t { margin-left: 8px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
+.map-dot.open { background: rgba(15,19,32,.26); }
+.map-dot.now { height: 13px; background: var(--blue); }
+.map-track-t { margin-left: 9px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-track.none { font-size: 12.5px; color: var(--amber-ink); }
 .map-track-no { flex: none; margin-left: 8px; font-size: 12px; color: var(--amber-ink); }

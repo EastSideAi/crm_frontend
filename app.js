@@ -10139,8 +10139,9 @@
       '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stages) + '</div>' +
       '<div class="map-c map-c-seat' + (seat.text ? '' : ' map-empty') + '" data-l="Кабинет">' + (seat.text
         ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + (seat.fresh ? ' fresh' : '') + '">' +
-          (seat.fresh ? '<i class="map-new"></i>' : '') + esc(seat.text) +
-          (seat.fresh ? ' <b>впервые</b>' : '') + '</span>'
+          /* «Впервые» идет ПЕРЕД временем: это новость, а время — уточнение к ней.
+             В хвосте оно к тому же отрывалось на вторую строку и висело одиноко. */
+          (seat.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') + esc(seat.text) + '</span>'
         : MAP_DASH) + '</div>' +
       '<div class="map-c map-c-task' + (c.tasks_open ? '' : ' map-empty') + '" data-l="Задачи">' + (c.tasks_open
         ? '<span class="map-task">' + c.tasks_open + ' задач' +
@@ -10207,7 +10208,9 @@
         '<div class="sec-head"><span class="ic">' + ic('kanban', 14) + '</span>' +
           '<div><div class="t">Где идут наши клиенты</div>' +
           '<div class="s">этапы тарифа из продуктового портала; человек стоит на первом, где у семьи есть незакрытая задача</div></div>' +
-          '<span class="cnt num">' + all.length + '</span></div>' +
+          /* Счетчик считает ТОТ ЖЕ срез, что и дорожка под ним: при выбранном тарифе
+             общее число рядом с отфильтрованными сегментами читается как ошибка. */
+          '<span class="cnt num">' + inTariff.length + '</span></div>' +
         mapRail(inTariff, stages) +
       '</div>' +
       '<div class="card listcard map-list">' +
@@ -27155,7 +27158,7 @@
     var head = '<div class="uz-jh"><span>Кабинет семьи</span><i></i></div>';
     if (!p || p === 'load') return head + '<div class="sk-line"><div class="shim a"></div>' +
       '<div class="shim c"></div></div>';
-    if (p === 'none') return head + '<div class="empty">Не удалось загрузить данные кабинета.</div>';
+    if (p === 'none') return head + '<div class="cab-empty">Не удалось загрузить данные кабинета.</div>';
 
     var seats = (p.people || []).length
       ? '<div class="cab-seats">' + p.people.map(function (m) {
@@ -27175,7 +27178,7 @@
           return '<div class="cab-act"><span class="cab-act-t">' + esc(a.title) + '</span>' +
             '<span class="cab-act-w">' + fmtWhen(a.at) + '</span></div>';
         }).join('') + '</div>'
-      : '<div class="empty">Сам на платформе еще ничего не проходил.</div>';
+      : '<div class="cab-empty">Сам на платформе еще ничего не проходил.</div>';
 
     var stages = (p.stages || []).map(function (st) {
       var n = st.total ? st.done + ' из ' + st.total : '';
