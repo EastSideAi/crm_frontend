@@ -73,6 +73,7 @@
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
+    _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
@@ -167,6 +168,7 @@
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
     hsk_contact: 'оставил телефон после теста HSK',
+    cabinet_entered: 'первый вход в кабинет',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -196,6 +198,7 @@
       label = (String(p.event || '').indexOf('intensive') === 0 ? 'смотрел интенсив' : 'смотрел эфир') +
         ': ' + (mins < 1 ? 'меньше минуты' : mins + ' мин') + (days.length ? ' (' + days.join(', ') + ')' : '');
     }
+    if (e.type === 'cabinet_entered') label += ': ' + (p.relation === 'parent' ? 'родитель' : 'ученик');
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_access') {
@@ -9992,7 +9995,8 @@
      Клиент без плана стоит отдельным сегментом, а не на первом этапе: «мы ему еще
      не собрали план» и «он только начал» — разные состояния, и смешивать их
      значило бы прятать дыру, ради которой этот экран и заводился. */
-  var MAP_NONE = 'none';   // сегмент «без плана» — не этап, отдельная колонка
+  var MAP_NONE = 'none';      // плана нет и этапа нет: мы этого человека не разложили
+  var MAP_NOPLAN = 'noplan';  // плана нет, а этап есть — по факту входа в кабинет
   /* Тарифы на карту приходят из продуктового портала, а не из своего списка в коде:
      портал — то место, где команда правит продукт (цены, наполнение, названия), и
      второй список неизбежно разъехался бы с ним. Флагман у нас один, «Поступление
@@ -10020,13 +10024,43 @@
     }).catch(function () { state._map = 'none'; if (state.page === 'roadmap') renderView(); });
   }
   function mapSeg(c) { return c.stage_key || MAP_NONE; }
+  /* «Плана нет» и «этапа нет» — разные дыры, и считать их надо по-разному.
+     Этап теперь стоит по факту входа в кабинет, поэтому человек без плана
+     спокойно попадает в «Доступ»: сводка, считавшая только бесэтапных, под
+     тарифным срезом показывала ноль, пока в списке под ней половина строк
+     помечена «плана нет». Считаем ровно тех, кого помечаем. */
+  function mapNoPlan(c) { return !c.has_plan; }
+  /* Этапы под выбранный тариф: в Стандарте их 13, в Премиуме 16, и показывать
+     команде этапы чужого тарифа — врать. Тариф не выбран — показываем все. */
+  function mapStages() {
+    var all = ((state._map || {}).stages) || [];
+    var t = state.mapTariff;
+    if (!t || t === '__none') return all;
+    return all.filter(function (s) { return (s.tariffs || []).indexOf(t) >= 0; });
+  }
+  /* Путь строки меряется тарифом КЛИЕНТА, а не выбранным фильтром: на срезе
+     «все тарифы» стандартному клиенту иначе рисуется шестнадцать засечек, три из
+     которых к нему не относятся, и дошедший до конца выглядит недоделанным.
+     Раскладку держим в кэше: строк на экране сотни, а тарифов три. */
+  var _mapByTariff = {};
+  function stagesOf(c) {
+    var all = ((state._map || {}).stages) || [];
+    var t = c.tariff || '';
+    if (!t) return all;
+    if (_mapByTariff[t] && _mapByTariff[t].src === all) return _mapByTariff[t].list;
+    var list = all.filter(function (s) { return (s.tariffs || []).indexOf(t) >= 0; });
+    _mapByTariff[t] = { src: all, list: list };
+    return list;
+  }
   /* Кабинет семьи одной строкой: кто заходил последним. Молчание дольше двух
      недель — повод обратить внимание, поэтому оно и подсвечено. */
   function mapSeat(c) {
-    var best = null, who = '';
+    var best = null, who = '', first = null;
     [['student', 'ученик'], ['parent', 'родитель']].forEach(function (pair) {
       var s = c[pair[0]];
-      if (s && s.last_seen && (!best || s.last_seen > best)) { best = s.last_seen; who = pair[1]; }
+      if (!s) return;
+      if (s.last_seen && (!best || s.last_seen > best)) { best = s.last_seen; who = pair[1]; }
+      if (s.first_seen && (!first || s.first_seen > first)) first = s.first_seen;
     });
     if (!best) {
       // кабинета нет вовсе — пустая клетка; кабинет есть, но в него не заходили —
@@ -10034,52 +10068,92 @@
       return { text: (c.student || c.parent) ? 'ни разу не заходили' : '', cold: true };
     }
     var days = (Date.now() - new Date(best).getTime()) / 86400000;
-    return { text: who + ' ' + ago(best) + ' назад', cold: days > 14 };
+    // Свежий ПЕРВЫЙ вход горит сутки: человек только что включился в работу, и это
+    // тот момент, когда с ним говорят. Дольше суток гореть нельзя — через неделю
+    // светилась бы половина таблицы, и гореть перестало бы значить что-либо.
+    var fresh = first && (Date.now() - new Date(first).getTime()) < 86400000;
+    // У свежего входа время не пишем: «впервые» и так значит «сегодня», а полная
+    // фраза рвала строку надвое. Точная минута есть в карточке.
+    return { text: fresh ? who : who + ' ' + ago(best) + ' назад', cold: days > 14, fresh: fresh };
   }
-  function mapFiltered() {
+  /* skipSeg — тот же срез, но без фильтра по этапу: по нему считаются цифры на
+     дорожке. Иначе клик по этапу схлопывал бы дорожку в один ненулевой сегмент. */
+  function mapFiltered(skipSeg) {
     var d = state._map || {}, list = (d.clients || []).slice();
     var q = (state.mapQ || '').trim().toLowerCase();
     return list.filter(function (c) {
-      if (state.mapSeg && mapSeg(c) !== state.mapSeg) return false;
+      if (!skipSeg && state.mapSeg) {
+        if (state.mapSeg === MAP_NOPLAN ? !mapNoPlan(c) : mapSeg(c) !== state.mapSeg) return false;
+      }
       if (state.mapTariff === '__none' ? c.tariff : (state.mapTariff && c.tariff !== state.mapTariff)) return false;
       if (q && (c.name + ' ' + (c.owner_name || '')).toLowerCase().indexOf(q) < 0) return false;
       return true;
     });
   }
-  /* Дорожка этапов — якорь экрана: восемь сегментов пути плюс «без плана».
-     Цифра крупная, потому что на нее и смотрят; клик по сегменту фильтрует
-     список, повторный клик снимает фильтр. */
+  /* Дорожка этапов — якорь экрана: этапы тарифа плюс «без плана». Цифра крупная,
+     потому что на нее и смотрят; клик по сегменту фильтрует список, повторный клик
+     снимает фильтр. Подпись короткая (short из словаря этапов): на этап приходится
+     сантиметр ширины, полное название туда не влезает. */
   function mapRail(list, stages) {
     var byKey = {};
     list.forEach(function (c) { var k = mapSeg(c); byKey[k] = (byKey[k] || 0) + 1; });
     var max = 1;
-    Object.keys(byKey).forEach(function (k) { max = Math.max(max, byKey[k]); });
-    var segs = stages.map(function (s) { return { key: s.key, title: s.title, n: byKey[s.key] || 0 }; });
-    segs.push({ key: MAP_NONE, title: 'Без плана', n: byKey[MAP_NONE] || 0, gap: true });
-    return '<div class="map-rail">' + segs.map(function (s, i) {
-      var on = state.mapSeg === s.key;
-      return '<button class="map-seg' + (on ? ' on' : '') + (s.gap ? ' gap' : '') +
-          (s.n ? '' : ' zero') + '" data-seg="' + esc(s.key) + '" type="button"' +
-          (s.n ? '' : ' disabled') + '>' +
-        '<span class="map-seg-n num">' + s.n + '</span>' +
-        '<span class="map-seg-t">' + esc(s.title) + '</span>' +
-        '<span class="map-seg-b"><i style="width:' + Math.round(s.n / max * 100) + '%"></i></span>' +
-        (s.gap ? '' : '<span class="map-seg-i num">' + (i + 1) + '</span>') +
+    stages.forEach(function (s) { max = Math.max(max, byKey[s.key] || 0); });
+    var rail = stages.map(function (s) {
+      var n = byKey[s.key] || 0, on = state.mapSeg === s.key;
+      return '<button class="map-seg' + (on ? ' on' : '') + (n ? '' : ' zero') +
+          '" data-seg="' + esc(s.key) + '" type="button" title="' + esc(s.title) + '"' +
+          (n ? '' : ' disabled') + '>' +
+        '<span class="map-seg-n num">' + n + '</span>' +
+        '<span class="map-seg-t">' + esc(s.short || s.title) + '</span>' +
+        '<span class="map-seg-b"><i style="width:' + Math.round(n / max * 100) + '%"></i></span>' +
       '</button>';
-    }).join('') + '</div>';
+    }).join('');
+    /* «Без плана» стоит НЕ в дорожке, а отдельной строкой под ней: это не этап
+       пути, а те, кого мы по пути еще не разложили. В дорожке из шестнадцати
+       сегментов он потерялся бы семнадцатым, и дыра в работе читалась бы как
+       очередной этап. */
+    var noPlanN = list.filter(mapNoPlan).length, noPlanOn = state.mapSeg === MAP_NOPLAN;
+    var lostN = byKey[MAP_NONE] || 0, lostOn = state.mapSeg === MAP_NONE;
+    return '<div class="map-rail">' + rail + '</div>' +
+      '<button class="map-gap' + (noPlanOn ? ' on' : '') + (noPlanN ? '' : ' zero') +
+        '" data-seg="' + MAP_NOPLAN + '" type="button"' + (noPlanN ? '' : ' disabled') + '>' +
+        '<span class="map-gap-n num">' + noPlanN + '</span>' +
+        '<span class="map-gap-t">без плана</span>' +
+        '<span class="map-gap-s">плана поступления нет; на дорожке они стоят по факту входа</span>' +
+      '</button>' +
+      /* Отдельная вещь: план есть, а этап по нему не читается (старый шаблон со
+         своими ключами). Таких обычно единицы, поэтому строка появляется только
+         когда они есть — иначе она каждый день объясняла бы пустоту. */
+      (lostN ? '<button class="map-gap lost' + (lostOn ? ' on' : '') +
+        '" data-seg="' + MAP_NONE + '" type="button">' +
+        '<span class="map-gap-n num">' + lostN + '</span>' +
+        '<span class="map-gap-t">этап не определен</span>' +
+        '<span class="map-gap-s">план собран по своим этапам — на дорожку не ложится</span>' +
+      '</button>' : '');
   }
-  /* Позиция человека на пути: восемь засечек. Пройденное залито, текущая засечка
-     крупнее — так этап читается без чтения подписи. */
+  /* Путь человека засечками. Засечка знает не только «до» и «после» текущего
+     этапа, но и что на этапе происходит: закрыт целиком, идет работа или к нему
+     еще не притрагивались. Это разные вещи, и на пути в 16 этапов, часть которых
+     идет параллельно (язык, CSCA и документы живут одной осенью), «все до текущего
+     закрыто» было бы неправдой. */
+  var MAP_STATE_RU = { done: 'закрыт', now: 'идет сейчас', open: 'в работе' };
   function mapTrack(c, stages) {
-    if (!c.stage_pos) {
-      // план бывает собран по своим этапам (старые шаблоны) — тогда позиции на
-      // доске у человека нет, но и «плана нет» сказать нельзя, это разные вещи
+    if (!c.stage_key) {
+      // план бывает собран по своим этапам (старые шаблоны) — тогда этапа у
+      // человека нет, но и «плана нет» сказать нельзя, это разные вещи
       return '<span class="map-track none">' + (c.has_plan ? 'этап не определен' : 'план не собран') + '</span>';
     }
-    return '<span class="map-track">' + stages.map(function (s, i) {
-      var pos = i + 1, cls = pos < c.stage_pos ? ' done' : (pos === c.stage_pos ? ' now' : '');
-      return '<i class="map-dot' + cls + '" title="' + esc(s.title) + '"></i>';
-    }).join('') + '<b class="map-track-t">' + esc(c.stage_title || '') + '</b></span>';
+    var track = c.track || {};
+    return '<span class="map-track">' + stages.map(function (s) {
+      var st = s.key === c.stage_key ? 'now' : (track[s.key] || '');
+      return '<i class="map-dot' + (st ? ' ' + st : '') + '" title="' + esc(s.title) +
+        (MAP_STATE_RU[st] ? ' — ' + MAP_STATE_RU[st] : '') + '"></i>';
+    }).join('') + '<b class="map-track-t">' + esc(c.stage_short || c.stage_title || '') + '</b>' +
+      /* Человек может стоять на «доступе» и при этом не иметь плана вовсе: этап
+         считается по входу в кабинет, а план ему просто не собирали. Обе вещи
+         важны, поэтому говорим обе, а не выбираем одну. */
+      (c.has_plan ? '' : '<span class="map-track-no">плана нет</span>') + '</span>';
   }
   /* Пустое значение — прочерк, а не фраза: под подписанной шапкой «кабинета нет ·
      задач нет · нечего предложить» в каждой строке повторяет названия колонок и
@@ -10090,43 +10164,70 @@
   function mapRow(c, stages) {
     var seat = mapSeat(c);
     var sell = (c.offers || []).slice(0, 2).map(function (o) { return esc(o.name); }).join(' · ');
-    return '<div class="trow map-grid" data-id="' + esc(c.session_id) + '" tabindex="0">' +
+    return '<div class="trow map-grid" data-id="' + esc(c.session_id) + '" tabindex="0" role="button">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(c.name) + '</div>' +
         '<div class="t-sub">' + (c.grade ? esc(c.grade) : 'класс не указан') +
         (c.owner_name ? ' · ' + esc(c.owner_name) : '') + '</div></div>' +
       '<div class="map-c map-c-tar" data-l="Тариф">' + (c.tariff
         ? '<span class="sev map-tar">' + esc(mapTariffName(c.tariff)) + '</span>'
         : '<span class="sev map-tar off">не указан</span>') + '</div>' +
-      '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stages) + '</div>' +
+      '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stagesOf(c)) + '</div>' +
       '<div class="map-c map-c-seat' + (seat.text ? '' : ' map-empty') + '" data-l="Кабинет">' + (seat.text
-        ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + '">' + esc(seat.text) + '</span>'
+        ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + (seat.fresh ? ' fresh' : '') + '">' +
+          /* «Впервые» идет ПЕРЕД временем: это новость, а время — уточнение к ней.
+             В хвосте оно к тому же отрывалось на вторую строку и висело одиноко. */
+          (seat.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') + esc(seat.text) + '</span>'
         : MAP_DASH) + '</div>' +
       '<div class="map-c map-c-task' + (c.tasks_open ? '' : ' map-empty') + '" data-l="Задачи">' + (c.tasks_open
         ? '<span class="map-task">' + c.tasks_open + ' задач' +
           (c.tasks_overdue ? '<b class="map-over"> · ' + c.tasks_overdue + ' просроч.</b>' : '') + '</span>'
         : MAP_DASH) + '</div>' +
-      '<div class="map-c map-sell' + (sell ? '' : ' map-empty') + '" data-l="Можно предложить">' +
+      // title — потому что строка узкая и апсейл почти всегда обрезан многоточием,
+      // а это одна из двух вещей, ради которых на колонку и смотрят
+      '<div class="map-c map-sell' + (sell ? '' : ' map-empty') + '" data-l="Можно предложить"' +
+        (sell ? ' title="' + sell.replace(/"/g, '&quot;') + '"' : '') + '>' +
         (sell || MAP_DASH) + '</div>' +
     '</div>';
   }
+  /* Список выдаем порциями, как в «Задачах по ученикам»: клиентов сотни, и рисовать
+     их все — это несколько десятков тысяч пикселей страницы и заметная пауза на
+     каждом нажатии фильтра. Порция и кнопка те же, что там, третьего варианта
+     заводить не надо. */
+  var MAP_PAGE = 25;
   function mapRows(list, stages) {
-    return list.length ? list.map(function (c) { return mapRow(c, stages); }).join('')
-                       : '<div class="empty">Под фильтр никто не попал.</div>';
+    if (!list.length) return '<div class="empty">Под фильтр никто не попал.</div>';
+    var show = Math.min(state.mapShow || MAP_PAGE, list.length);
+    var rest = list.length - show;
+    return list.slice(0, show).map(function (c) { return mapRow(c, stages); }).join('') +
+      (rest ? '<button class="stu-more" id="map-more">Показать еще ' +
+        Math.min(MAP_PAGE, rest) + ' из ' + rest + '</button>' : '');
   }
   /* «3 из 10» — иначе после клика по сегменту экран молчит о том, что показывает
      срез: счетчик в шапке считает всех, а в списке остаются три строки. */
   function mapCountHtml(shown, total) {
-    return shown === total ? '<b>' + total + '</b> клиентов'
-                           : '<b>' + shown + '</b> из ' + total;
+    return shown === total
+      ? '<b>' + total + '</b> ' + plural(total, 'клиент', 'клиента', 'клиентов')
+      : '<b>' + shown + '</b> из ' + total;
   }
+  // поиск и любой фильтр начинают список с первой порции: иначе человек ищет
+  // одного, а экран отдает ему двести открытых ранее строк
+  function mapResetShow() { state.mapShow = MAP_PAGE; }
   function mapPaintRows(stages) {
     var box = el('map-rows');
     if (!box) return;
     var list = mapFiltered();
     box.innerHTML = mapRows(list, stages);
     var cnt = el('map-count');
-    if (cnt) cnt.innerHTML = mapCountHtml(list.length, ((state._map || {}).clients || []).length);
+    if (cnt) cnt.innerHTML = mapCountHtml(list.length, mapFiltered(true).length);
     mapWireRows(stages);
+    mapWireMore(stages);
+  }
+  function mapWireMore(stages) {
+    var more = el('map-more');
+    if (more) more.addEventListener('click', function () {
+      state.mapShow = (state.mapShow || MAP_PAGE) + MAP_PAGE;
+      mapPaintRows(stages);
+    });
   }
   function mapWireRows() {
     var box = el('map-rows');
@@ -10149,13 +10250,13 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту. Проверьте сеть и обновите страницу.</div></div>';
       return;
     }
-    var d = state._map, stages = d.stages || [], all = d.clients || [];
+    var d = state._map, stages = mapStages(), all = d.clients || [];
     if (!all.length) {
       view.innerHTML = '<div class="card"><div class="empty">Клиентов пока нет. Сюда попадают те, у кого статус «клиент» ' +
         'или уже собран план поступления.</div></div>';
       return;
     }
-    var list = mapFiltered();
+    var list = mapFiltered(), inTariff = mapFiltered(true);
     var tabs = [{ id: '', label: 'Все тарифы' }]
       .concat(mapTariffs().map(function (t) { return { id: t.id, label: t.name }; }))
       .concat([{ id: '__none', label: 'Без тарифа' }]);
@@ -10164,9 +10265,11 @@
       '<div class="card map-top">' +
         '<div class="sec-head"><span class="ic">' + ic('kanban', 14) + '</span>' +
           '<div><div class="t">Где идут наши клиенты</div>' +
-          '<div class="s">этап считается по плану поступления: первый, где у семьи есть незакрытая задача</div></div>' +
-          '<span class="cnt num">' + all.length + '</span></div>' +
-        mapRail(all, stages) +
+          '<div class="s">этапы тарифа из продуктового портала; человек стоит на первом, где у семьи есть незакрытая задача</div></div>' +
+          /* Счетчик считает ТОТ ЖЕ срез, что и дорожка под ним: при выбранном тарифе
+             общее число рядом с отфильтрованными сегментами читается как ошибка. */
+          '<span class="cnt num">' + inTariff.length + '</span></div>' +
+        mapRail(inTariff, stages) +
       '</div>' +
       '<div class="card listcard map-list">' +
         '<div class="map-bar">' +
@@ -10178,7 +10281,7 @@
               '" data-tar="' + esc(t.id) + '" type="button">' + esc(t.label) + '</button>';
           }).join('') +
           '</div>' +
-          '<span class="list-count" id="map-count">' + mapCountHtml(list.length, all.length) + '</span>' +
+          '<span class="list-count" id="map-count">' + mapCountHtml(list.length, inTariff.length) + '</span>' +
         '</div>' +
         '<div class="trow thead map-grid"><span class="th">Клиент</span><span class="th">Тариф</span>' +
           '<span class="th">Этап пути</span><span class="th">Кабинет</span><span class="th">Задачи</span>' +
@@ -10190,18 +10293,28 @@
       b.addEventListener('click', function () {
         var k = b.getAttribute('data-seg');
         state.mapSeg = state.mapSeg === k ? '' : k;
+        mapResetShow();
         renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-tar]'), function (b) {
       b.addEventListener('click', function () {
         state.mapTariff = b.getAttribute('data-tar');
+        // выбранного этапа в новом тарифе может не быть — фильтр по этапу снимаем,
+        // иначе экран замирает пустым списком без видимой причины
+        mapResetShow();
+        if (state.mapSeg && state.mapSeg !== MAP_NONE && state.mapSeg !== MAP_NOPLAN) {
+          var keys = mapStages().map(function (x) { return x.key; });
+          if (keys.indexOf(state.mapSeg) < 0) state.mapSeg = '';
+        }
         renderView();
       });
     });
+    mapWireMore(stages);
     var q = el('map-q');
     if (q) q.addEventListener('input', function () {
       state.mapQ = this.value;
+      mapResetShow();
       mapPaintRows(stages);
     });
     mapWireRows(stages);
@@ -21455,7 +21568,7 @@
   function startEditTemplate(id) {
     if (!id) {
       state._tplEdit = 'new';
-      state._tplDraft = { id: '', name: '', segment: '', description: '', stages: [{ title: '', about: '', tasks: [] }] };
+      state._tplDraft = { id: '', name: '', segment: '', description: '', stages: [{ title: '', about: '', stage_key: '', tasks: [] }] };
       renderView(); return;
     }
     state._tplEdit = id; state._tplDraft = null; renderView();
@@ -21463,7 +21576,7 @@
       state._tplDraft = {
         id: t.id, name: t.name, segment: t.segment || '', description: t.description || '',
         stages: (t.stages || []).map(function (st) {
-          return { title: st.title || '', about: st.about || '',
+          return { title: st.title || '', about: st.about || '', stage_key: st.stage_key || '',
             tasks: (st.tasks || []).map(function (tk) {
               return { owner: tk.owner === 'eastside' ? 'eastside' : 'client', title: tk.title || '',
                 description: tk.description || '', how_to: tk.how_to || '', tip: tk.tip || '', due_rule: tk.due_rule || '' };
@@ -21497,6 +21610,16 @@
       return '<div class="tpl-stage">' +
         '<div class="tpl-stage-h">' +
           '<input class="tpl-fld tpl-stage-t" data-si="' + si + '" data-f="stitle" value="' + esc(st.title) + '" placeholder="Этап ' + (si + 1) + ' — название">' +
+          /* На какой этап пути лягут задачи стадии. Раньше это считалось по номеру
+             стадии в шаблоне, и любая вставка этапа в середину молча переносила
+             задачи на соседний этап. */
+          '<select class="tpl-fld tpl-stage-k" data-si="' + si + '" data-f="skey">' +
+            '<option value="">этап пути — по порядку</option>' +
+            ADMISSION_STAGES.map(function (b) {
+              return '<option value="' + b.key + '"' + (b.key === st.stage_key ? ' selected' : '') + '>' +
+                b.n + '. ' + esc(b.title) + '</option>';
+            }).join('') +
+          '</select>' +
           '<button class="tpl-mini-del" data-delstage="' + si + '" title="Удалить этап">' + ic('x', 13) + '</button>' +
         '</div>' +
         '<input class="tpl-fld" data-si="' + si + '" data-f="sabout" value="' + esc(st.about) + '" placeholder="О чём этап — коротко">' +
@@ -21535,6 +21658,7 @@
         else if (fid === 'description') d.description = f.value;
         else if (fid === 'stitle') d.stages[+si].title = f.value;
         else if (fid === 'sabout') d.stages[+si].about = f.value;
+        else if (fid === 'skey') d.stages[+si].stage_key = f.value;
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('.tpl-own-b'), function (b) {
@@ -21568,7 +21692,7 @@
     var body = {
       name: d.name, segment: d.segment, description: d.description,
       stages: d.stages.map(function (st) {
-        return { title: st.title || 'Без названия', about: st.about,
+        return { title: st.title || 'Без названия', about: st.about, stage_key: st.stage_key || '',
           tasks: st.tasks.filter(function (tk) { return tk.title.trim(); }).map(function (tk) {
             return { owner: tk.owner, title: tk.title, description: tk.description, how_to: tk.how_to, tip: tk.tip, due_rule: tk.due_rule };
           }) };
@@ -24405,38 +24529,93 @@
     text:  { label: 'Текст',  icon: 'note' },
     link:  { label: 'Ссылка', icon: 'ext' },
   };
+  /* Этапы пути. Словарь общий с бэкендом (client_views.BOARD_STAGES) и с тарифной
+     таблицей продуктового портала: команда продает этапами оттуда, значит и работу
+     ведет по ним же. t — тарифы, в которых этап есть. */
   var ADMISSION_STAGES = [
-    { key: 'intro',    n: 1, title: 'Знакомство и анализ',  sub: 'Собираем профиль и понимаем, с чем работаем.',
+    { key: 'access',  n: 1, title: 'Доступ к платформе', sub: 'Личный кабинет ученику и родителю.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Войти в личный кабинет', o: 'client', need: 'Открой ссылку из письма и задай пароль.' },
+                 { t: 'Подключить родителя к кабинету', o: 'client' },
+                 { t: 'Выдать доступ и провести по кабинету', o: 'team' } ] },
+    { key: 'diag',    n: 2, title: 'Диагностика и оценка шансов', sub: 'Понимаем, с чем работаем.',
+      t: ['std', 'plus', 'prem'],
       presets: [ { t: 'Заполнить анкету', o: 'client', need: 'Пройти все шаги анкеты на платформе.', at: ['text'] },
                  { t: 'Пройти консультацию', o: 'client' },
                  { t: 'Проанализировать профиль', o: 'team' } ] },
-    { key: 'strategy', n: 2, title: 'Стратегия',            sub: 'Подбираем гранты и вузы под профиль.',
-      presets: [ { t: 'Сформировать стратегию поступления', o: 'team' }, { t: 'Подобрать список вузов и грантов', o: 'team' } ] },
-    { key: 'docs',     n: 3, title: 'Подготовка документов', sub: 'Собираем и оформляем весь пакет.',
-      hint: 'Дедлайны: справка о несудимости — около 15 ноября · Duolingo / IELTS — до 1 января · многое — до 1 декабря.',
+    { key: 'pick',    n: 3, title: 'Подбор вузов и грантов', sub: 'Куда идем и каким маршрутом.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Сформировать стратегию поступления', o: 'team' },
+                 { t: 'Подобрать список вузов и грантов', o: 'team' },
+                 { t: 'Согласовать список с семьей', o: 'client' } ] },
+    { key: 'docs',    n: 4, title: 'Документы', sub: 'Сбор, перевод, заверение.',
+      t: ['std', 'plus', 'prem'],
+      hint: 'Дедлайны: справка о несудимости — около 15 ноября · многое — до 1 декабря.',
       presets: [
         { t: 'Загранпаспорт', o: 'client', need: 'Разворот с фото, четко, без бликов.', at: ['photo'] },
         { t: 'Аттестат или диплом', o: 'client', need: 'Аттестат и приложение с оценками. Скан или ровное фото.', at: ['photo', 'file'] },
         { t: 'Выписка оценок', o: 'client', need: 'Официальная выписка за все классы.', at: ['file'] },
-        { t: 'Языковой сертификат (HSK / IELTS / Duolingo / TOEFL)', o: 'client', need: 'Скан сертификата или результата.', at: ['photo', 'file'] },
-        { t: 'Мотивационное письмо', o: 'client', need: '200–300 слов: почему Китай, почему эта специальность.', at: ['text'] },
-        { t: 'Рекомендательные письма', o: 'client', need: 'От преподавателя последней ступени обучения.', at: ['file'] },
         { t: 'Справка о несудимости', o: 'client', need: 'Оформляется около двух недель — начни заранее.', at: ['file'] },
         { t: 'Медицинская справка', o: 'client', need: 'Форма для выезжающих за рубеж.', at: ['file'] },
         { t: 'Фотографии', o: 'client', need: 'Формат для документов, белый фон.', at: ['photo'] },
         { t: 'Проверить и подписать анкеты вузов', o: 'client', need: 'Проверь данные и пришли подписанные сканы.', at: ['file'] },
-        { t: 'Нотариальные переводы документов', o: 'team' }, { t: 'Заполнить анкеты вузов и грантов', o: 'team' },
+        { t: 'Нотариальные переводы документов', o: 'team' },
+        { t: 'Заполнить анкеты вузов и грантов', o: 'team' },
         { t: 'Проверить корректность пакета', o: 'team' } ] },
-    { key: 'submit',   n: 4, title: 'Подача',                sub: 'Отправляем документы в вузы.',
-      presets: [ { t: 'Подать документы в вузы', o: 'team' } ] },
-    { key: 'exam',     n: 5, title: 'Интервью и экзамены',  sub: 'Если вуз или грант их предусматривает.',
-      presets: [ { t: 'Подготовить кандидата к интервью', o: 'team' }, { t: 'Пройти собеседование или экзамен', o: 'client' } ] },
-    { key: 'result',   n: 6, title: 'Результат и выбор',    sub: 'Разбираем офферы и выбираем грант.',
-      presets: [ { t: 'Помочь с анализом офферов', o: 'team' }, { t: 'Выбрать подходящий грант', o: 'client' } ] },
-    { key: 'visa',     n: 7, title: 'Визовое оформление',   sub: 'Готовим документы на визу.',
-      presets: [ { t: 'Оформить документы на визу', o: 'team' } ] },
-    { key: 'move',     n: 8, title: 'Переезд и заселение',  sub: 'Маршрут, прибытие, регистрация в вузе.',
-      presets: [ { t: 'Спланировать маршрут и прибытие', o: 'team' }, { t: 'Регистрация в вузе и заселение', o: 'team' } ] },
+    { key: 'folio',   n: 5, title: 'Профиль и портфолио', sub: 'То, что двигает шансы на грант.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Собрать достижения и сертификаты', o: 'client', at: ['file'] },
+                 { t: 'Разобрать профиль и дать стратегию усиления', o: 'team' },
+                 { t: 'Пройти курс или олимпиаду по направлению', o: 'client' } ] },
+    { key: 'letters', n: 6, title: 'Мотивационное и рекомендательные письма', sub: 'Одинаково на всех тарифах.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Мотивационное письмо', o: 'client', need: '200-300 слов: почему Китай, почему эта специальность.', at: ['text'] },
+                 { t: 'Рекомендательные письма', o: 'client', need: 'От преподавателя последней ступени обучения.', at: ['file'] },
+                 { t: 'Довести и проверить письма', o: 'team' } ] },
+    { key: 'study',   n: 7, title: 'Методы обучения', sub: 'Ставим до экзаменов, а не после.',
+      t: ['prem'],
+      presets: [ { t: 'Пройти курс по методам обучения', o: 'client' } ] },
+    { key: 'lang',    n: 8, title: 'Языковой экзамен', sub: 'Duolingo, TOEFL или HSK — по программе.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Пройти тест уровня на платформе', o: 'client' },
+                 { t: 'Заниматься на тренажере по плану', o: 'client' },
+                 { t: 'Записаться и сдать экзамен', o: 'client' },
+                 { t: 'Языковой сертификат', o: 'client', need: 'Скан сертификата или результата.', at: ['photo', 'file'] },
+                 { t: 'Помочь с оплатой экзамена', o: 'team' } ] },
+    { key: 'csca',    n: 9, title: 'CSCA по математике', sub: 'Вступительное тестирование вузов КНР.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Пройти диагностику уровня', o: 'client' },
+                 { t: 'Отработать темы на тренажере', o: 'client' },
+                 { t: 'Записать на тестирование', o: 'team' } ] },
+    { key: 'interview', n: 10, title: 'Онлайн-интервью', sub: 'Там, где вуз или грант его проводит.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Подготовить кандидата к интервью', o: 'team' },
+                 { t: 'Пройти тренажер интервью', o: 'client' },
+                 { t: 'Пройти собеседование или экзамен', o: 'client' } ] },
+    { key: 'apply',   n: 11, title: 'Подача в вузы', sub: 'Самый плотный по срокам этап.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Подать документы в вузы', o: 'team' },
+                 { t: 'Вести переписку с приемной комиссией', o: 'team' } ] },
+    { key: 'offer',   n: 12, title: 'Зачисление и выбор гранта', sub: 'Разбираем офферы и выбираем.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Помочь с анализом офферов', o: 'team' },
+                 { t: 'Выбрать подходящий грант', o: 'client' } ] },
+    { key: 'visa',    n: 13, title: 'Учебная виза', sub: 'Готовим документы на визу.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Оформить документы на визу', o: 'team' },
+                 { t: 'Подать документы в визовый центр', o: 'client' } ] },
+    { key: 'adapt',   n: 14, title: 'Адаптация в Китае', sub: 'Первый год начинается с быта.',
+      t: ['std', 'plus', 'prem'],
+      presets: [ { t: 'Спланировать маршрут и прибытие', o: 'team' },
+                 { t: 'Пройти симулятор адаптации', o: 'client' },
+                 { t: 'Регистрация в вузе и заселение', o: 'team' } ] },
+    { key: 'meet',    n: 15, title: 'Теплый прием в Китае', sub: 'День прилета.',
+      t: ['prem'],
+      presets: [ { t: 'Прислать данные о рейсе', o: 'client' },
+                 { t: 'Встретить в аэропорту и заселить', o: 'team' } ] },
+    { key: 'settle',  n: 16, title: 'Первые месяцы в Китае', sub: 'Банк, симка, деканат, общежитие.',
+      t: ['plus', 'prem'],
+      presets: [ { t: 'Сопровождать первый месяц', o: 'team' } ] },
   ];
   var RM_STATUS = {
     wait:   { label: 'ждем' },
@@ -24467,12 +24646,12 @@
     var now = Date.now();
     var hrs = function (h) { return new Date(now - h * 3600000).toISOString(); };
     var T = [
-      { stage: 'intro', title: 'Заполнить анкету', owner: 'client', status: 'done', need: 'Пройти все шаги анкеты на платформе.', attach: ['text'],
+      { stage: 'diag', title: 'Заполнить анкету', owner: 'client', status: 'done', need: 'Пройти все шаги анкеты на платформе.', attach: ['text'],
         subs: [{ kind: 'text', text: 'Анкета заполнена полностью — 7 из 7 шагов.', at: hrs(72) }] },
-      { stage: 'intro', title: 'Пройти консультацию', owner: 'client', status: 'done' },
-      { stage: 'intro', title: 'Проанализировать профиль', owner: 'team', status: 'done' },
-      { stage: 'strategy', title: 'Сформировать стратегию поступления', owner: 'team', status: 'done' },
-      { stage: 'strategy', title: 'Подобрать список вузов и грантов', owner: 'team', status: 'doing' },
+      { stage: 'diag', title: 'Пройти консультацию', owner: 'client', status: 'done' },
+      { stage: 'diag', title: 'Проанализировать профиль', owner: 'team', status: 'done' },
+      { stage: 'pick', title: 'Сформировать стратегию поступления', owner: 'team', status: 'done' },
+      { stage: 'pick', title: 'Подобрать список вузов и грантов', owner: 'team', status: 'doing' },
       { stage: 'docs', title: 'Загранпаспорт', owner: 'client', status: 'done', need: 'Разворот с фото, четко, без бликов.', attach: ['photo'],
         subs: [{ kind: 'image', name: 'passport.jpg', at: hrs(48) }] },
       { stage: 'docs', title: 'Аттестат или диплом', owner: 'client', status: 'review', need: 'Аттестат и приложение с оценками. Скан или ровное фото, без бликов.', attach: ['photo', 'file'],
@@ -24481,7 +24660,7 @@
           { by: 'client', text: 'Прислал аттестат и приложение с оценками, плюс перевод', at: hrs(5) },
           { by: 'mgr', text: 'Принял, спасибо. Вот образец печати, которую ждем на справке, и список требований.', at: hrs(4), atts: [{ kind: 'image', name: 'obrazec-pechati.jpg' }, { kind: 'file', name: 'trebovaniya.pdf' }] },
         ] },
-      { stage: 'docs', title: 'Мотивационное письмо', owner: 'client', status: 'review', need: '200–300 слов: почему Китай, почему эта специальность.', attach: ['text'],
+      { stage: 'letters', title: 'Мотивационное письмо', owner: 'client', status: 'review', need: '200–300 слов: почему Китай, почему эта специальность.', attach: ['text'],
         subs: [{ kind: 'text', text: 'С детства увлекаюсь робототехникой и хочу учиться там, где она развивается быстрее всего. Китай для меня — это…', at: hrs(2) }] },
       { stage: 'docs', title: 'Выписка оценок', owner: 'client', status: 'doing', need: 'Официальная выписка за все классы.', attach: ['file'], due: todayISO(-1) },
       { stage: 'docs', title: 'Справка о несудимости', owner: 'client', status: 'wait', need: 'Оформляется около двух недель — начни заранее.', attach: ['file'], due: todayISO(5) },
@@ -25113,6 +25292,18 @@
       (RM_FLASH[t.id] ? ' rm-flash' : '') + '" data-tid="' + esc(t.id) + '">' + head + detail + '</div>';
   }
 
+  /* Этапы, которые показываем в плане: те, что есть в тарифе клиента, плюс любые,
+     где уже стоят задачи. Прятать этап с задачами нельзя ни при каком тарифе —
+     работа не должна исчезать с экрана из-за поля в карточке. Тариф не выбран —
+     показываем все этапы. */
+  function rmStages(ctx, byStage) {
+    var o = (ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {};
+    var t = o.tariff || '';
+    return ADMISSION_STAGES.filter(function (st) {
+      if (!t || (st.t || []).indexOf(t) >= 0) return true;
+      return (byStage[st.key] || []).length > 0;
+    });
+  }
   function buildAdmissionSection(ctx) {
     var id = state.drawerId;
     var tasks = rmTasks(id);
@@ -25141,7 +25332,7 @@
     // личные названия/описания этапов от AI (то, что видит ученик) поверх словаря
     var stMeta = (state.planStatus[id] && state.planStatus[id].meta) || {};
     html += '<div class="rm-flow">';
-    ADMISSION_STAGES.forEach(function (st) {
+    rmStages(ctx, byStage).forEach(function (st) {
       var meta = stMeta[st.key] || {};
       var list = byStage[st.key] || [];
       var doneN = list.filter(function (t) { return t.status === 'done'; }).length;
@@ -26990,12 +27181,98 @@
     if (!state._catalog) fetchCatalog(function () {
       if (state.drawerId === id && state.modalSection === 'path') renderModalContent();
     });
+    platLoad(id);
     var html = '<div class="m-ctitle">Путь и использование</div>' +
       '<div class="m-csub">Кто это, как пользуется платформой и где остановился — вся картина на одном экране.</div>';
     html += buildUsageDash(ctx, L);
+    html += buildCabinet(id);
     html += '<div class="uz-jh"><span>Как шел по платформе</span><i></i></div>';
     html += buildPathTimeline(L, d || null);
     return html;
+  }
+
+  /* ── КАБИНЕТ СЕМЬИ: кто зашел и что делает сам ────────────────────────────
+     Карточка отвечала на вопрос «что мы сделали для клиента» и молчала о том, что
+     делает он. Между тем половина работы идет в кабинете: тренажеры, диагностика,
+     сдача задач. Тьютор об этом узнавал, только спросив семью.
+     Тянем отдельной ручкой и только в этой секции: в карточке и так тяжело, а
+     цифры нужны не каждый раз. */
+  function platLoad(id) {
+    if (state._plat[id]) return;
+    state._plat[id] = 'load';
+    var done = function (v) {
+      state._plat[id] = v;
+      if (state.drawerId === id && state.modalSection === 'path') renderModalContent();
+    };
+    api('/admin/api/leads/' + id + '/platform')
+      .then(function (r) { done(r || 'none'); })
+      .catch(function () { done('none'); });
+  }
+  var PLAT_REL = { self: 'Ученик', parent: 'Родитель' };
+  var PLAT_STATE = { done: 'закрыт', now: 'идет сейчас', open: 'в работе', none: '' };
+  function platSeat(p) {
+    if (!p.last_seen) return { text: 'ни разу не заходил', cold: true };
+    var days = (Date.now() - new Date(p.last_seen).getTime()) / 86400000;
+    // Тот же рецепт, что в строке карты: первый вход за сутки горит. Тьютор
+    // работает в карточке, и новость должна догонять его здесь, а не только
+    // в общем списке.
+    var fresh = p.first_seen && (Date.now() - new Date(p.first_seen).getTime()) < 86400000;
+    return { text: 'заходил ' + ago(p.last_seen) + ' назад', cold: days > 14, fresh: !!fresh };
+  }
+  function buildCabinet(id) {
+    var p = state._plat[id];
+    var head = '<div class="uz-jh"><span>Кабинет семьи</span><i></i></div>';
+    if (!p || p === 'load') return head + '<div class="sk-line"><div class="shim a"></div>' +
+      '<div class="shim c"></div></div>';
+    if (p === 'none') return head + '<div class="cab-empty">Не удалось загрузить данные кабинета.</div>';
+
+    /* Кого в кабинете НЕТ — такой же ответ на вопрос «кто вошел», как и кто есть.
+       Пустое место читалось бы как «родителя у семьи нет», а это чаще всего значит
+       «мы его не завели»: родитель платит и тревожится, ему кабинет нужен. */
+    var have = {};
+    (p.people || []).forEach(function (m) { have[m.relation] = 1; });
+    var missing = ['self', 'parent'].filter(function (rel) { return !have[rel]; })
+      .map(function (rel) {
+        return '<div class="cab-seat off"><div class="cab-seat-r">' + PLAT_REL[rel] + '</div>' +
+          '<div class="cab-seat-n">не заведен</div>' +
+          '<div class="cab-seat-s">кабинета нет</div></div>';
+      }).join('');
+    var seats = (p.people || []).length
+      ? '<div class="cab-seats">' + p.people.map(function (m) {
+          var s = platSeat(m);
+          return '<div class="cab-seat' + (s.cold ? ' cold' : '') + (s.fresh ? ' fresh' : '') + '">' +
+            '<div class="cab-seat-r">' + (PLAT_REL[m.relation] || m.relation) + '</div>' +
+            '<div class="cab-seat-n">' + esc(m.name || 'без имени') + '</div>' +
+            '<div class="cab-seat-s">' + (s.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') +
+            esc(s.text) + '</div></div>';
+        }).join('') + missing + '</div>'
+      // кабинета нет вовсе — это не «мало активности», это отсутствие доступа, и
+      // говорить об этом надо прямо, а не пустым местом
+      : '<div class="cab-warn">Кабинета нет ни у ученика, ни у родителя. Пока семью не завели в ' +
+        'платформу, ни задачи, ни тренажеры, ни план до нее не доходят.</div>';
+
+    var acts = (p.activity || []).length
+      ? '<div class="cab-acts">' + p.activity.map(function (a) {
+          return '<div class="cab-act"><span class="cab-act-t">' + esc(a.title) + '</span>' +
+            '<span class="cab-act-w">' + fmtWhen(a.at) + '</span></div>';
+        }).join('') + '</div>'
+      : '<div class="cab-empty">Сам на платформе еще ничего не проходил.</div>';
+
+    var stages = (p.stages || []).map(function (st) {
+      var n = st.total ? st.done + ' из ' + st.total : '';
+      return '<div class="cab-st' + (st.state !== 'none' ? ' ' + st.state : '') + '">' +
+        '<i class="cab-st-d"></i><span class="cab-st-t">' + esc(st.title) + '</span>' +
+        '<span class="cab-st-s">' + (PLAT_STATE[st.state] || '') +
+          (n ? '<b class="cab-st-n"> · ' + n + '</b>' : '') + '</span></div>';
+    }).join('');
+    var tname = p.tariff ? mapTariffName(p.tariff) : '';
+
+    return head + seats +
+      '<div class="cab-h">Что прошел сам</div>' + acts +
+      '<div class="cab-h">Этапы пути' +
+        (tname ? ' <span class="cab-h-t">' + esc(tname) + '</span>'
+               : ' <span class="cab-h-t off">тариф не выбран — показываем все этапы</span>') +
+      '</div><div class="cab-sts">' + stages + '</div>';
   }
 
   /* герой-пульс + сетка панелей использования */

@@ -4280,6 +4280,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .tpl-stage { background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .tpl-stage-h { display: flex; gap: 10px; align-items: center; }
 .tpl-stage-h .tpl-stage-t { font-weight: 600; font-size: 14px; }
+/* Этап пути, на который лягут задачи стадии: подчиненное поле рядом с названием */
+.tpl-stage-h .tpl-stage-k { flex: 0 0 auto; width: 230px; font-size: 12.5px; color: var(--ink-2); }
 .tpl-stage > .tpl-fld[data-f="sabout"] { font-size: 12.5px; }
 .tpl-tasks { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
 .tpl-task { background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
@@ -8448,25 +8450,30 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* ════ КАРТА: клиенты по этапам пути (.map-*) ════════════════════════════════
    Якорь экрана — дорожка этапов: она единственная крупная вещь, список под ней
    намеренно тихий. Полоска под числом дает форму потока с одного взгляда, без
-   диаграмм. Сегмент «Без плана» отбит от дорожки: это не девятый этап, а те, кого
-   мы еще не разложили по пути, и читаться он должен иначе. */
+   диаграмм. Этапов на пути шестнадцать (словарь тарифной таблицы), поэтому
+   дорожка — сетка в два ряда, а не полоса с горизонтальной прокруткой: путь
+   должен быть виден целиком, иначе дорожкой пользоваться нельзя.
+   «Без плана» вынесен из дорожки отдельной строкой: это не этап, а те, кого мы
+   еще не разложили по пути, и читаться он должен иначе. */
 .map-top { padding: 22px 26px 20px; }
-.map-rail { display: flex; align-items: stretch; gap: 8px; margin-top: 18px;
-  overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
-.map-seg { flex: 1 1 0; min-width: 104px; position: relative; text-align: left;
-  display: flex; flex-direction: column; gap: 6px; padding: 12px 13px 11px;
+/* Ровно восемь в ряд: шестнадцать этапов ложатся двумя одинаковыми рядами, а
+   подписи вроде «Диагностики» перестают ломаться посреди слова. */
+.map-rail { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 7px; margin-top: 18px; }
+.map-seg { position: relative; text-align: left; min-width: 0;
+  display: flex; flex-direction: column; gap: 5px; padding: 11px 12px 10px;
   background: var(--fill); border: 1px solid transparent; border-radius: var(--r-lg);
   cursor: pointer; transition: .14s var(--ease); }
 .map-seg:hover { background: #EDEFF3; }
 .map-seg.on { background: var(--blue-tint); border-color: rgba(47,107,255,.28); }
-.map-seg-n { font: 800 26px 'Manrope', sans-serif; letter-spacing: -.035em; color: var(--ink);
+.map-seg-n { font: 800 24px 'Manrope', sans-serif; letter-spacing: -.035em; color: var(--ink);
   line-height: 1; font-variant-numeric: tabular-nums; }
 .map-seg.zero .map-seg-n { color: var(--ink-3); font-weight: 700; }
 /* На этапе никого — кнопка не обещает перехода в пустой список */
 .map-seg:disabled { cursor: default; }
 .map-seg:disabled:hover { background: var(--fill); }
 .map-seg.on .map-seg-n { color: var(--blue); }
-.map-seg-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+.map-seg-t { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--ink-3); line-height: 1.25; }
 .map-seg.on .map-seg-t { color: var(--navy); }
 .map-seg-b { display: block; height: 3px; border-radius: 2px; background: rgba(15,19,32,.07);
@@ -8474,59 +8481,148 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .map-seg-b i { display: block; height: 100%; border-radius: 2px; background: var(--navy);
   opacity: .35; transition: width .9s var(--ease); }
 .map-seg.on .map-seg-b i { background: var(--blue); opacity: 1; }
-/* номер этапа — тихая подпись в углу, чтобы порядок читался и без счета глазами */
-.map-seg-i { position: absolute; top: 11px; right: 12px; font-size: 11px; font-weight: 700;
-  color: var(--ink-3); opacity: .55; }
-/* «Без плана»: отбивка слева и амбер — это не этап, а незакрытая работа команды */
-.map-seg.gap { margin-left: 14px; flex: 0 0 132px; }
-.map-seg.gap::before { content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
-  width: 1px; background: var(--line-2); }
-.map-seg.gap:not(.zero) { background: var(--amber-soft); }
-.map-seg.gap:not(.zero) .map-seg-n { color: var(--amber-ink); }
-.map-seg.gap:not(.zero) .map-seg-t { color: var(--amber-ink); opacity: .8; }
-.map-seg.gap:not(.zero) .map-seg-b i { background: var(--amber); opacity: .55; }
-/* Выбранный «Без плана» остается амбером (синий тут читался бы как другой сегмент),
-   но берет полную плотность подписи и заметный бордер — иначе нажатие визуально
-   ничего не меняет, а список под ним уже показывает срез. */
-.map-seg.gap.on { background: var(--amber-soft); border: 1.5px solid var(--amber);
-  padding: 11.5px 12.5px 10.5px; }
-.map-seg.gap.on .map-seg-t { opacity: 1; }
-.map-seg.gap.on .map-seg-b i { opacity: 1; }
+
+/* «Без плана»: строка под дорожкой, амбер — это не этап, а незакрытая работа
+   команды. Выбранный берет заметный бордер: иначе нажатие визуально ничего не
+   меняет, а список под ним уже показывает срез. */
+.map-gap { display: flex; align-items: baseline; gap: 10px; width: 100%; margin-top: 8px;
+  padding: 10px 14px; text-align: left; cursor: pointer; border-radius: var(--r-lg);
+  background: var(--amber-soft); border: 1px solid transparent; transition: .14s var(--ease); }
+.map-gap.zero { background: var(--fill); cursor: default; }
+.map-gap.on { border: 1.5px solid var(--amber); padding: 9.5px 13.5px; }
+.map-gap-n { font: 800 20px 'Manrope', sans-serif; letter-spacing: -.03em; line-height: 1;
+  color: var(--amber-ink); font-variant-numeric: tabular-nums; }
+.map-gap.zero .map-gap-n { color: var(--ink-3); }
+.map-gap-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--amber-ink); }
+.map-gap.zero .map-gap-t { color: var(--ink-3); }
+.map-gap-s { font-size: 12px; color: var(--ink-3); margin-left: auto; }
+/* «Этап не определен» — не дыра в работе, а мусор старых шаблонов: та же строка,
+   но без амбера, иначе два одинаково тревожных блока подряд. */
+.map-gap.lost { background: var(--fill); }
+.map-gap.lost .map-gap-n, .map-gap.lost .map-gap-t { color: var(--ink-2); }
+.map-gap.lost.on { border-color: var(--line-2); }
+
+/* ════ КАБИНЕТ СЕМЬИ в карточке клиента (.cab-*) ═════════════════════════════
+   Блок отвечает на три вопроса подряд: кто из семьи вообще внутри, что человек
+   прошел сам, и как это ложится на этапы его тарифа. Тон тихий — это справка
+   внутри карточки, а не экран; кричит здесь только то, чего нет: непройденный
+   вход в кабинет и этап, до которого не дошли. */
+.cab-seats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.cab-seat { flex: 1 1 180px; min-width: 0; padding: 11px 13px; border-radius: var(--r-lg);
+  background: var(--fill); }
+.cab-seat-r { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.cab-seat-n { margin-top: 3px; font-size: 13.5px; font-weight: 650; color: var(--ink);
+  letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-seat-s { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+/* Молчание дольше двух недель и «ни разу не заходил» — то, ради чего блок и
+   заведен: оно чернее рядового «заходил вчера», а не бледнее. */
+.cab-seat.cold { background: var(--amber-soft); }
+.cab-seat.cold .cab-seat-r, .cab-seat.cold .cab-seat-s { color: var(--amber-ink); }
+/* Кого не завели — пунктиром и без цвета: это не тревога, это пробел, который
+   видно. Заполненная плашка рядом должна оставаться главнее. */
+.cab-seat.off { background: transparent; border: 1px dashed var(--line-2); }
+.cab-seat.off .cab-seat-n { color: var(--ink-2); font-weight: 600; }
+.cab-seat.fresh { background: var(--green-soft); }
+.cab-seat.fresh .cab-seat-s { color: var(--green-ink); font-weight: 600; }
+.cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+
+.cab-h { margin: 18px 0 8px; font-size: 12px; font-weight: 700; color: var(--ink-2);
+  letter-spacing: -.01em; }
+.cab-h-t { font-weight: 600; color: var(--ink-3); }
+.cab-h-t.off { font-weight: 500; }
+.cab-acts { display: flex; flex-direction: column; }
+.cab-act { display: flex; align-items: baseline; gap: 12px; padding: 8px 0;
+  border-top: 1px solid var(--line); font-size: 12.5px; }
+.cab-act:first-child { border-top: 0; }
+.cab-act-t { flex: 1; min-width: 0; color: var(--ink); }
+.cab-act-w { flex: none; color: var(--ink-3); font-size: 12px; }
+/* Пусто здесь — обычный факт, а не экран: общий .empty отбивает полсотни пикселей
+   сверху и снизу и рвет блок надвое. */
+.cab-empty { padding: 9px 0; font-size: 12.5px; color: var(--ink-3); }
+
+/* Этапы тарифа: засечка слева, состояние справа. Этап, которого никто не касался,
+   держим совсем тихим — иначе шестнадцать одинаково заметных строк, и взгляду не
+   за что зацепиться. */
+.cab-sts { display: flex; flex-direction: column; }
+.cab-st { display: flex; align-items: center; gap: 10px; padding: 7px 0;
+  border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); }
+.cab-st:first-child { border-top: 0; }
+.cab-st-d { width: 7px; height: 7px; border-radius: 50%; background: rgba(15,19,32,.12); flex: none; }
+.cab-st-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cab-st-s { flex: none; font-size: 12px; }
+.cab-st.done .cab-st-d { background: var(--navy); opacity: .45; }
+.cab-st.done .cab-st-t { color: var(--ink-2); }
+.cab-st.open .cab-st-d { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(15,19,32,.34); }
+.cab-st.open .cab-st-t { color: var(--ink); }
+.cab-st.now .cab-st-d { width: 9px; height: 9px; background: var(--blue); }
+.cab-st.now .cab-st-t { color: var(--ink); font-weight: 650; }
+.cab-st.now .cab-st-s { color: var(--blue); font-weight: 600; }
 
 .map-list { margin-top: 16px; }
 .map-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 13px 16px; border-bottom: 1px solid var(--line); }
 .map-bar .searchwrap { flex: 0 1 280px; }
 .map-chips { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-.map-grid { grid-template-columns: minmax(150px, 1.2fr) 118px minmax(210px, 1.5fr) 140px 118px minmax(110px, .9fr); }
+.map-grid { grid-template-columns: minmax(150px, 1.15fr) 118px minmax(230px, 1.4fr) minmax(178px, 1.15fr) 104px minmax(104px, .85fr); }
 .map-grid.thead { height: 38px; }
+/* Строка открывает карточку, значит она кнопка и с клавиатуры: тот же inset,
+   что у .det-row и .st-row — дефолтное кольцо на строке в 58px теряется. */
+.trow.map-grid:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .map-c { min-width: 0; font-size: 12.5px; color: var(--ink-2); }
 .map-tar { font-size: 11.5px; }
 .map-tar.off { color: var(--ink-3); background: var(--fill); border: 1px dashed var(--line-2); }
 
 /* Позиция на пути: засечки вместо полосы. Пройденное чернильное, текущее синее и
-   крупнее — этап читается раньше, чем подпись рядом. */
-.map-track { display: flex; align-items: center; gap: 4px; max-width: 100%; }
-.map-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(15,19,32,.12); flex: none; }
+   выше остальных — этап читается раньше, чем подпись рядом. Начатое, но не закрытое —
+   половинный тон: на пути, где этапы идут внахлест, «идет работа» и «закрыт» нельзя
+   показывать одинаково. Засечка узкая: шестнадцать кружков в строке — уже не шкала,
+   а рябь, и подписи рядом не остается места. */
+.map-track { display: flex; align-items: center; gap: 2px; max-width: 100%; }
+.map-dot { width: 4px; height: 9px; border-radius: 2px; background: rgba(15,19,32,.12); flex: none; }
 .map-dot.done { background: var(--navy); opacity: .45; }
-.map-dot.now { width: 10px; height: 10px; background: var(--blue); }
-.map-track-t { margin-left: 8px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
+.map-dot.open { background: rgba(15,19,32,.26); }
+.map-dot.now { height: 13px; background: var(--blue); }
+.map-track-t { margin-left: 9px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-track.none { font-size: 12.5px; color: var(--amber-ink); }
+.map-track-no { flex: none; margin-left: 8px; font-size: 12px; color: var(--amber-ink); }
 
 /* Молчание дольше двух недель — то, ради чего колонка заведена: оно чернее
    рядового «заходил вчера», а не бледнее. Амбер сюда не тащим, он занят
    якорем «Без плана» на дорожке. */
 .map-seat { color: var(--ink-3); }
 .map-seat.cold { color: var(--ink-2); font-weight: 600; }
+/* Первый вход в кабинет за последние сутки: зеленая точка с мягким пульсом. Зеленый
+   тут по формуле — это успех, семья включилась; амбер занят «Без плана», а красный
+   значит потерю. Пульс медленный и один: экран не должен мигать. */
+.map-seat.fresh { color: var(--green-ink); font-weight: 650; }
+.map-new { display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: var(--green); vertical-align: baseline;
+  /* Три вспышки по секунде и стоп: §6 не разрешает движение дольше ~1s, а вечно
+     пульсирующая точка в таблице к тому же превращается в фон через минуту.
+     Зеленых чернил и слова «впервые» хватает, чтобы строка осталась видна. */
+  animation: mapNew 1s var(--ease) 3; }
+@keyframes mapNew {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(24,169,87,.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(24,169,87,0); }
+}
+@media (prefers-reduced-motion: reduce) { .map-new { animation: none; } }
 .map-none { color: var(--ink-3); }
 .map-over { color: var(--red-ink); font-weight: 700; }
 .map-sell { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 960px) {
   .map-top { padding: 18px 16px 16px; }
-  .map-seg { flex: 0 0 118px; }
-  .map-seg.gap { flex: 0 0 128px; }
+  /* Три в ряд, а не четыре: на 390px в четверть строки не влезает «зачисление»,
+     и подпись обрезается ровно у самых длинных этапов. */
+  .map-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .map-seg { padding: 9px 10px 8px; }
+  .map-seg-n { font-size: 20px; }
+  .map-seg-t { font-size: 9.5px; letter-spacing: .02em; overflow-wrap: break-word; }
+  .map-gap-s { display: none; }
   /* Строка на телефоне разворачивается ярусами: имя и тариф, путь, кабинет и
      задачи, предложение — в шесть колонок на 390px имя схлопывается до двух букв.
      Шапки тут нет, поэтому ярусы подписаны сами (data-l), как в .tp-grid. */
