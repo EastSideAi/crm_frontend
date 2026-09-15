@@ -7823,6 +7823,29 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 46px 20px 52px; color: var(--ink-3); font-size: 14px; max-width: 400px; margin: 0 auto; }
 .att-empty svg { opacity: .55; }
 
+/* Доступ к курсам: переключатель среза и сетка «люди x курсы».
+   Клетка — одно состояние из четырех: открыт/закрыт по роли и то же самое
+   решением руководителя. Ручное решение помечено кольцом, а не вторым цветом:
+   цвет тут уже занят смыслом «открыт или нет». */
+.att-seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--fill); border-radius: var(--r-pill); }
+.att-sg { padding: 6px 14px; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-3); background: none; border: 0; border-radius: var(--r-pill); cursor: pointer; transition: .15s; }
+.att-sg:hover { color: var(--ink-2); }
+.att-sg.on { color: var(--ink); background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+.acc-table td.att-c { padding: 9px 14px; }
+.acc-cell { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--ink-3); cursor: pointer; transition: .15s; }
+.acc-cell:hover { border-color: var(--line-2); }
+.acc-cell.on { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
+.acc-cell.off { background: var(--fill); color: var(--ink-3); }
+.acc-cell.man { box-shadow: inset 0 0 0 2px var(--blue); }
+.acc-cell:disabled { opacity: .5; cursor: default; }
+.acc-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 24px 16px; font-size: 12px; color: var(--ink-3); }
+.acc-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.acc-lg { width: 13px; height: 13px; border-radius: 4px; background: var(--fill); }
+.acc-lg.on { background: var(--green-soft); }
+.acc-lg.man { background: var(--card); box-shadow: inset 0 0 0 2px var(--blue); }
+.acc-hint { margin-left: auto; }
+@media (max-width: 720px) { .acc-hint { margin-left: 0; } }
+
 /* ── Недельный цикл: «Неделя», «Потом», «Команда» (ADR 001) ──────────────────
    Полосы дней — тот же .tsk-band, что делил «Сегодня» на важное и остальное.
    Предел недели — тонкая полоса заполненности рядом с навигацией: число «5 из 7»

@@ -96,7 +96,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio', 'attSeg'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -107,6 +107,7 @@
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, taskPrio: state.taskPrio || '',
+        attSeg: state.attSeg || '',
       }));
     } catch (e) {}
   }
@@ -4219,12 +4220,113 @@
     '</tr>';
   }
 
+  /* ── Доступ к курсам: кто что видит в Академии ──────────────────────────────
+     Павел 15.09.2026: «у руководителя должна быть панель кому открывать доступ а
+     кому нет». Дефолт считает роль, панель хранит ТОЛЬКО исключения, поэтому в
+     клетке видно две вещи сразу: открыт курс или нет и стоит ли за этим решение
+     человека. Клик переключает; вернул как по роли — отметка снимается сама
+     (сервер не хранит отметку, совпавшую с ролью).  */
+  var ACC = null;
+
+  function accLoad(cb) {
+    api('/admin/api/academy/access').then(function (r) {
+      ACC = { users: r.users || [], courses: r.courses || [] };
+      if (cb) cb();
+    }).catch(function () { ACC = { users: [], courses: [] }; if (cb) cb(); });
+  }
+
+  function accCell(u, c) {
+    var hint = c.open ? 'открыт' : 'закрыт';
+    hint += c.manual == null ? ' по роли'
+      : ' вручную' + (c.by ? ', ' + c.by : '') + (c.at ? ', ' + arDate(c.at) : '');
+    return '<td class="att-c"><button class="acc-cell' + (c.open ? ' on' : ' off') +
+      (c.manual == null ? '' : ' man') + '" data-u="' + u.id + '" data-c="' + esc(c.id) +
+      '" title="' + esc(c.title + ': ' + hint) + '">' +
+      (c.open ? ic('check', 13) : ic('x', 12)) + '</button></td>';
+  }
+
+  function accDraw(view) {
+    var cs = ACC.courses, us = ACC.users;
+    var body;
+    if (!us.length) {
+      body = '<div class="att-empty">' + ic('award', 22) +
+        '<div>В команде пока некого учить. Заведите сотрудника в разделе «Команда».</div></div>';
+    } else {
+      body = '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
+        '<th>Сотрудник</th>' +
+        cs.map(function (c) { return '<th class="att-c">' + esc(c.title) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' + us.map(function (u) {
+          var role = (ROLES[u.role] && ROLES[u.role].label) || u.role || '';
+          return '<tr><td><div class="att-who"><span class="att-name">' + esc(u.name || u.login) +
+            '</span><span class="att-role">' + esc(role) + '</span></div></td>' +
+            cs.map(function (c) {
+              var cell = null;
+              for (var i = 0; i < u.courses.length; i++) if (u.courses[i].id === c.id) cell = u.courses[i];
+              return cell ? accCell(u, cell) : '<td class="att-c"></td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div>' +
+        '<div class="acc-legend">' +
+          '<span><i class="acc-lg on"></i>открыт</span>' +
+          '<span><i class="acc-lg off"></i>закрыт</span>' +
+          '<span><i class="acc-lg man"></i>решение руководителя, а не роль</span>' +
+          '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается.</span>' +
+        '</div>';
+    }
+    return body;
+  }
+
+  function accBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('.acc-cell'), function (b) {
+      b.addEventListener('click', function () {
+        var uid = +b.getAttribute('data-u'), cid = b.getAttribute('data-c');
+        var user = null, cell = null, i;
+        for (i = 0; i < ACC.users.length; i++) if (ACC.users[i].id === uid) user = ACC.users[i];
+        if (!user) return;
+        for (i = 0; i < user.courses.length; i++) if (user.courses[i].id === cid) cell = user.courses[i];
+        if (!cell) return;
+        var want = !cell.open;
+        b.disabled = true;
+        apiSend('/admin/api/academy/access', 'PUT', { user_id: uid, course: cid, allow: want },
+          function (r) {
+            cell.open = !!(r && r.open);
+            cell.manual = (r && r.manual != null) ? r.manual : null;
+            cell.by = cell.manual == null ? null : (state.userName || '');
+            cell.at = cell.manual == null ? null : new Date().toISOString();
+            attDraw(view);
+            showToast(cell.open ? 'Курс открыт' : 'Курс закрыт');
+          },
+          function () { b.disabled = false; showToast('Не сохранилось — проверь сеть'); });
+      });
+    });
+  }
+
   function attDraw(view) {
     var rows = (state.att && state.att.rows) || [];
     var passed = rows.filter(function (r) { return r.passed; }).length;
-    var head = '<div class="att-head"><div class="att-h">Аттестации тьюторов</div>' +
+    var seg = state.attSeg === 'access' ? 'access' : 'done';
+    var head = '<div class="att-head"><div class="att-h">' +
+      (seg === 'access' ? 'Доступ к курсам' : 'Аттестации тьюторов') + '</div>' +
+      '<div class="att-seg">' +
+        '<button class="att-sg' + (seg === 'done' ? ' on' : '') + '" data-seg="done">Сдачи</button>' +
+        '<button class="att-sg' + (seg === 'access' ? ' on' : '') + '" data-seg="access">Доступ</button>' +
+      '</div>' +
       '<div class="att-sp"></div>' +
       '<button class="att-refresh" id="att-refresh">' + ic('refresh', 14) + 'Обновить</button></div>';
+    if (seg === 'access') {
+      if (ACC == null) {
+        view.innerHTML = '<div class="att">' + head +
+          '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div>' +
+          '<div class="loaddot"></div></div></div>';
+        attSegBind(view);
+        return accLoad(function () { if (state.page === 'attestations') attDraw(view); });
+      }
+      view.innerHTML = '<div class="att">' + head + accDraw(view) + '</div>';
+      attSegBind(view);
+      accBind(view);
+      var rb2 = view.querySelector('#att-refresh');
+      if (rb2) rb2.onclick = function () { ACC = null; attDraw(view); };
+      return;
+    }
     var sum = '<div class="att-sum"><span><b>' + rows.length + '</b> в курсе</span>' +
       '<span class="att-mid"><b>' + passed + '</b> допущено</span></div>';
     var body;
@@ -4238,8 +4340,19 @@
         '</tr></thead><tbody>' + rows.map(attRow).join('') + '</tbody></table></div>';
     }
     view.innerHTML = '<div class="att">' + head + sum + body + '</div>';
+    attSegBind(view);
     var rb = view.querySelector('#att-refresh');
     if (rb) rb.onclick = function () { state.att = null; renderAttestations(view); };
+  }
+
+  function attSegBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('.att-sg'), function (b) {
+      b.addEventListener('click', function () {
+        state.attSeg = b.getAttribute('data-seg');
+        saveUi();
+        attDraw(view);
+      });
+    });
   }
 
   /* ── Заезды тьютора ─────────────────────────────────────────────────────────
