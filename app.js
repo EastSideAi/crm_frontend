@@ -3672,7 +3672,7 @@
   function acOpen(view, cid) {
     var c = acById(cid); if (!c) return;
     state.ac.course = c; state.ac.srv = null;
-    state.ac.li = null; state.ac.tv = {}; state.ac.lt = {};
+    state.ac.li = null; state.ac.tv = {}; state.ac.lt = {}; state.ac.cl = {};
     renderAcademy(view);
   }
 
@@ -3684,7 +3684,7 @@
       // Уже аттестован — открываем сразу экран допуска, а не интро.
       A.exStep = A.srv.passed ? X.iResult : 0;
       A.exAnswers = []; A.pay = A.srv.pay_method || null; A.agreed = !!A.srv.agreement;
-      A.tv = A.tv || {}; A.lt = A.lt || {};
+      A.tv = A.tv || {}; A.lt = A.lt || {}; A.cl = A.cl || {};
     }
     var mats = (C.mats || []).map(function (m) {
       return '<a class="ac-mat" href="' + esc(m[0]) + '" download>' + ic('doc', 14) + esc(m[1]) + '</a>';
@@ -3784,6 +3784,9 @@
     if (sc.type === 'shot') extra = acShotHTML(sc);
     if (sc.type === 'sign') extra = acSignHTML(sc);
     if (sc.type === 'task') extra = acTaskHTML(sc);
+    if (sc.type === 'stage') extra = acStageHTML(sc);
+    if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
+    if (sc.type === 'chklist') extra = acChkHTML(sc);
     if (sc.type === 'q') return acQHTML(sc);
     return eye + h + body + extra;
   }
@@ -3829,9 +3832,65 @@
       '<button class="ac-btn pri" disabled>' + (sc.soon ? 'Подпись скоро' : 'Подписать') + '</button></div>';
   }
 
+  /* Этап пути ученика. Один экран отвечает на четыре вопроса сразу: когда идет,
+     кто что делает, чем отличаются тарифы и по какому признаку этап закрыт.
+     Раскладка взята из портала продуктов (content/portal.json, продукт grant):
+     цифры и наполнение этапов правятся ТАМ, курс их пересказывает. */
+  function acStageHTML(sc) {
+    var meta = [];
+    if (sc.when) meta.push('<span class="ac-smeta"><i>Когда</i>' + esc(sc.when) + '</span>');
+    if (sc.who) meta.push('<span class="ac-smeta"><i>Кто ведет</i>' + esc(sc.who) + '</span>');
+    if (sc.point) meta.push('<span class="ac-smeta pt"><i>Оплата</i>' + esc(sc.point) + '</span>');
+    var cols = (sc.cols || []).map(function (c) {
+      return '<div class="ac-scol"><div class="ac-scol-h ac-cap">' + esc(c[0]) + '</div><ul>' +
+        c[1].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
+    }).join('');
+    var tar = (sc.tar || []).map(function (t) {
+      return '<li class="ac-tar ' + esc(t[0]) + '"><span class="ac-tar-n">' + esc(t[1]) + '</span><span>' + esc(t[2]) + '</span></li>';
+    }).join('');
+    return '<div class="ac-stage">' +
+      (meta.length ? '<div class="ac-smetas">' + meta.join('') + '</div>' : '') +
+      (cols ? '<div class="ac-scols">' + cols + '</div>' : '') +
+      (tar ? '<div class="ac-tars"><div class="ac-scol-h ac-cap">Чем отличаются тарифы</div><ul>' + tar + '</ul></div>' : '') +
+      (sc.dl ? '<div class="ac-sdl">' + ic('clock', 14) + '<span>' + esc(sc.dl) + '</span></div>' : '') +
+      (sc.done ? '<div class="ac-sdone"><b>Этап закрыт, когда:</b> ' + esc(sc.done) + '</div>' : '') +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  /* Три тарифа рядом: тьютор обязан знать, что именно семье продали. */
+  function acTariffsHTML(sc) {
+    var cards = (sc.cards || []).map(function (c) {
+      return '<div class="ac-tcard' + (c.accent ? ' accent' : '') + '">' +
+        '<div class="ac-tname">' + esc(c.n) + '</div>' +
+        '<div class="ac-tprice">' + esc(c.price) + '</div>' +
+        '<div class="ac-tpos">' + esc(c.pos) + '</div>' +
+        '<ul class="ac-tlist">' + (c.items || []).map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>' +
+        '<div class="ac-tends"><i>Заканчиваем</i>' + esc(c.ends) + '</div></div>';
+    }).join('');
+    return '<div class="ac-tcards">' + cards + '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  /* Чек-лист этапа: отмечается прямо в уроке. Дальше пускает всегда — это
+     тренажер, а не экзамен; смысл в том, чтобы человек прошел список руками
+     и увидел, сколько пунктов на самом деле стоит за словом «этап». */
+  function acChkHTML(sc) {
+    var st = state.ac.cl[sc.id] || (state.ac.cl[sc.id] = {});
+    var done = 0;
+    var items = (sc.items || []).map(function (t, i) {
+      var on = !!st[i]; if (on) done++;
+      return '<li><label class="ac-chkline"><input type="checkbox" data-ci="' + i + '"' + (on ? ' checked' : '') + '> ' + esc(t) + '</label></li>';
+    }).join('');
+    return '<div class="ac-chk" data-chk="' + esc(sc.id) + '">' +
+      '<div class="ac-chk-top"><span class="ac-cap">Отметьте, что уже умеете</span><span class="ac-chk-n" id="ac-cn">' + done + ' из ' + (sc.items || []).length + '</span></div>' +
+      '<ul class="ac-chk-list">' + items + '</ul></div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
   function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
   function acQHTML(sc) {
+    // sit — обстановка кейса: несколько абзацев до вопроса. Без нее это просто вопрос.
+    var sit = (sc.sit || []).map(function (t) { return '<p class="ac-p">' + esc(t) + '</p>'; }).join('');
     return '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div><h1 class="ac-h">' + esc(sc.h) + '</h1>' +
+      (sit ? '<div class="ac-sit">' + sit + '</div>' : '') +
       '<p class="ac-qlead">' + esc(sc.lead) + '</p>' +
       '<div class="ac-opts" id="ac-opts">' + sc.opts.map(function (o) { return '<button class="ac-opt" data-ok="' + o[2] + '"><span class="ac-key">' + esc(o[0]) + '</span><span class="ac-ot">' + esc(o[1]) + '</span></button>'; }).join('') + '</div>' +
       '<div class="ac-fb" id="ac-fb"></div>';
@@ -3857,6 +3916,7 @@
       var chk = el('ac-lt');
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
+    if (sc.type === 'chklist') acBindChk(sc);
     acBuildRoute();
   }
   function acBindQ(sc) {
@@ -3874,6 +3934,19 @@
         fb.innerHTML = ok ? sc.ok : sc.no;
         el('ac-next').disabled = false;
       });
+    });
+  }
+
+  function acBindChk(sc) {
+    var box = el('ac-screen').querySelector('[data-chk]'); if (!box) return;
+    var st = state.ac.cl[sc.id] || (state.ac.cl[sc.id] = {}), n = (sc.items || []).length;
+    box.addEventListener('change', function (ev) {
+      var i = ev.target.getAttribute && ev.target.getAttribute('data-ci');
+      if (i == null) return;
+      st[i] = ev.target.checked;
+      var done = 0; for (var k in st) if (st[k]) done++;
+      var lab = el('ac-cn'); if (lab) lab.textContent = done + ' из ' + n;
+      box.classList.toggle('full', done === n);
     });
   }
 
