@@ -3917,7 +3917,10 @@
     var cards = (sc.cards || []).map(function (c) {
       return '<div class="ac-tcard' + (c.accent ? ' accent' : '') + '">' +
         '<div class="ac-tname">' + esc(c.n) + '</div>' +
-        '<div class="ac-tprice">' + esc(c.price) + '</div>' +
+        // Цены тарифов в курсе тьютора не показываем (Павел 15.09.2026): тьютору
+        // нужно наполнение и какие этапы куда входят, а не чек семьи. Крупной
+        // строкой вместо цены идет объем — сколько этапов в тарифе.
+        '<div class="ac-tprice">' + esc(c.cnt) + '</div>' +
         '<div class="ac-tpos">' + esc(c.pos) + '</div>' +
         '<ul class="ac-tlist">' + (c.items || []).map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>' +
         '<div class="ac-tends"><i>Заканчиваем</i>' + esc(c.ends) + '</div></div>';
