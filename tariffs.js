@@ -197,10 +197,10 @@
     .then(function (d) {
       var p = (d.products || []).filter(function (x) { return x.id === PRODUCT; })[0];
       if (!p) throw new Error('нет продукта');
-      document.title = p.title + ' — тарифы ИстСайд';
+      document.title = p.title + ' — тарифы Истсайд.рф';
       root.innerHTML =
         '<header class="lp-head">' +
-          '<div class="al-eyebrow">ИстСайд</div>' +
+          '<div class="al-eyebrow">Истсайд.рф</div>' +
           '<h1 class="lp-h1">' + esc(p.title) + '</h1>' +
           /* подзаголовок берем из landing.sub, а НЕ из note или lead: те написаны
              для команды («флагман», «продаем вероятность»), и на странице,
