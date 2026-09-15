@@ -3935,6 +3935,7 @@
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
     if (sc.type === 'howto') extra = acHowHTML(sc);
+    if (sc.type === 'calc') extra = acCalcHTML(sc);
     // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
     // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
     if (sc.type === 'q') return acQHTML(sc);
@@ -4052,6 +4053,94 @@
     return '<ol class="ac-how">' + rows + '</ol>' + (sc.note ? acNote(sc.note) : '');
   }
 
+  /* Учебный калькулятор выплаты. Формула на соседних экранах написана словами, но
+     пока человек не увидит СВОЮ цифру, она остается абстракцией (просьба Павла
+     15.09.2026). Считает ровно то, что стоит в уроке: 20 000 ₽ за работу с
+     коэффициентом вовлеченности, до 10 000 ₽ за результат, премия и консультации
+     сверху. Ничего не сохраняет и никуда не отправляет — это тренажер, а не
+     ведомость, поэтому и цифры тут учебные, одинаковые для всех учеников. */
+  var AC_CALC = { n: 5, eng: 0, res: 0, top: true, cons: 5 };
+  var AC_ENG = [['90 и выше', 1, '1,00'], ['75—89', 0.95, '0,95'],
+                ['60—74', 0.9, '0,90'], ['ниже 60', 0.8, '0,80']];
+  var AC_RES = [['Полный грант', 10000], ['Скидка 50—99%', 7500],
+                ['Скидка до 50%', 5000], ['Платное', 4000], ['Никуда', 0]];
+  var AC_YESNO = [['Да'], ['Нет']];
+  var AC_WORK_PART = 20000, AC_BONUS = 3000, AC_CONS_FEE = 3000;
+  var AC_LIM = { n: [1, 20], cons: [0, 30] };
+
+  function acCalcSum() {
+    var c = AC_CALC;
+    var work = Math.round(AC_WORK_PART * AC_ENG[c.eng][1]);
+    var res = AC_RES[c.res][1];
+    // Премия — за два условия сразу, и оба про лучший исход: вуз уровня А и год
+    // без провалов. Частичный грант премию не дает, это разобрано на экране ставок.
+    var bonus = (c.eng === 0 && c.top && c.res === 0) ? AC_BONUS : 0;
+    var one = work + res + bonus, cons = c.cons * AC_CONS_FEE;
+    return { work: work, res: res, bonus: bonus, one: one,
+             all: one * c.n, cons: cons, total: one * c.n + cons };
+  }
+  function acStudWord(n) { return (n % 10 === 1 && n % 100 !== 11) ? 'ученика' : 'учеников'; }
+  function acCalcSeg(f, opts, cur) {
+    return '<div class="ac-seg" data-f="' + f + '">' + opts.map(function (o, i) {
+      return '<button type="button" class="ac-sg' + (i === cur ? ' on' : '') +
+        '" data-v="' + i + '">' + esc(o[0]) + '</button>';
+    }).join('') + '</div>';
+  }
+  function acCalcStep(f, v) {
+    return '<div class="ac-stp" data-f="' + f + '">' +
+      '<button type="button" data-d="-1" title="меньше">\u2212</button>' +
+      '<b>' + v + '</b>' +
+      '<button type="button" data-d="1" title="больше">+</button></div>';
+  }
+  function acCalcRow(t, v, cls) {
+    return '<li' + (cls ? ' class="' + cls + '"' : '') + '><span>' + t + '</span>' +
+      '<span class="ac-amt">' + fmtMoney(v) + '\u00a0₽</span></li>';
+  }
+  function acCalcOut() {
+    var s = acCalcSum(), c = AC_CALC;
+    return '<ul class="ac-clist">' +
+      acCalcRow('Работа, точки 1, 2, 3 и 5 · коэффициент ' + AC_ENG[c.eng][2], s.work) +
+      acCalcRow('Результат, точка 4', s.res) +
+      acCalcRow('Премия за вуз уровня А', s.bonus) +
+      (s.bonus ? '' : '<li class="ac-chint">Премия идет только при трех условиях сразу: коэффициент 1,00, вуз уровня А и полный грант</li>') +
+      acCalcRow('За одного ученика', s.one, 'sum') +
+      acCalcRow('За ' + c.n + ' ' + acStudWord(c.n), s.all) +
+      acCalcRow('Консультации по стратегии, ' + c.cons + ' × 3 000 ₽', s.cons) +
+      '</ul>' +
+      '<div class="ac-ctot"><span>Итого за год</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
+  }
+  function acCalcHTML(sc) {
+    return '<div class="ac-calc" id="ac-calc">' +
+      '<div class="ac-cfs">' +
+        '<div class="ac-cf"><span class="ac-cfl">Учеников на грантовом треке</span>' + acCalcStep('n', AC_CALC.n) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Коэффициент вовлеченности, баллы</span>' + acCalcSeg('eng', AC_ENG, AC_CALC.eng) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Что в итоге дал вуз</span>' + acCalcSeg('res', AC_RES, AC_CALC.res) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Вуз записан в уровень А на точке 1</span>' + acCalcSeg('top', AC_YESNO, AC_CALC.top ? 0 : 1) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Консультаций по стратегии за год</span>' + acCalcStep('cons', AC_CALC.cons) + '</div>' +
+      '</div>' +
+      '<div class="ac-cout" id="ac-cout">' + acCalcOut() + '</div>' +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+  function acBindCalc() {
+    var box = el('ac-calc'); if (!box) return;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!b || !box.contains(b)) return;
+      var wrap = b.parentNode, f = wrap.getAttribute('data-f');
+      if (!f) return;
+      if (b.hasAttribute('data-d')) {
+        var lim = AC_LIM[f];
+        AC_CALC[f] = Math.max(lim[0], Math.min(lim[1], AC_CALC[f] + (+b.getAttribute('data-d'))));
+        wrap.querySelector('b').textContent = AC_CALC[f];
+      } else {
+        var v = +b.getAttribute('data-v');
+        AC_CALC[f] = f === 'top' ? v === 0 : v;
+        [].forEach.call(wrap.children, function (x, i) { x.classList.toggle('on', i === v); });
+      }
+      el('ac-cout').innerHTML = acCalcOut();
+    });
+  }
+
   /* Голос преподавателя. Экран показывает факты, а объясняет их человек: короткая
      реплика своими словами, как на занятии (Павел 15.09.2026: «слайды должны
      объясняться как учителем»). Этот же текст потом читает озвучка — сценарий
@@ -4095,6 +4184,7 @@
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
     if (sc.type === 'chklist') acBindChk(sc);
+    if (sc.type === 'calc') acBindCalc();
     acZoomBind(scr);
     acVoiceMount(acC().id + '-' + A.li + '-' + A.si);
     acBuildRoute();

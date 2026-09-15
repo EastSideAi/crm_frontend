@@ -7530,6 +7530,46 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-hw { display: inline-flex; align-items: flex-start; gap: 7px; font-size: 13.5px; color: var(--ac-ink-3); }
 .academy .ac-hw svg { width: 12px; height: 12px; flex: none; margin-top: 4px; color: var(--ac-blue); }
 
+/* ── Академия: учебный калькулятор выплаты ───────────────────────────────────
+   Поля тихие, единственный акцент на экране — итоговая сумма. Цифры табличные:
+   человек двигает переключатели и смотрит, как меняется число, а прыгающая
+   ширина разрядов мешает это заметить. */
+.academy .ac-calc { margin: 18px 0 0; display: grid; gap: 14px; }
+.academy .ac-cfs { border: 1px solid var(--ac-line); border-radius: var(--ac-r-lg); overflow: hidden; }
+.academy .ac-cf { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 11px 14px; border-bottom: 1px solid var(--ac-line); }
+.academy .ac-cf:last-child { border-bottom: 0; }
+.academy .ac-cfl { font-size: 13.5px; font-weight: 600; color: var(--ac-ink-2); }
+.academy .ac-seg { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.academy .ac-sg { border: 1px solid var(--ac-line-2); background: var(--ac-card); color: var(--ac-ink-2);
+  font: 600 12.5px 'Manrope', sans-serif; padding: 6px 11px; border-radius: var(--ac-r-pill);
+  cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-sg:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-sg.on { background: var(--ac-blue-tint); border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-stp { display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+  border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill); }
+.academy .ac-stp button { width: 26px; height: 26px; border: 0; background: transparent; cursor: pointer;
+  color: var(--ac-ink-2); font: 600 15px 'Manrope', sans-serif; line-height: 1; border-radius: var(--ac-r-pill);
+  transition: .12s var(--ac-ease); }
+.academy .ac-stp button:hover { background: var(--ac-blue-tint); color: var(--ac-blue-d); }
+.academy .ac-stp b { min-width: 30px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; }
+.academy .ac-clist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.academy .ac-clist li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding: 7px 2px; font-size: 13.5px; color: var(--ac-ink-2); }
+.academy .ac-clist li.sum { margin-top: 5px; padding-top: 12px; border-top: 1px solid var(--ac-line);
+  color: var(--ac-ink); font-weight: 700; }
+.academy .ac-chint { padding-top: 0; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-ctot { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  background: var(--ac-navy); color: #fff; border-radius: var(--ac-r-lg); padding: 15px 18px; }
+.academy .ac-ctot span { font-size: 13px; font-weight: 600; opacity: .7; }
+.academy .ac-ctot b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .academy .ac-cf { flex-direction: column; align-items: flex-start; gap: 9px; }
+  .academy .ac-seg { justify-content: flex-start; }
+  .academy .ac-ctot b { font-size: 23px; }
+}
+
 .academy .ac-quote { border-left: 3px solid var(--ac-blue); padding: 4px 0 4px 16px; margin: 16px 0; font-size: 15px; color: #333843; }
 .academy .ac-who { display: block; margin-top: 6px; }
 
