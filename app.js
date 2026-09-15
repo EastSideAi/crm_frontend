@@ -3987,7 +3987,7 @@
     var scr = el('ac-screen');
     el('ac-label').textContent = 'Урок ' + (A.li + 1) + ' · ' + L.t;
     acVoiceStop();
-    scr.innerHTML = acScreenHTML(sc, acC() + '-' + A.li + '-' + A.si);
+    scr.innerHTML = acScreenHTML(sc, acC().id + '-' + A.li + '-' + A.si);
     acAnim(scr);
     var dots = el('ac-dots'); dots.innerHTML = '';
     L.screens.forEach(function (_, i) { var d = document.createElement('i'); d.className = i === A.si ? 'on' : (i < A.si ? 'past' : ''); dots.appendChild(d); });
