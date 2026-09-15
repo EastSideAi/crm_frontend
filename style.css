@@ -8280,6 +8280,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    якорем «Без плана» на дорожке. */
 .map-seat { color: var(--ink-3); }
 .map-seat.cold { color: var(--ink-2); font-weight: 600; }
+/* Первый вход в кабинет за последние сутки: зеленая точка с мягким пульсом. Зеленый
+   тут по формуле — это успех, семья включилась; амбер занят «Без плана», а красный
+   значит потерю. Пульс медленный и один: экран не должен мигать. */
+.map-seat.fresh { color: var(--green-ink); font-weight: 650; }
+.map-new { display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; background: var(--green); vertical-align: baseline;
+  animation: mapNew 2.4s var(--ease) infinite; }
+@keyframes mapNew {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(24,169,87,.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(24,169,87,0); }
+}
+@media (prefers-reduced-motion: reduce) { .map-new { animation: none; } }
 .map-none { color: var(--ink-3); }
 .map-over { color: var(--red-ink); font-weight: 700; }
 .map-sell { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -167,6 +167,7 @@
     offer_paid: 'оплатил счет',
     hsk_signup: 'записался на HSK',
     hsk_contact: 'оставил телефон после теста HSK',
+    cabinet_entered: 'первый вход в кабинет',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -196,6 +197,7 @@
       label = (String(p.event || '').indexOf('intensive') === 0 ? 'смотрел интенсив' : 'смотрел эфир') +
         ': ' + (mins < 1 ? 'меньше минуты' : mins + ' мин') + (days.length ? ' (' + days.join(', ') + ')' : '');
     }
+    if (e.type === 'cabinet_entered') label += ': ' + (p.relation === 'parent' ? 'родитель' : 'ученик');
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_access') {
@@ -9664,11 +9666,12 @@
   /* Кабинет семьи одной строкой: кто заходил последним. Молчание дольше двух
      недель — повод обратить внимание, поэтому оно и подсвечено. */
   function mapSeat(c) {
-    var best = null, who = '';
+    var best = null, who = '', first = null;
     [['student', 'ученик'], ['parent', 'родитель']].forEach(function (pair) {
       var s = c[pair[0]];
       if (!s) return;
       if (s.last_seen && (!best || s.last_seen > best)) { best = s.last_seen; who = pair[1]; }
+      if (s.first_seen && (!first || s.first_seen > first)) first = s.first_seen;
     });
     if (!best) {
       // кабинета нет вовсе — пустая клетка; кабинет есть, но в него не заходили —
@@ -9676,7 +9679,11 @@
       return { text: (c.student || c.parent) ? 'ни разу не заходили' : '', cold: true };
     }
     var days = (Date.now() - new Date(best).getTime()) / 86400000;
-    return { text: who + ' ' + ago(best) + ' назад', cold: days > 14 };
+    // Свежий ПЕРВЫЙ вход горит сутки: человек только что включился в работу, и это
+    // тот момент, когда с ним говорят. Дольше суток гореть нельзя — через неделю
+    // светилась бы половина таблицы, и гореть перестало бы значить что-либо.
+    var fresh = first && (Date.now() - new Date(first).getTime()) < 86400000;
+    return { text: who + ' ' + ago(best) + ' назад', cold: days > 14, fresh: fresh };
   }
   /* skipSeg — тот же срез, но без фильтра по этапу: по нему считаются цифры на
      дорожке. Иначе клик по этапу схлопывал бы дорожку в один ненулевой сегмент. */
@@ -9763,7 +9770,9 @@
         : '<span class="sev map-tar off">не указан</span>') + '</div>' +
       '<div class="map-c map-c-track" data-l="Этап пути">' + mapTrack(c, stages) + '</div>' +
       '<div class="map-c map-c-seat' + (seat.text ? '' : ' map-empty') + '" data-l="Кабинет">' + (seat.text
-        ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + '">' + esc(seat.text) + '</span>'
+        ? '<span class="map-seat' + (seat.cold ? ' cold' : '') + (seat.fresh ? ' fresh' : '') + '">' +
+          (seat.fresh ? '<i class="map-new"></i>' : '') + esc(seat.text) +
+          (seat.fresh ? ' <b>впервые</b>' : '') + '</span>'
         : MAP_DASH) + '</div>' +
       '<div class="map-c map-c-task' + (c.tasks_open ? '' : ' map-empty') + '" data-l="Задачи">' + (c.tasks_open
         ? '<span class="map-task">' + c.tasks_open + ' задач' +
