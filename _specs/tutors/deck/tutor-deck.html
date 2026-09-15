@@ -158,6 +158,20 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .tbl .n + td,.tbl th.n + th{padding-left:44px}
 .tbl tr.hi td{color:#FFFFFF;font-weight:600}
 .tbl tr:last-child td{border-bottom:none}
+/* таблица «метрика — что считает система — ваше действие — когда видно»:
+   колонки текстовые и без заданной ширины наезжают друг на друга */
+.tbl.four{font-size:27px;table-layout:fixed}
+.tbl.four th,.tbl.four td{padding-right:40px;vertical-align:top}
+.tbl.four td{font-size:27px}
+.tbl.four th:last-child,.tbl.four td:last-child{padding-right:0}
+.tbl.four col.c1{width:17%}.tbl.four col.c2{width:30%}
+.tbl.four col.c3{width:33%}.tbl.four col.c4{width:20%}
+/* календарь выплат: своя раскладка, деньги узкой колонкой */
+.tbl.pay col.c1{width:20%}.tbl.pay col.c2{width:40%}
+.tbl.pay col.c3{width:16%}.tbl.pay col.c4{width:24%}
+.tbl .dim{color:#5C6E93;font-size:23px}
+.tbl.pay td{font-size:25px;padding-top:15px;padding-bottom:15px}
+.tbl.pay th{padding-bottom:15px}
 
 /* число-герой */
 .nums{display:flex;align-items:flex-end;gap:56px;margin-top:8px}
@@ -183,7 +197,7 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .pt-x{font-size:30px;color:#5C6E93;text-align:right;transition:transform .25s}
 .pt.open .pt-x{transform:rotate(45deg)}
 .pt-b{max-height:0;overflow:hidden;transition:max-height .32s ease}
-.pt.open .pt-b{max-height:300px}
+.pt.open .pt-b{max-height:380px}
 .pt-b ul{padding:0 0 26px 144px}
 .pt-b li{list-style:none;font-size:27px;color:#8FA1C4;padding:7px 0;display:flex;gap:14px}
 .pt-b li::before{content:'✓';color:#2B8FFF}
@@ -200,8 +214,10 @@ input[type=range]{-webkit-appearance:none;appearance:none;height:7px;border-radi
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;
   border-radius:50%;background:#2B8FFF;border:0;box-shadow:0 0 0 6px rgba(43,143,255,.14)}
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#2B8FFF;border:0}
-.met[data-w="25"] .sl{width:100%}.met[data-w="20"] .sl{width:80%}
-.met[data-w="15"] .sl{width:60%}.met[data-w="10"] .sl{width:40%}
+/* ширина ползунка показывает вес метрики: 40 — во всю колонку, 10 — четверть */
+.met[data-w="40"] .sl{width:100%}.met[data-w="30"] .sl{width:75%}
+.met[data-w="20"] .sl{width:50%}.met[data-w="10"] .sl{width:28%}
+.met-do{font-size:23px;color:#6C7E9F;line-height:1.35;margin-top:13px;letter-spacing:-.005em}
 .out3{display:flex;gap:90px;align-items:baseline;margin-top:52px}
 .out3 .v{font-size:110px;font-weight:700;letter-spacing:-.045em;line-height:1;
   font-variant-numeric:tabular-nums}
@@ -337,19 +353,47 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 .total{font-size:52px;font-weight:700;letter-spacing:-.04em;color:#F5C84C;line-height:1;
   font-variant-numeric:tabular-nums}
 .total-cap{font-size:14px;color:var(--dim);margin-top:8px}
-.calc .brk li{font-size:15px;padding:11px 0;color:var(--muted)}
-.calc .brk li b{font-size:15px}
+.calc .brk li,.coef .brk li{font-size:15px;padding:11px 0;color:var(--muted)}
+.calc .brk li b,.coef .brk li b{font-size:15px}
 @media (max-width:820px){.calc{grid-template-columns:1fr}}
+
+/* карта денег: что в зоне тьютора, что общее, что сверху */
+.mmap{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;margin-top:52px}
+.mmap .c{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.045);
+  border-radius:28px;padding:40px 36px 42px;display:flex;flex-direction:column}
+.mmap .c.own{border-color:rgba(43,143,255,.42);background:rgba(43,143,255,.10)}
+.mmap .c.up{border-color:rgba(245,200,76,.30);background:rgba(245,200,76,.06)}
+.mmap .v{font-size:92px;font-weight:700;letter-spacing:-.05em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.mmap .c.up .v{color:#F5C84C}
+.mmap .t{font-size:31px;font-weight:600;letter-spacing:-.018em;margin:24px 0 14px}
+.mmap .d{font-size:26px;line-height:1.4;color:#9FB0D0;letter-spacing:-.005em}
+.mmap .tag{margin-top:auto;padding-top:28px;font-size:23px;color:#5C6E93}
+
+/* разбор коэффициента */
+.coef{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start}
+.cstack{display:flex;flex-direction:column;gap:34px}
+.crow label.chk{justify-content:flex-start;gap:12px;align-items:center;margin-bottom:0;
+  cursor:pointer;line-height:1.4}
+.crow label.chk input{accent-color:var(--sapphire);width:17px;height:17px;flex:none}
+.coef .seg{flex-wrap:wrap}
+@media (max-width:820px){.coef{grid-template-columns:1fr}}
+
+/* обязательный пункт чек-листа: сказать семье. Выделен, потому что именно
+   его раньше не делали, а брошенность у семьи берется отсюда */
+.pt-b li.say{color:#E6ECF7}
+.pt-b li.say::before{color:#F5C84C}
 </style>
 </head><body>
 
 <div class="top">
   <h1>Тьюторство 2026/27</h1>
-  <span class="note">28 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
+  <span class="note">34 слайдов к встрече команды. Условия предварительные, обсуждаем на встрече.</span>
 </div>
 
 <div class="tabs" role="tablist">
   <button class="tab" id="tab-slides" role="tab" aria-selected="true" aria-controls="view-slides">Слайды</button>
+  <button class="tab" id="tab-coef" role="tab" aria-selected="false" aria-controls="view-coef">Разбор коэффициента</button>
   <button class="tab" id="tab-calc" role="tab" aria-selected="false" aria-controls="view-calc">Калькулятор года</button>
 </div>
 
@@ -387,7 +431,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">02</div>
+  <div class="srcline">2</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Часть первая. Как устроена работа">
@@ -397,7 +441,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title rise d1">Как теперь устроена работа</h2>
     <div class="rule"></div>
   </div>
-  <div class="srcline">03</div>
+  <div class="srcline">3</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Что уходит в систему, что остается вам">
@@ -418,7 +462,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <li>Доведение до заезда</li></ul></div>
     </div>
   </div>
-  <div class="srcline">04</div>
+  <div class="srcline">4</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Приемка подачи в песочнице">
@@ -433,7 +477,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:64px">Вы отвечаете только за то, что приняли. Устного «посмотрел» больше нет: есть кнопка и запись, кто и когда нажал.</p>
   </div>
-  <div class="srcline">05</div>
+  <div class="srcline">5</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Вузы по трем уровням: А, Б, С">
@@ -448,7 +492,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:56px">Семья слышит план на плохой сценарий до подач, а не в момент отказа.</p>
   </div>
-  <div class="srcline">06</div>
+  <div class="srcline">6</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="План усиления профиля на год">
@@ -471,7 +515,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       </div>
     </div>
   </div>
-  <div class="srcline">07</div>
+  <div class="srcline">7</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Связь с вузом остается на тьюторе">
@@ -485,7 +529,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       <div class="card"><div class="n">03</div><h3>Очный визит</h3><p>В приемную комиссию, по необходимости и по согласованию</p></div>
     </div>
   </div>
-  <div class="srcline">08</div>
+  <div class="srcline">8</div>
 </section>
 
 <section class="slide" data-part="Работа" data-title="Бот в чатах и обучение агента">
@@ -500,7 +544,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
     <p class="small rise d3" style="margin-top:64px">Тот же бот меряет скорость и качество ответов. Не для того, чтобы поймать: чтобы вы видели свои цифры каждый день.</p>
   </div>
-  <div class="srcline">09</div>
+  <div class="srcline">9</div>
 </section>
 
 <section class="slide" id="s-case" data-part="Работа" data-title="Сквозной пример: Артем, год целиком">
@@ -539,12 +583,13 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title sm rise d1">Меняется не размер ставки, а то, как она набирается</h2>
     <table class="tbl rise d2"><thead><tr><th>За что</th><th class="n">Ставка, ₽</th></tr></thead><tbody>
       <tr><td>Бакалавриат на грант</td><td class="n">30 000</td></tr>
-      <tr><td>Магистратура на грант</td><td class="n">20 000</td></tr>
-      <tr><td>Языковой год на грант</td><td class="n">20 000</td></tr>
+      <tr><td>Магистратура на грант</td><td class="n">30 000</td></tr>
+      <tr><td>Языковой год, потом бакалавриат — за оба года</td><td class="n">30 000</td></tr>
+      <tr><td>Языковой год отдельно</td><td class="n">20 000</td></tr>
       <tr><td>Платная консультация с подборкой</td><td class="n">3 000</td></tr>
       <tr><td>Подача в вуз для тех, кто идет на платное</td><td class="n">5 000</td></tr>
     </tbody></table>
-    <p class="small rise d3" style="margin-top:44px">Раньше эти деньги платились за любой грант, хоть за минимальную скидку, и за срыв сроков ничего не менялось. Теперь ставка стала потолком, до которого доходят результатом и работой.</p>
+    <p class="small rise d3" style="margin-top:28px">Магистратуру подняли до 30 000 после вашей же правки на встрече: работы там не меньше. Связка языковой плюс бакалавриат — те же 30 000, но за два года.</p>
   </div>
   <div class="plaque">предварительные условия</div>
   <div class="srcline">12</div>
@@ -554,16 +599,37 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
   <div class="glow"></div><div class="vignette"></div>
   <div class="stage">
     <div class="kicker rise">Формула</div>
-    <h2 class="title sm rise d1">Половина за работу, половина за результат</h2>
-    <div class="formula rise d2">Работа + <span class="p2">Результат × сила гранта</span><br><span class="p3">все это ×</span> коэффициент вовлеченности</div>
+    <h2 class="title sm rise d1">Две трети за работу, треть за результат</h2>
+    <div class="formula rise d2">20 000 <span class="p3">× вовлеченность</span> + <span class="p2">10 000 × сила гранта</span><br><span class="p3">и сверху</span> 3 000 за вуз уровня А</div>
     <div class="fkey rise d3">
-      <div><b>15 000 за работу</b>Платятся по контрольным точкам. От гранта не зависят вовсе</div>
-      <div><b>15 000 за результат</b>Умножаются на силу гранта и на то, в какой вуз поступил</div>
-      <div><b>Вовлеченность от 0,7 до 1,0</b>Выше единицы не бывает: полная ставка это норма, а не награда</div>
+      <div><b>20 000 за работу</b>От гранта не зависят вовсе. Умножаются только на вашу вовлеченность, а ее считают по вашим же действиям</div>
+      <div><b>10 000 за результат</b>Умножаются на силу гранта. Если решал не тьютор, есть правило, которое держит коэффициент</div>
+      <div><b>3 000 за вуз уровня А</b>Премия сверх ставки, а не вычет за то, что в него не попали</div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
   <div class="srcline">13 · пример для бакалавриата</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Что от чего зависит">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Карта денег</div>
+    <h2 class="title sm rise d1">Где ваша зона, а где общая</h2>
+    <div class="mmap rise d2">
+      <div class="c own"><div class="v">20 000</div><div class="t">Ваша зона целиком</div>
+        <div class="d">Сроки точек, документы, скорость ответа семье, доведение до заезда. Ни одной строки про решение вуза и про балл ученика.</div>
+        <div class="tag">двигает вовлеченность, 0,80—1,00</div></div>
+      <div class="c"><div class="v">10 000</div><div class="t">Общий результат</div>
+        <div class="d">Какой грант в итоге дал вуз. Тут вы влияете не в одиночку, поэтому это треть ставки, а не половина, и поэтому есть правило про чужую зону.</div>
+        <div class="tag">двигает сила гранта, 0,00—1,00</div></div>
+      <div class="c up"><div class="v">3 000</div><div class="t">Сверху</div>
+        <div class="d">Ученик поступил на грант в один из двух приоритетных вузов, которые вы назвали семье в сентябре.</div>
+        <div class="tag">премия, сверх ставки</div></div>
+    </div>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">14 · бакалавриат</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Пять контрольных точек">
@@ -572,62 +638,146 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <div class="kicker rise">Пять контрольных точек</div>
     <h2 class="title sm rise d1">Точка закрыта: деньги ушли</h2>
     <div class="pts rise d2" id="pts">
-      <div class="pt open"><div class="pt-h"><div class="pt-n">10%</div><div class="pt-t">Стратегия года</div><div class="pt-s">3 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Консультация проведена, семья на связи</li><li>Вузы А, Б и С названы семье и внесены в карточку</li><li>План усиления профиля выставлен по месяцам</li></ul></div></div>
-      <div class="pt"><div class="pt-h"><div class="pt-n">15%</div><div class="pt-t">Профиль и документы</div><div class="pt-s">4 500 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Пакет документов принят вами в песочнице</li><li>Мотивационное и рекомендательные письма приняты</li><li>Языковой и CSCA идут по вашему же плану</li></ul></div></div>
-      <div class="pt"><div class="pt-h"><div class="pt-n">10%</div><div class="pt-t">Подачи приняты</div><div class="pt-s">3 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Все заявки проверены и подтверждены вами</li><li>Ни одна не вернулась из вуза на исправление</li><li>Сроки подач соблюдены</li></ul></div></div>
-      <div class="pt res"><div class="pt-h"><div class="pt-n">50%</div><div class="pt-t">Результат</div><div class="pt-s">до 15 000 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Зачисление и JW202 на руках</li><li>Письмо вуза с условиями гранта в карточке</li><li>Условия разобраны с семьей: что покрыто, что нет</li></ul></div></div>
-      <div class="pt"><div class="pt-h"><div class="pt-n">15%</div><div class="pt-t">Заезд и первый месяц</div><div class="pt-s">4 500 ₽</div><div class="pt-x">+</div></div>
-        <div class="pt-b"><ul><li>Виза, билеты, регистрация по прилету</li><li>Заселение подтверждено</li><li>Связь с учеником через месяц после заезда</li></ul></div></div>
+      <div class="pt open"><div class="pt-h"><div class="pt-n">13%</div><div class="pt-t">Стратегия года</div><div class="pt-s">4 000 ₽</div><div class="pt-x">+</div></div>
+        <div class="pt-b"><ul><li>Консультация проведена, семья на связи</li><li>Вузы А, Б и С названы семье и внесены в карточку</li><li>План усиления профиля выставлен по месяцам</li><li class="say">Семье сказано: что решили, что дальше, к какому числу</li></ul></div></div>
+      <div class="pt"><div class="pt-h"><div class="pt-n">20%</div><div class="pt-t">Профиль и документы</div><div class="pt-s">6 000 ₽</div><div class="pt-x">+</div></div>
+        <div class="pt-b"><ul><li>Пакет документов принят вами в песочнице</li><li>Мотивационное и рекомендательные письма приняты</li><li>Языковой и CSCA идут по вашему же плану</li><li class="say">Семье сказано: пакет собран, чего не хватает, когда подаем</li></ul></div></div>
+      <div class="pt"><div class="pt-h"><div class="pt-n">13%</div><div class="pt-t">Подачи приняты</div><div class="pt-s">4 000 ₽</div><div class="pt-x">+</div></div>
+        <div class="pt-b"><ul><li>Все заявки проверены и подтверждены вами</li><li>Ни одна не вернулась из вуза на исправление</li><li>Сроки подач соблюдены</li><li class="say">Семье сказано: куда подали, когда ждать ответ</li></ul></div></div>
+      <div class="pt res"><div class="pt-h"><div class="pt-n">33%</div><div class="pt-t">Результат</div><div class="pt-s">до 10 000 ₽</div><div class="pt-x">+</div></div>
+        <div class="pt-b"><ul><li>Зачисление и JW202 на руках</li><li>Письмо вуза с условиями гранта в карточке</li><li>Условия разобраны с семьей голосом: что покрыто, что нет</li><li class="say">Семье сказано: итог и что дальше по визе</li></ul></div></div>
+      <div class="pt"><div class="pt-h"><div class="pt-n">20%</div><div class="pt-t">Заезд и первый месяц</div><div class="pt-s">6 000 ₽</div><div class="pt-x">+</div></div>
+        <div class="pt-b"><ul><li>Виза, билеты, регистрация по прилету</li><li>Заселение подтверждено</li><li>Связь с учеником через месяц после заезда</li><li class="say">Семье сказано: ребенок на месте, вот контакты на месте</li></ul></div></div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">14 · нажмите на точку</div>
+  <div class="srcline">15 · нажмите на точку · золотом отмечен обязательный пункт</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Чек-лист есть и у администратора">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Не только у вас</div>
+    <h2 class="title sm rise d1">На каждом этапе два чек-листа, и оба ведет агент</h2>
+    <div class="two-col rise d2">
+      <div><h4>Ваш чек-лист</h4><ul class="stay">
+        <li>Стратегия, решения, разговор с семьей</li>
+        <li>Приемка того, что сделал агент</li>
+        <li>Доведение до заезда и первый месяц</li>
+      </ul></div>
+      <div><h4>Чек-лист администратора</h4><ul class="stay">
+        <li>Подтверждает то, что агент уже сделал: документы, сроки, дедлайны</li>
+        <li>Делает сам только то, что агент не может: оплаты, нотариус, виза</li>
+        <li>Смотрит за всеми учениками сразу: где встало и кто не отвечает</li>
+        <li>Запускает опрос семьи после каждого этапа, ведет опрос агент</li>
+      </ul></div>
+    </div>
+    <p class="small rise d3" style="margin-top:36px">«Разобрал условия голосом» агент за вас не поставит: человеческие пункты закрывает человек. А опрос администратор забыл запустить — агент запустит сам на третий день, ваша оценка не зависит от чужой забывчивости.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">16</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Сила гранта">
   <div class="glow"></div><div class="vignette"></div>
   <div class="stage">
     <div class="kicker rise">Сила гранта</div>
-    <h2 class="title sm rise d1">Коэффициент считается по доле покрытия из письма вуза</h2>
-    <table class="tbl rise d2"><thead><tr><th class="n">К</th><th>Что в письме вуза</th><th class="n">Выходит за ученика, ₽</th></tr></thead><tbody>
-      <tr class="hi"><td class="n">1,00</td><td>Полное покрытие, вуз уровня А</td><td class="n">30 000</td></tr>
-      <tr><td class="n">0,90</td><td>Полное покрытие, вуз уровня Б или С</td><td class="n">28 500</td></tr>
-      <tr><td class="n">0,85</td><td>Покрыто обучение, без стипендии</td><td class="n">27 750</td></tr>
-      <tr><td class="n">0,70</td><td>Скидка от 50 до 99 процентов</td><td class="n">25 500</td></tr>
-      <tr><td class="n">0,50</td><td>Скидка до 50 процентов</td><td class="n">22 500</td></tr>
-      <tr><td class="n">0,25</td><td>Целились в грант, ушел на платное</td><td class="n">18 750</td></tr>
-      <tr><td class="n">0,00</td><td>Не поступил никуда</td><td class="n">15 000</td></tr>
+    <h2 class="title sm rise d1">Пять строк вместо семи, и уровня вуза среди них больше нет</h2>
+    <table class="tbl rise d2"><thead><tr><th class="n">К</th><th>Что в письме вуза</th><th class="n">За результат, ₽</th><th class="n">Всего за ученика, ₽</th></tr></thead><tbody>
+      <tr class="hi"><td class="n">1,00</td><td>Грант покрывает обучение</td><td class="n">10 000</td><td class="n">30 000</td></tr>
+      <tr><td class="n">0,75</td><td>Скидка от 50 до 99 процентов</td><td class="n">7 500</td><td class="n">27 500</td></tr>
+      <tr><td class="n">0,50</td><td>Скидка до 50 процентов</td><td class="n">5 000</td><td class="n">25 000</td></tr>
+      <tr><td class="n">0,40</td><td>Целились в грант, поехал на платное</td><td class="n">4 000</td><td class="n">24 000</td></tr>
+      <tr><td class="n">0,00</td><td>Не поступил никуда</td><td class="n">0</td><td class="n">20 000</td></tr>
     </tbody></table>
+    <p class="small rise d3" style="margin-top:36px">Вуз уровня А из этой таблицы убран совсем: балл Duolingo ставите не вы. Он переехал в премию сверху, а спрос за балл переезжает к тем, кто готовит к Duolingo и CSCA.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">15 · при полной вовлеченности</div>
+  <div class="srcline">17 · при полной вовлеченности</div>
 </section>
 
-<section class="slide" id="s-eng" data-part="Деньги" data-title="Вовлеченность: шесть метрик">
+<section class="slide" data-part="Деньги" data-title="Когда решали не вы">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Не ваша зона</div>
+    <h2 class="title sm rise d1">Четыре случая, когда коэффициент не опускается ниже 0,75</h2>
+    <div class="two-col rise d2">
+      <div><h4>Случаи</h4><ul class="stay">
+        <li>Ученик не добрал балл по языку или CSCA, хотя план стоял и занятия шли</li>
+        <li>Вуз поменял условия, квоты или сроки уже после подачи</li>
+        <li>Семья отказалась подавать в рекомендованный вуз или сорвала свои сроки</li>
+        <li>Ученик отказался от поступления по личным причинам</li>
+      </ul></div>
+      <div><h4>Условие, без которого правило не работает</h4><ul>
+        <li>Вы подняли флаг в карточке не позже чем за два месяца до дедлайна подач</li>
+        <li>И предложили перейти на уровень Б или С</li>
+      </ul>
+      <p class="small" style="margin-top:28px">Не увидели и не сказали — считаем по обычной шкале. Увидели и сказали — получаете 27 500 вместо 20 000, даже если вуз в итоге отказал.</p></div>
+    </div>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">18</div>
+</section>
+
+<section class="slide" id="s-eng" data-part="Деньги" data-title="Вовлеченность: четыре метрики">
   <div class="glow"></div><div class="vignette"></div>
   <div class="stage">
     <div class="kicker rise">Вовлеченность</div>
-    <h2 class="title sm rise d1">Шесть цифр, которые считает система</h2>
+    <h2 class="title sm rise d1">Четыре цифры, и все четыре в ваших руках</h2>
     <div class="mets rise d2" id="mets">
-      <div class="met" data-w="25"><div class="met-h"><b>Контрольные точки в срок</b><i>вес 25</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
-      <div class="met" data-w="20"><div class="met-h"><b>Прогресс профиля ученика</b><i>вес 20</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
-      <div class="met" data-w="20"><div class="met-h"><b>Скорость первого ответа</b><i>вес 20</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
-      <div class="met" data-w="15"><div class="met-h"><b>Нет зависших вопросов</b><i>вес 15</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
-      <div class="met" data-w="10"><div class="met-h"><b>Оценка семьи</b><i>вес 10</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
-      <div class="met" data-w="10"><div class="met-h"><b>Обучение агента</b><i>вес 10</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div></div>
+      <div class="met" data-w="40"><div class="met-h"><b>Контрольные точки в срок</b><i>вес 40</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div><div class="met-do">закрыть чек-лист до даты, которую сами поставили</div></div>
+      <div class="met" data-w="30"><div class="met-h"><b>Скорость ответа семье</b><i>вес 30</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div><div class="met-do">ответить первым или подтвердить ответ бота</div></div>
+      <div class="met" data-w="20"><div class="met-h"><b>Оценка семьи</b><i>вес 20</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div><div class="met-do">объяснить, что происходит, до того как спросят</div></div>
+      <div class="met" data-w="10"><div class="met-h"><b>Работа с агентом</b><i>вес 10</i></div><div class="sl"><input type="range" min="0" max="100" value="100"></div><div class="met-do">вернуть заявку с причиной, а не подтвердить не глядя</div></div>
     </div>
     <div class="out3 rise d3">
       <div><div class="v" id="engScore">100</div><div class="cap">баллов из ста</div></div>
       <div><div class="v k" id="engK">1,00</div><div class="cap">коэффициент вовлеченности</div></div>
-      <div><div class="v" id="engMoney">30 000</div><div class="cap">за ученика при полном гранте, ₽</div></div>
+      <div><div class="v" id="engMoney">30 000</div><div class="cap">за ученика при гранте на обучение, ₽</div></div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">16 · подвигайте ползунки · 90 баллов и выше дают 1,00</div>
+  <div class="srcline">19 · подвигайте ползунки · 90 баллов и выше дают 1,00</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Четкие критерии по каждой метрике">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">По каждой метрике</div>
+    <h2 class="title sm rise d1">Что считает система и с какого порога</h2>
+    <table class="tbl four rise d2"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup><thead><tr><th>Метрика</th><th>Что считает система</th><th>Сто процентов, если</th><th>Что НЕ входит</th></tr></thead><tbody>
+      <tr><td>Точки в срок<br><span class="dim">вес 40</span></td><td>доля точек, закрытых до плановой даты, которую вы сами поставили</td><td>закрыто до даты. Просрочка до трех дней — половина, дальше ноль</td><td>точка «результат»: ее дату назначает вуз</td></tr>
+      <tr><td>Скорость ответа<br><span class="dim">вес 30</span></td><td>доля сообщений семьи, отвеченных в норму</td><td>ответ за 3 часа. До 12 часов — половина, дальше ноль</td><td>ночь и выходные. Ожидание вуза, если вы об этом написали</td></tr>
+      <tr><td>Оценка семьи<br><span class="dim">вес 20</span></td><td>средняя оценка из опроса после каждой точки</td><td>пятерка. Четверка — 80, тройка — 60</td><td>молчание семьи: не ответили — в среднее не идет</td></tr>
+      <tr><td>Работа с агентом<br><span class="dim">вес 10</span></td><td>доля приемок, по которым вы приняли решение</td><td>решение за сутки. До трех суток — половина</td><td>сколько ошибок нашлось. Вернуть равно подтвердить</td></tr>
+    </tbody></table>
+    <p class="small rise d3" style="margin-top:32px">Коэффициент фиксируется на момент закрытия каждой точки и применяется к деньгам этой точки. Плохой месяц не портит весь год, хороший не выкупает год плохой работы.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">20</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Чего в коэффициенте нет вовсе">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Чего в коэффициенте нет вовсе</div>
+    <h2 class="title sm rise d1">Ни одна метрика не смотрит на это</h2>
+    <div class="two-col rise d2">
+      <div><ul class="gone">
+        <li>Балл Duolingo и результат CSCA у ученика</li>
+        <li>Решение приемной комиссии</li>
+        <li>Поступил ученик в вуз уровня А или нет</li>
+      </ul></div>
+      <div><ul class="gone">
+        <li>Как ученик учится и делает ли домашние задания</li>
+        <li>Сроки вуза, визового центра и консульства</li>
+        <li>То, что делает или не делает семья</li>
+      </ul></div>
+    </div>
+    <p class="sub rise d3" style="margin-top:44px;max-width:1500px">Отвечали вовремя, закрывали точки в срок, держали семью в курсе и не тормозили приемки — коэффициент 1,00 даже у ученика, который никуда не поступил. Это 20 000 из 30 000, и ни рубля из них не снимает решение вуза.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">21</div>
 </section>
 
 <section class="slide" id="s-ladder" data-part="Деньги" data-title="Лестница заработка">
@@ -637,12 +787,12 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <h2 class="title sm rise d1">Сколько выходит за одного ученика</h2>
     <div class="seg rise d2" id="lseg">
       <button data-d="1" class="on">вовлеченность 1,0</button><button data-d="0.95">0,95</button>
-      <button data-d="0.9">0,9</button><button data-d="0.8">0,8</button><button data-d="0.7">0,7</button>
+      <button data-d="0.9">0,9</button><button data-d="0.8">0,8</button>
     </div>
     <div class="ladder rise d3" id="ladder"></div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">17 · бакалавриат, ставка 30 000</div>
+  <div class="srcline">22 · бакалавриат, ставка 30 000, вовлеченность двигает только первые 20 000</div>
 </section>
 
 <section class="slide" id="s-chart" data-part="Деньги" data-title="График роста за сезон">
@@ -654,19 +804,38 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       <div class="plot"><svg id="svg" viewBox="0 0 1000 480" preserveAspectRatio="none"></svg>
         <div class="legend"><span><i></i>новые условия</span><span><i class="old"></i>старые, 33 000 за ученика</span></div></div>
       <div class="side">
-        <div class="big" id="chSum">776 100</div>
-        <div class="sub2" id="chMonth">64 675 ₽ в месяц</div>
+        <div class="big" id="chSum">846 000</div>
+        <div class="sub2" id="chMonth">70 500 ₽ в месяц</div>
         <div class="verdict" id="chVerdict"></div>
         <div class="ctl"><div class="met-h"><b>Учеников за сезон</b><i id="chNlab">20</i></div>
           <input type="range" id="chN" min="5" max="45" step="1" value="20"></div>
         <div class="ctl"><div class="met-h"><b>Вовлеченность</b><i id="chKlab">0,90</i></div>
-          <input type="range" id="chK" min="70" max="100" step="5" value="90"></div>
+          <input type="range" id="chK" min="80" max="100" step="5" value="90"></div>
         <div class="seg" id="chSeg"><button data-s="1" class="on">продаю сам</button><button data-s="0">только веду</button></div>
       </div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">18 · подвигайте ползунки</div>
+  <div class="srcline">23 · подвигайте ползунки</div>
+</section>
+
+<section class="slide" data-part="Деньги" data-title="Когда какая выплата">
+  <div class="glow"></div><div class="vignette"></div>
+  <div class="stage">
+    <div class="kicker rise">Когда какая выплата</div>
+    <h2 class="title sm rise d1">Деньги идут по точкам</h2>
+    <table class="tbl four pay rise d2"><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup><thead><tr><th>Точка</th><th>За что</th><th class="n">Сколько</th><th>Обычно закрывается</th></tr></thead><tbody>
+      <tr><td>1. Стратегия года</td><td>консультация, вузы А, Б и С в карточке, план профиля по месяцам</td><td class="n">4 000</td><td>сентябрь—октябрь</td></tr>
+      <tr><td>2. Профиль и документы</td><td>пакет и письма приняты, язык и CSCA идут по плану</td><td class="n">6 000</td><td>до конца января</td></tr>
+      <tr><td>3. Подачи приняты</td><td>все заявки подтверждены, ни одна не вернулась</td><td class="n">4 000</td><td>февраль—май</td></tr>
+      <tr><td>4. Результат</td><td>зачисление, JW202, письмо с условиями гранта</td><td class="n">до 10 000</td><td>май—июль</td></tr>
+      <tr><td>5. Заезд и первый месяц</td><td>виза, билеты, регистрация, заселение, связь через месяц</td><td class="n">6 000</td><td>сентябрь следующего года</td></tr>
+      <tr><td>Премия</td><td>грант в вуз, который вы записали в уровень А</td><td class="n">3 000</td><td>вместе с точкой 4</td></tr>
+    </tbody></table>
+    <p class="small rise d3" style="margin-top:28px">Не одним платежом в июле, как раньше. Расчет за прошлый месяц собирается до 3 числа, до 5 виден в кабинете построчно, до 10 приходят деньги: закрыли точку 28 января — получите до 10 февраля.</p>
+  </div>
+  <div class="plaque">предварительные условия</div>
+  <div class="srcline">24</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Бонус за скорость отменяется">
@@ -683,7 +852,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <div class="cap">тьюторов получили бонус за скорость за все время, что он существовал</div></div></div>
     </div>
   </div>
-  <div class="srcline">19</div>
+  <div class="srcline">25</div>
 </section>
 
 <section class="slide" data-part="Деньги" data-title="Кабинет тьютора">
@@ -692,23 +861,23 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <div class="kicker rise">Ваш кабинет</div>
     <h2 class="title sm rise d1">Никаких сюрпризов в день выплаты</h2>
     <div class="cards rise d2">
-      <div class="card"><div class="n">Каждый день</div><h3>Шесть метрик и баллы</h3><p>Видно сразу, а не в конце периода</p></div>
+      <div class="card"><div class="n">Каждый день</div><h3>Четыре метрики и баллы</h3><p>Видно сразу, а не в конце периода</p></div>
       <div class="card"><div class="n">По точкам</div><h3>Деньги за закрытые точки</h3><p>Что закрыто, что осталось, сколько это стоит</p></div>
       <div class="card"><div class="n">До расчета</div><h3>Что просело и почему</h3><p>Спорное разбираем до выплаты, а не после</p></div>
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">20</div>
+  <div class="srcline">26</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Часть третья. Вы можете продавать">
   <div class="glow"></div><div class="vignette"></div>
   <div class="stage">
     <div class="kicker rise">Часть третья</div>
-    <h2 class="title rise d1">Вы можете продавать</h2>
+    <h2 class="title rise d1">Продавать можно, но не обязательно</h2>
     <div class="rule"></div>
   </div>
-  <div class="srcline">21</div>
+  <div class="srcline">27</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Две роли: чаты и диагностика">
@@ -723,7 +892,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">Ваша платная консультация с подбором вузов и есть диагностика, только глубже. Отдельной сетки для тьюторов мы не заводим.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">22</div>
+  <div class="srcline">28</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Смены на чатах: 30 000 в месяц">
@@ -742,7 +911,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">23 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
+  <div class="srcline">29 · 90 баллов и выше дают 1,00, ниже 0,9 · 0,8 · 0,7 · 0,6</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Как делится процент с продажи">
@@ -759,7 +928,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:40px">Процент считается по факту поступления денег от семьи. Рассрочка идет частями вслед за платежами.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">24 · цены тарифов из портала</div>
+  <div class="srcline">30 · цены тарифов из портала</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Сколько выходит в месяц">
@@ -775,7 +944,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <p class="small rise d3" style="margin-top:56px">При двух сделках выходит 40 176, 49 200 и 55 600. При десяти: 80 880, 126 000 и 158 000. Оплата диагностик идет сверх этого.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">25 · при полной загрузке смен и коэффициенте 1,0</div>
+  <div class="srcline">31 · при полной загрузке смен и коэффициенте 1,0</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Оплата диагностик">
@@ -796,7 +965,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">26</div>
+  <div class="srcline">32</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что выходит за сезон у тьютора">
@@ -805,14 +974,14 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     <div class="kicker rise">Что выходит за сезон у тьютора</div>
     <h2 class="title sm rise d1">Год выше прошлогоднего у того, кто ведет и продает</h2>
     <div class="years rise d2">
-      <div class="year"><div class="n">20 учеников</div><div class="big">776 100</div><div class="sub2">64 675 ₽ в месяц</div><div class="was">по старым условиям было 660 000</div></div>
-      <div class="year mid"><div class="n">30 учеников</div><div class="big">1 164 150</div><div class="sub2">97 012 ₽ в месяц</div><div class="was">по старым условиям было 990 000</div></div>
-      <div class="year"><div class="n">40 учеников</div><div class="big">1 552 200</div><div class="sub2">129 350 ₽ в месяц</div><div class="was">по старым условиям было 1 320 000</div></div>
+      <div class="year"><div class="n">20 учеников</div><div class="big">846 000</div><div class="sub2">70 500 ₽ в месяц</div><div class="was">по старым условиям было 660 000</div></div>
+      <div class="year mid"><div class="n">30 учеников</div><div class="big">1 269 000</div><div class="sub2">105 750 ₽ в месяц</div><div class="was">по старым условиям было 990 000</div></div>
+      <div class="year"><div class="n">40 учеников</div><div class="big">1 692 000</div><div class="sub2">141 000 ₽ в месяц</div><div class="was">по старым условиям было 1 320 000</div></div>
     </div>
-    <p class="small rise d3" style="margin-top:56px">Вовлеченность 0,9, две консультации на ученика, процент с договоров по тарифу Плюс.</p>
+    <p class="small rise d3" style="margin-top:56px">Вовлеченность 0,9, две консультации на ученика, процент с договоров по тарифу Плюс. Тот, кто продажи не берет, за 20 учеников получает 534 000, это 44 500 в месяц: чтобы остаться при прошлогодних деньгах без продаж, надо вести примерно на четверть больше учеников.</p>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">27</div>
+  <div class="srcline">33</div>
 </section>
 
 <section class="slide" data-part="Продажи" data-title="Что дальше до начала кампании">
@@ -834,7 +1003,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
     </div>
   </div>
   <div class="plaque">предварительные условия</div>
-  <div class="srcline">28</div>
+  <div class="srcline">34</div>
 </section>
 
     </div></div></div>
@@ -852,6 +1021,51 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
   </div>
 </div>
 
+<div class="view" id="view-coef" role="tabpanel" aria-labelledby="tab-coef" hidden>
+  <div class="wide">
+    <h2>Разбор коэффициента: что на что влияет</h2>
+    <p class="lead">Слева то, что вы делаете сами, справа то, чем кончился год у ученика.
+    Подвигайте ползунки и посмотрите, сколько рублей стоит каждая строка. Ставка бакалавриата
+    складывается из 20 000 за работу и 10 000 за результат, плюс премия 3 000, если ученик
+    поступил на грант в один из двух приоритетных вузов.</p>
+    <div class="coef" id="coef">
+      <div class="cstack">
+        <div class="calcbox">
+          <h3>Ваша зона: вовлеченность</h3>
+          <div class="crow"><label>Контрольные точки в срок, вес 40 <b id="co1lab">100%</b></label>
+            <input type="range" id="co1" data-w="40" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Скорость ответа семье, вес 30 <b id="co2lab">100%</b></label>
+            <input type="range" id="co2" data-w="30" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Оценка семьи, вес 20 <b id="co3lab">100%</b></label>
+            <input type="range" id="co3" data-w="20" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Работа с агентом, вес 10 <b id="co4lab">100%</b></label>
+            <input type="range" id="co4" data-w="10" min="0" max="100" step="5" value="100"></div>
+          <p class="muted-note" id="coScoreLine">100 баллов из ста, вовлеченность 1,00</p>
+        </div>
+        <div class="calcbox">
+          <h3>Общая зона: чем кончился год</h3>
+          <div class="seg" id="coSeg">
+            <button class="opt" data-r="1" aria-pressed="true">грант на обучение</button>
+            <button class="opt" data-r="0.75" aria-pressed="false">скидка 50—99%</button>
+            <button class="opt" data-r="0.5" aria-pressed="false">скидка до 50%</button>
+            <button class="opt" data-r="0.4" aria-pressed="false">поехал на платное</button>
+            <button class="opt" data-r="0" aria-pressed="false">не поступил</button>
+          </div>
+          <div class="crow"><label class="chk"><input type="checkbox" id="coA" checked> поступил в вуз уровня А, премия 3 000</label></div>
+          <div class="crow"><label class="chk"><input type="checkbox" id="coOut"> сорвалось не по вашей вине, флаг подняли за два месяца</label></div>
+        </div>
+      </div>
+      <div class="calcbox">
+        <h3>Выходит за одного ученика</h3>
+        <div><div class="total" id="coTotal">33 000 ₽</div>
+          <div class="total-cap">бакалавриат, потолок 33 000</div></div>
+        <ul class="brk" id="coBrk"></ul>
+        <p class="warn" id="coHint"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="view" id="view-calc" role="tabpanel" aria-labelledby="tab-calc" hidden>
   <div class="wide">
     <h2>Посчитайте свой сезон</h2>
@@ -864,7 +1078,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
         <div class="crow"><label>Учеников за сезон <b id="cNlab">20</b></label>
           <input type="range" id="cN" min="5" max="45" step="1" value="20"></div>
         <div class="crow"><label>Вовлеченность <b id="cKlab">0,90</b></label>
-          <input type="range" id="cK" min="70" max="100" step="5" value="90"></div>
+          <input type="range" id="cK" min="80" max="100" step="5" value="90"></div>
         <div class="seg" id="cSeg">
           <button class="opt" data-s="1" aria-pressed="true">продаю сам</button>
           <button class="opt" data-s="0" aria-pressed="false">только веду</button>
@@ -872,7 +1086,7 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
       </div>
       <div class="calcbox">
         <h3>Выходит за сезон</h3>
-        <div><div class="total" id="cTotal">776 100 ₽</div>
+        <div><div class="total" id="cTotal">846 000 ₽</div>
           <div class="total-cap" id="cMonth"></div></div>
         <ul class="brk" id="cBrk"></ul>
       </div>
@@ -885,7 +1099,11 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 <script>/* Каркас урока: чипсы разделов, вкладки, вписывание холста 1920x1080 в кадр,
    навигация и живые расчеты на слайдах. Все цифры считаются формулами прямо
    в браузере, чтобы на встрече можно было подвигать ползунок, а не спорить. */
-var RATE = 25783, CONS = 6000, SALE = 9600, OLD = 33000, YMAX = 1900000;
+/* WORK — часть ставки за работу, ее двигает только вовлеченность.
+   RESAVG — средний результат вместе с премией за вуз А по реальной смеси грантов
+   этого года (коэффициент 0,79 и премия примерно у четверти). */
+var WORK = 20000, RESAVG = 8700, CONS = 6000, SALE = 9600, OLD = 33000, YMAX = 1900000;
+function perBase(k){ return Math.round(WORK * k) + RESAVG; }
 var fmt = function(v){ return Math.round(v).toLocaleString('ru-RU').replace(/ /g,' '); };
 var fk = function(v){ return v.toFixed(2).replace('.', ','); };
 
@@ -1036,7 +1254,7 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
   var mets = document.getElementById('mets');
   if (!mets) return;
   function kOf(score){
-    return score >= 90 ? 1 : score >= 80 ? 0.95 : score >= 70 ? 0.9 : score >= 55 ? 0.8 : 0.7;
+    return score >= 90 ? 1 : score >= 75 ? 0.95 : score >= 60 ? 0.9 : 0.8;
   }
   function recalc(){
     var score = 0;
@@ -1046,7 +1264,7 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
     var k = kOf(score);
     document.getElementById('engScore').textContent = Math.round(score);
     document.getElementById('engK').textContent = fk(k);
-    document.getElementById('engMoney').textContent = fmt(30000 * k);
+    document.getElementById('engMoney').textContent = fmt(WORK * k + 10000);
   }
   [].forEach.call(mets.querySelectorAll('input'), function(x){ x.addEventListener('input', recalc); });
   recalc();
@@ -1054,19 +1272,18 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
 
 /* ---------- лестница ---------- */
 var LAD = [
-  ['Полное покрытие, вуз уровня А', 1], ['Полное покрытие, вуз Б или С', 0.9],
-  ['Покрыто обучение, без стипендии', 0.85], ['Скидка от 50 до 99 процентов', 0.7],
-  ['Скидка до 50 процентов', 0.5], ['Целились в грант, ушел на платное', 0.25],
-  ['Не поступил никуда', 0]
+  ['Грант на обучение, вуз уровня А', 1, 3000], ['Грант на обучение, вуз Б или С', 1, 0],
+  ['Скидка от 50 до 99 процентов', 0.75, 0], ['Скидка до 50 процентов', 0.5, 0],
+  ['Целились в грант, поехал на платное', 0.4, 0], ['Не поступил никуда', 0, 0]
 ];
 var dvol = 1;
 function drawLadder(){
   var ladder = document.getElementById('ladder');
   if (!ladder) return;
   ladder.innerHTML = LAD.map(function(r, n){
-    var v = (15000 + 15000 * r[1]) * dvol;
+    var v = WORK * dvol + 10000 * r[1] + r[2];
     return '<div class="lrow' + (n === 0 ? ' top' : '') + '"><div class="lab">' + r[0] +
-      '</div><div class="trk"><i data-w="' + (v / 30000 * 100) + '"></i></div><div class="val">' +
+      '</div><div class="trk"><i data-w="' + (v / 33000 * 100) + '"></i></div><div class="val">' +
       fmt(v) + '</div></div>';
   }).join('');
   requestAnimationFrame(function(){
@@ -1087,16 +1304,16 @@ function drawLadder(){
 })();
 
 /* ---------- график роста ----------
-   Средняя ставка при полной вовлеченности 25 783 (реальная смесь грантов этого
-   года), две консультации по 3 000, процент с договора Плюс 3,2% = 9 600.
-   Старые условия: 33 000 за ученика, и все. */
+   Ставка = 20 000 за работу x вовлеченность + 8 700 средний результат с премией
+   (реальная смесь грантов этого года), две консультации по 3 000, процент с
+   договора Плюс 3,2% = 9 600. Старые условия: 33 000 за ученика, и все. */
 var X = function(n){ return 70 + n / 45 * 910; }, Y = function(v){ return 440 - v / YMAX * 410; };
 function drawChart(){
   var svg = document.getElementById('svg');
   if (!svg) return;
   var k = (+document.getElementById('chK').value) / 100;
   var n = +document.getElementById('chN').value;
-  var per = Math.round(RATE * k) + CONS + (chSale ? SALE : 0);
+  var per = perBase(k) + CONS + (chSale ? SALE : 0);
   var pNew = '', pOld = '', area = 'M70,440 ';
   for (var t = 0; t <= 45; t++){
     pNew += (t ? ' L' : 'M') + X(t).toFixed(1) + ',' + Y(per * t).toFixed(1);
@@ -1157,7 +1374,7 @@ var chSale = 1;
   });
   function calc(){
     var N = +n.value, K = (+k.value) / 100;
-    var base = Math.round(RATE * K) * N, cons = CONS * N, pct = sale ? SALE * N : 0;
+    var base = perBase(K) * N, cons = CONS * N, pct = sale ? SALE * N : 0;
     var total = base + cons + pct;
     document.getElementById('cNlab').textContent = N;
     document.getElementById('cKlab').textContent = fk(K);
@@ -1170,6 +1387,78 @@ var chSale = 1;
       '<li><span>Разница со старыми условиями</span><b>' + (total - OLD * N >= 0 ? '+' : '') + fmt(total - OLD * N) + '</b></li>';
   }
   n.addEventListener('input', calc); k.addEventListener('input', calc);
+  calc();
+})();
+
+/* ---------- разбор коэффициента ----------
+   Считает ровно то же, что слайды: 20 000 за работу двигает вовлеченность,
+   10 000 за результат двигает сила гранта, премия 3 000 идет сверху ставки.
+   Правило «не ваша зона» поднимает силу гранта до 0,75, если она была ниже. */
+(function(){
+  var box = document.getElementById('coef');
+  if (!box) return;
+  var METS = [
+    ['co1', 'точки в срок'], ['co2', 'скорость ответа'],
+    ['co3', 'оценка семьи'], ['co4', 'работа с агентом']
+  ];
+  var seg = document.getElementById('coSeg');
+  var res = 1;
+
+  function kOf(score){
+    return score >= 90 ? 1 : score >= 75 ? 0.95 : score >= 60 ? 0.9 : 0.8;
+  }
+
+  function calc(){
+    var score = 0, worst = null;
+    METS.forEach(function(m){
+      var el = document.getElementById(m[0]), w = +el.dataset.w, v = +el.value;
+      document.getElementById(m[0] + 'lab').textContent = v + '%';
+      score += w * v / 100;
+      var lost = w * (100 - v) / 100;
+      if (lost > 0 && (!worst || lost > worst[1])) worst = [m[1], lost];
+    });
+    var k = kOf(score);
+    document.getElementById('coScoreLine').textContent =
+      Math.round(score) + ' баллов из ста, вовлеченность ' + fk(k);
+
+    var out = document.getElementById('coOut').checked;
+    var r = out ? Math.max(res, 0.75) : res;
+    var prem = document.getElementById('coA').checked && r === 1 ? 3000 : 0;
+    var work = Math.round(WORK * k), result = Math.round(10000 * r);
+    var total = work + result + prem;
+
+    document.getElementById('coTotal').textContent = fmt(total) + ' ₽';
+    document.getElementById('coBrk').innerHTML =
+      '<li><span>За работу: 20 000 × ' + fk(k) + '</span><b>' + fmt(work) + '</b></li>' +
+      '<li><span>За результат: 10 000 × ' + fk(r) + '</span><b>' + fmt(result) + '</b></li>' +
+      (prem ? '<li><span>Премия за вуз уровня А</span><b>3 000</b></li>' : '') +
+      '<li><span>' + (total >= 33000 ? 'Потолок взят целиком' : 'Недобрано до потолка 33 000') +
+      '</span><b>' + (total >= 33000 ? '—' : fmt(33000 - total)) + '</b></li>';
+
+    var hint = document.getElementById('coHint');
+    if (out && res < 0.75) {
+      hint.textContent = 'Правило «не ваша зона» подняло силу гранта с ' + fk(res) +
+        ' до 0,75. Это ' + fmt(7500 - 10000 * res) + ' ₽, которые вы бы потеряли за чужое решение.';
+    } else if (worst) {
+      hint.textContent = 'Сильнее всего просела метрика «' + worst[0] + '», минус ' +
+        Math.round(worst[1]) + ' баллов. Вернуть ее в сто процентов стоит ' +
+        fmt(Math.round(WORK * kOf(score + worst[1])) - work) + ' ₽ на этом ученике.';
+    } else {
+      hint.textContent = 'Все четыре метрики в сто процентов: вовлеченность 1,00, и вся ваша ' +
+        'часть ставки выплачена целиком. Ниже этой строки коэффициент не опускает ничего, ' +
+        'что решаете не вы.';
+    }
+  }
+
+  [].forEach.call(seg.children, function(b){
+    b.addEventListener('click', function(){
+      [].forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', 'true'); res = +b.dataset.r; calc();
+    });
+  });
+  METS.forEach(function(m){ document.getElementById(m[0]).addEventListener('input', calc); });
+  document.getElementById('coA').addEventListener('change', calc);
+  document.getElementById('coOut').addEventListener('change', calc);
   calc();
 })();
 </script>
