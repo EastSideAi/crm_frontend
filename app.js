@@ -19323,6 +19323,14 @@
 
   /* Карточка с графиками. Данных мало — не рисуем сетку ради сетки: пустой график
      читается как «всё плохо» или «система врёт», а на деле цифр ещё нет. */
+  /* Подпись графика — диапазон дат, а не «N дней»: на графике видны ВСЕ дни отрезка,
+     включая пустые, и счётчик «дней с цифрами» рядом с ними читался бы как ошибка. */
+  function launchSpan(days) {
+    if (!days.length) return 'дней пока нет';
+    var a = days[0].day.split('-'), b = days[days.length - 1].day.split('-');
+    return 'с ' + a[2] + '.' + a[1] + ' по ' + b[2] + '.' + b[1];
+  }
+
   function launchCharts(cur) {
     var days = cur.by_day || [];
     var withData = days.filter(function (d) { return d.registered || d.paid; });
@@ -19330,8 +19338,7 @@
     if (withData.length >= 2) {
       dayCard = '<div class="card sp7" style="padding:22px 26px">' +
         '<div class="sec-head"><div><div class="t">По дням</div>' +
-        '<div class="s">регистрации и оплаты, ' + withData.length + ' ' +
-        plural(withData.length, 'день', 'дня', 'дней') + '</div></div></div>' +
+        '<div class="s">регистрации и оплаты, ' + launchSpan(days) + '</div></div></div>' +
         launchDayChart(days) + '</div>';
     } else {
       dayCard = '<div class="card sp7" style="padding:22px 26px">' +
