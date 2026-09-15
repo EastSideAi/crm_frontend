@@ -7474,7 +7474,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .academy .ac-stage { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 32px 40px 24px; min-height: 520px; display: flex; flex-direction: column; }
 .academy .ac-stage-top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-.academy .ac-dots { display: flex; gap: 6px; margin-left: auto; }
+.academy .ac-top-r { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+/* Проигрыватель слайда. Стоит в шапке сцены, потому что читает весь экран, а не
+   отдельную реплику; тихий, чтобы не спорить с заголовком за внимание. */
+.academy .ac-voice { display: flex; align-items: center; gap: 6px; }
+.academy .ac-voice[hidden] { display: none; }
+.academy .ac-rate { min-width: 34px; height: 30px; padding: 0 8px; border: 1px solid var(--ac-line-2);
+  border-radius: var(--ac-r-pill); background: var(--ac-card); font: 700 12px 'Manrope', sans-serif;
+  color: var(--ac-ink-3); cursor: pointer; transition: .15s; font-variant-numeric: tabular-nums; }
+.academy .ac-rate:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-dots { display: flex; gap: 6px; }
 .academy .ac-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac-line-2); transition: .25s var(--ac-ease); }
 .academy .ac-dots i.on { background: var(--ac-blue); transform: scale(1.15); }
 .academy .ac-dots i.past { background: var(--ac-blue-tint); }
@@ -7504,7 +7513,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-st { font-size: 15px; line-height: 1.65; color: #4A5160; }
 .academy .ac-st b { color: var(--ac-ink); font-weight: 700; }
 .academy .ac-sp { margin: 0; }
-.academy .ac-play { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 7px 14px 7px 11px;
+.academy .ac-play { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px 0 10px;
   border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill); background: var(--ac-card);
   font: 600 13px 'Manrope', sans-serif; color: var(--ac-ink-2); cursor: pointer; transition: .15s; }
 .academy .ac-play:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
