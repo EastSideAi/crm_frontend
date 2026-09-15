@@ -3843,8 +3843,8 @@
     if (sc.type === 'stage') extra = acStageHTML(sc);
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
-    if (sc.type === 'q') return acQHTML(sc);
-    return eye + h + body + extra;
+    if (sc.type === 'q') return acQHTML(sc) + acSay(sc);
+    return eye + h + body + extra + acSay(sc);
   }
 
   /* Снимок экрана с подписями. Файла еще нет — рисуем схему: подписи те же,
@@ -3856,7 +3856,7 @@
     var body;
     if (sc.file && AC_SHOTS_READY[sc.file]) {
       body = '<figure class="ac-shot"><img src="' + esc(AC_SHOT_DIR + sc.file + '.' + AC_SHOTS_READY[sc.file]) + '" alt="' + esc(sc.h) + '" loading="lazy">' +
-        '<figcaption class="ac-cap">Данные на снимке демонстрационные</figcaption></figure>';
+        '<figcaption class="ac-cap">Данные на снимке демонстрационные · нажмите, чтобы открыть крупно</figcaption></figure>';
     } else {
       body = '<div class="ac-shot-soon"><span class="ac-badge">' + (sc.soon ? 'экран в работе' : 'снимок готовим') + '</span>' +
         '<div class="ac-frame">' + (sc.pins || []).map(function (p) { return '<span class="ac-fbox"><i>' + esc(p[0]) + '</i>' + esc(p[1]) + '</span>'; }).join('') + '</div></div>';
@@ -3944,6 +3944,15 @@
       '<ul class="ac-chk-list">' + items + '</ul></div>' + (sc.note ? acNote(sc.note) : '');
   }
 
+  /* Голос преподавателя. Экран показывает факты, а объясняет их человек: короткая
+     реплика своими словами, как на занятии (Павел 15.09.2026: «слайды должны
+     объясняться как учителем»). Этот же текст потом читает озвучка — сценарий
+     один, второй копии не заводим. */
+  function acSay(sc) {
+    if (!sc.say) return '';
+    return '<div class="ac-say"><div class="ac-sic">' + ic('chat', 14) + '</div><div class="ac-st">' + sc.say + '</div></div>';
+  }
+
   function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
   function acQHTML(sc) {
     // sit — обстановка кейса: несколько абзацев до вопроса. Без нее это просто вопрос.
@@ -3976,8 +3985,33 @@
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
     if (sc.type === 'chklist') acBindChk(sc);
+    acZoomBind(scr);
     acBuildRoute();
   }
+  /* Снимок открывается во весь экран по клику. В колонке урока интерфейс CRM виден
+     мелко, а на снимке как раз показывают, куда нажимать (Павел 15.09.2026: «очень
+     мелко и не видно»). */
+  function acZoomBind(scr) {
+    var img = scr.querySelector('.ac-shot img');
+    if (!img) return;
+    img.addEventListener('click', function () { acZoomOpen(img.getAttribute('src'), img.getAttribute('alt')); });
+  }
+
+  function acZoomOpen(src, alt) {
+    var ov = document.createElement('div');
+    ov.className = 'ac-zoom';
+    ov.innerHTML = '<img src="' + esc(src) + '" alt="' + esc(alt || '') + '">' +
+      '<button class="ac-zx" aria-label="Закрыть">' + ic('x', 16) + '</button>';
+    function close() {
+      ov.parentNode && ov.parentNode.removeChild(ov);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    ov.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+  }
+
   function acBindQ(sc) {
     var A = state.ac, opts = el('ac-screen').querySelectorAll('#ac-opts .ac-opt'), fb = el('ac-fb');
     Array.prototype.forEach.call(opts, function (o) {

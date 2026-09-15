@@ -7407,12 +7407,27 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-nt { font-size: 14px; color: #333843; }
 .academy .ac-nt b { color: var(--ac-ink); }
 
+/* Реплика преподавателя под экраном. Намеренно НЕ похожа на плашку-примечание:
+   без заливки, отделена волоском — это не еще одно правило, а человек, который
+   объясняет своими словами то, что выше показано схемой. */
+.academy .ac-say { display: flex; gap: 13px; align-items: flex-start; margin: 22px 0 0;
+  padding-top: 18px; border-top: 1px solid var(--ac-line); }
+.academy .ac-sic { width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--ac-blue-tint);
+  color: var(--ac-blue-d); display: grid; place-items: center; }
+.academy .ac-st { font-size: 15px; line-height: 1.65; color: #4A5160; }
+.academy .ac-st b { color: var(--ac-ink); font-weight: 700; }
+
 .academy .ac-quote { border-left: 3px solid var(--ac-blue); padding: 4px 0 4px 16px; margin: 16px 0; font-size: 15px; color: #333843; }
 .academy .ac-who { display: block; margin-top: 6px; }
 
-.academy .ac-rules { list-style: none; padding: 0; margin: 16px 0; display: flex; flex-direction: column; gap: 10px; }
-.academy .ac-rules li { display: flex; gap: 11px; align-items: flex-start; font-size: 14.5px; color: #333843; }
-.academy .ac-mk { width: 22px; height: 22px; flex: none; border-radius: 7px; background: var(--ac-blue-tint); color: var(--ac-blue-d); display: grid; place-items: center; font-weight: 800; font-size: 12px; margin-top: 1px; }
+/* Сетка, а не флекс в каждой строке: метка бывает и числом этапа, и словом
+   («Стандарт», «Премиум»). В квадрате 22px слово не помещалось и наезжало на
+   текст правой колонки. Общая колонка auto держит все метки одной ширины, и
+   текст всех строк начинается по одной линии. */
+.academy .ac-rules { list-style: none; padding: 0; margin: 16px 0; display: grid;
+  grid-template-columns: auto minmax(0, 1fr); column-gap: 11px; row-gap: 10px; }
+.academy .ac-rules li { display: contents; font-size: 14.5px; color: #333843; }
+.academy .ac-mk { min-width: 22px; height: 22px; padding: 0 6px; justify-self: start; border-radius: 7px; background: var(--ac-blue-tint); color: var(--ac-blue-d); display: grid; place-items: center; font-weight: 800; font-size: 12px; margin-top: 1px; }
 .academy .ac-rules.good .ac-mk { background: var(--ac-green-soft); color: var(--ac-green-ink); }
 .academy .ac-rules.no .ac-mk { background: var(--ac-red-soft); color: var(--ac-red); }
 .academy .ac-rules li b { font-weight: 700; color: var(--ac-ink); }
@@ -7554,7 +7569,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    Пока файла нет, на месте картинки стоит схема тех же подписей: она честнее
    пустого места и меняется на снимок без правки урока. */
 .academy .ac-shot { margin: 16px 0; border-radius: var(--ac-r-lg); overflow: hidden; border: 1px solid var(--ac-line-2); }
-.academy .ac-shot img { display: block; width: 100%; }
+.academy .ac-shot img { display: block; width: 100%; cursor: zoom-in; }
+/* Снимок во весь экран. Живет поверх всего и вне .academy: его контейнер — body,
+   иначе колонка урока обрезала бы картинку по своей ширине. */
+.ac-zoom { position: fixed; inset: 0; z-index: 140; background: rgba(17, 21, 31, .86);
+  display: grid; place-items: center; padding: 28px; overflow: auto; cursor: zoom-out;
+  animation: acZoomIn .16s ease-out; }
+.ac-zoom img { max-width: min(1680px, 96vw); width: 100%; height: auto; border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
+.ac-zx { position: fixed; top: 20px; right: 22px; width: 38px; height: 38px; border: 0; border-radius: 50%;
+  background: rgba(255, 255, 255, .16); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.ac-zx:hover { background: rgba(255, 255, 255, .28); }
+@keyframes acZoomIn { from { opacity: 0; } to { opacity: 1; } }
 .academy .ac-shot figcaption { padding: 8px 12px; background: var(--ac-fill); }
 .academy .ac-shot-soon { position: relative; margin: 16px 0; border-radius: var(--ac-r-lg);
   border: 1px dashed var(--ac-line-2); background: var(--ac-fill); padding: 34px 18px 18px; }
