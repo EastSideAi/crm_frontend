@@ -4059,24 +4059,30 @@
      коэффициентом вовлеченности, до 10 000 ₽ за результат, премия и консультации
      сверху. Ничего не сохраняет и никуда не отправляет — это тренажер, а не
      ведомость, поэтому и цифры тут учебные, одинаковые для всех учеников. */
-  var AC_CALC = { n: 5, eng: 0, res: 0, top: true, cons: 5 };
+  var AC_CALC = { n: 5, eng: 0, res: 0, top: true, flag: false, cons: 5 };
   var AC_ENG = [['90 и выше', 1, '1,00'], ['75—89', 0.95, '0,95'],
                 ['60—74', 0.9, '0,90'], ['ниже 60', 0.8, '0,80']];
-  var AC_RES = [['Полный грант', 10000], ['Скидка 50—99%', 7500],
-                ['Скидка до 50%', 5000], ['Платное', 4000], ['Никуда', 0]];
+  // Точка 4 двумя частями: за зачисление на грант и за силу этого гранта
+  // (решение Павла 15.09.2026). Платное точку 4 не закрывает вовсе.
+  var AC_RES = [['Полный грант', 6000, 4000], ['Скидка 50—99%', 6000, 3000],
+                ['Скидка до 50%', 6000, 2000], ['Платное', 0, 0], ['Никуда', 0, 0]];
   var AC_YESNO = [['Да'], ['Нет']];
-  var AC_WORK_PART = 20000, AC_BONUS = 3000, AC_CONS_FEE = 3000;
+  var AC_WORK_PART = 20000, AC_BONUS = 3000, AC_CONS_FEE = 3000, AC_SAFE = 7500;
   var AC_LIM = { n: [1, 20], cons: [0, 30] };
 
   function acCalcSum() {
     var c = AC_CALC;
     var work = Math.round(AC_WORK_PART * AC_ENG[c.eng][1]);
-    var res = AC_RES[c.res][1];
+    var enr = AC_RES[c.res][1], pow = AC_RES[c.res][2];
+    // «Не ваша зона»: флаг риска, поднятый вовремя, поднимает точку 4 до 7 500 ₽,
+    // но никогда ее не опускает — у хорошего исхода она и так выше.
+    var safe = c.flag && (enr + pow) < AC_SAFE;
+    var p4 = safe ? AC_SAFE : enr + pow;
     // Премия — за два условия сразу, и оба про лучший исход: вуз уровня А и год
     // без провалов. Частичный грант премию не дает, это разобрано на экране ставок.
     var bonus = (c.eng === 0 && c.top && c.res === 0) ? AC_BONUS : 0;
-    var one = work + res + bonus, cons = c.cons * AC_CONS_FEE;
-    return { work: work, res: res, bonus: bonus, one: one,
+    var one = work + p4 + bonus, cons = c.cons * AC_CONS_FEE;
+    return { work: work, enr: enr, pow: pow, safe: safe, p4: p4, bonus: bonus, one: one,
              all: one * c.n, cons: cons, total: one * c.n + cons };
   }
   function acStudWord(n) { return (n % 10 === 1 && n % 100 !== 11) ? 'ученика' : 'учеников'; }
@@ -4100,7 +4106,11 @@
     var s = acCalcSum(), c = AC_CALC;
     return '<ul class="ac-clist">' +
       acCalcRow('Работа, точки 1, 2, 3 и 5 · коэффициент ' + AC_ENG[c.eng][2], s.work) +
-      acCalcRow('Результат, точка 4', s.res) +
+      (s.safe
+        ? acCalcRow('Точка 4 по правилу «не ваша зона»', s.p4)
+        : acCalcRow('Точка 4: довели до зачисления на грант', s.enr) +
+          acCalcRow('Точка 4: сила гранта', s.pow)) +
+      (!s.safe && !s.p4 ? '<li class="ac-chint">Платное и «никуда» точку 4 не закрывают: цель, записанная на точке 1, — грант</li>' : '') +
       acCalcRow('Премия за вуз уровня А', s.bonus) +
       (s.bonus ? '' : '<li class="ac-chint">Премия идет только при трех условиях сразу: коэффициент 1,00, вуз уровня А и полный грант</li>') +
       acCalcRow('За одного ученика', s.one, 'sum') +
@@ -4116,6 +4126,7 @@
         '<div class="ac-cf"><span class="ac-cfl">Коэффициент вовлеченности, баллы</span>' + acCalcSeg('eng', AC_ENG, AC_CALC.eng) + '</div>' +
         '<div class="ac-cf"><span class="ac-cfl">Что в итоге дал вуз</span>' + acCalcSeg('res', AC_RES, AC_CALC.res) + '</div>' +
         '<div class="ac-cf"><span class="ac-cfl">Вуз записан в уровень А на точке 1</span>' + acCalcSeg('top', AC_YESNO, AC_CALC.top ? 0 : 1) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Флаг риска подняли вовремя</span>' + acCalcSeg('flag', AC_YESNO, AC_CALC.flag ? 0 : 1) + '</div>' +
         '<div class="ac-cf"><span class="ac-cfl">Консультаций по стратегии за год</span>' + acCalcStep('cons', AC_CALC.cons) + '</div>' +
       '</div>' +
       '<div class="ac-cout" id="ac-cout">' + acCalcOut() + '</div>' +
@@ -4134,7 +4145,7 @@
         wrap.querySelector('b').textContent = AC_CALC[f];
       } else {
         var v = +b.getAttribute('data-v');
-        AC_CALC[f] = f === 'top' ? v === 0 : v;
+        AC_CALC[f] = (f === 'top' || f === 'flag') ? v === 0 : v;
         [].forEach.call(wrap.children, function (x, i) { x.classList.toggle('on', i === v); });
       }
       el('ac-cout').innerHTML = acCalcOut();
