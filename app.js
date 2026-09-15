@@ -3824,7 +3824,9 @@
     }
     if (sc.type === 'check') extra = '<ul class="ac-rules good">' + sc.items.map(function (it) { return '<li><span class="ac-mk">✓</span><div>' + esc(it) + '</div></li>'; }).join('') + '</ul>';
     if (sc.type === 'quote') extra = '<div class="ac-quote">' + esc(sc.quote.text) + '<span class="ac-who ac-cap">' + esc(sc.quote.who) + '</span></div>' + (sc.note ? acNote(sc.note) : '');
-    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(r[1]) + ' ₽</span></li>'; }).join('') + '</ul>' +
+    // Рубль дописывается сам, но не к строке, где единица уже своя: «3,2% суммы»,
+    // «750 ₽ × качество». Иначе в уроке денег выходит «30 000 ₽ ₽».
+    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { var v = String(r[1]); return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(/[₽%]/.test(v) ? v : v + ' ₽') + '</span></li>'; }).join('') + '</ul>' +
       (sc.note ? acNote(sc.note) : '');
     if (sc.type === 'deduct') {
       extra = '<div class="ac-deduct">' + sc.groups.map(function (g) {
