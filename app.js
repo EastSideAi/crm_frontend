@@ -31,11 +31,14 @@
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
+    drafts: {},         // черновики композера по диалогам — живут в state, а не в DOM (см. composerSave)
+    composer: { id: null, focus: false, caret: 0 },
     bot: { loaded: false, source: 'demo', list: null, msgs: {} }, botConvoId: null, botStats: null,
     drawerId: null, drawerList: [], modalSection: 'now',
     details: {}, inflight: {}, seenBefore: 0, updatedAt: null, timer: null,
     planStatus: {}, _templates: null, _tplEdit: null, _tplDraft: null,
     planChat: null,   // id лида, у которого открыт чат правок плана
+    showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
@@ -84,7 +87,21 @@
     clicked_messenger: 'перешел в мессенджер',
     opened_product: 'открыл продукт',
     tg_nudge_sent: 'бот напомнил о записи',
+    magnet_registered: 'забрал бесплатный мини-курс',
+    magnet_progress: 'мини-курс: прогресс',
   };
+  /* подпись события: словарь + уточнения из payload (одна на все ленты) */
+  function evText(e) {
+    var p = e.payload || {}, label = EVENTS_RU[e.type] || e.type;
+    if (e.type === 'opened_product' && p.product) label += ': ' + p.product;
+    if (e.type === 'clicked_messenger' && p.channel) label += ' (' + p.channel + ')';
+    if (e.type === 'magnet_registered' && p.title) label += ' «' + p.title + '»';
+    if (e.type === 'magnet_progress') {
+      label = 'мини-курс: ' + (p.blocks_done || 0) + ' из ' + (p.blocks_total || 0) + ' блоков' +
+        (p.quiz_total ? ', задания ' + (p.quiz_right || 0) + ' из ' + p.quiz_total : '');
+    }
+    return label;
+  }
   var COMM_KINDS = { call: 'звонок', msg: 'написал', meet: 'встреча' };
   var UNI_TYPE = { dream: 'мечта', solid: 'надежный', safe: 'запасной' };
   var SNAPSHOT = [
@@ -119,6 +136,7 @@
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
       alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
+      mail: '<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3.2 6.2l6.1 4.4a1.2 1.2 0 0 0 1.4 0l6.1-4.4"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
       spark: '<path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor" stroke="none"/>',
@@ -147,6 +165,7 @@
       bolt: '<path d="M11 2.5 4 11h4.5L9 17.5 16 9h-4.5L11 2.5z" fill="currentColor" stroke="none"/>',
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
+      max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
       dialogs: '<path d="M2.5 6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2H6l-3.5 2.5V6z"/><path d="M9 11v.5a2 2 0 0 0 2 2h3.5l3 2.2V10a2 2 0 0 0-2-2h-1"/>',
@@ -188,7 +207,7 @@
   function el(id) { return document.getElementById(id); }
   function getKey() {
     var m = location.search.match(/[?&]k=([^&]+)/);
-    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname); }
+    if (m) { localStorage.setItem(KEY_LS, decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname + location.hash); }
     return localStorage.getItem(KEY_LS) || '';
   }
   function pad(n) { return ('0' + n).slice(-2); }
@@ -212,6 +231,14 @@
     if (diff === 0) return 'Сегодня';
     if (diff === 1) return 'Вчера';
     return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  /* Полная дата словами: «10 ноября 2026». Для сроков, до которых далеко, где
+     «10.11» без года читается двусмысленно. */
+  function dayFull(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] + ' ' + d.getFullYear();
   }
   function ago(iso) {
     if (!iso) return '';
@@ -266,9 +293,12 @@
   }
   function copyText(text, btn) {
     var done = function () {
-      var t = btn.textContent;
-      btn.textContent = 'Скопировано';
-      setTimeout(function () { btn.textContent = t; }, 1400);
+      if (!btn) return;
+      // подтверждение прямо в кнопке; иконочную кнопку не растягиваем текстом
+      if (btn._cpHtml == null) btn._cpHtml = btn.innerHTML;
+      btn.innerHTML = btn.textContent.trim() ? ic('check', 13) + 'Скопировано' : ic('check', 13);
+      clearTimeout(btn._cpT);
+      btn._cpT = setTimeout(function () { btn.innerHTML = btn._cpHtml; btn._cpHtml = null; }, 1400);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, done);
@@ -282,10 +312,56 @@
   function findLead(id) {
     return state.leads.filter(function (l) { return l.id === id; })[0] || null;
   }
+  /* ── прямая ссылка на карточку клиента ─────────────────────
+     Адрес вида crm.истсайд.рф/#lead/<id>: кто из команды откроет его (уже войдя
+     в CRM), сразу попадёт в карточку этого клиента. Копируем ВСЕГДА боевой адрес,
+     а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
+     оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
+  var CRM_HOME = 'https://crm.истсайд.рф/';
+  function leadUrl(id) {
+    return CRM_HOME + '#lead/' + encodeURIComponent(id);
+  }
+  function hashLeadId() { return hashRouteId('lead'); }
+  /* Тот же приём для переписки: `#dialog/<id>` открывает конкретный диалог инбокса.
+     На эту ссылку ведёт уведомление бота в Telegram («клиенту нужен менеджер») —
+     из пуша попадаешь сразу в разговор, а не в общий список. */
+  function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
+  function hashDialogId() { return hashRouteId('dialog'); }
+  /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
+     хэш-функция строки ниже по файлу, и одноимённое объявление её перетирало. */
+  function hashRouteId(kind) {
+    var m = String(location.hash || '').match(new RegExp('^#' + kind + '\\/(.+)$'));
+    if (!m) return '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
+  }
+  /* адрес в строке браузера всегда показывает открытую карточку (или диалог) — ссылку
+     можно скопировать и оттуда; replaceState, чтобы не засорять историю «назад» */
+  function syncHash(id, kind) {
+    kind = kind || 'lead';
+    try {
+      if (hashRouteId(kind) === (id || '')) return;
+      history.replaceState(null, '', id ? '#' + kind + '/' + encodeURIComponent(id)
+                                        : location.pathname + location.search);
+    } catch (e) {}
+  }
   function isNewLead(l) {
     return state.seenBefore && l.created_at && new Date(l.created_at).getTime() > state.seenBefore;
   }
-  function leadName(l) { return l.name || 'Без имени'; }
+  /* Имени нет — подписываем тем, что человек успел сделать: заявку без имени менеджер
+     откроет и разберет, а пустой заход трогать незачем. Голое «Без имени» на обоих
+     не отличало заявку от случайного посетителя. */
+  function leadName(l) {
+    if (l.name) return l.name;
+    return l.status === 'visited' ? 'Заход без анкеты' : 'Заявка без имени';
+  }
+  /* Пустой заход: человек открыл платформу и ушел, не оставив о себе ничего.
+     Это не лид, а строка статистики — в «Людях» такие свернуты (см. blankFoot),
+     в разделе «Путь» они считаются как раньше, первой ступенью воронки. */
+  function isBlankVisit(l) {
+    return l.status === 'visited' && !l.name && !l.email && !l.paid &&
+      !(l.booking || {}).contact && !(l.events || []).length &&
+      !l.crm.note && !(l.crm.tasks || []).length && l.crm.status === 'new';
+  }
   /* override-поля менеджера поверх данных анкеты/booking */
   function ov(ctx, field) {
     var o = (ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {};
@@ -377,7 +453,17 @@
     opts = opts || {};
     var sep = path.indexOf('?') === -1 ? '?' : '&';
     return fetch(API + path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
-      if (r.status === 403) { localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново'); throw new Error('403'); }
+      /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
+         на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
+         отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
+         CRM посреди работы. */
+      if (r.status === 403) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (String((j && j.detail) || '').indexOf('no access') === 0) throw new Error('403acl');
+          localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
+          throw new Error('403');
+        });
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     });
@@ -408,12 +494,16 @@
     try { localStorage.removeItem(DC_PREF + id); } catch (e) {}
     fetchDetail(id, cb);
   }
-  function apiSend(path, method, body, cb) {
+  /* onErr(code) — когда вызвавшему есть что сказать про конкретный отказ (занятый
+     логин, недостаточно прав). Без него ошибка гасится общим тостом, как раньше. */
+  function apiSend(path, method, body, cb, onErr) {
     api(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
     }).then(function (r) { if (cb) cb(r); }).catch(function (e) {
+      if (onErr) return onErr(parseInt(String(e.message).replace(/\D+/g, ''), 10) || 0);
+      if (e.message === '403acl') return showToast('Нет доступа — это может только владелец');
       if (e.message !== '403') showToast('Не сохранилось — проверь сеть');
     });
   }
@@ -504,6 +594,7 @@
   function segLeads(seg) {
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
@@ -540,10 +631,14 @@
     return arr;
   }
   function counts() {
-    var c = { queue: 0, all: state.leads.length, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
-              anketa: 0, booked: 0 };
+    /* «Пользователи» считаются по тому же правилу, что и список: свернутые пустые
+       заходы в цифру на вкладке не входят, иначе счетчик спорил бы со строками. */
+    var c = { queue: 0, all: 0, clients: 0, rejected: 0, hot: 0, week: 0, today: 0,
+              anketa: 0, booked: 0, blank: 0 };
     var weekAgo = Date.now() - 7 * 86400000;
     state.leads.forEach(function (l) {
+      if (isBlankVisit(l)) { c.blank++; if (!state.showBlank) return; }
+      c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
       if (!!l.paid) c.clients++;
@@ -721,6 +816,7 @@
     var periodLabels = { '': 'За все время', today: 'Сегодня', week: '7 дней', month: '30 дней' };
 
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -805,6 +901,7 @@
     var node = el('list-count');
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
+      if (!state.showBlank && isBlankVisit(l)) return false;
       if (state.filters.funnel && l.status !== state.filters.funnel) return false;
       return inPeriod(l, state.filters.period);
     });
@@ -1158,13 +1255,14 @@
         '<div class="gate-card">' +
           '<h1>Вход в CRM</h1>' +
           '<p>Сессия сохранится на этом устройстве.</p>' +
-          '<input id="lg-login" type="text" placeholder="Логин" autocomplete="username">' +
+          '<input id="lg-login" type="text" placeholder="Логин или почта" autocomplete="username">' +
           '<div class="lg-passwrap">' +
             '<input id="lg-pass" type="password" placeholder="Пароль" autocomplete="current-password">' +
             '<button class="lg-eye" id="lg-eye" type="button" tabindex="-1">показать</button>' +
           '</div>' +
           '<button class="bp" id="lg-go">Войти</button>' +
           '<div class="gate-err" id="lg-err">' + esc(err || '') + '</div>' +
+          '<button class="gate-link" id="lg-forgot" type="button">Забыли пароль?</button>' +
         '</div>' +
       '</div></div>';
     if (err) el('lg-err').style.display = 'block';
@@ -1199,6 +1297,119 @@
     el('lg-go').addEventListener('click', go);
     pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
     li.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    el('lg-forgot').addEventListener('click', function () { renderReset(); });
+  }
+
+  /* ── восстановление пароля ────────────────────────────── */
+  /* Два шага в одной карточке: почта → код из письма и новый пароль. Отдельного
+     экрана «введите код» не делаем — человек и так держит письмо открытым, лишний
+     переход только добавляет шанс уйти не туда. */
+  function renderReset(ctx) {
+    ctx = ctx || {};
+    document.body.classList.remove('dock-open');
+    var sent = !!ctx.challenge;
+    root.innerHTML =
+      '<div id="gate"><div class="gate-split">' +
+        '<div class="gate-brand">' +
+          '<div class="logo light"><div class="mk">И</div><div class="nm">ИстСайд<small>CRM команды</small></div></div>' +
+          '<div class="gb-mid">' +
+            '<div class="gb-h">Вся воронка EastSide<br>в одном окне</div>' +
+            '<div class="gb-s">Заявки, диалоги с ботом, путь людей по платформе и деньги — на одном экране.</div>' +
+          '</div>' +
+          '<div class="gb-foot">' + ic('spark', 12) + 'поступление в вузы Китая — от диагностики до визы</div>' +
+        '</div>' +
+        '<div class="gate-card">' +
+          (sent
+            ? '<h1>Новый пароль</h1>' +
+              '<p>Код отправили на ' + esc(ctx.email) + '. Он действует ' + (ctx.ttlMin || 15) + ' минут.</p>' +
+              '<input id="rs-code" type="text" inputmode="numeric" maxlength="6" placeholder="Код из письма" autocomplete="one-time-code">' +
+              '<div class="lg-passwrap">' +
+                '<input id="rs-pass" type="password" placeholder="Новый пароль" autocomplete="new-password">' +
+                '<button class="lg-eye" id="rs-eye" type="button" tabindex="-1">показать</button>' +
+              '</div>' +
+              '<button class="bp" id="rs-go">Сохранить и войти</button>'
+            : '<h1>Восстановление пароля</h1>' +
+              '<p>Пришлем код на почту, привязанную к аккаунту.</p>' +
+              '<input id="rs-email" type="email" placeholder="Почта" autocomplete="email">' +
+              '<button class="bp" id="rs-go">Отправить код</button>') +
+          '<div class="gate-err" id="rs-err"></div>' +
+          '<button class="gate-link" id="rs-back" type="button">Вернуться ко входу</button>' +
+        '</div>' +
+      '</div></div>';
+
+    var btn = el('rs-go');
+    function fail(msg) { var e = el('rs-err'); e.textContent = msg; e.style.display = 'block'; }
+    el('rs-back').addEventListener('click', function () { renderLogin(); });
+
+    if (!sent) {
+      var ei = el('rs-email');
+      ei.focus();
+      ei.addEventListener('keydown', function (e) { if (e.key === 'Enter') ask(); });
+      btn.addEventListener('click', ask);
+      return;
+    }
+
+    var ci = el('rs-code'), pi = el('rs-pass'), eye = el('rs-eye');
+    ci.focus();
+    eye.addEventListener('click', function () {
+      var show = pi.type === 'password';
+      pi.type = show ? 'text' : 'password';
+      eye.textContent = show ? 'скрыть' : 'показать';
+      pi.focus();
+    });
+    ci.addEventListener('keydown', function (e) { if (e.key === 'Enter') pi.focus(); });
+    pi.addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+    btn.addEventListener('click', save);
+
+    function ask() {
+      var email = el('rs-email').value.trim();
+      if (!email || email.indexOf('@') < 0) { fail('Введи почту целиком, вместе с @'); return; }
+      btn.textContent = 'Отправляем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/request', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email }),
+      }).then(function (r) {
+        if (r.status === 429) { fail('Код уже отправляли. Проверь почту или подожди минуту'); return null; }
+        if (r.status === 503) { fail('Письмо сейчас не уходит. Напиши в чат — разберемся'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        if (!j) return;
+        renderReset({ challenge: j.challenge_id, email: email,
+                      ttlMin: Math.max(1, Math.round((j.expires_in || 900) / 60)) });
+      }).catch(function () {
+        btn.textContent = 'Отправить код'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
+
+    function save() {
+      var code = ci.value.trim(), pass = pi.value;
+      if (!/^\d{6}$/.test(code)) { fail('Код — шесть цифр из письма'); return; }
+      if (pass.length < 6) { fail('Пароль покороче шести символов не подойдет'); return; }
+      btn.textContent = 'Сохраняем…'; btn.disabled = true;
+      fetch(API + '/admin/api/password/reset/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challenge_id: ctx.challenge, code: code, password: pass }),
+      }).then(function (r) {
+        if (r.status === 400) { fail('Код не подошел. Проверь цифры из письма'); return null; }
+        if (r.status === 410) { fail('Код устарел. Запроси новый'); return null; }
+        if (r.status === 429) { fail('Слишком много попыток. Запроси новый код'); return null; }
+        if (r.status === 422) { fail('Пароль слишком короткий — минимум шесть символов'); return null; }
+        if (!r.ok) { fail('Не получилось. Проверь сеть'); return null; }
+        return r.json();
+      }).then(function (j) {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        if (!j) return;
+        localStorage.setItem(KEY_LS, j.token);
+        state.role = j.role; state.userName = j.name || '';
+        boot();
+      }).catch(function () {
+        btn.textContent = 'Сохранить и войти'; btn.disabled = false;
+        fail('Сеть недоступна');
+      });
+    }
   }
 
   /* ── shell ────────────────────────────────────────────── */
@@ -1300,22 +1511,24 @@
      Возможности (caps) = что роль видит/делает. Роль = набор caps. Чтобы добавить
      новый блок: (1) заведи cap в CAP_ALL, (2) добавь его нужным ролям ниже,
      (3) добавь nav-айтем с этим cap. Кто видит — определяется только caps. */
-  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'];
+  var CAP_ALL = ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'grants', 'marketing', 'partners', 'team'] },
-    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team'] },
+    product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'clients', 'path', 'analytics', 'products', 'students', 'templates'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'inbox', 'clients', 'path', 'finance'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'inbox', 'clients'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'grants', 'products'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students'] },
-    tutor:         { label: 'Тьютор',                 short: 'обучение',             caps: ['dash', 'students'] },
-    teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'students'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'inbox', 'clients', 'students', 'templates', 'grants', 'products'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'clients', 'students', 'templates'] },
+    /* У преподавателя и тьютора нет «Дашборда»: там воронка продаж, деньги и счетчики
+       заявок — чужая для них работа. Им нужен один экран: свои ученики. */
+    tutor:         { label: 'Тьютор',                 short: 'свои ученики',         caps: ['students'] },
+    teacher:       { label: 'Преподаватель',          short: 'свои ученики',         caps: ['students'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'path', 'analytics', 'marketing'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'clients', 'analytics'] },
-    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students'] },
+    curator:       { label: 'Куратор',                short: 'ведёт клиентов',       caps: ['dash', 'inbox', 'clients', 'students', 'templates'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'grants', 'clients'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
@@ -1330,7 +1543,7 @@
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
-    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'students' },
+    { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
     { id: 'finance', label: 'Финансы', icon: 'coins', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
@@ -1362,10 +1575,14 @@
       });
     }
     var ws = el('welc-sub');
-    if (ws) ws.textContent = c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—');
+    // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал «0 лидов
+    // · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
+    if (ws) ws.textContent = can('clients')
+      ? c.all + ' ' + plural(c.all, 'лид', 'лида', 'лидов') + ' · обновлено ' + (state.updatedAt ? pad(state.updatedAt.getHours()) + ':' + pad(state.updatedAt.getMinutes()) : '—')
+      : roleInfo().label;
     var promo = el('promo');
     if (promo) {
-      if (!can('path')) { promo.style.display = 'none'; }
+      if (!can('path') || !can('clients')) { promo.style.display = 'none'; }
       else {
         promo.style.display = '';
         var worst = worstStep(funnelData(''));
@@ -1427,7 +1644,7 @@
           else { renderTopbar(); renderHead(); renderView(); }
         });
       });
-    } else if (state.page === 'path') {
+    } else if (state.page === 'path' && can('clients')) {
       var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
       tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
         return '<a class="tab' + (state.pathPeriod === o[0] ? ' on' : '') + '" data-per="' + o[0] + '">' + o[1] + '</a>';
@@ -1456,7 +1673,7 @@
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('chat', 11) + '</span>' + bsrc + '</div>';
     } else if (state.page === 'analytics') {
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('bolt', 11) + '</span>аналитика бота</div>';
-    } else if (state.page === 'dash') {
+    } else if (state.page === 'dash' && can('clients')) {
       var pers = [['', 'Всё время'], ['today', 'Сегодня'], ['week', '7 дней'], ['month', '30 дней']];
       var customLbl = state.dashPeriod === 'custom'
         ? (state.dashFrom || '…') + ' — ' + (state.dashTo || '…')
@@ -1513,7 +1730,10 @@
     if (!ch) return;
     var c = counts();
     var html = '';
-    if (state.page === 'dash') {
+    if (state.page === 'dash' && !can('clients')) {
+      // Роль без клиентов лидов не грузит: любая фраза про заявки была бы враньем.
+      html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2></div>';
+    } else if (state.page === 'dash') {
       var risks = allRisks();
       var worst = worstStep(funnelData(''));
       var phrase;
@@ -1528,7 +1748,9 @@
       html = '<div><h2>Люди</h2>' +
         '<div class="verdict" style="margin-top:8px"><span>' + esc(SEGS[state.seg].hint) + '</span></div></div>';
     }
-    if (state.page === 'path') {
+    if (state.page === 'path' && !can('clients')) {
+      html = '<div><h2>Путь по платформе</h2></div>';
+    } else if (state.page === 'path') {
       var steps = funnelData(state.pathPeriod);
       var w2 = worstStep(steps);
       var conv = steps[0].n ? Math.round(steps[steps.length - 1].n / steps[0].n * 1000) / 10 : 0;
@@ -1569,7 +1791,7 @@
   }
 
   /* ── view ─────────────────────────────────────────────── */
-  var STUB_PAGES = { students: 1, grants: 1, partners: 1 };
+  var STUB_PAGES = { grants: 1, partners: 1 };
   function renderView() {
     var view = el('view');
     if (!view) return;
@@ -1595,19 +1817,30 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'products') renderProducts(view);
+    else if (state.page === 'students') renderStudents(view);
     else if (STUB_PAGES[state.page]) renderStub(view);
     else renderLeads(view);
     pageAnim(view);
   }
   /* ── заглушки будущих разделов (роль их видит, но фич ещё нет) ── */
   var STUB_TEXT = {
-    students:  'Ученики, расписание, прогресс по языку и экзаменам, материалы и домашки. Появится, когда подключим обучение.',
     products:  'Каталог услуг — что продаём, цены, привязка к оплатам клиентов и финансам.',
     grants:    'Гранты CSC и провинциальные: заявки, статусы, дедлайны, пакет документов по каждому ученику.',
     marketing: 'Источники трафика, кампании, стоимость лида и ROI по каналам.',
     partners:  'Кабинет партнёров: их приведённые лиды, статистика и выплаты.',
   };
   function navMeta(id) { for (var i = 0; i < NAV_ALL.length; i++) if (NAV_ALL[i].id === id) return NAV_ALL[i]; return null; }
+  /* Дашборд и «Путь» целиком собраны из карточек клиентов. Роль без доступа к
+     клиентам (маркетолог, партнер, подрядчик) их не загружает — и без этой заглушки
+     видела бы честные нули, будто в компании нет ни одной заявки. Говорим прямо. */
+  function noClientsStub(view, page) {
+    view.innerHTML = '<div class="stub">' +
+      '<div class="stub-ic">' + ic(page === 'path' ? 'path' : 'dash', 30) + '</div>' +
+      '<div class="stub-t">' + (page === 'path' ? 'Путь по платформе' : 'Воронка по клиентам') + '</div>' +
+      '<div class="stub-s">Считается по карточкам клиентов, а твоей роли они закрыты — поэтому цифр тут нет. ' +
+      'Нужен доступ, скажи руководителю.</div></div>';
+  }
+
   function renderStub(view) {
     var m = navMeta(state.page) || { label: 'Раздел', icon: 'box' };
     view.innerHTML = '<div class="stub">' +
@@ -1616,6 +1849,103 @@
       '<div class="stub-s">' + esc(STUB_TEXT[state.page] || 'Раздел в разработке.') + '</div>' +
       '<div class="stub-tag">' + ic('spark', 12) + 'В разработке</div></div>';
   }
+  /* ── Обучение: ученики по английскому ──────────────────────
+     Экран преподавателя. У преподавателя нет доступа ни к карточкам лидов, ни к
+     деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
+     учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
+     здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
+  function studentsLoad(force) {
+    if (state._students && !force) return;
+    state._students = null;
+    api('/admin/api/det/students').then(function (r) {
+      state._students = r || { students: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () { state._students = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentOpen(id) {
+    state.studentId = id;
+    state._student = null;
+    renderView();
+    api('/admin/api/det/students/' + id).then(function (r) {
+      state._student = r;
+      if (state.page === 'students' && state.studentId === id) renderView();
+    }).catch(function () { state._student = 'none'; if (state.page === 'students') renderView(); });
+  }
+  function studentRow(s) {
+    var when = s.last_practice ? 'занимался ' + esc(ago(s.last_practice)) + ' назад' : 'еще не занимался';
+    return '<div class="tm-row st-row" data-sid="' + esc(s.id) + '" tabindex="0">' +
+      '<span class="tm-av">' + esc(initials(s.name)) + '</span>' +
+      '<div class="tm-i"><div class="tm-n">' + esc(s.name) + '</div>' +
+        '<div class="tm-l">' + when + (s.week ? ' · за неделю ' + s.week : '') + '</div></div>' +
+      (s.overall != null ? '<span class="st-score num">' + s.overall + '</span>'
+                         : '<span class="st-score none">теста нет</span>') +
+      '<span class="st-go">' + ic('go', 14) + '</span></div>';
+  }
+  function renderStudents(view) {
+    if (state.studentId) return renderStudentCard(view);
+    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
+    if (state._students === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      return;
+    }
+    var list = state._students.students || [];
+    var mine = state._students.mine_only;
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
+      '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
+      '<div class="s">' + (mine
+        ? 'кого вам передали: как занимаются в тренажерах и что с тестом'
+        : 'у кого назначен преподаватель — назначает менеджер в карточке человека') + '</div></div>' +
+      '<span class="cnt num">' + list.length + '</span></div>' +
+      '<div class="tm-list">' + (list.map(studentRow).join('') ||
+        '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
+        'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
+      var go = function () { studentOpen(row.getAttribute('data-sid')); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+    });
+  }
+  function renderStudentCard(view) {
+    if (!state._student) { view.innerHTML = dashSkeleton(); return; }
+    if (state._student === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось открыть ученика.</div></div>';
+      return;
+    }
+    var d = state._student;
+    var pr = d.practice || {};
+    var modes = (d.by_mode || []).map(function (m) {
+      var weak = m.accuracy_pct != null && m.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(m.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(m.n * 100 /
+          ((d.by_mode[0] && d.by_mode[0].n) || 1)) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + m.n +
+          (m.accuracy_pct != null ? ' · <b>' + m.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    var tests = (d.attempts || []).slice().reverse().map(function (a) {
+      return '<div class="tm-row"><div class="tm-i"><div class="tm-n">' +
+        (a.overall != null ? a.overall + ' баллов' : 'без балла') + '</div>' +
+        '<div class="tm-l">' + esc(fmtWhen(a.finished_at || a.started_at)) +
+        (a.reading != null ? ' · чтение ' + a.reading : '') +
+        (a.listening != null ? ' · аудирование ' + a.listening : '') +
+        (a.writing != null ? ' · письмо ' + a.writing : '') +
+        (a.speaking != null ? ' · речь ' + a.speaking : '') + '</div></div></div>';
+    }).join('');
+    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+      '<div class="sec-head"><button class="bp sm ghost st-back" id="st-back">' + ic('back', 13) + 'Все ученики</button>' +
+      '<div><div class="t">' + esc(d.name) + '</div>' +
+      '<div class="s">занятия в тренажерах и история тестов</div></div></div>' +
+      (pr.total ? detPractice(pr, { noSkills: true }) : '<div class="empty">Пока не занимался. Проверьте, что в карточке ' +
+        'человека включен тумблер «Тренажеры» — пока он выключен, занятия не записываются.</div>') +
+      (modes ? '<div class="m-sec"><div class="m-sec-h">По тренажерам</div>' + modes + '</div>' : '') +
+      '<div class="m-sec"><div class="m-sec-h">Тесты</div><div class="tm-list">' +
+        (tests || '<div class="empty">Тест еще не проходили.</div>') + '</div></div></div>';
+    var back = el('st-back');
+    if (back) back.addEventListener('click', function () {
+      state.studentId = null; state._student = null; renderView();
+    });
+  }
+
   /* ── Команда и роли (Super Admin) ── */
   function renderTeam(view) {
     if (!state._team) {
@@ -1625,19 +1955,66 @@
       return;
     }
     if (state._team === 'none') { view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить команду. Нужен доступ Super Admin.</div></div>'; return; }
-    var assignable = Object.keys(ROLES).filter(function (k) { return k !== 'owner' && k !== 'manager'; });
+    /* верхние роли раздает только тот, у кого они уже есть — бэкенд отвечает тем же
+       (иначе руководитель выписывал бы себе доступ к финансам и документам детей) */
+    var iAmTop = state.role === 'super_admin' || state.role === 'owner';
+    var assignable = Object.keys(ROLES).filter(function (k) {
+      if (k === 'owner' || k === 'manager') return false;
+      return k !== 'super_admin' || iAmTop;
+    });
+    function roleOpts(cur) {
+      return assignable.map(function (k) {
+        return '<option value="' + k + '"' + (cur === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>';
+      }).join('');
+    }
     var rows = state._team.map(function (u) {
-      var opts = assignable.map(function (k) { return '<option value="' + k + '"' + (u.role === k ? ' selected' : '') + '>' + ROLES[k].label + '</option>'; }).join('');
-      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + (ROLES[u.role] ? ROLES[u.role].label : u.role) + ' (legacy)</option>' : '';
+      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
+      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
+         Показываем ее настоящую роль и запираем поля: пустой селект «Куратор» напротив
+         супер-админа врал бы о том, кто в системе главный. */
+      var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
+      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
+      var sel = lock
+        ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
+        : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
         '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) + '</div><div class="tm-l">@' + esc(u.login) + '</div></div>' +
-        '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + opts + '</select></div>';
+        '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
+          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта — вход и восстановление">' +
+        sel + '</div>';
     }).join('');
+
+    /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
+       только его хеш, второй раз взять неоткуда. */
+    var made = state._teamMade;
+    var madeHtml = made ? '<div class="tm-made">' +
+        '<div class="tm-made-h">' + ic('check', 14) + 'Сотрудник заведен: ' + esc(made.user.name) + '</div>' +
+        '<div class="tm-made-b">Логин <b>' + esc(made.user.login) + '</b> · пароль <b>' + esc(made.password) + '</b></div>' +
+        '<div class="tm-made-s">Передайте пароль лично и попросите сменить его после первого входа. ' +
+          'Здесь он больше не появится — мы храним только его отпечаток.</div>' +
+        '<div class="tm-made-a"><button class="bp sm" id="tm-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+        '<button class="bp sm ghost" id="tm-made-x">Понятно</button></div></div>' : '';
+
+    var d = state._teamNew;
+    var formHtml = d ? '<div class="tm-add">' +
+        '<div class="tm-add-g">' +
+          '<label class="tm-f"><span>Имя</span><input id="tn-name" value="' + esc(d.name) + '" placeholder="Лиана Эванс" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Логин</span><input id="tn-login" value="' + esc(d.login) + '" placeholder="liana" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Почта</span><input id="tn-email" type="email" value="' + esc(d.email) + '" placeholder="liana@example.com" autocomplete="off"></label>' +
+          '<label class="tm-f"><span>Роль</span><select id="tn-role">' + roleOpts(d.role) + '</select></label>' +
+        '</div>' +
+        '<div class="tm-add-a"><span class="tm-add-s">Пароль придумаем сами и покажем один раз.</span>' +
+        '<button class="bp sm ghost" id="tn-cancel">Отмена</button>' +
+        '<button class="bp sm" id="tn-save">Завести</button></div></div>' : '';
+
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">кто в системе и что видит — роль определяет доступ к разделам</div></div>' +
-      '<span class="cnt num">' + state._team.length + '</span></div>' +
+      '<span class="cnt num">' + state._team.length + '</span>' +
+      (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>') +
+      '</div>' + madeHtml + formHtml +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div></div>';
+
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
@@ -1645,14 +2022,76 @@
         apiSend('/admin/api/users/' + sel.getAttribute('data-uid'), 'PATCH', { role: sel.value }, function () { showToast('Роль обновлена'); });
       });
     });
+    /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-mail'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (u && (u.email || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { email: val }, function () {
+          if (u) u.email = val;
+          inp.classList.toggle('none', !val);
+          showToast(val ? 'Почта сохранена' : 'Почта убрана');
+        });
+      });
+    });
+
+    var nb = el('tm-new');
+    if (nb) nb.addEventListener('click', function () {
+      state._teamNew = { name: '', login: '', email: '', role: 'curator' };
+      state._teamMade = null;   // прошлый выданный пароль убираем: он уже передан
+      renderView();
+      var f = el('tn-name'); if (f) f.focus();
+    });
+    var cx = el('tn-cancel');
+    if (cx) cx.addEventListener('click', function () { state._teamNew = null; renderView(); });
+    var mx = el('tm-made-x');
+    if (mx) mx.addEventListener('click', function () { state._teamMade = null; renderView(); });
+    var cp = el('tm-copy');
+    if (cp) cp.addEventListener('click', function () {
+      var m = state._teamMade;
+      copyText('Логин: ' + m.user.login + '\nПароль: ' + m.password + '\nАдрес: ' + CRM_HOME);
+    });
+    ['tn-name', 'tn-login', 'tn-email', 'tn-role'].forEach(function (id) {
+      var f = el(id);
+      if (f) f.addEventListener('input', function () {
+        state._teamNew[id.slice(3)] = f.value;
+      });
+    });
+    var sv = el('tn-save');
+    if (sv) sv.addEventListener('click', function () {
+      var body = state._teamNew || {};
+      if (!body.name.trim() || !body.login.trim()) return showToast('Заполните имя и логин');
+      sv.disabled = true;
+      apiSend('/admin/api/users', 'POST', {
+        name: body.name.trim(), login: body.login.trim().toLowerCase(),
+        email: body.email.trim(), role: body.role,
+      }, function (r) {
+        state._teamNew = null;
+        state._teamMade = r;
+        state._team = null;   // перечитываем список с сервера, а не дорисовываем локально
+        renderView();
+      }, function (code) {
+        sv.disabled = false;
+        showToast(code === 409 ? 'Такой логин или почта уже заняты'
+          : code === 403 ? 'Эту роль может выдать только владелец'
+          : code === 422 ? 'Проверьте логин: латиница, цифры, точка и дефис, от 3 символов'
+          : 'Не удалось завести — попробуйте еще раз');
+      });
+    });
   }
   /* ── МАРКЕТИНГ: CRM владеет воронкой, агент — только шагами logics/<code>.md ── */
-  /* копируемый /go-адрес: прод-бэкенд → красивый go.истсайд.рф; локаль/staging
-     (EASTSIDE_API_BASE на другой хост) — рабочий /go ЭТОГО окружения, иначе
-     скопированная ссылка вела бы на прод, где превью-данных нет */
+  /* копируемый /go-адрес: на проде — ЛАТИНСКИЙ go.eastside.study. Кириллический домен
+     Instagram не принимает: в шапке профиля вместо ссылки висит `go.%D0%B8%D1%81...`, и она
+     не кликается (скрин маркетолога 30.07.2026); плюс зону .рф резолвят не все зарубежные
+     DNS, а часть аудитории — Китай. Уже разошедшиеся по постам .рф-ссылки продолжают
+     работать, меняется только то, что копируется впредь.
+     Локаль/staging (EASTSIDE_API_BASE на другой хост) — рабочий /go ЭТОГО окружения, иначе
+     скопированная ссылка вела бы на прод, где превью-данных нет. */
   var MK_GO = (function () {
     var base = window.EASTSIDE_API_BASE || '';
-    if (!base || /истсайд\.рф|xn--80aikf2bag/.test(base)) return 'https://go.истсайд.рф/';
+    if (!base || /истсайд\.рф|xn--80aikf2bag|eastside\.study/.test(base)) return 'https://go.eastside.study/';
     return base + '/go/';
   })();
   var MK_CODE_RE = /^[a-z0-9_-]{1,64}$/;
@@ -2869,6 +3308,7 @@
   }
 
   function renderDash(view) {
+    if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
     var c = dashCounts(P);
     var cAll = counts();
@@ -3120,17 +3560,38 @@
     }).join('') + '</div>';
   }
 
+  /* Заметка о свернутых пустых заходах. Не прячем их насовсем: менеджеру важно видеть,
+     что трафик есть, а строки открывать незачем — поэтому цифра и раскрытие. Стоит НАД
+     таблицей: под списком в пятьсот строк ее не увидел бы никто. */
+  function blankNote() {
+    var n = counts().blank;
+    if (!n || state.seg !== 'all') return '';
+    var word = plural(n, 'пустой заход', 'пустых захода', 'пустых заходов');
+    return '<div class="list-foot">' +
+      '<span class="lf-ic">' + ic('funnel', 13) + '</span>' +
+      '<span class="lf-t">' + (state.showBlank ? 'Показаны' : 'Свернуто') + ' <b class="num">' + n + '</b> ' + word +
+        ' — открыли платформу и ушли, не оставив о себе ничего. Они учтены в разделе «Путь».</span>' +
+      '<button class="lf-btn" id="lf-blank">' + (state.showBlank ? 'Свернуть' : 'Показать') + '</button>' +
+    '</div>';
+  }
+  function attachBlankNote(host) {
+    var b = host.querySelector('#lf-blank');
+    if (b) b.addEventListener('click', function () { state.showBlank = !state.showBlank; renderAll(); });
+  }
   function fillTable(host) {
     var arr = segLeads(state.seg);
     if (!arr.length) {
-      host.innerHTML = emptyState();
+      host.innerHTML = blankNote() + emptyState();
       var lc = el('le-clear');
       if (lc) lc.addEventListener('click', function () { state.q = ''; state.quick = ''; renderView(); });
+      attachBlankNote(host);
       return;
     }
     var rows = arr.map(function (l) {
       var tone = l.score != null ? scoreTone(l.score) : null;
-      var contact = (l.booking || {}).contact;
+      /* почта аккаунта — тоже способ связаться: без нее у зарегистрировавшихся без
+         записи на разбор колонка стояла пустой, хотя контакт у нас был */
+      var contact = (l.booking || {}).contact || l.email;
       var act = contactAction(contact);
       var profileBits = [l.grade, l.target_year ? 'поступление ' + l.target_year : null, (l.geo || {}).city]
         .filter(Boolean).map(esc);
@@ -3158,7 +3619,8 @@
       '</div>';
     }).join('');
 
-    host.innerHTML = '<div class="trow lr-grid thead">' +
+    host.innerHTML = blankNote() +
+      '<div class="trow lr-grid thead">' +
         thCell('crm', 'Статус', '') +
         thCell('name', 'Лид', '') +
         thCell('score', 'Балл', ' hidem') +
@@ -3166,6 +3628,7 @@
         thCell('created', 'Пришел', ' r') +
         '<span class="th hidem"></span>' +
       '</div>' + rows;
+    attachBlankNote(host);
 
     Array.prototype.forEach.call(host.querySelectorAll('.th.sortable'), function (th) {
       th.addEventListener('click', function () {
@@ -3257,6 +3720,7 @@
 
   /* ── ПУТЬ ─────────────────────────────────────────────── */
   function renderPath(view) {
+    if (!can('clients')) { noClientsStub(view, 'path'); return; }
     var steps = funnelData(state.pathPeriod);
     if (!steps[0].n) {
       view.innerHTML = '<div class="card"><div class="empty">За этот период данных нет.</div></div>';
@@ -3641,10 +4105,11 @@
     telegram: { label: 'Telegram',  icon: 'send', c: '#2AABEE' },
     whatsapp: { label: 'WhatsApp',  icon: 'wa',   c: '#25D366' },
     vk:       { label: 'VK',        icon: 'vk',   c: '#0077FF' },
+    max:      { label: 'Макс',      icon: 'max',  c: '#7B61FF' },
     site:     { label: 'Сайт',      icon: 'ext',  c: '#2F6BFF' },
     platform: { label: 'Платформа', icon: 'bolt', c: '#1C2B4A' },
   };
-  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'site', 'platform'];
+  var CHAN_ORDER = ['telegram', 'whatsapp', 'vk', 'max', 'site', 'platform'];
   function hashId(id) { var h = 0, sx = String(id); for (var i = 0; i < sx.length; i++) h = (h * 31 + sx.charCodeAt(i)) | 0; return Math.abs(h); }
   function botChannel(l) {
     var c = ((l.booking || {}).channel || '').toString().toLowerCase();
@@ -3711,6 +4176,61 @@
       if (cb) cb();
     });
   }
+  /* ── КОМПОЗЕР ИНБОКСА ─────────────────────────────────────────────────────────
+     Менеджер печатает, а инбокс в это время живёт своей жизнью: каждые 6с приходит
+     поллинг, клиент присылает реплику, тумблер бота перерисовывает шапку. Любая из этих
+     перерисовок пересобирала поле ввода — набранный текст исчезал на полуслове, и
+     сообщения уходили клиенту обрывками («Добрый день» отдельно, остальное заново).
+     Поэтому черновик живёт в state (свой на каждый диалог), а не в DOM: перерисовка
+     восстанавливает и текст, и каретку, и фокус. Переключение диалогов черновики хранит. */
+  function composerSave() {
+    if (state._composerRendering) return;   // идёт перерисовка — читать новое пустое поле нельзя
+    var inp = el('tg-input'); if (!inp) return;
+    // диалог берём с самого поля, а не из state.inboxSel: при переключении чата выбор
+    // меняется РАНЬШЕ перерисовки, и черновик уехал бы в чужую переписку
+    var cid = inp.getAttribute('data-conv'); if (!cid) return;
+    state.drafts[cid] = inp.value;
+    state.composer = { id: cid, focus: document.activeElement === inp, caret: inp.selectionStart };
+  }
+  function composerGrow(inp) {   // высота по содержимому: одна строка → до пяти, дальше скролл
+    if (!inp) return;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 128) + 'px';
+  }
+  function composerRestore(convId) {
+    var inp = el('tg-input'); if (!inp) return;
+    inp.value = state.drafts[convId] || '';
+    composerGrow(inp);
+    var c = state.composer || {};
+    if (c.focus && String(c.id) === String(convId)) {
+      inp.focus();
+      var p = c.caret == null ? inp.value.length : Math.min(c.caret, inp.value.length);
+      try { inp.setSelectionRange(p, p); } catch (e) {}
+    }
+  }
+  /* менеджер сейчас в поле ввода или у него набран текст — полную пересборку инбокса откладываем */
+  function composerBusy() {
+    var inp = el('tg-input');
+    return !!(inp && (inp.value || document.activeElement === inp));
+  }
+  /* Только что отправленные менеджером сообщения бэк ещё не отдаёт (он пишет их в историю
+     после доставки). Переносим их в свежий ответ, пока не увидим там свой же текст, —
+     иначе пузырь мигает: появился, исчез на следующем поллинге, появился снова. */
+  function mergeLocalMsgs(old, fresh) {
+    var msgs = (fresh && fresh.messages) || [];
+    var locals = ((old && old.messages) || []).filter(function (m) { return m._local; });
+    if (!locals.length) return msgs;
+    var used = {};
+    var pending = locals.filter(function (lm) {
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (used[i] || msgs[i].sender !== 'manager' || msgs[i].text !== lm.text) continue;
+        used[i] = 1; return false;   // бэк это сообщение уже знает — локальный дубль убираем
+      }
+      return true;
+    });
+    return msgs.concat(pending);
+  }
+
   /* РЕАЛТАЙМ: тихий фоновый опрос открытого инбокса — список + сообщения текущего чата.
      Перерисовываем только если что-то реально изменилось (без мельканий/скелетона). */
   function pollInboxLive() {
@@ -3729,12 +4249,16 @@
         }
       }
       state.bot.list = fresh;
-      // НЕ затираем свежий тумблер бэкенд-данными первые 5с (иначе реалтайм-полл откатит
-      // оптимистичное включение/выключение, пока POST ещё не дошёл — выглядит как «не работает»)
+      // НЕ затираем свежий тумблер бэкенд-данными, пока бэк не подтвердит наше значение:
+      // иначе реалтайм-полл откатывает переключение, пока POST ещё в пути — выглядит как
+      // «тумблер не работает». Держим до совпадения (а не фиксированные 5с: ответ бывает
+      // и медленнее), но не дольше 30с — чтобы залипшее значение не врало вечно.
       var now = Date.now();
       (fresh || []).forEach(function (c) {
-        var t = (state._aiToggleAt || {})[c.user_id];
-        if (t && now - t < 5000) { c.ai_enabled = (state._aiToggleVal || {})[c.user_id]; c.taken_by = c.ai_enabled ? null : c.taken_by; }
+        var p = (state._aiToggle || {})[c.user_id];
+        if (!p) return;
+        if (c.ai_enabled === p.val || now - p.at > 30000) { delete state._aiToggle[c.user_id]; return; }
+        c.ai_enabled = p.val; c.taken_by = p.val ? null : c.taken_by;
       });
       // сообщения открытого чата — тянем только если чат выбран и уже загружен (без скелетона)
       var sel = state.inboxSel;
@@ -3742,13 +4266,16 @@
         api('/admin/api/bot/conversations/' + sel + '/messages').then(function (d) {
           var old = state.bot.msgs[sel];
           var oldN = (old && old.messages) ? old.messages.length : -1;
-          var newN = (d && d.messages) ? d.messages.length : 0;
           // сохраняем актуальные флаги (могли поменяться тумблером) + новые сообщения
+          d.messages = mergeLocalMsgs(old, d);
+          var newN = d.messages.length;
           state.bot.msgs[sel] = d;
           if (newN !== oldN) { refreshOpenThread(true); }       // появились новые — дорисуем, докрутим вниз
           else if (changed) { refreshOpenThread(false); }
         }).catch(function () {});
-      } else if (changed) {
+      } else if (changed && !composerBusy()) {
+        // полную пересборку делаем только когда менеджер не в поле ввода — иначе она
+        // вырвала бы поле из-под рук (черновик переживёт, но каретка и скролл дёрнутся)
         renderSide();
         var host = el('tg-rows');
         if (host && state.bot.loaded) { renderInbox(el('view')); }
@@ -3844,43 +4371,83 @@
       : (c.ai_on === false) ? '<span class="tg-tag mgr">' + ic('hand', 10) + (c.taken_by ? esc(c.taken_by) : 'ведёт менеджер') + '</span>'
       : '<span class="tg-tag ai">' + ic('bot', 10) + 'AI</span>';
   }
+  /* Когда бот сам подхватит диалог. Правило на стороне бота: AI_RESUME_AFTER_H часов тишины —
+     не писал НИКТО, ни клиент, ни менеджер (app/handoff.py). Показываем точное время, а не
+     «через 20 минут»: подсказка живёт до следующей перерисовки и обратный отсчёт протух бы. */
+  var AI_RESUME_H = 2;
+  function aiResumeAt(c) {
+    var t = c && c.last_at ? Date.parse(c.last_at) : NaN;
+    return t ? new Date(t + AI_RESUME_H * 3600000) : null;
+  }
+  function resumeNote(c) {
+    var at = aiResumeAt(c);
+    if (!at) return '.';
+    return at - Date.now() > 0
+      ? '; сам он подхватит в ' + fmtTime(at.toISOString()) + ', если до тех пор никто не напишет.'
+      : '; тишина уже больше ' + AI_RESUME_H + ' часов — следующее сообщение бот возьмёт на себя.';
+  }
+
+  /* Тумблер обязан показывать РЕАЛЬНОЕ положение дел: по нему менеджер решает, писать ему
+     самому или бот справится. Поэтому переключение оптимистичное, но не «на веру» — если
+     запрос не прошёл, откатываем в исходное состояние и говорим об этом вслух. */
   function inboxSetAi(c, on) {
     if (c.api) {
-      apiSend('/admin/api/bot/conversations/' + c.id + '/ai', 'POST', { enabled: on }, function () {});
-      state._aiToggleAt = state._aiToggleAt || {}; state._aiToggleVal = state._aiToggleVal || {};
-      state._aiToggleAt[c.id] = Date.now(); state._aiToggleVal[c.id] = on;
+      var was = { ai: c.ai_on !== false, ho: c.handoff, by: c.taken_by };
       // вкл → бот снова сам отвечает, снимаем «ведёт менеджер»; выкл → диалог за менеджером
-      function apply(o) { if (!o) return; o.ai_enabled = on; o.handoff_requested = on ? false : o.handoff_requested; o.taken_by = on ? null : state.userName; }
-      apply(state.bot.msgs[c.id]);
-      apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
-      c.ai_on = on; c.handoff = on ? false : c.handoff; c.taken_by = on ? null : state.userName;
-      // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
-      if (state.page === 'inbox') {
-        renderInboxChat([c]);
-        var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
-        if (r3) r3.innerHTML = inboxTag(c);
+      function put(ai, ho, by) {
+        function apply(o) { if (!o) return; o.ai_enabled = ai; o.handoff_requested = ho; o.taken_by = by; }
+        apply(state.bot.msgs[c.id]);
+        apply((state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0]);
+        c.ai_on = ai; c.handoff = ho; c.taken_by = by;
+        // точечно: перерисовываем только чат + бейдж строки, без пересборки списка (без дёрганья)
+        if (state.page === 'inbox') {
+          renderInboxChat([c]);
+          var r3 = document.querySelector('.tg-row[data-id="' + c.id + '"] .tg-r3');
+          if (r3) r3.innerHTML = inboxTag(c);
+        }
+        renderSide();
       }
-      renderSide();
+      state._aiToggle = state._aiToggle || {};
+      state._aiToggle[c.id] = { val: on, at: Date.now() };
+      put(on, on ? false : was.ho, on ? null : state.userName);
+      api('/admin/api/bot/conversations/' + c.id + '/ai', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: on }),
+      }).then(function () {
+        showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
+      }).catch(function (e) {
+        delete state._aiToggle[c.id];
+        put(was.ai, was.ho, was.by);
+        // 403 — сессия истекла, api() уже увёл на экран входа: тост поверх него лишний
+        if (!e || e.message !== '403') {
+          showToast('Не переключилось — бот остался ' + (on ? 'выключенным' : 'включенным'));
+        }
+      });
     } else {
       state.dialogAi[c.id] = on; var dl = getDialog(c.lead); if (on) dl.handoff_req = false; else dl.handed = false;
       renderView(); renderSide();
+      showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
     }
-    showToast(on ? 'Бот снова отвечает сам' : 'Бот выключен — диалог ведёшь ты');
   }
   function inboxMarkSeen(c) {
     if (c.api) apiSend('/admin/api/bot/conversations/' + c.id + '/seen', 'POST', null, function () {});
     else state.dialogSeen[c.id] = 1;
   }
 
-  /* отправить сообщение менеджером (демо — локально; реал — POST) */
+  /* отправить сообщение менеджером (демо — локально; реал — POST).
+     Перерисовываем ТОЛЬКО тред: менеджер часто шлёт очередь коротких сообщений подряд,
+     и полная пересборка вью между ними стирала бы то, что он уже набирает дальше. */
   function inboxSend(c, text) {
     text = (text || '').trim(); if (!text) return;
     var nowISO = new Date().toISOString();
     if (c.api) {
       var d = state.bot.msgs[c.id];
-      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO };
+      var tmp = { role: 'assistant', sender: 'manager', text: text, at: nowISO, _local: true };
       if (d) d.messages = (d.messages || []).concat([tmp]);
-      if (c.ai_on !== false) inboxSetAi(c, false); else renderView();
+      // строка в списке слева тоже должна сразу показать новое последнее сообщение
+      var row = (state.bot.list || []).filter(function (x) { return String(x.user_id) === String(c.id); })[0];
+      if (row) { row.last_text = text; row.last_role = 'assistant'; row.last_at = nowISO; row.unread = false; }
+      if (c.ai_on !== false) inboxSetAi(c, false);   // менеджер перехватил диалог у бота
+      refreshOpenThread(true);
       // реальная доставка. Бэк отвечает {delivered, reason}: не ушло клиенту — помечаем пузырь
       // (не удаляем — менеджер видит свой текст и причину), сетевой сбой — откатываем.
       api('/admin/api/bot/conversations/' + c.id + '/send', {
@@ -3889,13 +4456,13 @@
         if (res && res.delivered === false) {
           tmp.undelivered = true; tmp.reason = res.reason || '';
           showToast(res.reason ? ('Не доставлено клиенту: ' + res.reason) : 'Сообщение не доставлено клиенту');
-          if (state.page === 'inbox') renderView();
+          refreshOpenThread(false);
         }
       }).catch(function () {
         var dd = state.bot.msgs[c.id];
         if (dd && dd.messages) dd.messages = dd.messages.filter(function (m) { return m !== tmp; });
         showToast('Сообщение не отправлено — проверь связь с ботом');
-        if (state.page === 'inbox') renderView();
+        refreshOpenThread(false);
       });
     } else {
       var dlg = getDialog(c.lead);
@@ -4023,6 +4590,7 @@
       Array.prototype.forEach.call(host.querySelectorAll('.tg-row[data-id]'), function (n) {
         n.addEventListener('click', function () {
           state.inboxSel = n.getAttribute('data-id');
+          syncHash(state.inboxSel, 'dialog');   // адрес показывает открытый диалог — ссылку можно скопировать
           // выделение без пересборки списка (без прыжков)
           Array.prototype.forEach.call(host.querySelectorAll('.tg-row'), function (x) { x.classList.remove('on'); });
           n.classList.add('on'); n.classList.remove('unread');
@@ -4038,6 +4606,7 @@
 
   function renderInboxChat(list) {
     var host = el('tg-chat'); if (!host) return;
+    composerSave();   // всё, что менеджер уже набрал, забираем в state ДО пересборки панели
     var c = (list || []).filter(function (x) { return String(x.id) === String(state.inboxSel); })[0];
     if (!c) {
       host.innerHTML = '<div class="tg-blank"><div class="tg-blank-ic">' + ic('chat', 26) + '</div><div>Выбери диалог слева</div></div>';
@@ -4073,6 +4642,7 @@
       : aiOn ? '<span class="tg-st ai">' + ic('bot', 11) + 'AI ведёт</span>'
       : '<span class="tg-st mgr">' + ic('hand', 11) + (c.taken_by ? 'ведёт ' + esc(c.taken_by) : 'ведёт менеджер') + '</span>';
 
+    state._composerRendering = true;
     host.innerHTML =
       '<div class="tg-chead">' +
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
@@ -4086,20 +4656,39 @@
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
         (aiOn
           ? '<span>Бот отвечает сам. <b>Напишешь — он замолчит в этом диалоге</b>, пока не включишь снова.</span>'
-          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы.</span>') +
+          : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
       '<div class="tg-compose">' +
-        '<input id="tg-input" placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '" autocomplete="off">' +
-        '<button class="tg-send" id="tg-send" title="Отправить">' + ic('send', 16) + '</button>' +
+        '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
+          'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
+        '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
       '</div>';
+    state._composerRendering = false;
 
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
     var inp = el('tg-input'), snd = el('tg-send');
-    function send() { if (!inp) return; var t = inp.value; inp.value = ''; inboxSend(c, t); }
+    function send() {
+      if (!inp) return;
+      var t = inp.value.trim(); if (!t) return;
+      inp.value = ''; delete state.drafts[c.id]; composerGrow(inp);
+      inp.focus(); composerSave();   // курсор остаётся в поле: следующее сообщение пишется сразу
+      inboxSend(c, t);
+    }
     if (snd) snd.addEventListener('click', send);
-    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+    if (inp) {
+      composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
+      inp.addEventListener('input', function () { composerSave(); composerGrow(inp); });
+      ['focus', 'blur', 'keyup', 'click'].forEach(function (ev) { inp.addEventListener(ev, composerSave); });
+      inp.addEventListener('keydown', function (e) {
+        // Enter отправляет, Shift+Enter — перенос строки (привычка из мессенджеров).
+        // e.isComposing — идёт набор через IME, Enter там подтверждает вариант, а не шлёт.
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) {
+          e.preventDefault(); send();
+        }
+      });
+    }
     // удаление сообщения (модерация) — оптимистично + фоном
     Array.prototype.forEach.call(host.querySelectorAll('.tg-del[data-del]'), function (b) {
       b.addEventListener('click', function (e) {
@@ -4254,10 +4843,12 @@
     { id: 'now',       label: 'Сейчас',      icon: 'flame' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
+    { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'offers',    label: 'Витрина',     icon: 'box' },
     { id: 'path',      label: 'Путь',        icon: 'path' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
+    { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
     { id: 'notify', label: 'Написать',   icon: 'send' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
@@ -5046,16 +5637,21 @@
     if (listIds && listIds.length) state.drawerList = listIds;
     state.modalSection = 'main';
     RM_CHAT = null;
+    syncHash(id);
     renderDrawer(false);
     el('mbg').classList.add('open');
     el('modal').classList.add('open');
     document.body.style.overflow = 'hidden';
     warm(id);
     if (!state.details[id]) fetchDetail(id, function (got) {
-      if (state.drawerId === id && got) renderDrawer(true);
+      if (state.drawerId !== id) return;
+      if (got) renderDrawer(true);
+      // пришли по ссылке на клиента, которого уже нет (или нет прав) — честно скажем
+      else if (!findLead(id)) { closeDrawer(); showToast('Клиент не найден — возможно, ссылка устарела'); }
     });
   }
   function closeDrawer() {
+    syncHash('');
     state.drawerId = null;
     state.botConvoId = null;
     RM_CHAT = null;
@@ -5072,6 +5668,7 @@
       state.drawerId = next;
       state.modalSection = 'main';
       RM_CHAT = null;
+      syncHash(next);
       renderDrawer(false);
       warm(next);
       if (!state.details[next]) fetchDetail(next, function (got) {
@@ -5109,7 +5706,14 @@
 
     var ctx = leadCtx(id);
     var lead = ctx.lead, d = ctx.d, base = ctx.base, crm = ctx.crm;
-    if (!base) { modal.innerHTML = ''; return; }
+    if (!base) {
+      // карточку открыли по прямой ссылке — данных ещё нет, ждём ответ бэка
+      modal.innerHTML = '<div class="m-navfloat"><button class="m-arrow" id="m-close">' + ic('x', 14) + '</button></div>' +
+        '<div class="m-load">Открываем карточку…</div>';
+      var mcl = el('m-close');
+      if (mcl) mcl.addEventListener('click', closeDrawer);
+      return;
+    }
     var diag = (d && d.diagnostics) || {};
     var score = lead && lead.score != null ? lead.score : diag.score;
     var tone = score != null ? scoreTone(score) : null;
@@ -5140,7 +5744,9 @@
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
-    ].filter(Boolean).join('<span class="dot-sep"></span>');
+    ].filter(Boolean).join('<span class="dot-sep"></span>') +
+      '<button class="m-copylink" id="m-link" title="Скопировать ссылку на эту карточку — команда откроет её одним кликом">' +
+      ic('copy', 12) + 'Ссылка на клиента</button>';
 
     // с открытым чатом правок окно шире: доска слева должна остаться читаемой
     modal.classList.toggle('pchat-open', hasSidePanel());
@@ -5180,6 +5786,8 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var lnk = el('m-link');
+    if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
     var mp = el('m-prev'), mn = el('m-next');
     if (mp) mp.addEventListener('click', function () { drawerStep(-1); });
     if (mn) mn.addEventListener('click', function () { drawerStep(1); });
@@ -5207,9 +5815,11 @@
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
+    else if (s === 'mail') host.innerHTML = buildMailSection(id);
     else if (s === 'notify') host.innerHTML = buildNotifySection(ctx);
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
+    else if (s === 'course') host.innerHTML = buildCourseSection(id);
     else if (s === 'offers') host.innerHTML = ctx.d ? buildOffersSection(ctx) : skeletonSection('offers');
     // правый столбец (чат плана / чат витрины) — вместе со сменой секции;
     // модалка под ним шире, поэтому класс тоже переключаем здесь
@@ -5233,6 +5843,8 @@
                  pay: ['Оплаты', 'Считаю платежи'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
+                 course: ['Китайский', 'Смотрю доступ к курсу'],
+                 mail: ['Почта', 'Поднимаю переписку с вузами'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
     if (kind === 'ai') {
@@ -5246,6 +5858,124 @@
     }
     return '<div class="m-ctitle">' + head[0] + '</div>' +
       (head[1] ? '<div class="m-csub">' + head[1] + '</div>' : '') + body;
+  }
+
+  /* ── РАЗДЕЛ «Почта»: свой адрес кейса и переписка с вузом ──
+     Адрес — строка в базе, а не ящик у почтового хостера: ловушка домена принимает
+     письма на ЛЮБОЙ адрес, поэтому «завести» стоит ноль и работает сразу. Входящее
+     приносит воркер, поэтому переписка перечитывается с бэка, а не копится на фронте. */
+  var MAIL = {};        // id лида -> блок с бэка
+  var MAIL_BUSY = {};   // id лида -> идет загрузка
+
+  function loadMail(id, force) {
+    if (MAIL_BUSY[id]) return;
+    if (force) delete MAIL[id];
+    MAIL_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/mail').then(function (r) {
+      MAIL_BUSY[id] = false; MAIL[id] = r;
+      if (state.drawerId === id && state.modalSection === 'mail') renderModalContent();
+    }).catch(function (e) {
+      MAIL_BUSY[id] = false;
+      if (e.message !== '403') { MAIL[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function mailRow(m) {
+    var incoming = m.direction === 'in';
+    var who = incoming ? m.from : m.to;
+    var docs = (m.doc_ids || []).length;
+    return '<div class="mail-row">' +
+      '<div class="mail-rhead">' +
+        '<span class="mail-dir ' + (incoming ? 'in' : 'out') + '">' + (incoming ? 'вуз' : 'мы') + '</span>' +
+        '<span class="mail-who">' + esc(who || '') + '</span>' +
+        (docs ? '<span class="mail-docs">' + ic('clip', 12) + docs + '</span>' : '') +
+        '<span class="mail-when">' + fmtWhen(m.created_at) + '</span>' +
+      '</div>' +
+      '<div class="mail-subj">' + esc(m.subject || 'Без темы') + '</div>' +
+      (m.text ? '<div class="mail-text">' + esc(m.text) + '</div>' : '') +
+    '</div>';
+  }
+
+  function buildMailSection(id) {
+    var b = MAIL[id];
+    if (!b) { loadMail(id); return skeletonSection('mail'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Почта</div>' +
+        '<div class="m-csub">Не удалось загрузить переписку. Обновите страницу.</div>';
+    }
+    var head = '<div class="m-ctitle">Почта</div>' +
+      '<div class="m-csub">Свой адрес ученика на нашем домене: с него пишем в приемные комиссии, и ответы вузов приходят сюда же. Гмейл в Китае заблокирован, поэтому личная почта для подачи не годится.</div>';
+
+    if (!b.address) {
+      return head +
+        '<div class="mail-hero empty">' +
+          '<div class="mail-hero-ic">' + ic('mail', 20) + '</div>' +
+          '<div><div class="mail-empty-t">Адреса еще нет</div>' +
+          '<div class="mail-empty-s">Заведется за секунду и будет выглядеть как имя.фамилия@eastside.study.</div></div>' +
+          '<button class="bp sm" id="mail-create">' + ic('plus', 13) + 'Завести адрес</button>' +
+        '</div>';
+    }
+
+    var form = b.can_send
+      ? '<div class="mail-form">' +
+          '<input type="text" id="mail-to" placeholder="Кому, адрес приемной комиссии">' +
+          '<input type="text" id="mail-subj" placeholder="Тема письма">' +
+          '<textarea id="mail-body" rows="4" placeholder="Текст письма"></textarea>' +
+          '<button class="bp sm" id="mail-send">' + ic('send', 13) + 'Отправить</button>' +
+        '</div>'
+      // молчащая кнопка хуже честной причины: тьютор должен понимать, почему нельзя
+      : '<div class="mail-off">Отправка пока не настроена — письма принимаются, но написать из карточки нельзя.</div>';
+
+    var list = (b.messages || []).length
+      ? (b.messages || []).map(mailRow).join('')
+      : '<div class="mail-off">Писем пока нет.</div>';
+
+    return head +
+      '<div class="mail-addr">' +
+        '<span class="mail-addr-v" id="mail-addr-v">' + esc(b.address) + '</span>' +
+        '<button class="bp ghost sm" id="mail-copy">' + ic('copy', 12) + 'Скопировать</button>' +
+        '<button class="bp ghost sm" id="mail-refresh">' + ic('refresh', 12) + 'Обновить</button>' +
+      '</div>' + form +
+      '<div class="mail-list">' + list + '</div>';
+  }
+
+  function wireMail(id, host) {
+    var create = el('mail-create');
+    if (create) create.addEventListener('click', function () {
+      create.disabled = true;
+      apiSend('/admin/api/leads/' + id + '/mail/address', 'POST', {}, function () {
+        showToast('Адрес готов');
+        loadMail(id, true);
+      });
+    });
+
+    var copy = el('mail-copy');
+    if (copy) copy.addEventListener('click', function () {
+      var v = el('mail-addr-v');
+      if (v) copyText(v.textContent, copy);
+    });
+
+    var refresh = el('mail-refresh');
+    if (refresh) refresh.addEventListener('click', function () { loadMail(id, true); });
+
+    var send = el('mail-send');
+    if (send) send.addEventListener('click', function () {
+      var to = (el('mail-to').value || '').trim();
+      var subject = (el('mail-subj').value || '').trim();
+      var text = (el('mail-body').value || '').trim();
+      if (!to || !subject || !text) { showToast('Заполните кому, тему и текст'); return; }
+      send.disabled = true;
+      api('/admin/api/leads/' + id + '/mail/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: to, subject: subject, text: text }),
+      }).then(function () {
+        showToast('Письмо ушло');
+        loadMail(id, true);
+      }).catch(function (e) {
+        send.disabled = false;
+        if (e.message !== '403') showToast('Письмо не ушло: ' + e.message);
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Английский»: входной тест DET, пересдачи, доступ ──
@@ -5289,21 +6019,80 @@
     return '<span class="det-delta' + (up ? ' up' : ' down') + '">' + (up ? '+' : '') + v + '</span>';
   }
 
-  /* Чего в балле еще не хватает. Сочинение проверяет модель, речь — человек, и менеджер
+  /* Чего в балле еще не хватает. Письмо и речь сначала проверяет модель, и менеджер
      должен видеть разницу: балл от модели можно оспорить, балл преподавателя — нет. */
+  var DET_SKILL_RU = { writing: 'сочинение', speaking: 'устный ответ' };
+
   function detPartial(a) {
     var g = a.graded_by || {};
-    if (g.writing === 'teacher' && g.speaking === 'teacher') return '';
-    if (!g.speaking && !g.writing) return 'Балл предварительный — письмо и речь еще не проверены';
-    if (!g.speaking) return 'Речь ждет преподавателя' + (g.writing === 'ai' ? ', сочинение проверила модель' : '');
-    return 'Сочинение проверила модель — преподаватель может поправить балл';
+    var wait = [], byAi = [];
+    ['writing', 'speaking'].forEach(function (s) {
+      if (!g[s]) wait.push(DET_SKILL_RU[s]);
+      else if (g[s] === 'ai') byAi.push(DET_SKILL_RU[s]);
+    });
+    if (wait.length) return 'Балл неполный — ' + wait.join(' и ') + ' еще не проверены';
+    if (byAi.length) return 'Проверила модель: ' + byAi.join(' и ') + ' — можете поправить балл';
+    return '';
   }
 
   function detWho(a) {
     var by = String(a.scored_by || '');
     if (!by) return '';
-    return by.indexOf('ai:') === 0 ? ' · сочинение проверила модель'
+    return by.indexOf('ai:') === 0 ? ' · первым проверила модель'
       : ' · проверил ' + esc(by.replace('teacher:', ''));
+  }
+
+  /* Кто ведет ученика по английскому. Преподаватель видит в своем разделе ТОЛЬКО тех,
+     кого ему сюда назначили, — поэтому пустое поле значит «этот ученик не виден никому
+     из преподавателей». Список ролей ограничен: менеджера в преподаватели не поставить. */
+  var DET_TEACHERS = null;
+  function detTeacherRow(t) {
+    return '<div class="det-lbl det-linkh">Преподаватель по английскому</div>' +
+      '<div class="det-teacher"><select class="tm-sel" id="det-teacher">' +
+        '<option value="">не назначен</option>' +
+        ((DET_TEACHERS || (t ? [t] : [])).map(function (x) {
+          return '<option value="' + esc(x.login) + '"' + (t && t.login === x.login ? ' selected' : '') +
+            '>' + esc(x.name) + '</option>';
+        }).join('')) + '</select>' +
+      '<span class="det-teacher-s">' + (t
+        ? 'видит занятия этого ученика в разделе «Обучение»'
+        : 'пока не назначен — занятия ученика не видит ни один преподаватель') + '</span></div>';
+  }
+
+  /* Занятия в тренажерах. Разбор каждого задания — дело преподавателя, здесь ответ на
+     один вопрос: человек занимается или ссылку открыл и бросил. Поэтому четыре цифры,
+     полоска по дням и распределение по навыкам, без таблиц. */
+  function detPractice(pr, opts) {
+    if (!pr.total) return '';
+    opts = opts || {};
+    var DOW = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+    // Фронт может приехать раньше бэка: старый ответ без разбивки — показываем цифры.
+    var days = (pr.by_day || []).map(function (d) {
+      var dt = new Date(d.date + 'T12:00:00');
+      return '<div class="det-day' + (d.n ? ' on' : '') + '" title="' + esc(d.date) + '">' +
+        '<b>' + (d.n || '·') + '</b><i>' + (isNaN(dt) ? '' : DOW[dt.getDay()]) + '</i></div>';
+    }).join('');
+    var top = (pr.by_skill || []).reduce(function (m, s) { return Math.max(m, s.n); }, 0) || 1;
+    var skills = (pr.by_skill || []).map(function (s) {
+      var weak = s.accuracy_pct != null && s.accuracy_pct < 60;
+      return '<div class="det-skl"><div class="det-skl-t">' + esc(s.label) + '</div>' +
+        '<div class="det-skl-b"><i style="width:' + Math.round(s.n * 100 / top) + '%"></i></div>' +
+        '<div class="det-skl-v' + (weak ? ' warn' : '') + '">' + s.n +
+          (s.accuracy_pct != null ? ' · <b>' + s.accuracy_pct + '%</b>' : '') + '</div></div>';
+    }).join('');
+    return '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
+      '<div class="pay-board det-board">' +
+        '<div class="pay-cell"><div class="pc-l">Заданий</div><div class="pc-v num">' + pr.total + '</div></div>' +
+        '<div class="pay-cell' + (pr.week ? '' : ' muted') + '"><div class="pc-l">За неделю</div>' +
+          '<div class="pc-v num">' + (pr.week || 0) + '</div></div>' +
+        '<div class="pay-cell' + (pr.accuracy_pct == null ? ' muted' : '') + '"><div class="pc-l">Верно</div>' +
+          '<div class="pc-v num">' + (pr.accuracy_pct == null ? '—' : pr.accuracy_pct + '%') + '</div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Дней</div><div class="pc-v num">' + (pr.days || 0) + '</div></div>' +
+      '</div>' +
+      '<div class="det-lbl det-prl">Две недели по дням</div><div class="det-days">' + days + '</div>' +
+      (skills && !opts.noSkills ? '<div class="det-lbl det-prl">По навыкам</div>' + skills : '') +
+      (pr.last_at ? '<div class="det-pr det-prl">последний раз ' + esc(ago(pr.last_at)) + ' назад</div>' : '') +
+      '</div>';
   }
 
   function detAttemptRow(a, prev) {
@@ -5349,31 +6138,40 @@
     }).join('');
 
     // Разбор модели: по нему преподаватель либо соглашается, либо ставит свой балл.
-    var ai = det.ai;
-    var aiHtml = '';
-    if (ai && ai.criteria) {
-      var teacherSet = (a.graded_by || {}).writing === 'teacher';
-      aiHtml = '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
-        '<div class="det-ai-h">' + ic('spark', 13) +
-          (teacherSet ? 'Что говорила модель (балл уже ваш)' : 'Сочинение проверила модель') +
-          (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
-        '<div class="det-ai-c">' + ai.criteria.map(function (c) {
-          return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
-            '<span class="det-ai-v num">' + c.score + '</span>' +
-            (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
-        }).join('') + '</div>' +
-        (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
-        (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
-        (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
-        '</div>';
-    }
+    var aiHtml = [['writing', det.ai, 'Сочинение проверила модель'],
+                  ['speaking', det.ai_speaking, 'Устный ответ проверила модель']]
+      .map(function (b) {
+        var ai = b[1];
+        if (!ai || !ai.criteria) return '';
+        var teacherSet = (a.graded_by || {})[b[0]] === 'teacher';
+        return '<div class="det-ai' + (teacherSet ? ' old' : '') + '">' +
+          '<div class="det-ai-h">' + ic('spark', 13) +
+            (teacherSet ? 'Что говорила модель про ' + DET_SKILL_RU[b[0]] + ' (балл уже ваш)' : b[2]) +
+            (ai.cefr ? '<i>уровень ' + esc(ai.cefr) + '</i>' : '') + '</div>' +
+          '<div class="det-ai-c">' + ai.criteria.map(function (c) {
+            return '<div class="det-ai-r"><span class="det-ai-t">' + esc(c.title || c.code) + '</span>' +
+              '<span class="det-ai-v num">' + c.score + '</span>' +
+              (c.note ? '<span class="det-ai-n">' + esc(c.note) + '</span>' : '') + '</div>';
+          }).join('') + '</div>' +
+          (ai.summary ? '<div class="det-ai-s">' + esc(ai.summary) + '</div>' : '') +
+          (ai.growth ? '<div class="det-ai-s muted">' + esc(ai.growth) + '</div>' : '') +
+          // Расшифровка речи — чтобы не переслушивать запись ради одной фразы. Ученику
+          // ее не показываем: спорить с тем, как машина расслышала, тут не о чем.
+          (ai.transcript ? '<div class="det-ai-tr">' + esc(ai.transcript) + '</div>' : '') +
+          (ai.flags && ai.flags.length ? '<div class="det-ai-f">' + esc(ai.flags.join(', ')) + '</div>' : '') +
+          '</div>';
+      }).join('');
 
     var form = '';
     if (can('students') && a.status !== 'in_progress') {
       var m = det.attempt;
-      var regrade = (a.graded_by || {}).writing === 'teacher' ? ''
+      // Перепроверяем только то, что человек еще не оценил сам: свой балл модель не трогает.
+      var g = a.graded_by || {};
+      var canRegrade = ['writing', 'speaking'].filter(function (s) { return g[s] !== 'teacher'; });
+      var regrade = !canRegrade.length ? ''
         : '<button class="bp ghost sm" id="det-regrade" data-aid="' + esc(a.id) + '">' + ic('spark', 13) +
-          (ai ? 'Перепроверить сочинение' : 'Проверить сочинение моделью') + '</button>';
+          (canRegrade.some(function (s) { return g[s] === 'ai'; }) ? 'Перепроверить моделью' : 'Проверить моделью') +
+          '</button>';
       form = '<div class="det-grade">' +
         '<div class="det-lbl">Балл за письмо и речь</div>' +
         '<div class="det-grade-r">' +
@@ -5385,8 +6183,8 @@
           regrade +
         '</div>' +
         '<div class="det-grade-hint">Шкала 10-160, шагом 5. Ученик себе балл не ставит — только вы. ' +
-          ((a.graded_by || {}).writing === 'ai'
-            ? 'В поле «письмо» стоит балл модели — сохраните, если согласны, или поставьте свой.'
+          (['writing', 'speaking'].some(function (s) { return g[s] === 'ai'; })
+            ? 'Где балл поставила модель, он уже стоит в поле — сохраните, если согласны, или впишите свой.'
             : '') + '</div></div>';
     }
 
@@ -5402,7 +6200,7 @@
         '<div class="m-csub">Не удалось загрузить тест. Обновите страницу.</div>';
     }
     var head = '<div class="m-ctitle">Английский</div>' +
-      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение проверяет модель, речь слушает преподаватель. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
+      '<div class="m-csub">Входной тест DET по шкале 10-160: чтение и аудирование считает сервер, сочинение и устный ответ сначала проверяет модель, а вы можете поправить ее балл. Тест бесплатный и проходится один раз — повтор открываете вы.</div>';
 
     var latest = b.latest;
     // Пока оценены не все навыки, балл неполный. Вердикт цветом тут не даем: менеджер
@@ -5471,19 +6269,16 @@
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       '<div class="det-sw-row">' +
         '<div class="det-sw-b"><div class="det-sw-t">Открыть тренажеры</div>' +
-          '<div class="det-sw-s">Тренировки на платформе между тестами. Открывайте после оплаты занятий.</div></div>' +
+          '<div class="det-sw-s">Тренировки на платформе между тестами. Пока закрыты, занятия ученика ' +
+            'в карточку не попадают — откройте после оплаты, и здесь будет видно, как он занимается.</div></div>' +
         '<button type="button" class="pd-sw' + (acc.practice_open ? ' on' : '') + '" id="det-sw-practice">' +
           '<span class="pd-sw-l">' + (acc.practice_open ? 'Открыты' : 'Закрыты') + '</span>' +
           '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
       (acc.updated_by ? '<div class="det-sw-by">последним менял ' + esc(acc.updated_by) + ' · ' + esc(fmtWhen(acc.updated_at)) + '</div>' : '') +
+      detTeacherRow(b.teacher) +
       '<div class="det-lbl det-linkh">Ссылка на тест</div>' + link + '</div>';
 
-    var pr = b.practice || {};
-    var practice = pr.total
-      ? '<div class="m-sec"><div class="m-sec-h">Занятия в тренажерах</div>' +
-        '<div class="det-pr">' + pr.total + ' ' + plural(pr.total, 'подход', 'подхода', 'подходов') +
-        ', за неделю ' + pr.week + (pr.last_at ? ' · последний раз ' + esc(ago(pr.last_at)) + ' назад' : '') + '</div></div>'
-      : '';
+    var practice = detPractice(b.practice || {});
 
     var it = b.intensive;
     var intensive = it
@@ -5499,6 +6294,147 @@
       '<div class="m-sec"><div class="m-sec-h">Попытки' +
         '<span class="hr" id="det-refresh">' + ic('refresh', 12) + 'обновить</span></div>' + rows + '</div>' +
       access + practice + intensive;
+  }
+
+  /* ── РАЗДЕЛ «Китайский»: доступ к курсу «Живой китайский» в записи ──
+     Близнец блока DET: тот же вопрос менеджера — «что у человека открыто» — и та же
+     кнопка на том же месте. Курс живет по личной ссылке, аккаунт платформы для него
+     не нужен, поэтому ссылку показываем прямо здесь: у школьника может не быть почты,
+     и доставить ссылку иногда придется руками. Ссылка одноразово выдается бэком в
+     ответе на открытие доступа и нигде не хранится — новая выпускается кнопкой. */
+  var CRS = {};        // id лида -> состояние с бэка
+  var CRS_BUSY = {};   // id лида -> идет загрузка
+  var CRS_LINK = {};   // id лида -> свежая ссылка на кабинет (живет до перезагрузки)
+
+  function loadCourse(id, force) {
+    if (CRS_BUSY[id]) return;
+    if (force) delete CRS[id];
+    CRS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/course').then(function (r) {
+      CRS_BUSY[id] = false; CRS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'course') renderModalContent();
+    }).catch(function (e) {
+      CRS_BUSY[id] = false;
+      if (e.message !== '403') { CRS[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function buildCourseSection(id) {
+    var b = CRS[id];
+    if (!b) { loadCourse(id); return skeletonSection('course'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Китайский</div>' +
+        '<div class="m-csub">Не удалось поднять состояние курса — обновите страницу.</div>';
+    }
+
+    var head = '<div class="m-ctitle">Китайский</div>' +
+      '<div class="m-csub">Видеокурс «Живой китайский». Доступ открывается кнопкой на ' +
+      '3 месяца: ученик заходит в кабинет по личной ссылке, аккаунт и пароль ему не нужны. ' +
+      'Когда срок выйдет, уроки закроются сами.</div>';
+
+    var done = b.done_n || 0;
+    var total = b.total_n || 0;
+    // Доступ к курсу срочный (3 месяца с открытия). Менеджеру важно видеть не только
+    // «открыт/закрыт», но и до какого дня, — иначе он узнает о конце срока от ученика.
+    var untilTxt = b.access_until ? dayFull(b.access_until) : '';
+    var expired = !b.has_access && !!b.access_until && new Date(b.access_until) < new Date();
+    var progress = b.has_access
+      ? (done
+          ? 'пройдено ' + done + ' из ' + total + ' ' + plural(total, 'урок', 'урока', 'уроков') +
+            (b.last_activity ? ' · последний раз ' + esc(ago(b.last_activity)) + ' назад' : '')
+          : 'к урокам еще не приступал')
+      : expired
+        ? 'срок вышел ' + esc(untilTxt) + ' — уроки закрылись сами'
+        : 'уроки закрыты';
+
+    var link = CRS_LINK[id];
+    var linkRow = '<div class="det-link">' +
+      (link
+        ? '<input class="al-in det-url" id="crs-url" readonly value="' + esc(link) + '">' +
+          '<button class="bp sm" id="crs-copy">' + ic('copy', 13) + 'Скопировать</button>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>'
+        : '<span class="det-link-none">Ссылка выдается при открытии доступа. Потерялась — выпустите новую.</span>' +
+          '<button class="bp ghost sm" id="crs-newlink">' + ic('refresh', 13) + 'Новая ссылка</button>') +
+      '</div>' +
+      '<div class="det-link-m">ссылка личная: по ней открывается кабинет именно этого ученика</div>';
+
+    var access = '<div class="m-sec"><div class="m-sec-h">Доступ' +
+        '<span class="hr" id="crs-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
+      '<div class="det-sw-row">' +
+        '<div class="det-sw-b"><div class="det-sw-t">Курс «Живой китайский»</div>' +
+          '<div class="det-sw-s">' + progress + '</div></div>' +
+        '<button type="button" class="pd-sw' + (b.has_access ? ' on' : '') + '" id="crs-sw">' +
+          '<span class="pd-sw-l">' + (b.has_access ? 'Открыт' : 'Закрыт') + '</span>' +
+          '<span class="pd-sw-t"><span class="pd-sw-k"></span></span></button></div>' +
+      (b.has_access && untilTxt
+        ? '<div class="det-sw-by">действует до ' + esc(untilTxt) + '</div>'
+        : '') +
+      (b.opened_by
+        ? '<div class="det-sw-by">открыл ' + esc(b.opened_by) + ' · ' + esc(fmtWhen(b.opened_at)) + '</div>'
+        : '') +
+      (b.has_access ? '<div class="det-lbl det-linkh">Ссылка на уроки</div>' + linkRow : '') +
+      '</div>';
+
+    return head + access;
+  }
+
+  function wireCourse(id) {
+    // Пока запрос в пути, кнопки этого блока выключены. Иначе второй клик по
+    // переключателю уходит на сервер раньше, чем вернется ответ на первый, — и
+    // ученик получает ссылку дважды (сервер такой повтор тоже отбивает).
+    var busy = false;
+    function lock(on) {
+      busy = on;
+      ['crs-sw', 'crs-newlink', 'crs-refresh'].forEach(function (bid) {
+        var b = el(bid);
+        if (b) { b.disabled = on; b.style.opacity = on ? '.55' : ''; }
+      });
+    }
+    function post(body, okMsg) {
+      if (busy) return;
+      lock(true);
+      return api('/admin/api/leads/' + id + '/course/access', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function (r) {
+        CRS[id] = r;
+        if (r.link) CRS_LINK[id] = r.link;
+        // Доступ открыт всегда, а вот доставка могла не дойти: у ученика, которого
+        // завели руками, чата с ботом нет. Менеджер должен узнать об этом сразу, а
+        // не из того, что ребенок так и не пришел на урок.
+        if (okMsg) {
+          showToast(body.open && !r.opened_now
+            ? okMsg + ' — ученику не дублируем, ссылка в карточке'
+            : r.delivered && r.delivered.telegram
+              ? okMsg + ' — ссылка ушла ему в чат'
+              : okMsg + ' — ссылку отправьте сами, она в карточке');
+        }
+        renderModalContent();
+      }).catch(function (e) {
+        if (e.message !== '403') showToast('Не получилось: ' + e.message);
+      }).then(function () { lock(false); });
+    }
+
+    var lead = findLead(id) || {};
+    var payload = { name: lead.name || '', email: lead.email || '' };
+
+    var rf = el('crs-refresh');
+    if (rf) rf.addEventListener('click', function () { loadCourse(id, true); });
+
+    var sw = el('crs-sw');
+    if (sw) sw.addEventListener('click', function () {
+      var on = (CRS[id] || {}).has_access;
+      if (on && !confirm('Закрыть ученику доступ к курсу?')) return;
+      post({ open: !on, name: payload.name, email: payload.email },
+           on ? 'Доступ закрыт' : 'Доступ открыт');
+    });
+
+    var cp = el('crs-copy');
+    if (cp) cp.addEventListener('click', function () { copyText(CRS_LINK[id] || '', cp); });
+
+    var nl = el('crs-newlink');
+    if (nl) nl.addEventListener('click', function () {
+      post({ open: true, name: payload.name, email: payload.email }, 'Новая ссылка готова');
+    });
   }
 
   /* ── РАЗДЕЛ «Сейчас» ── */
@@ -5882,10 +6818,9 @@
       if (e.type === 'anketa_step') {
         var s = (e.payload || {}).step || 0; if (s > maxStep) maxStep = s; return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' || e.type === 'lead_submitted');
+      var label = evText(e);
+      var hi = (e.type === 'questionnaire_submitted' || e.type === 'viewed_result' ||
+        e.type === 'lead_submitted' || e.type === 'magnet_registered');
       var bucket = (e.type === 'opened_product' || e.type === 'viewed_result') ? 'viewed'
         : (e.type === 'clicked_book_call' || e.type === 'clicked_messenger') ? 'cta'
         : (e.type === 'lead_submitted') ? 'booked'
@@ -6155,6 +7090,19 @@
            acc.practice_open ? 'Тренажеры закрыты' : 'Тренажеры открыты');
     });
 
+    var tsel = el('det-teacher');
+    if (tsel) {
+      // Список преподавателей грузим один раз на сессию и перерисовываем поле.
+      if (!DET_TEACHERS) api('/admin/api/det/teachers').then(function (r) {
+        DET_TEACHERS = (r && r.teachers) || [];
+        if (el('det-teacher')) renderDrawer(true);
+      }).catch(function () { DET_TEACHERS = []; });
+      tsel.addEventListener('change', function () {
+        post('/admin/api/leads/' + id + '/det/teacher', { login: tsel.value || null },
+             tsel.value ? 'Преподаватель назначен' : 'Преподаватель снят');
+      });
+    }
+
     var nl = el('det-newlink');
     if (nl) nl.addEventListener('click', function () {
       post('/admin/api/leads/' + id + '/det/invite', {}, 'Ссылка на тест готова');
@@ -6189,6 +7137,10 @@
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
     if (state.modalSection === 'det') wireDet(id, host);
+
+    // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
+    if (state.modalSection === 'course') wireCourse(id);
+    if (state.modalSection === 'mail') wireMail(id, host);
 
     // ── ПОСТУПЛЕНИЕ: конструктор задач по этапам ──
     var rmHost = host.querySelector('.rm-flow');
@@ -7334,11 +8286,9 @@
         if (s > maxStep) { maxStep = s; items.push({ at: e.at, text: 'анкета: дошел до шага ' + s + ' из 7', cls: '', step: true }); }
         return;
       }
-      var label = EVENTS_RU[e.type] || e.type;
-      if (e.type === 'opened_product' && e.payload && e.payload.product) label += ': ' + e.payload.product;
-      if (e.type === 'clicked_messenger' && e.payload && e.payload.channel) label += ' (' + e.payload.channel + ')';
-      items.push({ at: e.at, text: label,
-        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' || e.type === 'viewed_result') ? 'hi' : '' });
+      items.push({ at: e.at, text: evText(e),
+        cls: (e.type === 'lead_submitted' || e.type === 'questionnaire_submitted' ||
+          e.type === 'viewed_result' || e.type === 'magnet_registered') ? 'hi' : '' });
     });
     var stepItems = items.filter(function (i) { return i.step; });
     if (stepItems.length > 1) {
@@ -7449,25 +8399,52 @@
   }
 
   /* ── boot ─────────────────────────────────────────────── */
+  /* ссылка на карточку: #lead/<id> в адресе — открываем этого клиента */
+  function openFromHash() {
+    var id = hashLeadId();
+    if (!id || id === state.drawerId) return;
+    openDrawer(id, [id]);
+  }
+  /* ссылка на переписку: #dialog/<id> — открываем инбокс сразу на этом диалоге.
+     По такой ссылке приходит уведомление бота «клиенту нужен менеджер». */
+  function openDialogFromHash() {
+    var id = hashDialogId();
+    if (!id) return;
+    if (state.page === 'inbox' && state.inboxMode === 'bot' && String(state.inboxSel) === String(id)) return;
+    if (state.drawerId) closeDrawer();
+    state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
+    saveUi(); renderSide(); renderTopbar(); renderView();
+  }
+  window.addEventListener('hashchange', function () {
+    if (!state.loaded) return;
+    var id = hashLeadId();
+    if (id) openFromHash();
+    else if (hashDialogId()) openDialogFromHash();
+    else if (state.drawerId) closeDrawer();
+  });
   function startApp() {
     state.seenBefore = parseInt(localStorage.getItem(SEEN_LS) || '0', 10);
     localStorage.setItem(SEEN_LS, String(Date.now()));
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page))) state.page = firstAllowedPage();
     renderShell();
-    loadLeads(false);
+    /* Список людей и переписку тянем только тем, у кого есть на них права: у
+       преподавателя их нет, а неудачный запрос CRM трактует как «сессия истекла»
+       и выкидывает на вход. */
+    if (can('clients')) loadLeads(false, openFromHash);
+    else { state.loaded = true; renderView(); }
+    openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
-    refreshBot(function () { renderSide(); });
+    if (can('inbox')) refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
     state.timer = setInterval(function () {
-      if (!getKey()) return;
+      if (!getKey() || !can('clients')) return;
       var a = document.activeElement;
-      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in')) return;
-      // поллим диалоги бота всегда (для живого бейджа хэндоффа); инбокс обновляем, если открыт
-      refreshBot(function () {
-        renderSide();
-        if (state.page === 'inbox' && !state.botConvoId) renderView();
-      });
+      if (a && (a.id === 'dr-note' || a.id === 'search' || a.id === 'dr-task-in' || a.id === 'tg-input')) return;
+      // поллим диалоги бота всегда (для живого бейджа хэндоффа). Инбокс НЕ пересобираем:
+      // у него свой шестисекундный поллинг (pollInboxLive), а полная пересборка раз в минуту
+      // вырывала поле ввода из-под рук менеджера прямо на середине сообщения.
+      if (can('inbox')) refreshBot(function () { renderSide(); });
       if (state.drawerId || state.botConvoId) return; // не дёргаем интерфейс под открытой карточкой/диалогом
       loadLeads(true);
     }, 60000);
