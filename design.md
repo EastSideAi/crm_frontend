@@ -198,7 +198,8 @@ CRM — рабочий инструмент команды. Ценности п�
 | Диктовка | микрофон в блоке помощника (форма задачи) | витрины нет (см. `style.css` «Помощник в форме постановки») | `.al-mic .al-mic-dot .al-mic.rec .al-mic.busy` |
 | Мой день | список дел после диктовки, галочка и перенос в строке | витрины нет (см. `style.css` «Мой день») | `.dp-list .dp-row .dp-mark .dp-in .dp-when .tsk-chk .tsk-move` |
 | AI и каталог | AI-блоки, диагностика, витрина продуктов | `design/ai.html` | `.ai-hero .diag-* .pchat .rm-ai .of-* .pd-*` |
-| Карта клиентов | дорожка этапов и список на экране «Карта» | витрины нет (см. `style.css` «КАРТА») | `.map-rail .map-seg .map-grid .map-track .map-tar` |
+| Карта клиентов | дорожка этапов и список на экране «Карта» | витрины нет (см. `style.css` «КАРТА») | `.map-rail .map-seg .map-gap .map-grid .map-track .map-tar` |
+| Кабинет семьи | блок «кто заходил и что делает» в карточке клиента | витрины нет (см. `style.css` «КАБИНЕТ СЕМЬИ») | `.cab-seats .cab-seat .cab-acts .cab-sts .cab-st` |
 | Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .tg-cact .th-* .ibsw .handoff-banner` |
 | Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
 | Поступление | план, задачи, шаблоны | `design/admissions.html` | `.rm-* .tpl-*` |
