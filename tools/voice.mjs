@@ -78,6 +78,7 @@ function screenScript(sc) {
     add('Заканчиваем ' + c.ends + '.');
   });
   if (sc.type === 'chklist') { add('Отметьте, что уже умеете.'); add(...(sc.items || [])); }
+  if (sc.type === 'howto') (sc.items || []).forEach((it, i) => add((i + 1) + '. ' + it[0] + '. Где: ' + it[1]));
   if (sc.type === 'q') { add(...(sc.sit || []), sc.lead); (sc.opts || []).forEach((o) => add(o[0] + '. ' + o[1])); }
 
   if (sc.note && sc.note.t) add((sc.note.warn ? 'Важно. ' : '') + sc.note.t);

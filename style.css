@@ -7519,6 +7519,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-play:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
 .academy .ac-play.on { background: var(--ac-blue-tint); border-color: transparent; color: var(--ac-blue-d); }
 
+/* Итог урока «что сделать и где». Две строки на шаг: действие весом, адрес
+   экрана тише и с иконкой — глаз находит нужную строку, не читая весь список. */
+.academy .ac-how { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 14px; }
+.academy .ac-how li { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 12px; align-items: start; }
+.academy .ac-hn { width: 26px; height: 26px; border-radius: 9px; background: var(--ac-blue-tint); color: var(--ac-blue-d);
+  display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; }
+.academy .ac-hb { display: grid; gap: 4px; padding-top: 3px; }
+.academy .ac-hb b { font-size: 14.5px; font-weight: 700; color: var(--ac-ink); }
+.academy .ac-hw { display: inline-flex; align-items: flex-start; gap: 7px; font-size: 13.5px; color: var(--ac-ink-3); }
+.academy .ac-hw svg { width: 12px; height: 12px; flex: none; margin-top: 4px; color: var(--ac-blue); }
+
 .academy .ac-quote { border-left: 3px solid var(--ac-blue); padding: 4px 0 4px 16px; margin: 16px 0; font-size: 15px; color: #333843; }
 .academy .ac-who { display: block; margin-top: 6px; }
 
