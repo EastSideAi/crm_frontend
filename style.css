@@ -8259,7 +8259,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
 .mail-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   background: #fff; color: var(--blue); }
-.mail-hero > div { flex: 1; min-width: 0; }
+.mail-hero-b { flex: 1; min-width: 0; }
 .mail-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
 .mail-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
 

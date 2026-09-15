@@ -24108,7 +24108,7 @@
       return head +
         '<div class="mail-hero empty">' +
           '<div class="mail-hero-ic">' + ic('mail', 20) + '</div>' +
-          '<div><div class="mail-empty-t">Адреса еще нет</div>' +
+          '<div class="mail-hero-b"><div class="mail-empty-t">Адреса еще нет</div>' +
           '<div class="mail-empty-s">Заведется за секунду и будет выглядеть как имя.фамилия@eastside.study.</div></div>' +
           '<button class="bp sm" id="mail-create">' + ic('plus', 13) + 'Завести адрес</button>' +
         '</div>';
