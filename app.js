@@ -18299,8 +18299,17 @@
      пять цифр сверху, лестница «где теряем людей», разбивки по каналам.
      Период topbar сюда не применяется: запуск меряется нарастающим итогом. */
 
+  /* Период запуска. Пусто — весь запуск нарастающим итогом, как и было. */
+  function mkLaunchQS() {
+    var f = state._mkLaunchFrom || '', t2 = state._mkLaunchTo || '';
+    var q = [];
+    if (f) q.push('from=' + encodeURIComponent(f));
+    if (t2) q.push('to=' + encodeURIComponent(t2));
+    return q.length ? '?' + q.join('&') : '';
+  }
+
   function fetchMkLaunch() {
-    api('/admin/api/marketing/launch').then(function (r) {
+    api('/admin/api/marketing/launch' + mkLaunchQS()).then(function (r) {
       state._mkLaunch = (r && r.launches && r.launches.length) ? r : 'none';
       if (state.page === 'marketing') renderView();
     }).catch(function (e) {
@@ -18323,6 +18332,98 @@
     return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
       (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-n num">' + n + '</div></div>';
+  }
+
+  /* Плашка одной ступени пути. Показывает ЛЮДЕЙ и две конверсии: от предыдущего
+     шага (где теряем) и от регистраций (масштаб). Шаг, которого ещё не было или
+     которого нет в системе, приглушён и без процентов — пустая плашка честнее
+     нуля, который читается как провал. */
+  function launchPlate(s, i, worstKey) {
+    var wait = s.state !== 'live';
+    var val = (s.people == null) ? '—' : fmtMoney(s.people);
+    var conv = '';
+    if (!wait && s.of_prev != null && i > 0) {
+      conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
+      if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
+    } else if (!wait && i === 0) {
+      conv = 'база пути';
+    } else if (s.state === 'soon') {
+      conv = 'после эфира';
+    } else {
+      conv = 'нет данных';
+    }
+    return '<div class="lstep' + (wait ? ' wait' : '') +
+      (s.key === worstKey ? ' drop' : '') + '">' +
+      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' + (s.branch ? 'ветка' : (i + 1)) + '</div>' +
+      '<div class="ls-v num">' + val + '</div>' +
+      '<div class="ls-t">' + esc(s.title) + '</div>' +
+      (s.note ? '<div class="ls-s">' + esc(s.note) + '</div>' : '') +
+      '<div class="ls-c">' + conv + '</div>' +
+    '</div>';
+  }
+
+  /* Где теряем больше всего: самая низкая конверсия к предыдущему шагу среди тех,
+     где уже есть что мерить. Отмечаем ОДИН шаг — иначе красным горит вся страница
+     и перестаёт значить что-либо. */
+  function worstStep(path) {
+    var worst = null;
+    path.forEach(function (s, i) {
+      if (i === 0 || s.branch || s.state !== 'live' || s.of_prev == null || !s.people) return;
+      if (s.of_prev >= 50) return;
+      if (!worst || s.of_prev < worst.of_prev) worst = s;
+    });
+    return worst ? worst.key : null;
+  }
+
+  function launchPlates(path) {
+    var worst = worstStep(path);
+    return '<div class="lsteps">' + path.map(function (s, i) {
+      return launchPlate(s, i, worst);
+    }).join('') + '</div>';
+  }
+
+  /* Панель периода. Даты — по дате регистрации человека: «сколько людей пришло за
+     эти дни и что с ними стало дальше». Кнопки-пресеты закрывают три вопроса,
+     которые задают чаще всего, поля — всё остальное. */
+  function launchPeriod() {
+    var f = state._mkLaunchFrom || '', t2 = state._mkLaunchTo || '';
+    var all = !f && !t2;
+    return '<div class="card lper">' +
+      '<span class="lper-l">Период регистрации</span>' +
+      '<div class="dperiod">' +
+        '<button data-lper="all" class="' + (all ? 'on' : '') + '">Весь запуск</button>' +
+        '<button data-lper="7">7 дней</button>' +
+        '<button data-lper="1">Сегодня</button>' +
+      '</div>' +
+      '<input type="date" class="lper-in" data-lper-from value="' + esc(f) + '">' +
+      '<span class="lper-d">—</span>' +
+      '<input type="date" class="lper-in" data-lper-to value="' + esc(t2) + '">' +
+    '</div>';
+  }
+
+  function launchPeriodBind(view) {
+    function apply(from, to) {
+      state._mkLaunchFrom = from || '';
+      state._mkLaunchTo = to || '';
+      state._mkLaunch = null;          /* перезапрашиваем: период считает сервер */
+      renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lper]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-lper');
+        if (v === 'all') return apply('', '');
+        var d = new Date();
+        var to = d.toISOString().slice(0, 10);
+        d.setDate(d.getDate() - (parseInt(v, 10) - 1));
+        apply(d.toISOString().slice(0, 10), to);
+      });
+    });
+    var fi = view.querySelector('[data-lper-from]'), ti = view.querySelector('[data-lper-to]');
+    if (fi && ti) {
+      var onCh = function () { apply(fi.value, ti.value); };
+      fi.addEventListener('change', onCh);
+      ti.addEventListener('change', onCh);
+    }
   }
 
   function renderMkLaunch(view) {
@@ -18409,6 +18510,12 @@
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
       ], 'five') +
+      launchPeriod() +
+      '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
+        '<div><div class="t">Путь человека по запуску</div><div class="s">' +
+          'каждая ступень считает людей из числа зарегистрировавшихся' + '</div></div></div>' +
+        '<div class="pad" style="border-top:1px solid var(--line)">' +
+          launchPlates(cur.path || []) + '</div></div>' +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">От показа до оплаты</div><div class="s">' +
           (hasWorst ? 'красным — шаг, где деньги не доходят' : 'путь запуска по ступеням') + '</div></div></div>' +
@@ -18440,6 +18547,7 @@
         renderView();
       });
     });
+    launchPeriodBind(view);
   }
 
   function renderMarketing(view) {

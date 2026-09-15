@@ -8245,3 +8245,33 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .map-grid .map-c.map-empty { display: none; }
   .map-bar .list-count { margin-left: 0; }
 }
+
+/* ── Запуски: путь человека плашками ──────────────────────────────────────── */
+/* Просьба Ольги: цифры плашками, а не строчками. Ширина колонки фиксируется
+   минимумом, а не числом колонок: ступеней в запуске то 12, то 16, и раскладка
+   не должна ломаться от добавления шага. */
+.lsteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; }
+.lstep { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
+         padding: 14px 16px 13px; background: var(--card); }
+.lstep .ls-i { position: absolute; top: 12px; right: 14px; font-size: 11px; color: var(--ink-3); }
+.lstep .ls-v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lstep .ls-t { font-size: 13px; font-weight: 600; margin-top: 3px; }
+.lstep .ls-s { font-size: 11px; color: var(--ink-3); margin-top: 3px; line-height: 1.35; }
+.lstep .ls-c { font-size: 11px; color: var(--ink-2); margin-top: 9px; }
+.lstep .ls-c b { font-weight: 700; color: var(--ink); }
+/* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
+.lstep.wait { background: var(--fill); }
+.lstep.wait .ls-v { color: var(--ink-3); }
+/* Единственный отмеченный провал: где теряем больше половины людей. */
+.lstep.drop { border-color: var(--red); background: var(--red-soft); }
+.lstep.drop .ls-c b { color: var(--red-ink); }
+
+.lper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 12px 16px; margin-bottom: 16px; }
+.lper-l { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-right: 4px; }
+.lper-d { color: var(--ink-3); }
+/* Поля дат — той же породы, что в поповере периода на других вкладках. */
+.lper-in { font: 500 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+           border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; outline: none; }
+.lper-in:focus { border-color: var(--blue); }
+.lstep .ls-i.br { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
