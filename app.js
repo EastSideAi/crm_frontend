@@ -22736,8 +22736,11 @@
     var inner = ic('doc', 13) + '<span class="fnm"><span>' + esc(base) + '</span>' +
       (ext ? '<i>' + esc(ext) + '</i>' : '') + '</span>' +
       (a.size ? '<i class="sz num">' + fmtSize(a.size) + '</i>' : '');
-    return a.url
-      ? '<a class="rm-catt file" href="' + esc(a.url) + '" target="_blank" rel="noopener">' + inner + '</a>'
+    // Ссылку пускаем только http(s): esc() экранирует кавычки, но схему не смотрит, а
+    // вложения приходят из переписки — это чужие данные, и javascript: там недопустим.
+    var href = /^https?:\/\//i.test(String(a.url || '')) ? a.url : '';
+    return href
+      ? '<a class="rm-catt file" href="' + esc(href) + '" target="_blank" rel="noopener">' + inner + '</a>'
       : '<span class="rm-catt file">' + inner + '</span>';
   }
 
@@ -22929,7 +22932,7 @@
      redraw — перерисовка этого треда. Оптимистично тут только ПОЯВЛЕНИЕ пузыря, и он до
      ответа сервера помечен «отправляется»: файл уходит секунды, и пустой экран все это
      время читается как «кнопка не сработала». */
-  function sendConvFile(convId, file, msgs, redraw) {
+  function sendConvFile(convId, file, msgs, redraw, unmute) {
     if (!file) return;
     if (file.size > CONV_FILE_MAX_MB * 1024 * 1024) {
       showToast('Файл больше ' + CONV_FILE_MAX_MB + ' МБ — столько клиенту не отправить');
@@ -22952,6 +22955,7 @@
         if (res && res.delivered === false) {
           tmp.undelivered = true; tmp.reason = res.reason || '';
           showToast(res.reason ? ('Файл не доставлен: ' + res.reason) : 'Файл не доставлен клиенту');
+          if (unmute) unmute();   // файл не ушёл — диалог боту возвращаем, иначе клиент остался без ответа вовсе
         }
         redraw();
       }).catch(function (e) {
@@ -22960,6 +22964,7 @@
         var i = msgs.indexOf(tmp); if (i >= 0) msgs.splice(i, 1);
         var why = (e && e.body && e.body.detail) || '';
         showToast(why || 'Файл не отправлен — проверьте связь с ботом');
+        if (unmute) unmute();
         redraw();
       });
     };
@@ -23427,8 +23432,10 @@
       var d = state.bot.msgs[c.id];
       if (!d) { showToast('Переписка ещё грузится — секунду'); return; }
       d.messages = d.messages || [];
-      if (c.ai_on !== false) inboxSetAi(c, false);   // отправил менеджер — бот замолкает
-      sendConvFile(c.id, f, d.messages, function () { refreshOpenThread(true, true); });
+      var wasOn = c.ai_on !== false;
+      if (wasOn) inboxSetAi(c, false);   // отправил менеджер — бот замолкает
+      sendConvFile(c.id, f, d.messages, function () { refreshOpenThread(true, true); },
+                   wasOn ? function () { inboxSetAi(c, true); } : null);
     });
     if (inp) {
       composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
@@ -29136,11 +29143,17 @@
     if (dFile) dFile.addEventListener('change', function () {
       var f = dFile.files && dFile.files[0]; dFile.value = '';
       if (!f || !dcv) return;
+      // Диалог сведён с карточкой по нику — связка слабая, ник меняют. Реплику мимо
+      // адресата пережить можно, документ с чужими данными — нет, поэтому тут спрашиваем.
+      if (dcv.match === 'username' && !window.confirm(
+            'Этот диалог сведён с карточкой по нику ' + ('@' + (dcv.username || '')) +
+            ' — совпадение может быть чужим. Точно отправить файл этому человеку?')) return;
       dconv.messages = dconv.messages || [];
+      var wasOn = dcv.ai_enabled !== false;
       dcv.ai_enabled = false;   // отправил менеджер — бот в этом диалоге замолкает (так же на бэке)
       sendConvFile(dcv.user_id, f, dconv.messages, function () {
         if (state.modalSection === 'dialog') renderModalContent();
-      });
+      }, wasOn ? function () { dcv.ai_enabled = true; } : null);
     });
     if (dIn) dIn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
