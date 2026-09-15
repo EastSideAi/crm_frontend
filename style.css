@@ -7540,6 +7540,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   padding: 11px 14px; border-bottom: 1px solid var(--ac-line); }
 .academy .ac-cf:last-child { border-bottom: 0; }
 .academy .ac-cfl { font-size: 13.5px; font-weight: 600; color: var(--ac-ink-2); }
+/* Подпись поля в одну строку: иначе она ломается пополам, а переключатели
+   рядом и так переносятся — получаются две рваные колонки. На телефоне поле
+   складывается в две строки, и запрет переноса там снимается. */
+@media (min-width: 561px) { .academy .ac-cfl { white-space: nowrap; } }
 .academy .ac-seg { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .academy .ac-sg { border: 1px solid var(--ac-line-2); background: var(--ac-card); color: var(--ac-ink-2);
   font: 600 12.5px 'Manrope', sans-serif; padding: 6px 11px; border-radius: var(--ac-r-pill);
