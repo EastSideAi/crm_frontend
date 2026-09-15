@@ -18364,8 +18364,10 @@
 
   /* Где теряем больше всего: самая низкая конверсия к предыдущему шагу среди тех,
      где уже есть что мерить. Отмечаем ОДИН шаг — иначе красным горит вся страница
-     и перестаёт значить что-либо. */
-  function worstStep(path) {
+     и перестаёт значить что-либо.
+     Имя с приставкой launch намеренно: worstStep уже занят воронкой сессий (строка ~988),
+     и одноимённая функция молча перебила бы её на пяти экранах. */
+  function launchWorstStep(path) {
     var worst = null;
     path.forEach(function (s, i) {
       if (i === 0 || s.branch || s.state !== 'live' || s.of_prev == null || !s.people) return;
@@ -18376,7 +18378,7 @@
   }
 
   function launchPlates(path) {
-    var worst = worstStep(path);
+    var worst = launchWorstStep(path);
     return '<div class="lsteps">' + path.map(function (s, i) {
       return launchPlate(s, i, worst);
     }).join('') + '</div>';
@@ -18424,6 +18426,99 @@
       fi.addEventListener('change', onCh);
       ti.addEventListener('change', onCh);
     }
+  }
+
+  /* Столбики по дням: регистрации и оплаты. Компонент тот же, что на дашборде
+     (.chart/.ch-day/.ch-labels/.ch-legend) — два разных вида столбиков в одной CRM
+     читались бы как два разных продукта. */
+  /* Непрерывный ряд дат: дни без регистраций — это тоже факт («два дня тишины»),
+     а из двух столбиков во всю ширину графика не читается ничего. Дырки заполняем
+     нулями от первого дня до сегодняшнего. */
+  function launchDaysFilled(days) {
+    if (!days.length) return [];
+    var by = {}, i;
+    for (i = 0; i < days.length; i++) by[days[i].day] = days[i];
+    var cur = new Date(days[0].day + 'T00:00:00Z');
+    var lastDay = days[days.length - 1].day;
+    var today = new Date().toISOString().slice(0, 10);
+    var end = new Date((lastDay > today ? lastDay : today) + 'T00:00:00Z');
+    var out = [], guard = 0;
+    while (cur <= end && guard++ < 400) {
+      var key = cur.toISOString().slice(0, 10);
+      out.push(by[key] || { day: key, registered: 0, vip: 0, paid: 0, paid_rub: 0 });
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  function launchDayChart(rawDays) {
+    var days = launchDaysFilled(rawDays);
+    var maxR = 1, i;
+    for (i = 0; i < days.length; i++) maxR = Math.max(maxR, days[i].registered);
+    var bars = days.map(function (d) {
+      var h = Math.round(d.registered / maxR * 100);
+      var paidH = d.paid ? Math.max(4, Math.round(d.paid / maxR * 100)) : 0;
+      var dd = d.day.split('-');
+      return '<div class="ch-day" title="' + dd[2] + '.' + dd[1] + ': регистраций ' + d.registered +
+        (d.paid ? ', оплат ' + d.paid : '') + '">' +
+        (paidH ? '<div class="b2" style="height:' + paidH + '%"></div>' : '') +
+        '<div class="b1" style="height:' + Math.max(3, h - paidH) + '%"></div></div>';
+    }).join('');
+    var labels = days.map(function (d, idx) {
+      var show = days.length <= 8 || idx % 2 === 1;
+      return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
+    }).join('');
+    return '<div class="lchart"><div class="chart">' + bars + '</div>' +
+      '<div class="ch-labels">' + labels + '</div></div>' +
+      '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>регистрации</span>' +
+      '<span><i style="background:#2F6BFF"></i>оплаты</span></div>';
+  }
+
+  /* Воронка запуска столбиками: только ступени пути, без ответвлений и без шагов,
+     которых ещё не было. Ответвление рядом со ступенью сбивало бы чтение «сверху
+     вниз всё меньше». */
+  function launchFunnelChart(path) {
+    var steps = path.filter(function (s) { return !s.branch && s.state === 'live' && s.people != null; });
+    if (steps.length < 3) return '';
+    var max = Math.max(1, steps[0].people);
+    return '<div class="lfun">' + steps.map(function (s) {
+      var w = Math.max(1.5, Math.round(s.people / max * 100));
+      return '<div class="lfun-row">' +
+        '<span class="lfun-nm">' + esc(s.title) + '</span>' +
+        '<span class="lfun-bar"><i style="width:' + w + '%"></i></span>' +
+        '<span class="lfun-n num">' + fmtMoney(s.people) + '</span>' +
+        '<span class="lfun-p num">' + (s.of_reg == null ? '' : s.of_reg + '%') + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* Карточка с графиками. Данных мало — не рисуем сетку ради сетки: пустой график
+     читается как «всё плохо» или «система врёт», а на деле цифр ещё нет. */
+  function launchCharts(cur) {
+    var days = cur.by_day || [];
+    var withData = days.filter(function (d) { return d.registered || d.paid; });
+    var dayCard;
+    if (withData.length >= 2) {
+      dayCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">По дням</div>' +
+        '<div class="s">регистрации и оплаты, ' + withData.length + ' ' +
+        plural(withData.length, 'день', 'дня', 'дней') + '</div></div></div>' +
+        launchDayChart(days) + '</div>';
+    } else {
+      dayCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">По дням</div>' +
+        '<div class="s">график появится, когда наберётся хотя бы два дня с цифрами</div></div></div>' +
+        '<div class="empty">Пока данных на график нет: ' +
+        (withData.length ? 'есть только один день с регистрациями.' : 'регистраций ещё не было.') +
+        '</div></div>';
+    }
+    var fun = launchFunnelChart(cur.path || []);
+    var funCard = fun
+      ? '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">Воронка запуска</div>' +
+        '<div class="s">сколько людей на каждой ступени</div></div></div>' + fun + '</div>'
+      : '';
+    return '<div class="grid" style="margin-bottom:16px">' + dayCard + funCard + '</div>';
   }
 
   function renderMkLaunch(view) {
@@ -18516,6 +18611,7 @@
           'каждая ступень считает людей из числа зарегистрировавшихся' + '</div></div></div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">От показа до оплаты</div><div class="s">' +
           (hasWorst ? 'красным — шаг, где деньги не доходят' : 'путь запуска по ступеням') + '</div></div></div>' +

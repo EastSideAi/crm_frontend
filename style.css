@@ -8275,3 +8275,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
            border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; outline: none; }
 .lper-in:focus { border-color: var(--blue); }
 .lstep .ls-i.br { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+
+/* Воронка запуска столбиками: имя ступени, полоса, число, доля от регистраций. */
+.lfun { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.lfun-row { display: grid; grid-template-columns: 1fr 80px 46px 40px; gap: 10px; align-items: center; }
+.lfun-nm { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfun-bar { height: 10px; background: var(--fill); border-radius: var(--r-pill); overflow: hidden; }
+.lfun-bar i { display: block; height: 100%; background: var(--blue); border-radius: var(--r-pill); }
+.lfun-n { font-size: 13px; font-weight: 700; text-align: right; }
+.lfun-p { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+/* Запуск идёт днями, а не неделями: при двух-трёх днях столбик во всю колонку
+   выглядит стеной и ничего не сообщает — ограничиваем ширину. */
+.lchart .ch-day { max-width: 56px; }
+.lchart .chart { justify-content: flex-start; }
+.lchart .ch-labels span { max-width: 56px; }
