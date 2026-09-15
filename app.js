@@ -2113,6 +2113,13 @@
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
     accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
+    // Отвечает только за выплаты подрядчикам (Роман 11.09.2026): вносит выплаты в
+    // дашборд, они падают расходом фонда подрядчиков. Всю ведомость не видит. Зеркало
+    // ROLE_CAPS в backend/app/routers/admin.py.
+    contractor_payer: { label: 'Выплаты подрядчикам',  short: 'вносит выплаты',       caps: ['dash', 'tasks', 'finmodel_contractors'] },
+    // Вносит только операционные расходы (сервисы, административное) — падают прямым
+    // расходом в ведомость, чужих зарплат не видит. Зеркало ROLE_CAPS в admin.py.
+    expense_clerk:    { label: 'Операционные расходы',  short: 'вносит расходы',       caps: ['dash', 'tasks', 'finmodel_ops'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
     manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
@@ -2209,6 +2216,20 @@
     { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
+    /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
+       и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
+       из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
+       есть строка расхода фонда. */
+    { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
+      cap: 'finmodel|finmodel_contractors', hideCap: 'finmodel' },
+    /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
+       (сервисы, административное), но всю ведомость с зарплатами не видит. У кого есть
+       ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
+    { id: 'finopex', label: 'Операционные расходы', icon: 'wallet', space: 'fin',
+      cap: 'finmodel|finmodel_ops', hideCap: 'finmodel' },
+    /* Плановый налог АУСН 8% по месяцам за год — сколько отложить. Год, а не период:
+       у налога свои границы. Считается из дохода ведомости сам (база — до эквайринга). */
+    { id: 'fintax', label: 'Плановый налог', icon: 'coins', cap: 'finmodel', space: 'fin' },
     /* Расходы одним экраном с тремя состояниями (запланирован → проведен →
        подтвержден) и информатором проблем: где расход не закрыт документом и где
        на счете не хватает на плановое. Разрез, а не еще одна форма ввода. */
@@ -2266,6 +2287,10 @@
       // Пункт может быть скрыт для отдельных ролей, даже если cap подходит: тьютор
       // ведёт своих учеников, воронка входящих лидов не его работа (правило Павла).
       if (it.hideRole && it.hideRole.indexOf(state.role) >= 0) return false;
+      // hideCap прячет пункт у того, кто и так добирается до него другим путём: выплаты
+      // подрядчикам ведут внутри «Фондов», отдельным разделом в меню они торчат только у
+      // роли, у которой всей ведомости нет (решение Романа 11.09.2026).
+      if (it.hideCap && can(it.hideCap)) return false;
       return can(it.cap) && navSpace(it) === s;
     });
   }
@@ -2597,11 +2622,15 @@
     } else if (state.page === 'finprograms') {
       // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
+    } else if (state.page === 'fintax') {
+      // Налог считается за год, а не за ведомость — год выбирается на самом экране.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог за год</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
-               state.page === 'finspend' || state.page === 'finmetrics') {
+               state.page === 'finspend' || state.page === 'finmetrics' ||
+               state.page === 'finpayouts' || state.page === 'finopex') {
       // Период — это и есть контекст ведомости: без него цифры внизу ничего не значат.
       // Ведомостей стало много (архив 2026), поэтому не лента вкладок, а выбор
       // год -> месяц -> ведомость, как на старом сайте.
@@ -2982,7 +3011,8 @@
                      finops: 'Карта операций', finref: 'Сервисы и долги',
                      finfund: 'Фонды', finincome: 'Доходы',
                      finedit: 'Расчетные листы', findirect: 'Прямые расходы',
-                     finspend: 'Расходы',
+                     finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
+                     finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finmetrics: 'Итоги периода' };
       var ph;
@@ -3022,6 +3052,11 @@
             (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
           : 'Считаю программы по чекам…';
       }
+      // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
+      else if (state.page === 'fintax') {
+        ph = 'Плановый налог АУСН 8% по месяцам за год: сколько дохода пришло и сколько ' +
+          'с него отложить на налог. Доход берется из ведомости сам, база — до эквайринга.';
+      }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
         // Остаток счета берем у самого счета: в «показателях центра» лежит движение
@@ -3050,6 +3085,14 @@
       } else if (state.page === 'findirect') {
         ph = 'Расходы с расчетного счета по направлениям за ведомость <b>' + esc(per.name) +
           '</b>. Строки из расчетных листов попадают в свой блок сами — видно, что откуда.';
+      } else if (state.page === 'finpayouts') {
+        ph = 'Выплаты подрядчикам за ведомость <b>' + esc(per.name) + '</b>. Вносите ' +
+          'выплату здесь — она сразу падает расходом фонда подрядчиков, переносить в ' +
+          'ведомость руками не нужно. Реквизиты и чек/акт хранятся при выплате.';
+      } else if (state.page === 'finopex') {
+        ph = 'Операционные расходы за ведомость <b>' + esc(per.name) + '</b>: сервисы, ' +
+          'административное. Вносите трату здесь — она сразу падает расходом в ведомость, ' +
+          'переносить руками не нужно. Можно приложить чек.';
       } else if (state.page === 'finspend') {
         ph = 'Расходы ведомости <b>' + esc(per.name) + '</b> по стадиям: запланирован → ' +
           'проведен → подтвержден. Информатор показывает, где расход не закрыт документом ' +
@@ -3157,6 +3200,9 @@
     else if (state.page === 'finincome') renderFinIncome(view);
     else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'findirect') renderFinDirect(view);
+    else if (state.page === 'finpayouts') renderFinPayouts(view);
+    else if (state.page === 'finopex') renderFinOpex(view);
+    else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
@@ -13599,7 +13645,8 @@
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
-              calendar: null, programs: null, spend: null,
+              calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
+              opex: null, opexBusy: false, tax: null, taxYear: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
   /* Суммы ведомости — всегда с копейками: тут сходятся акты и выписки, и округление
@@ -13854,7 +13901,7 @@
     FIN.sheet = null; FIN.ops = null; FIN.pnl = null; FIN.pnlp = null;
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
-    FIN.forecast = null;
+    FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -14086,6 +14133,30 @@
         '</div></div>'
       : '';
 
+    /* Плановый налог АУСН 8% (Роман 11.09.2026): «табличка, которая сама считает
+       плановый налог в зависимости от дохода». Живой калькулятор — впиши доход,
+       увидишь 8%. База — доход ДО вычета эквайринга (в каскаде доход уже за вычетом
+       комиссии), поэтому поле правится руками, а рядом стоит оговорка. Под ним
+       короткая справочная табличка на круглых суммах. */
+    var TAX_RATE = 0.08;
+    var taxCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Плановый налог (АУСН 8%)</div>' +
+        '<div class="s">8% от дохода до вычета эквайринга — сколько отложить на фонд налогов</div></div></div>' +
+      '<div class="fin-kv">' +
+        '<label class="fkv fin-taxrow"><span>Доход за период, ₽</span>' +
+          '<input id="tax-inc" class="al-in num" type="number" min="0" step="0.01" value="' +
+          (c.income || '') + '"></label>' +
+        '<div class="fkv total"><span>Налог 8%</span>' +
+          '<b class="num" id="tax-out">' + finRub((c.income || 0) * TAX_RATE) + '</b></div>' +
+      '</div>' +
+      '<div class="fin-note">' + ic('alert', 13) +
+        'Подставлен доход к зачислению (после эквайринга). База налога — доход ДО ' +
+        'эквайринга; если он выше, впишите его, и налог пересчитается.</div>' +
+      '<button class="qchip" id="tax-year-lnk" style="margin-top:12px">' +
+        ic('coins', 12) + 'Годовая таблица по месяцам</button>' +
+    '</div>';
+
     var warn = (s.warnings || []).length
       ? '<div class="card fin-block">' +
         '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
@@ -14138,8 +14209,18 @@
 
     view.innerHTML = bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + finAccountsCard(s, editable) + warn +
+      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + taxCard +
+        finAccountsCard(s, editable) + warn +
       '</div></div>';
+
+    // Живой пересчет планового налога: 8% от вписанного дохода. Доступно и на просмотре —
+    // это калькулятор, а не правка ведомости.
+    var taxIn = el('tax-inc'), taxOut = el('tax-out');
+    if (taxIn && taxOut) taxIn.addEventListener('input', function () {
+      taxOut.textContent = finRub((Number(taxIn.value) || 0) * 0.08);
+    });
+    var taxLnk = el('tax-year-lnk');
+    if (taxLnk) taxLnk.addEventListener('click', function () { setPage('fintax'); });
 
     if (editable) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-frule]'), function (n) {
@@ -14450,26 +14531,44 @@
         : '') +
       '</div>';
 
-    // Выплату с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
-    // налоги, краткосрочка) это единственное место, где можно записать расход с фонда
-    // (пункт 1 Романа). Уходит в открытую ведомость, фонд предвыбран.
-    var canPay = can('finmodel_edit');
+    // Расход с фонда заводят прямо здесь: у фондов без расчетного листа (безопасность,
+    // налоги, краткосрочка) это единственное место, где можно записать расход (пункт 1
+    // Романа). Уходит в открытую ведомость, фонд предвыбран.
+    // Фонд подрядчиков ведём тоже здесь, но своей формой выплаты (реквизиты + чек/акт):
+    // отдельного раздела в меню у выплат нет, они живут внутри своего фонда — выплата и
+    // есть расход этого фонда (решение Романа 11.09.2026). Открытая ведомость — куда
+    // ложится новая выплата; без неё вносить некуда.
+    var isContractors = FIN.fundId === 'contractors';
+    var openP = (f.periods || []).filter(function (x) { return x.open; })[0];
+    var canPay = can('finmodel_edit') && (!isContractors || !!openP);
     var opsCard = '<div class="card fin-block">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
-        '<div><div class="t">Расходы фонда</div>' +
-        '<div class="s">каждая копейка, ушедшая с фонда, новое сверху</div></div>' +
+        '<div><div class="t">' + (isContractors ? 'Выплаты подрядчикам' : 'Расходы фонда') +
+          '</div><div class="s">' + (isContractors
+            ? 'выплата с реквизитами и чеком/актом, сразу расход фонда в ведомости'
+            : 'каждая копейка, ушедшая с фонда, новое сверху') + '</div></div>' +
         (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
-            return '<div class="fl-row fl-2"><div class="fl-main">' +
+            // Выплата подрядчику (ручной расход фонда) открывается на правку по клику;
+            // автострока и чужая статья (продукт в этом же фонде) — только показ.
+            var payRow = isContractors && o.source === 'фонд' && !o.auto;
+            var docChip = !payRow ? ''
+              : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
+                    esc(o.doc.name || 'документ') + '</span>'
+                 : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
+            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') + '"' +
+              (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
               (o.offering ? ' · ' + esc(o.offering) : '') +
-              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + '</span></div>' +
+              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + docChip + '</span></div>' +
               '<div class="fl-v num">' + finRub(o.amount) + '</div></div>';
           }).join('') + '</div>'
-        : '<div class="empty">С этого фонда пока ничего не платили.</div>') +
+        : '<div class="empty">' + (isContractors
+            ? 'Выплат подрядчикам с этого фонда пока не было. Нажмите «Добавить выплату».'
+            : 'С этого фонда пока ничего не платили.') + '</div>') +
       '</div>';
 
     /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
@@ -14542,7 +14641,19 @@
     if (save) save.addEventListener('click', finSaveOpening);
     var pay = el('ff-pay');
     if (pay) pay.addEventListener('click', function () {
-      finLineForm(null, { form: 'фонд', section: FIN.fundId });
+      if (isContractors) finPayoutForm(null, { period_id: openP && openP.id });
+      else finLineForm(null, { form: 'фонд', section: FIN.fundId });
+    });
+    // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
+    // в ведомости той строки (period_id), а не в текущей выбранной.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
+      r.addEventListener('click', function () {
+        var id = r.getAttribute('data-fpay');
+        var ops = (FIN.fund && FIN.fund.operations) || [];
+        for (var i = 0; i < ops.length; i++) {
+          if (ops[i].id === id) return finPayoutForm(ops[i], { period_id: ops[i].period_id });
+        }
+      });
     });
     if (sum) sum.focus();
     pageAnim(view);
@@ -14926,10 +15037,18 @@
           : '',
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
+      // Имя клиента в строке дохода — ссылка в его карточку (case_id даёт бэкенд только
+      // под cap clients; у зарплат и строк без клиента его нет). Клик по имени открывает
+      // карточку, клик по остальной строке — правку (см. обработчики ниже).
+      var nm = esc(it.counterparty || it.item || '—');
+      var nameHtml = it.case_id
+        ? '<b class="fin-lead" data-lead="' + esc(it.case_id) +
+          '" title="Открыть карточку клиента">' + nm + '</b>'
+        : '<b>' + nm + '</b>';
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
+        '<span class="fo-what">' + nameHtml +
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
@@ -14994,6 +15113,16 @@
         });
       });
     }
+    // Клик по имени клиента открывает его карточку в новой вкладке. Глушим всплытие,
+    // чтобы у редактора заодно не открылась форма правки строки. Регистрируем всегда,
+    // а не только под canFix: посмотреть карточку может и тот, кто ведомость не правит.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-lead[data-lead]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
+      });
+    });
     pageAnim(view);
   }
 
@@ -15168,6 +15297,20 @@
       spendHits(ch) +
       '</div>';
   }
+  /* Пометка «чем платили»: с расчетного счета или с карты Виталия. На карточных
+     строках видно, что деньги надо вернуть Виталию. Клик переключает (только под
+     правом на ведомость); без права — тихий бейдж только у карточных, чтобы не шуметь. */
+  function spendViaChip(it, canFix) {
+    var card = it.paid_via === 'card';
+    var lbl = card ? 'с карты, вернуть Виталию' : 'с Р/С';
+    var cls = 'fsp-via' + (card ? ' card' : '');
+    if (canFix) {
+      return '<button class="qchip ' + cls + '" data-spvia="' + esc(it.id) +
+        '" data-via="' + (card ? 'card' : 'rs') + '" title="Переключить: чем платили">' +
+        esc(lbl) + '</button>';
+    }
+    return card ? '<span class="qchip ' + cls + '">' + esc(lbl) + '</span>' : '';
+  }
   function renderFinSpend(view) {
     if (!FIN.spend) {
       if (FIN.err) return finErrView(view);
@@ -15179,7 +15322,7 @@
     function fa(s) { return (sum[s] && sum[s].amount) || 0; }
     function fc(s) { return (sum[s] && sum[s].count) || 0; }
 
-    var bar = statBar([
+    var barItems = [
       { label: 'Проведено, факт', value: finRub(fa('проведен') + fa('подтвержден')),
         sub: 'ушло по расходам' },
       { label: 'Подтверждено', value: finRub(fa('подтвержден')),
@@ -15188,7 +15331,12 @@
         sub: fc('проведен') + ' закрыть нечем' },
       { label: 'Запланировано', value: finRub(fa('запланирован')),
         sub: 'намечено, еще не ушло' },
-    ]);
+    ];
+    // Показываем «вернуть Виталию», только когда есть карточные траты: он оплачивает
+    // часть с фонда своей картой, компания возвращает. Ноль читался бы как долг.
+    if (S.reimburse_card) barItems.push({ label: 'Вернуть Виталию',
+      value: finRub(S.reimburse_card), sub: 'оплачено с его карты' });
+    var bar = statBar(barItems);
 
     var inf;
     if (checks.length) {
@@ -15224,7 +15372,8 @@
           '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
-          '<span class="fo-st">' + spendStateChip(it.state) + act + '</span>' +
+          '<span class="fo-st">' + spendStateChip(it.state) + spendViaChip(it, canFix) +
+            act + '</span>' +
         '</div>';
       }).join('');
       var tots = 'план ' + finRub(a['запланирован']) + ' · факт ' +
@@ -15246,6 +15395,14 @@
     view.innerHTML = bar + inf + cards;
     Array.prototype.forEach.call(view.querySelectorAll('[data-spdoc]'), function (b) {
       b.addEventListener('click', function () { spendDocForm(b.getAttribute('data-spdoc')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
+      b.addEventListener('click', function () {
+        var next = b.getAttribute('data-via') === 'card' ? 'rs' : 'card';
+        finDo('/admin/api/fin/operation/' + b.getAttribute('data-spvia') + '/paid-via',
+          'POST', { via: next },
+          next === 'card' ? 'Отмечено: с карты Виталия.' : 'Отмечено: с расчетного счета.');
+      });
     });
     pageAnim(view);
   }
@@ -15542,6 +15699,530 @@
       return 'Вносить строки в ведомость может финансист или админ';
     }
     return m || 'Не сохранилось. Проверьте связь и попробуйте еще раз';
+  }
+
+  /* ── Выплаты подрядчикам (дашборд) ──────────────────────────────────────────
+     Единая точка, где админ вносит выплату подрядчику: получатель, реквизиты,
+     сумма, за что, чек/акт. Та же запись — это строка расхода фонда подрядчиков
+     в ведомости (форма 'выплата-подрядчику' на бэкенде: account_id='contractors',
+     source='фонд'). Отдельного объекта «выплата» и ручного переноса в ведомость
+     нет — в этом вся суть: внёс в дашборде = появилось в ведомости. Ошибка 13.08
+     (две выплаты не перенесли из дашборда) этим и закрывается. */
+  function finLoadPayouts() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadPayouts(); });
+    finBusy('payouts', function (done) {
+      api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('выплата-подрядчику')))
+        .then(function (r) {
+          if (finStale(r)) return;
+          FIN.payouts = r; FIN.err = '';
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'payouts'); }).then(done);
+    });
+  }
+
+  // Короткая сводка реквизитов для строки: получатель по счёту и хвост счёта. Полный
+  // счёт в списке не светим — он виден в самой выплате.
+  function finPayoutReq(p) {
+    if (!p) return '';
+    var bits = [];
+    if (p.receiver) bits.push(p.receiver);
+    if (p.inn) bits.push('ИНН ' + p.inn);
+    else if (p.account) bits.push('счёт …' + String(p.account).slice(-4));
+    return bits.join(' · ');
+  }
+
+  function renderFinPayouts(view) {
+    if (!FIN.payouts) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPayouts(); return;
+    }
+    if (FIN.payouts === 'none') return finErrView(view);
+    var L = FIN.payouts, items = L.items || [], per = finPeriod();
+    // Вносит и правит выплаты финансист (finmodel_edit) ИЛИ ответственный за выплаты
+    // (finmodel_contractors). Тот, у кого ведомость только на просмотр (finmodel),
+    // список видит, но кнопок ввода нет.
+    var canFix = can('finmodel_edit|finmodel_contractors');
+    var fact = 0, plan = 0, factN = 0, biggest = 0, noDoc = 0;
+    items.forEach(function (i) {
+      if (i.status === 'план') plan += i.amount;
+      else { fact += i.amount; factN += 1; if (i.amount > biggest) biggest = i.amount;
+             if (!i.doc) noDoc += 1; }
+    });
+    var tiles = [
+      { label: 'Выплачено', value: finRub(fact), sub: 'фактом за период' },
+      { label: 'К оплате', value: finRub(plan), sub: 'намечено, не ушло' },
+      { label: 'Выплат', value: String(factN), sub: 'проведено фактом' },
+      { label: 'Без чека/акта', value: String(noDoc),
+        sub: noDoc ? 'расход не закрыт документом' : 'все подтверждены' },
+    ];
+
+    var rows = items.map(function (it) {
+      var sub = [
+        it.item,
+        finPayoutReq(it.payout),
+        it.comment || '',
+      ].filter(Boolean).map(esc).join(' · ');
+      // Документ — не второй статус, а подтверждение: тихий чип с зелёной галочкой,
+      // чтобы он не спорил с зелёным «факт». Громким остаётся только амбер «нет
+      // документа» — это и есть то, на что смотрят перед закрытием.
+      var docChip = it.doc
+        ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
+        : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
+      return '<div class="trow fin-grid fe-grid" data-payout="' + it.id + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st">' +
+          '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+            esc(it.status) + '</span>' + docChip +
+        '</span>' +
+      '</div>';
+    }).join('');
+
+    var addBtn = canFix
+      ? '<button class="qchip add" id="pp-add">' + ic('plus', 12) + 'Добавить выплату</button>'
+      : '';
+    view.innerHTML = statBar(tiles) +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Выплаты подрядчикам</div>' +
+            '<div class="s fe-s">каждая выплата сразу расход фонда подрядчиков в ведомости' +
+              (per ? ' «' + esc(per.name) + '»' : '') + '</div></div>' +
+          '<span class="list-count fin-count"><b>' + items.length + '</b> ' +
+            plural(items.length, 'выплата', 'выплаты', 'выплат') +
+            ' · факт <b>' + finRub(fact) + '</b>' +
+            (plan ? ' · план <b>' + finRub(plan) + '</b>' : '') + '</span>' +
+          addBtn +
+        '</div>' +
+        (rows ||
+          '<div class="empty">Выплат подрядчикам в этой ведомости ещё нет. ' +
+          (canFix ? 'Нажмите «Добавить выплату».' : 'Вносит их финансист.') + '</div>') +
+      '</div>';
+
+    var add = el('pp-add');
+    if (add) add.addEventListener('click', function () { finPayoutForm(null); });
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-payout]'), function (r) {
+        r.addEventListener('click', function () {
+          var id = r.getAttribute('data-payout');
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].id === id) return finPayoutForm(items[i]);
+          }
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  function finPayoutForm(line, opts) {
+    if (document.querySelector('.al-ov')) return;
+    var isNew = !line, p = (line && line.payout) || {}, doc = (line && line.doc) || {};
+    // Период берём явно: со страницы фонда правим строку в её ведомости (line.period_id),
+    // а новую выплату вносим в открытую ведомость (opts.period_id). На самом дашборде
+    // период задаёт полоса сверху (FIN.id).
+    var payPeriod = (opts && opts.period_id) || (line && line.period_id) || FIN.id;
+    var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '',
+                      item: '', comment: '', amount: '' };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var f = function (label, inner) {
+      return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+    };
+    var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
+    var num = function (x) { return x === '' || x === null || x === undefined ? '' : String(x); };
+
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Выплаты подрядчикам</div>' +
+            '<div class="al-title">' + (isNew ? 'Новая выплата' : 'Выплата подрядчику') +
+            '</div></div>' +
+          '<button class="al-x" id="pp-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Выплата сразу станет расходом фонда подрядчиков в ведомости. ' +
+          'После сохранения отчисления в фонды пересчитаются сами.</div>' +
+        '<div class="al-body">' +
+          '<div class="al-row">' +
+            f('Получатель <i>*</i>', '<input id="pp-who" class="al-in" maxlength="200" value="' +
+              v(s.counterparty) + '" placeholder="кому платим">') +
+            f('Сумма, ₽ <i>*</i>', '<input id="pp-sum" class="al-in" type="number" min="0" ' +
+              'step="0.01" value="' + num(s.amount) + '">') +
+          '</div>' +
+          '<div class="al-row">' +
+            f('За что / задание', '<input id="pp-item" class="al-in" maxlength="200" value="' +
+              v(s.item) + '" placeholder="проверка ДЗ, монтаж, тьюторство">') +
+            f('Дата', '<input id="pp-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+          '</div>' +
+          f('Это', '<select id="pp-st" class="al-in">' +
+            '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже заплатили</option>' +
+            '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>план, ещё не платили</option>' +
+            '</select>') +
+          '<div class="fin-note calm">Реквизиты подрядчика — по ним делают платёжку. ' +
+            'Хранятся при выплате, чтобы через год ответить «кому и куда платили».</div>' +
+          '<div class="al-row">' +
+            f('ФИО или ИП', '<input id="pp-rcv" class="al-in" maxlength="200" value="' +
+              v(p.receiver) + '" placeholder="ИП Уральскова Кристина">') +
+            f('ИНН', '<input id="pp-inn" class="al-in" maxlength="20" value="' +
+              v(p.inn) + '" placeholder="645419807080">') +
+          '</div>' +
+          '<div class="al-row">' +
+            f('Расчётный счёт', '<input id="pp-acc" class="al-in" maxlength="34" value="' +
+              v(p.account) + '" placeholder="40802…">') +
+            f('БИК', '<input id="pp-bic" class="al-in" maxlength="12" value="' +
+              v(p.bic) + '" placeholder="044525593">') +
+          '</div>' +
+          f('Банк', '<input id="pp-bank" class="al-in" maxlength="200" value="' +
+            v(p.bank) + '" placeholder="Альфа-банк">') +
+          '<div class="fin-note calm">Чек самозанятого («Мой налог») или акт ИП — ' +
+            'ссылкой. Закрывает расход перед налоговой.</div>' +
+          '<div class="al-row">' +
+            f('Документ', '<input id="pp-docn" class="al-in" maxlength="200" value="' +
+              v(doc.name) + '" placeholder="Чек Мой налог / Акт">') +
+            f('Ссылка на документ', '<input id="pp-docl" class="al-in" maxlength="500" value="' +
+              v(doc.link) + '" placeholder="https://lknpd.nalog.ru/…">') +
+          '</div>' +
+          f('Комментарий', '<input id="pp-note" class="al-in" maxlength="300" value="' +
+            v(s.comment) + '">') +
+          '<div class="ct-err" id="pp-err"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (isNew ? '' : '<button class="al-cancel fl-del" id="pp-del">Удалить</button>') +
+          '<button class="al-cancel" id="pp-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="pp-ok">Сохранить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('pp-x').addEventListener('click', close);
+    el('pp-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var val = function (id) { var e = el(id); return e ? e.value.trim() : ''; };
+    el('pp-ok').addEventListener('click', function () {
+      if (FIN.payBusy) return;
+      var err = el('pp-err');
+      var who = val('pp-who');
+      if (who.length < 2) { err.textContent = 'Напишите, кому платим'; return; }
+      var sum = Number(val('pp-sum'));
+      if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
+      var payload = {
+        id: line ? line.id : null, period_id: payPeriod, form: 'выплата-подрядчику',
+        counterparty: who, item: val('pp-item'), comment: val('pp-note'),
+        op_date: val('pp-date') || null, status: el('pp-st').value, amount: val('pp-sum'),
+        pay_receiver: val('pp-rcv'), pay_inn: val('pp-inn'), pay_account: val('pp-acc'),
+        pay_bic: val('pp-bic'), pay_bank: val('pp-bank'),
+        doc_name: val('pp-docn'), doc_link: val('pp-docl'),
+      };
+      FIN.payBusy = true;
+      err.textContent = '';
+      czSend('/admin/api/fin/operation', 'POST', payload)
+        .then(function () {
+          close();
+          // Выплата меняет фонд подрядчиков и каскад, а не только этот список — сбрасываем всё.
+          finForget(true);
+          renderAll();
+          showToast(isNew ? 'Выплата внесена' : 'Выплата поправлена');
+        })
+        .catch(function (e) { err.textContent = finLineErr(e); })
+        .then(function () { FIN.payBusy = false; });
+    });
+
+    var del = el('pp-del');
+    if (del) del.addEventListener('click', function () {
+      if (FIN.payBusy) return;
+      FIN.payBusy = true;
+      czSend('/admin/api/fin/operation?id=' + encodeURIComponent(line.id) +
+             '&period_id=' + encodeURIComponent(payPeriod), 'DELETE')
+        .then(function () {
+          close(); finForget(true); renderAll(); showToast('Выплата убрана');
+        })
+        .catch(function (e) { el('pp-err').textContent = finLineErr(e); })
+        .then(function () { FIN.payBusy = false; });
+    });
+  }
+
+  /* ── Операционные расходы ────────────────────────────────────────────────────
+     Узкий экран для того, кто вносит хозяйственные траты (сервисы, административное),
+     но всей ведомости с зарплатами не видит. Трата — это сразу строка расхода в
+     ведомости (form='операционный', флаг meta.ops на сервере), переносить ничего
+     руками не нужно. У кого есть вся ведомость, вносит это на «Прямых расходах». */
+  // Категория одна — сервисы и подписки: админ вносит только это (решение Романа
+  // 13.09). Выбора в форме нет, все операционные расходы идут в статью «сервисы».
+  function finLoadOpex() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadOpex(); });
+    finBusy('opex', function (done) {
+      api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('операционный')))
+        .then(function (r) {
+          if (finStale(r)) return;
+          FIN.opex = r; FIN.err = '';
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'opex'); }).then(done);
+    });
+  }
+
+  function renderFinOpex(view) {
+    if (!FIN.opex) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadOpex(); return;
+    }
+    if (FIN.opex === 'none') return finErrView(view);
+    var L = FIN.opex, items = L.items || [], per = finPeriod();
+    // Вносит и правит расход финансист (finmodel_edit) ИЛИ ответственный за расходы
+    // (finmodel_ops). Кто ведомость только смотрит — кнопок ввода нет.
+    var canFix = can('finmodel_edit|finmodel_ops');
+    var fact = 0, plan = 0, factN = 0, noDoc = 0;
+    items.forEach(function (i) {
+      if (i.status === 'план') plan += i.amount;
+      else { fact += i.amount; factN += 1; if (!i.doc) noDoc += 1; }
+    });
+    var tiles = [
+      { label: 'Проведено', value: finRub(fact), sub: 'фактом за период' },
+      { label: 'К оплате', value: finRub(plan), sub: 'по счетам, не ушло' },
+      { label: 'Расходов', value: String(factN), sub: 'проведено фактом' },
+      { label: 'Без чека', value: String(noDoc),
+        sub: noDoc ? 'расход не закрыт документом' : 'все с чеком' },
+    ];
+    var rows = items.map(function (it) {
+      var sub = it.comment ? esc(it.comment) : '';
+      var docChip = it.doc
+        ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'чек') + '</span>'
+        : (it.status === 'факт' ? '<span class="fst wait">нет чека</span>' : '');
+      return '<div class="trow fin-grid fe-grid" data-opex="' + it.id + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.item || it.counterparty || 'расход') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+          esc(it.status) + '</span>' + docChip + '</span>' +
+      '</div>';
+    }).join('');
+    var addBtn = canFix
+      ? '<button class="qchip add" id="ox-add">' + ic('plus', 12) + 'Добавить расход</button>'
+      : '';
+    view.innerHTML = statBar(tiles) +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Операционные расходы</div>' +
+            '<div class="s fe-s">хозяйственные траты, каждая сразу расход в ведомости' +
+              (per ? ' «' + esc(per.name) + '»' : '') + '</div></div>' +
+          '<span class="list-count fin-count"><b>' + items.length + '</b> ' +
+            plural(items.length, 'расход', 'расхода', 'расходов') +
+            ' · факт <b>' + finRub(fact) + '</b>' +
+            (plan ? ' · план <b>' + finRub(plan) + '</b>' : '') + '</span>' +
+          addBtn +
+        '</div>' +
+        (rows ||
+          '<div class="empty">Операционных расходов в этой ведомости ещё нет. ' +
+          (canFix ? 'Нажмите «Добавить расход».' : 'Вносит их финансист.') + '</div>') +
+      '</div>';
+    var add = el('ox-add');
+    if (add) add.addEventListener('click', function () { finOpexForm(null); });
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-opex]'), function (r) {
+        r.addEventListener('click', function () {
+          var id = r.getAttribute('data-opex');
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].id === id) return finOpexForm(items[i]);
+          }
+        });
+      });
+    }
+    pageAnim(view);
+  }
+
+  function finOpexForm(line) {
+    if (document.querySelector('.al-ov')) return;
+    var isNew = !line, doc = (line && line.doc) || {};
+    var s = line || { date: finTodayInPeriod(), status: 'факт', section: 'сервисы',
+                      counterparty: '', item: '', comment: '', amount: '' };
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    var f = function (label, inner) {
+      return '<label class="al-f"><span class="al-l">' + label + '</span>' + inner + '</label>';
+    };
+    var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
+    var num = function (x) { return x === '' || x === null || x === undefined ? '' : String(x); };
+    ov.innerHTML =
+      '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Операционные расходы</div>' +
+            '<div class="al-title">' + (isNew ? 'Новый расход' : 'Операционный расход') +
+            '</div></div>' +
+          '<button class="al-x" id="ox-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Расход сразу станет строкой в ведомости. После сохранения ' +
+          'отчисления в фонды пересчитаются сами.</div>' +
+        '<div class="al-body">' +
+          '<div class="al-row">' +
+            f('На что <i>*</i>', '<input id="ox-item" class="al-in" maxlength="200" value="' +
+              v(s.item) + '" placeholder="подписка Zoom, канцелярия">') +
+            f('Сумма, ₽ <i>*</i>', '<input id="ox-sum" class="al-in" type="number" min="0" ' +
+              'step="0.01" value="' + num(s.amount) + '">') +
+          '</div>' +
+          '<div class="al-row">' +
+            f('Дата', '<input id="ox-date" class="al-in" type="date" value="' + v(s.date) + '">') +
+            f('Это', '<select id="ox-st" class="al-in">' +
+              '<option value="факт"' + (s.status === 'план' ? '' : ' selected') + '>уже оплатили</option>' +
+              '<option value="план"' + (s.status === 'план' ? ' selected' : '') + '>счёт, ещё не платили</option>' +
+              '</select>') +
+          '</div>' +
+          f('Кому платим', '<input id="ox-who" class="al-in" maxlength="200" value="' +
+            v(s.counterparty) + '" placeholder="поставщик или сервис">') +
+          '<div class="fin-note calm">Чек или счёт — ссылкой. Закрывает расход документом.</div>' +
+          '<div class="al-row">' +
+            f('Документ', '<input id="ox-docn" class="al-in" maxlength="200" value="' +
+              v(doc.name) + '" placeholder="Чек, счёт">') +
+            f('Ссылка на документ', '<input id="ox-docl" class="al-in" maxlength="500" value="' +
+              v(doc.link) + '" placeholder="https://…">') +
+          '</div>' +
+          f('Комментарий', '<input id="ox-note" class="al-in" maxlength="300" value="' +
+            v(s.comment) + '">') +
+          '<div class="ct-err" id="ox-err"></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (isNew ? '' : '<button class="al-cancel fl-del" id="ox-del">Удалить</button>') +
+          '<button class="al-cancel" id="ox-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="ox-ok">Сохранить</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('ox-x').addEventListener('click', close);
+    el('ox-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    var val = function (id) { var e = el(id); return e ? e.value.trim() : ''; };
+    el('ox-ok').addEventListener('click', function () {
+      if (FIN.opexBusy) return;
+      var err = el('ox-err');
+      var item = val('ox-item');
+      if (item.length < 2) { err.textContent = 'Напишите, на что расход'; return; }
+      var sum = Number(val('ox-sum'));
+      if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
+      var payload = {
+        id: line ? line.id : null, period_id: FIN.id, form: 'операционный',
+        item: item, counterparty: val('ox-who'), comment: val('ox-note'),
+        op_date: val('ox-date') || null, status: el('ox-st').value,
+        amount: val('ox-sum'), section: 'сервисы',
+        doc_name: val('ox-docn'), doc_link: val('ox-docl'),
+      };
+      FIN.opexBusy = true; err.textContent = '';
+      czSend('/admin/api/fin/operation', 'POST', payload)
+        .then(function () {
+          close(); finForget(true); renderAll();
+          showToast(isNew ? 'Расход внесён' : 'Расход поправлен');
+        })
+        .catch(function (e) { err.textContent = finLineErr(e); })
+        .then(function () { FIN.opexBusy = false; });
+    });
+    var del = el('ox-del');
+    if (del) del.addEventListener('click', function () {
+      if (FIN.opexBusy) return;
+      FIN.opexBusy = true;
+      czSend('/admin/api/fin/operation?id=' + encodeURIComponent(line.id) +
+             '&period_id=' + encodeURIComponent(FIN.id), 'DELETE')
+        .then(function () {
+          close(); finForget(true); renderAll(); showToast('Расход убран');
+        })
+        .catch(function (e) { el('ox-err').textContent = finLineErr(e); })
+        .then(function () { FIN.opexBusy = false; });
+    });
+  }
+
+  /* ── Плановый налог по месяцам ───────────────────────────────────────────────
+     Годовая табличка АУСН 8%: сколько дохода пришло в каждом месяце и сколько с него
+     отложить на налог. Считается из ведомости сама, база — доход до эквайринга
+     (meta.gross у ЮKassa-строк). Год выбирается тут же, ведомость не при чем. */
+  function finLoadTax() {
+    var yr = FIN.taxYear || new Date().getFullYear();
+    finBusy('tax', function (done) {
+      api('/admin/api/fin/tax-year?year=' + yr)
+        .then(function (r) {
+          FIN.tax = r; FIN.taxYear = r.year; FIN.err = '';
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'tax'); }).then(done);
+    });
+  }
+  function renderFinTax(view) {
+    if (!FIN.tax) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadTax(); return;
+    }
+    if (FIN.tax === 'none') return finErrView(view);
+    var t = FIN.tax, yr = t.year, now = new Date();
+    var curM = (yr === now.getFullYear()) ? now.getMonth() + 1 : 0;
+    var maxInc = 0;
+    t.months.forEach(function (m) { if (m.income > maxInc) maxInc = m.income; });
+    var lo = (t.years && t.years.first) || yr, hi = Math.max((t.years && t.years.last) || yr,
+      now.getFullYear());
+    var yPrev = yr > lo, yNext = yr < hi;
+    var tiles = [
+      { label: 'Доход за год', value: finRub(t.income_total, 0), sub: 'база налога, до эквайринга' },
+      { label: 'Отложить на налог', value: finRub(t.tax_total, 0), sub: '8% АУСН за год' },
+      { label: 'В среднем за месяц', value: finRub(Math.round(t.tax_total / 12), 0),
+        sub: 'налог, если ровно' },
+    ];
+    var rows = t.months.map(function (m) {
+      var w = maxInc ? Math.max(0, Math.round(m.income / maxInc * 100)) : 0;
+      var cur = m.month === curM;
+      return '<div class="tx-row' + (cur ? ' cur' : '') + (m.income ? '' : ' empty') + '">' +
+        '<span class="tx-m">' + esc(m.name) + (cur ? ' <i>сейчас</i>' : '') + '</span>' +
+        '<span class="tx-bar"><i style="width:' + w + '%"></i></span>' +
+        '<span class="tx-inc num">' + (m.income ? finRub(m.income) : '—') + '</span>' +
+        '<span class="tx-tax num">' + (m.tax ? finRub(m.tax) : '—') + '</span>' +
+      '</div>';
+    }).join('');
+    view.innerHTML = statBar(tiles) +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Плановый налог по месяцам</div>' +
+            '<div class="s fe-s">сколько отложить на налог с дохода каждого месяца</div></div>' +
+          '<div class="tx-year">' +
+            '<button class="icobtn" id="tx-prev" aria-label="Предыдущий год"' +
+              (yPrev ? '' : ' disabled') + '>‹</button>' +
+            '<b class="num">' + yr + '</b>' +
+            '<button class="icobtn" id="tx-next" aria-label="Следующий год"' +
+              (yNext ? '' : ' disabled') + '>›</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tx-head"><span>Месяц</span><span></span><span>Доход</span>' +
+          '<span>Налог 8%</span></div>' +
+        '<div class="tx-list">' + rows +
+          '<div class="tx-row total"><span class="tx-m">За год</span><span class="tx-bar"></span>' +
+            '<span class="tx-inc num">' + finRub(t.income_total) + '</span>' +
+            '<span class="tx-tax num">' + finRub(t.tax_total) + '</span></div>' +
+        '</div>' +
+        '<div class="fin-note">' + ic('alert', 13) +
+          'Доход берется из ведомости сам, база — до вычета эквайринга (полная сумма ' +
+          'оплаты клиента). Это плановый расчет, отложить на фонд налогов; итог по ' +
+          'декларации считает бухгалтер.</div>' +
+      '</div>';
+    var go = function (d) {
+      return function () { FIN.taxYear = yr + d; FIN.tax = null; renderAll(); finLoadTax(); };
+    };
+    var pv = el('tx-prev'), nx = el('tx-next');
+    if (pv && yPrev) pv.addEventListener('click', go(-1));
+    if (nx && yNext) nx.addEventListener('click', go(1));
+    pageAnim(view);
   }
 
   /* ── Сервисы и обязательства ────────────────────────────────────────────────
@@ -21922,6 +22603,7 @@
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
         return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+                 atts: m.attachments || [], sending: m.sending === true,
                  // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
                  // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
                  // копия правила разъедется с первой в день, когда канал его поменяет.
@@ -22041,6 +22723,24 @@
     }
   }
 
+  /* Вложение в пузыре — та же карточка файла, что в обсуждениях (.rm-catt): второго
+     рецепта для одной и той же сущности в системе быть не должно. Входящий файл лежит в
+     хранилище платформы, и на него есть ссылка; наш исходящий нигде не хранится — копить
+     чужие документы незачем, — поэтому он показан строкой без ссылки. */
+  function tgFileCard(a) {
+    a = a || {};
+    // Длинное имя режем по основе, а расширение оставляем целым: «podborka-vuzov….pdf»
+    // говорит, что это за файл, а «podborka-vuzov….» — уже нет.
+    var nm = String(a.name || 'файл'), dot = nm.lastIndexOf('.');
+    var base = dot > 0 ? nm.slice(0, dot) : nm, ext = dot > 0 ? nm.slice(dot) : '';
+    var inner = ic('doc', 13) + '<span class="fnm"><span>' + esc(base) + '</span>' +
+      (ext ? '<i>' + esc(ext) + '</i>' : '') + '</span>' +
+      (a.size ? '<i class="sz num">' + fmtSize(a.size) + '</i>' : '');
+    return a.url
+      ? '<a class="rm-catt file" href="' + esc(a.url) + '" target="_blank" rel="noopener">' + inner + '</a>'
+      : '<span class="rm-catt file">' + inner + '</span>';
+  }
+
   function buildThread(msgs) {
     if (msgs === null) {
       return '<div class="tg-sk">' +
@@ -22074,6 +22774,14 @@
         foot = '<span class="tg-by">' + ic('pen', 9) + 'изменено' +
                (m.edBy ? ' · ' + esc(m.edBy) : '') + '</span>' + (foot || '');
       }
+      var atts = m.atts || [];
+      var files = atts.length ? '<div class="tg-atts">' + atts.map(tgFileCard).join('') + '</div>' : '';
+      // Бот пишет в историю «[файл] имя», когда подписи к документу не было. Карточка
+      // вложения говорит то же самое, и второй раз это читать незачем.
+      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || ''));
+      if (m.sending) {
+        foot = '<span class="tg-by">' + ic('clock', 9) + 'отправляется…</span>';
+      }
       var editing = state.msgEdit && String(state.msgEdit) === String(m.id);
       var bub = editing
         ? '<div class="tg-bub tg-edbox">' +
@@ -22083,7 +22791,8 @@
               '<button class="tg-edok" data-edsave="' + m.id + '">Сохранить</button>' +
             '</div>' +
           '</div>'
-        : '<div class="tg-bub">' + mdMsg(m.text) + '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
+        : '<div class="tg-bub">' + files + (fileTxt ? '' : mdMsg(m.text)) +
+            '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
             ((m.canEdit || m.canDel) ? '<span class="tg-acts">' +
               (m.canEdit ? '<button class="tg-edit" data-edit="' + m.id + '" title="Изменить текст у клиента">' + ic('pen', 11) + '</button>' : '') +
               (m.canDel ? '<button class="tg-del" data-del="' + m.id + '" title="Убрать сообщение у клиента">' + ic('x', 11) + '</button>' : '') +
@@ -22199,6 +22908,62 @@
       if (dlg.ai_on) { state.dialogAi[c.id] = false; }
       renderView();
     }
+  }
+
+  /* ── ФАЙЛ КЛИЕНТУ ──
+     Менеджер прикладывает документ прямо в переписке (подборка вузов, памятка, договор).
+     Байты идут base64 в JSON — тем же способом, что вложения задач и импорт встречи:
+     второй приемник ради одного файла не нужен. В канал его кладет бот, у него токены.
+     Предел тот же, что на сервере: файл едет одним куском, и «подборка на 50 МБ» просто
+     повисла бы в загрузке. */
+  var CONV_FILE_MAX_MB = 20;
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' МБ';
+    if (n >= 1024) return Math.round(n / 1024) + ' КБ';
+    return n + ' Б';
+  }
+
+  /* Отправка файла в диалог. msgs — массив сообщений открытого треда (туда кладем пузырь),
+     redraw — перерисовка этого треда. Оптимистично тут только ПОЯВЛЕНИЕ пузыря, и он до
+     ответа сервера помечен «отправляется»: файл уходит секунды, и пустой экран все это
+     время читается как «кнопка не сработала». */
+  function sendConvFile(convId, file, msgs, redraw) {
+    if (!file) return;
+    if (file.size > CONV_FILE_MAX_MB * 1024 * 1024) {
+      showToast('Файл больше ' + CONV_FILE_MAX_MB + ' МБ — столько клиенту не отправить');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onerror = function () { showToast('Файл не прочитался — попробуйте еще раз'); };
+    reader.onload = function () {
+      var src = String(reader.result || '');
+      if (!src) { showToast('Файл не прочитался — попробуйте еще раз'); return; }
+      var tmp = { role: 'assistant', sender: 'manager', text: '', at: new Date().toISOString(),
+                  attachments: [{ name: file.name, mime: file.type || '', size: file.size, outgoing: true }],
+                  sending: true, _local: true };
+      msgs.push(tmp); redraw();
+      api('/admin/api/bot/conversations/' + convId + '/send-file', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, mime: file.type || '', data: src }),
+      }).then(function (res) {
+        tmp.sending = false;
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Файл не доставлен: ' + res.reason) : 'Файл не доставлен клиенту');
+        }
+        redraw();
+      }).catch(function (e) {
+        // Не ушло — пузырь убираем совсем: файла у клиента нет, и след в переписке
+        // соврал бы менеджеру. Причину сервер объясняет словами, показываем ее.
+        var i = msgs.indexOf(tmp); if (i >= 0) msgs.splice(i, 1);
+        var why = (e && e.body && e.body.detail) || '';
+        showToast(why || 'Файл не отправлен — проверьте связь с ботом');
+        redraw();
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   /* тумблер поверхностей инбокса: переписки бота ↔ обсуждения по задачам */
@@ -22631,6 +23396,8 @@
           : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
       '<div class="tg-compose">' +
+        '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
+          '<input type="file" id="tg-file" hidden></label>' +
         '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
           'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
         '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
@@ -22653,6 +23420,16 @@
       inboxSend(c, t);
     }
     if (snd) snd.addEventListener('click', send);
+    var fin = el('tg-file');
+    if (fin) fin.addEventListener('change', function () {
+      var f = fin.files && fin.files[0]; fin.value = '';   // один и тот же файл можно выбрать снова
+      if (!f) return;
+      var d = state.bot.msgs[c.id];
+      if (!d) { showToast('Переписка ещё грузится — секунду'); return; }
+      d.messages = d.messages || [];
+      if (c.ai_on !== false) inboxSetAi(c, false);   // отправил менеджер — бот замолкает
+      sendConvFile(c.id, f, d.messages, function () { refreshOpenThread(true, true); });
+    });
     if (inp) {
       composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
       inp.addEventListener('input', function () { composerSave(); composerGrow(inp); });
@@ -22691,6 +23468,7 @@
     return (d.messages || []).map(function (m) {
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
       return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+               atts: m.attachments || [], sending: m.sending === true,
                canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
                canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
@@ -22741,6 +23519,8 @@
         matched +
         '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
         '<div class="m-dlg-compose">' +
+          '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
+            '<input type="file" id="dlg-file" hidden></label>' +
           '<textarea id="dlg-in" rows="1" placeholder="' +
             (aiOn ? 'Ответить — вы перехватите диалог у бота' : 'Ответить клиенту') + '"></textarea>' +
           '<button class="tg-send" id="dlg-send" title="Отправить (Enter)">' + ic('send', 16) + '</button>' +
@@ -28352,6 +29132,16 @@
       });
     }
     if (dSend) dSend.addEventListener('click', dlgSend);
+    var dFile = el('dlg-file');
+    if (dFile) dFile.addEventListener('change', function () {
+      var f = dFile.files && dFile.files[0]; dFile.value = '';
+      if (!f || !dcv) return;
+      dconv.messages = dconv.messages || [];
+      dcv.ai_enabled = false;   // отправил менеджер — бот в этом диалоге замолкает (так же на бэке)
+      sendConvFile(dcv.user_id, f, dconv.messages, function () {
+        if (state.modalSection === 'dialog') renderModalContent();
+      });
+    });
     if (dIn) dIn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
     });

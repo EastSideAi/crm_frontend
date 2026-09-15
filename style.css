@@ -4014,6 +4014,19 @@ button.tsk-mimp { cursor: pointer; }
 .tg-compose .tg-send, .m-dlg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover, .m-dlg-compose .tg-send:hover { background: var(--blue-d); }
+/* скрепка: отправить клиенту файл прямо из переписки. Тихая, в отличие от синей
+   кнопки отправки: основное действие здесь всё-таки ответ словами. */
+.tg-clip { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  color: var(--ink-2); cursor: pointer; transition: background .15s, color .15s; }
+.tg-clip:hover { background: var(--fill); color: var(--blue); }
+.tg-compose .tg-clip, .m-dlg-compose .tg-clip { order: -1; }
+/* имя файла: основа сжимается, расширение остаётся целым */
+.rm-catt.file .fnm { display: flex; min-width: 0; align-items: baseline; }
+.rm-catt.file .fnm > span { min-width: 0; }
+.rm-catt.file .fnm > i { font-style: normal; flex: none; }
+/* размер файла рядом с именем — тише имени, цифры табличные */
+.rm-catt.file .sz { font-style: normal; font-size: 11px; color: var(--ink-3); flex: none; }
+.tg-msg.out .rm-catt.file .sz { color: rgba(255,255,255,.7); }
 .tg-chead .ai-toggle { flex: none; }
 
 /* инбокс на всю высоту: контейнер фиксируется под экран, скроллит только внутри */
@@ -5933,6 +5946,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    безубыточности). Амбер тут врал бы — он означает «посмотри, что-то не так». */
 .fin-note.calm { background: var(--fill); color: var(--ink-2); }
 .fin-note.calm svg { color: var(--ink-3); }
+/* Калькулятор планового налога: поле дохода в строке .fkv не должно распирать ряд
+   (у .al-in ширина 100%), поэтому оно по содержимому и прижато вправо. */
+.fin-taxrow .al-in { width: 150px; text-align: right; }
+.fin-taxref-t { margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink-3); }
+.fin-taxref { margin-top: 4px; }
+.fin-taxref .fkv { padding: 8px 0; font-size: 12.5px; }
 
 .fin-groups { margin-top: 12px; }
 .fg + .fg { margin-top: 16px; }
@@ -5965,6 +5985,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
    отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
 .trow.click:hover .fo-what b { color: var(--blue); }
+/* Имя клиента в «Доходах» — ссылка в его карточку (data-lead). Отдельно от .trow.click:
+   тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
+.fin-lead { cursor: pointer; }
+.fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
@@ -5972,6 +5996,47 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* Чип приложенного документа (выплаты подрядчикам): нейтральная плашка с зелёной
+   галочкой. Не залитый зелёный, чтобы не читаться вторым статусом рядом с «факт». */
+.fst.doc { color: var(--ink-2); background: var(--fill); gap: 4px; }
+.fst.doc svg { color: var(--green); flex: none; }
+
+/* Плановый налог по месяцам: годовая табличка. Доход тихий, налог — акцент (это то,
+   что откладывают). У текущего месяца синяя полоса и синие цифры. */
+.tx-year { display: flex; align-items: center; gap: 8px; }
+.tx-year .num { font-size: 15px; font-weight: 700; min-width: 52px; text-align: center; }
+.tx-year .icobtn[disabled] { opacity: .35; cursor: default; }
+.tx-head, .tx-row { display: grid; grid-template-columns: 116px 1fr 118px 118px;
+  align-items: center; gap: 14px; }
+.tx-head { padding: 6px 0 10px; margin-top: 4px; font: 600 11px 'Manrope', sans-serif;
+  color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--line); }
+.tx-head span:nth-child(3), .tx-head span:nth-child(4),
+.tx-row .tx-inc, .tx-row .tx-tax { text-align: right; }
+.tx-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.tx-row:last-child { border-bottom: 0; }
+/* глобальный .empty (text-align:center) протекал в .tx-row.empty и центровал
+   месяц — держим название всегда по левому краю */
+.tx-m { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+.tx-m i { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--blue);
+  margin-left: 7px; text-transform: uppercase; letter-spacing: .03em; }
+.tx-bar { height: 6px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.tx-bar i { display: block; height: 100%; background: var(--blue-tint); border-radius: inherit;
+  transition: width .8s var(--ease); }
+.tx-inc { font-size: 13.5px; color: var(--ink-2); }
+.tx-tax { font-size: 14px; font-weight: 700; color: var(--ink); }
+.tx-row.cur .tx-bar i { background: var(--blue); }
+.tx-row.cur .tx-m, .tx-row.cur .tx-tax { color: var(--blue-d); }
+.tx-row.empty .tx-inc, .tx-row.empty .tx-tax { color: var(--ink-3); font-weight: 500; }
+.tx-row.total { border-top: 2px solid var(--line-2); border-bottom: 0;
+  margin-top: 4px; padding-top: 14px; }
+.tx-row.total .tx-m { font-weight: 700; }
+.tx-row.total .tx-tax { color: var(--blue-d); font-size: 15px; }
+@media (max-width: 640px) {
+  .tx-head, .tx-row { grid-template-columns: 1fr auto auto; gap: 10px; }
+  .tx-bar { display: none; }
+  .tx-head span:nth-child(2) { display: none; }
+}
 
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
    документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
@@ -5991,6 +6056,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
+.fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
+.fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }
+button.fsp-via { cursor: pointer; }
 
 /* Прямые расходы: у блока свой заголовок с итогом и своей кнопкой, между блоками
    воздух больше, чем внутри — блоки читаются как отдельные направления. */
