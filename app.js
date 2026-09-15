@@ -4245,14 +4245,40 @@
       (c.open ? ic('check', 13) : ic('x', 12)) + '</button></td>';
   }
 
+  /* Поиск и потолок строк. В команде два десятка человек, и список читается
+     глазами, но таблица людей обязана выдерживать базу, где их тысячи: на копии
+     боевой базы в превью их 16 849, и без потолка страница рисовала 350 тысяч
+     узлов и замирала на десяток секунд. Поэтому фильтр по имени, логину и роли
+     плюс первые ACC_MAX строк. */
+  var ACC_MAX = 200;
+
+  function accMatch(u, q) {
+    if (!q) return true;
+    var role = (ROLES[u.role] && ROLES[u.role].label) || u.role || '';
+    return ((u.name || '') + ' ' + (u.login || '') + ' ' + role).toLowerCase().indexOf(q) >= 0;
+  }
+
   function accDraw(view) {
-    var cs = ACC.courses, us = ACC.users;
+    var cs = ACC.courses, all = ACC.users;
+    var q = (state.accQ || '').trim().toLowerCase();
+    var us = all.filter(function (u) { return accMatch(u, q); });
+    var total = us.length;
+    var more = total - ACC_MAX;
+    if (more > 0) us = us.slice(0, ACC_MAX);
     var body;
-    if (!us.length) {
+    if (!all.length) {
       body = '<div class="att-empty">' + ic('award', 22) +
         '<div>В команде пока некого учить. Заведите сотрудника в разделе «Команда».</div></div>';
     } else {
-      body = '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
+      body = '<div class="list-tools acc-find">' +
+        '<div class="searchwrap' + (state.accQ ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="acc-q" class="search" type="search" placeholder="Найти сотрудника" ' +
+          'autocomplete="off" value="' + esc(state.accQ || '') + '">' +
+          '<button class="s-clear" id="acc-qx">' + ic('x', 12) + '</button></div>' +
+        '<span class="acc-cnt">' + (q ? 'нашлось ' + total : total + ' в команде') + '</span></div>' +
+        (total ? '' : '<div class="att-empty">' + ic('award', 22) +
+          '<div>Никого не нашли. Проверьте написание или очистите поиск.</div></div>') +
+        (total ? '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
         '<th>Сотрудник</th>' +
         cs.map(function (c) { return '<th class="att-c">' + esc(c.title) + '</th>'; }).join('') +
         '</tr></thead><tbody>' + us.map(function (u) {
@@ -4264,18 +4290,31 @@
               for (var i = 0; i < u.courses.length; i++) if (u.courses[i].id === c.id) cell = u.courses[i];
               return cell ? accCell(u, cell) : '<td class="att-c"></td>';
             }).join('') + '</tr>';
-        }).join('') + '</tbody></table></div>' +
-        '<div class="acc-legend">' +
+        }).join('') + '</tbody></table></div>' : '') +
+        (more > 0 ? '<div class="acc-more">Показаны первые ' + ACC_MAX + ' из ' + total +
+          '. Найдите человека поиском.</div>' : '') +
+        (total ? '<div class="acc-legend">' +
           '<span><i class="acc-lg on"></i>открыт</span>' +
           '<span><i class="acc-lg off"></i>закрыт</span>' +
           '<span><i class="acc-lg man"></i>решение руководителя, а не роль</span>' +
           '<span class="acc-hint">Клик переключает. Вернули как по роли — отметка снимается.</span>' +
-        '</div>';
+        '</div>' : '');
     }
     return body;
   }
 
   function accBind(view) {
+    var q = view.querySelector('#acc-q'), qx = view.querySelector('#acc-qx');
+    if (q) {
+      q.addEventListener('input', function () {
+        state.accQ = q.value;
+        attDraw(view);
+        // Перерисовка убивает поле вместе с фокусом, а человек продолжает печатать.
+        var f = view.querySelector('#acc-q');
+        if (f) { f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+      });
+    }
+    if (qx) qx.addEventListener('click', function () { state.accQ = ''; attDraw(view); });
     Array.prototype.forEach.call(view.querySelectorAll('.acc-cell'), function (b) {
       b.addEventListener('click', function () {
         var uid = +b.getAttribute('data-u'), cid = b.getAttribute('data-c');

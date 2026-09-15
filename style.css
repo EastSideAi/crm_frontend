@@ -7844,6 +7844,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .acc-lg.on { background: var(--green-soft); }
 .acc-lg.man { background: var(--card); box-shadow: inset 0 0 0 2px var(--blue); }
 .acc-hint { margin-left: auto; }
+/* Поиск по людям в панели доступа: команда небольшая, но таблица обязана
+   выдерживать базу в тысячи учеток — без фильтра и потолка строк страница
+   замирала на копии базы в превью (16 849 человек, 350 тысяч узлов). */
+.acc-find { border-bottom: 1px solid var(--line); }
+.acc-cnt { font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; }
+.acc-more { padding: 12px 24px 0; font-size: 12px; color: var(--ink-3); }
 @media (max-width: 720px) { .acc-hint { margin-left: 0; } }
 
 /* ── Недельный цикл: «Неделя», «Потом», «Команда» (ADR 001) ──────────────────
