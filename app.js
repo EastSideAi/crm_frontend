@@ -3581,7 +3581,11 @@
   // Данные на снимках всегда демонстрационные: курс открыт и внешним людям, а на
   // боевых экранах персональные данные несовершеннолетних (152-ФЗ).
   var AC_SHOT_DIR = 'assets/academy/';
-  var AC_SHOTS_READY = {};
+  // Значение — расширение файла: снимки интерфейса живут в png (текст четкий),
+  // кабинеты платформы в jpg (там фотографии, png весил бы полтора мегабайта).
+  var AC_SHOTS_READY = { 'portal-path': 'png', 'roadmap': 'png', 'card-full': 'png',
+    'card-apply': 'png', 'card-tasks': 'png', 'notes': 'png',
+    'cabinet-parent': 'jpg', 'cabinet-student': 'jpg' };
 
   function acById(id) { for (var i = 0; i < AC_ALL.length; i++) if (AC_ALL[i].id === id) return AC_ALL[i]; return null; }
   function acC() { return state.ac && state.ac.course; }
@@ -3800,7 +3804,7 @@
     }).join('');
     var body;
     if (sc.file && AC_SHOTS_READY[sc.file]) {
-      body = '<figure class="ac-shot"><img src="' + esc(AC_SHOT_DIR + sc.file) + '.png" alt="' + esc(sc.h) + '" loading="lazy">' +
+      body = '<figure class="ac-shot"><img src="' + esc(AC_SHOT_DIR + sc.file + '.' + AC_SHOTS_READY[sc.file]) + '" alt="' + esc(sc.h) + '" loading="lazy">' +
         '<figcaption class="ac-cap">Данные на снимке демонстрационные</figcaption></figure>';
     } else {
       body = '<div class="ac-shot-soon"><span class="ac-badge">' + (sc.soon ? 'экран в работе' : 'снимок готовим') + '</span>' +
