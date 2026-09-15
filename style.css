@@ -1007,6 +1007,7 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
   .tb-goals { display: none; }
   .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
+  .prio-sel { margin-left: 0; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -1161,6 +1162,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-archive#m-hide:hover svg { color: var(--red); }
 .m-archive#m-unhide:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
 .m-archive#m-unhide:hover svg { color: var(--blue); }
+/* «Войти как» — кабинет клиента его глазами. Уводит из CRM, поэтому тон синий,
+   как у всего, что открывается на стороне клиента, а не красный, как архив. */
+.m-archive#m-sublogin { margin-right: auto; }
+.m-archive#m-sublogin:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
+.m-archive#m-sublogin:hover svg { color: var(--blue); }
 
 /* ── секции БЕЗ верхней полоски (воздух + подзаголовок) ── */
 .m-sec { margin-top: 30px; }
@@ -2798,6 +2804,9 @@ button.tr-crumb:hover { color: var(--blue); }
    по клику на его месте встает выбор человека. */
 .tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
+.tsk-mwho.tsk-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
+.tsk-mwho.tsk-edit svg { color: var(--blue); }
+.tsk-sec[hidden] { display: none; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
@@ -3188,6 +3197,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
 .tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
 .tsk-resrow .bp { height: 36px; }
+/* Редактор задачи: та же панель, что у сдачи результата, поля формы как в «Новой задаче». */
+.tsk-editform .al-f { gap: 5px; }
+.tsk-editform .al-sel { background: #fff; }
+.tsk-editform .tsk-resrow { justify-content: flex-end; }
+.tsk-editform .tsk-resrow .al-cancel { margin-left: 0; }
+/* Порядок задач: системный селект .al-sel.sm по содержимому, не во всю ширину.
+   Выбранный порядок подсвечен синим тинтом, как тумблер периода .rh-onoff. */
+.prio-sel { display: inline-block; width: auto; margin-left: 10px; }
+.prio-sel .al-sel { width: auto; }
+.prio-sel.on .al-sel { background: var(--blue-tint); color: var(--blue); }
+/* Соседние сегменты в шапке плана: внешний зазор больше внутреннего, иначе восемь пилюль читаются одной лентой. */
+.wk-top > .pay-seg + .pay-seg { margin-left: 8px; }
 .tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .tsk-picked:empty { display: none; }
 .tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
@@ -3518,6 +3539,7 @@ button.tr-crumb:hover { color: var(--blue); }
 @keyframes dotsAnim { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
 /* статус-меню (клик по пилюле в таблице) */
+#smenu.ddmenu--over-modal { z-index: 90; }   /* выпадашка из карточки — поверх нее (.modal z-index 81) */
 #smenu { position: fixed; z-index: 70; background: #fff; border: 1px solid var(--line-2);
   border-radius: 14px; padding: 6px; box-shadow: 0 14px 40px -16px rgba(15,19,32,.3);
   display: flex; flex-direction: column; gap: 1px; min-width: 188px; }
@@ -8297,4 +8319,52 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      подписана шапкой, и пустая клетка держит сетку. */
   .map-grid .map-c.map-empty { display: none; }
   .map-bar .list-count { margin-left: 0; }
+}
+
+/* ── Раздел «Почта» карточки: адрес кейса и переписка с вузом ──
+   Плотно и тихо: якорь раздела — сам адрес, письма идут ровным списком на
+   полупрозрачных разделителях, без рамок и зебры. */
+.mail-hero { display: flex; align-items: center; gap: 16px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.mail-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.mail-hero-b { flex: 1; min-width: 0; }
+.mail-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.mail-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+.mail-addr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.mail-addr-v { flex: 1; min-width: 180px; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); word-break: break-all; }
+
+.mail-form { display: grid; gap: 8px; margin-top: 16px; }
+.mail-form input, .mail-form textarea { font-family: inherit; font-size: 13.5px; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  background: #fff; color: var(--ink); width: 100%; }
+.mail-form textarea { resize: vertical; }
+.mail-form input::placeholder, .mail-form textarea::placeholder { color: var(--ink-3); }
+.mail-form input:focus, .mail-form textarea:focus { outline: none; border-color: var(--blue); }
+.mail-form .bp { justify-self: start; }
+.mail-off { margin-top: 16px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.mail-list { margin-top: 20px; }
+.mail-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.mail-row:last-child { border-bottom: none; }
+.mail-rhead { display: flex; align-items: center; gap: 9px; }
+.mail-dir { flex: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-pill); }
+.mail-dir.in { background: var(--green-soft); color: var(--green-ink); }
+.mail-dir.out { background: var(--blue-tint); color: var(--blue-d); }
+.mail-who { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-docs { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.mail-when { flex: none; font-size: 12px; color: var(--ink-3); }
+.mail-subj { margin-top: 6px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.mail-text { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+
+/* телефон: форма и шапка письма перестают быть строкой, ничего не уезжает за экран */
+@media (max-width: 520px) {
+  .mail-addr { gap: 8px; }
+  .mail-addr-v { min-width: 100%; }
+  .mail-rhead { flex-wrap: wrap; }
+  .mail-who { flex: 1 1 100%; white-space: normal; }
 }

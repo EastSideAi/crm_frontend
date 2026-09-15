@@ -75,7 +75,7 @@
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine', boardGoal: '', meetLog: null, meetOpen: {},
+    myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     news: null, newsUnread: 0,
     teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
@@ -96,7 +96,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -106,7 +106,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        mkTab: state.mkTab, mkDays: state.mkDays,
+        mkTab: state.mkTab, mkDays: state.mkDays, taskPrio: state.taskPrio || '',
       }));
     } catch (e) {}
   }
@@ -231,7 +231,11 @@
     { key: 'viewed',    label: 'Открыли разбор',        hint: 'увидели результат',       test: function (l) { return hasEv(l, 'viewed_result'); } },
     { key: 'cta',       label: 'Нажали «записаться»',   hint: 'клик по CTA',             test: function (l) { return hasEv(l, 'clicked_book_call') || hasEv(l, 'clicked_messenger'); } },
     { key: 'booked',    label: 'Оставили заявку',       hint: 'контакт + слот',          test: function (l) { return !!l.booking; } },
-    { key: 'client',    label: 'Стали клиентами',       hint: 'статус в CRM',            test: function (l) { return !!l.paid; } },
+    /* Последняя ступень считается по факту оплаты, а не по статусу в карточке:
+       статус «клиент» менеджер ставит рукой, деньги — факт. Подпись раньше врала
+       про «статус в CRM», и было непонятно, почему человек со статусом «клиент»
+       не виден во вкладке «Клиенты» — она фильтрует по этому же признаку. */
+    { key: 'client',    label: 'Стали клиентами',       hint: 'есть оплата в карточке',  test: function (l) { return !!l.paid; } },
   ];
   function hasEv(l, t) { return (l.events || []).indexOf(t) !== -1; }
 
@@ -249,6 +253,7 @@
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
       alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
+      mail: '<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3.2 6.2l6.1 4.4a1.2 1.2 0 0 0 1.4 0l6.1-4.4"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
       spark: '<path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor" stroke="none"/>',
@@ -2066,7 +2071,7 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy_review'] },
@@ -3281,6 +3286,41 @@
       '</svg>' + legend + '</div>';
   }
 
+  /* Схема карточки клиента с открытым разделом «Почта»: слева список разделов,
+     справа адрес ученика, форма письма и лента переписки. Рисуем по той же сетке,
+     что и gdWin, чтобы обе картинки курса читались как одна семья. */
+  function gdMail() {
+    var items = '';
+    for (var i = 0; i < 6; i++) {
+      var on = i === 4;
+      items += '<rect x="12" y="' + (30 + i * 15) + '" width="72" height="11" rx="3.5" ' +
+        'class="' + (on ? 'gw-on' : 'gw-it') + '"/>';
+    }
+    var letters = '';
+    for (var j = 0; j < 2; j++) {
+      letters += '<rect x="108" y="' + (84 + j * 20) + '" width="182" height="16" rx="5" class="gw-row"/>';
+    }
+    var marks = [[300, 36, 'адрес ученика'], [300, 64, 'письмо в вуз'], [300, 92, 'ответы вуза']];
+    var dots = marks.map(function (m, i) {
+      return '<circle cx="' + m[0] + '" cy="' + m[1] + '" r="8" class="gw-dot"/>' +
+        '<text x="' + m[0] + '" y="' + (m[1] + 3.4) + '" class="gw-dn">' + (i + 1) + '</text>';
+    }).join('');
+    var legend = '<div class="gd-leg">' + marks.map(function (m, i) {
+      return '<span><i>' + (i + 1) + '</i>' + esc(m[2]) + '</span>';
+    }).join('') + '</div>';
+    return '<div class="gd-art"><svg viewBox="0 0 320 132" role="img" aria-label="Схема карточки клиента с разделом Почта">' +
+      '<rect x="1" y="1" width="318" height="130" rx="12" class="gw-app"/>' +
+      '<path d="M96 1v130" class="gw-div"/>' +
+      '<rect x="12" y="12" width="44" height="9" rx="4.5" class="gw-logo"/>' +
+      '<path d="M108 16h72" class="gw-top"/>' +
+      items +
+      '<text x="18" y="' + (30 + 4 * 15 + 8) + '" class="gw-lb">Почта</text>' +
+      '<rect x="108" y="30" width="122" height="13" rx="6.5" class="gw-row-on"/>' +
+      '<rect x="108" y="52" width="182" height="24" rx="5" class="gw-row"/>' +
+      letters + dots +
+      '</svg>' + legend + '</div>';
+  }
+
   var GD = {
     start: {
       lead: 'CRM — это общий рабочий стол команды. Тут лежит все, что мы знаем про учеников и заявки, ' +
@@ -3378,6 +3418,19 @@
         'Следующий шаг оформляйте задачей со сроком. Без нее человек забывается через два дня.',
       ],
       tip: 'Пустая карточка без ответственного — это потерянный клиент. Половина заявок теряется именно так.',
+    },
+    mail: {
+      lead: 'У ученика свой почтовый адрес на нашем домене, и живет он в карточке. Из нее пишем в приемную ' +
+        'комиссию, в нее же приходит ответ вуза. Личная почта для подачи не годится: ответ уйдет мимо ' +
+        'карточки, и найти его будет негде.',
+      art: function () { return gdMail(); },
+      dos: [
+        'Карточка клиента, раздел «Почта», кнопка «Завести адрес». Адрес соберется из имени и фамилии, тезкам добавится цифра.',
+        'Письмо пишется прямо тут: кому, тема, текст. Уходит оно с адреса ученика, а не с вашего личного.',
+        'Ответ вуза ложится в эту же карточку вместе с вложениями. Отдельно проверять почту не нужно.',
+        'Адрес заводим тем, с кем заключен договор. Это почта для подачи документов, а не для переписки с семьей.',
+      ],
+      tip: 'В приемной комиссии читает человек. Пишите по-английски, коротко и по делу: кто ученик, какая программа, какой вопрос.',
     },
     inbox: {
       lead: 'Раздел «Диалоги» — переписки клиентов с ботом и обсуждения внутри команды. Сюда попадает человек, ' +
@@ -6167,8 +6220,7 @@
      карточек он покажет (включая «Сделано»), а не «живых»: иначе чип и доска
      считают разное. Прогресс по шагам — дугой, точное значение в подсказке.
      Цель без единой задачи на доске — пустой фильтр, а не информация: чип не показываем. */
-  function boardGoalOpts(dept) {
-    var list = dept.tasks;
+  function boardGoalOpts(dept, list) {
     var of = function (id) { return list.filter(function (t) { return id === 'none' ? !t.parent_id : t.parent_id === id; }); };
     var goals = dept.goals.filter(function (g) { return of(g.id).length; }).sort(function (a, b) {
       return of(b.id).length - of(a.id).length || String(a.title).localeCompare(String(b.title), 'ru');
@@ -6180,8 +6232,8 @@
     if (of('none').length) opts.push({ id: 'none', title: 'Без цели', n: of('none').length, pct: null });
     return opts;
   }
-  function boardGoalStrip(dept) {
-    var opts = boardGoalOpts(dept);
+  function boardGoalStrip(dept, list) {
+    var opts = boardGoalOpts(dept, list);
     var on = function (o) { return String(state.boardGoal) === String(o.id); };
     var chips = opts.map(function (o) {
       return '<button type="button" class="qchip tb-gchip' + (on(o) ? ' on' : '') + '" data-bgoal="' + o.id + '"' +
@@ -6193,8 +6245,8 @@
     return '<div class="tb-goals">' + chips + '</div>';
   }
   // На телефоне полоса целей не помещается в шапку — та же выборка одним селектом рядом с поиском.
-  function boardGoalSelect(dept) {
-    return '<span class="al-selwrap tb-gsel"><select class="al-sel sm" id="tb-gsel">' + boardGoalOpts(dept).map(function (o) {
+  function boardGoalSelect(dept, list) {
+    return '<span class="al-selwrap tb-gsel"><select class="al-sel sm" id="tb-gsel">' + boardGoalOpts(dept, list).map(function (o) {
       return '<option value="' + o.id + '"' + (String(state.boardGoal) === String(o.id) ? ' selected' : '') + '>' +
         esc(o.title) + (o.pct == null ? '' : ' · ' + o.pct + '%') + (o.n ? ' (' + o.n + ')' : '') + '</option>';
     }).join('') + '</select></span>';
@@ -6227,13 +6279,17 @@
       return;
     }
     var gave = dept ? 'dept' : state.boardWho === 'gave';
-    var list = dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine;
+    var q = (state.taskQ || '').toLowerCase().trim();
+    // base — то, что доска покажет без отбора по цели: по нему же считают чипы целей.
+    var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine);
+    if (q) base = base.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
+    var list = base;
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
     }
-    var q = (state.taskQ || '').toLowerCase().trim();
-    if (q) list = list.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var order = function (a, b) {
+      var p = prioCmp(a, b);
+      if (p) return p;
       if (!!a.overdue !== !!b.overdue) return a.overdue ? -1 : 1;
       if (!a.due_at || !b.due_at) return a.due_at ? -1 : b.due_at ? 1 : 0;
       return new Date(a.due_at) - new Date(b.due_at);
@@ -6263,15 +6319,15 @@
     var how = howOff ? '' : '<div class="rh-how tb-how"><div class="rh-hh">' + ic('kanban', 13) + 'Как работает доска' +
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
-    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + whoSeg + '<span class="wk-spacer"></span>' +
+    view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
         '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        (dept ? boardGoalSelect(state.myboard.dept) : '') + '</div>' +
+        (dept ? boardGoalSelect(state.myboard.dept, base) : '') + '</div>' +
       how +
-      (dept ? boardGoalStrip(state.myboard.dept) : '') +
+      (dept ? boardGoalStrip(state.myboard.dept, base) : '') +
       '<div class="kb-wrap tb-wrap">' + cols + '</div>';
-    wirePlanMode(view); wireDeptChips(view);
+    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-bgoal]'), function (b) {
       b.addEventListener('click', function () { state.boardGoal = b.getAttribute('data-bgoal'); renderView(); });
     });
@@ -6423,7 +6479,7 @@
       return;
     }
     var w = state.myweek, r = w.r || {};
-    var tasks = w.tasks || [];
+    var tasks = prioSort(w.tasks || []);
     var q = (state.taskQ || '').toLowerCase().trim();
     if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
     var cap = r.cap || 0, load = r.load || 0;
@@ -6470,11 +6526,12 @@
       body = accept + wkBands(tasks, function (t) { return wkRow(t); });
     }
 
-    var head = planModeSeg() + deptChips();
+    var head = planModeSeg() + deptChips() + prioSeg();
     if (state.planMode === 'day' && sh === 0 && !q) {
       // Текущая неделя — это день. Панель сверху без поиска: на экране дня
       // искать нечего, десять строк видны целиком.
-      renderMyDay(view, w, r, head + '<span class="wk-spacer"></span>' + meter + act +
+      var wd = state.taskPrio ? Object.assign({}, w, { tasks: tasks }) : w;
+      renderMyDay(view, wd, r, head + '<span class="wk-spacer"></span>' + meter + act +
         '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
       var dg = view.querySelector('.dy-grid');
       if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []));
@@ -6493,7 +6550,7 @@
       '</div>' + laterBand(w.later || []);
     }
 
-    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wireLater(view);
+    wkWireNav(view); wirePlanMode(view); wireDeptChips(view); wirePrio(view); wireLater(view);
     if (el('tsk-new')) el('tsk-new').addEventListener('click', function () { openNewTask(); });
     var qi = el('tsk-q');
     if (qi) {
@@ -6560,7 +6617,7 @@
     }).join('');
     view.innerHTML = '<div class="wk-top">' + planModeSeg() + deptChips() + '<span class="wk-spacer"></span>' + nav + '</div>' +
       stats + weeks;
-    wirePlanMode(view); wireDeptChips(view);
+    wirePlanMode(view); wireDeptChips(view); wirePrio(view);
     function go(d) { state.monthShift = Math.max(-12, Math.min(3, (state.monthShift || 0) + d)); state.mymonth = null; renderView(); }
     if (el('mo-prev')) el('mo-prev').addEventListener('click', function () { go(-1); });
     if (el('mo-next')) el('mo-next').addEventListener('click', function () { go(1); });
@@ -7302,6 +7359,39 @@
      галочкой тут же. Цель и шаг заводятся одной строкой: поле и Enter, остальное
      наследуется (кому — ведущий цели, срок — срок цели, отдел — отдел цели) и
      правится в карточке. Форма из восьми полей осталась для подробностей. */
+  /* Порядок в плане (Павел 14.09.2026: «сначала срочные, потом сначала важные
+     или обычные»). Это не фильтр, а сортировка: выбранная ось всплывает наверх,
+     остальное остается ниже, ничего не прячется. Срочность — срок: просрочено,
+     сегодня, завтра; важность — флаг. Общий для дня, недели и доски,
+     запоминается, как срез направления. */
+  var PRIO_MODES = [['', 'Обычный порядок'], ['urg', 'Сначала срочные'], ['imp', 'Сначала важные']];
+  function urgRank(t) {
+    var c = dueLabel(t).cls;
+    return t.overdue || c === 'due-over' ? 0 : c === 'due-now' ? 1 : c === 'due-soon' ? 2 : 3;
+  }
+  function prioKey(t) {
+    var m = state.taskPrio || '';
+    if (!m) return 0;
+    var u = urgRank(t), i = t.important ? 0 : 1;
+    return m === 'urg' ? u * 2 + i : i * 4 + u;
+  }
+  function prioCmp(a, b) { return prioKey(a) - prioKey(b); }
+  function prioSort(list) {
+    if (!state.taskPrio) return list;
+    return list.map(function (t, i) { return [t, i]; })
+      .sort(function (x, y) { return prioCmp(x[0], y[0]) || x[1] - y[1]; })
+      .map(function (p) { return p[0]; });
+  }
+  function prioSeg() {
+    return '<span class="al-selwrap prio-sel' + (state.taskPrio ? ' on' : '') + '"><select class="al-sel sm" id="prio-sel" aria-label="Порядок задач">' +
+      PRIO_MODES.map(function (m) {
+        return '<option value="' + m[0] + '"' + ((state.taskPrio || '') === m[0] ? ' selected' : '') + '>' + m[1] + '</option>';
+      }).join('') + '</select></span>';
+  }
+  function wirePrio(view) {
+    var sel = view.querySelector('#prio-sel');
+    if (sel) sel.addEventListener('change', function () { state.taskPrio = sel.value; saveUi(); renderView(); });
+  }
   function deptChips() {
     var all = [''].concat(DEPT_LIVE);
     return '<div class="dept-seg pay-seg">' + all.map(function (d) {
@@ -8191,6 +8281,11 @@
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
             ? '<button class="tsk-mwho tsk-watch" id="tk-watch" title="Исполнители и наблюдатели">' + ic('leads', 12) + 'роли' + chev() + '</button>'
             : '') +
+          // Название, суть и критерий правятся тут же (Павел 14.09.2026: «один раз
+          // поставил, потом тяжело отредактировать»). Закрытую не правим: история.
+          ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
+            ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('pen', 12) + 'изменить</button>'
+            : '') +
           (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
@@ -8198,8 +8293,26 @@
           (t.parent_id ? '<button class="tsk-mwho tsk-up" id="tk-up">' + ic('target', 12) + esc(t.parent_title || 'к цели') + '</button>' : '') +
         '</div>' +
         '<div class="al-body">' +
-          (t.details ? '<div class="tsk-sec"><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
-          (t.result_expect ? '<div class="tsk-sec tsk-crit"><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
+          // Редактор стоит у самого текста, который правит, а не в конце ленты.
+          '<div class="tsk-resform tsk-editform" id="tk-editf" hidden>' +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="tk-etitle" class="al-in" maxlength="200" value="' + esc(t.title || '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Что нужно сделать</span>' +
+              '<textarea id="tk-edetails" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Суть задачи: что и для кого">' + esc(t.details || '') + '</textarea></label>' +
+            '<label class="al-f"><span class="al-l">Что считается сделанным</span>' +
+              '<textarea id="tk-eexpect" class="al-in al-ta" rows="2" maxlength="4000" placeholder="По чему поймем, что готово">' + esc(t.result_expect || '') + '</textarea></label>' +
+            (t.parent_id ? '' :
+              '<label class="al-f"><span class="al-l">Направление</span><span class="al-selwrap">' +
+                '<select id="tk-edept" class="al-sel">' + [''].concat(Object.keys(DEPTS)).map(function (d) {
+                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') + '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
+                }).join('') + '</select></span></label>') +
+            '<div class="tsk-resrow">' +
+              '<button class="al-cancel" id="tk-ecx">Отмена</button>' +
+              '<button class="bp" id="tk-eok">Сохранить</button>' +
+            '</div>' +
+          '</div>' +
+          (t.details ? '<div class="tsk-sec" data-editsec><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
+          (t.result_expect ? '<div class="tsk-sec tsk-crit" data-editsec><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
           // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
           // приемка это сравнение двух блоков, а не поиск доказательств в ленте.
           (t.result_text || files.length || (isAssignee && t.status !== 'cancel')
@@ -8354,6 +8467,41 @@
         body.scrollTop = body.scrollHeight;
       };
       el('tk-rescx').addEventListener('click', function () { setRes(''); });
+
+      var editB = el('tk-edit'), editF = el('tk-editf');
+      if (editB) {
+        var setEdit = function (on) {
+          // setRes('') возвращает футер, поэтому сначала он, потом прячем.
+          if (on) setRes('');
+          editF.hidden = !on;
+          var footActs = ov.querySelector('.tsk-acts');
+          if (footActs) footActs.hidden = !!on;
+          // Пока правим, старые «Что нужно сделать» / «Что считается сделанным»
+          // прячем: два одинаковых текста рядом, и не видно, какой живой.
+          Array.prototype.forEach.call(ov.querySelectorAll('[data-editsec]'), function (x) { x.hidden = !!on; });
+          if (on) { body.scrollTop = 0; el('tk-etitle').focus(); }
+        };
+        editB.addEventListener('click', function () { setEdit(editF.hidden); });
+        el('tk-ecx').addEventListener('click', function () { setEdit(false); });
+        el('tk-eok').addEventListener('click', function () {
+          var title = (el('tk-etitle').value || '').trim();
+          if (!title) { showToast('Название пустым быть не может'); el('tk-etitle').focus(); return; }
+          var patch = { title: title, details: (el('tk-edetails').value || '').trim(), result_expect: (el('tk-eexpect').value || '').trim() };
+          var dsel = el('tk-edept');
+          if (dsel && dsel.value !== (t.dept || '')) patch.dept = dsel.value;
+          var ok = el('tk-eok'); ok.disabled = true;
+          apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
+            showToast('Сохранено');
+            state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+            api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            ok.disabled = false;
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 403 ? 'Править может постановщик, исполнитель или руководитель' : 'Не удалось сохранить'));
+          });
+        });
+      }
       el('tk-resfile').addEventListener('change', function (e) {
         readFiles(e.target.files, function (got) {
           picked = picked.concat(got).slice(0, RES_MAX_FILES);
@@ -23543,6 +23691,7 @@
     { id: 'arrival', label: 'Заезд',      icon: 'flight' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
+    { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
     { id: 'dialog', label: 'Диалог',     icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
@@ -24440,6 +24589,76 @@
     return { id: id, lead: lead, d: d, base: base, crm: crm };
   }
 
+  /* ── «Войти как»: кабинет глазами клиента ─────────────────────────────────
+     Семья пишет «у меня ничего не видно», а мы видим только CRM — другой экран и
+     другие данные. Кнопка открывает платформу ровно в том виде, в каком ее видит
+     ученик или мама. Сервер выдает часовой токен ТОЛЬКО на просмотр и пишет каждый
+     заход в журнал (backend routers/sublogin.py) — менять в чужом кабинете нельзя
+     ничего, иначе от имени ребенка в чат тьютору ушло бы сообщение.
+
+     Список аккаунтов семьи держим готовым к нажатию (грузим при открытии карточки):
+     браузер режет window.open, случившийся ПОСЛЕ ответа сервера, и человек видел бы
+     «кнопка не работает». Холодный путь — открыть пустую вкладку сразу по жесту и
+     довести ее до адреса, когда сервер ответит. */
+  var slAccs = {};
+
+  function slLoad(id) {
+    if (slAccs[id]) return Promise.resolve(slAccs[id]);
+    return api('/admin/api/sublogin/case/' + id).then(function (r) {
+      slAccs[id] = (r && r.accounts) || [];
+      return slAccs[id];
+    });
+  }
+
+  function slClick(id, anchor) {
+    if (slAccs[id]) return slPick(id, anchor, null);
+    var w = window.open('', '_blank');
+    slLoad(id).then(function () { slPick(id, anchor, w); }).catch(function () {
+      if (w) w.close();
+      showToast('Не удалось открыть — проверь сеть');
+    });
+  }
+
+  function slPick(id, anchor, win) {
+    var accs = slAccs[id] || [];
+    if (!accs.length) {
+      if (win) win.close();
+      return showToast('Никто из семьи еще не завел кабинет', 'входить не под кем');
+    }
+    if (accs.length === 1) return slGo(id, accs[0], win || window.open('', '_blank'));
+    if (win) win.close();
+    openDropdown(anchor, accs.map(function (a) {
+      return { v: a.account_id, label: (a.name || 'без имени') + ' — ' + a.relation_ru };
+    }), '', function (v) {
+      var acc = accs.filter(function (a) { return a.account_id === v; })[0];
+      if (acc) slGo(id, acc, window.open('', '_blank'));
+    });
+    // Меню открыто ИЗ карточки, а она сама лежит поверх страницы (z-index 81):
+    // на своей обычной высоте выпадашка оказывалась под ней и выглядела как
+    // «кнопка не сработала». И раскрываем ее ВВЕРХ: кнопка стоит в подвале
+    // карточки, вниз места нет и меню ложилось прямо на нее.
+    var m = el('smenu');
+    if (m) {
+      m.classList.add('ddmenu--over-modal');
+      m.style.top = Math.max(8, anchor.getBoundingClientRect().top - m.offsetHeight - 6) + 'px';
+    }
+  }
+
+  function slGo(caseId, acc, win) {
+    apiSend('/admin/api/sublogin/start', 'POST',
+      { account_id: acc.account_id, case_id: caseId },
+      function (r) {
+        if (!r || !r.url) { if (win) win.close(); return showToast('Не удалось открыть кабинет'); }
+        if (win) win.location = r.url; else window.open(r.url, '_blank');
+        showToast('Кабинет открыт: ' + (acc.name || 'клиент'), 'только просмотр, менять нельзя');
+      },
+      function (code) {
+        if (win) win.close();
+        showToast(code === 403 ? 'Войти как клиент может только супер-админ'
+                               : 'Не удалось открыть кабинет');
+      });
+  }
+
   function renderDrawer(keepScroll) {
     var modal = el('modal');
     var id = state.drawerId;
@@ -24532,6 +24751,10 @@
         '<div id="m-side"></div>' +
       '</div>' +
       '<div class="m-foot">' +
+        (can('sublogin')
+          ? '<button class="m-archive" id="m-sublogin" title="Открыть кабинет глазами клиента — то же, что видит он. Только просмотр: менять там ничего нельзя">' +
+            ic('ext', 14) + 'Войти как</button>'
+          : '') +
         (crm.hidden
           ? '<button class="m-archive" id="m-unhide" title="Вернуть лида из архива">' + ic('refresh', 14) + 'Вернуть из архива</button>'
           : '<button class="m-archive" id="m-hide" title="Скрыть лида в архив (мягко, данные останутся)">' + ic('x', 14) + 'Скрыть</button>') +
@@ -24544,6 +24767,13 @@
     });
     var unhideBtn = el('m-unhide');
     if (unhideBtn) unhideBtn.addEventListener('click', function () { rmHideLead(id, false); });
+    var slBtn = el('m-sublogin');
+    if (slBtn) {
+      // stopPropagation: общий обработчик документа гасит всплывающие меню по клику
+      // где угодно, и выбор «ученик/родитель» закрывался бы в тот же миг.
+      slBtn.addEventListener('click', function (e) { e.stopPropagation(); slClick(id, slBtn); });
+      slLoad(id).catch(function () {});   // к нажатию список уже на руках
+    }
     var lnk = el('m-link');
     if (lnk) lnk.addEventListener('click', function () { copyText(leadUrl(id), lnk); });
     var mp = el('m-prev'), mn = el('m-next');
@@ -24573,6 +24803,7 @@
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
+    if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
@@ -24585,6 +24816,7 @@
     else if (s === 'arrival') host.innerHTML = buildArrivalSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
+    else if (s === 'mail') host.innerHTML = buildMailSection(id);
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
@@ -24637,6 +24869,7 @@
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
+                 mail: ['Почта', 'Поднимаю переписку с вузами'],
                  arrival: ['Заезд', 'Поднимаю заезд ученика'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
@@ -24651,6 +24884,124 @@
     }
     return '<div class="m-ctitle">' + head[0] + '</div>' +
       (head[1] ? '<div class="m-csub">' + head[1] + '</div>' : '') + body;
+  }
+
+  /* ── РАЗДЕЛ «Почта»: свой адрес кейса и переписка с вузом ──
+     Адрес — строка в базе, а не ящик у почтового хостера: ловушка домена принимает
+     письма на ЛЮБОЙ адрес, поэтому «завести» стоит ноль и работает сразу. Входящее
+     приносит воркер, поэтому переписка перечитывается с бэка, а не копится на фронте. */
+  var MAIL = {};        // id лида -> блок с бэка
+  var MAIL_BUSY = {};   // id лида -> идет загрузка
+
+  function loadMail(id, force) {
+    if (MAIL_BUSY[id]) return;
+    if (force) delete MAIL[id];
+    MAIL_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/mail').then(function (r) {
+      MAIL_BUSY[id] = false; MAIL[id] = r;
+      if (state.drawerId === id && state.modalSection === 'mail') renderModalContent();
+    }).catch(function (e) {
+      MAIL_BUSY[id] = false;
+      if (e.message !== '403') { MAIL[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function mailRow(m) {
+    var incoming = m.direction === 'in';
+    var who = incoming ? m.from : m.to;
+    var docs = (m.doc_ids || []).length;
+    return '<div class="mail-row">' +
+      '<div class="mail-rhead">' +
+        '<span class="mail-dir ' + (incoming ? 'in' : 'out') + '">' + (incoming ? 'вуз' : 'мы') + '</span>' +
+        '<span class="mail-who">' + esc(who || '') + '</span>' +
+        (docs ? '<span class="mail-docs">' + ic('clip', 12) + docs + '</span>' : '') +
+        '<span class="mail-when">' + fmtWhen(m.created_at) + '</span>' +
+      '</div>' +
+      '<div class="mail-subj">' + esc(m.subject || 'Без темы') + '</div>' +
+      (m.text ? '<div class="mail-text">' + esc(m.text) + '</div>' : '') +
+    '</div>';
+  }
+
+  function buildMailSection(id) {
+    var b = MAIL[id];
+    if (!b) { loadMail(id); return skeletonSection('mail'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Почта</div>' +
+        '<div class="m-csub">Не удалось загрузить переписку. Обновите страницу.</div>';
+    }
+    var head = '<div class="m-ctitle">Почта</div>' +
+      '<div class="m-csub">Свой адрес ученика на нашем домене: с него пишем в приемные комиссии, и ответы вузов приходят сюда же. Личная почта для подачи не годится: ответ уйдет мимо карточки.</div>';
+
+    if (!b.address) {
+      return head +
+        '<div class="mail-hero empty">' +
+          '<div class="mail-hero-ic">' + ic('mail', 20) + '</div>' +
+          '<div class="mail-hero-b"><div class="mail-empty-t">Адреса еще нет</div>' +
+          '<div class="mail-empty-s">Заведется за секунду и будет выглядеть как имя.фамилия@eastside.study.</div></div>' +
+          '<button class="bp sm" id="mail-create">' + ic('plus', 13) + 'Завести адрес</button>' +
+        '</div>';
+    }
+
+    var form = b.can_send
+      ? '<div class="mail-form">' +
+          '<input type="text" id="mail-to" placeholder="Кому, адрес приемной комиссии">' +
+          '<input type="text" id="mail-subj" placeholder="Тема письма">' +
+          '<textarea id="mail-body" rows="4" placeholder="Текст письма"></textarea>' +
+          '<button class="bp sm" id="mail-send">' + ic('send', 13) + 'Отправить</button>' +
+        '</div>'
+      // молчащая кнопка хуже честной причины: тьютор должен понимать, почему нельзя
+      : '<div class="mail-off">Отправка пока не настроена — письма принимаются, но написать из карточки нельзя.</div>';
+
+    var list = (b.messages || []).length
+      ? (b.messages || []).map(mailRow).join('')
+      : '<div class="mail-off">Писем пока нет.</div>';
+
+    return head +
+      '<div class="mail-addr">' +
+        '<span class="mail-addr-v" id="mail-addr-v">' + esc(b.address) + '</span>' +
+        '<button class="bp ghost sm" id="mail-copy">' + ic('copy', 12) + 'Скопировать</button>' +
+        '<button class="bp ghost sm" id="mail-refresh">' + ic('refresh', 12) + 'Обновить</button>' +
+      '</div>' + form +
+      '<div class="mail-list">' + list + '</div>';
+  }
+
+  function wireMail(id, host) {
+    var create = el('mail-create');
+    if (create) create.addEventListener('click', function () {
+      create.disabled = true;
+      apiSend('/admin/api/leads/' + id + '/mail/address', 'POST', {}, function () {
+        showToast('Адрес готов');
+        loadMail(id, true);
+      });
+    });
+
+    var copy = el('mail-copy');
+    if (copy) copy.addEventListener('click', function () {
+      var v = el('mail-addr-v');
+      if (v) copyText(v.textContent, copy);
+    });
+
+    var refresh = el('mail-refresh');
+    if (refresh) refresh.addEventListener('click', function () { loadMail(id, true); });
+
+    var send = el('mail-send');
+    if (send) send.addEventListener('click', function () {
+      var to = (el('mail-to').value || '').trim();
+      var subject = (el('mail-subj').value || '').trim();
+      var text = (el('mail-body').value || '').trim();
+      if (!to || !subject || !text) { showToast('Заполните кому, тему и текст'); return; }
+      send.disabled = true;
+      api('/admin/api/leads/' + id + '/mail/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: to, subject: subject, text: text }),
+      }).then(function () {
+        showToast('Письмо ушло');
+        loadMail(id, true);
+      }).catch(function (e) {
+        send.disabled = false;
+        if (e.message !== '403') showToast('Письмо не ушло: ' + e.message);
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Английский»: входной тест DET, пересдачи, доступ ──
@@ -27889,6 +28240,7 @@
 
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
+    if (state.modalSection === 'mail') wireMail(id, host);
 
     // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {
