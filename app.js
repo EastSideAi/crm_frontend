@@ -3935,7 +3935,6 @@
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
     if (sc.type === 'howto') extra = acHowHTML(sc);
-    if (sc.type === 'howto') extra = acHowHTML(sc);
     // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
     // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
     if (sc.type === 'q') return acQHTML(sc);
@@ -4037,20 +4036,6 @@
     return '<div class="ac-chk" data-chk="' + esc(sc.id) + '">' +
       '<div class="ac-chk-top"><span class="ac-cap">Отметьте, что уже умеете</span><span class="ac-chk-n" id="ac-cn">' + done + ' из ' + (sc.items || []).length + '</span></div>' +
       '<ul class="ac-chk-list">' + items + '</ul></div>' + (sc.note ? acNote(sc.note) : '');
-  }
-
-  /* Итог урока: что сделать и ГДЕ это в системе. Заведен по правке Павла
-     15.09.2026 («тьютор должен четко понимать, что нужно сделать, а самое главное
-     как грамотно это сделать и с помощью нашей песочницы»). Курс объяснял смысл
-     этапа, но человек выходил из урока без ответа «куда мне теперь нажимать»,
-     поэтому у каждого шага своя вторая строка с адресом экрана. */
-  function acHowHTML(sc) {
-    var rows = (sc.items || []).map(function (it, i) {
-      return '<li><span class="ac-hn">' + (i + 1) + '</span>' +
-        '<div class="ac-hb"><b>' + esc(it[0]) + '</b>' +
-        '<span class="ac-hw">' + ic('go', 12) + esc(it[1]) + '</span></div></li>';
-    }).join('');
-    return '<ol class="ac-how">' + rows + '</ol>' + (sc.note ? acNote(sc.note) : '');
   }
 
   /* Итог урока: что сделать и ГДЕ это в системе. Заведен по правке Павла

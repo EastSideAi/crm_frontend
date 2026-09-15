@@ -7627,6 +7627,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .academy .ac-stage { padding: 22px 18px 18px; min-height: 0; }
   .academy .ac-h { font-size: 23px; }
   .academy .ac-fin .ac-h { font-size: 22px; }
+  /* Шапка сцены не сжимается ниже своего содержимого: название урока, кнопка
+     чтения и точки шагов — все три с минимальной шириной. На узком экране их
+     сумма шире карточки, и карточка уезжала за край вместе со всем текстом
+     (Павел 15.09.2026: «с телефона все съезжает»). Поэтому переносим строку. */
+  .academy .ac-stage-top { flex-wrap: wrap; row-gap: 10px; }
+  .academy .ac-dots { flex-wrap: wrap; }
+}
+
+/* На телефоне точки шагов убираем совсем: место они занимают больше, чем кнопка
+   чтения, а тот же «Шаг 6 из 11» написан словами внизу экрана. */
+@media (max-width: 560px) {
+  .academy .ac-dots { display: none; }
 }
 
 .academy .ac-dl-wrap { margin-top: 18px; }
