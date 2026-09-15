@@ -310,6 +310,7 @@
       pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
       compass: '<circle cx="10" cy="10" r="7.2"/><path d="M12.8 7.2 8.9 8.9 7.2 12.8l3.9-1.7 1.7-3.9z" fill="currentColor" stroke="none"/>',
       lock: '<rect x="4" y="8.5" width="12" height="8.5" rx="2.2"/><path d="M7 8.5V6.4a3 3 0 0 1 6 0v2.1"/>',
+      pause: '<rect x="6" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/><rect x="11" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -3636,6 +3637,19 @@
     'card-apply': 'png', 'card-tasks': 'png', 'notes': 'png',
     'cabinet-parent': 'jpg', 'cabinet-student': 'jpg' };
 
+  /* Озвучка реплик преподавателя. Карту собирает tools/voice.mjs, файлы лежат
+     в assets/academy/voice. Звука у экрана может не быть — тогда кнопки просто
+     нет, урок от этого не ломается. */
+  var AC_VOICE = window.AC_VOICE || {};
+  var AC_VOICE_DIR = 'assets/academy/voice/';
+  var AC_AU = null;          // один проигрыватель на всю Академию
+
+  function acVoiceStop() {
+    if (!AC_AU) return;
+    AC_AU.pause();
+    AC_AU = null;
+  }
+
   function acById(id) { for (var i = 0; i < AC_ALL.length; i++) if (AC_ALL[i].id === id) return AC_ALL[i]; return null; }
   function acC() { return state.ac && state.ac.course; }
   function acLessons() { return acC().lessons; }
@@ -3812,7 +3826,7 @@
     el('ac-bar').style.width = Math.round(passed / total * 100) + '%';
   }
 
-  function acScreenHTML(sc) {
+  function acScreenHTML(sc, key) {
     var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
     var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>';
     var body = (sc.body || []).map(function (p, i) { return '<p class="ac-p' + (i === 0 && sc.type === 'read' ? ' lead' : '') + '">' + esc(p) + '</p>'; }).join('');
@@ -3843,8 +3857,8 @@
     if (sc.type === 'stage') extra = acStageHTML(sc);
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
-    if (sc.type === 'q') return acQHTML(sc) + acSay(sc);
-    return eye + h + body + extra + acSay(sc);
+    if (sc.type === 'q') return acQHTML(sc) + acSay(sc, key);
+    return eye + h + body + extra + acSay(sc, key);
   }
 
   /* Снимок экрана с подписями. Файла еще нет — рисуем схему: подписи те же,
@@ -3948,9 +3962,13 @@
      реплика своими словами, как на занятии (Павел 15.09.2026: «слайды должны
      объясняться как учителем»). Этот же текст потом читает озвучка — сценарий
      один, второй копии не заводим. */
-  function acSay(sc) {
+  function acSay(sc, key) {
     if (!sc.say) return '';
-    return '<div class="ac-say"><div class="ac-sic">' + ic('chat', 14) + '</div><div class="ac-st">' + sc.say + '</div></div>';
+    var file = key && AC_VOICE[key];
+    var play = file ? '<button class="ac-play" type="button" data-src="' + esc(AC_VOICE_DIR + file) + '">' +
+      ic('play', 15) + '<span>Слушать</span></button>' : '';
+    return '<div class="ac-say"><div class="ac-sic">' + ic('chat', 14) + '</div>' +
+      '<div class="ac-st">' + sc.say + play + '</div></div>';
   }
 
   function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
@@ -3968,7 +3986,8 @@
     var A = state.ac, L = acLessons()[A.li], sc = L.screens[A.si];
     var scr = el('ac-screen');
     el('ac-label').textContent = 'Урок ' + (A.li + 1) + ' · ' + L.t;
-    scr.innerHTML = acScreenHTML(sc);
+    acVoiceStop();
+    scr.innerHTML = acScreenHTML(sc, acC() + '-' + A.li + '-' + A.si);
     acAnim(scr);
     var dots = el('ac-dots'); dots.innerHTML = '';
     L.screens.forEach(function (_, i) { var d = document.createElement('i'); d.className = i === A.si ? 'on' : (i < A.si ? 'past' : ''); dots.appendChild(d); });
@@ -3986,8 +4005,32 @@
     }
     if (sc.type === 'chklist') acBindChk(sc);
     acZoomBind(scr);
+    acVoiceBind(scr);
     acBuildRoute();
   }
+  /* Кнопка «Слушать» под репликой. Один раз нажали — дальше урок сам читает
+     каждый следующий экран: браузер разрешает звук только после действия человека,
+     поэтому первое нажатие обязательно, а остальные уже нет. */
+  function acVoiceBind(scr) {
+    var b = scr.querySelector('.ac-play');
+    if (!b) return;
+    var lab = b.querySelector('span');
+    function icon(name, text) { b.innerHTML = ic(name, 15) + '<span>' + text + '</span>'; lab = b.querySelector('span'); }
+    function start() {
+      acVoiceStop();
+      AC_AU = new Audio(b.getAttribute('data-src'));
+      AC_AU.play().then(function () { icon('pause', 'Пауза'); b.classList.add('on'); })
+        .catch(function () { icon('play', 'Слушать'); b.classList.remove('on'); });
+      AC_AU.addEventListener('ended', function () { icon('play', 'Слушать'); b.classList.remove('on'); });
+    }
+    b.addEventListener('click', function () {
+      if (AC_AU && !AC_AU.paused) { acVoiceStop(); icon('play', 'Слушать'); b.classList.remove('on'); return; }
+      state.acVoiceAuto = true;
+      start();
+    });
+    if (state.acVoiceAuto) start();
+  }
+
   /* Снимок открывается во весь экран по клику. В колонке урока интерфейс CRM виден
      мелко, а на снимке как раз показывают, куда нажимать (Павел 15.09.2026: «очень
      мелко и не видно»). */
