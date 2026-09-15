@@ -82,13 +82,14 @@
             <div class="tg-cn">Марина К.</div>
             <div class="tg-cs"><span class="tg-st ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/></svg>Отвечает бот</span></div>
           </div>
+          <span class="tg-cwrap"><button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</button></span>
         </div>
         <div class="tg-thread">
           <div class="tg-day"><span>Сегодня</span></div>
           <div class="tg-msg in"><div class="tg-bub">Здравствуйте! Дочь хочет в медицинский в Китае. С чего начать?<span class="tg-mt">14:02</span></div></div>
           <div class="tg-msg out ai"><div class="tg-bub">Здравствуйте! Начинаем с бесплатной диагностики — она покажет реальные шансы и что подтянуть. Займет 10 минут.<span class="tg-mt">14:03</span></div><div class="tg-by">Бот</div></div>
           <div class="tg-msg in"><div class="tg-bub">А сколько по времени займет язык?<span class="tg-mt">14:20</span></div></div>
-          <div class="tg-msg out mgr"><div class="tg-bub">Марина, при старте с нуля до уровня подачи — около 8 месяцев интенсива. Расскажу подробнее на созвоне.<span class="tg-mt">14:24</span></div><div class="tg-by">Анна · куратор</div></div>
+          <div class="tg-msg out mgr"><div class="tg-bub">Марина, при старте с нуля до уровня подачи — около 8 месяцев интенсива. Расскажу подробнее на созвоне.<span class="tg-mt">14:24</span></div><div class="tg-by">Анна · тьютор</div></div>
           <div class="tg-msg out mgr undelivered"><div class="tg-bub">Удобно завтра в 18:00?<span class="tg-mt">14:25</span></div><div class="tg-by warn">Не доставлено</div></div>
         </div>
         <div class="handoff-banner">
@@ -105,6 +106,15 @@
         </div>
       </div>
     </div>
+    <div class="sc-lab" style="margin-top:22px">КНОПКА КАРТОЧКИ В ШАПКЕ ЧАТА · .tg-cact</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+      <button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</button>
+      <button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка<span class="tg-cw">по нику</span></button>
+      <button class="tg-cact new"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>
+      <span class="tg-cact off"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</span>
+    </div>
+    <p class="sc-note">Тихая таблетка рядом с тумблером бота: якорь экрана — переписка. Открывает карточку в НОВОЙ вкладке, диалог остается на месте. Связки в базе нет, сшивает бэкенд: сшито по нику — говорим об этом пометкой <code>.tg-cw</code>. Карточки нет вовсе (боту пишет кто угодно) — та же кнопка ее заводит, <code>.new</code>. Четвертое состояние — пока грузится связка, <code>.off</code>.</p>
+
     <p class="sc-note">Фон ленты <code>#F3F5F8</code> — единственный «не белый» фон контента в CRM. Пузыри: входящий белый с тонкой тенью, бот синий, менеджер navy, недоставленный — красная инсет-рамка. Разделитель дней <code>.tg-day</code>, подпись автора <code>.tg-by</code>.</p>
   </section>
 
@@ -135,7 +145,7 @@
           <span class="tg-ava sm" style="--c:#2F6BFF"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8M4 12v6a2 2 0 0 0 2 2h12"/></svg></span>
           <span class="tg-rb">
             <span class="tg-r1"><span class="tg-nm">Марина К.</span><span class="tg-tm">2ч</span></span>
-            <span class="tg-r2"><span class="tg-pv">Куратор: загрузил черновик мотивационного письма</span></span>
+            <span class="tg-r2"><span class="tg-pv">Тьютор: загрузил черновик мотивационного письма</span></span>
             <span class="tg-r3"><span class="tg-tag st">Подача · документы</span></span>
           </span>
         </button>

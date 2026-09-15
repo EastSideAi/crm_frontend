@@ -1,8 +1,10 @@
 name: deploy-crm-selectel
 # Автодеплой CRM на Selectel (crm.истсайд.рф).
 # Репозиторий статический — сборки нет, отдаём файлы из корня как есть
-# (ровно то, что делал Vercel: outputDirectory "."). Исключения повторяют
-# .vercelignore плюс служебные папки, чтобы на сервер не уезжали спеки и дизайн-исходники.
+# (ровно то, что делал Vercel: outputDirectory "."). Список --exclude ниже —
+# ЕДИНСТВЕННАЯ настоящая защита: боевая выкладка идет этим tar-ом и .vercelignore
+# не читает. Кладешь в репозиторий внутренний документ — добавляй его сюда,
+# иначе он откроется по прямой ссылке на crm.истсайд.рф без входа.
 on:
   push:
     branches: [main]
@@ -17,6 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Метка версии к app.js и style.css. Файлы отдаются под неизменными именами, и
+      # браузер держал старую копию до жесткого обновления: менеджеры видели вчерашнюю
+      # CRM и считали, что правка не выехала (11.08.2026). Метка меняется с каждым
+      # коммитом — новый адрес, значит гарантированно свежий файл.
+      - name: Проставить версию статики
+        run: |
+          set -eo pipefail
+          V="${GITHUB_SHA::12}"
+          sed -i -E 's#(src|href)="(app\.js|style\.css)"#\1="\2?v='"$V"'"#g' index.html
+          grep -E '(app\.js|style\.css)\?v=' index.html || {
+            echo "версия не проставилась — проверь разметку index.html"; exit 1; }
 
       - name: Собрать пакет для выкладки
         run: |
@@ -34,8 +48,15 @@ jobs:
             --exclude='./CLAUDE.md' \
             --exclude='./vercel.json' \
             --exclude='./.vercelignore' \
+            --exclude='./docs' \
+            --exclude='./WORKSPACE.md' \
+            --exclude='./memory.md' \
+            --exclude='./.agents' \
+            --exclude='./.tmp' \
+            --exclude='./files' \
             --exclude='./_*.mjs' \
             --exclude='./_*.py' \
+            --exclude='./_*.html' \
             --exclude='./fonts/*.txt' \
             -C . .
           tar -tzf _out/site.tgz | head -20

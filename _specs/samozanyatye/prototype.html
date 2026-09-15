@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EastSide — исполнители (прототип)</title>
+<style>
+/* ============================================================
+   Прототип модуля самозанятых. Поверхность B (светлое стекло)
+   по design.md: темный холст + рейл, белое окно контента.
+   Токены скопированы из tokens.css, не выдуманы.
+   ============================================================ */
+:root{
+  --font: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'InterVariable', system-ui, 'Segoe UI', sans-serif;
+  --base:#03081C;
+  --acc:#2B8FFF; --acc-deep:#2073E6; --acc-ink:#1763C8; --acc-line:rgba(43,143,255,.42);
+  --ink:#16203B; --ink-sub:rgba(22,32,59,.60); --ink-mute:rgba(22,32,59,.42);
+  --line:rgba(22,32,59,.09);
+  --ok:#2EA06E; --ok-ink:#1C7E52; --ok-soft:#E0F3EA;
+  --warn:#C9923E; --warn-ink:#936417; --warn-soft:#FBF1DA;
+  --bad:#D2604F; --bad-ink:#B23B2A; --bad-soft:#FBE7E2;
+  --info-ink:#1763C8; --info-soft:#E1EEFF;
+}
+*{box-sizing:border-box;}
+*,*::before,*::after{font-family:var(--font)!important;}
+html,body{height:100%;}
+body{margin:0;background:var(--base);color:var(--ink);-webkit-font-smoothing:antialiased;}
+.num{font-variant-numeric:tabular-nums;}
+button{font-family:inherit;cursor:pointer;}
+
+/* ── каркас ─────────────────────────────────────────────── */
+.app{display:flex;gap:16px;padding:16px;height:100vh;width:100%;overflow:hidden;position:relative;}
+.app::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(900px 520px at 86% -8%,rgba(30,114,240,.16),transparent 60%),
+    radial-gradient(720px 520px at -2% 108%,rgba(22,100,230,.12),transparent 60%);}
+.side,.main{position:relative;z-index:1;}
+
+.side{flex:0 0 252px;width:252px;height:100%;display:flex;flex-direction:column;padding:10px 8px 14px;}
+.brand{display:flex;align-items:baseline;gap:8px;padding:6px 10px 4px;margin-bottom:26px;}
+.brand__n{font-size:19px;font-weight:700;color:#fff;letter-spacing:-.4px;}
+.brand__s{font-size:12px;color:#7C89B4;}
+.nav{display:flex;flex-direction:column;gap:3px;flex:1 1 auto;}
+.nav__i{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:10.5px 12px;border-radius:12px;border:1px solid transparent;background:transparent;
+  color:#9AA3C7;font-size:14.5px;font-weight:500;transition:background .15s,color .15s,border-color .15s;}
+.nav__i:hover{color:#EAF0FF;background:rgba(255,255,255,.045);}
+.nav__i.on{color:#fff;font-weight:600;
+  background:linear-gradient(90deg,rgba(43,143,255,.52) 0%,rgba(43,143,255,.2) 48%,rgba(43,143,255,.05) 100%);
+  border-color:var(--acc-line);
+  box-shadow:inset 0 0 22px rgba(43,143,255,.26),inset 0 1px 0 rgba(255,255,255,.14);}
+.nav__i svg{width:19px;height:19px;flex:0 0 19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:#9AA3C7;}
+.nav__i.on svg{color:#DCEBFF;filter:drop-shadow(0 0 8px rgba(120,185,255,.9));}
+.nav__lab{flex:1 1 auto;}
+.nav__b{min-width:20px;height:20px;padding:0 6px;border-radius:99px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:11.5px;font-weight:700;color:#fff;background:linear-gradient(150deg,var(--acc),var(--acc-deep));
+  box-shadow:0 0 10px rgba(43,143,255,.55);}
+.nav__soon{font-size:11px;color:#5E6A96;}
+.side__op{margin-top:12px;display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:16px;
+  background:linear-gradient(150deg,rgba(43,143,255,.2),rgba(43,143,255,.05) 60%),#07143A;
+  border:1px solid rgba(60,150,250,.34);}
+.side__av{width:34px;height:34px;flex:none;border-radius:11px;display:grid;place-items:center;color:#EAF2FF;font-weight:700;font-size:13px;
+  background:rgba(43,143,255,.14);box-shadow:inset 0 0 14px rgba(43,143,255,.95),inset 0 0 3px rgba(160,205,255,.7);}
+.side__nm{font-size:14px;font-weight:600;color:#fff;line-height:1.2;}
+.side__rl{font-size:11.5px;color:#9AA6CE;margin-top:2px;}
+
+.main{flex:1 1 auto;min-width:0;height:100%;overflow-y:auto;overflow-x:hidden;border-radius:26px;
+  border:1px solid rgba(255,255,255,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 24px 60px rgba(3,8,28,.5);
+  background:
+    radial-gradient(680px 480px at 88% -4%, rgba(118,150,255,.18) 0%, transparent 64%),
+    radial-gradient(560px 460px at 4% 6%, rgba(170,140,250,.14) 0%, transparent 62%),
+    radial-gradient(720px 540px at 50% 118%, rgba(120,170,255,.10) 0%, transparent 60%),
+    linear-gradient(180deg,#F7F8FE 0%,#FBFBFF 52%,#F6F7FD 100%);}
+.main::-webkit-scrollbar{width:0;}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 44px 80px;}
+
+/* ── шапка экрана ───────────────────────────────────────── */
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:26px;}
+.h1{font-size:34px;font-weight:700;letter-spacing:-1.1px;line-height:1.04;text-wrap:balance;margin:0;}
+.h1__sub{margin-top:8px;font-size:14px;color:var(--ink-sub);}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:14px;border:0;
+  font-size:14px;font-weight:700;color:#fff;background:var(--acc-deep);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),0 8px 22px rgba(32,115,230,.34);
+  transition:transform .15s,box-shadow .16s,background .15s;}
+.btn:hover{background:var(--acc);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.36),0 12px 28px rgba(32,115,230,.42);}
+.btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.btn--q{background:rgba(255,255,255,.7);color:var(--ink);border:1px solid rgba(22,32,59,.1);box-shadow:inset 0 1px 0 rgba(255,255,255,.9);}
+.btn--q:hover{background:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.95);}
+
+/* ── KPI: якорь + два тихих ─────────────────────────────── */
+.kpis{display:grid;grid-template-columns:1.34fr 1fr 1fr;gap:14px;margin-bottom:28px;}
+.kpi{border-radius:20px;padding:18px 20px;background:rgba(255,255,255,.58);
+  border:1.5px solid rgba(255,255,255,.92);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.85), inset 0 0 40px rgba(255,255,255,.28);}
+.kpi--anchor{background:linear-gradient(150deg,rgba(43,143,255,.16),rgba(43,143,255,.05) 62%),rgba(255,255,255,.7);
+  border:1.5px solid rgba(43,143,255,.4);
+  box-shadow:inset 0 0 26px rgba(43,143,255,.3), inset 0 0 6px rgba(43,143,255,.16);}
+.kpi__l{font-size:13px;color:var(--ink-sub);font-weight:500;}
+.kpi__v{margin-top:6px;font-size:36px;font-weight:700;letter-spacing:-1.6px;line-height:1;}
+.kpi__v small{font-size:17px;font-weight:600;color:var(--ink-mute);letter-spacing:-.4px;margin-left:4px;}
+.kpi__v--warn{color:var(--warn-ink);}
+.kpi__bar{margin-top:14px;height:6px;border-radius:99px;background:rgba(22,32,59,.08);overflow:hidden;}
+.kpi__bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--acc-deep),var(--acc));
+  box-shadow:0 0 10px rgba(43,143,255,.6);animation:grow 1s cubic-bezier(.22,.61,.36,1) .25s both;}
+.kpi__n{margin-top:10px;font-size:12.5px;color:var(--ink-mute);}
+.kpi__bar--warn i{background:linear-gradient(90deg,var(--warn),#DDB05F);box-shadow:0 0 10px rgba(201,146,62,.5);}
+@keyframes grow{from{transform:scaleX(0);transform-origin:left;}to{transform:scaleX(1);}}
+
+/* ── фильтры ────────────────────────────────────────────── */
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;}
+.fchip{padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;color:var(--ink-sub);
+  background:rgba(255,255,255,.62);border:1px solid rgba(22,32,59,.08);transition:all .14s;}
+.fchip:hover{background:#fff;color:var(--ink);}
+.fchip.on{color:#fff;background:var(--acc-deep);border-color:transparent;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3);}
+.fchip b{font-weight:700;opacity:.72;margin-left:5px;}
+.search{margin-left:auto;display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:14px;min-width:314px;
+  background:rgba(255,255,255,.7);border:1px solid rgba(22,32,59,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.9);}
+.search svg{width:16px;height:16px;stroke:rgba(22,32,59,.4);fill:none;stroke-width:1.9;}
+.search input{border:0;background:0;outline:0;font-size:14px;color:var(--ink);width:100%;}
+.search input::placeholder{color:rgba(22,32,59,.35);}
+
+/* ── таблица ────────────────────────────────────────────── */
+.tbl{border-radius:20px;overflow:hidden;background:rgba(255,255,255,.6);
+  border:1.5px solid rgba(255,255,255,.92);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.85), inset 0 0 40px rgba(255,255,255,.28);}
+.tr{display:grid;align-items:center;gap:16px;padding:13px 20px;border-bottom:1px solid var(--line);
+  transition:background .14s,box-shadow .14s;}
+.tr:last-child{border-bottom:0;}
+.tr--h{padding:11px 20px;font-size:12px;font-weight:600;color:var(--ink-mute);background:rgba(244,246,253,.6);}
+.tr--r{cursor:pointer;}
+.tr--r:hover{background:rgba(43,143,255,.05);box-shadow:inset 3px 0 0 var(--acc);}
+.people .tr{grid-template-columns:minmax(196px,1.5fr) 132px 168px 1fr 172px;}
+.tasks .tr{grid-template-columns:minmax(220px,1.6fr) 150px 130px 132px 1fr;}
+.nm{font-size:14.5px;font-weight:600;letter-spacing:-.1px;}
+.nm__s{font-size:12.5px;color:var(--ink-mute);margin-top:3px;}
+.cell{font-size:13.5px;color:var(--ink-sub);}
+.cell b{color:var(--ink);font-weight:600;}
+
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;font-size:12.5px;font-weight:600;white-space:nowrap;}
+.chip i{width:6px;height:6px;border-radius:99px;background:currentColor;flex:none;}
+.chip--ok{background:var(--ok-soft);color:var(--ok-ink);}
+.chip--warn{background:var(--warn-soft);color:var(--warn-ink);}
+.chip--bad{background:var(--bad-soft);color:var(--bad-ink);}
+.chip--info{background:var(--info-soft);color:var(--info-ink);}
+.chip--mute{background:rgba(22,32,59,.06);color:var(--ink-mute);}
+
+.money{font-size:14px;font-weight:600;letter-spacing:-.2px;}
+.mbar{margin-top:5px;height:4px;width:110px;border-radius:99px;background:rgba(22,32,59,.08);overflow:hidden;}
+.mbar i{display:block;height:100%;border-radius:99px;background:var(--acc);}
+.mbar.hi i{background:var(--warn);}
+.next{font-size:13px;color:var(--acc-ink);font-weight:600;}
+.probl{font-size:12.5px;color:var(--bad-ink);line-height:1.4;}
+.probl--w{color:var(--warn-ink);}
+
+/* ── шторка карточки ────────────────────────────────────── */
+.veil{position:fixed;inset:0;background:rgba(4,9,26,.44);backdrop-filter:blur(3px);z-index:900;opacity:0;pointer-events:none;transition:opacity .2s;}
+.veil.on{opacity:1;pointer-events:auto;}
+.sheet{position:fixed;top:16px;right:16px;bottom:16px;width:min(560px,calc(100vw - 32px));z-index:950;
+  border-radius:24px;overflow-y:auto;transform:translateX(calc(100% + 24px));transition:transform .28s cubic-bezier(.32,.72,0,1);
+  background:linear-gradient(180deg,#FBFCFF 0%,#F5F7FD 100%);
+  border:1px solid rgba(255,255,255,.7);box-shadow:0 24px 60px rgba(3,8,28,.5);}
+.sheet::-webkit-scrollbar{width:0;}
+.sheet.on{transform:translateX(0);}
+.sh__top{padding:26px 28px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2;
+  background:linear-gradient(180deg,rgba(251,252,255,.97),rgba(251,252,255,.86));backdrop-filter:blur(10px);}
+.sh__x{position:absolute;top:22px;right:22px;width:32px;height:32px;border-radius:11px;border:1px solid rgba(22,32,59,.1);
+  background:rgba(255,255,255,.7);display:grid;place-items:center;color:var(--ink-sub);font-size:16px;line-height:1;}
+.sh__x:hover{background:#fff;color:var(--ink);}
+.sh__t{font-size:24px;font-weight:700;letter-spacing:-.7px;line-height:1.1;padding-right:44px;}
+.sh__s{margin-top:7px;font-size:13.5px;color:var(--ink-sub);}
+.sh__b{padding:22px 28px 32px;}
+.sec{margin-bottom:26px;}
+.sec__h{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;}
+.rows{border-radius:16px;overflow:hidden;background:rgba(255,255,255,.66);border:1px solid rgba(255,255,255,.9);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.85);}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 15px;border-bottom:1px solid var(--line);font-size:13.5px;}
+.row:last-child{border-bottom:0;}
+.row__l{color:var(--ink-mute);}
+.row__v{font-weight:600;text-align:right;}
+.callout{border-radius:18px;padding:16px 18px;
+  background:linear-gradient(150deg,rgba(43,143,255,.14),rgba(43,143,255,.04) 62%),rgba(255,255,255,.7);
+  border:1.5px solid rgba(43,143,255,.34);box-shadow:inset 0 0 24px rgba(43,143,255,.22);}
+.callout--warn{background:linear-gradient(150deg,rgba(201,146,62,.16),rgba(201,146,62,.04) 62%),rgba(255,255,255,.7);
+  border-color:rgba(201,146,62,.36);box-shadow:inset 0 0 24px rgba(201,146,62,.18);}
+.callout--bad{background:linear-gradient(150deg,rgba(210,96,79,.16),rgba(210,96,79,.04) 62%),rgba(255,255,255,.7);
+  border-color:rgba(210,96,79,.38);box-shadow:inset 0 0 24px rgba(210,96,79,.18);}
+.callout__t{font-size:14px;font-weight:700;}
+.callout__x{margin-top:6px;font-size:13px;color:var(--ink-sub);line-height:1.5;}
+.acts{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
+.hist{position:relative;padding-left:20px;}
+.hist__i{position:relative;padding-bottom:16px;font-size:13px;color:var(--ink-sub);line-height:1.5;}
+.hist__i:last-child{padding-bottom:0;}
+.hist__i::before{content:'';position:absolute;left:-20px;top:5px;width:7px;height:7px;border-radius:99px;background:var(--acc);
+  box-shadow:0 0 8px rgba(43,143,255,.7);}
+.hist__i::after{content:'';position:absolute;left:-17px;top:14px;bottom:0;width:1px;background:var(--line);}
+.hist__i:last-child::after{display:none;}
+.hist__i b{color:var(--ink);font-weight:600;}
+.hist__i--ok::before{background:var(--ok);box-shadow:0 0 8px rgba(46,160,110,.55);}
+.hist__i--bad::before{background:var(--bad);box-shadow:0 0 8px rgba(210,96,79,.55);}
+.hist__i--mute::before{background:rgba(22,32,59,.22);box-shadow:none;}
+.btn[disabled]{background:rgba(22,32,59,.08);color:var(--ink-mute);box-shadow:none;cursor:default;}
+.btn[disabled]:hover{transform:none;background:rgba(22,32,59,.08);box-shadow:none;}
+.acts__x{width:100%;margin-top:-4px;font-size:12.5px;color:var(--ink-mute);line-height:1.45;}
+.hist__d{color:var(--ink-mute);font-size:12.5px;margin-top:2px;}
+
+/* ── копирование значения одной кнопкой ─────────────────── */
+.copy{margin-left:9px;width:26px;height:26px;flex:none;border-radius:8px;border:1px solid rgba(22,32,59,.1);
+  background:rgba(255,255,255,.75);display:inline-grid;place-items:center;vertical-align:-7px;
+  color:var(--ink-mute);transition:color .14s,background .14s,border-color .14s;}
+.copy:hover{color:var(--acc-ink);background:#fff;border-color:var(--acc-line);}
+.copy svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.copy.done{color:var(--ok-ink);border-color:rgba(46,160,110,.4);background:var(--ok-soft);}
+
+/* ── пусто ──────────────────────────────────────────────── */
+.empty{padding:52px 28px;text-align:center;}
+.empty__t{font-size:16px;font-weight:600;letter-spacing:-.3px;}
+.empty__x{margin-top:7px;font-size:13.5px;color:var(--ink-sub);}
+
+.note{margin-top:26px;font-size:12.5px;color:var(--ink-mute);text-align:center;}
+[hidden]{display:none!important;}
+
+/* ── телефон: рейл становится верхней лентой, таблица — карточками ── */
+.lbl{display:none;}
+@media (max-width:860px){
+  html,body{height:auto;}
+  .app{flex-direction:column;height:auto;padding:10px;gap:10px;overflow:visible;}
+  .side{flex:none;width:100%;height:auto;padding:6px 2px 0;}
+  .brand{margin-bottom:12px;}
+  .nav{flex-direction:row;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;}
+  .nav::-webkit-scrollbar{display:none;}
+  .nav__i{width:auto;flex:none;padding:9px 13px;border-radius:11px;font-size:13.5px;}
+  .nav__i svg{width:17px;height:17px;flex-basis:17px;}
+  .nav__soon{display:none;}
+  .side__op{display:none;}
+  .main{height:auto;overflow:visible;border-radius:20px;}
+  .wrap{padding:24px 16px 44px;}
+  .top{flex-direction:column;gap:14px;margin-bottom:18px;}
+  .h1{font-size:26px;letter-spacing:-.7px;}
+  .kpis{grid-template-columns:1fr;gap:10px;margin-bottom:20px;}
+  .kpi{padding:15px 17px;}
+  .kpi__v{font-size:30px;}
+  .filters{gap:7px;}
+  .search{margin-left:0;width:100%;min-width:0;order:9;}
+  .tr--h{display:none;}
+  .tbl .tr{grid-template-columns:1fr!important;gap:9px;padding:15px 17px;}
+  .lbl{display:block;font-size:11.5px;color:var(--ink-mute);margin-bottom:3px;}
+  .mbar{width:100%;}
+  .sheet{top:auto;right:0;left:0;bottom:0;width:100%;max-height:92vh;border-radius:22px 22px 0 0;
+    transform:translateY(calc(100% + 24px));}
+  .sheet.on{transform:translateY(0);}
+  .sh__top,.sh__b{padding-left:20px;padding-right:20px;}
+  .sh__t{font-size:21px;}
+  .row{flex-wrap:wrap;gap:4px 12px;}
+  .row__v{margin-left:auto;}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="brand__n">EastSide</span><span class="brand__s">исполнители</span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side__op">
+      <div class="side__av">ВК</div>
+      <div><div class="side__nm">Виталий</div><div class="side__rl">оператор</div></div>
+    </div>
+  </aside>
+  <main class="main"><div class="wrap" id="screen"></div></main>
+</div>
+
+<div class="veil" id="veil"></div>
+<section class="sheet" id="sheet" aria-hidden="true"></section>
+
+<script>
+/* ── демо-данные (выдуманные) ───────────────────────────── */
+const PEOPLE = [
+  {id:1, fio:'Смирнова Анна Игоревна', tel:'+7 914 200-11-04', mail:'a.smirnova@mail.ru', inn:'253901234567',
+   state:'ok', checked:'3 августа, 09:12', year:412000, kind:'Самозанятая', since:'14 марта 2026', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****4417, Т-Банк', problems:[]},
+  {id:2, fio:'Ким Дарья Александровна', tel:'+7 924 118-77-32', mail:'d.kim@yandex.ru', inn:'254102345678',
+   state:'ok', checked:'3 августа, 09:12', year:268500, kind:'Самозанятая', since:'2 апреля 2026', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****9021, Сбербанк', problems:[]},
+  {id:3, fio:'Мельников Егор Дмитриевич', tel:'+7 902 445-19-66', mail:'e.melnikov@gmail.com', inn:'250811223344',
+   state:'bad', checked:'3 августа, 09:12', year:186000, kind:'Самозанятый', since:'19 января 2026', citiz:'РФ', src:'Миграция',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','не подписано']],
+   pay:'Счет ****3388, Альфа-Банк',
+   problems:['Снялся с учета как самозанятый 28 июля — выплаты заблокированы','Не подписано соглашение о неразглашении']},
+  {id:4, fio:'Литвинова Ольга Сергеевна', tel:'+7 908 771-40-25', mail:'o.litvinova@mail.ru', inn:'253700998877',
+   state:'warn', checked:'3 августа, 09:12', year:1980000, kind:'Самозанятая', since:'11 ноября 2025', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****1290, Т-Банк',
+   problems:['Доход за год подходит к лимиту 2,4 млн — осталось 420 000 ₽']},
+  {id:5, fio:'Хабибуллин Тимур Ринатович', tel:'+7 917 336-08-71', mail:'t.khabibullin@gmail.com', inn:'166012345098',
+   state:'ok', checked:'3 августа, 09:12', year:94000, kind:'Самозанятый', since:'27 мая 2026', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****7734, Т-Банк', problems:[]},
+  {id:6, fio:'Ветрова Полина Максимовна', tel:'+7 964 220-55-13', mail:'p.vetrova@yandex.ru', inn:'—',
+   state:'new', checked:'—', year:0, kind:'Не определен', since:'—', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','не отправлен'],['Согласие на обработку ПДн','не подписано'],['Соглашение о неразглашении','не подписано']],
+   pay:'—',
+   problems:['Приглашение отправлено 30 июля, исполнитель не завершил регистрацию','Нет ИНН и реквизитов']},
+  {id:7, fio:'Соколов Артем Павлович', tel:'+7 950 617-92-48', mail:'a.sokolov@mail.ru', inn:'270309876543',
+   state:'bad', checked:'3 августа, 09:12', year:322000, kind:'Самозанятый', since:'8 февраля 2026', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****6650, Сбербанк',
+   problems:['Долг по чекам: 2 выплаты без чека с 22 июля — следующая выплата заблокирована']},
+  {id:8, fio:'Нгуен Ань Тхи', tel:'+7 999 084-31-77', mail:'anh.nguyen@gmail.com', inn:'773612349900',
+   state:'new', checked:'—', year:0, kind:'Не определен', since:'—', citiz:'Вьетнам', src:'Импорт',
+   docs:[['Договор ГПХ','не отправлен'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','не подписано']],
+   pay:'—',
+   problems:['Не указаны реквизиты для выплаты','Договор не отправлен на подпись']},
+  {id:9, fio:'Гончарова Мария Викторовна', tel:'+7 921 553-16-09', mail:'m.goncharova@mail.ru', inn:'781203344556',
+   state:'ok', checked:'3 августа, 09:12', year:540000, kind:'Самозанятая', since:'6 октября 2025', citiz:'РФ', src:'Миграция',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****8812, Т-Банк', problems:[]},
+  {id:10, fio:'Ершов Никита Андреевич', tel:'+7 913 604-77-20', mail:'n.ershov@yandex.ru', inn:'540188776655',
+   state:'ok', checked:'3 августа, 09:12', year:156000, kind:'Самозанятый', since:'21 апреля 2026', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****2043, Сбербанк', problems:[]},
+  {id:11, fio:'Заремба Ирина Олеговна', tel:'+7 985 447-30-58', mail:'i.zaremba@gmail.com', inn:'503611220099',
+   state:'ok', checked:'3 августа, 09:12', year:378000, kind:'Самозанятая', since:'3 декабря 2025', citiz:'РФ', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****5567, Т-Банк', problems:[]},
+  {id:12, fio:'Ли Чэнь', tel:'+7 966 812-04-93', mail:'li.chen@gmail.com', inn:'772844556677',
+   state:'ok', checked:'3 августа, 09:12', year:225000, kind:'Самозанятый', since:'17 февраля 2026', citiz:'КНР', src:'Приглашение',
+   docs:[['Договор ГПХ','подписан'],['Согласие на обработку ПДн','подписано'],['Соглашение о неразглашении','подписано']],
+   pay:'Счет ****9930, Т-Банк', problems:[]}
+];
+
+const TASKS = [
+  {id:'№ 000148', name:'Занятия по китайскому языку, группа А1', who:1, unit:'занятие', qty:16, qtyF:16,
+   plan:32000, fact:32000, from:'1 июля', to:'31 июля', st:'paid', act:'подписан', pay:'оплачено 1 августа', chk:'чек получен',
+   descr:'Провести 16 групповых занятий по китайскому языку для группы уровня А1 по программе центра.',
+   res:'Проведены занятия, заполнены отчеты по каждому занятию.'},
+  {id:'№ 000151', name:'Проверка домашних работ, июль', who:2, unit:'работа', qty:120, qtyF:104,
+   plan:24000, fact:20800, from:'1 июля', to:'31 июля', st:'act_signed', act:'подписан', pay:'ожидает выплаты', chk:'—',
+   reason:'Фактический объем меньше планового: сдано 104 работы вместо 120',
+   descr:'Проверить домашние работы учеников групп А1-А2 с письменным разбором ошибок.',
+   res:'Проверены работы, по каждой дан письменный разбор.'},
+  {id:'№ 000153', name:'Монтаж роликов для канала, июль', who:5, unit:'ролик', qty:8, qtyF:8,
+   plan:24000, fact:24000, from:'5 июля', to:'30 июля', st:'accepted_op', act:'не создан', pay:'—', chk:'—',
+   descr:'Смонтировать 8 роликов по предоставленным исходникам, наложить титры и субтитры.',
+   res:'Готовые ролики переданы в облако в согласованном формате.'},
+  {id:'№ 000157', name:'Консультации по подбору вузов', who:4, unit:'консультация', qty:12, qtyF:null,
+   plan:36000, fact:null, from:'15 июля', to:'15 августа', st:'in_work', act:'не создан', pay:'—', chk:'—',
+   descr:'Провести консультации для семей по подбору университетов КНР под профиль ученика.',
+   res:'Проведена консультация, подготовлена подборка из 5-7 вузов с обоснованием.'},
+  {id:'№ 000158', name:'Занятия по китайскому языку, группа В1', who:2, unit:'занятие', qty:12, qtyF:null,
+   plan:30000, fact:null, from:'1 августа', to:'31 августа', st:'accepted', act:'не создан', pay:'—', chk:'—',
+   descr:'Провести 12 групповых занятий для группы уровня В1 по программе центра.',
+   res:'Проведены занятия, заполнены отчеты.'},
+  {id:'№ 000159', name:'Перевод методических материалов', who:8, unit:'страница', qty:40, qtyF:null,
+   plan:20000, fact:null, from:'4 августа', to:'20 августа', st:'offered', act:'не создан', pay:'—', chk:'—',
+   descr:'Перевести методические материалы с китайского на русский, 40 страниц.',
+   res:'Переданы переведенные файлы в формате docx.'},
+  {id:'№ 000160', name:'Проверка домашних работ, август', who:2, unit:'работа', qty:120, qtyF:null,
+   plan:24000, fact:null, from:'1 августа', to:'31 августа', st:'draft', act:'не создан', pay:'—', chk:'—',
+   descr:'Проверить домашние работы учеников групп А1-А2 с письменным разбором ошибок.',
+   res:'Проверены работы, по каждой дан письменный разбор.'},
+  {id:'№ 000149', name:'Подготовка к HSK 4, индивидуально', who:7, unit:'занятие', qty:10, qtyF:10,
+   plan:35000, fact:35000, from:'1 июля', to:'29 июля', st:'paid_nochk', act:'подписан', pay:'оплачено 30 июля', chk:'чека нет 4 дня',
+   descr:'Провести 10 индивидуальных занятий по подготовке к экзамену HSK 4.',
+   res:'Проведены занятия, подготовлен итоговый разбор пробного теста.'},
+  {id:'№ 000146', name:'Занятия по китайскому языку, группа А2', who:3, unit:'занятие', qty:14, qtyF:14,
+   plan:28000, fact:28000, from:'1 июля', to:'30 июля', st:'blocked', act:'подписан', pay:'заблокировано', chk:'—',
+   descr:'Провести 14 групповых занятий для группы уровня А2 по программе центра.',
+   res:'Проведены занятия, заполнены отчеты.'},
+  {id:'№ 000155', name:'Оформление презентации для родителей', who:5, unit:'пакет', qty:1, qtyF:null,
+   plan:12000, fact:null, from:'20 июля', to:'28 июля', st:'declined', act:'не создан', pay:'—', chk:'—',
+   descr:'Собрать презентацию по итогам поступления для родительского эфира.',
+   res:'Готовая презентация в 20 слайдов.'}
+];
+
+const ST = {
+  draft:      ['Черновик',         'mute', 'Отправить исполнителю'],
+  offered:    ['Предложено',       'info', 'Ждем ответа исполнителя'],
+  accepted:   ['Принято',          'info', 'Ожидаем выполнения'],
+  declined:   ['Отказ',            'mute', 'Предложить другому'],
+  in_work:    ['В работе',         'info', 'Ожидаем результата'],
+  done:       ['Выполнено',        'warn', 'Проверить результат'],
+  accepted_op:['Принято оператором','warn','Создать акт'],
+  act_signed: ['Акт подписан',     'ok',   'Провести выплату'],
+  paid:       ['Оплачено',         'ok',   'Закрыто, чек получен'],
+  paid_nochk: ['Ждем чек',         'bad',  'Напомнить про чек'],
+  blocked:    ['Выплата заблокирована','bad','Снять блокировку']
+};
+const PSTATE = {
+  ok:  ['Готов работать', 'ok'],
+  warn:['Предупреждение', 'warn'],
+  bad: ['Есть проблемы',  'bad'],
+  new: ['Не завершил',    'mute']
+};
+
+const UNIT = {
+  'занятие':['занятие','занятия','занятий'], 'работа':['работа','работы','работ'],
+  'ролик':['ролик','ролика','роликов'], 'консультация':['консультация','консультации','консультаций'],
+  'страница':['страница','страницы','страниц'], 'пакет':['пакет','пакета','пакетов']
+};
+function plural(n, unit){
+  const f = UNIT[unit]; if (!f) return unit;
+  const a = n % 10, b = n % 100;
+  return (a === 1 && b !== 11) ? f[0] : (a >= 2 && a <= 4 && (b < 10 || b >= 20)) ? f[1] : f[2];
+}
+const rub = n => n.toLocaleString('ru-RU').replace(/ /g,' ').replace(/ /g,' ') + ' ₽';
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const person = id => PEOPLE.find(p => p.id === id);
+const chip = (txt, kind) => `<span class="chip chip--${kind}"><i></i>${esc(txt)}</span>`;
+
+/* Кнопка «скопировать» — ТЗ 5: контакты копируются одной кнопкой. */
+const copyBtn = val => val === '—' ? '' :
+  `<button class="copy" data-copy="${esc(val)}" title="Скопировать" aria-label="Скопировать">
+     <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 5.6V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h.6"/></svg>
+   </button>`;
+
+/* Сценарий онбординга: пока один, но поле есть в ТЗ и появится второй тип занятости. */
+const scenario = p => p.state === 'new' ? 'Самозанятый — не завершен' : 'Самозанятый';
+
+/* История проверок статуса в налоговой. Демо: строится из состояния человека. */
+function checks(p){
+  if (p.inn === '—') return [['Проверок не было', 'ИНН не указан — проверять нечего', 'mute']];
+  const lost = p.problems.some(x => x.startsWith('Снялся'));
+  if (lost) return [
+    ['Статус не подтвержден', p.checked + ' · автоматически', 'bad'],
+    ['Снят с учета как самозанятый', '28 июля, 09:10 · автоматически', 'bad'],
+    ['Статус подтвержден', '27 июля, 09:11 · автоматически', 'ok']
+  ];
+  return [
+    ['Статус подтвержден', p.checked + ' · автоматически', 'ok'],
+    ['Статус подтвержден', '2 августа, 09:10 · автоматически', 'ok'],
+    ['Статус подтвержден', '1 августа, 09:12 · перед выплатой', 'ok']
+  ];
+}
+
+/* ── навигация ──────────────────────────────────────────── */
+const IC = {
+  people:'<svg viewBox="0 0 24 24"><path d="M16 19v-1.5a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4V19"/><circle cx="9" cy="7" r="3.2"/><path d="M22 19v-1.5a4 4 0 0 0-3-3.87"/><path d="M16.5 3.8a4 4 0 0 1 0 6.4"/></svg>',
+  tasks:'<svg viewBox="0 0 24 24"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2"/><path d="M8.5 13.5l2 2 4.5-4.5"/></svg>',
+  invite:'<svg viewBox="0 0 24 24"><path d="M4 6.5h16v11H4z"/><path d="M4.5 7.5l7.5 5.5 7.5-5.5"/></svg>',
+  acts:'<svg viewBox="0 0 24 24"><path d="M7 3.5h7l5 5V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z"/><path d="M14 3.5V9h5"/><path d="M9 14h6M9 17h4"/></svg>',
+  pay:'<svg viewBox="0 0 24 24"><path d="M3 7.5h18v11H3z"/><path d="M3 11h18"/><path d="M6.5 15.5h3"/></svg>',
+  risk:'<svg viewBox="0 0 24 24"><path d="M12 3.5l9 16H3l9-16z"/><path d="M12 10v4M12 16.6v.4"/></svg>'
+};
+const NAV = [
+  {k:'people', lab:'Исполнители', ic:'people', badge:3},
+  {k:'tasks',  lab:'Задания',     ic:'tasks',  badge:2},
+  {k:'invite', lab:'Приглашения', ic:'invite', soon:1},
+  {k:'acts',   lab:'Акты',        ic:'acts',   soon:1},
+  {k:'pay',    lab:'Выплаты',     ic:'pay',    soon:1},
+  {k:'risk',   lab:'Риски',       ic:'risk',   soon:1}
+];
+
+function drawNav(active){
+  document.getElementById('nav').innerHTML = NAV.map(n => `
+    <button class="nav__i ${n.k===active?'on':''}" data-go="${n.k}">
+      ${IC[n.ic]}<span class="nav__lab">${n.lab}</span>
+      ${n.badge?`<span class="nav__b">${n.badge}</span>`:''}
+      ${n.soon?`<span class="nav__soon">скоро</span>`:''}
+    </button>`).join('');
+}
+
+/* ── экран: исполнители ─────────────────────────────────── */
+let peopleFilter = 'all';
+let peopleQuery = '';
+function screenPeople(){
+  const ready = PEOPLE.filter(p => p.state==='ok').length;
+  const att   = PEOPLE.filter(p => p.state==='bad'||p.state==='warn').length;
+  const nw    = PEOPLE.filter(p => p.state==='new').length;
+  const q     = peopleQuery.trim().toLowerCase();
+  const list  = PEOPLE.filter(p =>
+    peopleFilter==='all' ? true :
+    peopleFilter==='ready' ? p.state==='ok' :
+    peopleFilter==='prob' ? (p.state==='bad'||p.state==='warn') : p.state==='new')
+    /* ТЗ 4.1: поиск по ФИО, телефону, email или ИНН. Телефон ищем и без разделителей. */
+    .filter(p => !q || [p.fio, p.tel, p.tel.replace(/[^\d+]/g,''), p.mail, p.inn]
+      .some(v => v.toLowerCase().includes(q)));
+
+  return `
+  <div class="top">
+    <div>
+      <h1 class="h1">Исполнители</h1>
+      <div class="h1__sub">Статус самозанятого проверяется автоматически каждое утро и перед каждой выплатой</div>
+    </div>
+    <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Пригласить</button>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi kpi--anchor">
+      <div class="kpi__l">Готовы к работе</div>
+      <div class="kpi__v num">${ready}<small>из ${PEOPLE.length}</small></div>
+      <div class="kpi__bar"><i style="width:${Math.round(ready/PEOPLE.length*100)}%"></i></div>
+      <div class="kpi__n">Статус подтвержден в налоговой сегодня в 09:12</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi__l">Требуют внимания</div>
+      <div class="kpi__v kpi__v--warn num">${att}</div>
+      <div class="kpi__n">Снятие с учета, долг по чекам, лимит дохода</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi__l">Не завершили регистрацию</div>
+      <div class="kpi__v num">${nw}</div>
+      <div class="kpi__n">Приглашение отправлено, данных пока нет</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    ${[['all','Все',PEOPLE.length],['ready','Готовы',ready],['prob','С проблемами',att],['new','Не завершили',nw]]
+      .map(([k,l,n]) => `<button class="fchip ${peopleFilter===k?'on':''}" data-pf="${k}">${l}<b>${n}</b></button>`).join('')}
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <input id="pq" placeholder="Поиск по ФИО, телефону, почте или ИНН" value="${esc(peopleQuery)}">
+    </div>
+  </div>
+
+  <div class="tbl people">
+    <div class="tr tr--h"><div>Исполнитель</div><div>ИНН</div><div>Статус</div><div>Что мешает работать</div><div>Доход за год</div></div>
+    ${!list.length ? `<div class="empty">
+        <div class="empty__t">Никого не нашли</div>
+        <div class="empty__x">${q ? 'По запросу «'+esc(peopleQuery)+'» совпадений нет. Проверьте написание или очистите поиск.'
+                                  : 'В этой группе пока никого нет.'}</div>
+      </div>` : ''}
+    ${list.map(p => {
+      const [lab,kind] = PSTATE[p.state];
+      const pct = Math.min(100, Math.round(p.year/2400000*100));
+      return `<div class="tr tr--r" data-person="${p.id}">
+        <div><div class="nm">${esc(p.fio)}</div><div class="nm__s">${esc(p.tel)}</div></div>
+        <div class="cell num"><span class="lbl">ИНН</span>${esc(p.inn)}</div>
+        <div>${chip(lab,kind)}</div>
+        <div class="${!p.problems.length ? 'cell' : p.state==='bad' ? 'probl' : p.state==='warn' ? 'probl probl--w' : 'cell'}">${p.problems.length ? esc(p.problems[0]) : 'ничего, можно ставить задания'}</div>
+        <div>
+          <div class="money num"><span class="lbl">Доход через нас за год</span>${p.year ? rub(p.year) : '—'}</div>
+          ${p.year?`<div class="mbar ${pct>75?'hi':''}"><i style="width:${pct}%"></i></div>`:''}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="note">Данные вымышленные — это прототип для просмотра, не рабочая система</div>`;
+}
+
+/* ── экран: задания ─────────────────────────────────────── */
+let taskFilter = 'all';
+function screenTasks(){
+  const grp = {
+    all: () => true,
+    work: t => ['offered','accepted','in_work','done','accepted_op','act_signed'].includes(t.st),
+    draft: t => t.st==='draft',
+    done: t => ['done','accepted_op','act_signed'].includes(t.st),
+    paid: t => ['paid','paid_nochk'].includes(t.st)
+  };
+  const list = TASKS.filter(grp[taskFilter]);
+  const sum  = list.reduce((a,t) => a + (t.fact ?? t.plan), 0);
+
+  return `
+  <div class="top">
+    <div>
+      <h1 class="h1">Задания</h1>
+      <div class="h1__sub">${list.length} заданий на сумму <b class="num">${rub(sum)}</b> — без задания нельзя создать акт и провести выплату</div>
+    </div>
+    <button class="btn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Создать задание</button>
+  </div>
+
+  <div class="filters">
+    ${[['all','Все',TASKS.length],['work','В процессе',TASKS.filter(grp.work).length],
+       ['draft','Черновики',TASKS.filter(grp.draft).length],['done','Выполнено',TASKS.filter(grp.done).length],
+       ['paid','Оплачено',TASKS.filter(grp.paid).length]]
+      .map(([k,l,n]) => `<button class="fchip ${taskFilter===k?'on':''}" data-tf="${k}">${l}<b>${n}</b></button>`).join('')}
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <input placeholder="Поиск по номеру, названию или исполнителю">
+    </div>
+  </div>
+
+  <div class="tbl tasks">
+    <div class="tr tr--h"><div>Задание</div><div>Исполнитель</div><div>Срок</div><div>Сумма</div><div>Статус и что дальше</div></div>
+    ${list.map(t => {
+      const p = person(t.who); const [lab,kind,next] = ST[t.st];
+      const changed = t.fact !== null && t.fact !== t.plan;
+      return `<div class="tr tr--r" data-task="${t.id}">
+        <div><div class="nm">${esc(t.name)}</div><div class="nm__s num">${t.id} · ${t.qty} ${esc(plural(t.qty, t.unit))}</div></div>
+        <div class="cell"><span class="lbl">Исполнитель</span>${esc(p.fio.split(' ').slice(0,2).join(' '))}</div>
+        <div class="cell num"><span class="lbl">Срок</span>${t.from} — ${t.to}</div>
+        <div>
+          <div class="money num"><span class="lbl">Сумма</span>${rub(t.fact ?? t.plan)}</div>
+          ${changed?`<div class="nm__s num">было ${rub(t.plan)}</div>`:''}
+        </div>
+        <div>${chip(lab,kind)}<div class="next" style="margin-top:5px">${next}</div></div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="note">Данные вымышленные — это прототип для просмотра, не рабочая система</div>`;
+}
+
+/* ── шторки ─────────────────────────────────────────────── */
+function sheetPerson(id){
+  const p = person(id); const [lab,kind] = PSTATE[p.state];
+  const pct = Math.min(100, Math.round(p.year/2400000*100));
+  const tasks = TASKS.filter(t => t.who === p.id);
+  const docChip = s => s.includes('не') ? chip(s,'bad') : chip(s,'ok');
+
+  return `
+  <div class="sh__top">
+    <button class="sh__x" data-close>×</button>
+    <div class="sh__t">${esc(p.fio)}</div>
+    <div class="sh__s">${p.since === '—' ? 'Источник — ' + esc(p.src) : esc(p.kind) + ' · подключен ' + esc(p.since)} · ${chip(lab,kind)}</div>
+  </div>
+  <div class="sh__b">
+    ${p.problems.length ? `
+      <div class="callout callout--${p.state==='bad'?'bad':'warn'}" style="margin-bottom:24px">
+        <div class="callout__t">${p.state==='bad' ? 'Работа с исполнителем ограничена'
+                                : p.state==='new' ? 'Регистрация не завершена' : 'Обратите внимание'}</div>
+        <div class="callout__x">${p.problems.map(esc).join('<br>')}</div>
+      </div>` : `
+      <div class="callout" style="margin-bottom:24px">
+        <div class="callout__t">Готов к работе</div>
+        <div class="callout__x">Статус самозанятого подтвержден ${esc(p.checked)}, документы подписаны, реквизиты есть. Можно ставить задания и платить.</div>
+      </div>`}
+
+    <div class="sec">
+      <div class="sec__h">Контакты и данные</div>
+      <div class="rows">
+        <div class="row"><span class="row__l">Телефон</span><span class="row__v num">${esc(p.tel)}${copyBtn(p.tel)}</span></div>
+        <div class="row"><span class="row__l">Почта</span><span class="row__v">${esc(p.mail)}${copyBtn(p.mail)}</span></div>
+        <div class="row"><span class="row__l">ИНН</span><span class="row__v num">${esc(p.inn)}${copyBtn(p.inn)}</span></div>
+        <div class="row"><span class="row__l">Сценарий онбординга</span><span class="row__v">${esc(scenario(p))}</span></div>
+        <div class="row"><span class="row__l">Гражданство</span><span class="row__v">${esc(p.citiz)}</span></div>
+        <div class="row"><span class="row__l">Источник</span><span class="row__v">${esc(p.src)}</span></div>
+        <div class="row"><span class="row__l">Реквизиты</span><span class="row__v num">${esc(p.pay)}</span></div>
+      </div>
+    </div>
+
+    ${p.inn === '—' ? '' : `
+    <div class="sec">
+      <div class="sec__h">Статус самозанятого и доход</div>
+      <div class="rows">
+        <div class="row"><span class="row__l">Последняя проверка в налоговой</span><span class="row__v" id="lastCheck">${esc(p.checked)}</span></div>
+        <div class="row"><span class="row__l">Доход через нас за 2026 год</span><span class="row__v num">${p.year?rub(p.year):'—'}</span></div>
+        <div class="row"><span class="row__l">Лимит самозанятого</span><span class="row__v num">2 400 000 ₽</span></div>
+      </div>
+      ${p.year?`<div class="kpi__bar ${p.year>=2000000?'kpi__bar--warn':''}" style="margin-top:12px"><i style="width:${pct}%"></i></div>
+      <div class="kpi__n">Использовано ${pct}% лимита. ${p.year>=2000000
+        ? 'Порог предупреждения 2 млн пройден: следите за суммами, выплата сверх 2,4 млн будет заблокирована.'
+        : 'При достижении 2 млн приходит предупреждение, выплата сверх лимита блокируется.'}</div>`:''}
+    </div>`}
+
+    <div class="sec">
+      <div class="sec__h">Проверки статуса в налоговой</div>
+      <div class="hist" id="checks">
+        ${checks(p).map(([t,d,k]) => `<div class="hist__i hist__i--${k}"><b>${esc(t)}</b><div class="hist__d">${esc(d)}</div></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">Документы</div>
+      <div class="rows">
+        ${p.docs.map(([d,s]) => `<div class="row"><span class="row__l">${esc(d)}</span><span class="row__v">${docChip(s)}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">Задания</div>
+      <div class="rows">
+        ${tasks.length ? tasks.map(t => {
+          const [l,k] = ST[t.st];
+          return `<div class="row"><span class="row__l">${esc(t.name)}</span><span class="row__v">${chip(l,k)}</span></div>`;
+        }).join('') : `<div class="row"><span class="row__l">Заданий пока нет</span><span class="row__v">—</span></div>`}
+      </div>
+    </div>
+
+    ${(() => {
+      /* ТЗ 17: без статуса самозанятого и без подписанного договора задание выдавать нельзя. */
+      const lost = p.problems.some(x => x.startsWith('Снялся'));
+      const raw  = p.state === 'new';
+      const stop = lost ? 'Пока статус самозанятого не восстановлен, новые задания этому человеку выдавать нельзя.'
+                : raw  ? 'Человек не завершил регистрацию: нет ИНН, реквизитов и подписанного договора.'
+                : '';
+      return `<div class="acts">
+        ${raw ? `<button class="btn">Напомнить об онбординге</button>`
+              : `<button class="btn" ${stop?'disabled':''}>Создать задание</button>`}
+        ${p.inn === '—' ? '' : `<button class="btn btn--q" data-check="${p.id}">Проверить статус сейчас</button>`}
+        ${stop?`<div class="acts__x">${esc(stop)}</div>`:''}
+      </div>`;
+    })()}
+  </div>`;
+}
+
+function sheetTask(tid){
+  const t = TASKS.find(x => x.id === tid); const p = person(t.who);
+  const [lab,kind,next] = ST[t.st];
+  const changed = t.fact !== null && t.fact !== t.plan;
+
+  return `
+  <div class="sh__top">
+    <button class="sh__x" data-close>×</button>
+    <div class="sh__t">${esc(t.name)}</div>
+    <div class="sh__s"><span class="num">${t.id}</span> · ${esc(p.fio)} · ${chip(lab,kind)}</div>
+  </div>
+  <div class="sh__b">
+    <div class="callout ${t.st==='blocked'||t.st==='paid_nochk'?'callout--bad':''}" style="margin-bottom:24px">
+      <div class="callout__t">Следующее действие: ${esc(next)}</div>
+      <div class="callout__x">${
+        t.st==='blocked' ? 'Исполнитель снялся с учета как самозанятый — выплата по этому заданию заблокирована. Акт подписан, работа принята, деньги удерживаются до восстановления статуса.' :
+        t.st==='paid_nochk' ? 'Выплата проведена 30 июля, чек от исполнителя не получен. Пока чека нет, следующая выплата этому человеку заблокирована.' :
+        t.st==='act_signed' ? 'Акт подписан обеими сторонами. Перед выплатой платформа заново проверит статус самозанятого и лимит дохода.' :
+        'Задание идет по обычному пути: принято исполнителем, выполняется, дальше приемка и акт.'}</div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">Что нужно сделать</div>
+      <div class="rows">
+        <div class="row" style="display:block"><div class="row__l" style="margin-bottom:5px">Описание</div><div style="line-height:1.5">${esc(t.descr)}</div></div>
+        <div class="row" style="display:block"><div class="row__l" style="margin-bottom:5px">Результат</div><div style="line-height:1.5">${esc(t.res)}</div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">Условия</div>
+      <div class="rows">
+        <div class="row"><span class="row__l">Период выполнения</span><span class="row__v num">${t.from} — ${t.to}</span></div>
+        <div class="row"><span class="row__l">Место выполнения</span><span class="row__v">Удаленно</span></div>
+        <div class="row"><span class="row__l">Единица измерения</span><span class="row__v">${esc(t.unit)}</span></div>
+        <div class="row"><span class="row__l">Количество: план / факт</span><span class="row__v num">${t.qty} / ${t.qtyF ?? '—'}</span></div>
+        <div class="row"><span class="row__l">Стоимость: план / факт</span><span class="row__v num">${rub(t.plan)} / ${t.fact?rub(t.fact):'—'}</span></div>
+        ${changed?`<div class="row"><span class="row__l">Причина корректировки</span><span class="row__v" style="max-width:60%">${esc(t.reason)}</span></div>`:''}
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">Акт, выплата, чек</div>
+      <div class="rows">
+        <div class="row"><span class="row__l">Акт</span><span class="row__v">${esc(t.act)}</span></div>
+        <div class="row"><span class="row__l">Выплата</span><span class="row__v">${esc(t.pay)}</span></div>
+        <div class="row"><span class="row__l">Чек</span><span class="row__v">${t.chk==='чека нет 4 дня'?chip(t.chk,'bad'):esc(t.chk)}</span></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec__h">История</div>
+      <div class="hist">
+        <div class="hist__i"><b>${esc(lab)}</b><div class="hist__d">сегодня, 09:12 · автоматически</div></div>
+        ${changed?`<div class="hist__i"><b>Сумма изменена: ${rub(t.plan)} → ${rub(t.fact)}</b><div class="hist__d">1 августа, 14:20 · оператор Виталий · ${esc(t.reason)}</div></div>`:''}
+        <div class="hist__i"><b>Задание принято исполнителем</b><div class="hist__d">${esc(t.from)}, 10:05 · ${esc(p.fio.split(' ')[0])}</div></div>
+        <div class="hist__i"><b>Задание создано и отправлено</b><div class="hist__d">${esc(t.from)}, 09:40 · оператор Виталий</div></div>
+      </div>
+    </div>
+
+    <div class="acts">
+      <button class="btn">${esc(next)}</button>
+      <button class="btn btn--q">Изменить</button>
+      <button class="btn btn--q">Отменить с причиной</button>
+    </div>
+  </div>`;
+}
+
+/* ── роутинг и события ──────────────────────────────────── */
+const $screen = document.getElementById('screen');
+const $sheet = document.getElementById('sheet');
+const $veil = document.getElementById('veil');
+
+function render(){
+  const k = (location.hash.replace('#/','') || 'people');
+  drawNav(k);
+  $screen.innerHTML = k === 'tasks' ? screenTasks()
+    : k === 'people' ? screenPeople()
+    : `<div class="top"><div><h1 class="h1">${(NAV.find(n=>n.k===k)||{}).lab||'Раздел'}</h1>
+       <div class="h1__sub">Этот раздел делаем следующим — сейчас в прототипе показаны исполнители и задания</div></div></div>`;
+  $screen.scrollTop = 0;
+}
+function openSheet(html){ $sheet.innerHTML = html; $sheet.classList.add('on'); $veil.classList.add('on'); $sheet.setAttribute('aria-hidden','false'); }
+function closeSheet(){ $sheet.classList.remove('on'); $veil.classList.remove('on'); $sheet.setAttribute('aria-hidden','true'); }
+
+/* Проверка статуса по кнопке. В прототипе ответ налоговой имитируется задержкой:
+   на бэкенде здесь будет запрос в сервис ФНС по ИНН. */
+function runCheck(btn, id){
+  const p = person(id);
+  if (p.inn === '—'){ btn.textContent = 'Сначала нужен ИНН'; return; }
+  const was = btn.textContent;
+  btn.textContent = 'Проверяем в налоговой…'; btn.disabled = true;
+  setTimeout(() => {
+    const lost = p.problems.some(x => x.startsWith('Снялся'));
+    const now  = 'только что · вручную, оператор Виталий';
+    const line = lost ? ['Статус не подтвержден', now, 'bad'] : ['Статус подтвержден', now, 'ok'];
+    document.getElementById('lastCheck').textContent = 'только что';
+    document.getElementById('checks').insertAdjacentHTML('afterbegin',
+      `<div class="hist__i hist__i--${line[2]}"><b>${esc(line[0])}</b><div class="hist__d">${esc(line[1])}</div></div>`);
+    btn.textContent = was; btn.disabled = false;
+  }, 900);
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'pq'){
+    peopleQuery = e.target.value;
+    render();
+    const f = document.getElementById('pq');
+    if (f){ f.focus(); f.setSelectionRange(f.value.length, f.value.length); }
+  }
+});
+
+document.addEventListener('click', e => {
+  const cp = e.target.closest('[data-copy]');
+  if (cp){
+    navigator.clipboard?.writeText(cp.dataset.copy);
+    cp.classList.add('done');
+    setTimeout(() => cp.classList.remove('done'), 1200);
+    return;
+  }
+  const ck = e.target.closest('[data-check]');
+  if (ck){ runCheck(ck, +ck.dataset.check); return; }
+  const go = e.target.closest('[data-go]');
+  if (go){ location.hash = '#/' + go.dataset.go; return; }
+  const pf = e.target.closest('[data-pf]');
+  if (pf){ peopleFilter = pf.dataset.pf; render(); return; }
+  const tf = e.target.closest('[data-tf]');
+  if (tf){ taskFilter = tf.dataset.tf; render(); return; }
+  const pr = e.target.closest('[data-person]');
+  if (pr){ openSheet(sheetPerson(+pr.dataset.person)); return; }
+  const tr = e.target.closest('[data-task]');
+  if (tr){ openSheet(sheetTask(tr.dataset.task)); return; }
+  if (e.target.closest('[data-close]') || e.target === $veil) closeSheet();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+window.addEventListener('hashchange', render);
+render();
+</script>
+</body>
+</html>
