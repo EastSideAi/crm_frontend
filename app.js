@@ -2571,19 +2571,22 @@
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
-      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'],
+      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
                     ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
+      /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
+        (state.mkTab === 'launch' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
-        }).join('') + '</div>';
+        }).join('') + '</div>');
       Array.prototype.forEach.call(tb.querySelectorAll('[data-mktab]'), function (t) {
         t.addEventListener('click', function () {
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'spend') state._mkSpend = null;
+          if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -18866,7 +18869,7 @@
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">От клика до оплаты</div>' +
         '<div class="s">красная полоса — где теряем больше всего людей</div></div></div>' +
-        '<div style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
+        '<div class="lad-static" style="border-top:1px solid var(--line)">' + mkStageLadder(t, meta) + '</div></div>' +
       '<div class="card mkd-card sp5" style="padding:22px 26px">' +
         '<div class="sec-head"><span class="ic">' + ic('bolt', 14) + '</span>' +
         '<div><div class="t">По дням</div><div class="s">клики и входы в бота</div></div></div>' +
@@ -19115,11 +19118,366 @@
       : '';
 
     return '<div class="card sp5" style="overflow:hidden;margin-bottom:18px">' + head +
-      '<div style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+      '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + sources + '</div>' + note + '</div>';
+  }
+
+
+  /* ── ЗАПУСКИ — аналитика запуска от клика до оплаты ──
+     Один запуск — одна вкладка страницы; реестр запусков ведет бэкенд
+     (/admin/api/marketing/launch). Собрано по макету design/launch.html:
+     пять цифр сверху, лестница «где теряем людей», разбивки по каналам.
+     Период topbar сюда не применяется: запуск меряется нарастающим итогом. */
+
+  /* Период запуска. Пусто — весь запуск нарастающим итогом, как и было. */
+  function mkLaunchQS() {
+    var f = state._mkLaunchFrom || '', t2 = state._mkLaunchTo || '';
+    var q = [];
+    if (f) q.push('from=' + encodeURIComponent(f));
+    if (t2) q.push('to=' + encodeURIComponent(t2));
+    return q.length ? '?' + q.join('&') : '';
+  }
+
+  function fetchMkLaunch() {
+    api('/admin/api/marketing/launch' + mkLaunchQS()).then(function (r) {
+      state._mkLaunch = (r && r.launches && r.launches.length) ? r : 'none';
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._mkLaunch = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  function ladRow(name, small, n, track, right, cls) {
+    /* track: null = серой полосы нет (данных не бывает), число 0..100 = ширина */
+    return '<div class="lad-row' + (cls ? ' ' + cls : '') + '">' +
+      '<div class="lad-nm">' + esc(name) + (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
+      '<div class="lad-track">' + (track == null ? '' : '<div class="lad-fill" style="width:' + track + '%"></div>') + '</div>' +
+      '<div class="lad-n num">' + n + '</div>' +
+      '<div class="lad-right">' + (right || '') + '</div></div>';
+  }
+
+  function flatRow(name, small, n) {
+    return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
+      (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
+      '<div class="lad-n num">' + n + '</div></div>';
+  }
+
+  /* Плашка одной ступени пути. Показывает ЛЮДЕЙ и две конверсии: от предыдущего
+     шага (где теряем) и от регистраций (масштаб). Шаг, которого ещё не было или
+     которого нет в системе, приглушён и без процентов — пустая плашка честнее
+     нуля, который читается как провал. */
+  function launchPlate(s, i, worstKey) {
+    var wait = s.state !== 'live';
+    var val = (s.people == null) ? '—' : fmtMoney(s.people);
+    var conv = '';
+    if (!wait && s.of_prev != null && i > 0) {
+      conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
+      if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
+    } else if (!wait && i === 0) {
+      conv = 'база пути';
+    } else if (s.state === 'soon') {
+      conv = 'после эфира';
+    } else {
+      conv = 'нет данных';
+    }
+    return '<div class="lstep' + (wait ? ' wait' : '') +
+      (s.key === worstKey ? ' drop' : '') + '">' +
+      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' + (s.branch ? 'ветка' : (i + 1)) + '</div>' +
+      '<div class="ls-v num">' + val + '</div>' +
+      '<div class="ls-t">' + esc(s.title) + '</div>' +
+      (s.note ? '<div class="ls-s">' + esc(s.note) + '</div>' : '') +
+      '<div class="ls-c">' + conv + '</div>' +
+    '</div>';
+  }
+
+  /* Где теряем больше всего: самая низкая конверсия к предыдущему шагу среди тех,
+     где уже есть что мерить. Отмечаем ОДИН шаг — иначе красным горит вся страница
+     и перестаёт значить что-либо.
+     Имя с приставкой launch намеренно: worstStep уже занят воронкой сессий (строка ~988),
+     и одноимённая функция молча перебила бы её на пяти экранах. */
+  function launchWorstStep(path) {
+    var worst = null;
+    path.forEach(function (s, i) {
+      if (i === 0 || s.branch || s.state !== 'live' || s.of_prev == null || !s.people) return;
+      if (s.of_prev >= 50) return;
+      if (!worst || s.of_prev < worst.of_prev) worst = s;
+    });
+    return worst ? worst.key : null;
+  }
+
+  function launchPlates(path) {
+    var worst = launchWorstStep(path);
+    return '<div class="lsteps">' + path.map(function (s, i) {
+      return launchPlate(s, i, worst);
+    }).join('') + '</div>';
+  }
+
+  /* Панель периода. Даты — по дате регистрации человека: «сколько людей пришло за
+     эти дни и что с ними стало дальше». Кнопки-пресеты закрывают три вопроса,
+     которые задают чаще всего, поля — всё остальное. */
+  function launchPeriod() {
+    var f = state._mkLaunchFrom || '', t2 = state._mkLaunchTo || '';
+    var all = !f && !t2;
+    return '<div class="card lper">' +
+      '<span class="lper-l">Период регистрации</span>' +
+      '<div class="dperiod">' +
+        '<button data-lper="all" class="' + (all ? 'on' : '') + '">Весь запуск</button>' +
+        '<button data-lper="7">7 дней</button>' +
+        '<button data-lper="1">Сегодня</button>' +
+      '</div>' +
+      '<input type="date" class="lper-in" data-lper-from value="' + esc(f) + '">' +
+      '<span class="lper-d">—</span>' +
+      '<input type="date" class="lper-in" data-lper-to value="' + esc(t2) + '">' +
+    '</div>';
+  }
+
+  function launchPeriodBind(view) {
+    function apply(from, to) {
+      state._mkLaunchFrom = from || '';
+      state._mkLaunchTo = to || '';
+      state._mkLaunch = null;          /* перезапрашиваем: период считает сервер */
+      renderView();
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lper]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-lper');
+        if (v === 'all') return apply('', '');
+        var d = new Date();
+        var to = d.toISOString().slice(0, 10);
+        d.setDate(d.getDate() - (parseInt(v, 10) - 1));
+        apply(d.toISOString().slice(0, 10), to);
+      });
+    });
+    var fi = view.querySelector('[data-lper-from]'), ti = view.querySelector('[data-lper-to]');
+    if (fi && ti) {
+      var onCh = function () { apply(fi.value, ti.value); };
+      fi.addEventListener('change', onCh);
+      ti.addEventListener('change', onCh);
+    }
+  }
+
+  /* Столбики по дням: регистрации и оплаты. Компонент тот же, что на дашборде
+     (.chart/.ch-day/.ch-labels/.ch-legend) — два разных вида столбиков в одной CRM
+     читались бы как два разных продукта. */
+  /* Непрерывный ряд дат: дни без регистраций — это тоже факт («два дня тишины»),
+     а из двух столбиков во всю ширину графика не читается ничего. Дырки заполняем
+     нулями от первого дня до сегодняшнего. */
+  function launchDaysFilled(days) {
+    if (!days.length) return [];
+    var by = {}, i;
+    for (i = 0; i < days.length; i++) by[days[i].day] = days[i];
+    var cur = new Date(days[0].day + 'T00:00:00Z');
+    var lastDay = days[days.length - 1].day;
+    var today = new Date().toISOString().slice(0, 10);
+    var end = new Date((lastDay > today ? lastDay : today) + 'T00:00:00Z');
+    var out = [], guard = 0;
+    while (cur <= end && guard++ < 400) {
+      var key = cur.toISOString().slice(0, 10);
+      out.push(by[key] || { day: key, registered: 0, vip: 0, paid: 0, paid_rub: 0 });
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  function launchDayChart(rawDays) {
+    var days = launchDaysFilled(rawDays);
+    var maxR = 1, i;
+    for (i = 0; i < days.length; i++) maxR = Math.max(maxR, days[i].registered);
+    var bars = days.map(function (d) {
+      var h = Math.round(d.registered / maxR * 100);
+      var paidH = d.paid ? Math.max(4, Math.round(d.paid / maxR * 100)) : 0;
+      var dd = d.day.split('-');
+      return '<div class="ch-day" title="' + dd[2] + '.' + dd[1] + ': регистраций ' + d.registered +
+        (d.paid ? ', оплат ' + d.paid : '') + '">' +
+        (paidH ? '<div class="b2" style="height:' + paidH + '%"></div>' : '') +
+        '<div class="b1" style="height:' + Math.max(3, h - paidH) + '%"></div></div>';
+    }).join('');
+    var labels = days.map(function (d, idx) {
+      var show = days.length <= 8 || idx % 2 === 1;
+      return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
+    }).join('');
+    return '<div class="lchart"><div class="chart">' + bars + '</div>' +
+      '<div class="ch-labels">' + labels + '</div></div>' +
+      '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>регистрации</span>' +
+      '<span><i style="background:#2F6BFF"></i>оплаты</span></div>';
+  }
+
+  /* Воронка запуска столбиками: только ступени пути, без ответвлений и без шагов,
+     которых ещё не было. Ответвление рядом со ступенью сбивало бы чтение «сверху
+     вниз всё меньше». */
+  function launchFunnelChart(path) {
+    var steps = path.filter(function (s) { return !s.branch && s.state === 'live' && s.people != null; });
+    if (steps.length < 3) return '';
+    var max = Math.max(1, steps[0].people);
+    return '<div class="lfun">' + steps.map(function (s) {
+      var w = Math.max(1.5, Math.round(s.people / max * 100));
+      return '<div class="lfun-row">' +
+        '<span class="lfun-nm">' + esc(s.title) + '</span>' +
+        '<span class="lfun-bar"><i style="width:' + w + '%"></i></span>' +
+        '<span class="lfun-n num">' + fmtMoney(s.people) + '</span>' +
+        '<span class="lfun-p num">' + (s.of_reg == null ? '' : s.of_reg + '%') + '</span>' +
+      '</div>';
+    }).join('') + '</div>';
+  }
+
+  /* Карточка с графиками. Данных мало — не рисуем сетку ради сетки: пустой график
+     читается как «всё плохо» или «система врёт», а на деле цифр ещё нет. */
+  function launchCharts(cur) {
+    var days = cur.by_day || [];
+    var withData = days.filter(function (d) { return d.registered || d.paid; });
+    var dayCard;
+    if (withData.length >= 2) {
+      dayCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">По дням</div>' +
+        '<div class="s">регистрации и оплаты, ' + withData.length + ' ' +
+        plural(withData.length, 'день', 'дня', 'дней') + '</div></div></div>' +
+        launchDayChart(days) + '</div>';
+    } else {
+      dayCard = '<div class="card sp7" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">По дням</div>' +
+        '<div class="s">график появится, когда наберётся хотя бы два дня с цифрами</div></div></div>' +
+        '<div class="empty">Пока данных на график нет: ' +
+        (withData.length ? 'есть только один день с регистрациями.' : 'регистраций ещё не было.') +
+        '</div></div>';
+    }
+    var fun = launchFunnelChart(cur.path || []);
+    var funCard = fun
+      ? '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><div><div class="t">Воронка запуска</div>' +
+        '<div class="s">сколько людей на каждой ступени</div></div></div>' + fun + '</div>'
+      : '';
+    return '<div class="grid" style="margin-bottom:16px">' + dayCard + funCard + '</div>';
+  }
+
+  function renderMkLaunch(view) {
+    if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
+    if (state._mkLaunch === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры запуска — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var all = state._mkLaunch.launches;
+    var cur = all[Math.min(state._mkLaunchIdx || 0, all.length - 1)];
+    var reg = cur.registrations, pay = cur.payment, ch = cur.channels || {};
+    var tg = ch.tg || {};
+    var clicksN = (cur.clicks || []).reduce(function (n, c) { return n + c.n; }, 0);
+    var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
+    var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
+    var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
+
+    var hasWorst = pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5;
+    var chSmall = 'тг ' + (tg.members || 0) +
+      ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
+    var days = cur.days_to_event;
+    var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
+
+    /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
+       регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
+       что 200 регистраций, и шкала врала бы. */
+    var base = Math.max(reg.total, clicksN) || 1;
+    var ladder =
+      ladRow('Посетители страницы', 'знает только Метрика', '—', null, convMut('нет данных')) +
+      ladRow('Клики по нашим ссылкам', clicksN ? 'короткие ссылки в постах и письме' : 'коды заведены, ждут раздачи',
+        clicksN || 0, pct(clicksN, base), clicksN ? '' : convMut('ждет раздачи')) +
+      ladRow('Зарегистрировались', 'форма на истсайд.рф/intensive', reg.total, pct(reg.total, base), convMut(clicksN ? pct(reg.total, clicksN) + '% от кликов' : 'все')) +
+      ladRow('Выбрали бесплатное участие', '48 часов доступа после эфира',
+        reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
+      ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
+        reg.vip, pct(reg.vip, base), conv(pct(reg.vip, base) + '% регистраций')) +
+      ladRow('Получили счет на 690', pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+        pay.invoiced, pct(pay.invoiced, base), conv(reg.vip && pay.invoiced >= reg.vip ? 'все, кто выбрал' : pct(pay.invoiced, reg.vip || base) + '% выбравших')) +
+      ladRow('Оплатили 690', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+        pay.paid, pct(pay.paid, base) || 2,
+        conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
+          (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
+        hasWorst ? 'worst' : '') +
+      ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
+        pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
+      ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
+        reg.viewers || '—', reg.viewers ? pct(reg.viewers, base) : null,
+        reg.viewers ? conv(pct(reg.viewers, base) + '% от реги') : convMut(days > 0 ? 'еще не было' : 'нет данных')) +
+      ladRow('Заявка на диагностику', 'ради чего зовем на эфир', '—', null, convMut('после эфира')) +
+      ladRow('Оплата диагностики', 'деньги запуска', '—', null, convMut('после эфира'));
+
+    var diagRows = (cur.diag || []).map(function (d) {
+      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done, d.done);
+    }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
+
+    var srcRows = (reg.sources || []).map(function (s) {
+      return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
+        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n);
+    }).join('') || '<div class="empty">Регистраций пока нет.</div>';
+
+    var chRows =
+      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0) +
+      flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
+      flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
+
+    var clickRows = (cur.clicks || []).map(function (c) {
+      return flatRow(c.title || c.code, c.code, c.n);
+    }).join('');
+
+    var tabs = all.map(function (l, i) {
+      return '<a class="tab' + (i === (state._mkLaunchIdx || 0) ? ' on' : '') + '" data-launch="' + i + '">' + esc(l.title) + '</a>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      statBar([
+        { label: 'Регистрации', value: reg.total,
+          sub: 'бесплатно ' + reg.free + ' · платно ' + reg.vip },
+        { label: 'Счет на 690', value: pay.invoiced,
+          sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
+          sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        { label: 'В закрытом канале', value: tg.members || 0,
+          sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
+        { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
+      ], 'five') +
+      launchPeriod() +
+      '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
+        '<div><div class="t">Путь человека по запуску</div><div class="s">' +
+          'каждая ступень считает людей из числа зарегистрировавшихся' + '</div></div></div>' +
+        '<div class="pad" style="border-top:1px solid var(--line)">' +
+          launchPlates(cur.path || []) + '</div></div>' +
+      launchCharts(cur) +
+      '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div><div class="t">От показа до оплаты</div><div class="s">' +
+          (hasWorst ? 'красным — шаг, где деньги не доходят' : 'путь запуска по ступеням') + '</div></div></div>' +
+        '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="grid" style="margin-top:16px">' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
+          '<div class="brk">' + diagRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
+          '<div class="brk">' + srcRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
+          '<div class="brk">' + chRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
+          '<div class="brk">' + (clickRows || '<div class="empty">Кликов пока нет — ссылки еще не розданы.</div>') + '</div></div>' +
+        '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
+          '<div style="border-top:1px solid var(--line)">' +
+            '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сюда она не подключена</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+            '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+          '</div></div>' +
+      '</div></div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
+      t.addEventListener('click', function () {
+        state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
+        renderView();
+      });
+    });
+    launchPeriodBind(view);
   }
 
   function renderMarketing(view) {
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
+    if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
