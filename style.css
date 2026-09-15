@@ -416,9 +416,10 @@ a { color: inherit; text-decoration: none; }
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.85) 50%, transparent);
   animation: shimmer 1.5s var(--ease) infinite; }
 @keyframes shimmer { 100% { transform: translateX(100%); } }
-@media (prefers-reduced-motion: reduce) { .shim::after { animation: none;
+@media (prefers-reduced-motion: reduce) {
+  .shim::after { animation: none; }
   .gl-ring { transition: none; }
-} }
+}
 
 /* dashboard-скелетон: повторяет layout (полоса KPI + карточки) */
 .sk-statbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding: 8px;
@@ -993,12 +994,32 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tb-how .rh-ht { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .tb-how-m { display: none; }
 .tb-who-seg { margin-left: 2px; }
+/* Полоса целей над доской отдела: системный .qchip, свое только кольцо и ширина названия. */
+.tb-goals { display: flex; gap: 6px; overflow-x: auto; padding: 0 0 12px; margin-top: -4px; scrollbar-width: none; }
+.tb-goals::-webkit-scrollbar { display: none; }
+.tb-gchip { flex: none; max-width: 260px; padding-left: 9px; }
+.tb-gchip .gl-ring { width: 18px; height: 18px; }
+.tb-gchip .gl-ring::before { inset: 3px; background: var(--fill); }
+.tb-gchip:hover .gl-ring::before { background: #EDEFF3; }
+.tb-gchip.on .gl-ring::before { background: var(--blue-tint); }
+.tb-gchip .gl-ring b { display: none; }
+.tb-gchip .tb-gt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-gchip.on { background: var(--blue-tint); color: var(--blue); border-color: var(--blue); }
+.tb-gchip.on .qn { color: var(--blue); }
+.tb-top .tb-gsel { display: none; }
+.tb-goal { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); min-width: 0; }
+.tb-goal svg { flex: none; }
+.tb-goal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .tb-col { flex: none; width: 232px; min-width: 0; }
   /* Переключатель «Мои / Выдал» и поиск в одну строку: минус полоса контролов до доски. */
   .tb-top .tb-who-seg { flex: none; }
   .tb-top .wk-spacer { display: none; }
   .tb-top .wk-search { flex: 1 1 120px; min-width: 120px; }
+  /* Цели на телефоне — селект в строке поиска вместо полосы чипов. */
+  .tb-goals { display: none; }
+  .tb-top .tb-gsel { display: block; flex: 1 1 140px; min-width: 140px; width: auto; }
+  .prio-sel { margin-left: 0; }
   /* Перетаскивания на тач-экране нет — объясняем настоящий путь. */
   .tb-how-d { display: none; }
   .tb-how-m { display: block; }
@@ -1153,6 +1174,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-archive#m-hide:hover svg { color: var(--red); }
 .m-archive#m-unhide:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
 .m-archive#m-unhide:hover svg { color: var(--blue); }
+/* «Войти как» — кабинет клиента его глазами. Уводит из CRM, поэтому тон синий,
+   как у всего, что открывается на стороне клиента, а не красный, как архив. */
+.m-archive#m-sublogin { margin-right: auto; }
+.m-archive#m-sublogin:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.25); }
+.m-archive#m-sublogin:hover svg { color: var(--blue); }
 
 /* ── секции БЕЗ верхней полоски (воздух + подзаголовок) ── */
 .m-sec { margin-top: 30px; }
@@ -2790,6 +2816,9 @@ button.tr-crumb:hover { color: var(--blue); }
    по клику на его месте встает выбор человека. */
 .tsk-mwho.tsk-watch { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
+.tsk-mwho.tsk-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
+.tsk-mwho.tsk-edit svg { color: var(--blue); }
+.tsk-sec[hidden] { display: none; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pp-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: var(--r-pill);
@@ -3180,6 +3209,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-reshint { font-size: 11.5px; color: var(--ink-3); }
 .tsk-resrow .al-cancel { margin-left: auto; height: 36px; }
 .tsk-resrow .bp { height: 36px; }
+/* Редактор задачи: та же панель, что у сдачи результата, поля формы как в «Новой задаче». */
+.tsk-editform .al-f { gap: 5px; }
+.tsk-editform .al-sel { background: #fff; }
+.tsk-editform .tsk-resrow { justify-content: flex-end; }
+.tsk-editform .tsk-resrow .al-cancel { margin-left: 0; }
+/* Порядок задач: системный селект .al-sel.sm по содержимому, не во всю ширину.
+   Выбранный порядок подсвечен синим тинтом, как тумблер периода .rh-onoff. */
+.prio-sel { display: inline-block; width: auto; margin-left: 10px; }
+.prio-sel .al-sel { width: auto; }
+.prio-sel.on .al-sel { background: var(--blue-tint); color: var(--blue); }
+/* Соседние сегменты в шапке плана: внешний зазор больше внутреннего, иначе восемь пилюль читаются одной лентой. */
+.wk-top > .pay-seg + .pay-seg { margin-left: 8px; }
 .tsk-picked { display: flex; flex-wrap: wrap; gap: 6px; }
 .tsk-picked:empty { display: none; }
 .tsk-pick { display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
@@ -3510,6 +3551,7 @@ button.tr-crumb:hover { color: var(--blue); }
 @keyframes dotsAnim { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
 /* статус-меню (клик по пилюле в таблице) */
+#smenu.ddmenu--over-modal { z-index: 90; }   /* выпадашка из карточки — поверх нее (.modal z-index 81) */
 #smenu { position: fixed; z-index: 70; background: #fff; border: 1px solid var(--line-2);
   border-radius: 14px; padding: 6px; box-shadow: 0 14px 40px -16px rgba(15,19,32,.3);
   display: flex; flex-direction: column; gap: 1px; min-width: 188px; }
@@ -3984,6 +4026,19 @@ button.tsk-mimp { cursor: pointer; }
 .tg-compose .tg-send, .m-dlg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover, .m-dlg-compose .tg-send:hover { background: var(--blue-d); }
+/* скрепка: отправить клиенту файл прямо из переписки. Тихая, в отличие от синей
+   кнопки отправки: основное действие здесь всё-таки ответ словами. */
+.tg-clip { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  color: var(--ink-2); cursor: pointer; transition: background .15s, color .15s; }
+.tg-clip:hover { background: var(--fill); color: var(--blue); }
+.tg-compose .tg-clip, .m-dlg-compose .tg-clip { order: -1; }
+/* имя файла: основа сжимается, расширение остаётся целым */
+.rm-catt.file .fnm { display: flex; min-width: 0; align-items: baseline; }
+.rm-catt.file .fnm > span { min-width: 0; }
+.rm-catt.file .fnm > i { font-style: normal; flex: none; }
+/* размер файла рядом с именем — тише имени, цифры табличные */
+.rm-catt.file .sz { font-style: normal; font-size: 11px; color: var(--ink-3); flex: none; }
+.tg-msg.out .rm-catt.file .sz { color: rgba(255,255,255,.7); }
 .tg-chead .ai-toggle { flex: none; }
 
 /* инбокс на всю высоту: контейнер фиксируется под экран, скроллит только внутри */
@@ -5907,6 +5962,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    безубыточности). Амбер тут врал бы — он означает «посмотри, что-то не так». */
 .fin-note.calm { background: var(--fill); color: var(--ink-2); }
 .fin-note.calm svg { color: var(--ink-3); }
+/* Калькулятор планового налога: поле дохода в строке .fkv не должно распирать ряд
+   (у .al-in ширина 100%), поэтому оно по содержимому и прижато вправо. */
+.fin-taxrow .al-in { width: 150px; text-align: right; }
+.fin-taxref-t { margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink-3); }
+.fin-taxref { margin-top: 4px; }
+.fin-taxref .fkv { padding: 8px 0; font-size: 12.5px; }
 
 .fin-groups { margin-top: 12px; }
 .fg + .fg { margin-top: 16px; }
@@ -5939,6 +6001,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
    отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
 .trow.click:hover .fo-what b { color: var(--blue); }
+/* Имя клиента в «Доходах» — ссылка в его карточку (data-lead). Отдельно от .trow.click:
+   тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
+.fin-lead { cursor: pointer; }
+.fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
@@ -5946,6 +6012,47 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* Чип приложенного документа (выплаты подрядчикам): нейтральная плашка с зелёной
+   галочкой. Не залитый зелёный, чтобы не читаться вторым статусом рядом с «факт». */
+.fst.doc { color: var(--ink-2); background: var(--fill); gap: 4px; }
+.fst.doc svg { color: var(--green); flex: none; }
+
+/* Плановый налог по месяцам: годовая табличка. Доход тихий, налог — акцент (это то,
+   что откладывают). У текущего месяца синяя полоса и синие цифры. */
+.tx-year { display: flex; align-items: center; gap: 8px; }
+.tx-year .num { font-size: 15px; font-weight: 700; min-width: 52px; text-align: center; }
+.tx-year .icobtn[disabled] { opacity: .35; cursor: default; }
+.tx-head, .tx-row { display: grid; grid-template-columns: 116px 1fr 118px 118px;
+  align-items: center; gap: 14px; }
+.tx-head { padding: 6px 0 10px; margin-top: 4px; font: 600 11px 'Manrope', sans-serif;
+  color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--line); }
+.tx-head span:nth-child(3), .tx-head span:nth-child(4),
+.tx-row .tx-inc, .tx-row .tx-tax { text-align: right; }
+.tx-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.tx-row:last-child { border-bottom: 0; }
+/* глобальный .empty (text-align:center) протекал в .tx-row.empty и центровал
+   месяц — держим название всегда по левому краю */
+.tx-m { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+.tx-m i { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--blue);
+  margin-left: 7px; text-transform: uppercase; letter-spacing: .03em; }
+.tx-bar { height: 6px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.tx-bar i { display: block; height: 100%; background: var(--blue-tint); border-radius: inherit;
+  transition: width .8s var(--ease); }
+.tx-inc { font-size: 13.5px; color: var(--ink-2); }
+.tx-tax { font-size: 14px; font-weight: 700; color: var(--ink); }
+.tx-row.cur .tx-bar i { background: var(--blue); }
+.tx-row.cur .tx-m, .tx-row.cur .tx-tax { color: var(--blue-d); }
+.tx-row.empty .tx-inc, .tx-row.empty .tx-tax { color: var(--ink-3); font-weight: 500; }
+.tx-row.total { border-top: 2px solid var(--line-2); border-bottom: 0;
+  margin-top: 4px; padding-top: 14px; }
+.tx-row.total .tx-m { font-weight: 700; }
+.tx-row.total .tx-tax { color: var(--blue-d); font-size: 15px; }
+@media (max-width: 640px) {
+  .tx-head, .tx-row { grid-template-columns: 1fr auto auto; gap: 10px; }
+  .tx-bar { display: none; }
+  .tx-head span:nth-child(2) { display: none; }
+}
 
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
    документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
@@ -5965,6 +6072,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
+.fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
+.fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }
+button.fsp-via { cursor: pointer; }
 
 /* Прямые расходы: у блока свой заголовок с итогом и своей кнопкой, между блоками
    воздух больше, чем внутри — блоки читаются как отдельные направления. */
@@ -6010,7 +6121,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fe-grid { grid-template-columns: 92px 1.6fr 150px 150px; cursor: pointer; }
 .fe-t { font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
 .fe-s { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
-.fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; }
+.fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+/* Крестик удаления строки: тихий, проявляется по наведению на строку, краснеет на себе.
+   Всегда виден на тач-экранах — там наведения нет. */
+.fd-del { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border: none; background: transparent;
+  color: var(--ink-3); border-radius: var(--r-sm, 6px); cursor: pointer;
+  opacity: 0; transition: opacity .12s, background .12s, color .12s; }
+.trow.fe-grid:hover .fd-del { opacity: .6; }
+.fd-del:hover { opacity: 1; background: var(--red-soft); color: var(--red); }
+@media (hover: none) { .fd-del { opacity: .5; } }
 /* Кнопка «добавить» стоит в одном ряду с чипами форм, но она действие, а не фильтр:
    синие чернила отделяют ее, не заводя третьего рецепта кнопки. */
 .qchip.add { display: inline-flex; align-items: center; gap: 5px; color: var(--blue);
@@ -6021,6 +6141,19 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .trow.fe-grid { grid-template-columns: 1fr auto !important; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
 }
+
+/* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
+   Клик по нему помечает продажу полученной, не открывая форму — как чек-лист.
+   Строкам даём боковые поля под шапку (16px): иначе кружок липнет к краю, а сумма
+   упирается в правую грань карточки. */
+.rp-row { padding-left: 16px; padding-right: 16px; }
+.rp-row.rp-haschk { grid-template-columns: auto 1fr auto; column-gap: 12px; }
+.rp-chk { width: 22px; height: 22px; padding: 0; flex: none; display: inline-flex;
+  align-items: center; justify-content: center; border: 1.5px solid var(--line-2);
+  background: transparent; border-radius: 50%; color: #fff; cursor: pointer;
+  transition: border-color .12s, background .12s; }
+.rp-chk:hover { border-color: var(--green); }
+.rp-chk.on { background: var(--green); border-color: var(--green); }
 
 /* ── Управление ведомостью ──────────────────────────────────────────────────
    Правка живет там, где видно ее последствие: правило фонда — в строке каскада,
@@ -7696,6 +7829,73 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .wk-pick .wk-state { margin: 0 0 12px; }
 .wkc-text { margin-top: 14px; }
 /* Команда: строка на человека. */
+/* ── Пульс команды (.tp-*, свой префикс: .pl-* занят планами работ) ─────────────────────────────────────────────────────────
+   Строка на человека: кто, сейчас, сделано, завтра. Якорь экрана — колонка
+   «Сейчас» чернилами и часы движения под именем; остальное тихое. Красное на
+   экране одно — просрочка (чип у имени и полоска строки .r-crit). */
+.tp-sum { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 14px 24px 12px; border-bottom: 1px solid var(--line-2);
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.tp-sum b { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; }
+.tp-sum .bad, .tp-sum .bad b { color: var(--red-ink); }
+.tp-sum .warn, .tp-sum .warn b { color: var(--amber-ink); }
+.brd-n.warn { color: var(--amber-ink); }
+.tp-grid { grid-template-columns: minmax(200px, 300px) minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); }
+.tp-wgrid { grid-template-columns: minmax(200px, 300px) repeat(4, minmax(64px, 1fr)) 210px; }
+.tp-wgrid .th:nth-child(n+2):nth-child(-n+5), .tp-wgrid .brd-n { text-align: right; }
+.trow.tp-grid, .trow.tp-wgrid { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; align-items: start; }
+.trow.tp-grid.thead, .trow.tp-wgrid.thead { min-height: 0; padding-top: 0; padding-bottom: 0; align-items: center; }
+.trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { padding-top: 4px; }
+.trow.tp-wgrid.has-note { padding-bottom: 12px; }
+.tp-who { cursor: pointer; align-self: start; }
+.tp-who:hover .tp-nm { color: var(--blue); }
+.tp-nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.01em; transition: color .12s var(--ease); }
+.tp-nm .sev { flex: none; }
+.sev.tp-over { background: var(--red-soft); color: var(--red-ink); }
+.trow.tp-grid.tp-quiet .tsk-av { background: var(--fill); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+.tp-who .brd-nm { overflow: visible; }
+/* Часы движения: 13 точек, 8:00–20:00. Заполненная — в этот час человек что-то
+   делал с задачами. Подписи только у 8, 12, 16, 20 — иначе шкала шумит. */
+.tp-hrs { display: inline-flex; align-items: flex-end; gap: 3px; margin-top: 7px; height: 10px; margin-bottom: 13px; }
+.tp-hrs i { position: relative; width: 6px; height: 6px; border-radius: 2px; background: var(--line); transition: background .3s var(--ease); }
+.tp-hrs i.on { background: var(--blue); height: 10px; }
+.tp-hrs i[data-h]::after { content: attr(data-h); position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  margin-top: 3px; font-size: 10px; font-weight: 600; font-style: normal; line-height: 1; color: var(--ink-3); }
+.tp-hrs.off i { background: var(--line-2); }
+.tp-hrs.days { gap: 5px; margin-top: 8px; }
+.tp-hrs.days i { width: 14px; height: 6px; }
+.tp-hrs.days i.on { height: 6px; background: var(--blue); }
+.tp-hrs.days i[data-h]::after { margin-top: 4px; }
+.tp-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding-right: 14px; }
+.tp-t { display: block; width: 100%; text-align: left; padding: 3px 6px; margin-left: -6px; border-radius: 8px;
+  font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.35;
+  transition: background .12s var(--ease), color .12s var(--ease); }
+.tp-t:hover { background: var(--blue-tint); color: var(--blue-d); }
+.tp-tt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tp-meta { display: block; margin-top: 1px; font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tp-meta i { font-style: normal; font-weight: 600; }
+/* Якорь строки — «Сейчас»: крупнее и чернилами; «Сделано» и «Завтра» тише. */
+.tp-t { color: var(--ink-2); }
+.tp-c.now .tp-t { font-size: 14px; font-weight: 600; color: var(--ink); }
+.tp-none { font-size: 12.5px; color: var(--ink-3); padding: 3px 0; }
+.tp-none b { color: var(--ink-2); }
+.tp-more { display: inline-block; padding: 2px 0 0; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.tp-foot { display: flex; justify-content: flex-end; }
+.tp-link { font: 600 12px 'Manrope', sans-serif; color: var(--ink-3); transition: color .12s; }
+.tp-link:hover { color: var(--blue); }
+@media (max-width: 720px) {
+  .trow.tp-grid, .trow.tp-wgrid { grid-template-columns: minmax(0, 1fr) !important; gap: 8px; }
+  .trow.tp-grid.thead, .trow.tp-wgrid.thead { display: none; }
+  .trow.tp-grid .tp-c { padding-right: 0; }
+  /* Пустые клетки на телефоне не рисуем: у тихого остается только шапка с именем и точками. */
+  .trow.tp-grid .tp-c.tp-empty { display: none; }
+  .trow.tp-grid .tp-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .trow.tp-wgrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .trow.tp-wgrid .brd-who { grid-column: 1 / -1; }
+  .trow.tp-wgrid .brd-n, .trow.tp-wgrid .rh-c { display: flex; align-items: baseline; gap: 6px; text-align: left; font-size: 14px; }
+  .trow.tp-wgrid .brd-n::before, .trow.tp-wgrid .rh-c::before { content: attr(data-l); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .tp-sum { padding: 12px 16px 10px; gap: 4px 16px; }
+}
 .wk-grid { grid-template-columns: minmax(180px, 340px) 130px repeat(4, minmax(64px, 1fr)) 210px; }
 .wk-grid .th:nth-child(n+3):nth-child(-n+6), .wk-grid .brd-n { text-align: right; }
 /* Поле замечания раскрывается первым кликом по «Вернуть»: до него скрыто,
@@ -8032,3 +8232,199 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   /* Чипы адресата по ширине текста: мобильное правило «Команды» растягивает их на ряд. */
   .nw-roles .tm-tp-b, .nw-people .tm-tp-b { flex: none; }
 }
+
+/* ════ КАРТА: клиенты по этапам пути (.map-*) ════════════════════════════════
+   Якорь экрана — дорожка этапов: она единственная крупная вещь, список под ней
+   намеренно тихий. Полоска под числом дает форму потока с одного взгляда, без
+   диаграмм. Сегмент «Без плана» отбит от дорожки: это не девятый этап, а те, кого
+   мы еще не разложили по пути, и читаться он должен иначе. */
+.map-top { padding: 22px 26px 20px; }
+.map-rail { display: flex; align-items: stretch; gap: 8px; margin-top: 18px;
+  overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+.map-seg { flex: 1 1 0; min-width: 104px; position: relative; text-align: left;
+  display: flex; flex-direction: column; gap: 6px; padding: 12px 13px 11px;
+  background: var(--fill); border: 1px solid transparent; border-radius: var(--r-lg);
+  cursor: pointer; transition: .14s var(--ease); }
+.map-seg:hover { background: #EDEFF3; }
+.map-seg.on { background: var(--blue-tint); border-color: rgba(47,107,255,.28); }
+.map-seg-n { font: 800 26px 'Manrope', sans-serif; letter-spacing: -.035em; color: var(--ink);
+  line-height: 1; font-variant-numeric: tabular-nums; }
+.map-seg.zero .map-seg-n { color: var(--ink-3); font-weight: 700; }
+/* На этапе никого — кнопка не обещает перехода в пустой список */
+.map-seg:disabled { cursor: default; }
+.map-seg:disabled:hover { background: var(--fill); }
+.map-seg.on .map-seg-n { color: var(--blue); }
+.map-seg-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); line-height: 1.25; }
+.map-seg.on .map-seg-t { color: var(--navy); }
+.map-seg-b { display: block; height: 3px; border-radius: 2px; background: rgba(15,19,32,.07);
+  overflow: hidden; margin-top: auto; }
+.map-seg-b i { display: block; height: 100%; border-radius: 2px; background: var(--navy);
+  opacity: .35; transition: width .9s var(--ease); }
+.map-seg.on .map-seg-b i { background: var(--blue); opacity: 1; }
+/* номер этапа — тихая подпись в углу, чтобы порядок читался и без счета глазами */
+.map-seg-i { position: absolute; top: 11px; right: 12px; font-size: 11px; font-weight: 700;
+  color: var(--ink-3); opacity: .55; }
+/* «Без плана»: отбивка слева и амбер — это не этап, а незакрытая работа команды */
+.map-seg.gap { margin-left: 14px; flex: 0 0 132px; }
+.map-seg.gap::before { content: ''; position: absolute; left: -8px; top: 8px; bottom: 8px;
+  width: 1px; background: var(--line-2); }
+.map-seg.gap:not(.zero) { background: var(--amber-soft); }
+.map-seg.gap:not(.zero) .map-seg-n { color: var(--amber-ink); }
+.map-seg.gap:not(.zero) .map-seg-t { color: var(--amber-ink); opacity: .8; }
+.map-seg.gap:not(.zero) .map-seg-b i { background: var(--amber); opacity: .55; }
+/* Выбранный «Без плана» остается амбером (синий тут читался бы как другой сегмент),
+   но берет полную плотность подписи и заметный бордер — иначе нажатие визуально
+   ничего не меняет, а список под ним уже показывает срез. */
+.map-seg.gap.on { background: var(--amber-soft); border: 1.5px solid var(--amber);
+  padding: 11.5px 12.5px 10.5px; }
+.map-seg.gap.on .map-seg-t { opacity: 1; }
+.map-seg.gap.on .map-seg-b i { opacity: 1; }
+
+.map-list { margin-top: 16px; }
+.map-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 13px 16px; border-bottom: 1px solid var(--line); }
+.map-bar .searchwrap { flex: 0 1 280px; }
+.map-chips { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.map-grid { grid-template-columns: minmax(150px, 1.2fr) 118px minmax(210px, 1.5fr) 140px 118px minmax(110px, .9fr); }
+.map-grid.thead { height: 38px; }
+.map-c { min-width: 0; font-size: 12.5px; color: var(--ink-2); }
+.map-tar { font-size: 11.5px; }
+.map-tar.off { color: var(--ink-3); background: var(--fill); border: 1px dashed var(--line-2); }
+
+/* Позиция на пути: засечки вместо полосы. Пройденное чернильное, текущее синее и
+   крупнее — этап читается раньше, чем подпись рядом. */
+.map-track { display: flex; align-items: center; gap: 4px; max-width: 100%; }
+.map-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(15,19,32,.12); flex: none; }
+.map-dot.done { background: var(--navy); opacity: .45; }
+.map-dot.now { width: 10px; height: 10px; background: var(--blue); }
+.map-track-t { margin-left: 8px; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-track.none { font-size: 12.5px; color: var(--amber-ink); }
+
+/* Молчание дольше двух недель — то, ради чего колонка заведена: оно чернее
+   рядового «заходил вчера», а не бледнее. Амбер сюда не тащим, он занят
+   якорем «Без плана» на дорожке. */
+.map-seat { color: var(--ink-3); }
+.map-seat.cold { color: var(--ink-2); font-weight: 600; }
+.map-none { color: var(--ink-3); }
+.map-over { color: var(--red-ink); font-weight: 700; }
+.map-sell { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 960px) {
+  .map-top { padding: 18px 16px 16px; }
+  .map-seg { flex: 0 0 118px; }
+  .map-seg.gap { flex: 0 0 128px; }
+  /* Строка на телефоне разворачивается ярусами: имя и тариф, путь, кабинет и
+     задачи, предложение — в шесть колонок на 390px имя схлопывается до двух букв.
+     Шапки тут нет, поэтому ярусы подписаны сами (data-l), как в .tp-grid. */
+  .map-grid { grid-template-columns: 1fr auto !important; height: auto !important;
+    padding: 13px 16px; gap: 8px 10px; }
+  .map-grid.thead { display: none !important; }
+  .map-grid .t-cell { grid-column: 1; }
+  .map-grid .map-c-tar { grid-column: 2; justify-self: end; }
+  .map-grid .map-c-track, .map-grid .map-sell { grid-column: 1 / -1; }
+  .map-grid .map-c-seat, .map-grid .map-c-task { font-size: 12px; }
+  .map-grid .map-c-seat::before, .map-grid .map-c-task::before,
+  .map-grid .map-sell::before { content: attr(data-l); display: block; margin-bottom: 2px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); }
+  .map-sell { white-space: normal; }
+  /* Пустые ярусы на телефоне не рисуем: подпись ради прочерка съедает экран
+     (прием из .tp-grid .tp-empty). На десктопе прочерк остается — там колонка
+     подписана шапкой, и пустая клетка держит сетку. */
+  .map-grid .map-c.map-empty { display: none; }
+  .map-bar .list-count { margin-left: 0; }
+}
+
+/* ── Раздел «Почта» карточки: адрес кейса и переписка с вузом ──
+   Плотно и тихо: якорь раздела — сам адрес, письма идут ровным списком на
+   полупрозрачных разделителях, без рамок и зебры. */
+.mail-hero { display: flex; align-items: center; gap: 16px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.mail-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.mail-hero-b { flex: 1; min-width: 0; }
+.mail-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.mail-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+.mail-addr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.mail-addr-v { flex: 1; min-width: 180px; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); word-break: break-all; }
+
+.mail-form { display: grid; gap: 8px; margin-top: 16px; }
+.mail-form input, .mail-form textarea { font-family: inherit; font-size: 13.5px; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  background: #fff; color: var(--ink); width: 100%; }
+.mail-form textarea { resize: vertical; }
+.mail-form input::placeholder, .mail-form textarea::placeholder { color: var(--ink-3); }
+.mail-form input:focus, .mail-form textarea:focus { outline: none; border-color: var(--blue); }
+.mail-form .bp { justify-self: start; }
+.mail-off { margin-top: 16px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.mail-list { margin-top: 20px; }
+.mail-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.mail-row:last-child { border-bottom: none; }
+.mail-rhead { display: flex; align-items: center; gap: 9px; }
+.mail-dir { flex: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-pill); }
+.mail-dir.in { background: var(--green-soft); color: var(--green-ink); }
+.mail-dir.out { background: var(--blue-tint); color: var(--blue-d); }
+.mail-who { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-docs { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.mail-when { flex: none; font-size: 12px; color: var(--ink-3); }
+.mail-subj { margin-top: 6px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.mail-text { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+
+/* телефон: форма и шапка письма перестают быть строкой, ничего не уезжает за экран */
+@media (max-width: 520px) {
+  .mail-addr { gap: 8px; }
+  .mail-addr-v { min-width: 100%; }
+  .mail-rhead { flex-wrap: wrap; }
+  .mail-who { flex: 1 1 100%; white-space: normal; }
+}
+
+/* ── Запуски: путь человека плашками ──────────────────────────────────────── */
+/* Просьба Ольги: цифры плашками, а не строчками. Ширина колонки фиксируется
+   минимумом, а не числом колонок: ступеней в запуске то 12, то 16, и раскладка
+   не должна ломаться от добавления шага. */
+.lsteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; }
+.lstep { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
+         padding: 14px 16px 13px; background: var(--card); }
+.lstep .ls-i { position: absolute; top: 12px; right: 14px; font-size: 11px; color: var(--ink-3); }
+.lstep .ls-v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lstep .ls-t { font-size: 13px; font-weight: 600; margin-top: 3px; }
+.lstep .ls-s { font-size: 11px; color: var(--ink-3); margin-top: 3px; line-height: 1.35; }
+.lstep .ls-c { font-size: 11px; color: var(--ink-2); margin-top: 9px; }
+.lstep .ls-c b { font-weight: 700; color: var(--ink); }
+/* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
+.lstep.wait { background: var(--fill); }
+.lstep.wait .ls-v { color: var(--ink-3); }
+/* Единственный отмеченный провал: где теряем больше половины людей. */
+.lstep.drop { border-color: var(--red); background: var(--red-soft); }
+.lstep.drop .ls-c b { color: var(--red-ink); }
+
+.lper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 12px 16px; margin-bottom: 16px; }
+.lper-l { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-right: 4px; }
+.lper-d { color: var(--ink-3); }
+/* Поля дат — той же породы, что в поповере периода на других вкладках. */
+.lper-in { font: 500 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+           border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; outline: none; }
+.lper-in:focus { border-color: var(--blue); }
+.lstep .ls-i.br { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+
+/* Воронка запуска столбиками: имя ступени, полоса, число, доля от регистраций. */
+.lfun { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.lfun-row { display: grid; grid-template-columns: 1fr 80px 46px 40px; gap: 10px; align-items: center; }
+.lfun-nm { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfun-bar { height: 10px; background: var(--fill); border-radius: var(--r-pill); overflow: hidden; }
+.lfun-bar i { display: block; height: 100%; background: var(--blue); border-radius: var(--r-pill); }
+.lfun-n { font-size: 13px; font-weight: 700; text-align: right; }
+.lfun-p { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+/* Запуск идёт днями, а не неделями: при двух-трёх днях столбик во всю колонку
+   выглядит стеной и ничего не сообщает — ограничиваем ширину. */
+.lchart .ch-day { max-width: 56px; }
+.lchart .chart { justify-content: flex-start; }
+.lchart .ch-labels span { max-width: 56px; }
