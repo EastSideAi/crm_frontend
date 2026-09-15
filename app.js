@@ -19338,7 +19338,7 @@
     if (withData.length >= 2) {
       dayCard = '<div class="card sp7" style="padding:22px 26px">' +
         '<div class="sec-head"><div><div class="t">По дням</div>' +
-        '<div class="s">регистрации и оплаты, ' + launchSpan(days) + '</div></div></div>' +
+        '<div class="s">регистрации и оплаты, ' + launchSpan(launchDaysFilled(days)) + '</div></div></div>' +
         launchDayChart(days) + '</div>';
     } else {
       dayCard = '<div class="card sp7" style="padding:22px 26px">' +
