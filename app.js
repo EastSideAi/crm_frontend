@@ -253,6 +253,7 @@
       x: '<path d="M5 5l10 10M15 5L5 15"/>',
       alert: '<path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/>',
       phone: '<path d="M4.5 3.5h3l1.2 3.6-1.7 1.2a9.5 9.5 0 0 0 4.7 4.7l1.2-1.7 3.6 1.2v3a1.2 1.2 0 0 1-1.4 1.2A13.6 13.6 0 0 1 3.3 4.9a1.2 1.2 0 0 1 1.2-1.4z"/>',
+      mail: '<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M3.2 6.2l6.1 4.4a1.2 1.2 0 0 0 1.4 0l6.1-4.4"/>',
       send: '<path d="M17 3L8.5 11.5"/><path d="M17 3l-5.5 14-3-6.5L2 7.5 17 3z"/>',
       cal: '<rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/>',
       spark: '<path d="M10 2l1.8 4.7L17 8.5l-4.6 2.1L10 16l-2.4-5.4L3 8.5l5.2-1.8L10 2z" fill="currentColor" stroke="none"/>',
@@ -22862,6 +22863,7 @@
     { id: 'arrival', label: 'Заезд',      icon: 'flight' },
     { id: 'notes',  label: 'Заметки',    icon: 'note' },
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
+    { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
     { id: 'dialog', label: 'Диалог',     icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
@@ -23973,6 +23975,7 @@
     // состояния — уводим на «Главное».
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
+    if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
@@ -23985,6 +23988,7 @@
     else if (s === 'arrival') host.innerHTML = buildArrivalSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
     else if (s === 'docs') host.innerHTML = ctx.d ? buildDocsSection(ctx) : skeletonSection('docs');
+    else if (s === 'mail') host.innerHTML = buildMailSection(id);
     else if (s === 'pay') host.innerHTML = ctx.d ? buildPaySection(ctx) : skeletonSection('pay');
     else if (s === 'ai') host.innerHTML = ctx.d ? buildAiSections(ctx.d) : skeletonSection('ai');
     else if (s === 'det') host.innerHTML = buildDetSection(id);
@@ -24037,6 +24041,7 @@
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
+                 mail: ['Почта', 'Поднимаю переписку с вузами'],
                  arrival: ['Заезд', 'Поднимаю заезд ученика'],
                  ai: ['Разбор AI', 'Поднимаю диагностику с платформы'] }[kind] || ['Загрузка', ''];
     var body;
@@ -24051,6 +24056,124 @@
     }
     return '<div class="m-ctitle">' + head[0] + '</div>' +
       (head[1] ? '<div class="m-csub">' + head[1] + '</div>' : '') + body;
+  }
+
+  /* ── РАЗДЕЛ «Почта»: свой адрес кейса и переписка с вузом ──
+     Адрес — строка в базе, а не ящик у почтового хостера: ловушка домена принимает
+     письма на ЛЮБОЙ адрес, поэтому «завести» стоит ноль и работает сразу. Входящее
+     приносит воркер, поэтому переписка перечитывается с бэка, а не копится на фронте. */
+  var MAIL = {};        // id лида -> блок с бэка
+  var MAIL_BUSY = {};   // id лида -> идет загрузка
+
+  function loadMail(id, force) {
+    if (MAIL_BUSY[id]) return;
+    if (force) delete MAIL[id];
+    MAIL_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/mail').then(function (r) {
+      MAIL_BUSY[id] = false; MAIL[id] = r;
+      if (state.drawerId === id && state.modalSection === 'mail') renderModalContent();
+    }).catch(function (e) {
+      MAIL_BUSY[id] = false;
+      if (e.message !== '403') { MAIL[id] = 'none'; if (state.drawerId === id) renderModalContent(); }
+    });
+  }
+
+  function mailRow(m) {
+    var incoming = m.direction === 'in';
+    var who = incoming ? m.from : m.to;
+    var docs = (m.doc_ids || []).length;
+    return '<div class="mail-row">' +
+      '<div class="mail-rhead">' +
+        '<span class="mail-dir ' + (incoming ? 'in' : 'out') + '">' + (incoming ? 'вуз' : 'мы') + '</span>' +
+        '<span class="mail-who">' + esc(who || '') + '</span>' +
+        (docs ? '<span class="mail-docs">' + ic('clip', 12) + docs + '</span>' : '') +
+        '<span class="mail-when">' + fmtWhen(m.created_at) + '</span>' +
+      '</div>' +
+      '<div class="mail-subj">' + esc(m.subject || 'Без темы') + '</div>' +
+      (m.text ? '<div class="mail-text">' + esc(m.text) + '</div>' : '') +
+    '</div>';
+  }
+
+  function buildMailSection(id) {
+    var b = MAIL[id];
+    if (!b) { loadMail(id); return skeletonSection('mail'); }
+    if (b === 'none') {
+      return '<div class="m-ctitle">Почта</div>' +
+        '<div class="m-csub">Не удалось загрузить переписку. Обновите страницу.</div>';
+    }
+    var head = '<div class="m-ctitle">Почта</div>' +
+      '<div class="m-csub">Свой адрес ученика на нашем домене: с него пишем в приемные комиссии, и ответы вузов приходят сюда же. Гмейл в Китае заблокирован, поэтому личная почта для подачи не годится.</div>';
+
+    if (!b.address) {
+      return head +
+        '<div class="mail-hero empty">' +
+          '<div class="mail-hero-ic">' + ic('mail', 20) + '</div>' +
+          '<div class="mail-hero-b"><div class="mail-empty-t">Адреса еще нет</div>' +
+          '<div class="mail-empty-s">Заведется за секунду и будет выглядеть как имя.фамилия@eastside.study.</div></div>' +
+          '<button class="bp sm" id="mail-create">' + ic('plus', 13) + 'Завести адрес</button>' +
+        '</div>';
+    }
+
+    var form = b.can_send
+      ? '<div class="mail-form">' +
+          '<input type="text" id="mail-to" placeholder="Кому, адрес приемной комиссии">' +
+          '<input type="text" id="mail-subj" placeholder="Тема письма">' +
+          '<textarea id="mail-body" rows="4" placeholder="Текст письма"></textarea>' +
+          '<button class="bp sm" id="mail-send">' + ic('send', 13) + 'Отправить</button>' +
+        '</div>'
+      // молчащая кнопка хуже честной причины: тьютор должен понимать, почему нельзя
+      : '<div class="mail-off">Отправка пока не настроена — письма принимаются, но написать из карточки нельзя.</div>';
+
+    var list = (b.messages || []).length
+      ? (b.messages || []).map(mailRow).join('')
+      : '<div class="mail-off">Писем пока нет.</div>';
+
+    return head +
+      '<div class="mail-addr">' +
+        '<span class="mail-addr-v" id="mail-addr-v">' + esc(b.address) + '</span>' +
+        '<button class="bp ghost sm" id="mail-copy">' + ic('copy', 12) + 'Скопировать</button>' +
+        '<button class="bp ghost sm" id="mail-refresh">' + ic('refresh', 12) + 'Обновить</button>' +
+      '</div>' + form +
+      '<div class="mail-list">' + list + '</div>';
+  }
+
+  function wireMail(id, host) {
+    var create = el('mail-create');
+    if (create) create.addEventListener('click', function () {
+      create.disabled = true;
+      apiSend('/admin/api/leads/' + id + '/mail/address', 'POST', {}, function () {
+        showToast('Адрес готов');
+        loadMail(id, true);
+      });
+    });
+
+    var copy = el('mail-copy');
+    if (copy) copy.addEventListener('click', function () {
+      var v = el('mail-addr-v');
+      if (v) copyText(v.textContent, copy);
+    });
+
+    var refresh = el('mail-refresh');
+    if (refresh) refresh.addEventListener('click', function () { loadMail(id, true); });
+
+    var send = el('mail-send');
+    if (send) send.addEventListener('click', function () {
+      var to = (el('mail-to').value || '').trim();
+      var subject = (el('mail-subj').value || '').trim();
+      var text = (el('mail-body').value || '').trim();
+      if (!to || !subject || !text) { showToast('Заполните кому, тему и текст'); return; }
+      send.disabled = true;
+      api('/admin/api/leads/' + id + '/mail/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: to, subject: subject, text: text }),
+      }).then(function () {
+        showToast('Письмо ушло');
+        loadMail(id, true);
+      }).catch(function (e) {
+        send.disabled = false;
+        if (e.message !== '403') showToast('Письмо не ушло: ' + e.message);
+      });
+    });
   }
 
   /* ── РАЗДЕЛ «Английский»: входной тест DET, пересдачи, доступ ──
@@ -27289,6 +27412,7 @@
 
     // ── КИТАЙСКИЙ: доступ к курсу в записи и личная ссылка на уроки ──
     if (state.modalSection === 'course') wireCourse(id);
+    if (state.modalSection === 'mail') wireMail(id, host);
 
     // ── ЭКЗАМЕНЫ: переход в свою вкладку и перечитать CSCA ──
     Array.prototype.forEach.call(host.querySelectorAll('[data-exgo]'), function (b) {

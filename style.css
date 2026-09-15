@@ -8251,3 +8251,51 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .map-grid .map-c.map-empty { display: none; }
   .map-bar .list-count { margin-left: 0; }
 }
+
+/* ── Раздел «Почта» карточки: адрес кейса и переписка с вузом ──
+   Плотно и тихо: якорь раздела — сам адрес, письма идут ровным списком на
+   полупрозрачных разделителях, без рамок и зебры. */
+.mail-hero { display: flex; align-items: center; gap: 16px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.mail-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.mail-hero-b { flex: 1; min-width: 0; }
+.mail-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.mail-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+.mail-addr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.mail-addr-v { flex: 1; min-width: 180px; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); word-break: break-all; }
+
+.mail-form { display: grid; gap: 8px; margin-top: 16px; }
+.mail-form input, .mail-form textarea { font-family: inherit; font-size: 13.5px; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  background: #fff; color: var(--ink); width: 100%; }
+.mail-form textarea { resize: vertical; }
+.mail-form input::placeholder, .mail-form textarea::placeholder { color: var(--ink-3); }
+.mail-form input:focus, .mail-form textarea:focus { outline: none; border-color: var(--blue); }
+.mail-form .bp { justify-self: start; }
+.mail-off { margin-top: 16px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.mail-list { margin-top: 20px; }
+.mail-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.mail-row:last-child { border-bottom: none; }
+.mail-rhead { display: flex; align-items: center; gap: 9px; }
+.mail-dir { flex: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-pill); }
+.mail-dir.in { background: var(--green-soft); color: var(--green-ink); }
+.mail-dir.out { background: var(--blue-tint); color: var(--blue-d); }
+.mail-who { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-docs { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.mail-when { flex: none; font-size: 12px; color: var(--ink-3); }
+.mail-subj { margin-top: 6px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.mail-text { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+
+/* телефон: форма и шапка письма перестают быть строкой, ничего не уезжает за экран */
+@media (max-width: 520px) {
+  .mail-addr { gap: 8px; }
+  .mail-addr-v { min-width: 100%; }
+  .mail-rhead { flex-wrap: wrap; }
+  .mail-who { flex: 1 1 100%; white-space: normal; }
+}
