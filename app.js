@@ -21538,6 +21538,7 @@
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
         return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+                 atts: m.attachments || [], sending: m.sending === true,
                  // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
                  // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
                  // копия правила разъедется с первой в день, когда канал его поменяет.
@@ -21657,6 +21658,19 @@
     }
   }
 
+  /* Вложение в пузыре — та же карточка файла, что в обсуждениях (.rm-catt): второго
+     рецепта для одной и той же сущности в системе быть не должно. Входящий файл лежит в
+     хранилище платформы, и на него есть ссылка; наш исходящий нигде не хранится — копить
+     чужие документы незачем, — поэтому он показан строкой без ссылки. */
+  function tgFileCard(a) {
+    a = a || {};
+    var inner = ic('doc', 13) + '<span>' + esc(a.name || 'файл') + '</span>' +
+      (a.size ? '<i class="sz num">' + fmtSize(a.size) + '</i>' : '');
+    return a.url
+      ? '<a class="rm-catt file" href="' + esc(a.url) + '" target="_blank" rel="noopener">' + inner + '</a>'
+      : '<span class="rm-catt file">' + inner + '</span>';
+  }
+
   function buildThread(msgs) {
     if (msgs === null) {
       return '<div class="tg-sk">' +
@@ -21690,6 +21704,14 @@
         foot = '<span class="tg-by">' + ic('pen', 9) + 'изменено' +
                (m.edBy ? ' · ' + esc(m.edBy) : '') + '</span>' + (foot || '');
       }
+      var atts = m.atts || [];
+      var files = atts.length ? '<div class="tg-atts">' + atts.map(tgFileCard).join('') + '</div>' : '';
+      // Бот пишет в историю «[файл] имя», когда подписи к документу не было. Карточка
+      // вложения говорит то же самое, и второй раз это читать незачем.
+      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || ''));
+      if (m.sending) {
+        foot = '<span class="tg-by">' + ic('clock', 9) + 'отправляется…</span>';
+      }
       var editing = state.msgEdit && String(state.msgEdit) === String(m.id);
       var bub = editing
         ? '<div class="tg-bub tg-edbox">' +
@@ -21699,7 +21721,8 @@
               '<button class="tg-edok" data-edsave="' + m.id + '">Сохранить</button>' +
             '</div>' +
           '</div>'
-        : '<div class="tg-bub">' + mdMsg(m.text) + '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
+        : '<div class="tg-bub">' + files + (fileTxt ? '' : mdMsg(m.text)) +
+            '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
             ((m.canEdit || m.canDel) ? '<span class="tg-acts">' +
               (m.canEdit ? '<button class="tg-edit" data-edit="' + m.id + '" title="Изменить текст у клиента">' + ic('pen', 11) + '</button>' : '') +
               (m.canDel ? '<button class="tg-del" data-del="' + m.id + '" title="Убрать сообщение у клиента">' + ic('x', 11) + '</button>' : '') +
@@ -21815,6 +21838,62 @@
       if (dlg.ai_on) { state.dialogAi[c.id] = false; }
       renderView();
     }
+  }
+
+  /* ── ФАЙЛ КЛИЕНТУ ──
+     Менеджер прикладывает документ прямо в переписке (подборка вузов, памятка, договор).
+     Байты идут base64 в JSON — тем же способом, что вложения задач и импорт встречи:
+     второй приемник ради одного файла не нужен. В канал его кладет бот, у него токены.
+     Предел тот же, что на сервере: файл едет одним куском, и «подборка на 50 МБ» просто
+     повисла бы в загрузке. */
+  var CONV_FILE_MAX_MB = 20;
+
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' МБ';
+    if (n >= 1024) return Math.round(n / 1024) + ' КБ';
+    return n + ' Б';
+  }
+
+  /* Отправка файла в диалог. msgs — массив сообщений открытого треда (туда кладем пузырь),
+     redraw — перерисовка этого треда. Оптимистично тут только ПОЯВЛЕНИЕ пузыря, и он до
+     ответа сервера помечен «отправляется»: файл уходит секунды, и пустой экран все это
+     время читается как «кнопка не сработала». */
+  function sendConvFile(convId, file, msgs, redraw) {
+    if (!file) return;
+    if (file.size > CONV_FILE_MAX_MB * 1024 * 1024) {
+      showToast('Файл больше ' + CONV_FILE_MAX_MB + ' МБ — столько клиенту не отправить');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onerror = function () { showToast('Файл не прочитался — попробуйте еще раз'); };
+    reader.onload = function () {
+      var src = String(reader.result || '');
+      if (!src) { showToast('Файл не прочитался — попробуйте еще раз'); return; }
+      var tmp = { role: 'assistant', sender: 'manager', text: '', at: new Date().toISOString(),
+                  attachments: [{ name: file.name, mime: file.type || '', size: file.size, outgoing: true }],
+                  sending: true, _local: true };
+      msgs.push(tmp); redraw();
+      api('/admin/api/bot/conversations/' + convId + '/send-file', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, mime: file.type || '', data: src }),
+      }).then(function (res) {
+        tmp.sending = false;
+        if (res && res.delivered === false) {
+          tmp.undelivered = true; tmp.reason = res.reason || '';
+          showToast(res.reason ? ('Файл не доставлен: ' + res.reason) : 'Файл не доставлен клиенту');
+        }
+        redraw();
+      }).catch(function (e) {
+        // Не ушло — пузырь убираем совсем: файла у клиента нет, и след в переписке
+        // соврал бы менеджеру. Причину сервер объясняет словами, показываем ее.
+        var i = msgs.indexOf(tmp); if (i >= 0) msgs.splice(i, 1);
+        var why = (e && e.body && e.body.detail) || '';
+        showToast(why || 'Файл не отправлен — проверьте связь с ботом');
+        redraw();
+      });
+    };
+    reader.readAsDataURL(file);
   }
 
   /* тумблер поверхностей инбокса: переписки бота ↔ обсуждения по задачам */
@@ -22247,6 +22326,8 @@
           : '<span>Диалог ведёшь ты — бот молчит. Нажми <b>«Бот вкл»</b>, чтобы вернуть авто-ответы' + resumeNote(c) + '</span>') +
       '</div>' +
       '<div class="tg-compose">' +
+        '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
+          '<input type="file" id="tg-file" hidden></label>' +
         '<textarea id="tg-input" rows="1" data-conv="' + esc(c.id) + '" autocomplete="off" ' +
           'placeholder="' + (aiOn ? 'Написать — вы перехватите диалог у бота' : 'Написать сообщение') + '"></textarea>' +
         '<button class="tg-send" id="tg-send" title="Отправить (Enter · Shift+Enter — новая строка)">' + ic('send', 16) + '</button>' +
@@ -22269,6 +22350,16 @@
       inboxSend(c, t);
     }
     if (snd) snd.addEventListener('click', send);
+    var fin = el('tg-file');
+    if (fin) fin.addEventListener('change', function () {
+      var f = fin.files && fin.files[0]; fin.value = '';   // один и тот же файл можно выбрать снова
+      if (!f) return;
+      var d = state.bot.msgs[c.id];
+      if (!d) { showToast('Переписка ещё грузится — секунду'); return; }
+      d.messages = d.messages || [];
+      if (c.ai_on !== false) inboxSetAi(c, false);   // отправил менеджер — бот замолкает
+      sendConvFile(c.id, f, d.messages, function () { refreshOpenThread(true, true); });
+    });
     if (inp) {
       composerRestore(c.id);   // возвращаем недописанное после любой перерисовки
       inp.addEventListener('input', function () { composerSave(); composerGrow(inp); });
@@ -22307,6 +22398,7 @@
     return (d.messages || []).map(function (m) {
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
       return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
+               atts: m.attachments || [], sending: m.sending === true,
                canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
                canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
@@ -22357,6 +22449,8 @@
         matched +
         '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
         '<div class="m-dlg-compose">' +
+          '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
+            '<input type="file" id="dlg-file" hidden></label>' +
           '<textarea id="dlg-in" rows="1" placeholder="' +
             (aiOn ? 'Ответить — вы перехватите диалог у бота' : 'Ответить клиенту') + '"></textarea>' +
           '<button class="tg-send" id="dlg-send" title="Отправить (Enter)">' + ic('send', 16) + '</button>' +
@@ -27745,6 +27839,16 @@
       });
     }
     if (dSend) dSend.addEventListener('click', dlgSend);
+    var dFile = el('dlg-file');
+    if (dFile) dFile.addEventListener('change', function () {
+      var f = dFile.files && dFile.files[0]; dFile.value = '';
+      if (!f || !dcv) return;
+      dconv.messages = dconv.messages || [];
+      dcv.ai_enabled = false;   // отправил менеджер — бот в этом диалоге замолкает (так же на бэке)
+      sendConvFile(dcv.user_id, f, dconv.messages, function () {
+        if (state.modalSection === 'dialog') renderModalContent();
+      });
+    });
     if (dIn) dIn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); dlgSend(); }
     });

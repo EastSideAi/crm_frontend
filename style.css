@@ -3992,6 +3992,15 @@ button.tsk-mimp { cursor: pointer; }
 .tg-compose .tg-send, .m-dlg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover, .m-dlg-compose .tg-send:hover { background: var(--blue-d); }
+/* скрепка: отправить клиенту файл прямо из переписки. Тихая, в отличие от синей
+   кнопки отправки: основное действие здесь всё-таки ответ словами. */
+.tg-clip { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  color: var(--ink-2); cursor: pointer; transition: background .15s, color .15s; }
+.tg-clip:hover { background: var(--fill); color: var(--blue); }
+.tg-compose .tg-clip, .m-dlg-compose .tg-clip { order: -1; }
+/* размер файла рядом с именем — тише имени, цифры табличные */
+.rm-catt.file .sz { font-style: normal; font-size: 11px; color: var(--ink-3); flex: none; }
+.tg-msg.out .rm-catt.file .sz { color: rgba(255,255,255,.7); }
 .tg-chead .ai-toggle { flex: none; }
 
 /* инбокс на всю высоту: контейнер фиксируется под экран, скроллит только внутри */
