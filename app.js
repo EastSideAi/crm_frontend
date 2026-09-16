@@ -3695,17 +3695,34 @@
     'card-apply': 'png', 'card-tasks': 'png', 'notes': 'png',
     'cabinet-parent': 'jpg', 'cabinet-student': 'jpg' };
 
-  /* Озвучка реплик преподавателя. Карту собирает tools/voice.mjs, файлы лежат
-     в assets/academy/voice. Звука у экрана может не быть — тогда кнопки просто
-     нет, урок от этого не ломается. */
+  /* Озвучка экрана. Голос читает слайд целиком — заголовок, текст, пункты,
+     предупреждение и реплику преподавателя (Павел 15.09.2026: «хочется чтобы он
+     все озвучивал на слайде»). Сценарий собирает tools/voice.mjs из тех же полей
+     урока, файлы лежат в assets/academy/voice. Звука у экрана может не быть —
+     тогда кнопки просто нет, урок от этого не ломается. */
   var AC_VOICE = window.AC_VOICE || {};
   var AC_VOICE_DIR = 'assets/academy/voice/';
   var AC_AU = null;          // один проигрыватель на всю Академию
+  var AC_RATES = [1, 1.5, 2];
+  var AC_RATE_KEY = 'eastside_crm_ac_rate';
+
+  function acRate() {
+    var v = +(lsGet(AC_RATE_KEY) || 1);
+    return AC_RATES.indexOf(v) >= 0 ? v : 1;
+  }
+  function acRateLabel(v) { return (v === 1 ? '1' : String(v).replace('.', ',')) + '\u00d7'; }
 
   function acVoiceStop() {
     if (!AC_AU) return;
     AC_AU.pause();
     AC_AU = null;
+    acVoiceBtn('play', 'Слушать');
+  }
+
+  function acVoiceBtn(icon, text) {
+    var b = el('ac-vplay'); if (!b) return;
+    b.innerHTML = ic(icon, 15) + '<span>' + text + '</span>';
+    b.classList.toggle('on', icon === 'pause');
   }
 
   function acById(id) { for (var i = 0; i < AC_ALL.length; i++) if (AC_ALL[i].id === id) return AC_ALL[i]; return null; }
@@ -3719,8 +3736,14 @@
   function acIsDone(i) { return acDoneSet().indexOf(acLids()[i]) !== -1; }
   function acPassedCount() { var n = 0, L = acLessons(); for (var i = 0; i < L.length; i++) if (acIsDone(i)) n++; return n; }
   function acFirstOpen() { var L = acLessons(); for (var i = 0; i < L.length; i++) if (!acIsDone(i)) return i; return L.length - 1; }
-  function acMaxUnlocked() { return acFirstOpen(); }
-  function acExamOpen() { return acPassedCount() >= acLessons().length; }
+  /* Режим просмотра: руководитель открывает курс не для того, чтобы его пройти, а
+     чтобы посмотреть, что читают люди (просьба Павла 16.09.2026). Ему открыты все
+     уроки сразу, вопросы и задания не держат кнопку «Дальше». Ключ — роль, а не
+     конкретный логин: смотреть курс может понадобиться любому руководителю.
+     У тьютора все как было: урок за уроком, на вопрос надо ответить. */
+  function acReview() { return state.role === 'super_admin' || state.role === 'owner'; }
+  function acMaxUnlocked() { return acReview() ? acLessons().length - 1 : acFirstOpen(); }
+  function acExamOpen() { return acReview() || acPassedCount() >= acLessons().length; }
 
   /* Индексы шагов аттестации. Состав у курсов разный (у одного две практики и
      выбор оплаты, у другого одна практика и только соглашение), поэтому шаги
@@ -3827,7 +3850,14 @@
           (mats ? '<div class="ac-mats"><span class="ac-cap">Материалы</span>' + mats + '</div>' : '') +
         '</aside>' +
         '<section class="ac-stage">' +
-          '<div class="ac-stage-top"><span class="ac-cap" id="ac-label"></span><div class="ac-dots" id="ac-dots"></div></div>' +
+          '<div class="ac-stage-top"><span class="ac-cap" id="ac-label"></span>' +
+            '<div class="ac-top-r">' +
+              '<div class="ac-voice" id="ac-voice" hidden>' +
+                '<button class="ac-play" id="ac-vplay" type="button">' + ic('play', 15) + '<span>Слушать</span></button>' +
+                '<button class="ac-rate" id="ac-vrate" type="button" title="Скорость чтения"></button>' +
+              '</div>' +
+              '<div class="ac-dots" id="ac-dots"></div>' +
+            '</div></div>' +
           '<div class="ac-screen" id="ac-screen"></div>' +
           '<div class="ac-foot">' +
             '<button class="ac-btn ghost" id="ac-back" style="visibility:hidden;">Назад</button>' +
@@ -3856,6 +3886,7 @@
       if (A.si > 0) { A.si--; acRender(view); }
     });
     el('ac-next').addEventListener('click', function () { acNext(view); });
+    acVoiceWire();
 
     if (A.li === acExamI()) acRenderExam(view); else acRender(view);
   }
@@ -3880,11 +3911,11 @@
       '<span class="ac-tl">Аттестация</span>' + (eLocked ? '<span class="ac-lk">' + ic('lock', 12) + '</span>' : '') + '</div>';
     list.innerHTML = html;
     var passed = acPassedCount() + (A.srv.passed ? 1 : 0), total = L.length + 1;
-    el('ac-prog').textContent = passed + ' / ' + total;
+    el('ac-prog').textContent = acReview() ? 'просмотр' : passed + ' / ' + total;
     el('ac-bar').style.width = Math.round(passed / total * 100) + '%';
   }
 
-  function acScreenHTML(sc, key) {
+  function acScreenHTML(sc) {
     var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
     var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>';
     var body = (sc.body || []).map(function (p, i) { return '<p class="ac-p' + (i === 0 && sc.type === 'read' ? ' lead' : '') + '">' + esc(p) + '</p>'; }).join('');
@@ -3915,8 +3946,12 @@
     if (sc.type === 'stage') extra = acStageHTML(sc);
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
-    if (sc.type === 'q') return acQHTML(sc) + acSay(sc, key);
-    return eye + h + body + extra + acSay(sc, key);
+    if (sc.type === 'howto') extra = acHowHTML(sc);
+    if (sc.type === 'calc') extra = acCalcHTML(sc);
+    // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
+    // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
+    if (sc.type === 'q') return acQHTML(sc);
+    return eye + h + body + extra + acSay(sc);
   }
 
   /* Снимок экрана с подписями. Файла еще нет — рисуем схему: подписи те же,
@@ -4016,17 +4051,127 @@
       '<ul class="ac-chk-list">' + items + '</ul></div>' + (sc.note ? acNote(sc.note) : '');
   }
 
+  /* Итог урока: что сделать и ГДЕ это в системе. Заведен по правке Павла
+     15.09.2026 («тьютор должен четко понимать, что нужно сделать, а самое главное
+     как грамотно это сделать и с помощью нашей песочницы»). Курс объяснял смысл
+     этапа, но человек выходил из урока без ответа «куда мне теперь нажимать»,
+     поэтому у каждого шага своя вторая строка с адресом экрана. */
+  function acHowHTML(sc) {
+    var rows = (sc.items || []).map(function (it, i) {
+      return '<li><span class="ac-hn">' + (i + 1) + '</span>' +
+        '<div class="ac-hb"><b>' + esc(it[0]) + '</b>' +
+        '<span class="ac-hw">' + ic('go', 12) + esc(it[1]) + '</span></div></li>';
+    }).join('');
+    return '<ol class="ac-how">' + rows + '</ol>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  /* Учебный калькулятор выплаты. Формула на соседних экранах написана словами, но
+     пока человек не увидит СВОЮ цифру, она остается абстракцией (просьба Павла
+     15.09.2026). Считает ровно то, что стоит в уроке: 20 000 ₽ за работу с
+     коэффициентом вовлеченности, до 10 000 ₽ за результат, премия и консультации
+     сверху. Ничего не сохраняет и никуда не отправляет — это тренажер, а не
+     ведомость, поэтому и цифры тут учебные, одинаковые для всех учеников. */
+  var AC_CALC = { n: 5, eng: 0, res: 0, top: true, flag: false, cons: 5 };
+  var AC_ENG = [['90 и выше', 1, '1,00'], ['75—89', 0.95, '0,95'],
+                ['60—74', 0.9, '0,90'], ['ниже 60', 0.8, '0,80']];
+  // Точка 4 двумя частями: за зачисление на грант и за силу этого гранта
+  // (решение Павла 15.09.2026). Платное точку 4 не закрывает вовсе.
+  var AC_RES = [['Полный грант', 6000, 4000], ['Скидка 50—99%', 6000, 3000],
+                ['Скидка до 50%', 6000, 2000], ['Платное', 0, 0], ['Никуда', 0, 0]];
+  var AC_YESNO = [['Да'], ['Нет']];
+  var AC_WORK_PART = 20000, AC_BONUS = 3000, AC_CONS_FEE = 3000, AC_SAFE = 7500;
+  var AC_LIM = { n: [1, 20], cons: [0, 30] };
+
+  function acCalcSum() {
+    var c = AC_CALC;
+    var work = Math.round(AC_WORK_PART * AC_ENG[c.eng][1]);
+    var enr = AC_RES[c.res][1], pow = AC_RES[c.res][2];
+    // «Не ваша зона»: флаг риска, поднятый вовремя, поднимает точку 4 до 7 500 ₽,
+    // но никогда ее не опускает — у хорошего исхода она и так выше.
+    var safe = c.flag && (enr + pow) < AC_SAFE;
+    var p4 = safe ? AC_SAFE : enr + pow;
+    // Премия — за два условия сразу, и оба про лучший исход: вуз уровня А и год
+    // без провалов. Частичный грант премию не дает, это разобрано на экране ставок.
+    var bonus = (c.eng === 0 && c.top && c.res === 0) ? AC_BONUS : 0;
+    var one = work + p4 + bonus, cons = c.cons * AC_CONS_FEE;
+    return { work: work, enr: enr, pow: pow, safe: safe, p4: p4, bonus: bonus, one: one,
+             all: one * c.n, cons: cons, total: one * c.n + cons };
+  }
+  function acStudWord(n) { return (n % 10 === 1 && n % 100 !== 11) ? 'ученика' : 'учеников'; }
+  function acCalcSeg(f, opts, cur) {
+    return '<div class="ac-seg" data-f="' + f + '">' + opts.map(function (o, i) {
+      return '<button type="button" class="ac-sg' + (i === cur ? ' on' : '') +
+        '" data-v="' + i + '">' + esc(o[0]) + '</button>';
+    }).join('') + '</div>';
+  }
+  function acCalcStep(f, v) {
+    return '<div class="ac-stp" data-f="' + f + '">' +
+      '<button type="button" data-d="-1" title="меньше">\u2212</button>' +
+      '<b>' + v + '</b>' +
+      '<button type="button" data-d="1" title="больше">+</button></div>';
+  }
+  function acCalcRow(t, v, cls) {
+    return '<li' + (cls ? ' class="' + cls + '"' : '') + '><span>' + t + '</span>' +
+      '<span class="ac-amt">' + fmtMoney(v) + '\u00a0₽</span></li>';
+  }
+  function acCalcOut() {
+    var s = acCalcSum(), c = AC_CALC;
+    return '<ul class="ac-clist">' +
+      acCalcRow('Работа, точки 1, 2, 3 и 5 · коэффициент ' + AC_ENG[c.eng][2], s.work) +
+      (s.safe
+        ? acCalcRow('Точка 4 по правилу «не ваша зона»', s.p4)
+        : acCalcRow('Точка 4: довели до зачисления на грант', s.enr) +
+          acCalcRow('Точка 4: сила гранта', s.pow)) +
+      (!s.safe && !s.p4 ? '<li class="ac-chint">Платное и «никуда» точку 4 не закрывают: цель, записанная на точке 1, — грант</li>' : '') +
+      acCalcRow('Премия за вуз уровня А', s.bonus) +
+      (s.bonus ? '' : '<li class="ac-chint">Премия идет только при трех условиях сразу: коэффициент 1,00, вуз уровня А и полный грант</li>') +
+      acCalcRow('За одного ученика', s.one, 'sum') +
+      acCalcRow('За ' + c.n + ' ' + acStudWord(c.n), s.all) +
+      acCalcRow('Консультации по стратегии, ' + c.cons + ' × 3 000 ₽', s.cons) +
+      '</ul>' +
+      '<div class="ac-ctot"><span>Итого за год</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
+  }
+  function acCalcHTML(sc) {
+    return '<div class="ac-calc" id="ac-calc">' +
+      '<div class="ac-cfs">' +
+        '<div class="ac-cf"><span class="ac-cfl">Учеников на грантовом треке</span>' + acCalcStep('n', AC_CALC.n) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Коэффициент вовлеченности, баллы</span>' + acCalcSeg('eng', AC_ENG, AC_CALC.eng) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Что в итоге дал вуз</span>' + acCalcSeg('res', AC_RES, AC_CALC.res) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Вуз записан в уровень А на точке 1</span>' + acCalcSeg('top', AC_YESNO, AC_CALC.top ? 0 : 1) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Флаг риска подняли вовремя</span>' + acCalcSeg('flag', AC_YESNO, AC_CALC.flag ? 0 : 1) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Консультаций по стратегии за год</span>' + acCalcStep('cons', AC_CALC.cons) + '</div>' +
+      '</div>' +
+      '<div class="ac-cout" id="ac-cout">' + acCalcOut() + '</div>' +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+  function acBindCalc() {
+    var box = el('ac-calc'); if (!box) return;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!b || !box.contains(b)) return;
+      var wrap = b.parentNode, f = wrap.getAttribute('data-f');
+      if (!f) return;
+      if (b.hasAttribute('data-d')) {
+        var lim = AC_LIM[f];
+        AC_CALC[f] = Math.max(lim[0], Math.min(lim[1], AC_CALC[f] + (+b.getAttribute('data-d'))));
+        wrap.querySelector('b').textContent = AC_CALC[f];
+      } else {
+        var v = +b.getAttribute('data-v');
+        AC_CALC[f] = (f === 'top' || f === 'flag') ? v === 0 : v;
+        [].forEach.call(wrap.children, function (x, i) { x.classList.toggle('on', i === v); });
+      }
+      el('ac-cout').innerHTML = acCalcOut();
+    });
+  }
+
   /* Голос преподавателя. Экран показывает факты, а объясняет их человек: короткая
      реплика своими словами, как на занятии (Павел 15.09.2026: «слайды должны
      объясняться как учителем»). Этот же текст потом читает озвучка — сценарий
      один, второй копии не заводим. */
-  function acSay(sc, key) {
+  function acSay(sc) {
     if (!sc.say) return '';
-    var file = key && AC_VOICE[key];
-    var play = file ? '<button class="ac-play" type="button" data-src="' + esc(AC_VOICE_DIR + file) + '">' +
-      ic('play', 15) + '<span>Слушать</span></button>' : '';
     return '<div class="ac-say"><div class="ac-sic">' + ic('chat', 14) + '</div>' +
-      '<div class="ac-st"><p class="ac-sp">' + sc.say + '</p>' + play + '</div></div>';
+      '<div class="ac-st"><p class="ac-sp">' + sc.say + '</p></div></div>';
   }
 
   function acNote(n) { return '<div class="ac-note' + (n.warn ? ' warn' : '') + '"><div class="ac-nic">' + (n.warn ? '!' : 'i') + '</div><div class="ac-nt">' + n.t + '</div></div>'; }
@@ -4045,7 +4190,7 @@
     var scr = el('ac-screen');
     el('ac-label').textContent = 'Урок ' + (A.li + 1) + ' · ' + L.t;
     acVoiceStop();
-    scr.innerHTML = acScreenHTML(sc, acC().id + '-' + A.li + '-' + A.si);
+    scr.innerHTML = acScreenHTML(sc);
     acAnim(scr);
     var dots = el('ac-dots'); dots.innerHTML = '';
     L.screens.forEach(function (_, i) { var d = document.createElement('i'); d.className = i === A.si ? 'on' : (i < A.si ? 'past' : ''); dots.appendChild(d); });
@@ -4055,38 +4200,59 @@
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = isQ || (isT && !A.lt[sc.id]);
+    nx.disabled = acReview() ? false : (isQ || (isT && !A.lt[sc.id]));
     if (isQ) acBindQ(sc);
     if (isT) {
       var chk = el('ac-lt');
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
     if (sc.type === 'chklist') acBindChk(sc);
+    if (sc.type === 'calc') acBindCalc();
     acZoomBind(scr);
-    acVoiceBind(scr);
+    acVoiceMount(acC().id + '-' + A.li + '-' + A.si);
     acBuildRoute();
   }
-  /* Кнопка «Слушать» под репликой. Один раз нажали — дальше урок сам читает
-     каждый следующий экран: браузер разрешает звук только после действия человека,
-     поэтому первое нажатие обязательно, а остальные уже нет. */
-  function acVoiceBind(scr) {
-    var b = scr.querySelector('.ac-play');
-    if (!b) return;
-    var lab = b.querySelector('span');
-    function icon(name, text) { b.innerHTML = ic(name, 15) + '<span>' + text + '</span>'; lab = b.querySelector('span'); }
-    function start() {
-      acVoiceStop();
-      AC_AU = new Audio(b.getAttribute('data-src'));
-      AC_AU.play().then(function () { icon('pause', 'Пауза'); b.classList.add('on'); })
-        .catch(function () { icon('play', 'Слушать'); b.classList.remove('on'); });
-      AC_AU.addEventListener('ended', function () { icon('play', 'Слушать'); b.classList.remove('on'); });
-    }
+  /* Проигрыватель экрана. Живет в шапке сцены, а не внутри текста: звук теперь
+     про весь слайд, и место у него должно быть одно на всех экранах. */
+  function acVoiceWire() {
+    var b = el('ac-vplay'), r = el('ac-vrate');
+    r.textContent = acRateLabel(acRate());
     b.addEventListener('click', function () {
-      if (AC_AU && !AC_AU.paused) { acVoiceStop(); icon('play', 'Слушать'); b.classList.remove('on'); return; }
+      if (AC_AU && !AC_AU.paused) { acVoiceStop(); return; }
+      // Первое нажатие включает и автоматическое чтение следующих экранов:
+      // браузер разрешает звук только после действия человека, поэтому одно
+      // нажатие обязательно, а дальше урок читает себя сам.
       state.acVoiceAuto = true;
-      start();
+      acVoicePlay();
     });
-    if (state.acVoiceAuto) start();
+    r.addEventListener('click', function () {
+      var next = AC_RATES[(AC_RATES.indexOf(acRate()) + 1) % AC_RATES.length];
+      try { localStorage.setItem(AC_RATE_KEY, next); } catch (e) { /* приватный режим */ }
+      r.textContent = acRateLabel(next);
+      if (AC_AU) AC_AU.playbackRate = next;
+    });
+  }
+
+  function acVoicePlay() {
+    var box = el('ac-voice'); if (!box || box.hidden) return;
+    acVoiceStop();
+    AC_AU = new Audio(box.getAttribute('data-src'));
+    AC_AU.playbackRate = acRate();
+    AC_AU.addEventListener('ended', function () { acVoiceBtn('play', 'Слушать'); });
+    AC_AU.play().then(function () { acVoiceBtn('pause', 'Пауза'); })
+      .catch(function () { acVoiceBtn('play', 'Слушать'); });
+  }
+
+  // Экран сменился: показать кнопку, если у него есть запись, и прочитать его,
+  // если человек уже включил чтение.
+  function acVoiceMount(key) {
+    var box = el('ac-voice'); if (!box) return;
+    acVoiceStop();
+    var file = AC_VOICE[key];
+    box.hidden = !file;
+    if (!file) return;
+    box.setAttribute('data-src', AC_VOICE_DIR + file);
+    if (state.acVoiceAuto) acVoicePlay();
   }
 
   /* Снимок открывается во весь экран по клику. В колонке урока интерфейс CRM виден
@@ -4126,6 +4292,7 @@
         });
         fb.className = 'ac-fb ' + (ok ? 'ok' : 'no') + ' show';
         fb.innerHTML = ok ? sc.ok : sc.no;
+        if (sc.say) fb.insertAdjacentHTML('afterend', acSay(sc));
         el('ac-next').disabled = false;
       });
     });
@@ -4170,6 +4337,7 @@
     var A = state.ac, scr = el('ac-screen'), E = acEx(), X = acExIdx();
     el('ac-label').textContent = 'Аттестация курса';
     el('ac-dots').innerHTML = '';
+    acVoiceMount(null);        // аттестацию человек проходит сам, без диктора
     el('ac-back').style.visibility = A.exStep > 0 ? 'visible' : 'hidden';
     var nx = el('ac-next'); nx.textContent = 'Дальше'; nx.disabled = false;
     acBuildRoute();
@@ -4185,7 +4353,7 @@
       scr.innerHTML = '<div class="ac-eyebrow ac-cap">Вопрос ' + A.exStep + ' из ' + X.N + '</div><h1 class="ac-h">' + esc(q.h) + '</h1><p class="ac-qlead">' + esc(q.lead) + '</p>' +
         '<div class="ac-opts" id="ac-opts">' + q.opts.map(function (o) { return '<button class="ac-opt" data-ok="' + o[2] + '"><span class="ac-key">' + esc(o[0]) + '</span><span class="ac-ot">' + esc(o[1]) + '</span></button>'; }).join('') + '</div>';
       el('ac-steplab').textContent = 'Вопрос ' + A.exStep + ' из ' + X.N;
-      nx.disabled = A.exAnswers[qi] === undefined;
+      nx.disabled = acReview() ? false : A.exAnswers[qi] === undefined;
       var opts = scr.querySelectorAll('#ac-opts .ac-opt');
       Array.prototype.forEach.call(opts, function (o) {
         if (A.exAnswers[qi] !== undefined) { o.disabled = true; if (o.getAttribute('data-ok') === '1') o.classList.add('correct'); }
@@ -4220,7 +4388,7 @@
       scr.innerHTML = head + '<div class="ac-task"><p>' + esc(t.p) + '</p>' +
         '<textarea class="ac-ta" id="ac-ta" placeholder="' + esc(t.ph || '') + '"></textarea></div>';
       var ta = el('ac-ta'); if (A.tv[t.id]) ta.value = A.tv[t.id];
-      var upd = function () { A.tv[t.id] = ta.value; nx.disabled = ta.value.trim().length < (t.min || 15); };
+      var upd = function () { A.tv[t.id] = ta.value; nx.disabled = acReview() ? false : ta.value.trim().length < (t.min || 15); };
       ta.addEventListener('input', upd); upd();
     } else {
       var on = !!A.tv[t.id];
@@ -4229,8 +4397,8 @@
         (t.tg ? '<a class="ac-tg" href="https://t.me/' + esc(t.tg) + '" target="_blank" rel="noopener">' + ic('send', 15) + 'Открыть чат администратора · @' + esc(t.tg) + '</a>' : '') +
         '</div><label class="ac-chkline"><input type="checkbox" id="ac-tc"' + (on ? ' checked' : '') + '> ' + esc(t.chk) + '</label>';
       var chk = el('ac-tc');
-      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; nx.disabled = !chk.checked; });
-      nx.disabled = !on;
+      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; nx.disabled = acReview() ? false : !chk.checked; });
+      nx.disabled = acReview() ? false : !on;
     }
     el('ac-steplab').textContent = lab;
     acAnim(scr);

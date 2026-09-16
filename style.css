@@ -7585,7 +7585,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .academy .ac-stage { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 32px 40px 24px; min-height: 520px; display: flex; flex-direction: column; }
 .academy .ac-stage-top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-.academy .ac-dots { display: flex; gap: 6px; margin-left: auto; }
+.academy .ac-top-r { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+/* Проигрыватель слайда. Стоит в шапке сцены, потому что читает весь экран, а не
+   отдельную реплику; тихий, чтобы не спорить с заголовком за внимание. */
+.academy .ac-voice { display: flex; align-items: center; gap: 6px; }
+.academy .ac-voice[hidden] { display: none; }
+.academy .ac-rate { min-width: 34px; height: 30px; padding: 0 8px; border: 1px solid var(--ac-line-2);
+  border-radius: var(--ac-r-pill); background: var(--ac-card); font: 700 12px 'Manrope', sans-serif;
+  color: var(--ac-ink-3); cursor: pointer; transition: .15s; font-variant-numeric: tabular-nums; }
+.academy .ac-rate:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-dots { display: flex; gap: 6px; }
 .academy .ac-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ac-line-2); transition: .25s var(--ac-ease); }
 .academy .ac-dots i.on { background: var(--ac-blue); transform: scale(1.15); }
 .academy .ac-dots i.past { background: var(--ac-blue-tint); }
@@ -7615,11 +7624,66 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-st { font-size: 15px; line-height: 1.65; color: #4A5160; }
 .academy .ac-st b { color: var(--ac-ink); font-weight: 700; }
 .academy .ac-sp { margin: 0; }
-.academy .ac-play { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; padding: 7px 14px 7px 11px;
+.academy .ac-play { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 13px 0 10px;
   border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill); background: var(--ac-card);
   font: 600 13px 'Manrope', sans-serif; color: var(--ac-ink-2); cursor: pointer; transition: .15s; }
 .academy .ac-play:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
 .academy .ac-play.on { background: var(--ac-blue-tint); border-color: transparent; color: var(--ac-blue-d); }
+
+/* Итог урока «что сделать и где». Две строки на шаг: действие весом, адрес
+   экрана тише и с иконкой — глаз находит нужную строку, не читая весь список. */
+.academy .ac-how { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 14px; }
+.academy .ac-how li { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 12px; align-items: start; }
+.academy .ac-hn { width: 26px; height: 26px; border-radius: 9px; background: var(--ac-blue-tint); color: var(--ac-blue-d);
+  display: grid; place-items: center; font: 700 12px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; }
+.academy .ac-hb { display: grid; gap: 4px; padding-top: 3px; }
+.academy .ac-hb b { font-size: 14.5px; font-weight: 700; color: var(--ac-ink); }
+.academy .ac-hw { display: inline-flex; align-items: flex-start; gap: 7px; font-size: 13.5px; color: var(--ac-ink-3); }
+.academy .ac-hw svg { width: 12px; height: 12px; flex: none; margin-top: 4px; color: var(--ac-blue); }
+
+/* ── Академия: учебный калькулятор выплаты ───────────────────────────────────
+   Поля тихие, единственный акцент на экране — итоговая сумма. Цифры табличные:
+   человек двигает переключатели и смотрит, как меняется число, а прыгающая
+   ширина разрядов мешает это заметить. */
+.academy .ac-calc { margin: 18px 0 0; display: grid; gap: 14px; }
+.academy .ac-cfs { border: 1px solid var(--ac-line); border-radius: var(--ac-r-lg); overflow: hidden; }
+.academy .ac-cf { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 11px 14px; border-bottom: 1px solid var(--ac-line); }
+.academy .ac-cf:last-child { border-bottom: 0; }
+.academy .ac-cfl { font-size: 13.5px; font-weight: 600; color: var(--ac-ink-2); }
+/* Подпись поля в одну строку: иначе она ломается пополам, а переключатели
+   рядом и так переносятся — получаются две рваные колонки. На телефоне поле
+   складывается в две строки, и запрет переноса там снимается. */
+@media (min-width: 561px) { .academy .ac-cfl { white-space: nowrap; } }
+.academy .ac-seg { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.academy .ac-sg { border: 1px solid var(--ac-line-2); background: var(--ac-card); color: var(--ac-ink-2);
+  font: 600 12.5px 'Manrope', sans-serif; padding: 6px 11px; border-radius: var(--ac-r-pill);
+  cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-sg:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-sg.on { background: var(--ac-blue-tint); border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-stp { display: inline-flex; align-items: center; gap: 2px; padding: 2px;
+  border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill); }
+.academy .ac-stp button { width: 26px; height: 26px; border: 0; background: transparent; cursor: pointer;
+  color: var(--ac-ink-2); font: 600 15px 'Manrope', sans-serif; line-height: 1; border-radius: var(--ac-r-pill);
+  transition: .12s var(--ac-ease); }
+.academy .ac-stp button:hover { background: var(--ac-blue-tint); color: var(--ac-blue-d); }
+.academy .ac-stp b { min-width: 30px; text-align: center; font-size: 14px; font-variant-numeric: tabular-nums; }
+.academy .ac-clist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.academy .ac-clist li { display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding: 7px 2px; font-size: 13.5px; color: var(--ac-ink-2); }
+.academy .ac-clist li.sum { margin-top: 5px; padding-top: 12px; border-top: 1px solid var(--ac-line);
+  color: var(--ac-ink); font-weight: 700; }
+.academy .ac-chint { padding-top: 0; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-ctot { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  background: var(--ac-navy); color: #fff; border-radius: var(--ac-r-lg); padding: 15px 18px; }
+.academy .ac-ctot span { font-size: 13px; font-weight: 600; opacity: .7; }
+.academy .ac-ctot b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 560px) {
+  .academy .ac-cf { flex-direction: column; align-items: flex-start; gap: 9px; }
+  .academy .ac-seg { justify-content: flex-start; }
+  .academy .ac-ctot b { font-size: 23px; }
+}
 
 .academy .ac-quote { border-left: 3px solid var(--ac-blue); padding: 4px 0 4px 16px; margin: 16px 0; font-size: 15px; color: #333843; }
 .academy .ac-who { display: block; margin-top: 6px; }
@@ -7718,6 +7782,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .academy .ac-stage { padding: 22px 18px 18px; min-height: 0; }
   .academy .ac-h { font-size: 23px; }
   .academy .ac-fin .ac-h { font-size: 22px; }
+  /* Шапка сцены не сжимается ниже своего содержимого: название урока, кнопка
+     чтения и точки шагов — все три с минимальной шириной. На узком экране их
+     сумма шире карточки, и карточка уезжала за край вместе со всем текстом
+     (Павел 15.09.2026: «с телефона все съезжает»). Поэтому переносим строку. */
+  .academy .ac-stage-top { flex-wrap: wrap; row-gap: 10px; }
+  .academy .ac-dots { flex-wrap: wrap; }
+}
+
+/* На телефоне точки шагов убираем совсем: место они занимают больше, чем кнопка
+   чтения, а тот же «Шаг 6 из 11» написан словами внизу экрана. */
+@media (max-width: 560px) {
+  .academy .ac-dots { display: none; }
 }
 
 .academy .ac-dl-wrap { margin-top: 18px; }
