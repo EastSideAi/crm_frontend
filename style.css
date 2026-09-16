@@ -9026,6 +9026,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mm-cell:hover { background: var(--blue-tint); }
 /* Дни соседних месяцев показываем, но приглушенно: без них неделя рвется. */
 .mm-cell.out { background: var(--fill); }
+/* Клетка дня открывается с клавиатуры, как клетка часа в слотах, и кольцо
+   у нее то же, что у остальных кликабельных строк продукта (.det-row, .st-row):
+   внутренняя рамка вместо системного контура, иначе она рвет сетку. */
+.mm-cell:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+
 .mm-cell.out .mm-num { color: var(--ink-3); }
 .mm-cell.now { background: var(--blue-tint); }
 .mm-num { display: flex; align-items: center; gap: 5px;
