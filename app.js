@@ -3730,8 +3730,14 @@
   function acIsDone(i) { return acDoneSet().indexOf(acLids()[i]) !== -1; }
   function acPassedCount() { var n = 0, L = acLessons(); for (var i = 0; i < L.length; i++) if (acIsDone(i)) n++; return n; }
   function acFirstOpen() { var L = acLessons(); for (var i = 0; i < L.length; i++) if (!acIsDone(i)) return i; return L.length - 1; }
-  function acMaxUnlocked() { return acFirstOpen(); }
-  function acExamOpen() { return acPassedCount() >= acLessons().length; }
+  /* Режим просмотра: руководитель открывает курс не для того, чтобы его пройти, а
+     чтобы посмотреть, что читают люди (просьба Павла 16.09.2026). Ему открыты все
+     уроки сразу, вопросы и задания не держат кнопку «Дальше». Ключ — роль, а не
+     конкретный логин: смотреть курс может понадобиться любому руководителю.
+     У тьютора все как было: урок за уроком, на вопрос надо ответить. */
+  function acReview() { return state.role === 'super_admin' || state.role === 'owner'; }
+  function acMaxUnlocked() { return acReview() ? acLessons().length - 1 : acFirstOpen(); }
+  function acExamOpen() { return acReview() || acPassedCount() >= acLessons().length; }
 
   /* Индексы шагов аттестации. Состав у курсов разный (у одного две практики и
      выбор оплаты, у другого одна практика и только соглашение), поэтому шаги
@@ -3899,7 +3905,7 @@
       '<span class="ac-tl">Аттестация</span>' + (eLocked ? '<span class="ac-lk">' + ic('lock', 12) + '</span>' : '') + '</div>';
     list.innerHTML = html;
     var passed = acPassedCount() + (A.srv.passed ? 1 : 0), total = L.length + 1;
-    el('ac-prog').textContent = passed + ' / ' + total;
+    el('ac-prog').textContent = acReview() ? 'просмотр' : passed + ' / ' + total;
     el('ac-bar').style.width = Math.round(passed / total * 100) + '%';
   }
 
@@ -4188,7 +4194,7 @@
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = isQ || (isT && !A.lt[sc.id]);
+    nx.disabled = acReview() ? false : (isQ || (isT && !A.lt[sc.id]));
     if (isQ) acBindQ(sc);
     if (isT) {
       var chk = el('ac-lt');
@@ -4341,7 +4347,7 @@
       scr.innerHTML = '<div class="ac-eyebrow ac-cap">Вопрос ' + A.exStep + ' из ' + X.N + '</div><h1 class="ac-h">' + esc(q.h) + '</h1><p class="ac-qlead">' + esc(q.lead) + '</p>' +
         '<div class="ac-opts" id="ac-opts">' + q.opts.map(function (o) { return '<button class="ac-opt" data-ok="' + o[2] + '"><span class="ac-key">' + esc(o[0]) + '</span><span class="ac-ot">' + esc(o[1]) + '</span></button>'; }).join('') + '</div>';
       el('ac-steplab').textContent = 'Вопрос ' + A.exStep + ' из ' + X.N;
-      nx.disabled = A.exAnswers[qi] === undefined;
+      nx.disabled = acReview() ? false : A.exAnswers[qi] === undefined;
       var opts = scr.querySelectorAll('#ac-opts .ac-opt');
       Array.prototype.forEach.call(opts, function (o) {
         if (A.exAnswers[qi] !== undefined) { o.disabled = true; if (o.getAttribute('data-ok') === '1') o.classList.add('correct'); }
