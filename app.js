@@ -7017,18 +7017,28 @@
           });
         });
       });
-      var meets = [], gcal = '';
+      var meets = [], gcal = '', busy = {}, seen = {};
       [r[2], r[3]].forEach(function (x) {
         if (!x) return;
         gcal = gcal || x.gcal || '';
         (x.meetings || []).forEach(function (m) {
           if (!meets.some(function (y) { return y.id === m.id && y.date === m.date; })) meets.push(m);
         });
+        // Занятые часы в клетку дня не помещаются плашками, но день с записанными
+        // учениками не должен выглядеть свободным: иначе на него ставят планерку.
+        // Копим счетчик, а не список: имя ученика в календарь команды не идет.
+        (x.slots || []).forEach(function (sl) {
+          if (!sl.booked) return;
+          var k = sl.date + '|' + sl.hour + '|' + sl.person;
+          if (seen[k]) return;      // два куска месяца перекрываются по краю
+          seen[k] = 1;
+          busy[sl.date] = (busy[sl.date] || 0) + 1;
+        });
       });
       // Права и список людей нужны кнопке «Планерка»: форма собирает из них
       // галочки участников. Берем из первого ответа — он про те же роли.
       var w = r[2] || r[3] || {};
-      state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal,
+      state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal, busy: busy,
         can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
       if (state.page === 'tasks') renderView();
     }).catch(function () {
@@ -7079,8 +7089,9 @@
       '<button class="icobtn" data-mm="1" title="Следующий месяц">' + ic('go', 14) + '</button></div>' +
       (gcal ? '<a class="sc-gcal" href="' + esc(gcal) + '" target="_blank" rel="noopener" ' +
         'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
-      // Те же действия и теми же словами, что в виде слотов: переключатель меняет
-      // только вид, а не то, что человек может сделать на экране.
+      // Действия и слова те же, что в виде слотов, с одним исключением: «Мое время»
+      // здесь нет, потому что отмечать нечего — свои свободные часы человек ставит
+      // в клетке часа, а в месяце клетка это целый день.
       (mayMeet || can('tasks_all') ? '<div class="zw-acts">' +
         (mayMeet ? '<button class="bp ghost sm sc-meetnew" id="mm-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
         (can('tasks_all') ? '<button class="bp sm" id="mm-new">' + ic('plus', 14) + 'Зум</button>' : '') +
@@ -7123,12 +7134,17 @@
       // не прочитать («11:0…»), поэтому там вместо плашек счетчик, а подробности
       // открываются кликом по дню.
       var cnt = ev.length ? '<span class="mm-cnt">' + ev.length + '</span>' : '';
-      cells += '<div class="mm-cell' + (other ? ' out' : '') + (isToday ? ' now' : '') + '" data-mmday="' + ymd + '">' +
-        '<div class="mm-num">' + d.getDate() + cnt + '</div>' + shown + more + '</div>';
+      var busy = (data.busy || {})[ymd] || 0;
+      var load = busy ? '<span class="mm-load" title="Занятых часов с учениками: ' + busy +
+        '">' + busy + '</span>' : '';
+      cells += '<div class="mm-cell' + (other ? ' out' : '') + (isToday ? ' now' : '') +
+        '" data-mmday="' + ymd + '" role="button" tabindex="0">' +
+        '<div class="mm-num">' + d.getDate() + load + cnt + '</div>' + shown + more + '</div>';
     }
     view.innerHTML = '<div class="card zw">' + head +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
-      '<div class="zw-foot">День целиком — клик по числу: откроется сетка слотов на этот день.</div></div>';
+      '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
+        + 'Серая цифра у числа — сколько часов в этот день уже заняты учениками.</div></div>';
     meetMonthWire(view, data);
   }
 
@@ -7165,6 +7181,7 @@
     // Клик по дню уводит в слоты этого дня: месяц отвечает «что происходит»,
     // слоты — «кто свободен и куда влезет еще одна встреча».
     Array.prototype.forEach.call(view.querySelectorAll('[data-mmday]'), function (b) {
+      if (b.classList.contains('mm-cell')) schedKeyClick(b);
       b.addEventListener('click', function () {
         var ymd = b.getAttribute('data-mmday');
         var d = new Date(ymd + 'T00:00:00'), now = new Date(); now.setHours(0, 0, 0, 0);

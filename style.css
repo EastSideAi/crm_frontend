@@ -3166,6 +3166,10 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
+/* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
+   написано словами в самих плашках («Козубенко (урок)»). Пятый ряд управления
+   уводил первый час расписания ниже середины экрана — это дороже подсказки. */
+@media (max-width: 700px) { .sc-legend { display: none; } }
 
 .sc-grid { border-top: 1px solid var(--line); }
 .sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -3194,7 +3198,7 @@ button.tr-crumb:hover { color: var(--blue); }
    линией часа. */
 .sc-chip.meet.long { border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
 .sc-chip.meet.cont { border-top-left-radius: 2px; border-top-right-radius: 2px; }
-.sc-chip.zoom { background: var(--fill); color: var(--ink-2); }
+.sc-chip.zoom { background: var(--fill); color: var(--ink); }
 /* Зум в слоте: название открывает карточку встречи, иконка рядом копирует ссылку.
    Кнопка копирования тихая и проявляется по наведению — в плотной сетке лишняя
    иконка в каждой клетке читалась бы как шум (тот же прием, что у .dn-undo). */
@@ -3210,6 +3214,10 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Название планерки в узкой колонке недели важнее одной ровной строки: «Планерка
    продаж» и «Планерка продукта» обрезаются в одно и то же «Планерка прод…». */
 .sc-grid .sc-chip.meet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* У зума ровно та же беда, и она дороже: человек пришел в клетку за ссылкой и
+   должен видеть, чью ссылку берет. «Китайский (Гр…» и «Китайский (Ко…» — не видит. */
+.sc-grid .sc-chip.zoom .sc-zopen { white-space: normal; text-overflow: clip;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .sc-chip.act { cursor: pointer; }
 .sc-chip.act:hover { background: var(--line-2); }
 .sc-chip.off { cursor: pointer; }
@@ -9015,15 +9023,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--fill); }
 .mm-cell { min-height: 104px; padding: 6px 7px 8px; display: flex; flex-direction: column; gap: 3px;
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; }
-.mm-cell:hover { background: var(--fill); }
+.mm-cell:hover { background: var(--blue-tint); }
 /* Дни соседних месяцев показываем, но приглушенно: без них неделя рвется. */
-.mm-cell.out { background: #FBFCFD; }
+.mm-cell.out { background: var(--fill); }
 .mm-cell.out .mm-num { color: var(--ink-3); }
 .mm-cell.now { background: var(--blue-tint); }
 .mm-num { display: flex; align-items: center; gap: 5px;
   font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 /* Счетчик встреч в дне — только для узкого экрана, где плашки не читаются. */
 .mm-cnt { display: none; }
+/* Сколько часов этого дня уже проданы ученикам. Тихая цифра, а не плашка:
+   в месяце это фон для решения «куда влезет планерка», а не событие. */
+.mm-load { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+
 .mm-cell.now .mm-num { color: var(--blue); }
 .mm-ev { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%;
   overflow: hidden; padding: 2px 4px;
@@ -9065,6 +9078,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      планерка остается в клетке обрезанным «11:0…». */
   .mm-ev, .mm-ev.plan, .mm-more { display: none; }
   .mm-cell { min-height: 54px; }
+  /* Цифра занятости уступает место счетчику встреч: два числа в клетке шириной
+     в палец не читаются, а счетчик отвечает на более частый вопрос. */
+  .mm-load { display: none; }
   .mm-cnt { display: inline-flex; align-items: center; justify-content: center;
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-pill);
     background: var(--blue-tint); color: var(--blue); font-size: 10px; font-weight: 700; }
