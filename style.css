@@ -9024,7 +9024,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Клетка дня — колонка, и без min-width: 0 длинная плашка растягивает ее шире
    собственной колонки сетки: название встречи вылезало за границу дня. */
 .mm-cell { min-width: 0; }
-.mm-ev.plan { background: var(--navy-soft); color: var(--navy);
+/* Планерка — простая строка, а не флекс: анонимный текстовый элемент внутри
+   флекса не сжимается короче своего текста, и название вылезало за границу дня. */
+.mm-ev.plan { display: block; background: var(--navy-soft); color: var(--navy);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mm-ev.zoom { background: var(--fill); color: var(--ink-2); }
 .mm-open { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
