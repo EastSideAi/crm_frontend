@@ -4382,7 +4382,7 @@
       scr.innerHTML = head + '<div class="ac-task"><p>' + esc(t.p) + '</p>' +
         '<textarea class="ac-ta" id="ac-ta" placeholder="' + esc(t.ph || '') + '"></textarea></div>';
       var ta = el('ac-ta'); if (A.tv[t.id]) ta.value = A.tv[t.id];
-      var upd = function () { A.tv[t.id] = ta.value; nx.disabled = ta.value.trim().length < (t.min || 15); };
+      var upd = function () { A.tv[t.id] = ta.value; nx.disabled = acReview() ? false : ta.value.trim().length < (t.min || 15); };
       ta.addEventListener('input', upd); upd();
     } else {
       var on = !!A.tv[t.id];
@@ -4391,8 +4391,8 @@
         (t.tg ? '<a class="ac-tg" href="https://t.me/' + esc(t.tg) + '" target="_blank" rel="noopener">' + ic('send', 15) + 'Открыть чат администратора · @' + esc(t.tg) + '</a>' : '') +
         '</div><label class="ac-chkline"><input type="checkbox" id="ac-tc"' + (on ? ' checked' : '') + '> ' + esc(t.chk) + '</label>';
       var chk = el('ac-tc');
-      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; nx.disabled = !chk.checked; });
-      nx.disabled = !on;
+      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; nx.disabled = acReview() ? false : !chk.checked; });
+      nx.disabled = acReview() ? false : !on;
     }
     el('ac-steplab').textContent = lab;
     acAnim(scr);
