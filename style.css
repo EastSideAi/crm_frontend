@@ -3192,6 +3192,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-chip.meet.long { border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
 .sc-chip.meet.cont { border-top-left-radius: 2px; border-top-right-radius: 2px; }
 .sc-chip.zoom { background: var(--fill); color: var(--ink-2); }
+/* Зум в слоте: название открывает карточку встречи, иконка рядом копирует ссылку.
+   Кнопка копирования тихая и проявляется по наведению — в плотной сетке лишняя
+   иконка в каждой клетке читалась бы как шум (тот же прием, что у .dn-undo). */
+.sc-chip.zoom.has-link { display: flex; align-items: center; gap: 4px; padding-right: 3px; }
+.sc-zopen { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-zcopy { flex: none; width: 18px; height: 18px; display: grid; place-items: center;
+  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
+.sc-chip.zoom:hover .sc-zcopy, .sc-zcopy:focus-visible { opacity: 1; }
+.sc-zcopy:hover { color: var(--blue); background: var(--blue-tint); }
+/* На телефоне наведения нет: кнопка видна всегда, только приглушенно. */
+@media (hover: none) { .sc-zcopy { opacity: .5; } }
 /* Название планерки в узкой колонке недели важнее одной ровной строки: «Планерка
    продаж» и «Планерка продукта» обрезаются в одно и то же «Планерка прод…». */
 .sc-grid .sc-chip.meet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -8986,3 +8998,44 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lchart .ch-day { max-width: 56px; }
 .lchart .chart { justify-content: flex-start; }
 .lchart .ch-labels span { max-width: 56px; }
+
+/* ════ ВСТРЕЧИ — вид «Календарь» (месяц целиком) ════
+   Второй вид той же сетки: слоты отвечают «кто свободен в четверг в три»,
+   календарь — «что вообще происходит в этом месяце». Рисунок намеренно тихий:
+   плотность важнее украшений, цветом кодируется только тип плашки. */
+.mm-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.mm-wd { padding: 7px 9px; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--fill); }
+.mm-cell { min-height: 104px; padding: 6px 7px 8px; display: flex; flex-direction: column; gap: 3px;
+  border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; }
+.mm-cell:hover { background: var(--fill); }
+/* Дни соседних месяцев показываем, но приглушенно: без них неделя рвется. */
+.mm-cell.out { background: #FBFCFD; }
+.mm-cell.out .mm-num { color: var(--ink-3); }
+.mm-cell.now { background: var(--blue-tint); }
+.mm-num { font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.mm-cell.now .mm-num { color: var(--blue); }
+.mm-ev { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 2px 4px;
+  border-radius: 6px; font-size: 11px; line-height: 1.35; font-weight: 600; }
+.mm-ev b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.mm-ev.plan { background: var(--navy-soft); color: var(--navy);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-ev.zoom { background: var(--fill); color: var(--ink-2); }
+.mm-open { flex: 1; min-width: 0; text-align: left; font: inherit; color: inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-copy { flex: none; width: 17px; height: 17px; display: grid; place-items: center;
+  border-radius: 5px; color: var(--ink-3); opacity: 0; transition: .15s; }
+.mm-ev:hover .mm-copy, .mm-copy:focus-visible { opacity: 1; }
+.mm-copy:hover { color: var(--blue); background: var(--blue-tint); }
+@media (hover: none) { .mm-copy { opacity: .5; } }
+.mm-more { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 1px 3px; }
+.mm-more:hover { color: var(--blue); }
+/* Телефон: семь колонок остаются (месяц без них не месяц), но клетка ниже и
+   в ней помещается одна плашка — остальное уводит «еще N». */
+@media (max-width: 960px) {
+  .mm-cell { min-height: 68px; padding: 4px 4px 6px; gap: 2px; }
+  .mm-wd { padding: 5px 4px; }
+  .mm-ev { font-size: 10px; padding: 1px 3px; }
+  .mm-num { font-size: 11.5px; }
+}
