@@ -6108,7 +6108,10 @@
           cells.push('<span class="zd-win">свободны: <b>' + names.map(esc).join('</b>, <b>') + '</b></span>');
         }
         if (cells.length) seen++;
-        rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span><span class="zd-c">' + cells.join('') + '</span></div>');
+        // Пустой час — тоже слот: тихая кнопка на ховере строки ставит встречу
+        // ровно на него (Павел 16.09.2026). На телефоне ховера нет, видна всегда.
+        rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span><span class="zd-c">' + cells.join('') +
+          '<button type="button" class="zd-add" data-zslot="' + dayKey + '|' + h + '|" title="Поставить встречу на ' + h + ':00">' + ic('plus', 12) + '</button></span></div>');
       }
       body = '<div class="zd-tbl">' + rows.join('') + '</div>';
       if (!seen) body = '<div class="zw-empty">' + (flt || accF ? 'Таких встреч в этот день нет.' : 'На этот день ничего не назначено.') + '</div>' + body;
@@ -6149,7 +6152,9 @@
           return '<div class="zw-row' + (isToday ? ' today' : '') + '"><span class="zw-d">' + WDAYS_RU[d.getDay()] + ' <b>' + d.getDate() + '</b></span>' +
             accs.map(function (a) {
               var ms = (a.meetings || []).filter(function (m) { return sameDay(m.start, d) && vis(m); });
-              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) { return chip(a, m, false); }).join('') + '</span>';
+              return '<span class="zw-c' + (a.error ? ' off' : '') + '">' + ms.map(function (m) { return chip(a, m, false); }).join('') +
+                (a.error ? '' : '<button type="button" class="zd-add" data-zslot="' + zoomYmd(d) + '||' + esc(a.slot) +
+                  '" title="Поставить встречу на этот день">' + ic('plus', 12) + '</button>') + '</span>';
             }).join('') + '</div>';
         }).join('') + '</div>';
     }
@@ -6414,6 +6419,14 @@
         var acc = accs.filter(function (a) { return a.slot === p[0]; })[0];
         var m = acc && (acc.meetings || []).filter(function (x) { return String(x.id) === p[1]; })[0];
         if (m) openZoomCard(acc, m);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-zslot]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = (b.getAttribute('data-zslot') || '').split('|');
+        openZoomForm({ day: p[0] || '', hour: p[1] === '' ? null : +p[1], slot: p[2] || '',
+          after: function () { state.zoomWeek = {}; state.zoomWin = {}; renderView(); } });
       });
     });
     if (el('zw-new')) el('zw-new').addEventListener('click', function () {
@@ -27799,15 +27812,42 @@
   }
   // Время встречи: любые сутки шагом 15 минут (Павел 10.09.2026), по умолчанию
   // ближайший круглый час.
-  function zoomTimeOptions() {
+  function zoomTimeOptions(sel) {
     var d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
-    var def = d.getHours() + ':00';
+    var def = (d.getHours() < 10 ? '0' : '') + d.getHours() + ':00';
+    if (sel) def = sel;
     var out = [];
     for (var h = 0; h <= 23; h++) for (var m = 0; m < 60; m += 15) {
       var v = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-      out.push('<option value="' + v + '"' + (v === (def.length < 5 ? '0' + def : def) ? ' selected' : '') + '>' + v + '</option>');
+      out.push('<option value="' + v + '"' + (v === def ? ' selected' : '') + '>' + v + '</option>');
     }
     return out.join('');
+  }
+  // Дни недели по ISO (1 пн … 7 вс) — так их понимает сервер и сам зум.
+  var WD_ISO = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [6, 'сб'], [7, 'вс']];
+  function isoWd(ymd) {
+    var d = new Date(ymd + 'T12:00');
+    return isNaN(d) ? 1 : (d.getDay() === 0 ? 7 : d.getDay());
+  }
+  function plusDays(ymd, n) {
+    var d = new Date(ymd + 'T12:00');
+    d.setDate(d.getDate() + n);
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+  // Как читается правило повтора в карточке встречи.
+  function zoomSeriesText(ser) {
+    if (!ser || !(ser.days || []).length) return '';
+    var days = ser.days.map(function (d) {
+      var w = WD_ISO.filter(function (x) { return x[0] === d; })[0];
+      return w ? w[1] : '';
+    }).filter(Boolean).join(', ');
+    var txt = (ser.interval === 2 ? 'через неделю' : 'каждую неделю') + ', ' + days;
+    if (ser.until) {
+      var u = new Date(ser.until + 'T12:00');
+      if (!isNaN(u)) txt += ', до ' + u.getDate() + ' ' + MONTHS_RU[u.getMonth()];
+    }
+    return txt;
   }
   function zoomWhen() {
     var day = (el('zm-day') || {}).value || '', t = (el('zm-time') || {}).value || '';
@@ -27815,10 +27855,30 @@
   }
   // Карточка встречи из сетки: ссылка, тип, удаление. Ссылку и тип держит сервер
   // (busy отдает join_url и kind), здесь только показ и три действия.
+  function zoomMinOptions(sel) {
+    var vals = [30, 45, 60, 90, 120];
+    if (sel && vals.indexOf(sel) === -1) vals.push(sel);
+    vals.sort(function (a, b) { return a - b; });
+    return vals.map(function (v) {
+      var t = v === 60 ? '1 час' : v === 90 ? '1,5 часа' : v === 120 ? '2 часа' : v + ' минут';
+      return '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+  }
   function openZoomCard(acc, m) {
     if (document.querySelector('.al-ov.zm-ov')) return;
     var s = new Date(m.start);
+    var mins = Math.max(15, Math.round((new Date(m.end) - s) / 60000)) || 60;
     var when = WDAYS_RU[s.getDay()] + ', ' + s.getDate() + ' ' + MONTHS_RU[s.getMonth()] + ' · ' + zoomHH(m.start) + '–' + zoomHH(m.end);
+    // Занятие серии: у него есть номер повторения, и все действия спрашивают,
+    // трогаем одну встречу или всю серию (Ольга 16.09.2026: «если что-то
+    // изменится, просто отменим»).
+    var ser = m.series && (m.series.days || []).length ? m.series : null;
+    var one = ser && m.occurrence_id ? m.occurrence_id : '';
+    var scopeSeg = one
+      ? '<div class="al-f"><span class="al-l">Что меняем</span><span class="due-seg zc-scope">' +
+          '<button type="button" data-scope="one" class="on">только эту</button>' +
+          '<button type="button" data-scope="all">всю серию</button></span></div>'
+      : '';
     var ov = document.createElement('div');
     ov.className = 'al-ov over zm-ov';
     ov.innerHTML =
@@ -27827,15 +27887,38 @@
           '<div><div class="al-eyebrow">' + esc(acc.name) + '</div><div class="al-title">' + esc(m.topic) + '</div></div>' +
           '<button class="al-x" id="zc-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">' + esc(when) + '</div>' +
+        '<div class="al-sub">' + esc(when) +
+          (ser ? '<span class="zc-ser">' + ic('refresh', 12) + esc(zoomSeriesText(ser)) + '</span>' : '') + '</div>' +
         '<div class="al-body">' +
-          '<label class="al-f"><span class="al-l">Тип встречи</span><span class="al-selwrap"><select id="zc-kind" class="al-sel">' +
+          '<div data-zcsec><label class="al-f"><span class="al-l">Тип встречи</span><span class="al-selwrap"><select id="zc-kind" class="al-sel">' +
             zoomKindOptions(m.kind || '', true) + '</select></span></label>' +
           (m.join_url
             ? '<div class="al-f"><span class="al-l">Ссылка</span><div class="zc-link">' +
                 '<span class="zc-url">' + esc(m.join_url) + '</span>' +
                 '<button type="button" class="bp sm ghost" id="zc-copy">' + ic('copy', 13) + 'Скопировать</button></div></div>'
             : '<div class="zc-nolink">Зум не отдал ссылку на эту встречу. Открой ее в приложении зума.</div>') +
+          '<div class="al-f zm-repf"><button type="button" class="qchip zc-edit" id="zc-edit">' + ic('pen', 12) + 'Изменить</button>' +
+            '<span class="zm-reph">Перенести на другой день или переименовать</span></div></div>' +
+          '<div class="tsk-resform zc-editf" id="zc-editf" hidden>' + scopeSeg +
+            '<label class="al-f"><span class="al-l">Название</span>' +
+              '<input id="zc-topic" class="al-in" type="text" maxlength="200" value="' + esc(m.topic || '') + '"></label>' +
+            '<div class="al-row">' +
+              '<label class="al-f"><span class="al-l">День</span>' +
+                '<input id="zc-day" class="al-in" type="date" value="' + zoomYmd(s) + '"></label>' +
+              '<label class="al-f"><span class="al-l">Время</span><span class="al-selwrap"><select id="zc-time" class="al-sel">' +
+                zoomTimeOptions(zoomHH(m.start)) + '</select></span></label>' +
+              '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="zc-min" class="al-sel">' +
+                zoomMinOptions(mins) + '</select></span></label>' +
+            '</div>' +
+            '<div class="tsk-resrow"><button type="button" class="al-cancel" id="zc-ecx">Отмена</button>' +
+              '<button type="button" class="bp sm" id="zc-eok">Сохранить</button></div>' +
+          '</div>' +
+          '<div class="zc-delbox" id="zc-delbox" hidden>' +
+            '<span class="zc-delq">Отменить</span>' +
+            '<button type="button" class="qchip" data-del="one">только эту встречу</button>' +
+            '<button type="button" class="qchip" data-del="all">всю серию</button>' +
+            '<button type="button" class="qchip" id="zc-delno">не надо</button>' +
+          '</div>' +
           '<div class="ct-err" id="zc-err"></div>' +
         '</div>' +
         '<div class="al-foot"><button type="button" class="al-cancel zc-del" id="zc-del">Удалить встречу</button>' +
@@ -27856,6 +27939,15 @@
     el('zc-x').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
     var err = el('zc-err');
+    var scope = function () {
+      var on = ov.querySelector('.zc-scope button.on');
+      return on && on.getAttribute('data-scope') === 'all' ? '' : one;
+    };
+    Array.prototype.forEach.call(ov.querySelectorAll('.zc-scope button'), function (b) {
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call(ov.querySelectorAll('.zc-scope button'), function (x) { x.classList.toggle('on', x === b); });
+      });
+    });
     if (el('zc-copy')) el('zc-copy').addEventListener('click', function () { copyText(m.join_url, el('zc-copy')); });
     el('zc-kind').addEventListener('change', function () {
       var v = el('zc-kind').value;
@@ -27865,16 +27957,58 @@
         err.textContent = (e && e.body && e.body.detail) || 'Не удалось сохранить тип, проверь интернет';
       });
     });
-    el('zc-del').addEventListener('click', function () {
-      if (!confirm('Удалить встречу «' + m.topic + '»? Она пропадет из зума, ссылка перестанет работать.')) return;
+
+    // Правка встречи: название, день, время, длительность одной формой — как
+    // редактор задачи в карточке. Пока она открыта, тип и ссылку прячем, чтобы
+    // в модалке не было двух наборов действий.
+    var setEdit = function (on) {
+      el('zc-editf').hidden = !on;
+      el('zc-delbox').hidden = true;
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-zcsec]'), function (x) { x.hidden = on; });
+      if (on) setTimeout(function () { var t = el('zc-topic'); if (t) { t.focus(); t.select(); } }, 40);
+    };
+    el('zc-edit').addEventListener('click', function () { setEdit(true); });
+    el('zc-ecx').addEventListener('click', function () { setEdit(false); err.textContent = ''; });
+    el('zc-eok').addEventListener('click', function () {
+      var topic = (el('zc-topic').value || '').trim();
+      var day = el('zc-day').value, t = el('zc-time').value;
+      if (!topic) { err.textContent = 'Нужно название встречи'; el('zc-topic').focus(); return; }
+      if (!day || !t) { err.textContent = 'Выбери день и время'; return; }
+      var ok = el('zc-eok'); ok.disabled = true; err.textContent = '';
+      apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id), 'PATCH', {
+        slot: acc.slot, topic: topic, start_at: new Date(day + 'T' + t).toISOString(),
+        minutes: +el('zc-min').value || 60, occurrence_id: scope(), at: m.start
+      }, function () {
+        close(); showToast('Встреча изменена');
+        state.zoomWeek = {}; state.zoomWin = {}; renderView();
+      }, function (code, e) {
+        ok.disabled = false;
+        err.textContent = (e && e.body && e.body.detail) || 'Не удалось изменить встречу, проверь интернет';
+      });
+    });
+
+    var drop = function (all) {
+      var q = '?slot=' + encodeURIComponent(acc.slot) +
+        (all ? '' : '&occurrence_id=' + encodeURIComponent(one) + '&at=' + encodeURIComponent(m.start));
       el('zc-del').disabled = true;
-      apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id) + '?slot=' + encodeURIComponent(acc.slot), 'DELETE', null, function () {
-        close(); showToast('Встреча удалена');
-        state.zoomWeek = {}; renderView();
+      apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id) + q, 'DELETE', null, function () {
+        close(); showToast(all && ser ? 'Серия отменена' : 'Встреча отменена');
+        state.zoomWeek = {}; state.zoomWin = {}; renderView();
       }, function (code, e) {
         el('zc-del').disabled = false;
         err.textContent = (e && e.body && e.body.detail) || 'Не удалось удалить, проверь интернет';
       });
+    };
+    el('zc-del').addEventListener('click', function () {
+      // У серии спрашиваем не «точно ли», а «что именно»: выбор из двух кнопок
+      // честнее системного confirm с одним «ок».
+      if (one) { el('zc-delbox').hidden = false; return; }
+      if (!confirm('Удалить встречу «' + m.topic + '»? Она пропадет из зума, ссылка перестанет работать.')) return;
+      drop(true);
+    });
+    el('zc-delno').addEventListener('click', function () { el('zc-delbox').hidden = true; });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-del]'), function (b) {
+      b.addEventListener('click', function () { drop(b.getAttribute('data-del') === 'all'); });
     });
   }
 
@@ -27884,6 +28018,10 @@
     if (document.querySelector('.al-ov.zm-ov')) return;
     zoomAccounts(function (accs) {
       if (!accs.length) { showToast('Зум не подключен: ключи аккаунтов еще не заведены'); return; }
+      // Слот из сетки: день, час и аккаунт колонки уже выбраны — форма открывается
+      // заполненной (Павел 16.09.2026: «выбирать слоты и составлять расписание»).
+      var day0 = o.day || isoDay(0);
+      var time0 = o.hour == null ? '' : (o.hour < 10 ? '0' : '') + o.hour + ':00';
       var ov = document.createElement('div');
       ov.className = 'al-ov over zm-ov';
       ov.innerHTML =
@@ -27898,7 +28036,7 @@
           '<div class="al-body">' +
             (accs.length > 1
               ? '<label class="al-f"><span class="al-l">Аккаунт</span><span class="al-selwrap"><select id="zm-acc" class="al-sel">' +
-                  accs.map(function (a) { return '<option value="' + esc(a.slot) + '">' + esc(a.name) + '</option>'; }).join('') +
+                  accs.map(function (a) { return '<option value="' + esc(a.slot) + '"' + (o.slot === a.slot ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') +
                 '</select></span></label>'
               : '') +
             '<label class="al-f"><span class="al-l">Название</span>' +
@@ -27910,16 +28048,34 @@
             // День и время раздельно, как срок в форме задачи (design.md §7): нативное
             // поле даты-времени рисуется по локали браузера и части команды показало бы 04:00 PM.
             '<div class="al-f"><span class="al-l">День</span><div class="zm-dayrow">' +
-              '<span class="due-seg"><button type="button" data-day="' + isoDay(0) + '" class="on">сегодня</button>' +
-                '<button type="button" data-day="' + isoDay(1) + '">завтра</button></span>' +
-              '<input id="zm-day" class="al-in sm" type="date" value="' + isoDay(0) + '"></div></div>' +
+              '<span class="due-seg"><button type="button" data-day="' + isoDay(0) + '"' + (day0 === isoDay(0) ? ' class="on"' : '') + '>сегодня</button>' +
+                '<button type="button" data-day="' + isoDay(1) + '"' + (day0 === isoDay(1) ? ' class="on"' : '') + '>завтра</button></span>' +
+              '<input id="zm-day" class="al-in sm" type="date" value="' + day0 + '"></div></div>' +
             '<div class="al-row">' +
               '<label class="al-f"><span class="al-l">Время</span><span class="al-selwrap"><select id="zm-time" class="al-sel">' +
-                zoomTimeOptions() + '</select></span></label>' +
+                zoomTimeOptions(time0) + '</select></span></label>' +
               '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="zm-min" class="al-sel">' +
                 '<option value="30">30 минут</option><option value="45">45 минут</option>' +
                 '<option value="60" selected>1 час</option><option value="90">1,5 часа</option>' +
                 '<option value="120">2 часа</option></select></span></label>' +
+            '</div>' +
+            // Регулярная встреча (Ольга 16.09.2026: «договорились о времени — не надо
+            // каждую неделю заводить заново»). Дни — тот же сегмент .due-seg, только
+            // включенных плашек может быть несколько: третьего рецепта не заводим.
+            '<div class="al-f zm-repf">' +
+              '<button type="button" class="qchip zm-rep" id="zm-rep">' + ic('refresh', 13) + 'Повторять</button>' +
+              '<span class="zm-reph">Одна ссылка на все встречи серии</span></div>' +
+            '<div class="zm-repbox" id="zm-repbox" hidden>' +
+              '<div class="al-f"><span class="al-l">По каким дням</span>' +
+                '<span class="due-seg zm-days">' + WD_ISO.map(function (w) {
+                  return '<button type="button" data-wd="' + w[0] + '">' + w[1] + '</button>';
+                }).join('') + '</span></div>' +
+              '<div class="al-row">' +
+                '<label class="al-f"><span class="al-l">Как часто</span><span class="al-selwrap"><select id="zm-int" class="al-sel">' +
+                  '<option value="1">каждую неделю</option><option value="2">через неделю</option></select></span></label>' +
+                '<label class="al-f"><span class="al-l">До какого дня</span>' +
+                  '<input id="zm-until" class="al-in" type="date" value="' + plusDays(day0, 90) + '"></label>' +
+              '</div>' +
             '</div>' +
             '<div class="zm-free" id="zm-free"></div>' +
             '<div class="ct-err" id="zm-err"></div>' +
@@ -27975,16 +28131,45 @@
         n.addEventListener('change', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 250); });
         n.addEventListener('input', function () { clearTimeout(freeT); freeT = setTimeout(checkFree, 500); });
       });
-      Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (b) {
+      // Селектор только по строке дня: в форме теперь два сегмента .due-seg, и
+      // общий querySelectorAll гасил бы выбранные дни недели у повтора.
+      var dayBtns = ov.querySelectorAll('.zm-dayrow .due-seg button');
+      var markDay = function () {
+        Array.prototype.forEach.call(dayBtns, function (x) { x.classList.toggle('on', x.getAttribute('data-day') === el('zm-day').value); });
+      };
+      Array.prototype.forEach.call(dayBtns, function (b) {
         b.addEventListener('click', function () {
           el('zm-day').value = b.getAttribute('data-day');
-          Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x === b); });
-          checkFree();
+          markDay(); syncRepeatDay(); checkFree();
         });
       });
-      el('zm-day').addEventListener('input', function () {
-        Array.prototype.forEach.call(ov.querySelectorAll('.due-seg button'), function (x) { x.classList.toggle('on', x.getAttribute('data-day') === el('zm-day').value); });
+      el('zm-day').addEventListener('input', function () { markDay(); syncRepeatDay(); });
+
+      // Повтор: пока человек сам не выбрал дни, серия идет по дню самой встречи —
+      // «каждую неделю в этот день», как просила Ольга.
+      var wdTouched = false;
+      var wdBtns = ov.querySelectorAll('.zm-days button');
+      function syncRepeatDay() {
+        if (wdTouched) return;
+        var w = isoWd(el('zm-day').value || day0);
+        Array.prototype.forEach.call(wdBtns, function (x) { x.classList.toggle('on', +x.getAttribute('data-wd') === w); });
+      }
+      Array.prototype.forEach.call(wdBtns, function (b) {
+        b.addEventListener('click', function () {
+          wdTouched = true;
+          b.classList.toggle('on');
+          // Ни одного дня — серии не выйдет: возвращаем день самой встречи.
+          if (!ov.querySelectorAll('.zm-days button.on').length) { wdTouched = false; syncRepeatDay(); }
+        });
       });
+      var repOn = function () { return el('zm-rep').classList.contains('on'); };
+      el('zm-rep').addEventListener('click', function () {
+        el('zm-rep').classList.toggle('on');
+        el('zm-repbox').hidden = !repOn();
+        el('zm-ok').textContent = repOn() ? 'Создать серию' : 'Создать ссылку';
+        if (repOn()) { syncRepeatDay(); el('zm-until').value = plusDays(el('zm-day').value || day0, 90); }
+      });
+      syncRepeatDay();
       checkFree();
       el('zm-ok').addEventListener('click', function () {
         var topic = ((el('zm-topic') || {}).value || '').trim();
@@ -27997,12 +28182,21 @@
         ok.disabled = true;
         // Время уходит с зоной браузера: коллега в Китае ставит встречу по своим часам,
         // и «в 12» должно значить его 12, а не московские.
+        var rep = null;
+        if (repOn()) {
+          rep = {
+            interval: +((el('zm-int') || {}).value || 1),
+            days: Array.prototype.map.call(ov.querySelectorAll('.zm-days button.on'), function (x) { return +x.getAttribute('data-wd'); }),
+            until: (el('zm-until') || {}).value || ''
+          };
+        }
         apiSend('/admin/api/zoom/meetings', 'POST', {
           topic: topic, slot: acc ? acc.value : '',
           start_at: when.toISOString(),
           minutes: +((el('zm-min') || {}).value || 60),
           kind: (el('zm-kind') || {}).value || '',
-          task_id: o.task_id || null, session_id: o.session_id || null
+          task_id: o.task_id || null, session_id: o.session_id || null,
+          repeat: rep
         }, function (r) {
           var m = r && r.meeting;
           close();
@@ -28010,7 +28204,9 @@
           if (link && navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(link).catch(function () {});
           }
-          showToast(link ? 'Ссылка на зум готова и скопирована' : 'Встреча создана');
+          var n = ((m && m.occurrences) || []).length;
+          showToast(n > 1 ? 'Серия из ' + n + ' встреч создана, ссылка скопирована'
+                          : link ? 'Ссылка на зум готова и скопирована' : 'Встреча создана');
           if (o.after) o.after(m);
         }, function (code, e) {
           ok.disabled = false;
