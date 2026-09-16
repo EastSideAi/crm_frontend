@@ -3060,6 +3060,10 @@ button.tr-crumb:hover { color: var(--blue); }
    общего правила .sec-head > .bp. */
 .mt-lens + .zw-seg { margin-left: 28px; }
 .mt-lens + .zw-seg + .zw-nav { margin-left: 12px; }
+/* Действия — одна группа: вправо уезжает первая кнопка (общее правило
+   .sec-head > .bp), вторая держится рядом с ней. Иначе margin-left: auto
+   достается обеим, и при переносе они разъезжаются по краям своей строки. */
+.zw-head > .bp + .bp { margin-left: 8px; }
 /* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
    один, и он достается главному действию, а не вспомогательной ссылке. */
 .sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
