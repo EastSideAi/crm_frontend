@@ -77,6 +77,7 @@
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
+    schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
     news: null, newsUnread: 0,
     teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
@@ -2155,6 +2156,10 @@
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
+    // «Расписание» видят все (cap dash есть у каждой роли): вопрос «кто когда
+    // свободен и когда планерка» возникает у всей команды, а отмечает человек
+    // только свое время — это проверяет сервер.
+    { id: 'sched', label: 'Расписание', icon: 'cal', cap: 'dash' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
@@ -3174,6 +3179,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'news') renderNews(view);
+    else if (state.page === 'sched') renderSched(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -5660,8 +5666,8 @@
     var key = lo.toISOString().slice(0, 10);
     state.zoomWeek[key] = 'loading';
     api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
-      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
+      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks' || state.page === 'sched') renderView(); })
+      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks' || state.page === 'sched') renderView(); });
   }
   // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
   // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
@@ -5830,6 +5836,473 @@
     }
     return '<div class="card zw">' + head + fltRow + body + tail +
       '<div class="zw-hint">Здесь все, что назначено в зуме на время: из CRM или из приложения. Звонок в личном зале без назначения заранее не виден.</div></div>';
+  }
+
+
+  /* ── Расписание команды: одна сетка на всех ──────────────────────────────────
+     Расписание живет отдельным сервисом (страница истсайд.рф/schedule), и команда
+     про него не помнила: люди спрашивали, где посмотреть занятые часы и планерки и
+     где отметить свои окна. Здесь та же сетка там, где команда сидит целый день:
+     свободные окна, занятые часы, планерки и зумы одним экраном.
+
+     Свои часы человек отмечает кликом по клетке, планерку ставит руководитель.
+     Источник данных — тот же сервис расписания, второй базы мы не заводим. Зумы
+     подмешиваются из той же ручки, что кормит сетку «Зумы» в задачах: два экрана
+     про один день разъехались бы. */
+
+  // Рамка суток. Данные за ее пределами раздвигают сетку сами: уроки с Китаем
+  // стоят и в 7 утра, и поздно вечером.
+  var SC_FROM = 8, SC_TO = 21;
+  var SC_WHAT = { teacher: 'урок', curator: 'разбор' };
+
+  function schedWeekStart(off) {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 7 * (off || 0));
+    return d;
+  }
+  function schedDay() {
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + (state.schedDayOff || 0));
+    return d;
+  }
+  // Понедельник показываемой недели: день берет ту неделю, в которую попал, —
+  // кэш один на оба вида, и лишний запрос при переключении не нужен.
+  function schedRangeStart() {
+    if (!schedIsDay()) return schedWeekStart(state.schedOff || 0);
+    var d = schedDay(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+  // На телефоне недельная матрица не помещается: семь колонок с именами уехали бы
+  // за экран. Там всегда день, и переключателя нет.
+  function schedIsDay() { return mqMobile.matches || state.schedView === 'day'; }
+
+  function schedLoad(lo) {
+    var key = zoomYmd(lo), hi = new Date(lo.getTime() + 7 * 86400000);
+    state.schedWeek[key] = 'loading';
+    api('/admin/api/sched/week?from=' + key + '&to=' + zoomYmd(hi))
+      .then(function (r) { state.schedWeek[key] = r || 'none'; if (state.page === 'sched') renderView(); })
+      .catch(function () { state.schedWeek[key] = 'none'; if (state.page === 'sched') renderView(); });
+  }
+  function schedReload() { state.schedWeek = {}; state.zoomWeek = {}; renderView(); }
+
+  /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
+     фамилия, и она же и есть то, чем людей различают на слух. */
+  function schedShort(name) { return String(name || '').trim().split(/\s+/)[0] || ''; }
+
+  function schedMine(d, s) {
+    return !!(d.me && s.person === d.me.person && s.role === d.me.role);
+  }
+  function schedCanEdit(d, s) { return !!(d.can_edit_all || schedMine(d, s)); }
+
+  /* Зумы этой недели из общего кэша: в сетке задач и здесь один и тот же день. */
+  function schedZooms(lo) {
+    var key = lo.toISOString().slice(0, 10), data = state.zoomWeek[key];
+    if (data === undefined) { loadZoomWeek(lo); return []; }
+    if (data === 'loading' || data === 'none' || !data.length) return [];
+    var out = [];
+    data.forEach(function (a) {
+      (a.meetings || []).forEach(function (m) {
+        var st = new Date(m.start);
+        out.push({ day: zoomYmd(st), hour: st.getHours(), topic: m.topic, acc: a.name,
+                   slot: a.slot, id: m.id, kind: m.kind || '' });
+      });
+    });
+    return out;
+  }
+
+  /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
+     границ времени непонятно, одна это встреча или несколько. */
+  function schedSpan(m) { return m.hour + ':00–' + (m.hour + (m.duration || 1)) + ':00'; }
+
+  function schedMeetAttr(m) {
+    return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
+      ' data-sc-md="' + m.date + '|' + m.hour + '" role="button" tabindex="0"';
+  }
+
+  function schedChip(cls, text, title, attr) {
+    return '<span class="sc-chip ' + cls + '"' + (title ? ' title="' + esc(title) + '"' : '') +
+      (attr || '') + '>' + esc(text) + '</span>';
+  }
+
+  /* Что стоит в этот час этого дня: планерки, занятые окна, свободные окна, зумы.
+     Порядок один и в неделе, и в дне — сверху то, что уже назначено. */
+  function schedAt(d, zooms, day, hour, who) {
+    var fit = function (p) { return !who || p === who; };
+    var meets = (d.meetings || []).filter(function (m) {
+      return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
+        (!who || (m.people || []).some(function (x) { return x.person === who; }));
+    });
+    var slots = (d.slots || []).filter(function (s) { return s.date === day && s.hour === hour && fit(s.person); });
+    return {
+      meets: meets,
+      busy: slots.filter(function (s) { return s.booked; }),
+      free: slots.filter(function (s) { return !s.booked && !s.blocked; }),
+      zooms: who ? [] : zooms.filter(function (z) { return z.day === day && z.hour === hour; }),
+    };
+  }
+
+  function schedWeekGrid(d, zooms, lo, today) {
+    var days = [], i, todayKey = zoomYmd(today);
+    for (i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
+    var who = state.schedWho || '';
+    var lo_h = SC_FROM, hi_h = SC_TO;
+    (d.slots || []).forEach(function (s) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); });
+    (d.meetings || []).forEach(function (m) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); });
+    zooms.forEach(function (z) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); });
+
+    var head = '<div class="sc-row head"><span class="sc-h"></span>' + days.map(function (x) {
+      return '<span class="sc-d' + (x.getTime() === today.getTime() ? ' now' : '') + '">' +
+        WDAYS_RU[x.getDay()] + ' <b>' + x.getDate() + '</b></span>';
+    }).join('') + '</div>';
+
+    var rows = [];
+    for (var h = lo_h; h <= hi_h; h++) {
+      var cells = days.map(function (x) {
+        var day = zoomYmd(x), at = schedAt(d, zooms, day, h, who), out = [];
+        at.meets.forEach(function (m) {
+          var long = (m.duration || 1) > 1;
+          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
+            m.title + ' · ' + schedSpan(m) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
+            (d.can_edit_all ? ' · нажмите, чтобы снять' : ''),
+            d.can_edit_all ? schedMeetAttr(m) : ''));
+        });
+        at.busy.forEach(function (s) {
+          out.push(schedChip('busy', schedShort(s.person),
+            s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : '')));
+        });
+        at.zooms.forEach(function (z) { out.push(schedChip('zoom', z.topic, z.topic + ' · ' + z.acc)); });
+        // Свой час всегда отдельным чипом, даже когда остальные схлопнуты в счетчик:
+        // «где стоят мои окна» — первый вопрос к этому экрану у того, кто их отмечает.
+        var own = at.free.filter(function (s) { return schedMine(d, s); });
+        var rest = at.free.filter(function (s) { return !schedMine(d, s); });
+        own.forEach(function (s) { out.push(schedChip('free mine', schedShort(s.person), s.person + ' · ваш свободный час')); });
+        if (rest.length > 2) out.push(schedChip('free', 'свободны ' + rest.length, 'Свободны: ' + rest.map(function (s) { return s.person; }).join(', ')));
+        else rest.forEach(function (s) { out.push(schedChip('free', schedShort(s.person), s.person + ' · свободен')); });
+        var pick = state.schedEdit && d.me;
+        return '<span class="sc-cell' + (pick ? ' pick' : '') + (day === todayKey ? ' today' : '') + '"' +
+          (pick ? ' data-sc-cell="' + day + '|' + h + '" role="button" tabindex="0"' +
+            ' title="' + (own.length ? 'Убрать свой свободный час' : 'Отметить этот час свободным') + '"' : '') + '>' +
+          out.join('') + '</span>';
+      }).join('');
+      rows.push('<div class="sc-row">' + '<span class="sc-h">' + h + ':00</span>' + cells + '</div>');
+    }
+    return '<div class="sc-grid">' + head + rows.join('') + '</div>';
+  }
+
+  function schedDayList(d, zooms, day, today) {
+    var key = zoomYmd(day), who = state.schedWho || '';
+    var lo_h = SC_FROM, hi_h = SC_TO;
+    (d.slots || []).forEach(function (s) { if (s.date === key) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); } });
+    (d.meetings || []).forEach(function (m) { if (m.date === key) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); } });
+    zooms.forEach(function (z) { if (z.day === key) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); } });
+    var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
+    var rows = [], seen = 0;
+    for (var h = lo_h; h <= hi_h; h++) {
+      var at = schedAt(d, zooms, key, h, who), cells = [];
+      // В списке дня планерка стоит один раз, в свой первый час: границы времени
+      // написаны прямо в строке, и повтор того же текста в каждом часе только мешает.
+      at.meets.forEach(function (m) {
+        if (m.hour !== h) return;
+        cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
+          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m) : '') + ' · ' +
+          (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
+          d.can_edit_all ? 'Нажмите, чтобы снять планерку' : (m.note || ''),
+          d.can_edit_all ? schedMeetAttr(m) : ''));
+      });
+      at.busy.forEach(function (s) {
+        cells.push(schedChip('busy', s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : ''), ''));
+      });
+      at.zooms.forEach(function (z) { cells.push(schedChip('zoom', z.topic + ' · ' + z.acc, '')); });
+      at.free.forEach(function (s) {
+        var can = state.schedEdit && schedCanEdit(d, s);
+        cells.push(schedChip('free' + (schedMine(d, s) ? ' mine' : '') + (can ? ' off' : ''),
+          schedShort(s.person) + (s.role === 'teacher' ? ' (урок)' : ' (разбор)'),
+          can ? 'Убрать этот час' : s.person + ' · свободен',
+          can ? ' data-sc-drop="' + s.id + '|' + s.role + '|' + s.date + '" role="button" tabindex="0"' : ''));
+      });
+      if (cells.length) seen++;
+      var pick = state.schedEdit && d.me
+        ? '<button type="button" class="sc-add" data-sc-cell="' + key + '|' + h + '" title="Отметить этот час свободным">' + ic('plus', 12) + '</button>'
+        : '';
+      rows.push('<div class="zd-row' + (h === nowH ? ' now' : '') + '"><span class="zd-h">' + h + ':00</span>' +
+        '<span class="zd-c">' + cells.join('') + pick + '</span></div>');
+    }
+    var body = '<div class="zd-tbl">' + rows.join('') + '</div>';
+    if (!seen) body = '<div class="zw-empty">' + (who ? 'У этого человека в этот день ничего нет.' : 'На этот день ничего не назначено.') + '</div>' + body;
+    return body;
+  }
+
+  function renderSched(view) {
+    var lo = schedRangeStart(), key = zoomYmd(lo);
+    var d = state.schedWeek[key];
+    if (d === undefined) { schedLoad(lo); d = 'loading'; }
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var dayView = schedIsDay(), day = schedDay();
+    var atNow = dayView ? !(state.schedDayOff || 0) : !(state.schedOff || 0);
+    var range = dayView
+      ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] +
+        (day.getTime() === today.getTime() ? '<span class="zw-td"> · сегодня</span>' : '')
+      : lo.getDate() + ' ' + MONTHS_RU[lo.getMonth()] + ' – ' +
+        new Date(lo.getTime() + 6 * 86400000).getDate() + ' ' + MONTHS_RU[new Date(lo.getTime() + 6 * 86400000).getMonth()];
+
+    var ok = d && typeof d === 'object';
+    var head = '<div class="sec-head zw-head"><div class="t">Расписание</div>' +
+      (mqMobile.matches ? '' :
+        '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-sv="week">Неделя</button>' +
+        '<button type="button" class="' + (dayView ? 'on' : '') + '" data-sv="day">День</button></div>') +
+      '<div class="zw-nav"><button class="icobtn" data-sw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
+      '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-sw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
+      '<button class="icobtn" data-sw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
+      (ok && d.me ? '<button class="bp sm' + (state.schedEdit ? '' : ' ghost') + ' sc-edit" id="sc-edit">' +
+        ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
+      (ok && d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+      '</div>';
+
+    if (d === 'loading') {
+      view.innerHTML = '<div class="card zw">' + head + '<div class="zw-empty">Спрашиваю расписание…</div></div>';
+      return schedWire(view, null);
+    }
+    if (d === 'none') {
+      view.innerHTML = '<div class="card zw">' + head +
+        '<div class="zw-empty">Расписание не ответило. Обнови страницу.</div></div>';
+      return schedWire(view, null);
+    }
+    if (!d.enabled) {
+      view.innerHTML = '<div class="card zw">' + head +
+        '<div class="zw-empty">Расписание не подключено к CRM. Скажи об этом разработчику — нужен адрес сервиса и ключ.</div></div>';
+      return schedWire(view, d);
+    }
+
+    var zooms = schedZooms(lo);
+    var people = (d.people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
+    var flt = '<div class="zw-fltrow"><label class="al-selwrap sc-who"><select class="al-sel" id="sc-who">' +
+      '<option value="">Все люди</option>' +
+      (d.me ? '<option value="' + esc(d.me.person) + '"' + (state.schedWho === d.me.person ? ' selected' : '') + '>Только я</option>' : '') +
+      people.map(function (p) {
+        return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
+      }).join('') + '</select></label>' +
+      '<div class="sc-legend"><span class="sc-chip free">свободно</span>' +
+        '<span class="sc-chip busy">занято</span><span class="sc-chip meet">планерка</span>' +
+        '<span class="sc-chip zoom">зум</span></div></div>';
+
+    // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
+    // и в расписании разные, угадывать их нельзя (можно отметить чужие часы).
+    var claim = '';
+    if (!d.me) {
+      var free = (d.people || []).filter(function (p) { return !p.taken; });
+      claim = '<div class="sc-claim">' + ic('team', 15) +
+        '<span>Чтобы отмечать свое время, выберите себя в расписании.</span>' +
+        (free.length
+          ? '<label class="al-selwrap sc-claimsel"><select class="al-sel" id="sc-me"><option value="">Кто вы в расписании</option>' +
+            free.map(function (p) { return '<option value="' + p.id + '">' + esc(p.person) + ' · ' + (SC_WHAT[p.role] || p.role) + '</option>'; }).join('') +
+            '</select></label>'
+          : '<span class="sc-claimnone">Свободных имен в расписании нет — попросите руководителя.</span>') + '</div>';
+    }
+
+    var body = dayView ? schedDayList(d, zooms, day, today) : schedWeekGrid(d, zooms, lo, today);
+    var hint = state.schedEdit
+      ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
+      : '<div class="zw-hint">Свободные часы отмечают сами преподаватели и тьюторы — здесь или в боте по четвергам. Планерки ставит руководитель отдела.</div>';
+    view.innerHTML = '<div class="card zw sc">' + head + flt + claim + body + hint + '</div>';
+    schedWire(view, d);
+  }
+
+  /* Клетка часа и чип планерки — это кнопки, просто нарисованные не кнопками. Значит
+     они должны слушать Enter и пробел: иначе отметить свое время и снять планерку можно
+     только мышью. */
+  function schedKeyClick(node) {
+    node.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      node.click();
+    });
+  }
+
+  function schedWire(view, d) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sw]'), function (b) {
+      b.addEventListener('click', function () {
+        var step = +b.getAttribute('data-sw');
+        if (schedIsDay()) state.schedDayOff = (state.schedDayOff || 0) + step;
+        else state.schedOff = (state.schedOff || 0) + step;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sw0]'), function (b) {
+      b.addEventListener('click', function () {
+        if (schedIsDay()) state.schedDayOff = 0; else state.schedOff = 0;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sv]'), function (b) {
+      b.addEventListener('click', function () { state.schedView = b.getAttribute('data-sv') === 'day' ? 'day' : 'week'; renderView(); });
+    });
+    if (el('sc-who')) el('sc-who').addEventListener('change', function () { state.schedWho = el('sc-who').value || ''; renderView(); });
+    if (el('sc-edit')) el('sc-edit').addEventListener('click', function () { state.schedEdit = !state.schedEdit; renderView(); });
+    if (el('sc-me')) el('sc-me').addEventListener('change', function () {
+      var id = +el('sc-me').value; if (!id) return;
+      apiSend('/admin/api/sched/me', 'POST', { person_id: id }, function () { schedReload(); },
+        function (code, e) { showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — обнови страницу'); });
+    });
+    if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
+    if (!d || !d.enabled) return;
+
+    // Клик по клетке — свой свободный час. Если он уже стоит, второй клик его снимает:
+    // отдельная кнопка «убрать» в сетке недели не помещается.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sc-cell]'), function (c) {
+      schedKeyClick(c);
+      c.addEventListener('click', function () {
+        var p = (c.getAttribute('data-sc-cell') || '').split('|');
+        if (!d.me || p.length < 2) return;
+        var mine = (d.slots || []).filter(function (s) {
+          return s.date === p[0] && s.hour === +p[1] && schedMine(d, s);
+        })[0];
+        if (mine && mine.booked) return showToast('На этот час записан клиент — снимите запись в карточке');
+        if (mine) return schedDrop(mine);
+        apiSend('/admin/api/sched/slots', 'POST',
+          { person: d.me.person, role: d.me.role, hours: [{ date: p[0], hour: +p[1] }] },
+          function () { schedReload(); }, schedErr);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sc-drop]'), function (c) {
+      schedKeyClick(c);
+      c.addEventListener('click', function () {
+        var p = (c.getAttribute('data-sc-drop') || '').split('|');
+        schedDrop({ id: +p[0], role: p[1], date: p[2] });
+      });
+    });
+    // Планерку снимает тот же, кто ее ставит. Иначе ошибочная встреча висит занятым
+    // часом у всех участников, и убрать ее можно только в самом сервисе расписания.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sc-meet]'), function (c) {
+      schedKeyClick(c);
+      c.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = (c.getAttribute('data-sc-meet') || '').split('|');
+        var w = (c.getAttribute('data-sc-md') || '').split('|');
+        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1]);
+      });
+    });
+  }
+
+  /* Снять планерку. Серию спрашиваем отдельной кнопкой: «повторяется по понедельникам»
+     и «эта конкретная» — разные намерения, и по ошибке стереть весь квартал нельзя. */
+  function openSchedMeetDrop(id, series, title, day, hour) {
+    if (document.querySelector('.al-ov')) return;
+    var dt = new Date(day + 'T00:00:00');
+    var when = isNaN(dt.getTime()) ? day
+      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' + hour + ':00';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
+        '<div class="al-title">Снять планерку</div></div></div>' +
+      '<div class="al-sub">' + esc(title) + ' · ' + esc(when) +
+        '. Час снова станет свободным у всех участников.</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="sd-no">Отмена</button>' +
+        (series ? '<button class="bp ghost" id="sd-all">Всю серию</button>' : '') +
+        '<button class="bp al-save" id="sd-one">' + (series ? 'Только эту' : 'Снять') + '</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sd-no').addEventListener('click', close);
+    var go = function (whole) {
+      close();
+      apiSend('/admin/api/sched/meetings/' + id + (whole ? '?series=1' : ''), 'DELETE', null, function () {
+        showToast(whole ? 'Серия снята' : 'Планерка снята');
+        schedReload();
+      }, schedErr);
+    };
+    el('sd-one').addEventListener('click', function () { go(false); });
+    if (el('sd-all')) el('sd-all').addEventListener('click', function () { go(true); });
+  }
+  function schedErr(code, e) {
+    showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не сохранилось — проверь сеть');
+  }
+  function schedDrop(s) {
+    apiSend('/admin/api/sched/slots/' + s.id + '?role=' + encodeURIComponent(s.role) + '&day=' + s.date,
+      'DELETE', null, function () { schedReload(); }, schedErr);
+  }
+
+  /* Планерка: название, день, час, длительность, участники и сколько недель подряд.
+     Повтор считает сам сервис расписания — серию потом можно снять целиком. */
+  function openSchedMeet(d) {
+    if (!d || document.querySelector('.al-ov.sc-ov')) return;
+    var all = (d.people || []).map(function (p) { return { role: p.role, person: p.person, label: p.person + ' · ' + (SC_WHAT[p.role] || p.role) }; })
+      .concat((d.staff || []).map(function (p) { return { role: 'staff', person: p.person, label: p.person }; }));
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over sc-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div><div class="al-eyebrow">Расписание</div><div class="al-title">Планерка</div></div>' +
+          '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится.</div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Название</span>' +
+            '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта"></label>' +
+          '<div class="al-row">' +
+            '<label class="al-f"><span class="al-l">День</span><input id="sm-day" class="al-in sm" type="date" value="' + zoomYmd(schedDay()) + '"></label>' +
+            '<label class="al-f"><span class="al-l">Час</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
+              (function () { var o = ''; for (var h = 7; h <= 22; h++) o += '<option value="' + h + '"' + (h === 11 ? ' selected' : '') + '>' + h + ':00</option>'; return o; })() +
+            '</select></span></label>' +
+          '</div>' +
+          '<div class="al-row">' +
+            '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="sm-dur" class="al-sel">' +
+              '<option value="1" selected>1 час</option><option value="2">2 часа</option><option value="3">3 часа</option></select></span></label>' +
+            '<label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
+              '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
+              '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
+          '</div>' +
+          '<div class="al-f"><span class="al-l">Кто участвует</span>' +
+            '<div class="sc-people">' + all.map(function (p, i) {
+              return '<label class="sc-p"><input type="checkbox" data-sm-p="' + i + '"><span>' + esc(p.label) + '</span></label>';
+            }).join('') + '</div></div>' +
+          '<div class="ct-err" id="sm-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="sm-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="sm-ok">Поставить</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey, true);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sm-x').addEventListener('click', close);
+    el('sm-cancel').addEventListener('click', close);
+    el('sm-title').focus();
+    el('sm-ok').addEventListener('click', function () {
+      var people = [];
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-sm-p]'), function (c) {
+        if (c.checked) people.push({ role: all[+c.getAttribute('data-sm-p')].role, person: all[+c.getAttribute('data-sm-p')].person });
+      });
+      var title = (el('sm-title').value || '').trim();
+      if (!title) return (el('sm-err').textContent = 'Напишите, как называется встреча');
+      if (!people.length) return (el('sm-err').textContent = 'Отметьте хотя бы одного участника');
+      el('sm-ok').disabled = true;
+      apiSend('/admin/api/sched/meetings', 'POST', {
+        title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
+        duration: +el('sm-dur').value, repeat: +el('sm-rep').value, people: people,
+      }, function (r) {
+        close();
+        showToast(r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании');
+        schedReload();
+      }, function (code, e) {
+        el('sm-ok').disabled = false;
+        el('sm-err').textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть';
+      });
+    });
   }
 
 
