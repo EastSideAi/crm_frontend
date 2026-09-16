@@ -5910,6 +5910,15 @@
     return out;
   }
 
+  /* «11:00–13:00» — планерка длиннее часа занимает несколько строк сетки, и без
+     границ времени непонятно, одна это встреча или несколько. */
+  function schedSpan(m) { return m.hour + ':00–' + (m.hour + (m.duration || 1)) + ':00'; }
+
+  function schedMeetAttr(m) {
+    return ' data-sc-meet="' + m.id + '|' + (m.series ? 1 : 0) + '" data-sc-mt="' + esc(m.title) + '"' +
+      ' data-sc-md="' + m.date + '|' + m.hour + '" role="button" tabindex="0"';
+  }
+
   function schedChip(cls, text, title, attr) {
     return '<span class="sc-chip ' + cls + '"' + (title ? ' title="' + esc(title) + '"' : '') +
       (attr || '') + '>' + esc(text) + '</span>';
@@ -5933,7 +5942,7 @@
   }
 
   function schedWeekGrid(d, zooms, lo, today) {
-    var days = [], i;
+    var days = [], i, todayKey = zoomYmd(today);
     for (i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
     var who = state.schedWho || '';
     var lo_h = SC_FROM, hi_h = SC_TO;
@@ -5951,24 +5960,28 @@
       var cells = days.map(function (x) {
         var day = zoomYmd(x), at = schedAt(d, zooms, day, h, who), out = [];
         at.meets.forEach(function (m) {
-          out.push(schedChip('meet', m.title, m.title + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ')));
+          var long = (m.duration || 1) > 1;
+          out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
+            m.title + ' · ' + schedSpan(m) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
+            (d.can_edit_all ? ' · нажмите, чтобы снять' : ''),
+            d.can_edit_all ? schedMeetAttr(m) : ''));
         });
         at.busy.forEach(function (s) {
           out.push(schedChip('busy', schedShort(s.person),
             s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : '')));
         });
         at.zooms.forEach(function (z) { out.push(schedChip('zoom', z.topic, z.topic + ' · ' + z.acc)); });
-        if (at.free.length) {
-          var names = at.free.map(function (s) { return s.person; });
-          out.push(at.free.length > 2
-            ? schedChip('free', 'свободны ' + at.free.length, 'Свободны: ' + names.join(', '))
-            : at.free.map(function (s) {
-                return schedChip('free', schedShort(s.person), s.person + ' · свободен');
-              }).join(''));
-        }
-        var mine = state.schedEdit && d.me && at.free.some(function (s) { return schedMine(d, s); });
-        return '<span class="sc-cell' + (state.schedEdit && d.me ? ' pick' : '') + (mine ? ' on' : '') + '"' +
-          (state.schedEdit && d.me ? ' data-sc-cell="' + day + '|' + h + '"' : '') + '>' +
+        // Свой час всегда отдельным чипом, даже когда остальные схлопнуты в счетчик:
+        // «где стоят мои окна» — первый вопрос к этому экрану у того, кто их отмечает.
+        var own = at.free.filter(function (s) { return schedMine(d, s); });
+        var rest = at.free.filter(function (s) { return !schedMine(d, s); });
+        own.forEach(function (s) { out.push(schedChip('free mine', schedShort(s.person), s.person + ' · ваш свободный час')); });
+        if (rest.length > 2) out.push(schedChip('free', 'свободны ' + rest.length, 'Свободны: ' + rest.map(function (s) { return s.person; }).join(', ')));
+        else rest.forEach(function (s) { out.push(schedChip('free', schedShort(s.person), s.person + ' · свободен')); });
+        var pick = state.schedEdit && d.me;
+        return '<span class="sc-cell' + (pick ? ' pick' : '') + (day === todayKey ? ' today' : '') + '"' +
+          (pick ? ' data-sc-cell="' + day + '|' + h + '" role="button" tabindex="0"' +
+            ' title="' + (own.length ? 'Убрать свой свободный час' : 'Отметить этот час свободным') + '"' : '') + '>' +
           out.join('') + '</span>';
       }).join('');
       rows.push('<div class="sc-row">' + '<span class="sc-h">' + h + ':00</span>' + cells + '</div>');
@@ -5986,8 +5999,15 @@
     var rows = [], seen = 0;
     for (var h = lo_h; h <= hi_h; h++) {
       var at = schedAt(d, zooms, key, h, who), cells = [];
+      // В списке дня планерка стоит один раз, в свой первый час: границы времени
+      // написаны прямо в строке, и повтор того же текста в каждом часе только мешает.
       at.meets.forEach(function (m) {
-        cells.push(schedChip('meet', m.title + ' · ' + (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '), m.note || ''));
+        if (m.hour !== h) return;
+        cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
+          m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m) : '') + ' · ' +
+          (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
+          d.can_edit_all ? 'Нажмите, чтобы снять планерку' : (m.note || ''),
+          d.can_edit_all ? schedMeetAttr(m) : ''));
       });
       at.busy.forEach(function (s) {
         cells.push(schedChip('busy', s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : ''), ''));
@@ -5995,9 +6015,10 @@
       at.zooms.forEach(function (z) { cells.push(schedChip('zoom', z.topic + ' · ' + z.acc, '')); });
       at.free.forEach(function (s) {
         var can = state.schedEdit && schedCanEdit(d, s);
-        cells.push(schedChip('free' + (can ? ' off' : ''), schedShort(s.person) + (s.role === 'teacher' ? ' (урок)' : ' (разбор)'),
+        cells.push(schedChip('free' + (schedMine(d, s) ? ' mine' : '') + (can ? ' off' : ''),
+          schedShort(s.person) + (s.role === 'teacher' ? ' (урок)' : ' (разбор)'),
           can ? 'Убрать этот час' : s.person + ' · свободен',
-          can ? ' data-sc-drop="' + s.id + '|' + s.role + '|' + s.date + '"' : ''));
+          can ? ' data-sc-drop="' + s.id + '|' + s.role + '|' + s.date + '" role="button" tabindex="0"' : ''));
       });
       if (cells.length) seen++;
       var pick = state.schedEdit && d.me
@@ -6086,6 +6107,17 @@
     schedWire(view, d);
   }
 
+  /* Клетка часа и чип планерки — это кнопки, просто нарисованные не кнопками. Значит
+     они должны слушать Enter и пробел: иначе отметить свое время и снять планерку можно
+     только мышью. */
+  function schedKeyClick(node) {
+    node.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      node.click();
+    });
+  }
+
   function schedWire(view, d) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-sw]'), function (b) {
       b.addEventListener('click', function () {
@@ -6117,6 +6149,7 @@
     // Клик по клетке — свой свободный час. Если он уже стоит, второй клик его снимает:
     // отдельная кнопка «убрать» в сетке недели не помещается.
     Array.prototype.forEach.call(view.querySelectorAll('[data-sc-cell]'), function (c) {
+      schedKeyClick(c);
       c.addEventListener('click', function () {
         var p = (c.getAttribute('data-sc-cell') || '').split('|');
         if (!d.me || p.length < 2) return;
@@ -6131,11 +6164,62 @@
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-sc-drop]'), function (c) {
+      schedKeyClick(c);
       c.addEventListener('click', function () {
         var p = (c.getAttribute('data-sc-drop') || '').split('|');
         schedDrop({ id: +p[0], role: p[1], date: p[2] });
       });
     });
+    // Планерку снимает тот же, кто ее ставит. Иначе ошибочная встреча висит занятым
+    // часом у всех участников, и убрать ее можно только в самом сервисе расписания.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-sc-meet]'), function (c) {
+      schedKeyClick(c);
+      c.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var p = (c.getAttribute('data-sc-meet') || '').split('|');
+        var w = (c.getAttribute('data-sc-md') || '').split('|');
+        openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1]);
+      });
+    });
+  }
+
+  /* Снять планерку. Серию спрашиваем отдельной кнопкой: «повторяется по понедельникам»
+     и «эта конкретная» — разные намерения, и по ошибке стереть весь квартал нельзя. */
+  function openSchedMeetDrop(id, series, title, day, hour) {
+    if (document.querySelector('.al-ov')) return;
+    var dt = new Date(day + 'T00:00:00');
+    var when = isNaN(dt.getTime()) ? day
+      : WDAYS_RU[dt.getDay()] + ' ' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()] + ', ' + hour + ':00';
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
+        '<div class="al-title">Снять планерку</div></div></div>' +
+      '<div class="al-sub">' + esc(title) + ' · ' + esc(when) +
+        '. Час снова станет свободным у всех участников.</div>' +
+      '<div class="al-foot"><button class="al-cancel" id="sd-no">Отмена</button>' +
+        (series ? '<button class="bp ghost" id="sd-all">Всю серию</button>' : '') +
+        '<button class="bp al-save" id="sd-one">' + (series ? 'Только эту' : 'Снять') + '</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var close = function () {
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    el('sd-no').addEventListener('click', close);
+    var go = function (whole) {
+      close();
+      apiSend('/admin/api/sched/meetings/' + id + (whole ? '?series=1' : ''), 'DELETE', null, function () {
+        showToast(whole ? 'Серия снята' : 'Планерка снята');
+        schedReload();
+      }, schedErr);
+    };
+    el('sd-one').addEventListener('click', function () { go(false); });
+    if (el('sd-all')) el('sd-all').addEventListener('click', function () { go(true); });
   }
   function schedErr(code, e) {
     showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не сохранилось — проверь сеть');
