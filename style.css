@@ -3192,6 +3192,12 @@ button.tr-crumb:hover { color: var(--blue); }
    сегменте .due-seg, что и «сегодня/завтра», просто включенных плашек может
    быть несколько — третьего рецепта сегмента не заводим (design.md §7.4). */
 .zm-repf { flex-direction: row; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Включенный тумблер — синим тинтом, а не темной пилюлей .qchip.on: тот же
+   прием, что у тумблера периода .rh-onoff, иначе он весит больше синей кнопки
+   формы и перетягивает якорь экрана на себя. */
+.qchip.zm-rep.on { background: var(--blue-tint); color: var(--blue); border-color: transparent; }
+.qchip.zm-rep.on svg { color: var(--blue); }
+.qchip.zm-rep.on:hover { background: #DCE6FF; color: var(--blue-d); }
 .zm-reph { font-size: 12px; color: var(--ink-3); }
 .zm-repbox { display: flex; flex-direction: column; gap: 10px; padding: 12px;
   border-radius: 12px; background: var(--fill); }
@@ -3207,12 +3213,18 @@ button.tr-crumb:hover { color: var(--blue); }
   font-weight: 600; color: var(--ink-2); }
 .zc-ser svg { width: 12px; height: 12px; color: var(--ink-3); }
 .zc-editf[hidden] { display: none; }
+/* Три поля в строке: нативному полю даты нужна своя ширина, иначе браузер
+   обрезает год («09/14/202»). Узко — строка переносится, а не давит поля. */
+.zc-editf .al-row { flex-wrap: wrap; }
+.zc-editf .al-row .al-f { flex: 1 1 140px; }
+.zc-editf input[type="date"] { min-width: 150px; }
 .al-body > [data-zcsec][hidden] { display: none; }
 .zc-delbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 10px 12px; border-radius: 12px; background: var(--red-soft); }
 .zc-delbox[hidden] { display: none; }
 .zc-delq { font-size: 12.5px; font-weight: 700; color: var(--red-ink); }
 .zc-delbox .qchip { background: #fff; }
+.zc-delbox .zc-delno { margin-left: auto; background: none; color: var(--ink-3); }
 
 /* Пустой слот в сетке: тихая кнопка на ховере строки, как «снять с готово» в
    отчете периода. Ховера нет на телефоне — там она видна всегда, но приглушена. */

@@ -28556,9 +28556,9 @@
           '</div>' +
           '<div class="zc-delbox" id="zc-delbox" hidden>' +
             '<span class="zc-delq">Отменить</span>' +
-            '<button type="button" class="qchip" data-del="one">только эту встречу</button>' +
+            '<button type="button" class="qchip" data-del="one">только эту</button>' +
             '<button type="button" class="qchip" data-del="all">всю серию</button>' +
-            '<button type="button" class="qchip" id="zc-delno">не надо</button>' +
+            '<button type="button" class="qchip zc-delno" id="zc-delno">не надо</button>' +
           '</div>' +
           '<div class="ct-err" id="zc-err"></div>' +
         '</div>' +
