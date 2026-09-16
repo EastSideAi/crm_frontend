@@ -7322,6 +7322,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gw-ava { fill: var(--navy); }
 .gw-dot { fill: var(--blue); }
 .gw-dn { fill: #fff; font: 700 9px 'Manrope', sans-serif; text-anchor: middle; }
+/* Схема расписания в обучении: те же четыре семейства чипов, что и в самом
+   разделе, иначе картинка учит не тому экрану. */
+.gw-free { fill: var(--green-soft); }
+.gw-busy { fill: var(--blue-tint); }
+.gw-meet { fill: var(--navy-soft); }
+.gw-hh { fill: var(--ink-3); font: 600 6px 'Manrope', sans-serif; }
 /* Легенда схемы: цифра на картинке и слово под ней — иначе схема остается
    красивым набором плашек, из которого человек ничего не узнает. */
 .gd-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
