@@ -6578,9 +6578,15 @@
       // подключает один раз за все время, главное действие экрана — свое время.
       (ok && d.gcal ? '<a class="sc-gcal" href="' + esc(d.gcal) + '" target="_blank" rel="noopener" ' +
         'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
-      (ok && d.me ? '<button class="bp sm' + (state.schedEdit ? '' : ' ghost') + ' sc-edit" id="sc-edit">' +
-        ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
-      (ok && d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+      // Действия лежат в своем блоке, а не соседями в шапке. Иначе на ноутбуке
+      // 1280 «Мое время» оставалось в первом ряду у правого края, а «Планерка»
+      // уезжала во второй и вставала слева под заголовком: в одной шапке два
+      // разных выравнивания. Блоком они переносятся вместе.
+      (ok && (d.me || d.can_edit_all) ? '<div class="zw-acts">' +
+        (d.me ? '<button class="bp sm' + (state.schedEdit ? '' : ' ghost') + ' sc-edit" id="sc-edit">' +
+          ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
+        (d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+        '</div>' : '') +
       '</div>';
 
     if (d === 'loading') {

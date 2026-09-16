@@ -3060,10 +3060,11 @@ button.tr-crumb:hover { color: var(--blue); }
    общего правила .sec-head > .bp. */
 .mt-lens + .zw-seg { margin-left: 28px; }
 .mt-lens + .zw-seg + .zw-nav { margin-left: 12px; }
-/* Действия — одна группа: вправо уезжает первая кнопка (общее правило
-   .sec-head > .bp), вторая держится рядом с ней. Иначе margin-left: auto
-   достается обеим, и при переносе они разъезжаются по краям своей строки. */
-.zw-head > .bp + .bp { margin-left: 8px; }
+/* Действия — один блок, а не две кнопки-соседа. Общее правило .sec-head > .bp
+   дает «вправо до упора» КАЖДОЙ кнопке-потомку, и при переносе они расходились
+   по разным рядам с разным выравниванием. В своем блоке они переносятся вместе
+   и держат правый край шапки. */
+.zw-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
 /* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
    один, и он достается главному действию, а не вспомогательной ссылке. */
 .sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
@@ -3110,10 +3111,11 @@ button.tr-crumb:hover { color: var(--blue); }
   .sc-gcal { order: 2; margin-left: auto; min-height: 30px; align-items: center; }
   /* Сброс margin-left надо писать с той же силой, что и общее правило
      .sec-head > .bp { margin-left: auto } — медиазапрос сам по себе силы не
-     добавляет, и без «.sec-head >» кнопки молча оставались бы разъехавшимися
-     по краям строки, а ряд действий не начинался бы от края карточки. */
-  .zw-new, .sc-edit, .sc-meetnew { order: 3; }
-  .sec-head > .zw-new, .sec-head > .sc-edit, .sec-head > .sc-meetnew { margin-left: 0; }
+     добавляет, и без «.sec-head >» кнопка молча осталась бы прижатой вправо,
+     а ряд действий не начинался бы от края карточки. */
+  .zw-new { order: 3; }
+  .sec-head > .zw-new { margin-left: 0; }
+  .zw-acts { order: 3; margin-left: 0; width: 100%; }
   .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
   .zw-range { padding: 4px 2px; }
   .zw-td { display: none; }
