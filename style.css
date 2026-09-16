@@ -3163,7 +3163,9 @@ button.tr-crumb:hover { color: var(--blue); }
    (app.js рисует день), поэтому горизонтальной прокрутки у страницы не бывает. */
 .sc .zw-fltrow { align-items: center; }
 .sc-who { min-width: 220px; }
-.sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+/* Оба фильтра ряда — один кегль и одна высота. Правило было написано только под
+   «Все люди», и «Все зумы» рядом с ним стоял на четыре пикселя выше. */
+.sc-who .al-sel, .sc-kind .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
 .sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .sc-legend .sc-chip { cursor: default; }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
