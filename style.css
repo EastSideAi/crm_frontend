@@ -3103,7 +3103,7 @@ button.tr-crumb:hover { color: var(--blue); }
   .mt-lens + .zw-seg + .zw-nav { margin-left: 0; }
   /* Ссылка делит ряд с датой, а не занимает свой: 16px текста на целую строку —
      дырка в самом плотном месте. Высота тапа как у соседних контролов. */
-  .sc-gcal { order: 2; margin-left: auto; min-height: 30px; }
+  .sc-gcal { order: 2; margin-left: auto; min-height: 30px; align-items: center; }
   /* Сброс margin-left надо писать с той же силой, что и общее правило
      .sec-head > .bp { margin-left: auto } — медиазапрос сам по себе силы не
      добавляет, и без «.sec-head >» кнопки молча оставались бы разъехавшимися

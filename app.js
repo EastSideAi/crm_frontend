@@ -6572,15 +6572,15 @@
       '<div class="zw-nav"><button class="icobtn" data-sw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-sw0 title="' + (atNow ? '' : 'Вернуться к сегодня') + '">' + range + '</button>' +
       '<button class="icobtn" data-sw="1" title="' + (dayView ? 'Следующий день' : 'Следующая неделя') + '">' + ic('go', 14) + '</button></div>' +
+      // Ссылка стоит сразу за датой, а не в конце строки: то и другое про «когда
+      // и где смотреть», и при переносе они остаются вместе, а действия уезжают
+      // на вторую строку группой. Тихая ссылка, а не кнопка: календарь человек
+      // подключает один раз за все время, главное действие экрана — свое время.
+      (ok && d.gcal ? '<a class="sc-gcal" href="' + esc(d.gcal) + '" target="_blank" rel="noopener" ' +
+        'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
       (ok && d.me ? '<button class="bp sm' + (state.schedEdit ? '' : ' ghost') + ' sc-edit" id="sc-edit">' +
         ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
       (ok && d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
-      // Все, что здесь стоит, уезжает в рабочий гугл-календарь. Кому удобнее
-      // смотреть там — жмет и подключает календарь себе одним движением.
-      // Тихая ссылка, а не кнопка: подключить календарь человек решает один раз
-      // за все время, а главное действие экрана — отметить свое время.
-      (ok && d.gcal ? '<a class="sc-gcal" href="' + esc(d.gcal) + '" target="_blank" rel="noopener" ' +
-        'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
       '</div>';
 
     if (d === 'loading') {
