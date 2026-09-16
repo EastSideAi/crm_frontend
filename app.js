@@ -28565,7 +28565,9 @@
                 '<button type="button" class="qchip" data-del="all">всю серию</button>'
               : '<button type="button" class="qchip" data-del="all">да, отменить</button>') +
             '<button type="button" class="qchip zc-delno" id="zc-delno">не надо</button>' +
-            '<span class="zc-delh">Встреча пропадет из зума, ссылка перестанет работать.</span>' +
+            '<span class="zc-delh">' + (one
+              ? 'Одно занятие уйдет из зума, ссылка и остальные встречи серии останутся. Вся серия уйдет вместе со ссылкой.'
+              : 'Встреча пропадет из зума, ссылка перестанет работать.') + '</span>' +
           '</div>' +
           '<div class="ct-err" id="zc-err"></div>' +
         '</div>' +
