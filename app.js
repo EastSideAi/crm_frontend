@@ -633,7 +633,12 @@
          CRM посреди работы. */
       if (r.status === 403) {
         return r.json().catch(function () { return {}; }).then(function (j) {
-          if (String((j && j.detail) || '').indexOf('no access') === 0) throw new Error('403acl');
+          /* На экран входа выкидываем ТОЛЬКО когда токен не годится: сервер на плохой
+             токен отдаёт detail «forbidden» (require_user). Любой другой 403 — это
+             отказ в действии (нет права: «no access…»; не твой ресурс: «not your…»,
+             «owner only»), и стирать ключ с выходом из CRM тут нельзя — раньше это
+             выкидывало человека посреди работы (напр. клик по галочке чужого заезда). */
+          if (String((j && j.detail) || 'forbidden') !== 'forbidden') throw new Error('403acl');
           localStorage.removeItem(KEY_LS); renderLogin('Сессия истекла — войди заново');
           throw new Error('403');
         });
@@ -4789,7 +4794,7 @@
 
     var body;
     if (A.open) {
-      body = arDetail(A.open, tab === 'review');
+      body = arDetail(A.open, tab);
     } else if (A.creating) {
       body = arCreateForm();
     } else if (tab === 'all') {
@@ -4898,12 +4903,17 @@
     return null;
   }
 
-  function arDetail(id, review) {
+  function arDetail(id, tab) {
     var a = arFind(id);
     if (!a) return '<div class="zz-empty">Заезд не найден</div>';
     var st = AR_STATUS[a.status] || { label: a.status, cls: 'gray' };
     var svc = AR_SERVICE[a.service] || { label: a.service, rate: 0 };
-    var editable = !review && (a.status === 'draft' || a.status === 'returned');
+    // Править чек-лист можно только в СВОИХ заездах (вкладка «Мои заезды»). Во «Все
+    // заезды» и «На проверке» карточка чужая — там смотрят и принимают, а не правят:
+    // правка чужого заезда всё равно отобьётся сервером (не твой заезд), а зря
+    // показанная галочка сбивала с толку и выкидывала проверяющего из аккаунта.
+    var review = tab === 'review';
+    var editable = tab === 'mine' && (a.status === 'draft' || a.status === 'returned');
     var done = a.points.filter(function (p) { return a.checklist[p]; }).length;
     var all = done === a.points.length;
     var pay = arPayout(a);
@@ -7014,9 +7024,18 @@
      отдельным пунктом меню, и получалось два места про одно и то же (Павел:
      «все расписание нужно перенести во встречи»). Переключатель стоит в месте
      заголовка раздела: своего заголовка ни одной половине больше не нужно. */
-  function meetSub() { return state.meetSub === 'sched' ? 'sched' : 'zoom'; }
+  /* «Зумы» остаются руководителю (cap tasks_all): зум-аккаунт общий на команду,
+     снятая встреча уносит ссылку у всех, кого на нее звали, а в дневной сетке
+     видно, кто чем занят. «Расписание» открыто каждому — ради него вкладка и
+     перестала быть закрытой. Сервер держит то же правило сам (routers/zoom.py
+     _may_touch и cap на «создать ссылку»), фронт тут только не дразнит. */
+  function meetSub() {
+    if (!can('tasks_all')) return 'sched';
+    return state.meetSub === 'sched' ? 'sched' : 'zoom';
+  }
 
   function meetLens() {
+    if (!can('tasks_all')) return '<div class="t">Расписание</div>';
     var at = meetSub();
     return '<div class="due-seg mt-lens">' +
       '<button type="button" class="' + (at === 'zoom' ? 'on' : '') + '" data-mlens="zoom">Зумы</button>' +
