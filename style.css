@@ -3044,13 +3044,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-range { white-space: nowrap; }
 .zw-seg { margin-left: 12px; }
 /* Переключатель половин «Встреч» («Зумы» / «Расписание») стоит в месте заголовка
-   секции и работает за него. Рецепт сегмента тот же, только кеглем заголовка:
-   рядом стоит «Неделя/День», и одинаковый размер читался бы как один контрол. */
-.mt-lens { flex: none; padding: 5px; border-radius: 12px; }
-.mt-lens button { font-size: 13.5px; padding: 7px 13px; }
-.mt-lens + .zw-seg { margin-left: 16px; }
-/* «В гугл-календарь» — третье действие в шапке, поэтому тихое: синяя кнопка тут
-   уже есть («Мое время»), а двух акцентов на экране не бывает (design.md §3). */
+   секции и работает за него: своего заголовка ни одной половине не нужно. Рецепт
+   сегмента тот же, но кеглем и весом заголовка секции (.sec-head .t), иначе в
+   строке не остается ни одного якоря — глазу не за что зацепиться. */
+.mt-lens { flex: none; padding: 5px; border-radius: 13px; }
+.mt-lens button { font-size: 15px; padding: 8px 15px; letter-spacing: -.015em; }
+/* «Неделя/День» переезжает вправо, к стрелкам и дате: он управляет ими, а не
+   половинами. Слева заголовок, справа группа «какой период», дальше действия —
+   три группы вместо шести одинаковых кнопок в ряд. */
+.mt-lens + .zw-seg { margin-left: auto; }
+.mt-lens + .zw-seg + .zw-nav { margin-left: 12px; }
+/* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
+   один, и он достается главному действию, а не вспомогательной ссылке. */
 .sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
   font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
 .sc-gcal:hover { color: var(--blue); }
@@ -3075,22 +3080,25 @@ button.tr-crumb:hover { color: var(--blue); }
 .zd-win { font-size: 12px; line-height: 1.5; color: var(--ink-3); padding: 3px 0; }
 .zd-win b { font-weight: 600; color: var(--ink-2); }
 .zd-win.busy { color: var(--ink-2); }
-/* Узкий экран: заголовок и кнопка в одной строке, навигация по неделям под ними. */
+/* Телефон: шапка укладывается в три ряда и не больше. Первый — половины во всю
+   ширину, это заголовок экрана. Второй — «какой период»: дата со стрелками слева,
+   ссылка на календарь справа. Третий — действия. Порядок не случайный: после
+   «какая половина» человек спрашивает «какой день я смотрю», а не «что нажать».
+   Раньше рядов набиралось шесть, и первый час расписания начинался ниже середины
+   экрана — на телефоне это дороже всего. */
 @media (max-width: 960px) {
   .zw-head { flex-wrap: wrap; row-gap: 8px; }
-  .zw-new { order: 2; margin-left: auto; }
-  .zw-nav { order: 3; margin-left: 0; width: 100%; }
-  /* Телефон: два ряда шапки (заголовок с кнопкой; сегмент со стрелками и датой)
-     и один ряд фильтров (лента типов скроллится, селект аккаунта справа). */
-  .zw-new { order: 1; }
-  /* Телефон: половины первой строкой во всю ширину — это заголовок экрана. */
   .mt-lens { order: 0; width: 100%; display: flex; }
   .mt-lens button { flex: 1; }
-  .zw-seg { order: 2; margin-left: 0; }
-  .mt-lens + .zw-seg { margin-left: 0; }
-  .sc-gcal { order: 4; margin-left: 0; }
+  .zw-seg { order: 1; margin-left: 0; }
   .zw-seg button { padding: 5px 9px; }
-  .zw-nav { order: 3; width: auto; margin-left: auto; gap: 4px; }
+  .mt-lens + .zw-seg { margin-left: 0; }
+  .zw-nav { order: 2; width: auto; margin-left: 0; gap: 4px; }
+  .mt-lens + .zw-seg + .zw-nav { margin-left: 0; }
+  /* Ссылка делит ряд с датой, а не занимает свой: 16px текста на целую строку —
+     дырка в самом плотном месте. Высота тапа как у соседних контролов. */
+  .sc-gcal { order: 2; margin-left: auto; min-height: 30px; }
+  .zw-new, .sc-edit, .sc-meetnew { order: 3; margin-left: 0; }
   .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
   .zw-range { padding: 4px 2px; }
   .zw-td { display: none; }
