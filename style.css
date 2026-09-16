@@ -2767,7 +2767,7 @@ button.tr-crumb:hover { color: var(--blue); }
    Три навы подряд в правом краю таблицы весят больше, чем сами сроки. */
 .rh-onoff { margin-left: auto; }
 .rh-onoff.on { background: var(--blue-tint); color: var(--blue); border-color: transparent; }
-.rh-onoff.on:hover { background: #DCE6FF; color: var(--blue-d); }
+.rh-onoff.on:hover, .qchip.zm-rep.on:hover { background: #DCE6FF; color: var(--blue-d); }
 .rh-sl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-3); }
 /* Поля в строке — по содержимому, а не во всю ширину: у .al-in width 100%, и
@@ -3197,7 +3197,7 @@ button.tr-crumb:hover { color: var(--blue); }
    формы и перетягивает якорь экрана на себя. */
 .qchip.zm-rep.on { background: var(--blue-tint); color: var(--blue); border-color: transparent; }
 .qchip.zm-rep.on svg { color: var(--blue); }
-.qchip.zm-rep.on:hover { background: #DCE6FF; color: var(--blue-d); }
+
 .zm-reph { font-size: 12px; color: var(--ink-3); }
 .zm-repbox { display: flex; flex-direction: column; gap: 10px; padding: 12px;
   border-radius: 12px; background: var(--fill); }
@@ -3213,18 +3213,19 @@ button.tr-crumb:hover { color: var(--blue); }
   font-weight: 600; color: var(--ink-2); }
 .zc-ser svg { width: 12px; height: 12px; color: var(--ink-3); }
 .zc-editf[hidden] { display: none; }
-/* Три поля в строке: нативному полю даты нужна своя ширина, иначе браузер
-   обрезает год («09/14/202»). Узко — строка переносится, а не давит поля. */
-.zc-editf .al-row { flex-wrap: wrap; }
-.zc-editf .al-row .al-f { flex: 1 1 140px; }
-.zc-editf input[type="date"] { min-width: 150px; }
+/* Поле даты рисуется браузером и в 150px обрезает год («09/14/202»), поэтому
+   день занимает строку целиком, а время с длительностью идут парой — ровно
+   так же, как в форме создания встречи. Своих правил ширины не заводим. */
 .al-body > [data-zcsec][hidden] { display: none; }
 .zc-delbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 10px 12px; border-radius: 12px; background: var(--red-soft); }
 .zc-delbox[hidden] { display: none; }
 .zc-delq { font-size: 12.5px; font-weight: 700; color: var(--red-ink); }
 .zc-delbox .qchip { background: #fff; }
-.zc-delbox .zc-delno { margin-left: auto; background: none; color: var(--ink-3); }
+/* «не надо» — тихая, но не бледная: на узкой ширине строка переносится, и
+   отказ, уехавший в правый край самым слабым чернилом, читался как обрывок. */
+.zc-delbox .zc-delno { background: none; color: var(--ink-2); }
+.zc-delh { flex-basis: 100%; font-size: 12px; line-height: 1.45; color: var(--red-ink); opacity: .8; }
 
 /* Пустой слот в сетке: тихая кнопка на ховере строки, как «снять с готово» в
    отчете периода. Ховера нет на телефоне — там она видна всегда, но приглушена. */

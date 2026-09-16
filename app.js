@@ -28457,12 +28457,16 @@
     var d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1);
     var def = (d.getHours() < 10 ? '0' : '') + d.getHours() + ':00';
     if (sel) def = sel;
-    var out = [];
+    var vals = [];
     for (var h = 0; h <= 23; h++) for (var m = 0; m < 60; m += 15) {
-      var v = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
-      out.push('<option value="' + v + '"' + (v === def ? ' selected' : '') + '>' + v + '</option>');
+      vals.push((h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m);
     }
-    return out.join('');
+    // Встречу из приложения зума могли поставить на 12:05: без своей строки
+    // селект показал бы первую (00:00) и молча перенес бы встречу на полночь.
+    if (def && vals.indexOf(def) === -1) { vals.push(def); vals.sort(); }
+    return vals.map(function (v) {
+      return '<option value="' + v + '"' + (v === def ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
   }
   // Дни недели по ISO (1 пн … 7 вс) — так их понимает сервер и сам зум.
   var WD_ISO = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [6, 'сб'], [7, 'вс']];
@@ -28543,9 +28547,9 @@
           '<div class="tsk-resform zc-editf" id="zc-editf" hidden>' + scopeSeg +
             '<label class="al-f"><span class="al-l">Название</span>' +
               '<input id="zc-topic" class="al-in" type="text" maxlength="200" value="' + esc(m.topic || '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">День</span>' +
+              '<input id="zc-day" class="al-in" type="date" value="' + zoomYmd(s) + '"></label>' +
             '<div class="al-row">' +
-              '<label class="al-f"><span class="al-l">День</span>' +
-                '<input id="zc-day" class="al-in" type="date" value="' + zoomYmd(s) + '"></label>' +
               '<label class="al-f"><span class="al-l">Время</span><span class="al-selwrap"><select id="zc-time" class="al-sel">' +
                 zoomTimeOptions(zoomHH(m.start)) + '</select></span></label>' +
               '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="zc-min" class="al-sel">' +
@@ -28555,14 +28559,17 @@
               '<button type="button" class="bp sm" id="zc-eok">Сохранить</button></div>' +
           '</div>' +
           '<div class="zc-delbox" id="zc-delbox" hidden>' +
-            '<span class="zc-delq">Отменить</span>' +
-            '<button type="button" class="qchip" data-del="one">только эту</button>' +
-            '<button type="button" class="qchip" data-del="all">всю серию</button>' +
+            '<span class="zc-delq">Отменить?</span>' +
+            (one
+              ? '<button type="button" class="qchip" data-del="one">только эту</button>' +
+                '<button type="button" class="qchip" data-del="all">всю серию</button>'
+              : '<button type="button" class="qchip" data-del="all">да, отменить</button>') +
             '<button type="button" class="qchip zc-delno" id="zc-delno">не надо</button>' +
+            '<span class="zc-delh">Встреча пропадет из зума, ссылка перестанет работать.</span>' +
           '</div>' +
           '<div class="ct-err" id="zc-err"></div>' +
         '</div>' +
-        '<div class="al-foot"><button type="button" class="al-cancel zc-del" id="zc-del">Удалить встречу</button>' +
+        '<div class="al-foot" id="zc-foot"><button type="button" class="al-cancel zc-del" id="zc-del">Отменить встречу</button>' +
           (m.join_url ? '<a class="bp al-save" href="' + esc(m.join_url) + '" target="_blank" rel="noopener">' + ic('ext', 14) + 'Открыть зум</a>' : '') +
         '</div>' +
       '</div>';
@@ -28602,12 +28609,16 @@
     // Правка встречи: название, день, время, длительность одной формой — как
     // редактор задачи в карточке. Пока она открыта, тип и ссылку прячем, чтобы
     // в модалке не было двух наборов действий.
-    var setEdit = function (on) {
-      el('zc-editf').hidden = !on;
-      el('zc-delbox').hidden = true;
-      Array.prototype.forEach.call(ov.querySelectorAll('[data-zcsec]'), function (x) { x.hidden = on; });
-      if (on) setTimeout(function () { var t = el('zc-topic'); if (t) { t.focus(); t.select(); } }, 40);
+    var setPanel = function (what) {
+      // Панели взаимно исключают друг друга, и обе прячут действия карточки:
+      // иначе на экране три набора кнопок и две синие сразу.
+      el('zc-editf').hidden = what !== 'edit';
+      el('zc-delbox').hidden = what !== 'del';
+      el('zc-foot').hidden = !!what;
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-zcsec]'), function (x) { x.hidden = !!what; });
+      if (what === 'edit') setTimeout(function () { var t = el('zc-topic'); if (t) { t.focus(); t.select(); } }, 40);
     };
+    var setEdit = function (on) { setPanel(on ? 'edit' : ''); };
     el('zc-edit').addEventListener('click', function () { setEdit(true); });
     el('zc-ecx').addEventListener('click', function () { setEdit(false); err.textContent = ''; });
     el('zc-eok').addEventListener('click', function () {
@@ -28631,23 +28642,19 @@
     var drop = function (all) {
       var q = '?slot=' + encodeURIComponent(acc.slot) +
         (all ? '' : '&occurrence_id=' + encodeURIComponent(one) + '&at=' + encodeURIComponent(m.start));
-      el('zc-del').disabled = true;
+      Array.prototype.forEach.call(ov.querySelectorAll('.zc-delbox .qchip'), function (x) { x.disabled = true; });
       apiSend('/admin/api/zoom/meetings/' + encodeURIComponent(m.id) + q, 'DELETE', null, function () {
         close(); showToast(all && ser ? 'Серия отменена' : 'Встреча отменена');
         state.zoomWeek = {}; state.zoomWin = {}; renderView();
       }, function (code, e) {
-        el('zc-del').disabled = false;
-        err.textContent = (e && e.body && e.body.detail) || 'Не удалось удалить, проверь интернет';
+        Array.prototype.forEach.call(ov.querySelectorAll('.zc-delbox .qchip'), function (x) { x.disabled = false; });
+        err.textContent = (e && e.body && e.body.detail) || 'Не удалось отменить встречу, проверь интернет';
       });
     };
-    el('zc-del').addEventListener('click', function () {
-      // У серии спрашиваем не «точно ли», а «что именно»: выбор из двух кнопок
-      // честнее системного confirm с одним «ок».
-      if (one) { el('zc-delbox').hidden = false; return; }
-      if (!confirm('Удалить встречу «' + m.topic + '»? Она пропадет из зума, ссылка перестанет работать.')) return;
-      drop(true);
-    });
-    el('zc-delno').addEventListener('click', function () { el('zc-delbox').hidden = true; });
+    // Спрашиваем не системным confirm, а плашкой в самой карточке: у серии это
+    // еще и выбор «одну или всю», а у одиночной — тот же вопрос теми же словами.
+    el('zc-del').addEventListener('click', function () { setPanel('del'); });
+    el('zc-delno').addEventListener('click', function () { setPanel(''); });
     Array.prototype.forEach.call(ov.querySelectorAll('[data-del]'), function (b) {
       b.addEventListener('click', function () { drop(b.getAttribute('data-del') === 'all'); });
     });
