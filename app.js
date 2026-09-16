@@ -6764,7 +6764,7 @@
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div><div class="al-eyebrow">Расписание</div><div class="al-title">Планерка</div></div>' +
           '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится.</div>' +
+        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта"></label>' +
