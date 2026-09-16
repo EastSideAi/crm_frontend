@@ -15026,6 +15026,9 @@
         '" data-fform="' + f[0] + '">' + f[1] + '</button>';
     }).join('') : '';
 
+    // Кнопку «привязать к клиенту» рисуем только на доходах без клиента и только тому, кто
+    // правит ведомость и видит карточки: без cap clients бэкенд case_id и не отдаёт.
+    var canLink = (page === 'finincome') && can(meta[3]) && can('clients');
     var rows = items.map(function (it) {
       var sub = [
         // В листе продаж главный человек строки — покупатель, а деньги уходят
@@ -15045,10 +15048,15 @@
         ? '<b class="fin-lead" data-lead="' + esc(it.case_id) +
           '" title="Открыть карточку клиента">' + nm + '</b>'
         : '<b>' + nm + '</b>';
+      // Доход без карточки — кнопка привязки. Клик по ней не должен открывать правку строки.
+      var linkBtn = (canLink && !it.case_id)
+        ? '<button class="fin-linkc" data-linkid="' + it.id + '" data-linknm="' +
+          esc(it.counterparty || '') + '" title="Привязать к карточке клиента">+ клиент</button>'
+        : '';
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what">' + nameHtml +
+        '<span class="fo-what">' + nameHtml + linkBtn +
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
@@ -15123,7 +15131,85 @@
         if (cid) openLeadTab(cid);
       });
     });
+    // Привязка дохода к карточке: клик по кнопке не должен открывать правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-linkc[data-linkid]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finPickClient(n.getAttribute('data-linkid'), n.getAttribute('data-linknm') || '');
+      });
+    });
     pageAnim(view);
+  }
+
+  /* Пикер карточки клиента для строки дохода без привязки. Список лидов ищем по имени и
+     контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
+     Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
+  function finPickClient(oid, presetName) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Доход</div>' +
+        '<div class="al-title">Привязать к клиенту</div></div>' +
+        '<button class="al-x" id="pk-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Выберите карточку того, кто оплатил.' +
+        (presetName ? ' В строке указан: ' + esc(presetName) : '') + '</div>' +
+      '<div class="al-body">' +
+        '<input class="al-in" id="pk-q" placeholder="Поиск по имени или контакту" autocomplete="off">' +
+        '<div class="pk-list" id="pk-list"><div class="empty">Загружаю клиентов…</div></div>' +
+      '</div>' +
+      '<div class="al-foot">' +
+        '<button class="al-cancel" id="pk-cancel">Отмена</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('pk-x').addEventListener('click', close);
+    el('pk-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var box = el('pk-list'), all = null;
+    var pick = function (cid) {
+      finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
+        'Привязал к клиенту');
+      close();
+    };
+    var draw = function (q) {
+      if (!all) return;
+      q = (q || '').trim().toLowerCase();
+      var list = all;
+      if (q) list = all.filter(function (l) {
+        return ((leadName(l) || '') + ' ' + (l.contact || '') + ' ' + (l.email || ''))
+          .toLowerCase().indexOf(q) >= 0;
+      });
+      if (!list.length) { box.innerHTML = '<div class="empty">Никого не нашли</div>'; return; }
+      box.innerHTML = list.slice(0, 60).map(function (l) {
+        var c = (l.contact || l.email || '').trim();
+        return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
+          '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
+          (c ? '<i>' + esc(c) + '</i>' : '') + '</button>';
+      }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
+      Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
+        b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });
+      });
+    };
+    var have = function (leads) {
+      all = leads || [];
+      draw(presetName || '');
+      var q = el('pk-q');
+      if (q) { q.value = presetName || ''; q.focus(); q.select(); }
+    };
+    if (state.leads && state.leads.length) have(state.leads);
+    else api('/admin/api/leads').then(function (r) { have((r && r.leads) || []); })
+      .catch(function () { box.innerHTML = '<div class="empty">Не удалось загрузить клиентов</div>'; });
+    el('pk-q').addEventListener('input', function () { draw(this.value); });
   }
 
   /* Прямые расходы — расходы с расчетного счета по пяти блокам-направлениям. В блок

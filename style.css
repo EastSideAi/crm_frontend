@@ -5989,6 +5989,21 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
 .fin-lead { cursor: pointer; }
 .fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+/* Кнопка привязки дохода к карточке — тихая, рядом с именем; проявляется на наведении строки. */
+.fin-linkc { margin-left: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink-2);
+  font: 600 11px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 1px 8px;
+  cursor: pointer; opacity: .55; transition: opacity .12s, border-color .12s, color .12s; }
+.trow:hover .fin-linkc { opacity: 1; }
+.fin-linkc:hover { border-color: var(--blue); color: var(--blue); }
+/* Пикер клиента: прокручиваемый список карточек с поиском. */
+.pk-list { margin-top: 10px; max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.pk-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
+  text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px;
+  padding: 8px 12px; cursor: pointer; transition: background .12s, border-color .12s; }
+.pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
+.pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
+.pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
+.pk-more { text-align: center; color: var(--ink-2); font-size: 12px; padding: 8px 0 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
