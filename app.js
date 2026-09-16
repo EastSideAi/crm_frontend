@@ -7144,7 +7144,7 @@
     view.innerHTML = '<div class="card zw">' + head +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">Клик по дню откроет сетку слотов на этот день. '
-        + 'Серая цифра у числа — сколько часов в этот день уже заняты учениками.</div></div>';
+        + 'Серая цифра справа — сколько часов в этот день уже заняты учениками.</div></div>';
     meetMonthWire(view, data);
   }
 

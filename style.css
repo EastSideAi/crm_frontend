@@ -9025,7 +9025,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--fill); }
 .mm-cell { min-height: 104px; padding: 6px 7px 8px; display: flex; flex-direction: column; gap: 3px;
   border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); cursor: pointer; }
-.mm-cell:hover { background: var(--blue-tint); }
+/* Ховер не синим: синим помечен сегодняшний день, и под мышью любая клетка
+   выглядела как «сегодня». Серый заметен и на клетке чужого месяца. */
+.mm-cell:hover { background: var(--line); }
 /* Дни соседних месяцев показываем, но приглушенно: без них неделя рвется. */
 .mm-cell.out { background: var(--fill); }
 /* Клетка дня открывается с клавиатуры, как клетка часа в слотах, и кольцо
