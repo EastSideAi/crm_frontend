@@ -7107,8 +7107,12 @@
       }).join('');
       var more = ev.length > MEET_MONTH_MAX
         ? '<button type="button" class="mm-more" data-mmday="' + ymd + '">еще ' + (ev.length - MEET_MONTH_MAX) + '</button>' : '';
+      // На телефоне колонка дня шириной в палец: название встречи в ней все равно
+      // не прочитать («11:0…»), поэтому там вместо плашек счетчик, а подробности
+      // открываются кликом по дню.
+      var cnt = ev.length ? '<span class="mm-cnt">' + ev.length + '</span>' : '';
       cells += '<div class="mm-cell' + (other ? ' out' : '') + (isToday ? ' now' : '') + '" data-mmday="' + ymd + '">' +
-        '<div class="mm-num">' + d.getDate() + '</div>' + shown + more + '</div>';
+        '<div class="mm-num">' + d.getDate() + cnt + '</div>' + shown + more + '</div>';
     }
     view.innerHTML = '<div class="card zw">' + head +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
