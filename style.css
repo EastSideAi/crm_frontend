@@ -9016,9 +9016,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mm-cell.now { background: var(--blue-tint); }
 .mm-num { font-size: 12.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .mm-cell.now .mm-num { color: var(--blue); }
-.mm-ev { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 2px 4px;
+.mm-ev { display: flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%;
+  overflow: hidden; padding: 2px 4px;
   border-radius: 6px; font-size: 11px; line-height: 1.35; font-weight: 600; }
+.mm-ev b { flex: none; }
 .mm-ev b { font-weight: 700; font-variant-numeric: tabular-nums; }
+/* Клетка дня — колонка, и без min-width: 0 длинная плашка растягивает ее шире
+   собственной колонки сетки: название встречи вылезало за границу дня. */
+.mm-cell { min-width: 0; }
 .mm-ev.plan { background: var(--navy-soft); color: var(--navy);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mm-ev.zoom { background: var(--fill); color: var(--ink-2); }
