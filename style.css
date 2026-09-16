@@ -3043,6 +3043,18 @@ button.tr-crumb:hover { color: var(--blue); }
 .zw-new { margin-left: 6px; white-space: nowrap; }
 .zw-range { white-space: nowrap; }
 .zw-seg { margin-left: 12px; }
+/* Переключатель половин «Встреч» («Зумы» / «Расписание») стоит в месте заголовка
+   секции и работает за него. Рецепт сегмента тот же, только кеглем заголовка:
+   рядом стоит «Неделя/День», и одинаковый размер читался бы как один контрол. */
+.mt-lens { flex: none; padding: 5px; border-radius: 12px; }
+.mt-lens button { font-size: 13.5px; padding: 7px 13px; }
+.mt-lens + .zw-seg { margin-left: 16px; }
+/* «В гугл-календарь» — третье действие в шапке, поэтому тихое: синяя кнопка тут
+   уже есть («Мое время»), а двух акцентов на экране не бывает (design.md §3). */
+.sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.sc-gcal:hover { color: var(--blue); }
+.sc-gcal svg { opacity: .7; }
 .zw-range { border: 0; background: none; padding: 4px 6px; border-radius: 8px; }
 .zw-range:not(.now):hover { color: var(--blue); background: var(--blue-tint); }
 .zw-fltrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -3071,7 +3083,12 @@ button.tr-crumb:hover { color: var(--blue); }
   /* Телефон: два ряда шапки (заголовок с кнопкой; сегмент со стрелками и датой)
      и один ряд фильтров (лента типов скроллится, селект аккаунта справа). */
   .zw-new { order: 1; }
+  /* Телефон: половины первой строкой во всю ширину — это заголовок экрана. */
+  .mt-lens { order: 0; width: 100%; display: flex; }
+  .mt-lens button { flex: 1; }
   .zw-seg { order: 2; margin-left: 0; }
+  .mt-lens + .zw-seg { margin-left: 0; }
+  .sc-gcal { order: 4; margin-left: 0; }
   .zw-seg button { padding: 5px 9px; }
   .zw-nav { order: 3; width: auto; margin-left: auto; gap: 4px; }
   .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }

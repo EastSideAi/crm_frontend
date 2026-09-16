@@ -79,6 +79,10 @@
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
+    // Встречи — две половины одного вопроса «когда»: 'zoom' (созвоны со ссылками)
+    // и 'sched' (кто когда свободен, планерки). Раздела «Расписание» в меню
+    // больше нет: 16.09.2026 Павел свел оба места в одно.
+    meetSub: 'zoom',
     news: null, newsUnread: 0,
     teamMode: 'day', teamStats: null, teamPeriod: 'month', teamShift: 0, teamReports: null, teamPerson: null,
     pulse: null, pulseDate: '', pulseTimer: null,
@@ -98,7 +102,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio', 'attSeg'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio', 'attSeg', 'meetSub'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -2161,10 +2165,6 @@
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
-    // «Расписание» видят все (cap dash есть у каждой роли): вопрос «кто когда
-    // свободен и когда планерка» возникает у всей команды, а отмечает человек
-    // только свое время — это проверяет сервер.
-    { id: 'sched', label: 'Расписание', icon: 'cal', cap: 'dash' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
@@ -3164,6 +3164,9 @@
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
       return;
     }
+    // «Расписание» больше не отдельная страница — это половина вкладки «Встречи».
+    // У кого сохранилась старая страница, тот попадает сразу туда, куда переехало.
+    if (state.page === 'sched') { state.page = 'tasks'; state.taskSeg = 'meet'; state.meetSub = 'sched'; }
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
@@ -3184,7 +3187,6 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'news') renderNews(view);
-    else if (state.page === 'sched') renderSched(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -5362,7 +5364,11 @@
     team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'у кого как идет неделя: собрана, сделано, застряло' },
     // Записи встреч (Fathom и загруженные протоколы) и что с каждой стало: до
     // 08.09.2026 черновики жили только за ссылкой из бота (Павел: «не могу найти»).
-    meet:  { label: 'Встречи', view: 'meetings', scope: 'all', cap: 'tasks_all', hint: 'все записи встреч: черновики задач, консультации в карточках, что не разобралось' },
+    // Встречи открыты всем, у кого есть «Задачи»: сюда 16.09.2026 переехал раздел
+    // «Расписание», а он был нужен каждому («кто когда свободен, когда планерка»).
+    // Журнал записей сервер и так режет по правам: кто видит задачи всей команды —
+    // видит все записи, остальные только свои протоколы.
+    meet:  { label: 'Встречи', view: 'meetings', scope: 'all', hint: 'зумы и расписание команды; ниже записи встреч и черновики задач' },
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
@@ -6159,8 +6165,8 @@
     var key = lo.toISOString().slice(0, 10);
     state.zoomWeek[key] = 'loading';
     api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks' || state.page === 'sched') renderView(); })
-      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks' || state.page === 'sched') renderView(); });
+      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
   }
   // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
   // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
@@ -6205,7 +6211,7 @@
       ? WDAYS_RU[day.getDay()] + ' ' + day.getDate() + ' ' + MONTHS_RU[day.getMonth()] + (day.getTime() === today.getTime() ? '<span class="zw-td"> · сегодня</span>' : '')
       : days[0].getDate() + ' ' + MONTHS_RU[days[0].getMonth()] + ' – ' + days[6].getDate() + ' ' + MONTHS_RU[days[6].getMonth()];
     var atNow = dayView ? !(state.zoomDayOff || 0) : !(state.zoomWeekOff || 0);
-    var head = '<div class="sec-head zw-head"><div class="t">Зумы</div>' +
+    var head = '<div class="sec-head zw-head">' + meetLens() +
       '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-zv="week">Неделя</button>' +
         '<button type="button" class="' + (dayView ? 'on' : '') + '" data-zv="day">День</button></div>' +
       '<div class="zw-nav"><button class="icobtn" data-zw="-1" title="' + (dayView ? 'Прошлый день' : 'Прошлая неделя') + '">' + ic('go', 14) + '</button>' +
@@ -6343,6 +6349,11 @@
      где отметить свои окна. Здесь та же сетка там, где команда сидит целый день:
      свободные окна, занятые часы, планерки и зумы одним экраном.
 
+     С 16.09.2026 живет половиной вкладки «Встречи» в «Задачах», своего пункта в
+     меню больше нет (Павел: «все расписание нужно перенести во встречи»). Все,
+     что стоит в этой сетке, уезжает в общий рабочий гугл-календарь; кнопка
+     «В гугл-календарь» в шапке подключает его человеку себе.
+
      Свои часы человек отмечает кликом по клетке, планерку ставит руководитель.
      Источник данных — тот же сервис расписания, второй базы мы не заводим. Зумы
      подмешиваются из той же ручки, что кормит сетку «Зумы» в задачах: два экрана
@@ -6378,8 +6389,8 @@
     var key = zoomYmd(lo), hi = new Date(lo.getTime() + 7 * 86400000);
     state.schedWeek[key] = 'loading';
     api('/admin/api/sched/week?from=' + key + '&to=' + zoomYmd(hi))
-      .then(function (r) { state.schedWeek[key] = r || 'none'; if (state.page === 'sched') renderView(); })
-      .catch(function () { state.schedWeek[key] = 'none'; if (state.page === 'sched') renderView(); });
+      .then(function (r) { state.schedWeek[key] = r || 'none'; if (state.page === 'tasks') renderView(); })
+      .catch(function () { state.schedWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
   }
   function schedReload() { state.schedWeek = {}; state.zoomWeek = {}; renderView(); }
 
@@ -6544,7 +6555,7 @@
         new Date(lo.getTime() + 6 * 86400000).getDate() + ' ' + MONTHS_RU[new Date(lo.getTime() + 6 * 86400000).getMonth()];
 
     var ok = d && typeof d === 'object';
-    var head = '<div class="sec-head zw-head"><div class="t">Расписание</div>' +
+    var head = '<div class="sec-head zw-head">' + meetLens() +
       (mqMobile.matches ? '' :
         '<div class="due-seg zw-seg"><button type="button" class="' + (dayView ? '' : 'on') + '" data-sv="week">Неделя</button>' +
         '<button type="button" class="' + (dayView ? 'on' : '') + '" data-sv="day">День</button></div>') +
@@ -6554,6 +6565,10 @@
       (ok && d.me ? '<button class="bp sm' + (state.schedEdit ? '' : ' ghost') + ' sc-edit" id="sc-edit">' +
         ic(state.schedEdit ? 'check' : 'pen', 14) + (state.schedEdit ? 'Готово' : 'Мое время') + '</button>' : '') +
       (ok && d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+      // Все, что здесь стоит, уезжает в рабочий гугл-календарь. Кому удобнее
+      // смотреть там — жмет и подключает календарь себе одним движением.
+      (ok && d.gcal ? '<a class="sc-gcal" href="' + esc(d.gcal) + '" target="_blank" rel="noopener" ' +
+        'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
       '</div>';
 
     if (d === 'loading') {
@@ -6993,7 +7008,36 @@
     });
   }
 
+  /* ── Встречи: две половины одного вопроса «когда» ───────────────────────────
+     «Зумы» — созвоны со ссылками и журнал записей под ними. «Расписание» — кто
+     когда свободен, планерки и занятые часы. До 16.09.2026 расписание жило
+     отдельным пунктом меню, и получалось два места про одно и то же (Павел:
+     «все расписание нужно перенести во встречи»). Переключатель стоит в месте
+     заголовка раздела: своего заголовка ни одной половине больше не нужно. */
+  function meetSub() { return state.meetSub === 'sched' ? 'sched' : 'zoom'; }
+
+  function meetLens() {
+    var at = meetSub();
+    return '<div class="due-seg mt-lens">' +
+      '<button type="button" class="' + (at === 'zoom' ? 'on' : '') + '" data-mlens="zoom">Зумы</button>' +
+      '<button type="button" class="' + (at === 'sched' ? 'on' : '') + '" data-mlens="sched">Расписание</button></div>';
+  }
+
   function renderMeetings(view) {
+    view.innerHTML = '<div id="mt-pane"></div>';
+    var pane = el('mt-pane');
+    if (meetSub() === 'sched') renderSched(pane);
+    else renderMeetLog(pane);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mlens]'), function (b) {
+      b.addEventListener('click', function () {
+        var to = b.getAttribute('data-mlens');
+        if (to === meetSub()) return;
+        state.meetSub = to; saveUi(); renderView();
+      });
+    });
+  }
+
+  function renderMeetLog(view) {
     if (state.meetLog === null) { view.innerHTML = dashSkeleton(); loadMeetLog(); return; }
     if (state.meetLog === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
