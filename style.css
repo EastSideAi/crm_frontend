@@ -9041,6 +9041,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (hover: none) { .mm-copy { opacity: .5; } }
 .mm-more { align-self: flex-start; font-size: 11px; font-weight: 600; color: var(--ink-3); padding: 1px 3px; }
 .mm-more:hover { color: var(--blue); }
+/* Подпись под сеткой: тихая сноска, а не абзац текста. Без нее строка шла
+   основным кеглем и читалась как содержимое карточки. */
+.zw-foot { margin-top: 10px; font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 /* Телефон: семь колонок остаются (месяц без них не месяц), но клетка ниже и
    в ней помещается одна плашка — остальное уводит «еще N». */
 @media (max-width: 960px) {

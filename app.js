@@ -6260,7 +6260,9 @@
       .then(function (r) { state.schedWeek[key] = r || 'none'; if (state.page === 'tasks') renderView(); })
       .catch(function () { state.schedWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
   }
-  function schedReload() { state.schedWeek = {}; state.zoomWeek = {}; renderView(); }
+  // Месяц собирается из тех же ручек, что и неделя, поэтому после любой правки
+  // его кэш тоже сбрасываем: иначе созданная планерка не появится в клетке дня.
+  function schedReload() { state.schedWeek = {}; state.zoomWeek = {}; state.meetMonthData = {}; renderView(); }
 
   /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
      фамилия, и она же и есть то, чем людей различают на слух. */
@@ -6539,7 +6541,7 @@
         copyText(b.getAttribute('data-mcopy') || '', b);
       });
     });
-    if (el('sc-zoomnew')) el('sc-zoomnew').addEventListener('click', function () { openZoomForm({}); });
+    if (el('sc-zoomnew')) el('sc-zoomnew').addEventListener('click', function () { openZoomForm({ after: schedReload }); });
     Array.prototype.forEach.call(view.querySelectorAll('.sc-zopen'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
@@ -7023,7 +7025,11 @@
           if (!meets.some(function (y) { return y.id === m.id && y.date === m.date; })) meets.push(m);
         });
       });
-      state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal };
+      // Права и список людей нужны кнопке «Планерка»: форма собирает из них
+      // галочки участников. Берем из первого ответа — он про те же роли.
+      var w = r[2] || r[3] || {};
+      state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal,
+        can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
       if (state.page === 'tasks') renderView();
     }).catch(function () {
       state.meetMonthData[key] = 'none';
@@ -7065,6 +7071,7 @@
     var atNow = !(state.meetMonth || 0);
     var title = MONTHS_FULL_RU[first.getMonth()] + ' ' + first.getFullYear();
     var gcal = (data && typeof data === 'object' && data.gcal) || '';
+    var mayMeet = !!(data && typeof data === 'object' && data.can_edit_all);
     var head = '<div class="sec-head zw-head">' + meetLens() +
       '<div class="zw-nav"><button class="icobtn" data-mm="-1" title="Прошлый месяц">' + ic('go', 14) + '</button>' +
       '<button type="button" class="zw-range' + (atNow ? ' now' : '') + '" data-mm0 title="' +
@@ -7072,17 +7079,22 @@
       '<button class="icobtn" data-mm="1" title="Следующий месяц">' + ic('go', 14) + '</button></div>' +
       (gcal ? '<a class="sc-gcal" href="' + esc(gcal) + '" target="_blank" rel="noopener" ' +
         'title="Открыть этот календарь в своем гугле">' + ic('cal', 14) + 'В гугл-календарь</a>' : '') +
-      (can('tasks_all') ? '<div class="zw-acts"><button class="bp sm" id="mm-new">' + ic('plus', 14) + 'Создать ссылку</button></div>' : '') +
+      // Те же действия и теми же словами, что в виде слотов: переключатель меняет
+      // только вид, а не то, что человек может сделать на экране.
+      (mayMeet || can('tasks_all') ? '<div class="zw-acts">' +
+        (mayMeet ? '<button class="bp ghost sm sc-meetnew" id="mm-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
+        (can('tasks_all') ? '<button class="bp sm" id="mm-new">' + ic('plus', 14) + 'Зум</button>' : '') +
+        '</div>' : '') +
       '</div>';
 
     if (data === 'loading') {
       view.innerHTML = '<div class="card zw">' + head + '<div class="zw-empty">Собираю месяц…</div></div>';
-      return meetMonthWire(view);
+      return meetMonthWire(view, null);
     }
     if (data === 'none') {
       view.innerHTML = '<div class="card zw">' + head +
         '<div class="zw-empty">Не удалось собрать месяц. Обнови страницу.</div></div>';
-      return meetMonthWire(view);
+      return meetMonthWire(view, null);
     }
 
     var from = new Date(first); from.setDate(from.getDate() - ((first.getDay() + 6) % 7));
@@ -7117,10 +7129,10 @@
     view.innerHTML = '<div class="card zw">' + head +
       '<div class="mm-grid">' + headRow + cells + '</div>' +
       '<div class="zw-foot">День целиком — клик по числу: откроется сетка слотов на этот день.</div></div>';
-    meetMonthWire(view);
+    meetMonthWire(view, data);
   }
 
-  function meetMonthWire(view) {
+  function meetMonthWire(view, d) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-mm]'), function (b) {
       b.addEventListener('click', function () {
         state.meetMonth = (state.meetMonth || 0) + (+b.getAttribute('data-mm'));
@@ -7130,7 +7142,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mm0]'), function (b) {
       b.addEventListener('click', function () { state.meetMonth = 0; renderView(); });
     });
-    if (el('mm-new')) el('mm-new').addEventListener('click', function () { openZoomForm({}); });
+    if (el('mm-new')) el('mm-new').addEventListener('click', function () { openZoomForm({ after: schedReload }); });
+    if (el('mm-meet')) el('mm-meet').addEventListener('click', function () { openSchedMeet(d); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mcopy]'), function (b) {
       b.addEventListener('click', function (e) {
         e.stopPropagation();
