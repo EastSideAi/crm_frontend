@@ -8562,3 +8562,57 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lchart .ch-day { max-width: 56px; }
 .lchart .chart { justify-content: flex-start; }
 .lchart .ch-labels span { max-width: 56px; }
+
+/* ── Воркшопы: библиотека обучения команды ──────────────────────────────────
+   Строка = один воркшоп: слева номер (по нему ориентируются в разговоре — «третий
+   воркшоп»), справа содержимое. Просмотренное гасим, а не прячем: библиотеку
+   перечитывают, и запись нужна и после первого раза. */
+.ws { padding: 4px 0; }
+.ws-item { display: flex; gap: 14px; padding: 16px 20px 18px; border-top: 1px solid var(--line); }
+.ws-item:first-child { border-top: 0; }
+.ws-item.done .ws-title, .ws-item.done .ws-n { color: var(--ink-2); }
+.ws-item.arch { opacity: .55; }
+.ws-n {
+  flex: none; width: 30px; height: 30px; border-radius: 10px; margin-top: 1px;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 13px; font-weight: 700; display: grid; place-items: center;
+}
+.ws-item.done .ws-n { background: var(--fill); }
+.ws-main { flex: 1 1 auto; min-width: 0; }
+.ws-top { display: flex; align-items: flex-start; gap: 10px; }
+.ws-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em;
+  color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+.ws-edit { flex: none; opacity: 0; transition: opacity .15s var(--ease); }
+.ws-item:hover .ws-edit, .ws-edit:focus-visible { opacity: 1; }
+.ws-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ws-about { margin: 9px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; }
+.ws-hw { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); max-width: 720px; white-space: pre-wrap; }
+.ws-hw-l { display: block; margin-bottom: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+.ws-mats { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-mat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--line-2); border-radius: 9px; background: #fff;
+  font-size: 12.5px; color: var(--ink-2); text-decoration: none; transition: .15s; }
+.ws-mat:hover { border-color: var(--blue); color: var(--blue); }
+.ws-act { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ws-play { text-decoration: none; }
+/* Просмотренное тише: строка остается на месте (к записи возвращаются), но
+   тянуть на себя внимание ей больше незачем. */
+.ws-item.done .ws-play { background: #fff; color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: none; }
+.ws-item.done .ws-play:hover { color: var(--blue); border-color: var(--blue); }
+.ws-norec { font-size: 12.5px; color: var(--ink-3); }
+.ws-seen.on { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
+.ws-cnt { margin-left: 2px; font-size: 12px; color: var(--ink-3); }
+.ws-card { max-width: 640px; }
+.ws-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.ws-row .al-f { flex: 1 1 140px; min-width: 0; }
+.ws-mrow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ws-mrow .ws-mt { flex: 0 1 180px; min-width: 0; }
+.ws-mrow .ws-mu { flex: 1 1 220px; min-width: 0; }
+.ws-madd { margin-top: 2px; }
+@media (max-width: 720px) {
+  .ws-item { padding: 14px 14px 16px; gap: 10px; }
+  .ws-mrow { flex-wrap: wrap; }
+  .ws-mrow .ws-mt, .ws-mrow .ws-mu { flex: 1 1 100%; }
+}

@@ -307,6 +307,7 @@
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.2 13.2 17 17"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
+      eye: '<path d="M2.5 10S5.5 5 10 5s7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/>',
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
       tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
       pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
@@ -2190,6 +2191,11 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
     { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
+    // «Воркшопы» — библиотека обучения команды: запись, материалы, домашка.
+    // Видят все (cap dash есть у каждой роли), заводит руководитель (cap team).
+    // Не вкладка «Академии»: та — курс с аттестацией и допуском к работе, а тут
+    // записи встреч, которые смотрят по желанию и в любом порядке.
+    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2875,6 +2881,18 @@
         '</span></div></div>' +
         (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
     }
+    if (state.page === 'workshops') {
+      var wsl = (state.ws && state.ws.items) || [];
+      var wsLeft = wsl.filter(function (x) { return !x.seen; }).length;
+      html = '<div><h2>Воркшопы</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('play', 13) + '</span><span>' +
+        (wsl.length
+          ? (wsLeft ? 'Не смотрели: <b>' + wsLeft + '</b> из ' + wsl.length + '. ' : 'Все ' + wsl.length + ' посмотрены. ') +
+            'Записи, материалы и домашка. Смотреть можно в любом порядке.'
+          : 'Записи воркшопов команды с материалами и домашкой.') +
+        '</span></div></div>' +
+        (state.ws && state.ws.can_edit ? '<button class="bp sm" id="ws-new">' + ic('plus', 14) + 'Добавить</button>' : '');
+    }
     if (state.page === 'analytics') {
       html = '<div><h2>Аналитика бота</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('bolt', 13) + '</span><span>' +
@@ -3154,6 +3172,8 @@
     if (gs) gs.addEventListener('click', guideExit);
     var nw = el('nw-new');
     if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
+    var wn = el('ws-new');
+    if (wn) wn.addEventListener('click', function () { openWsForm(null); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
@@ -3200,6 +3220,7 @@
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'focus') renderFocus(view);
     else if (state.page === 'news') renderNews(view);
+    else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'sched') renderSched(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
@@ -6505,6 +6526,198 @@
     var who = roles.concat(people);
     return (who.length ? who.join(', ') : 'всем') + (chats.length ? ' + ' + chats.join(', ') : '');
   }
+  /* ── Воркшопы: библиотека обучения команды ─────────────────────────────────
+     Лиана 16.09.2026: «организовать обучение команды», и отдельно — «давай как
+     библиотека». Поэтому здесь нет сроков, напоминаний и процента прохождения по
+     людям: отметка «посмотрел» — закладка человека для себя, чтобы в списке из
+     двадцати записей не гадать, где он остановился. Контент живет в базе, а не в
+     этом файле (в отличие от Академии): воркшоп добавляют каждую неделю руками. */
+  function wsLoad(cb) {
+    api('/admin/api/workshops').then(function (r) {
+      state.ws = r || { items: [] };
+      if (cb) cb(r);
+    }).catch(function () {
+      state.ws = state.ws || { items: [], none: true };
+      if (cb) cb(null);
+    });
+  }
+  function wsDate(iso) {
+    if (!iso) return '';
+    var p = String(iso).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso;
+  }
+  function renderWorkshops(view) {
+    if (!state.ws) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderWorkshops(view); } });
+    }
+    var w = state.ws, items = w.items || [];
+    if (w.none) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить воркшопы. Обнови страницу.</div></div>';
+      return;
+    }
+    if (!items.length) {
+      view.innerHTML = '<div class="card"><div class="empty">' +
+        (w.can_edit ? 'Воркшопов пока нет. Первый добавь кнопкой «Добавить» сверху: название, ссылка на запись и домашка.'
+                    : 'Воркшопов пока нет. Как проведем первый, запись появится здесь.') + '</div></div>';
+      return;
+    }
+    var body = items.map(function (it) {
+      var meta = [it.held_at ? wsDate(it.held_at) : '', it.host ? 'вел(а) ' + it.host : ''].filter(Boolean).join(' · ');
+      var mats = (it.materials || []).map(function (m) {
+        return '<a class="ws-mat" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('doc', 13) + esc(m.title) + '</a>';
+      }).join('');
+      return '<article class="ws-item' + (it.seen ? ' done' : '') + (it.archived ? ' arch' : '') + '" data-ws="' + it.id + '">' +
+        '<div class="ws-n num">' + (it.num || '—') + '</div>' +
+        '<div class="ws-main">' +
+          '<div class="ws-top">' +
+            '<h3 class="ws-title">' + esc(it.title) + '</h3>' +
+            (w.can_edit ? '<button class="icobtn ws-edit" data-wse="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') +
+          '</div>' +
+          (meta ? '<div class="ws-meta">' + esc(meta) + (it.archived ? '<span class="sev">в архиве</span>' : '') + '</div>' : '') +
+          (it.about ? '<p class="ws-about">' + esc(it.about) + '</p>' : '') +
+          (it.homework ? '<div class="ws-hw"><span class="ws-hw-l">Домашка</span>' + esc(it.homework) + '</div>' : '') +
+          (mats ? '<div class="ws-mats">' + mats + '</div>' : '') +
+          '<div class="ws-act">' +
+            (it.record_url
+              ? '<a class="bp sm ws-play" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' + ic('play', 14) + 'Смотреть запись</a>'
+              : '<span class="ws-norec">Записи нет</span>') +
+            '<button class="qchip ws-seen' + (it.seen ? ' on' : '') + '" data-wss="' + it.id + '">' +
+              ic(it.seen ? 'check' : 'eye', 13) + '<span>' + (it.seen ? 'Посмотрел' : 'Отметить, что посмотрел') + '</span></button>' +
+            (w.can_edit && it.seen_n ? '<span class="ws-cnt num" title="сколько человек отметили">' + it.seen_n + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+    view.innerHTML = '<div class="card ws">' + body + '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-wse]'), function (b) {
+      b.addEventListener('click', function () {
+        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-wse'); })[0];
+        if (it) openWsForm(it);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-wss]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-wss');
+        var it = items.filter(function (x) { return String(x.id) === id; })[0];
+        if (!it) return;
+        var next = !it.seen;
+        it.seen = next;                      // рисуем сразу: отметка себе, спорить не с чем
+        it.seen_n = Math.max(0, (it.seen_n || 0) + (next ? 1 : -1));
+        renderHead(); renderWorkshops(view);
+        apiSend('/admin/api/workshops/' + id + '/seen', 'POST', { seen: next }, null, function () {
+          it.seen = !next; showToast('Не сохранилось — проверь сеть'); renderHead(); renderWorkshops(view);
+        });
+      });
+    });
+  }
+  /* Форма воркшопа. Материалы — строки «название + ссылка»: файлы у нас лежат в
+     гугл-диске и ноушене, тащить их в CRM ради списка ссылок незачем. */
+  function openWsForm(it) {
+    if (document.querySelector('.al-ov.ws-ov')) return;
+    var mats = (it && it.materials || []).slice();
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over ws-ov';
+    function matRows() {
+      return mats.map(function (m, i) {
+        return '<div class="ws-mrow" data-mi="' + i + '">' +
+          '<input class="al-in ws-mt" type="text" maxlength="120" placeholder="Название" value="' + esc(m.title || '') + '">' +
+          '<input class="al-in ws-mu" type="url" maxlength="500" placeholder="https://" value="' + esc(m.url || '') + '">' +
+          '<button type="button" class="icobtn ws-mx" title="Убрать">' + ic('x', 13) + '</button></div>';
+      }).join('');
+    }
+    ov.innerHTML =
+      '<div class="al-card ws-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Воркшопы</div><div class="al-title">' + (it ? 'Поправить воркшоп' : 'Новый воркшоп') + '</div></div>' +
+          '<button class="al-x" id="ws-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Название</span>' +
+            '<input id="ws-title" class="al-in" type="text" maxlength="200" placeholder="О чем воркшоп, одной строкой" value="' + esc(it ? it.title : '') + '"></label>' +
+          '<div class="ws-row">' +
+            '<label class="al-f"><span class="al-l">Номер</span>' +
+              '<input id="ws-num" class="al-in" type="number" min="0" placeholder="1" value="' + (it && it.num ? it.num : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Дата</span>' +
+              '<input id="ws-date" class="al-in" type="date" value="' + esc(it && it.held_at ? it.held_at : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Кто вел</span>' +
+              '<input id="ws-host" class="al-in" type="text" maxlength="120" placeholder="Имя" value="' + esc(it ? it.host : '') + '"></label>' +
+          '</div>' +
+          '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
+            '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://" value="' + esc(it ? it.record_url : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">О чем</span>' +
+            '<textarea id="ws-about" class="al-in al-ta" rows="3" maxlength="2000" placeholder="Пара предложений: что разбирали и кому это пригодится">' + esc(it ? it.about : '') + '</textarea></label>' +
+          '<label class="al-f"><span class="al-l">Домашка</span>' +
+            '<textarea id="ws-hw" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Что сделать после просмотра. Если домашки нет — оставь пустым">' + esc(it ? it.homework : '') + '</textarea></label>' +
+          '<div class="al-f"><span class="al-l">Материалы</span>' +
+            '<div id="ws-mats">' + matRows() + '</div>' +
+            '<button type="button" class="qchip ws-madd" id="ws-madd">' + ic('plus', 13) + '<span>Добавить ссылку</span></button></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (it && !it.archived ? '<button class="al-cancel ws-del" id="ws-del">В архив</button>' : '') +
+          '<button class="al-cancel" id="ws-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="ws-save">Сохранить</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    function close() { ov.remove(); }
+    function readMats() {
+      return Array.prototype.map.call(ov.querySelectorAll('.ws-mrow'), function (row) {
+        return { title: row.querySelector('.ws-mt').value.trim(), url: row.querySelector('.ws-mu').value.trim() };
+      }).filter(function (m) { return m.url; });
+    }
+    function redrawMats() {
+      mats = readMats();
+      ov.querySelector('#ws-mats').innerHTML = matRows();
+      wireMats();
+    }
+    function wireMats() {
+      Array.prototype.forEach.call(ov.querySelectorAll('.ws-mx'), function (b) {
+        b.addEventListener('click', function () {
+          mats = readMats();
+          mats.splice(parseInt(b.parentNode.getAttribute('data-mi'), 10), 1);
+          ov.querySelector('#ws-mats').innerHTML = matRows();
+          wireMats();
+        });
+      });
+    }
+    wireMats();
+    ov.querySelector('#ws-madd').addEventListener('click', function () {
+      mats = readMats(); mats.push({ title: '', url: '' }); redrawMats();
+    });
+    ov.querySelector('#ws-x').addEventListener('click', close);
+    ov.querySelector('#ws-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var del = ov.querySelector('#ws-del');
+    if (del) del.addEventListener('click', function () {
+      apiSend('/admin/api/workshops/' + it.id, 'DELETE', null, function () {
+        close(); showToast('Убрал в архив');
+        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+      });
+    });
+    ov.querySelector('#ws-save').addEventListener('click', function () {
+      var title = ov.querySelector('#ws-title').value.trim();
+      if (!title) return showToast('Нужно название');
+      var num = parseInt(ov.querySelector('#ws-num').value, 10);
+      var payload = {
+        title: title,
+        about: ov.querySelector('#ws-about').value.trim(),
+        homework: ov.querySelector('#ws-hw').value.trim(),
+        host: ov.querySelector('#ws-host').value.trim(),
+        record_url: ov.querySelector('#ws-rec').value.trim(),
+        held_at: ov.querySelector('#ws-date').value || null,
+        materials: readMats(),
+      };
+      if (num >= 0) payload.num = num;
+      var path = it ? '/admin/api/workshops/' + it.id : '/admin/api/workshops';
+      apiSend(path, it ? 'PATCH' : 'POST', payload, function () {
+        close(); showToast('Сохранил');
+        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+      }, function (code, e) {
+        showToast((e && e.body && e.body.detail) || (code === 403 ? 'Это может только руководитель' : 'Не сохранилось'));
+      });
+    });
+    setTimeout(function () { var f = ov.querySelector('#ws-title'); if (f) f.focus(); }, 30);
+  }
+
   function renderNews(view) {
     if (!state.news) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
