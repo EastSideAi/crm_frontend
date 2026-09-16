@@ -3094,6 +3094,55 @@ button.tr-crumb:hover { color: var(--blue); }
   .zw-flt::-webkit-scrollbar { display: none; }
   .zw-flt .tab { flex: none; white-space: nowrap; }
 }
+/* ── Расписание команды (раздел «Расписание») ───────────────────────────────
+   Сетка недели: строка — час, колонка — день. На телефоне недели нет вовсе
+   (app.js рисует день), поэтому горизонтальной прокрутки у страницы не бывает. */
+.sc .zw-fltrow { align-items: center; }
+.sc-who { min-width: 220px; }
+.sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+.sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sc-legend .sc-chip { cursor: default; }
+
+.sc-grid { border-top: 1px solid var(--line); }
+.sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
+.sc-row.head { border-bottom: 1px solid var(--line-2); padding-bottom: 6px; margin-bottom: 2px; }
+.sc-h { font-size: 11.5px; color: var(--ink-3); padding: 6px 8px 6px 0; text-align: right; font-variant-numeric: tabular-nums; }
+.sc-d { font-size: 12px; color: var(--ink-3); padding: 8px 4px 0; text-transform: lowercase; }
+.sc-d b { color: var(--ink); font-weight: 700; margin-left: 3px; }
+.sc-d.now { color: var(--blue); }
+.sc-d.now b { color: var(--blue); }
+.sc-cell { display: flex; flex-direction: column; gap: 3px; padding: 4px 2px; min-height: 30px; min-width: 0; border-radius: 8px; }
+.sc-cell.pick { cursor: pointer; transition: background .12s var(--ease); }
+.sc-cell.pick:hover { background: var(--blue-tint); }
+.sc-cell.pick:empty::after { content: '+'; color: var(--ink-3); font-size: 13px; line-height: 22px; text-align: center; opacity: 0; transition: opacity .12s var(--ease); }
+.sc-cell.pick:hover:empty::after { opacity: 1; }
+
+.sc-chip { display: block; max-width: 100%; padding: 3px 7px; border-radius: 7px; font-size: 11.5px; line-height: 1.35; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-chip.free { background: var(--green-soft); color: var(--green-ink); }
+.sc-chip.busy { background: var(--blue-tint); color: var(--blue-d); }
+.sc-chip.meet { background: #E9ECF4; color: var(--navy); }
+.sc-chip.zoom { background: var(--fill); color: var(--ink-2); }
+.sc-chip.off { cursor: pointer; }
+.sc-chip.off:hover { background: var(--red-soft); color: var(--red-ink); }
+.zd-c .sc-chip { display: inline-block; }
+
+.sc-add { border: 1px dashed var(--line-2); background: none; color: var(--ink-3); border-radius: 7px; padding: 2px 8px; cursor: pointer; line-height: 0; }
+.sc-add:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
+
+.sc-claim { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--ink-2); }
+.sc-claim svg { color: var(--ink-3); flex: none; }
+.sc-claimsel { min-width: 260px; margin-left: auto; }
+.sc-claimnone { margin-left: auto; color: var(--ink-3); }
+
+.sc-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; max-height: 210px; overflow-y: auto; }
+.sc-p { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.sc-p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 960px) {
+  .sc-legend { margin-left: 0; }
+  .sc-claimsel { margin-left: 0; width: 100%; }
+  .sc-people { grid-template-columns: 1fr; }
+}
+
 .zc-link { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .zc-url { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zc-nolink { font-size: 13px; color: var(--ink-2); }
