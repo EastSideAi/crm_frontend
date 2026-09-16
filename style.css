@@ -3037,7 +3037,11 @@ button.tr-crumb:hover { color: var(--blue); }
 .zm-free.ok { color: var(--ink-2); }
 .zm-free.busy, .zm-free.warn { color: var(--amber-ink); font-weight: 600; }
 .zw { padding: 18px 24px 14px; margin-bottom: 14px; }
-.zw-head { margin-bottom: 8px; }
+/* Шапка переносится на любой ширине, а не только на телефоне. В ней шесть
+   контролов: половины, «Неделя/День», стрелки с датой и три действия. На
+   ноутбуке 1280 они в одну строку не помещаются, а переносить было нечему —
+   и последнее действие уезжало за край карточки. */
+.zw-head { margin-bottom: 8px; flex-wrap: wrap; row-gap: 10px; }
 .zw-nav { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 .zw-nav .icobtn:first-child svg { transform: rotate(180deg); }
 .zw-new { margin-left: 6px; white-space: nowrap; }
@@ -3049,10 +3053,12 @@ button.tr-crumb:hover { color: var(--blue); }
    строке не остается ни одного якоря — глазу не за что зацепиться. */
 .mt-lens { flex: none; padding: 5px; border-radius: 13px; }
 .mt-lens button { font-size: 15px; padding: 8px 15px; letter-spacing: -.015em; }
-/* «Неделя/День» переезжает вправо, к стрелкам и дате: он управляет ими, а не
-   половинами. Слева заголовок, справа группа «какой период», дальше действия —
-   три группы вместо шести одинаковых кнопок в ряд. */
-.mt-lens + .zw-seg { margin-left: auto; }
+/* Группы разделяет фиксированный отступ, а не остаток свободного места: на
+   узком экране остатка нет, и «auto» переставал что-либо разделять. Внутри
+   группы шаг 11px (.sec-head gap), между группами 28px — разница видна глазом
+   независимо от ширины. Действия уезжают вправо своим margin-left: auto из
+   общего правила .sec-head > .bp. */
+.mt-lens + .zw-seg { margin-left: 28px; }
 .mt-lens + .zw-seg + .zw-nav { margin-left: 12px; }
 /* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
    один, и он достается главному действию, а не вспомогательной ссылке. */
@@ -3098,7 +3104,12 @@ button.tr-crumb:hover { color: var(--blue); }
   /* Ссылка делит ряд с датой, а не занимает свой: 16px текста на целую строку —
      дырка в самом плотном месте. Высота тапа как у соседних контролов. */
   .sc-gcal { order: 2; margin-left: auto; min-height: 30px; }
-  .zw-new, .sc-edit, .sc-meetnew { order: 3; margin-left: 0; }
+  /* Сброс margin-left надо писать с той же силой, что и общее правило
+     .sec-head > .bp { margin-left: auto } — медиазапрос сам по себе силы не
+     добавляет, и без «.sec-head >» кнопки молча оставались бы разъехавшимися
+     по краям строки, а ряд действий не начинался бы от края карточки. */
+  .zw-new, .sc-edit, .sc-meetnew { order: 3; }
+  .sec-head > .zw-new, .sec-head > .sc-edit, .sec-head > .sc-meetnew { margin-left: 0; }
   .zw-nav .icobtn { width: 28px; height: 28px; min-width: 28px; }
   .zw-range { padding: 4px 2px; }
   .zw-td { display: none; }
