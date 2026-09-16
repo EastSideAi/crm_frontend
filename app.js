@@ -113,7 +113,7 @@
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, taskPrio: state.taskPrio || '',
-        attSeg: state.attSeg || '',
+        attSeg: state.attSeg || '', meetSub: state.meetSub || '',
       }));
     } catch (e) {}
   }
