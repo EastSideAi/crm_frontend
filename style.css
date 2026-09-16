@@ -3065,6 +3065,9 @@ button.tr-crumb:hover { color: var(--blue); }
    по разным рядам с разным выравниванием. В своем блоке они переносятся вместе
    и держат правый край шапки. */
 .zw-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+/* Подпись кнопки в две строки («Мое\nвремя») — не перенос, а поломка: ряд
+   действий становится разновысоким. Ширины хватает даже на 390px. */
+.zw-acts .bp { white-space: nowrap; flex: none; }
 /* «В гугл-календарь» — третье действие в шапке, поэтому тихое: акцент на экране
    один, и он достается главному действию, а не вспомогательной ссылке. */
 .sc-gcal { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;
@@ -3233,7 +3236,10 @@ button.tr-crumb:hover { color: var(--blue); }
      из четырех чипов и съедала пол-экрана. */
   .sc .zw-nav { width: auto; margin-left: 0; }
   .sc .zw-fltrow { flex-wrap: wrap; }
-  .sc-who { min-width: 0; width: 100%; }
+  /* Два фильтра делят одну строку поровну. Порознь они вставали лесенкой: «Все
+     люди» во всю ширину, «Все зумы» вполовину — и ряд читался как две разные
+     вещи, хотя это один набор. */
+  .sc-who, .sc-kind { min-width: 0; flex: 1 1 140px; }
   .sc-legend { margin-left: 0; width: 100%; }
   .sc-claimsel { margin-left: 0; width: 100%; }
   .zd-c .sc-chip { white-space: normal; }
