@@ -91,6 +91,8 @@
     taskWho: null,
     // недельный цикл: моя неделя, неделя команды, сдвиг недель, чью неделю смотрю
     myweek: null, teamWeek: null, weekShift: 0, teamWho: null,
+    // фокус недели: цели, у которых есть шаги в этой неделе (лист руководителя)
+    focus: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     cardCalls: {},
@@ -313,6 +315,7 @@
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.2 13.2 17 17"/>',
       globe: '<circle cx="10" cy="10" r="7.5"/><path d="M2.8 7.8h14.4M2.8 12.2h14.4"/><path d="M10 2.5c-2 2.2-3 4.7-3 7.5s1 5.3 3 7.5c2-2.2 3-4.7 3-7.5s-1-5.3-3-7.5z"/>',
       play: '<circle cx="10" cy="10" r="7.5"/><path d="M8.4 7.2 13 10l-4.6 2.8V7.2z" fill="currentColor" stroke-width="1"/>',
+      eye: '<path d="M2.5 10S5.5 5 10 5s7.5 5 7.5 5-3 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/>',
       search: '<circle cx="9" cy="9" r="5.6"/><path d="M13.1 13.1 17.2 17.2"/>',
       tree: '<rect x="7.3" y="2.6" width="5.4" height="4.2" rx="1.4"/><rect x="2.4" y="13.2" width="5.4" height="4.2" rx="1.4"/><rect x="12.2" y="13.2" width="5.4" height="4.2" rx="1.4"/><path d="M10 6.8v4.2M5.1 11h9.8M5.1 11v2.2M14.9 11v2.2"/>',
       pen: '<path d="M13.6 3.3a1.8 1.8 0 0 1 2.5 2.5L7.6 14.3 4 15.5l1.2-3.6 8.4-8.6z"/><path d="M12.2 4.7l2.5 2.5"/>',
@@ -2162,6 +2165,10 @@
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
+    // «Фокус недели» — управленческий взгляд: во что команда целится на этой
+    // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
+    // одного человека, а этот вопрос про всю компанию (и cap другой).
+    { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
@@ -2169,6 +2176,11 @@
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
+    /* «Дубли» — не пункт меню, а вкладка внутри «Людей» (renderTopbar): задача
+       редкая, а меню и так длинное. В NAV_ALL он нужен ради cap и пространства. */
+    /* Экран целиком под cap team: в списке кандидатов лежат почты и телеграм-аккаунты
+       детей, а объединять карточки все равно может только руководитель. */
+    { id: 'dupes', label: 'Дубли', icon: 'leads', cap: 'team', hidden: true },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
@@ -2194,6 +2206,11 @@
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
     { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
+    // «Воркшопы» — библиотека обучения команды: запись, материалы, домашка.
+    // Видят все (cap dash есть у каждой роли), заводит руководитель (cap team).
+    // Не вкладка «Академии»: та — курс с аттестацией и допуском к работе, а тут
+    // записи встреч, которые смотрят по желанию и в любом порядке.
+    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash' },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2302,6 +2319,7 @@
       // Пункт может быть скрыт для отдельных ролей, даже если cap подходит: тьютор
       // ведёт своих учеников, воронка входящих лидов не его работа (правило Павла).
       if (it.hideRole && it.hideRole.indexOf(state.role) >= 0) return false;
+      if (it.hidden) return false;   // экран есть, пункта меню нет (вкладка внутри раздела)
       // hideCap прячет пункт у того, кто и так добирается до него другим путём: выплаты
       // подрядчикам ведут внутри «Фондов», отдельным разделом в меню они торчат только у
       // роли, у которой всей ведомости нет (решение Романа 11.09.2026).
@@ -2506,21 +2524,34 @@
     if (!tb) return;
     var c = counts();
     if (noSections()) { tb.innerHTML = ''; return; }
-    if (state.page === 'leads') {
+    if (state.page === 'leads' || state.page === 'dupes') {
+      var onDup = state.page === 'dupes';
+      // Дубли карточек интенсива — вкладка тут же, рядом с людьми: это те же люди,
+      // просто заведенные дважды. Цифра — сколько групп сервер предлагает свести.
+      var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
+      var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
+        (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
-        return '<a class="tab' + (state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
+        return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
-      }).join('') + '</nav>';
+      }).join('') + dupTab + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
-          var prev = state.seg;
-          state.seg = t.getAttribute('data-seg');
+          var to = t.getAttribute('data-seg');
+          if (to === 'dupes') {
+            state.page = 'dupes'; saveUi();
+            renderSide(); renderTopbar(); renderHead(); renderView();
+            return;
+          }
+          var prev = onDup ? '' : state.seg;
+          state.page = 'leads';
+          state.seg = to;
           state.sort = null;
           saveUi();
           // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — при входе/выходе перезагружаем список
           if (state.seg === 'archive' || prev === 'archive') loadLeads(false);
-          else { renderTopbar(); renderHead(); renderView(); }
+          else { renderSide(); renderTopbar(); renderHead(); renderView(); }
         });
       });
     } else if (state.page === 'tasks') {
@@ -2742,6 +2773,20 @@
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
     }
+    if (state.page === 'focus') {
+      var fw = state.focus && state.focus !== 'none' ? state.focus : null;
+      var fwt = fw ? (fw.tasks || []).filter(function (t) { return t.status !== 'cancel'; }) : [];
+      var fwb = fwt.filter(function (t) { return t.overdue; }).length;
+      var fwd = fwt.filter(function (t) { return t.status === 'done'; }).length;
+      var fphr = !fw ? 'Собираю неделю…'
+        : !fwt.length ? 'Неделя пустая: ни одна задача не взята в работу.'
+        : fwb ? '<b>' + fwb + ' ' + plural(fwb, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
+                '.</b> Это первое, что стоит разобрать с людьми.'
+        : 'Просрочки нет. Закрыто ' + fwd + ' из ' + fwt.length + '.';
+      html = '<div><h2>Фокус недели' + (fw && fw.label ? ' · ' + esc(fw.label) : '') + '</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('target', 13) + '</span><span>' + fphr + '</span></div></div>' +
+        wkNav(fw ? fw.label : '');
+    }
     if (state.page === 'prospects') {
       var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
       html = '<div><h2>Лиды</h2>' +
@@ -2864,6 +2909,18 @@
         (nu ? 'Непрочитанных: <b>' + nu + '</b>. ' : '') + 'Что изменилось в CRM и как этим пользоваться. Записи приходят и в бот задач.' +
         '</span></div></div>' +
         (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
+    }
+    if (state.page === 'workshops') {
+      var wsl = (state.ws && state.ws.items) || [];
+      var wsLeft = wsl.filter(function (x) { return !x.seen; }).length;
+      html = '<div><h2>Воркшопы</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('play', 13) + '</span><span>' +
+        (wsl.length
+          ? (wsLeft ? 'Не смотрели: <b>' + wsLeft + '</b> из ' + wsl.length + '. ' : 'Все ' + wsl.length + ' посмотрены. ') +
+            'Записи, материалы и домашка. Смотреть можно в любом порядке.'
+          : 'Записи воркшопов команды с материалами и домашкой.') +
+        '</span></div></div>' +
+        (state.ws && state.ws.can_edit ? '<button class="bp sm" id="ws-new">' + ic('plus', 14) + 'Добавить</button>' : '');
     }
     if (state.page === 'analytics') {
       html = '<div><h2>Аналитика бота</h2>' +
@@ -3144,6 +3201,8 @@
     if (gs) gs.addEventListener('click', guideExit);
     var nw = el('nw-new');
     if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
+    var wn = el('ws-new');
+    if (wn) wn.addEventListener('click', function () { openWsForm(null); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
@@ -3191,7 +3250,9 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
+    else if (state.page === 'focus') renderFocus(view);
     else if (state.page === 'news') renderNews(view);
+    else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
@@ -3201,6 +3262,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
+    else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
     else if (state.page === 'attestations') return renderAttestations(view);
@@ -3342,6 +3404,59 @@
       '</svg>' + legend + '</div>';
   }
 
+  /* Схема раздела «Расписание»: слева меню, справа неделя часами по дням. Чипы
+     раскрашены теми же четырьмя цветами, что и в самом разделе, — человек потом
+     узнает экран. Снимок настоящей сетки сюда нельзя: в занятых окнах стоят имена
+     детей, а курс открыт всей команде. */
+  function gdSched() {
+    var items = '';
+    for (var i = 0; i < 5; i++) {
+      var on = i === 3;
+      items += '<rect x="13" y="' + (38 + i * 15) + '" width="58" height="10" rx="3.5" ' +
+        'class="' + (on ? 'gw-on' : 'gw-it') + '"/>';
+    }
+    var COLS = [100, 146, 192, 238], CW = 40, ROWS = [44, 62, 80, 98];
+    var head = '', hours = '', cells = '';
+    for (var c = 0; c < COLS.length; c++) {
+      head += '<rect x="' + COLS[c] + '" y="30" width="18" height="6" rx="3" class="gw-it"/>';
+    }
+    for (var r = 0; r < ROWS.length; r++) {
+      hours += '<text x="96" y="' + (ROWS[r] + 8) + '" class="gw-hh" text-anchor="end">' + (10 + r) + '</text>';
+      hours += '<path d="M100 ' + (ROWS[r] + 14) + 'h180" class="gw-div"/>';
+    }
+    /* Что стоит в клетках. Три помеченные цифрами — в последней колонке, чтобы точка
+       села в пустое поле справа и ничего не закрыла; остальные дают сетке фактуру. */
+    var plan = [[0, 0, 'free'], [1, 0, 'busy'], [3, 0, 'free'],
+                [0, 1, 'free'], [2, 1, 'meet'], [3, 1, 'busy'],
+                [1, 2, 'free'], [2, 2, 'meet'],
+                [0, 3, 'free']];
+    plan.forEach(function (p) {
+      cells += '<rect x="' + COLS[p[0]] + '" y="' + ROWS[p[1]] + '" width="' + CW +
+        '" height="11" rx="3.5" class="gw-' + p[2] + '"/>';
+    });
+    // Планерка на два часа — один блок на две строки, как она и стоит в сетке.
+    cells += '<rect x="' + COLS[3] + '" y="' + ROWS[2] + '" width="' + CW +
+      '" height="' + (ROWS[3] + 11 - ROWS[2]) + '" rx="3.5" class="gw-meet"/>';
+    var marks = [[292, ROWS[0] + 5, 'свободное окно'],
+                 [292, ROWS[1] + 5, 'занято, клиент записан'],
+                 [292, (ROWS[2] + ROWS[3] + 11) / 2, 'планерка на два часа']];
+    var dots = marks.map(function (m, i) {
+      return '<circle cx="' + m[0] + '" cy="' + m[1] + '" r="8" class="gw-dot"/>' +
+        '<text x="' + m[0] + '" y="' + (m[1] + 3.4) + '" class="gw-dn">' + (i + 1) + '</text>';
+    }).join('');
+    var legend = '<div class="gd-leg">' + marks.map(function (m, i) {
+      return '<span><i>' + (i + 1) + '</i>' + esc(m[2]) + '</span>';
+    }).join('') + '</div>';
+    return '<div class="gd-art"><svg viewBox="0 0 320 132" role="img" aria-label="Схема раздела Расписание: неделя часами по дням">' +
+      '<rect x="1" y="1" width="318" height="130" rx="12" class="gw-app"/>' +
+      '<path d="M84 1v130" class="gw-div"/>' +
+      '<rect x="13" y="13" width="30" height="9" rx="4.5" class="gw-logo"/>' +
+      '<circle cx="304" cy="19" r="7" class="gw-ava"/>' +
+      '<text x="100" y="21" class="gw-lb">Расписание</text>' +
+      items + head + hours + cells + dots +
+      '</svg>' + legend + '</div>';
+  }
+
   var GD = {
     start: {
       lead: 'CRM — это общий рабочий стол команды. Тут лежит все, что мы знаем про учеников и заявки, ' +
@@ -3417,6 +3532,19 @@
         'Пятница: «Закрыть неделю». По каждой открытой задаче — перенести с причиной или убрать в «Потом». Это и есть отчет, ничего писать не нужно.',
       ],
       tip: 'Перенесли задачу второй раз подряд — она помечается «застряла», и руководитель ее увидит. Лучше снять или попросить помощи, чем переносить молча.',
+    },
+    sched: {
+      lead: 'Раздел «Расписание» — одна сетка на всю команду: свободные окна преподавателей и тьюторов, ' +
+        'занятые часы, планерки и зумы. Раньше это жило отдельной страницей, про которую все забывали.',
+      art: function () { return gdSched(); },
+      dos: [
+        'Неделя — часы по дням, день — час за часом подробно. На телефоне сразу день.',
+        'Свои часы отмечаете сами: кнопка «Мое время», потом клик по клетке. Второй клик убирает час.',
+        'Один раз выберите себя в списке «Кто вы в расписании»: имена в CRM и в расписании разные, система не угадывает.',
+        'Час с записанным клиентом убрать нельзя — сначала отмените запись в карточке, иначе ребенок придет на встречу, которой нет.',
+        'Планерку ставит руководитель отдела: кнопка «Планерка», участники галочками, можно серией на недели вперед. Клик по планерке снимает ее или всю серию.',
+      ],
+      tip: 'Занятый час у коллеги — это и планерка тоже. Прежде чем предложить клиенту время, посмотрите сетку: продать час, на котором стоит встреча, нельзя.',
     },
     students: {
       lead: 'Раздел «Обучение» — ваши ученики: кто на каком этапе, что сдал, где застрял. ' +
@@ -5754,6 +5882,7 @@
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
     state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null; state.pulse = null;
+    state.focus = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -5771,6 +5900,151 @@
     if (el('wk-prev')) el('wk-prev').addEventListener('click', function () { go(-1); });
     if (el('wk-next')) el('wk-next').addEventListener('click', function () { go(1); });
     if (el('wk-now')) el('wk-now').addEventListener('click', function () { state.weekShift = 0; wkReload(); });
+  }
+
+
+  /* ── Фокус недели: лист руководителя ────────────────────────────────────────
+     Один экран, отвечающий на вопрос «во что компания целится на этой неделе и
+     что из этого уже сделано». Фокус — не новая сущность в базе: это цель, у
+     которой есть шаги, взятые в текущую неделю. Поэтому лист не надо вести
+     руками и он не устаревает: собрали неделю — фокус появился сам, закрыли
+     шаг — он позеленел, кончилась неделя — лист собрался заново.
+     Отдельным разделом, а не пятой вкладкой «Задач»: там срезы работы одного
+     человека (мой план, мои ученики), а тут вся компания сверху. */
+  function loadFocus(cb) {
+    var sh = wkShift();
+    state.tasksLoading = true;
+    Promise.all([
+      api('/admin/api/tasks?view=week&scope=all&shift=' + sh),
+      api('/admin/api/tasks?view=goals&scope=all'),
+    ]).then(function (rs) {
+      state.tasksLoading = false;
+      state.focus = {
+        tasks: (rs[0] && rs[0].tasks) || [],
+        goals: (rs[1] && rs[1].tasks) || [],
+        label: (rs[0] && rs[0].week_label) || '',
+      };
+      state.taskMe = rs[0] ? rs[0].me : state.taskMe;
+      if (cb) cb(); else if (state.page === 'focus') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.focus = 'none';
+      if (state.page === 'focus') renderView();
+    });
+  }
+
+  /* Порядок фокусов. Если руководитель проставил приоритет первой строкой
+     описания цели («Приоритет 2 из 4. …»), считаем его; иначе цель идет ниже, по
+     объему работы в неделе. Читаем текст, а не заводим колонку: приоритет живет
+     неделю, а поле в базе — вечно, и через месяц никто не помнит, что оно значит. */
+  function focusRank(g) {
+    var m = /^\s*Приоритет\s+(\d+)/i.exec((g && g.details) || '');
+    return m ? +m[1] : 90;
+  }
+  function focusWhy(g) {
+    var line = (((g && g.details) || '').split('\n')[0] || '').trim();
+    return line.length > 240 ? line.slice(0, 239) + '…' : line;
+  }
+  function focusLive(t) { return t.status !== 'cancel'; }
+  function focusDone(t) { return t.status === 'done'; }
+
+  function renderFocus(view) {
+    if (state.focus === null) { view.innerHTML = dashSkeleton(); loadFocus(); return; }
+    if (state.focus === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
+      return;
+    }
+    var f = state.focus;
+    var tasks = (f.tasks || []).filter(focusLive);
+    var goalById = {};
+    (f.goals || []).forEach(function (g) { goalById[g.id] = g; });
+
+    var byGoal = {}, loose = [];
+    tasks.forEach(function (t) {
+      if (t.parent_id) (byGoal[t.parent_id] = byGoal[t.parent_id] || []).push(t);
+      else loose.push(t);
+    });
+    var focuses = Object.keys(byGoal).map(function (id) {
+      var g = goalById[id] || { id: +id, title: (byGoal[id][0] || {}).parent_title || 'Цель' };
+      return { g: g, steps: byGoal[id] };
+    }).sort(function (a, b) {
+      var d = focusRank(a.g) - focusRank(b.g);
+      return d || b.steps.length - a.steps.length;
+    });
+
+    var done = tasks.filter(focusDone).length;
+    var burn = tasks.filter(function (t) { return t.overdue; }).length;
+    var bar = statBar([
+      { label: 'Фокусов', value: focuses.length, sub: 'целей в работе' },
+      { label: 'Задач в неделе', value: tasks.length, sub: 'у всей команды' },
+      { label: 'Закрыто', value: done, sub: tasks.length ? Math.round(done / tasks.length * 100) + '% недели' : '' },
+      { label: 'Горит', value: burn, sub: burn ? 'просрочено' : 'просрочки нет' },
+    ]);
+
+    var dayOf = function (t) {
+      if (!t.due_at) return '';
+      var d = new Date(t.due_at);
+      return WDAYS_RU[d.getDay()] + ' ' + d.getDate();
+    };
+
+    var blocks = focuses.map(function (fx, i) {
+      var g = fx.g;
+      var why = focusWhy(g);
+      var steps = fx.steps.slice().sort(function (a, b) {
+        return (a.due_at || '').localeCompare(b.due_at || '');
+      });
+      var sdone = steps.filter(focusDone).length;
+      return '<div class="card fw">' +
+        '<div class="fw-h">' +
+          '<span class="fw-n num">' + (i + 1) + '</span>' +
+          '<div class="fw-hm">' +
+            '<button class="fw-t" data-goalid="' + g.id + '">' + esc(g.title) + '</button>' +
+            '<div class="fw-sub">' +
+              (g.dept ? '<span>' + esc(deptLabel(g.dept)) + '</span>' : '') +
+              (g.assignee_name ? '<span>ведет ' + esc(g.assignee_name) + '</span>'
+                               : '<span class="fw-nobody">без ответственного</span>') +
+              '<span>' + sdone + ' из ' + steps.length + ' на этой неделе</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="fw-prog">' + progBar(g.steps_done || sdone, g.steps_total || steps.length) +
+            '<span class="fw-plab">вся цель</span></div>' +
+        '</div>' +
+        (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
+        '<div class="fw-rows">' + steps.map(function (t) {
+          return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
+            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+        }).join('') + '</div>' +
+      '</div>';
+    }).join('');
+
+    var looseBlock = loose.length
+      ? '<div class="card fw fw-loose">' +
+          '<div class="tsk-band"><span class="tsk-band-t">Вне фокусов</span>' +
+            '<span class="tsk-band-h">задачи недели, не привязанные к цели</span>' +
+            '<span class="tsk-band-n num">' + loose.length + '</span></div>' +
+          '<div class="fw-rows">' + loose.sort(function (a, b) {
+            return (a.due_at || '').localeCompare(b.due_at || '');
+          }).map(function (t) {
+            return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
+              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+          }).join('') + '</div>' +
+        '</div>'
+      : '';
+
+    view.innerHTML = bar +
+      (focuses.length
+        ? blocks
+        : '<div class="card"><div class="empty">На этой неделе ни одна цель не взята в работу. ' +
+          'Неделя собирается в разделе «Задачи»: там люди берут задачи из «Потом».</div></div>') +
+      looseBlock;
+
+    wkWireNav(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-goalid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
   }
 
   /* Строка задачи в неделе. Колонки: задача, день, статус. Исполнителя нет —
@@ -6773,6 +7047,198 @@
     var who = roles.concat(people);
     return (who.length ? who.join(', ') : 'всем') + (chats.length ? ' + ' + chats.join(', ') : '');
   }
+  /* ── Воркшопы: библиотека обучения команды ─────────────────────────────────
+     Лиана 16.09.2026: «организовать обучение команды», и отдельно — «давай как
+     библиотека». Поэтому здесь нет сроков, напоминаний и процента прохождения по
+     людям: отметка «посмотрел» — закладка человека для себя, чтобы в списке из
+     двадцати записей не гадать, где он остановился. Контент живет в базе, а не в
+     этом файле (в отличие от Академии): воркшоп добавляют каждую неделю руками. */
+  function wsLoad(cb) {
+    api('/admin/api/workshops').then(function (r) {
+      state.ws = r || { items: [] };
+      if (cb) cb(r);
+    }).catch(function () {
+      state.ws = state.ws || { items: [], none: true };
+      if (cb) cb(null);
+    });
+  }
+  function wsDate(iso) {
+    if (!iso) return '';
+    var p = String(iso).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso;
+  }
+  function renderWorkshops(view) {
+    if (!state.ws) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      return wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderWorkshops(view); } });
+    }
+    var w = state.ws, items = w.items || [];
+    if (w.none) {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить воркшопы. Обнови страницу.</div></div>';
+      return;
+    }
+    if (!items.length) {
+      view.innerHTML = '<div class="card"><div class="empty">' +
+        (w.can_edit ? 'Воркшопов пока нет. Первый добавь кнопкой «Добавить» сверху: название, ссылка на запись и домашка.'
+                    : 'Воркшопов пока нет. Как проведем первый, запись появится здесь.') + '</div></div>';
+      return;
+    }
+    var body = items.map(function (it) {
+      var meta = [it.held_at ? wsDate(it.held_at) : '', it.host ? 'вел(а) ' + it.host : ''].filter(Boolean).join(' · ');
+      var mats = (it.materials || []).map(function (m) {
+        return '<a class="ws-mat" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('doc', 13) + esc(m.title) + '</a>';
+      }).join('');
+      return '<article class="ws-item' + (it.seen ? ' done' : '') + (it.archived ? ' arch' : '') + '" data-ws="' + it.id + '">' +
+        '<div class="ws-n num">' + (it.num || '—') + '</div>' +
+        '<div class="ws-main">' +
+          '<div class="ws-top">' +
+            '<h3 class="ws-title">' + esc(it.title) + '</h3>' +
+            (w.can_edit ? '<button class="icobtn ws-edit" data-wse="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') +
+          '</div>' +
+          (meta ? '<div class="ws-meta">' + esc(meta) + (it.archived ? '<span class="sev">в архиве</span>' : '') + '</div>' : '') +
+          (it.about ? '<p class="ws-about">' + esc(it.about) + '</p>' : '') +
+          (it.homework ? '<div class="ws-hw"><span class="ws-hw-l">Домашка</span>' + esc(it.homework) + '</div>' : '') +
+          (mats ? '<div class="ws-mats">' + mats + '</div>' : '') +
+          '<div class="ws-act">' +
+            (it.record_url
+              ? '<a class="bp sm ws-play" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' + ic('play', 14) + 'Смотреть запись</a>'
+              : '<span class="ws-norec">Записи нет</span>') +
+            '<button class="qchip ws-seen' + (it.seen ? ' on' : '') + '" data-wss="' + it.id + '">' +
+              ic(it.seen ? 'check' : 'eye', 13) + '<span>' + (it.seen ? 'Посмотрел' : 'Отметить, что посмотрел') + '</span></button>' +
+            (w.can_edit && it.seen_n ? '<span class="ws-cnt num" title="сколько человек отметили">' + it.seen_n + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+    view.innerHTML = '<div class="card ws">' + body + '</div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-wse]'), function (b) {
+      b.addEventListener('click', function () {
+        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-wse'); })[0];
+        if (it) openWsForm(it);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-wss]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-wss');
+        var it = items.filter(function (x) { return String(x.id) === id; })[0];
+        if (!it) return;
+        var next = !it.seen;
+        it.seen = next;                      // рисуем сразу: отметка себе, спорить не с чем
+        it.seen_n = Math.max(0, (it.seen_n || 0) + (next ? 1 : -1));
+        renderHead(); renderWorkshops(view);
+        apiSend('/admin/api/workshops/' + id + '/seen', 'POST', { seen: next }, null, function () {
+          it.seen = !next; showToast('Не сохранилось — проверь сеть'); renderHead(); renderWorkshops(view);
+        });
+      });
+    });
+  }
+  /* Форма воркшопа. Материалы — строки «название + ссылка»: файлы у нас лежат в
+     гугл-диске и ноушене, тащить их в CRM ради списка ссылок незачем. */
+  function openWsForm(it) {
+    if (document.querySelector('.al-ov.ws-ov')) return;
+    var mats = (it && it.materials || []).slice();
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over ws-ov';
+    function matRows() {
+      return mats.map(function (m, i) {
+        return '<div class="ws-mrow" data-mi="' + i + '">' +
+          '<input class="al-in ws-mt" type="text" maxlength="120" placeholder="Название" value="' + esc(m.title || '') + '">' +
+          '<input class="al-in ws-mu" type="url" maxlength="500" placeholder="https://" value="' + esc(m.url || '') + '">' +
+          '<button type="button" class="icobtn ws-mx" title="Убрать">' + ic('x', 13) + '</button></div>';
+      }).join('');
+    }
+    ov.innerHTML =
+      '<div class="al-card ws-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Воркшопы</div><div class="al-title">' + (it ? 'Поправить воркшоп' : 'Новый воркшоп') + '</div></div>' +
+          '<button class="al-x" id="ws-x">' + ic('x', 14) + '</button></div>' +
+        '<div class="al-body">' +
+          '<label class="al-f"><span class="al-l">Название</span>' +
+            '<input id="ws-title" class="al-in" type="text" maxlength="200" placeholder="О чем воркшоп, одной строкой" value="' + esc(it ? it.title : '') + '"></label>' +
+          '<div class="ws-row">' +
+            '<label class="al-f"><span class="al-l">Номер</span>' +
+              '<input id="ws-num" class="al-in" type="number" min="0" placeholder="1" value="' + (it && it.num ? it.num : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Дата</span>' +
+              '<input id="ws-date" class="al-in" type="date" value="' + esc(it && it.held_at ? it.held_at : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Кто вел</span>' +
+              '<input id="ws-host" class="al-in" type="text" maxlength="120" placeholder="Имя" value="' + esc(it ? it.host : '') + '"></label>' +
+          '</div>' +
+          '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
+            '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://" value="' + esc(it ? it.record_url : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">О чем</span>' +
+            '<textarea id="ws-about" class="al-in al-ta" rows="3" maxlength="2000" placeholder="Пара предложений: что разбирали и кому это пригодится">' + esc(it ? it.about : '') + '</textarea></label>' +
+          '<label class="al-f"><span class="al-l">Домашка</span>' +
+            '<textarea id="ws-hw" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Что сделать после просмотра. Если домашки нет — оставь пустым">' + esc(it ? it.homework : '') + '</textarea></label>' +
+          '<div class="al-f"><span class="al-l">Материалы</span>' +
+            '<div id="ws-mats">' + matRows() + '</div>' +
+            '<button type="button" class="qchip ws-madd" id="ws-madd">' + ic('plus', 13) + '<span>Добавить ссылку</span></button></div>' +
+        '</div>' +
+        '<div class="al-foot">' +
+          (it && !it.archived ? '<button class="al-cancel ws-del" id="ws-del">В архив</button>' : '') +
+          '<button class="al-cancel" id="ws-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="ws-save">Сохранить</button>' +
+        '</div></div>';
+    document.body.appendChild(ov);
+    function close() { ov.remove(); }
+    function readMats() {
+      return Array.prototype.map.call(ov.querySelectorAll('.ws-mrow'), function (row) {
+        return { title: row.querySelector('.ws-mt').value.trim(), url: row.querySelector('.ws-mu').value.trim() };
+      }).filter(function (m) { return m.url; });
+    }
+    function redrawMats() {
+      mats = readMats();
+      ov.querySelector('#ws-mats').innerHTML = matRows();
+      wireMats();
+    }
+    function wireMats() {
+      Array.prototype.forEach.call(ov.querySelectorAll('.ws-mx'), function (b) {
+        b.addEventListener('click', function () {
+          mats = readMats();
+          mats.splice(parseInt(b.parentNode.getAttribute('data-mi'), 10), 1);
+          ov.querySelector('#ws-mats').innerHTML = matRows();
+          wireMats();
+        });
+      });
+    }
+    wireMats();
+    ov.querySelector('#ws-madd').addEventListener('click', function () {
+      mats = readMats(); mats.push({ title: '', url: '' }); redrawMats();
+    });
+    ov.querySelector('#ws-x').addEventListener('click', close);
+    ov.querySelector('#ws-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var del = ov.querySelector('#ws-del');
+    if (del) del.addEventListener('click', function () {
+      apiSend('/admin/api/workshops/' + it.id, 'DELETE', null, function () {
+        close(); showToast('Убрал в архив');
+        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+      });
+    });
+    ov.querySelector('#ws-save').addEventListener('click', function () {
+      var title = ov.querySelector('#ws-title').value.trim();
+      if (!title) return showToast('Нужно название');
+      var num = parseInt(ov.querySelector('#ws-num').value, 10);
+      var payload = {
+        title: title,
+        about: ov.querySelector('#ws-about').value.trim(),
+        homework: ov.querySelector('#ws-hw').value.trim(),
+        host: ov.querySelector('#ws-host').value.trim(),
+        record_url: ov.querySelector('#ws-rec').value.trim(),
+        held_at: ov.querySelector('#ws-date').value || null,
+        materials: readMats(),
+      };
+      if (num >= 0) payload.num = num;
+      var path = it ? '/admin/api/workshops/' + it.id : '/admin/api/workshops';
+      apiSend(path, it ? 'PATCH' : 'POST', payload, function () {
+        close(); showToast('Сохранил');
+        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+      }, function (code, e) {
+        showToast((e && e.body && e.body.detail) || (code === 403 ? 'Это может только руководитель' : 'Не сохранилось'));
+      });
+    });
+    setTimeout(function () { var f = ov.querySelector('#ws-title'); if (f) f.focus(); }, 30);
+  }
+
   function renderNews(view) {
     if (!state.news) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
@@ -16275,6 +16741,9 @@
         '" data-fform="' + f[0] + '">' + f[1] + '</button>';
     }).join('') : '';
 
+    // Кнопку «привязать к клиенту» рисуем только на доходах без клиента и только тому, кто
+    // правит ведомость и видит карточки: без cap clients бэкенд case_id и не отдаёт.
+    var canLink = (page === 'finincome') && can(meta[3]) && can('clients');
     var rows = items.map(function (it) {
       var sub = [
         // В листе продаж главный человек строки — покупатель, а деньги уходят
@@ -16294,10 +16763,15 @@
         ? '<b class="fin-lead" data-lead="' + esc(it.case_id) +
           '" title="Открыть карточку клиента">' + nm + '</b>'
         : '<b>' + nm + '</b>';
+      // Доход без карточки — кнопка привязки. Клик по ней не должен открывать правку строки.
+      var linkBtn = (canLink && !it.case_id)
+        ? '<button class="fin-linkc" data-linkid="' + it.id + '" data-linknm="' +
+          esc(it.counterparty || '') + '" title="Привязать к карточке клиента">+ клиент</button>'
+        : '';
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what">' + nameHtml +
+        '<span class="fo-what">' + nameHtml + linkBtn +
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
@@ -16372,7 +16846,85 @@
         if (cid) openLeadTab(cid);
       });
     });
+    // Привязка дохода к карточке: клик по кнопке не должен открывать правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-linkc[data-linkid]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finPickClient(n.getAttribute('data-linkid'), n.getAttribute('data-linknm') || '');
+      });
+    });
     pageAnim(view);
+  }
+
+  /* Пикер карточки клиента для строки дохода без привязки. Список лидов ищем по имени и
+     контакту; выбор пишет meta.case_id, после чего имя дохода станет ссылкой в карточку.
+     Прямой и ручной платёж приходит без клиента, и здесь его привязывают руками. */
+  function finPickClient(oid, presetName) {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML = '<div class="al-card ct-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Доход</div>' +
+        '<div class="al-title">Привязать к клиенту</div></div>' +
+        '<button class="al-x" id="pk-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
+      '<div class="al-sub">Выберите карточку того, кто оплатил.' +
+        (presetName ? ' В строке указан: ' + esc(presetName) : '') + '</div>' +
+      '<div class="al-body">' +
+        '<input class="al-in" id="pk-q" placeholder="Поиск по имени или контакту" autocomplete="off">' +
+        '<div class="pk-list" id="pk-list"><div class="empty">Загружаю клиентов…</div></div>' +
+      '</div>' +
+      '<div class="al-foot">' +
+        '<button class="al-cancel" id="pk-cancel">Отмена</button></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey);
+    el('pk-x').addEventListener('click', close);
+    el('pk-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var box = el('pk-list'), all = null;
+    var pick = function (cid) {
+      finDo('/admin/api/fin/income/' + oid + '/client', 'POST', { case_id: cid },
+        'Привязал к клиенту');
+      close();
+    };
+    var draw = function (q) {
+      if (!all) return;
+      q = (q || '').trim().toLowerCase();
+      var list = all;
+      if (q) list = all.filter(function (l) {
+        return ((leadName(l) || '') + ' ' + (l.contact || '') + ' ' + (l.email || ''))
+          .toLowerCase().indexOf(q) >= 0;
+      });
+      if (!list.length) { box.innerHTML = '<div class="empty">Никого не нашли</div>'; return; }
+      box.innerHTML = list.slice(0, 60).map(function (l) {
+        var c = (l.contact || l.email || '').trim();
+        return '<button class="pk-row" data-pick="' + esc(l.id) + '">' +
+          '<b>' + esc(leadName(l) || 'Без имени') + '</b>' +
+          (c ? '<i>' + esc(c) + '</i>' : '') + '</button>';
+      }).join('') + (list.length > 60 ? '<div class="pk-more">Уточните поиск — показаны первые 60</div>' : '');
+      Array.prototype.forEach.call(box.querySelectorAll('.pk-row'), function (b) {
+        b.addEventListener('click', function () { pick(b.getAttribute('data-pick')); });
+      });
+    };
+    var have = function (leads) {
+      all = leads || [];
+      draw(presetName || '');
+      var q = el('pk-q');
+      if (q) { q.value = presetName || ''; q.focus(); q.select(); }
+    };
+    if (state.leads && state.leads.length) have(state.leads);
+    else api('/admin/api/leads').then(function (r) { have((r && r.leads) || []); })
+      .catch(function () { box.innerHTML = '<div class="empty">Не удалось загрузить клиентов</div>'; });
+    el('pk-q').addEventListener('input', function () { draw(this.value); });
   }
 
   /* Прямые расходы — расходы с расчетного счета по пяти блокам-направлениям. В блок
@@ -20802,6 +21354,162 @@
     });
   }
 
+  /* ── Дубли карточек интенсива ─────────────────────────────────────────────
+     Карточку интенсива человек заводит по второму разу: пришел из кабинета, потом
+     по ссылке из бота, потом с телефона. Тогда оплата лежит в одной карточке, а
+     пройденные уроки в другой. Сервер только ПРЕДЛАГАЕТ пары — по общему контакту
+     (почта, телефон, телеграм), никогда по имени; склеивает человек кнопкой
+     (Вера, 17.09.2026: «перед склейкой карточки надо показывать мне»). */
+  var IDUP_PICK = {};   // выбор по группе: { main: id, skip: { id: true } }
+
+  function fetchDupes() {
+    if (state._dupWait) return;
+    state._dupWait = true;
+    api('/admin/api/intensive/duplicates').then(function (r) {
+      state._dupWait = false;
+      state._dup = r || { groups: [], merges: [] };
+      IDUP_PICK = {};
+      if (state.page === 'dupes') { renderView(); renderTopbar(); }
+    }).catch(function (e) {
+      state._dupWait = false;
+      if (e.message === '403') return;
+      state._dup = 'none';
+      if (state.page === 'dupes') renderView();
+    });
+  }
+
+  function idupPick(gi, g) {
+    if (!IDUP_PICK[gi]) IDUP_PICK[gi] = { main: g.suggest_main, skip: {} };
+    return IDUP_PICK[gi];
+  }
+
+  function idupWhen(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+  }
+
+  function idupCard(c, gi, pick) {
+    var isMain = pick.main === c.id;
+    var off = !isMain && !!pick.skip[c.id];
+    var tags = [];
+    if (c.paid_customer) tags.push('<span class="idup-t money">оплатил деньгами</span>');
+    else if (c.has_access) tags.push('<span class="idup-t open">доступ открыт</span>');
+    else tags.push('<span class="idup-t">доступа нет</span>');
+    tags.push('<span class="idup-t">' + (c.results_n ? 'уроков ' + c.results_n : 'уроков нет') + '</span>');
+    if (c.session_id) tags.push('<span class="idup-t">есть карточка в CRM</span>');
+    var when = 'заведена ' + idupWhen(c.created_at);
+    if (c.last_activity) when += ' · последний урок ' + ago(c.last_activity) + ' назад';
+    return '<div class="idup-c' + (isMain ? ' main' : '') + (off ? ' off' : '') + '">' +
+      '<div class="idup-c-t">' + esc(c.name || 'Без имени') +
+        (isMain ? '<span class="idup-main">главная</span>' : '') + '</div>' +
+      '<div class="idup-c-s">' + esc(c.contact || '') + '</div>' +
+      (c.identities ? '<div class="idup-c-s">подтвердил ' + esc(c.identities) + '</div>' : '') +
+      '<div class="idup-c-s">' + esc(when) + '</div>' +
+      '<div class="idup-c-tags">' + tags.join('') + '</div>' +
+      (isMain ? '' :
+        '<div class="idup-c-b">' +
+          '<button class="bp sm ghost" data-imain="' + c.id + '" data-ig="' + gi + '">Сделать главной</button>' +
+          '<button class="bp sm ghost" data-iskip="' + c.id + '" data-ig="' + gi + '">' +
+            (off ? 'Вернуть' : 'Не присоединять') + '</button>' +
+        '</div>') +
+    '</div>';
+  }
+
+  function renderDupes(view) {
+    if (!state._dup) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      fetchDupes();
+      return;
+    }
+    if (state._dup === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить дубли — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._dup, groups = d.groups || [];
+    var head = '<div class="idup-note">Карточки интенсива, у которых совпал контакт: почта, ' +
+      'телефон или телеграм. По имени совпадения не ищем — тезки сюда не попадают. ' +
+      'Сама по себе ни одна карточка не склеится.</div>';
+
+    var body = groups.length ? groups.map(function (g, gi) {
+      var pick = idupPick(gi, g);
+      return '<div class="card idup-g">' +
+        '<div class="idup-h"><b>Похоже, один человек: ' + g.cards.length + ' карточки</b>' +
+          '<div class="idup-k">совпадает — ' + esc((g.keys || []).join(', ')) + '</div></div>' +
+        '<div class="idup-list">' + g.cards.map(function (c) { return idupCard(c, gi, pick); }).join('') + '</div>' +
+        '<div class="idup-a">' +
+          '<button class="bp" data-imerge="' + gi + '">Объединить в главную</button>' +
+          '<button class="bp ghost" data-isplit="' + gi + '">Это разные люди</button>' +
+        '</div></div>';
+    }).join('') : '<div class="card"><div class="empty">Дублей нет — все карточки интенсива разные.</div></div>';
+
+    var merges = (d.merges || []).length ? '<div class="card idup-g"><div class="idup-h"><b>Что уже объединили</b>' +
+      '<div class="idup-k">если склеили зря — можно разделить обратно, уроки вернутся на свою карточку</div></div>' +
+      d.merges.map(function (m) {
+        return '<div class="idup-log"><span>' + esc(m.from_name || 'карточка') + ' → ' +
+          esc(m.into_name || 'карточка') + '</span>' +
+          '<span class="idup-k">' + esc(idupWhen(m.created_at)) + ', ' + esc(m.actor_name || '') + '</span>' +
+          '<button class="bp sm ghost" data-iunmerge="' + m.id + '">Разделить обратно</button></div>';
+      }).join('') + '</div>' : '';
+
+    view.innerHTML = head + body + merges;
+
+    function reload() { state._dup = null; IDUP_PICK = {}; renderDupes(view); }
+    function send(path, payload, okMsg) {
+      api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload) })
+        .then(function () { showToast(okMsg); reload(); })
+        .catch(function (e) {
+          if (e.message === '403acl') return showToast('Объединять карточки может только руководитель');
+          if (e.message === '403') return;
+          showToast('Не получилось: ' + ((e.body && e.body.detail) || e.message));
+        });
+    }
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-imain]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-ig');
+        idupPick(gi, groups[gi]).main = b.getAttribute('data-imain');
+        renderDupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-iskip]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-ig'), id = b.getAttribute('data-iskip');
+        var pick = idupPick(gi, groups[gi]);
+        if (pick.skip[id]) delete pick.skip[id]; else pick.skip[id] = true;
+        renderDupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-imerge]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-imerge'), g = groups[gi], pick = idupPick(gi, g);
+        var from = g.cards.filter(function (c) { return c.id !== pick.main && !pick.skip[c.id]; })
+                          .map(function (c) { return c.id; });
+        if (!from.length) return showToast('Нечего присоединять — выбери хотя бы одну карточку');
+        var main = g.cards.filter(function (c) { return c.id === pick.main; })[0] || {};
+        if (!confirm('Объединить выбранные карточки (' + from.length + ') в «' +
+                     (main.name || '') + '»? Уроки и оплата переедут туда.')) return;
+        send('/admin/api/intensive/duplicates/merge', { main_id: pick.main, from_ids: from },
+             'Объединили');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-isplit]'), function (b) {
+      b.addEventListener('click', function () {
+        var g = groups[+b.getAttribute('data-isplit')];
+        send('/admin/api/intensive/duplicates/dismiss',
+             { ids: g.cards.map(function (c) { return c.id; }) }, 'Больше не предложим');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-iunmerge]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Разделить обратно? Уроки и оплаты вернутся на свою карточку.')) return;
+        send('/admin/api/intensive/duplicates/unmerge',
+             { merge_id: +b.getAttribute('data-iunmerge') }, 'Разделили обратно');
+      });
+    });
+  }
+
   function renderGifts(view) {
     if (!state._gf || state._gfDays !== (state.gfDays || 0)) {
       view.innerHTML = dashSkeleton();
@@ -20907,7 +21615,7 @@
   }
   function snum(n) { return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
   function strunc(s, n) { s = (s || '').trim(); if (!s) return '—'; return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, '') + '…' : s; }
-  function periodLabel(q) { return { '14': 'за 2 недели', '30': 'за месяц', '90': 'за 90 дней', all: 'за всё время' }[q.period] || 'за период'; }
+  function periodLabel(q) { return { '7': 'за неделю', '14': 'за 2 недели', '30': 'за месяц', '90': 'за 90 дней', all: 'за всё время' }[q.period] || 'за период'; }
   var SOC_MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
   var SOC_FCOLORS = ['#2F6BFF', '#18A957', '#E0922F', '#8B5CF6', '#EC4899', '#14B8A6'];
   function platBadge(p) {
@@ -20943,7 +21651,7 @@
     }
     return '<div class="soc-filters">' +
       seg('plat', 'platform', [{ v: 'all', l: 'Все' }, { v: 'vk', l: 'ВКонтакте' }, { v: 'youtube', l: 'YouTube' }, { v: 'telegram', l: 'Telegram' }, { v: 'instagram', l: 'Instagram' }]) +
-      seg('period', 'period', [{ v: '14', l: '2 недели' }, { v: '30', l: 'Месяц' }, { v: '90', l: '90 дней' }, { v: 'all', l: 'Всё' }]) +
+      seg('period', 'period', [{ v: '7', l: 'Неделя' }, { v: '14', l: '2 недели' }, { v: '30', l: 'Месяц' }, { v: '90', l: '90 дней' }, { v: 'all', l: 'Всё' }]) +
       '</div>';
   }
   function bindSocialFilters(view) {
@@ -20962,7 +21670,7 @@
   }
   function socialTable(posts) {
     if (!posts || !posts.length) return '';
-    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Длит', 'Куда вела'];
+    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Подписч', 'Длит', 'Куда вела'];
     var rows = posts.slice().reverse().map(function (p) {
       var d = (p.published_at || '').slice(0, 10).split('-').reverse().join('.');
       return '<tr>' +
@@ -20977,6 +21685,7 @@
         '<td class="num">' + (p.reposts != null ? p.reposts : '—') + '</td>' +
         '<td class="num">' + (p.link_clicks != null ? p.link_clicks : '—') + '</td>' +
         '<td class="num">' + (p.saves != null ? snum(p.saves) : '—') + '</td>' +
+        '<td class="num">' + (p.new_subscribers != null ? snum(p.new_subscribers) : '—') + '</td>' +
         '<td class="num">' + (p.duration_sec != null ? (Math.floor(p.duration_sec / 60) + ':' + ('0' + (p.duration_sec % 60)).slice(-2)) : '—') + '</td>' +
         '<td>' + (p.link_url ? '<a href="' + esc(p.link_url) + '" target="_blank" rel="noopener" class="soc-out">' + esc(linkHost(p.link_url)) + ' ↗</a>' : '—') + '</td>' +
         '</tr>';
@@ -25378,9 +26087,16 @@
         { t: 'Проверить корректность пакета', o: 'team' } ] },
     { key: 'folio',   n: 5, title: 'Профиль и портфолио', sub: 'То, что двигает шансы на грант.',
       t: ['std', 'plus', 'prem'],
-      presets: [ { t: 'Собрать достижения и сертификаты', o: 'client', at: ['file'] },
-                 { t: 'Разобрать профиль и дать стратегию усиления', o: 'team' },
-                 { t: 'Пройти курс или олимпиаду по направлению', o: 'client' } ] },
+      hint: 'Для гранта портфолио обязательно: приемный минимум и порог гранта — разные числа. Начинать в сентябре, сертификаты и волонтерские часы копятся месяцами. У творческих направлений это отдельное поле с требованиями к работам, у остальных материалы идут в общий раздел заявки — поэтому достижения обязательно называем в письме, рекомендациях и на интервью.',
+      presets: [
+        { t: 'Разобрать профиль и собрать план портфолио', o: 'team' },
+        { t: 'Прислать все, что уже есть', o: 'client', need: 'Грамоты, дипломы, сертификаты курсов, разряды. Сканы или ровные фото.', at: ['photo', 'file'] },
+        { t: 'Курс китайской технологической компании', o: 'client', need: 'Бесплатный курс Huawei Talent или Alibaba Cloud под специальность. Нужен сертификат PDF.', at: ['file'] },
+        { t: 'Курс китайского университета', o: 'client', need: 'Курс на XuetangX под специальность. Сертификат или скриншот прогресса.', at: ['file'] },
+        { t: 'Олимпиада или конкурс по направлению', o: 'client', need: 'Диплом или сертификат участника.', at: ['file'] },
+        { t: 'Завести волонтерский трек на Добро.ру', o: 'client', need: 'Профиль на Добро.ру и подтвержденные часы в книжке волонтера.', at: ['photo', 'file'] },
+        { t: 'Проектный кейс: соавторство в проекте', o: 'team' },
+        { t: 'Собрать портфолио и CV абитуриента', o: 'team' } ] },
     { key: 'letters', n: 6, title: 'Мотивационное и рекомендательные письма', sub: 'Одинаково на всех тарифах.',
       t: ['std', 'plus', 'prem'],
       presets: [ { t: 'Мотивационное письмо', o: 'client', need: '200-300 слов: почему Китай, почему эта специальность.', at: ['text'] },
@@ -25391,6 +26107,7 @@
       presets: [ { t: 'Пройти курс по методам обучения', o: 'client' } ] },
     { key: 'lang',    n: 8, title: 'Языковой экзамен', sub: 'Duolingo, TOEFL или HSK — по программе.',
       t: ['std', 'plus', 'prem'],
+      hint: 'Дедлайн по сертификату: Duolingo или IELTS — до 1 января.',
       presets: [ { t: 'Пройти тест уровня на платформе', o: 'client' },
                  { t: 'Заниматься на тренажере по плану', o: 'client' },
                  { t: 'Записаться и сдать экзамен', o: 'client' },
@@ -30655,7 +31372,13 @@
               ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
               '<div class="doc-m">' + meta.map(esc).join(' · ') + '</div></div>' +
             '<span class="pay-amt num">' + fmtMoney(o.amount_total) + ' ₽</span></div>';
-          if (!isInst || !open) return head;
+          /* Ссылка на оплату: менеджер отправляет ее в переписку, и платит человек
+             без входа в кабинет. Родители за детей платят чаще всего именно так. */
+          var payable = o.status !== 'paid' && o.status !== 'canceled';
+          var linkBox = payable ? '<div class="ord-link" data-linkbox="' + o.id + '">' +
+            '<button class="oi-mark" data-getlink="' + o.id + '">получить ссылку на оплату</button>' +
+            '</div>' : '';
+          if (!isInst || !open) return head + linkBox;
           // раскрытый график: каждый взнос со статусом и ручной отметкой
           var rows = inst.map(function (i) {
             var s = IST[i.status] || IST.scheduled;
@@ -30675,7 +31398,7 @@
               '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
               act + '</div>';
           }).join('');
-          return head + '<div class="oi-box">' +
+          return head + linkBox + '<div class="oi-box">' +
             '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
             rows + '</div>';
         }).join('');
@@ -30683,6 +31406,38 @@
         Array.prototype.forEach.call(ordList.querySelectorAll('.ord-oh'), function (h) {
           h.addEventListener('click', function () {
             var oid = h.getAttribute('data-oid'); ordOpen[oid] = !ordOpen[oid]; renderOrders(orders);
+          });
+        });
+        // ссылка на оплату: получаем у бэкенда и сразу показываем с кнопкой копирования
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-getlink]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var oid = b.getAttribute('data-getlink');
+            var box = ordList.querySelector('[data-linkbox="' + oid + '"]');
+            b.disabled = true; b.textContent = 'готовлю…';
+            apiSend('/admin/api/orders/' + oid + '/pay-link', 'POST', null, function (r) {
+              /* Ссылку показываем в поле только для чтения: ее копируют и уносят в
+                 переписку, а не правят руками. */
+              box.innerHTML = '<input class="ord-link-i" readonly value="' + esc(r.url) + '">' +
+                '<button class="oi-mark" data-copy="' + oid + '">копировать</button>' +
+                '<div class="oi-hint">Ссылка работает, пока счет не оплачен или не снят. ' +
+                'Человек откроет ее без входа в кабинет, введет почту для чека и заплатит. ' +
+                'Деньги привяжутся к этому счету.</div>';
+              var inp = box.querySelector('.ord-link-i');
+              box.querySelector('[data-copy]').addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                inp.select();
+                var done = function () { showToast('Ссылка скопирована'); };
+                if (navigator.clipboard) navigator.clipboard.writeText(inp.value).then(done, done);
+                else { try { document.execCommand('copy'); } catch (x) {} done(); }
+              });
+            }, function (code, err) {
+              b.disabled = false; b.textContent = 'получить ссылку на оплату';
+              var d = (err && err.body && err.body.detail) || '';
+              if (code === 409) return showToast(d || 'По этому счету ссылку выдать нельзя');
+              if (code === 403) return showToast('Ссылку на оплату выдает только сотрудник с доступом к финансам');
+              showToast('Не получилось — проверь сеть');
+            });
           });
         });
         // отметка взноса
