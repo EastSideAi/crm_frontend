@@ -3171,7 +3171,12 @@ button.tr-crumb:hover { color: var(--blue); }
 /* На телефоне легенда стоила целой строки шапки, а расшифровывала то, что и так
    написано словами в самих плашках («Козубенко (урок)»). Пятый ряд управления
    уводил первый час расписания ниже середины экрана — это дороже подсказки. */
-@media (max-width: 700px) { .sc-legend { display: none; } }
+/* На телефоне легенда раньше пряталась совсем, и ключа к цветам не оставалось
+   вовсе. Оставляем ее, но компактной строкой под фильтрами. */
+@media (max-width: 700px) {
+  .sc-legend { margin-left: 0; width: 100%; gap: 6px; flex-wrap: wrap; }
+  .sc-legend .sc-chip { font-size: 10.5px; padding: 2px 6px; }
+}
 
 .sc-grid { border-top: 1px solid var(--line); }
 .sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
@@ -3200,7 +3205,11 @@ button.tr-crumb:hover { color: var(--blue); }
    линией часа. */
 .sc-chip.meet.long { border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
 .sc-chip.meet.cont { border-top-left-radius: 2px; border-top-right-radius: 2px; }
-.sc-chip.zoom { background: var(--fill); color: var(--ink); }
+/* Зум — единственный чип без своего цвета, и на клетке «сегодня» (тоже --fill) он
+   сливался с фоном, а в легенде читался просто словом, а не образцом. Тонкое
+   кольцо внутрь: заливка остается тихой, границу видно. */
+.sc-chip.zoom { background: var(--fill); color: var(--ink);
+  outline: 1px solid var(--line-2); outline-offset: -1px; }
 /* Зум в слоте: название открывает карточку встречи, иконка рядом копирует ссылку.
    Кнопка копирования тихая и проявляется по наведению — в плотной сетке лишняя
    иконка в каждой клетке читалась бы как шум (тот же прием, что у .dn-undo). */
@@ -3245,6 +3254,15 @@ button.tr-crumb:hover { color: var(--blue); }
    поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
    иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
 .sc-find { margin-bottom: 8px; }
+/* «Править всю серию» — согласие, а не поле: ставим его строкой над списком людей,
+   с тем же отступом, что у полей формы. */
+.sc-all { display: flex; align-items: center; gap: 9px; margin: 2px 0 2px;
+  font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.sc-all input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+/* Снятие встречи — действие в другую сторону, поэтому уезжает к левому краю
+   футера, подальше от «Сохранить». */
+.sc-mdrop { margin-right: auto; }
+.sc-mdrop:hover { color: var(--red-ink); }
 .sc-p[hidden] { display: none; }
 .sc-pnone { padding: 6px 2px; font-size: 12.5px; color: var(--ink-3); }
 .sc-pcnt { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
