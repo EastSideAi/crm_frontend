@@ -6209,6 +6209,21 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
 .fin-lead { cursor: pointer; }
 .fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
+/* Кнопка привязки дохода к карточке — тихая, рядом с именем; проявляется на наведении строки. */
+.fin-linkc { margin-left: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink-2);
+  font: 600 11px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 1px 8px;
+  cursor: pointer; opacity: .55; transition: opacity .12s, border-color .12s, color .12s; }
+.trow:hover .fin-linkc { opacity: 1; }
+.fin-linkc:hover { border-color: var(--blue); color: var(--blue); }
+/* Пикер клиента: прокручиваемый список карточек с поиском. */
+.pk-list { margin-top: 10px; max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.pk-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
+  text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 12px;
+  padding: 8px 12px; cursor: pointer; transition: background .12s, border-color .12s; }
+.pk-row:hover { background: var(--blue-tint); border-color: var(--blue); }
+.pk-row b { font: 600 13.5px 'Manrope', sans-serif; color: var(--ink); }
+.pk-row i { font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); font-style: normal; }
+.pk-more { text-align: center; color: var(--ink-2); font-size: 12px; padding: 8px 0 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
@@ -7453,6 +7468,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gw-ava { fill: var(--navy); }
 .gw-dot { fill: var(--blue); }
 .gw-dn { fill: #fff; font: 700 9px 'Manrope', sans-serif; text-anchor: middle; }
+/* Схема расписания в обучении: те же четыре семейства чипов, что и в самом
+   разделе, иначе картинка учит не тому экрану. */
+.gw-free { fill: var(--green-soft); }
+.gw-busy { fill: var(--blue-tint); }
+.gw-meet { fill: var(--navy-soft); }
+.gw-hh { fill: var(--ink-3); font: 600 6px 'Manrope', sans-serif; }
 /* Легенда схемы: цифра на картинке и слово под ней — иначе схема остается
    красивым набором плашек, из которого человек ничего не узнает. */
 .gd-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
@@ -8690,6 +8711,67 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .stu-g .dy-row { padding-left: 0; padding-right: 0; }
 .stu-g .stu-gl { margin-bottom: 2px; }
 
+/* ════ ФОКУС НЕДЕЛИ — лист руководителя ════
+   Карточка фокуса = цель + ее шаги этой недели. Своих рецептов строки и статуса
+   не заводит: строка задачи — общая .dy-row, прогресс — .tsk-prog, полоса
+   «Вне фокусов» — .tsk-band. Свое здесь только оправа: номер фокуса, шапка цели,
+   строка «зачем» и колонка дня слева от строки. */
+.fw { padding: 18px 20px 12px; margin-bottom: 16px; }
+.fw-h { display: flex; align-items: flex-start; gap: 14px; }
+.fw-n {
+  width: 26px; height: 26px; border-radius: 9px; flex: none;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 13px; font-weight: 700; display: grid; place-items: center; margin-top: 2px;
+}
+.fw-hm { flex: 1 1 auto; min-width: 0; }
+.fw-t {
+  display: block; text-align: left; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); line-height: 1.25;
+  transition: color .13s var(--ease);
+}
+.fw-t:hover { color: var(--blue); }
+.fw-sub { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px; font-size: 12.5px; color: var(--ink-2); }
+.fw-nobody { color: var(--amber-ink); }
+.fw-prog { flex: none; width: 176px; padding-top: 4px; }
+.fw-prog .tsk-prog-n { white-space: nowrap; }
+.fw-plab {
+  display: block; margin-top: 5px; text-align: right;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
+.fw-why {
+  margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink-2);
+}
+.fw-rows { margin-top: 6px; }
+.fw-day-wrap { display: flex; align-items: stretch; gap: 10px; }
+.fw-day-wrap .dy-row { flex: 1 1 auto; min-width: 0; }
+.fw-day {
+  flex: none; width: 46px; padding-top: 17px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
+.fw-day.over { color: var(--red-ink); }
+.fw-loose { padding-top: 10px; }
+.fw-loose .tsk-band { margin-bottom: 2px; }
+@media (max-width: 720px) {
+  .fw { padding: 14px 14px 8px; }
+  .fw-h { flex-wrap: wrap; }
+  .fw-prog { width: 100%; padding-top: 0; }
+  .fw-plab { text-align: left; }
+  /* День уходит НАД строкой: боковая колонка на 390px отъедала ширину у
+     названия, и задачи обрывались на середине слова. */
+  .fw-day-wrap { flex-direction: column; gap: 0; }
+  .fw-day { width: auto; padding: 12px 0 0 2px; }
+}
+
+/* Ссылка на оплату счета: кнопка, а после запроса — поле со ссылкой и «копировать».
+   Живет под шапкой счета, поэтому отступ сверху меньше, чем до следующего счета. */
+.ord-link { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 0 10px; }
+.ord-link .oi-mark { justify-self: start; }
+.ord-link-i { flex: 1 1 240px; min-width: 0; padding: 6px 9px;
+  font: 500 12px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border: 1px solid var(--line); border-radius: 8px; }
+.ord-link .oi-hint { flex: 1 0 100%; margin: 2px 0 0; }
 /* ── Что нового ─────────────────────────────────────────────────────────── */
 .nw { padding: 4px 0; }
 .nw-item { padding: 16px 20px 18px 20px; border-top: 1px solid var(--line); position: relative; }
@@ -9094,4 +9176,88 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-pill);
     background: var(--blue-tint); color: var(--blue); font-size: 10px; font-weight: 700; }
   .mm-cell.now .mm-cnt { background: #fff; }
+/* ── Воркшопы: библиотека обучения команды ──────────────────────────────────
+   Строка = один воркшоп: слева номер (по нему ориентируются в разговоре — «третий
+   воркшоп»), справа содержимое. Просмотренное гасим, а не прячем: библиотеку
+   перечитывают, и запись нужна и после первого раза. */
+.ws { padding: 4px 0; }
+.ws-item { display: flex; gap: 14px; padding: 16px 20px 18px; border-top: 1px solid var(--line); }
+.ws-item:first-child { border-top: 0; }
+.ws-item.done .ws-title, .ws-item.done .ws-n { color: var(--ink-2); }
+.ws-item.arch { opacity: .55; }
+.ws-n {
+  flex: none; width: 30px; height: 30px; border-radius: 10px; margin-top: 1px;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 13px; font-weight: 700; display: grid; place-items: center;
+}
+.ws-item.done .ws-n { background: var(--fill); }
+.ws-main { flex: 1 1 auto; min-width: 0; }
+.ws-top { display: flex; align-items: flex-start; gap: 10px; }
+.ws-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em;
+  color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+.ws-edit { flex: none; opacity: 0; transition: opacity .15s var(--ease); }
+.ws-item:hover .ws-edit, .ws-edit:focus-visible { opacity: 1; }
+.ws-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ws-about { margin: 9px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; }
+.ws-hw { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); max-width: 720px; white-space: pre-wrap; }
+.ws-hw-l { display: block; margin-bottom: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+.ws-mats { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-mat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--line-2); border-radius: 9px; background: #fff;
+  font-size: 12.5px; color: var(--ink-2); text-decoration: none; transition: .15s; }
+.ws-mat:hover { border-color: var(--blue); color: var(--blue); }
+.ws-act { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ws-play { text-decoration: none; }
+/* Просмотренное тише: строка остается на месте (к записи возвращаются), но
+   тянуть на себя внимание ей больше незачем. */
+.ws-item.done .ws-play { background: #fff; color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: none; }
+.ws-item.done .ws-play:hover { color: var(--blue); border-color: var(--blue); }
+.ws-norec { font-size: 12.5px; color: var(--ink-3); }
+.ws-seen.on { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
+.ws-cnt { margin-left: 2px; font-size: 12px; color: var(--ink-3); }
+.ws-card { max-width: 640px; }
+.ws-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.ws-row .al-f { flex: 1 1 140px; min-width: 0; }
+.ws-mrow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ws-mrow .ws-mt { flex: 0 1 180px; min-width: 0; }
+.ws-mrow .ws-mu { flex: 1 1 220px; min-width: 0; }
+.ws-madd { margin-top: 2px; }
+@media (max-width: 720px) {
+  .ws-item { padding: 14px 14px 16px; gap: 10px; }
+  .ws-mrow { flex-wrap: wrap; }
+  .ws-mrow .ws-mt, .ws-mrow .ws-mu { flex: 1 1 100%; }
+}
+
+/* ── Дубли карточек интенсива (вкладка «Дубли» в разделе «Люди») ───────────
+   Экран решений, а не таблица: карточки-кандидаты одна под другой, главная
+   подсвечена синим, действия крупные — Вера смотрит его с телефона. */
+.idup-note { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.idup-g { padding: 18px; margin-bottom: 14px; }
+.idup-h b { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.idup-k { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+.idup-list { display: grid; gap: 10px; margin-top: 14px; }
+.idup-c { border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: 12px 14px; }
+.idup-c.main { border-color: var(--blue); background: var(--blue-tint); }
+.idup-c.off { opacity: .5; }
+.idup-c-t { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+           font-size: 15px; font-weight: 700; }
+.idup-main { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: var(--blue); }
+.idup-c-s { color: var(--ink-2); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.idup-c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.idup-t { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill);
+         background: var(--fill); color: var(--ink-2); }
+.idup-t.money { background: var(--green-soft); color: var(--green-ink); }
+.idup-t.open { background: var(--blue-tint); color: var(--blue); }
+.idup-c-b { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.idup-a { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.idup-log { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+           padding: 10px 0; border-top: 1px solid var(--line);
+           color: var(--ink-2); font-size: 13px; }
+.idup-log .idup-k { margin: 0; }
+@media (max-width: 560px) {
+  .idup-g { padding: 14px; }
+  .idup-c-b button, .idup-a button { flex: 1 1 100%; }
 }
