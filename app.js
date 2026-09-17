@@ -5745,6 +5745,10 @@
     late: { label: 'закрыта поздно',  cls: 'rh-late' },
   };
   var WDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  // «Повторяется по пятницам» — в карточке планерки день недели пишется
+  // словом и во множественном числе: так говорят про регулярную встречу.
+  var WDAYS_EVERY_RU = ['воскресеньям', 'понедельникам', 'вторникам', 'средам',
+    'четвергам', 'пятницам', 'субботам'];
 
   function wkShift() { return state.weekShift || 0; }
 
@@ -6702,7 +6706,7 @@
         // «Пробников · урок» у занятого часа и «Пробников (урок)» у свободного
         // отличались только цветом, а на телефоне легенды нет: так и продают уже
         // занятый час. Состояние пишем словом, роль уводим в подсказку.
-        cells.push(schedChip('busy', s.person + ' · занято' + (s.client ? ' · ' + s.client : ''),
+        cells.push(schedChip('busy', schedShort(s.person) + ' · занято' + (s.client ? ' · ' + s.client : ''),
           (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
       at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
@@ -7014,9 +7018,11 @@
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
-          '<div class="al-title">' + (m ? 'Встреча' : 'Планерка') + '</div></div>' +
+          '<div class="al-title">Планерка</div></div>' +
           '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.</div>' +
+        '<div class="al-sub">' + (m
+          ? 'Меняется то, что вы поправите. Час планерки занят у каждого участника, а название видно в общем рабочем календаре.'
+          : 'Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.') + '</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
@@ -7039,12 +7045,24 @@
               }).join('') + '</select></span></label>' +
           '</div>' +
           (m
-            // У заведенной встречи повтор уже случился: спрашиваем не «сколько недель»,
-            // а «править одну или всю серию» — это разные намерения, и по ошибке
-            // сдвинуть весь квартал нельзя.
+            // У заведенной встречи повтор уже случился, поэтому здесь два разных
+            // вопроса. Первый — что правим: только это занятие или всю серию
+            // (тот же сегмент, что в карточке зума). Второй — сколько раз она
+            // повторяется дальше; прошедшие занятия при этом не трогаются.
             ? (m.series
-                ? '<label class="sc-all"><input type="checkbox" id="sm-all"><span>Править всю серию повторов, а не только это занятие</span></label>'
-                : '')
+                ? '<div class="al-f"><span class="al-l">Что меняем</span>' +
+                    '<span class="due-seg sc-scope">' +
+                      '<button type="button" data-scope="one" class="on">только эту</button>' +
+                      '<button type="button" data-scope="all">всю серию</button></span>' +
+                    '<div class="sc-sfacts" id="sm-facts"></div></div>'
+                : '') +
+              '<div class="al-row"><label class="al-f"><span class="al-l">Сколько раз повторить</span>' +
+                '<span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
+                  '<option value="" selected>оставить как есть</option>' +
+                  '<option value="1">только эта встреча</option><option value="4">4 недели</option>' +
+                  '<option value="12">12 недель</option><option value="26">полгода</option>' +
+                '</select></span></label><span class="al-f"></span></div>' +
+              '<div class="sc-shint" id="sm-rhint" hidden></div>'
             : '<div class="al-row"><label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
               '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
@@ -7063,7 +7081,7 @@
           '<div class="ct-err" id="sm-err"></div>' +
         '</div>' +
         '<div class="al-foot">' +
-          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять встречу</button>' : '') +
+          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять планерку</button>' : '') +
           '<button class="al-cancel" id="sm-cancel">Отмена</button>' +
           '<button class="bp al-save" id="sm-ok">' + (m ? 'Сохранить' : 'Поставить') + '</button></div>' +
       '</div>';
@@ -7107,14 +7125,65 @@
       openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
     });
 
+    // Область правки: «только эту» или «всю серию». Сегмент тот же, что в карточке
+    // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
+    // соседних экранах нельзя.
+    var scope = 'one';
+    var day0 = m && m.date, hour0 = m && m.hour;
+    var warn = function () {
+      if (!el('sm-rhint')) return;
+      var moved = scope === 'all' &&
+        (el('sm-day').value !== day0 || +el('sm-hour').value !== hour0);
+      var rep = el('sm-rep') && el('sm-rep').value;
+      var txt = [];
+      if (moved) txt.push('День и час поменяются у всех повторов: серия сдвинется целиком на ту же разницу.');
+      if (rep) txt.push(rep === '1'
+        ? 'Останется только эта встреча, будущие повторы снимутся.'
+        : 'Повторы считаются от этой встречи вперед, прошедшие занятия остаются на месте.');
+      el('sm-rhint').innerHTML = txt.join(' ');
+      el('sm-rhint').hidden = !txt.length;
+    };
+    var seg = ov.querySelector('.sc-scope');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-scope]');
+      if (!b) return;
+      scope = b.getAttribute('data-scope');
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      warn();
+    });
+    if (m) {
+      ['sm-day', 'sm-hour', 'sm-rep'].forEach(function (id) {
+        if (el(id)) el(id).addEventListener('change', warn);
+      });
+      // Факты серии в сетке недели не лежат: спрашиваем саму встречу.
+      api('/admin/api/sched/meetings/' + m.id).then(function (r) {
+        var x = r && r.meeting;
+        if (!x || !el('sm-facts')) return;
+        var d2 = new Date((x.series_last || '') + 'T00:00:00');
+        var when = isNaN(d2.getTime()) ? '' : d2.getDate() + ' ' + MONTHS_RU[d2.getMonth()];
+        var w = new Date((x.date || '') + 'T00:00:00');
+        el('sm-facts').textContent = 'Повторяется по ' + (isNaN(w.getTime()) ? 'неделям' : WDAYS_EVERY_RU[w.getDay()]) +
+          ', впереди ' + x.series_ahead + ' ' + plural(x.series_ahead, 'занятие', 'занятия', 'занятий') +
+          (when ? ', последнее ' + when : '');
+      }).catch(function () {});
+    }
+
     el('sm-ok').addEventListener('click', function () {
       var people = [];
       Array.prototype.forEach.call(boxes, function (c) {
         if (c.checked) people.push({ role: all[+c.getAttribute('data-sm-p')].role, person: all[+c.getAttribute('data-sm-p')].person });
       });
       var title = (el('sm-title').value || '').trim();
-      if (!title) return (el('sm-err').textContent = 'Напишите, как называется встреча');
-      if (!people.length) return (el('sm-err').textContent = 'Отметьте хотя бы одного участника');
+      // Ошибка живет под списком людей, а он на телефоне развернут целиком: без
+      // прокрутки нажатие «Сохранить» выглядит как «ничего не произошло».
+      var fail = function (t) {
+        el('sm-err').textContent = t;
+        el('sm-err').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+      if (!title) return fail('Напишите, как называется встреча');
+      if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
       var body = {
         title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
@@ -7122,16 +7191,17 @@
       };
       var ok = function (r) {
         close();
-        showToast(m ? 'Встреча изменена'
+        showToast(m ? 'Планерка изменена'
           : (r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании'));
         schedReload();
       };
       var bad = function (code, e) {
         el('sm-ok').disabled = false;
-        el('sm-err').textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть';
+        fail((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть');
       };
       if (m) {
-        body.series = !!(el('sm-all') && el('sm-all').checked);
+        body.series = scope === 'all';
+        if (el('sm-rep').value) body.repeat = +el('sm-rep').value;
         apiSend('/admin/api/sched/meetings/' + m.id, 'PATCH', body, ok, bad);
       } else {
         body.repeat = +el('sm-rep').value;

@@ -3254,11 +3254,14 @@ button.tr-crumb:hover { color: var(--blue); }
    поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
    иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
 .sc-find { margin-bottom: 8px; }
-/* «Править всю серию» — согласие, а не поле: ставим его строкой над списком людей,
-   с тем же отступом, что у полей формы. */
-.sc-all { display: flex; align-items: center; gap: 9px; margin: 2px 0 2px;
-  font-size: 13px; color: var(--ink-2); cursor: pointer; }
-.sc-all input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+/* Факты серии и последствия правки — тихие строки под своим полем: это не
+   предупреждение об опасности, а описание того, что сейчас произойдет. */
+.sc-sfacts { margin-top: 7px; font-size: 12px; color: var(--ink-3); }
+.sc-shint { margin: -2px 0 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.sc-shint[hidden] { display: none; }
+/* Сегмент области правки — ровно тот же рецепт, что в карточке зума (.due-seg),
+   своего размера ему не заводим: вопрос один и тот же. */
+.sc-scope { align-self: flex-start; }
 /* Снятие встречи — действие в другую сторону, поэтому уезжает к левому краю
    футера, подальше от «Сохранить». */
 .sc-mdrop { margin-right: auto; }
