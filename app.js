@@ -6550,6 +6550,15 @@
   }
   function schedCanEdit(d, s) { return !!(d.can_edit_all || schedMine(d, s)); }
 
+  /* Ответили ли уже зумы за эту неделю: 'wait' — еще спрашиваем, 'none' — ручка
+     молчит, 'ok' — список пришел. Нужно, чтобы не утверждать «зумов такого типа
+     нет» там, где на самом деле ничего не известно. */
+  function schedZoomState(lo) {
+    var data = state.zoomWeek[lo.toISOString().slice(0, 10)];
+    if (data === undefined || data === 'loading') return 'wait';
+    return data === 'none' ? 'none' : 'ok';
+  }
+
   /* Зумы этой недели из общего кэша: в сетке задач и здесь один и тот же день. */
   function schedZooms(lo) {
     var key = lo.toISOString().slice(0, 10), data = state.zoomWeek[key];
@@ -6643,7 +6652,7 @@
           var long = (m.duration || 1) > 1;
           out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
             m.title + ' · ' + schedSpan(m) + ' · ' + (m.people || []).map(function (p) { return p.person; }).join(', ') +
-            (d.can_edit_all ? ' · нажмите, чтобы снять' : ''),
+            (d.can_edit_all ? ' · нажмите, чтобы изменить или снять' : ''),
             d.can_edit_all ? schedMeetAttr(m) : ''));
         });
         at.busy.forEach(function (s) {
@@ -6686,17 +6695,21 @@
         cells.push(schedChip('meet' + (d.can_edit_all ? ' act' : ''),
           m.title + ((m.duration || 1) > 1 ? ' · ' + schedSpan(m) : '') + ' · ' +
           (m.people || []).map(function (p) { return schedShort(p.person); }).join(', '),
-          d.can_edit_all ? 'Нажмите, чтобы снять планерку' : (m.note || ''),
+          d.can_edit_all ? 'Нажмите, чтобы изменить или снять планерку' : (m.note || ''),
           d.can_edit_all ? schedMeetAttr(m) : ''));
       });
       at.busy.forEach(function (s) {
-        cells.push(schedChip('busy', s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : ''), ''));
+        // «Пробников · урок» у занятого часа и «Пробников (урок)» у свободного
+        // отличались только цветом, а на телефоне легенды нет: так и продают уже
+        // занятый час. Состояние пишем словом, роль уводим в подсказку.
+        cells.push(schedChip('busy', s.person + ' · занято' + (s.client ? ' · ' + s.client : ''),
+          (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
       at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
       at.free.forEach(function (s) {
         var can = state.schedEdit && schedCanEdit(d, s);
         cells.push(schedChip('free' + (schedMine(d, s) ? ' mine' : '') + (can ? ' off' : ''),
-          schedShort(s.person) + (s.role === 'teacher' ? ' (урок)' : ' (разбор)'),
+          schedShort(s.person) + ' · свободен' + (s.role === 'teacher' ? ', урок' : ', разбор'),
           can ? 'Убрать этот час' : s.person + ' · свободен',
           can ? ' data-sc-drop="' + s.id + '|' + s.role + '|' + s.date + '" role="button" tabindex="0"' : ''));
       });
@@ -6806,7 +6819,7 @@
       // существовал (Павел 17.09.2026): последняя строка заводит его самого,
       // именем из учетки.
       claim = '<div class="sc-claim">' + ic('team', 15) +
-        '<span>Чтобы отмечать свое время и фильтровать свои встречи, выберите себя в расписании.</span>' +
+        '<span>Чтобы отмечать свое свободное время, выберите себя в расписании.</span>' +
         '<label class="al-selwrap sc-claimsel"><select class="al-sel" id="sc-me"><option value="">Кто вы в расписании</option>' +
           free.map(function (p) { return '<option value="' + p.id + '">' + esc(p.person) + ' · ' + (SC_WHAT[p.role] || p.role) + '</option>'; }).join('') +
           (state.userName ? '<option value="staff">' + esc(state.userName) + ' · уроков не веду</option>' : '') +
@@ -6814,12 +6827,23 @@
     }
 
     var body = dayView ? schedDayList(d, zooms, day, today) : schedWeekGrid(d, zooms, lo, today);
-    // Фильтр типов относится только к зумам, и когда их в неделе нет, он выглядит
-    // сломанным: человек переключает и не видит разницы. Поэтому говорим прямо.
-    var kindNote = state.zoomKind && !zooms.length
-      ? '<div class="zw-note">' + ic('info', 13) + '<span>Зумов типа «' +
-        esc(zoomKindLabel(state.zoomKind)) + '» в этом периоде нет. Фильтр типов меняет только зумы: планерки и свободные часы он не трогает.</span></div>'
-      : '';
+    // Фильтр типов относится только к зумам, и когда их нет, он выглядит сломанным:
+    // человек переключает и не видит разницы. Поэтому говорим прямо — но только
+    // когда зумы уже ответили и ровно про то, что сейчас показано на экране: в
+    // дневном виде «в этом периоде» означает этот день, а не всю неделю.
+    var zoomSt = schedZoomState(lo);
+    var shownZooms = dayView
+      ? zooms.filter(function (z) { return z.day === zoomYmd(day); })
+      : zooms;
+    var when = dayView ? 'в этот день' : 'на этой неделе';
+    var kindNote = '';
+    if (state.zoomKind && zoomSt === 'none') {
+      kindNote = '<div class="zw-note">' + ic('info', 13) +
+        '<span>Зумы не ответили, поэтому фильтр типов сейчас ничего не показывает. Обнови страницу.</span></div>';
+    } else if (state.zoomKind && zoomSt === 'ok' && !shownZooms.length) {
+      kindNote = '<div class="zw-note">' + ic('info', 13) + '<span>Зумов типа «' +
+        esc(zoomKindLabel(state.zoomKind)) + '» ' + when + ' нет. Фильтр типов меняет только зумы: планерки и свободные часы он не трогает.</span></div>';
+    }
     var hint = state.schedEdit
       ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
       : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
@@ -6912,13 +6936,18 @@
         schedDrop({ id: +p[0], role: p[1], date: p[2] });
       });
     });
-    // Планерку снимает тот же, кто ее ставит. Иначе ошибочная встреча висит занятым
-    // часом у всех участников, и убрать ее можно только в самом сервисе расписания.
+    // Клик по планерке открывает ее карточку правки: название, день, час, отдел и
+    // участники. Снять ее можно оттуда же. До 17.09.2026 клик сразу спрашивал
+    // «снять?», и поправить опечатку в названии было нельзя вовсе.
     Array.prototype.forEach.call(view.querySelectorAll('[data-sc-meet]'), function (c) {
       schedKeyClick(c);
       c.addEventListener('click', function (e) {
         e.stopPropagation();
         var p = (c.getAttribute('data-sc-meet') || '').split('|');
+        var m = ((d && d.meetings) || []).filter(function (x) { return String(x.id) === p[0]; })[0];
+        if (m) return openSchedMeet(d, m);
+        // Встречи нет в загруженной неделе (кэш успел устареть) — тогда хотя бы
+        // снять ее человек сможет.
         var w = (c.getAttribute('data-sc-md') || '').split('|');
         openSchedMeetDrop(+p[0], p[1] === '1', c.getAttribute('data-sc-mt') || '', w[0], +w[1]);
       });
@@ -6973,47 +7002,70 @@
 
   /* Планерка: название, день, час, длительность, участники и сколько недель подряд.
      Повтор считает сам сервис расписания — серию потом можно снять целиком. */
-  function openSchedMeet(d) {
+  function openSchedMeet(d, m) {
     if (!d || document.querySelector('.al-ov.sc-ov')) return;
     var all = (d.people || []).map(function (p) { return { role: p.role, person: p.person, label: p.person + ' · ' + (SC_WHAT[p.role] || p.role) }; })
       .concat((d.staff || []).map(function (p) { return { role: 'staff', person: p.person, label: p.person }; }));
+    // Правка: участники встречи приезжают парой «роль + имя», отмечаем их в списке.
+    var had = {};
+    ((m && m.people) || []).forEach(function (p) { had[p.role + '|' + p.person] = 1; });
     var ov = document.createElement('div');
     ov.className = 'al-ov over sc-ov';
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
-        '<div class="al-head"><div><div class="al-eyebrow">Расписание</div><div class="al-title">Планерка</div></div>' +
+        '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
+          '<div class="al-title">' + (m ? 'Встреча' : 'Планерка') + '</div></div>' +
           '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
         '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
-            '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта"></label>' +
+            '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
           '<div class="al-row">' +
-            '<label class="al-f"><span class="al-l">День</span><input id="sm-day" class="al-in sm" type="date" value="' + zoomYmd(schedDay()) + '"></label>' +
+            '<label class="al-f"><span class="al-l">День</span><input id="sm-day" class="al-in sm" type="date" value="' + ((m && m.date) || zoomYmd(schedDay())) + '"></label>' +
             '<label class="al-f"><span class="al-l">Час</span><span class="al-selwrap"><select id="sm-hour" class="al-sel">' +
-              (function () { var o = ''; for (var h = 7; h <= 22; h++) o += '<option value="' + h + '"' + (h === 11 ? ' selected' : '') + '>' + h + ':00</option>'; return o; })() +
+              (function () { var o = '', sel = m ? m.hour : 11; for (var h = 7; h <= 22; h++) o += '<option value="' + h + '"' + (h === sel ? ' selected' : '') + '>' + h + ':00</option>'; return o; })() +
             '</select></span></label>' +
           '</div>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Длительность</span><span class="al-selwrap"><select id="sm-dur" class="al-sel">' +
-              '<option value="1" selected>1 час</option><option value="2">2 часа</option><option value="3">3 часа</option></select></span></label>' +
-            '<label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
+              [1, 2, 3].map(function (h) {
+                return '<option value="' + h + '"' + ((m ? m.duration : 1) === h ? ' selected' : '') + '>' + (h === 1 ? '1 час' : h + ' часа') + '</option>';
+              }).join('') + '</select></span></label>' +
+            // Отдел у планерки нужен затем же, зачем у зума: собрать встречи направления.
+            '<label class="al-f"><span class="al-l">Отдел</span><span class="al-selwrap"><select id="sm-kind" class="al-sel">' +
+              '<option value="">Без отдела</option>' +
+              ZOOM_KINDS.filter(function (k) { return k[0].indexOf('team_') === 0; }).map(function (k) {
+                return '<option value="' + k[0] + '"' + ((m && m.kind) === k[0] ? ' selected' : '') + '>' + esc(k[2] || k[1]) + '</option>';
+              }).join('') + '</select></span></label>' +
+          '</div>' +
+          (m
+            // У заведенной встречи повтор уже случился: спрашиваем не «сколько недель»,
+            // а «править одну или всю серию» — это разные намерения, и по ошибке
+            // сдвинуть весь квартал нельзя.
+            ? (m.series
+                ? '<label class="sc-all"><input type="checkbox" id="sm-all"><span>Править всю серию повторов, а не только это занятие</span></label>'
+                : '')
+            : '<div class="al-row"><label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
               '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
-          '</div>' +
+              '<span class="al-f"></span></div>') +
           // Людей в списке два десятка, и крутить его колесом дольше, чем набрать
           // три буквы фамилии (Павел 17.09.2026). Отмеченные при этом не теряются:
           // счетчик под списком считает всех, включая спрятанных поиском.
           '<div class="al-f"><span class="al-l">Кто участвует</span>' +
             '<input id="sm-q" class="al-in sm sc-find" type="search" autocomplete="off" placeholder="Поиск по имени">' +
             '<div class="sc-people">' + all.map(function (p, i) {
-              return '<label class="sc-p"><input type="checkbox" data-sm-p="' + i + '"><span>' + esc(p.label) + '</span></label>';
+              return '<label class="sc-p"><input type="checkbox" data-sm-p="' + i + '"' +
+                (had[p.role + '|' + p.person] ? ' checked' : '') + '><span>' + esc(p.label) + '</span></label>';
             }).join('') + '</div>' +
             '<div class="sc-pnone" id="sm-none" hidden>Никого с таким именем нет</div>' +
             '<div class="sc-pcnt" id="sm-cnt"></div></div>' +
           '<div class="ct-err" id="sm-err"></div>' +
         '</div>' +
-        '<div class="al-foot"><button class="al-cancel" id="sm-cancel">Отмена</button>' +
-          '<button class="bp al-save" id="sm-ok">Поставить</button></div>' +
+        '<div class="al-foot">' +
+          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять встречу</button>' : '') +
+          '<button class="al-cancel" id="sm-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="sm-ok">' + (m ? 'Сохранить' : 'Поставить') + '</button></div>' +
       '</div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -7048,27 +7100,43 @@
     };
     el('sm-q').addEventListener('input', smFind);
     ov.addEventListener('change', function (e) { if (e.target.hasAttribute('data-sm-p')) smCount(); });
+    smCount();
+
+    if (el('sm-drop')) el('sm-drop').addEventListener('click', function () {
+      close();
+      openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
+    });
 
     el('sm-ok').addEventListener('click', function () {
       var people = [];
-      Array.prototype.forEach.call(ov.querySelectorAll('[data-sm-p]'), function (c) {
+      Array.prototype.forEach.call(boxes, function (c) {
         if (c.checked) people.push({ role: all[+c.getAttribute('data-sm-p')].role, person: all[+c.getAttribute('data-sm-p')].person });
       });
       var title = (el('sm-title').value || '').trim();
       if (!title) return (el('sm-err').textContent = 'Напишите, как называется встреча');
       if (!people.length) return (el('sm-err').textContent = 'Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
-      apiSend('/admin/api/sched/meetings', 'POST', {
+      var body = {
         title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
-        duration: +el('sm-dur').value, repeat: +el('sm-rep').value, people: people,
-      }, function (r) {
+        duration: +el('sm-dur').value, kind: el('sm-kind').value || '', people: people,
+      };
+      var ok = function (r) {
         close();
-        showToast(r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании');
+        showToast(m ? 'Встреча изменена'
+          : (r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании'));
         schedReload();
-      }, function (code, e) {
+      };
+      var bad = function (code, e) {
         el('sm-ok').disabled = false;
         el('sm-err').textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть';
-      });
+      };
+      if (m) {
+        body.series = !!(el('sm-all') && el('sm-all').checked);
+        apiSend('/admin/api/sched/meetings/' + m.id, 'PATCH', body, ok, bad);
+      } else {
+        body.repeat = +el('sm-rep').value;
+        apiSend('/admin/api/sched/meetings', 'POST', body, ok, bad);
+      }
     });
   }
 
