@@ -2147,6 +2147,9 @@
     // «Карта» — клиенты по этапам пути. Рядом с «Людьми» намеренно: те же
     // люди, другой разрез. «Путь» — это про воронку входа, другой экран.
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
+    /* «Дубли» — не пункт меню, а вкладка внутри «Людей» (renderTopbar): задача
+       редкая, а меню и так длинное. В NAV_ALL он нужен ради cap и пространства. */
+    { id: 'dupes', label: 'Дубли', icon: 'leads', cap: 'clients', hidden: true },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     // Академия тьютора: обучающие курсы с аттестацией. Отдельно от «Обучения»
     // (там ученики тьютора по английскому) — это учится сам тьютор.
@@ -2266,6 +2269,7 @@
       // Пункт может быть скрыт для отдельных ролей, даже если cap подходит: тьютор
       // ведёт своих учеников, воронка входящих лидов не его работа (правило Павла).
       if (it.hideRole && it.hideRole.indexOf(state.role) >= 0) return false;
+      if (it.hidden) return false;   // экран есть, пункта меню нет (вкладка внутри раздела)
       return can(it.cap) && navSpace(it) === s;
     });
   }
@@ -2466,21 +2470,33 @@
     if (!tb) return;
     var c = counts();
     if (noSections()) { tb.innerHTML = ''; return; }
-    if (state.page === 'leads') {
+    if (state.page === 'leads' || state.page === 'dupes') {
+      var onDup = state.page === 'dupes';
+      // Дубли карточек интенсива — вкладка тут же, рядом с людьми: это те же люди,
+      // просто заведенные дважды. Цифра — сколько групп сервер предлагает свести.
+      var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
-        return '<a class="tab' + (state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
+        return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
-      }).join('') + '</nav>';
+      }).join('') + '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
+        (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a></nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
-          var prev = state.seg;
-          state.seg = t.getAttribute('data-seg');
+          var to = t.getAttribute('data-seg');
+          if (to === 'dupes') {
+            state.page = 'dupes'; saveUi();
+            renderSide(); renderTopbar(); renderHead(); renderView();
+            return;
+          }
+          var prev = onDup ? '' : state.seg;
+          state.page = 'leads';
+          state.seg = to;
           state.sort = null;
           saveUi();
           // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — при входе/выходе перезагружаем список
           if (state.seg === 'archive' || prev === 'archive') loadLeads(false);
-          else { renderTopbar(); renderHead(); renderView(); }
+          else { renderSide(); renderTopbar(); renderHead(); renderView(); }
         });
       });
     } else if (state.page === 'tasks') {
@@ -3137,6 +3153,7 @@
     else if (state.page === 'portal') renderPortal(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
+    else if (state.page === 'dupes') renderDupes(view);
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
     else if (state.page === 'attestations') return renderAttestations(view);
@@ -18507,6 +18524,162 @@
       if (cb) cb(); else if (state.page === 'gifts') renderView();
     }).catch(function (e) {
       if (e.message !== '403') { state._gf = 'none'; if (state.page === 'gifts') renderView(); }
+    });
+  }
+
+  /* ── Дубли карточек интенсива ─────────────────────────────────────────────
+     Карточку интенсива человек заводит по второму разу: пришел из кабинета, потом
+     по ссылке из бота, потом с телефона. Тогда оплата лежит в одной карточке, а
+     пройденные уроки в другой. Сервер только ПРЕДЛАГАЕТ пары — по общему контакту
+     (почта, телефон, телеграм), никогда по имени; склеивает человек кнопкой
+     (Вера, 17.09.2026: «перед склейкой карточки надо показывать мне»). */
+  var IDUP_PICK = {};   // выбор по группе: { main: id, skip: { id: true } }
+
+  function fetchDupes() {
+    if (state._dupWait) return;
+    state._dupWait = true;
+    api('/admin/api/intensive/duplicates').then(function (r) {
+      state._dupWait = false;
+      state._dup = r || { groups: [], merges: [] };
+      IDUP_PICK = {};
+      if (state.page === 'dupes') { renderView(); renderTopbar(); }
+    }).catch(function (e) {
+      state._dupWait = false;
+      if (e.message === '403') return;
+      state._dup = 'none';
+      if (state.page === 'dupes') renderView();
+    });
+  }
+
+  function idupPick(gi, g) {
+    if (!IDUP_PICK[gi]) IDUP_PICK[gi] = { main: g.suggest_main, skip: {} };
+    return IDUP_PICK[gi];
+  }
+
+  function idupWhen(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+  }
+
+  function idupCard(c, gi, pick) {
+    var isMain = pick.main === c.id;
+    var off = !isMain && !!pick.skip[c.id];
+    var tags = [];
+    if (c.paid_customer) tags.push('<span class="idup-t money">оплатил деньгами</span>');
+    else if (c.has_access) tags.push('<span class="idup-t open">доступ открыт</span>');
+    else tags.push('<span class="idup-t">доступа нет</span>');
+    tags.push('<span class="idup-t">' + (c.results_n ? 'уроков ' + c.results_n : 'уроков нет') + '</span>');
+    if (c.session_id) tags.push('<span class="idup-t">есть карточка в CRM</span>');
+    var when = 'заведена ' + idupWhen(c.created_at);
+    if (c.last_activity) when += ' · последний урок ' + ago(c.last_activity) + ' назад';
+    return '<div class="idup-c' + (isMain ? ' main' : '') + (off ? ' off' : '') + '">' +
+      '<div class="idup-c-t">' + esc(c.name || 'Без имени') +
+        (isMain ? '<span class="idup-main">главная</span>' : '') + '</div>' +
+      '<div class="idup-c-s">' + esc(c.contact || '') + '</div>' +
+      (c.identities ? '<div class="idup-c-s">подтвердил ' + esc(c.identities) + '</div>' : '') +
+      '<div class="idup-c-s">' + esc(when) + '</div>' +
+      '<div class="idup-c-tags">' + tags.join('') + '</div>' +
+      (isMain ? '' :
+        '<div class="idup-c-b">' +
+          '<button class="bp sm ghost" data-imain="' + c.id + '" data-ig="' + gi + '">Сделать главной</button>' +
+          '<button class="bp sm ghost" data-iskip="' + c.id + '" data-ig="' + gi + '">' +
+            (off ? 'Вернуть' : 'Не присоединять') + '</button>' +
+        '</div>') +
+    '</div>';
+  }
+
+  function renderDupes(view) {
+    if (!state._dup) {
+      view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
+      fetchDupes();
+      return;
+    }
+    if (state._dup === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить дубли — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._dup, groups = d.groups || [];
+    var head = '<div class="idup-note">Карточки интенсива, у которых совпал контакт: почта, ' +
+      'телефон или телеграм. По имени совпадения не ищем — тезки сюда не попадают. ' +
+      'Сама по себе ни одна карточка не склеится.</div>';
+
+    var body = groups.length ? groups.map(function (g, gi) {
+      var pick = idupPick(gi, g);
+      return '<div class="card dup-g">' +
+        '<div class="idup-h"><b>Похоже, один человек: ' + g.cards.length + ' карточки</b>' +
+          '<div class="idup-k">совпадает — ' + esc((g.keys || []).join(', ')) + '</div></div>' +
+        '<div class="idup-list">' + g.cards.map(function (c) { return idupCard(c, gi, pick); }).join('') + '</div>' +
+        '<div class="idup-a">' +
+          '<button class="bp" data-imerge="' + gi + '">Объединить в главную</button>' +
+          '<button class="bp ghost" data-isplit="' + gi + '">Это разные люди</button>' +
+        '</div></div>';
+    }).join('') : '<div class="card"><div class="empty">Дублей нет — все карточки интенсива разные.</div></div>';
+
+    var merges = (d.merges || []).length ? '<div class="card dup-g"><div class="idup-h"><b>Что уже объединили</b>' +
+      '<div class="idup-k">если склеили зря — можно разделить обратно, уроки вернутся на свою карточку</div></div>' +
+      d.merges.map(function (m) {
+        return '<div class="idup-log"><span>' + esc(m.from_name || 'карточка') + ' → ' +
+          esc(m.into_name || 'карточка') + '</span>' +
+          '<span class="idup-k">' + esc(idupWhen(m.created_at)) + ', ' + esc(m.actor_name || '') + '</span>' +
+          '<button class="bp sm ghost" data-iunmerge="' + m.id + '">Разделить обратно</button></div>';
+      }).join('') + '</div>' : '';
+
+    view.innerHTML = head + body + merges;
+
+    function reload() { state._dup = null; IDUP_PICK = {}; renderDupes(view); }
+    function send(path, payload, okMsg) {
+      api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload) })
+        .then(function () { showToast(okMsg); reload(); })
+        .catch(function (e) {
+          if (e.message === '403acl') return showToast('Объединять карточки может только руководитель');
+          if (e.message === '403') return;
+          showToast('Не получилось: ' + ((e.body && e.body.detail) || e.message));
+        });
+    }
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-imain]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-ig');
+        idupPick(gi, groups[gi]).main = b.getAttribute('data-imain');
+        renderDupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-iskip]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-ig'), id = b.getAttribute('data-iskip');
+        var pick = idupPick(gi, groups[gi]);
+        if (pick.skip[id]) delete pick.skip[id]; else pick.skip[id] = true;
+        renderDupes(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-imerge]'), function (b) {
+      b.addEventListener('click', function () {
+        var gi = +b.getAttribute('data-imerge'), g = groups[gi], pick = idupPick(gi, g);
+        var from = g.cards.filter(function (c) { return c.id !== pick.main && !pick.skip[c.id]; })
+                          .map(function (c) { return c.id; });
+        if (!from.length) return showToast('Нечего присоединять — выбери хотя бы одну карточку');
+        var main = g.cards.filter(function (c) { return c.id === pick.main; })[0] || {};
+        if (!confirm('Объединить выбранные карточки (' + from.length + ') в «' +
+                     (main.name || '') + '»? Уроки и оплата переедут туда.')) return;
+        send('/admin/api/intensive/duplicates/merge', { main_id: pick.main, from_ids: from },
+             'Объединили');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-isplit]'), function (b) {
+      b.addEventListener('click', function () {
+        var g = groups[+b.getAttribute('data-isplit')];
+        send('/admin/api/intensive/duplicates/dismiss',
+             { ids: g.cards.map(function (c) { return c.id; }) }, 'Больше не предложим');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-iunmerge]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Разделить обратно? Уроки и оплаты вернутся на свою карточку.')) return;
+        send('/admin/api/intensive/duplicates/unmerge',
+             { merge_id: +b.getAttribute('data-iunmerge') }, 'Разделили обратно');
+      });
     });
   }
 

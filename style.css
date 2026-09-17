@@ -8299,3 +8299,35 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mail-rhead { flex-wrap: wrap; }
   .mail-who { flex: 1 1 100%; white-space: normal; }
 }
+
+/* ── Дубли карточек интенсива (вкладка «Дубли» в разделе «Люди») ───────────
+   Экран решений, а не таблица: карточки-кандидаты одна под другой, главная
+   подсвечена синим, действия крупные — Вера смотрит его с телефона. */
+.idup-note { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.idup-g { padding: 18px; margin-bottom: 14px; }
+.idup-h b { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.idup-k { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+.idup-list { display: grid; gap: 10px; margin-top: 14px; }
+.idup-c { border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: 12px 14px; }
+.idup-c.main { border-color: var(--blue); background: var(--blue-tint); }
+.idup-c.off { opacity: .5; }
+.idup-c-t { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+           font-size: 15px; font-weight: 700; }
+.idup-main { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: var(--blue); }
+.idup-c-s { color: var(--ink-2); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.idup-c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.idup-t { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill);
+         background: var(--fill); color: var(--ink-2); }
+.idup-t.money { background: var(--green-soft); color: var(--green-ink); }
+.idup-t.open { background: var(--blue-tint); color: var(--blue); }
+.idup-c-b { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.idup-a { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.idup-log { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+           padding: 10px 0; border-top: 1px solid var(--line);
+           color: var(--ink-2); font-size: 13px; }
+.idup-log .idup-k { margin: 0; }
+@media (max-width: 560px) {
+  .idup-g { padding: 14px; }
+  .idup-c-b button, .idup-a button { flex: 1 1 100%; }
+}
