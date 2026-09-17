@@ -9,7 +9,7 @@
   --app: #FFFFFF; --main: #F6F7F9; --card: #FFFFFF;
   --ink: #11151F; --ink-2: #697086; --ink-3: #A6ABB8;
   --line: #EDEEF2; --line-2: #E3E5EB; --fill: #F5F6F9;
-  --blue: #2F6BFF; --blue-d: #1E50E6; --navy: #1C2B4A; --blue-tint: #EAF0FF;
+  --blue: #2F6BFF; --blue-d: #1E50E6; --navy: #1C2B4A; --blue-tint: #EAF0FF; --navy-soft: #E9ECF4;
   --black: #15161C;
   --green: #18A957; --green-ink: #0E7C3F; --green-soft: #E4F6EC;
   --red: #E5484D; --red-ink: #C42A2F; --red-soft: #FCEBEC;
@@ -291,6 +291,9 @@ a { color: inherit; text-decoration: none; }
 .sp6 { grid-column: span 6; }
 
 .sec-head { display: flex; align-items: center; gap: 11px; }
+/* Шапка секции внутри карточки с безотступным телом (лестница, разбивка):
+   паддинг несет шапка, а не карточка — тело ложится от края до края. */
+.sec-head.pad { padding: 20px 24px 16px; }
 .sec-head .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--blue-tint);
   display: grid; place-items: center; color: var(--blue); flex: none; }
 .sec-head .ic.warn { background: var(--red-soft); color: var(--red); }
@@ -851,6 +854,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .lad-drop { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
   color: var(--coral); background: var(--coral-soft); border-radius: var(--r-pill); padding: 4px 10px; white-space: nowrap; }
 .lad-drop.zero { color: var(--ink-3); background: var(--fill); font-weight: 600; }
+/* Разбивка «имя — число» (карточки страницы «Запуски»): строка лестницы без шкалы
+   и конверсий. Правило жило только в витрине design/launch.html — в проде строки
+   брали сетку 210px/1fr/54px/130px, и число висело посреди карточки. */
+.brk { border-top: 1px solid var(--line); }
+.brk .lad-row { grid-template-columns: minmax(0, 1fr) auto; }
+/* Лестница-витрина без клика: курсор не должен обещать то, чего нет
+   (прецедент — комментарий у .mkd-row ниже). Ховер тоже гасим. */
+.lad-static .lad-row, .brk .lad-row { cursor: default; }
+.lad-static .lad-row:hover, .brk .lad-row:hover { background: transparent; }
 
 .mini-funnel { display: flex; align-items: flex-end; gap: 9px; height: 110px; padding: 6px 0 0; }
 .fcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 9px; height: 100%; }
@@ -3094,6 +3106,79 @@ button.tr-crumb:hover { color: var(--blue); }
   .zw-flt::-webkit-scrollbar { display: none; }
   .zw-flt .tab { flex: none; white-space: nowrap; }
 }
+/* ── Расписание команды (раздел «Расписание») ───────────────────────────────
+   Сетка недели: строка — час, колонка — день. На телефоне недели нет вовсе
+   (app.js рисует день), поэтому горизонтальной прокрутки у страницы не бывает. */
+.sc .zw-fltrow { align-items: center; }
+.sc-who { min-width: 220px; }
+.sc-who .al-sel { padding-top: 7px; padding-bottom: 7px; font-size: 12.5px; }
+.sc-legend { margin-left: auto; display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.sc-legend .sc-chip { cursor: default; }
+
+.sc-grid { border-top: 1px solid var(--line); }
+.sc-row { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: stretch; border-bottom: 1px solid var(--line); }
+.sc-row.head { border-bottom: 1px solid var(--line-2); padding-bottom: 6px; margin-bottom: 2px; }
+.sc-h { font-size: 11.5px; color: var(--ink-3); padding: 6px 8px 6px 0; text-align: right; font-variant-numeric: tabular-nums; }
+.sc-d { font-size: 12px; color: var(--ink-3); padding: 8px 4px 0; text-transform: lowercase; }
+.sc-d b { color: var(--ink); font-weight: 700; margin-left: 3px; }
+.sc-d.now { color: var(--blue); }
+.sc-d.now b { color: var(--blue); }
+.sc-cell { display: flex; flex-direction: column; gap: 3px; padding: 4px 2px; min-height: 30px; min-width: 0; border-radius: 8px; }
+.sc-cell.today { background: var(--fill); }   /* колонка сегодня видна и ниже шапки */
+.sc-cell.pick { cursor: pointer; transition: background .12s var(--ease); }
+.sc-cell.pick:hover { background: var(--blue-tint); }
+.sc-cell.pick:empty::after { content: '+'; color: var(--ink-3); font-size: 13px; line-height: 22px; text-align: center; opacity: 0; transition: opacity .12s var(--ease); }
+.sc-cell.pick:hover:empty::after { opacity: 1; }
+
+.sc-chip { display: block; max-width: 100%; padding: 3px 7px; border-radius: 7px; font-size: 11.5px; line-height: 1.35; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-chip.free { background: var(--green-soft); color: var(--green-ink); }
+/* Свой час — тот же чип с тонкой оправой: человек находит свои окна в чужой сетке,
+   и ничего кроме оправы для этого не нужно. */
+.sc-chip.free.mine { outline: 1px solid var(--green); outline-offset: -1px; }
+.sc-chip.busy { background: var(--blue-tint); color: var(--blue-d); }
+.sc-chip.meet { background: var(--navy-soft); color: var(--navy); }
+/* Планерка на два часа стоит в двух строках сетки. Чтобы это читалось как одна
+   встреча, а не две, стыкующиеся углы делаем прямыми — блок выглядит разрезанным
+   линией часа. */
+.sc-chip.meet.long { border-bottom-left-radius: 2px; border-bottom-right-radius: 2px; }
+.sc-chip.meet.cont { border-top-left-radius: 2px; border-top-right-radius: 2px; }
+.sc-chip.zoom { background: var(--fill); color: var(--ink-2); }
+/* Название планерки в узкой колонке недели важнее одной ровной строки: «Планерка
+   продаж» и «Планерка продукта» обрезаются в одно и то же «Планерка прод…». */
+.sc-grid .sc-chip.meet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sc-chip.act { cursor: pointer; }
+.sc-chip.act:hover { background: var(--line-2); }
+.sc-chip.off { cursor: pointer; }
+.sc-chip.off:hover { background: var(--red-soft); color: var(--red-ink); }
+.zd-c .sc-chip { display: inline-block; }
+
+.sc-add { border: 1px dashed var(--line-2); background: none; color: var(--ink-3); border-radius: 7px; padding: 2px 8px; cursor: pointer; line-height: 0; }
+.sc-add:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
+
+.sc-claim { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--fill); font-size: 13px; color: var(--ink-2); }
+.sc-claim svg { color: var(--ink-3); flex: none; }
+.sc-claimsel { min-width: 260px; margin-left: auto; }
+.sc-claimnone { margin-left: auto; color: var(--ink-3); }
+
+.sc-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; max-height: 210px; overflow-y: auto; }
+.sc-p { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.sc-p input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+.sc-p span { min-width: 0; overflow-wrap: anywhere; }   /* «Митрофанова Мария В…» — не тот случай, где можно обрезать */
+@media (max-width: 960px) {
+  /* Телефон: недели нет, поэтому шапке нечем занять место слева от дат — стрелки
+     разводим по краям. Легенда цветов уходит на свою строку: в общем ряду она
+     складывалась в колонку из четырех чипов и съедала пол-экрана. */
+  .sc .zw-nav { width: 100%; margin-left: 0; justify-content: space-between; }
+  .sc .zw-fltrow { flex-wrap: wrap; }
+  .sc-who { min-width: 0; width: 100%; }
+  .sc-legend { margin-left: 0; width: 100%; }
+  .sc-claimsel { margin-left: 0; width: 100%; }
+  .zd-c .sc-chip { white-space: normal; }
+  /* Список участников на телефоне едет вместе с телом модалки: два вложенных
+     скролла прячут половину людей, и руководитель решает, что их там нет. */
+  .sc-people { grid-template-columns: 1fr; max-height: none; overflow: visible; }
+}
+
 .zc-link { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .zc-url { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .zc-nolink { font-size: 13px; color: var(--ink-2); }
@@ -4014,6 +4099,19 @@ button.tsk-mimp { cursor: pointer; }
 .tg-compose .tg-send, .m-dlg-compose .tg-send { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
   background: var(--blue); color: #fff; transition: .15s; }
 .tg-compose .tg-send:hover, .m-dlg-compose .tg-send:hover { background: var(--blue-d); }
+/* скрепка: отправить клиенту файл прямо из переписки. Тихая, в отличие от синей
+   кнопки отправки: основное действие здесь всё-таки ответ словами. */
+.tg-clip { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  color: var(--ink-2); cursor: pointer; transition: background .15s, color .15s; }
+.tg-clip:hover { background: var(--fill); color: var(--blue); }
+.tg-compose .tg-clip, .m-dlg-compose .tg-clip { order: -1; }
+/* имя файла: основа сжимается, расширение остаётся целым */
+.rm-catt.file .fnm { display: flex; min-width: 0; align-items: baseline; }
+.rm-catt.file .fnm > span { min-width: 0; }
+.rm-catt.file .fnm > i { font-style: normal; flex: none; }
+/* размер файла рядом с именем — тише имени, цифры табличные */
+.rm-catt.file .sz { font-style: normal; font-size: 11px; color: var(--ink-3); flex: none; }
+.tg-msg.out .rm-catt.file .sz { color: rgba(255,255,255,.7); }
 .tg-chead .ai-toggle { flex: none; }
 
 /* инбокс на всю высоту: контейнер фиксируется под экран, скроллит только внутри */
@@ -4227,6 +4325,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 @media (max-width: 480px) {
   .statbar, .statbar.five { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
+  /* Пять плиток одной колонкой — 650px скролла до содержимого, и последняя
+     (на «Запусках» это «До эфира») уезжала за экран. Пятая — во всю ширину. */
+  .statbar.five { grid-template-columns: 1fr 1fr; }
+  .statbar.five .stat:last-child { grid-column: 1 / -1; }
 }
 
 /* ════ ШАБЛОНЫ пути поступления ════ */
@@ -5933,6 +6035,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    безубыточности). Амбер тут врал бы — он означает «посмотри, что-то не так». */
 .fin-note.calm { background: var(--fill); color: var(--ink-2); }
 .fin-note.calm svg { color: var(--ink-3); }
+/* Калькулятор планового налога: поле дохода в строке .fkv не должно распирать ряд
+   (у .al-in ширина 100%), поэтому оно по содержимому и прижато вправо. */
+.fin-taxrow .al-in { width: 150px; text-align: right; }
+.fin-taxref-t { margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink-3); }
+.fin-taxref { margin-top: 4px; }
+.fin-taxref .fkv { padding: 8px 0; font-size: 12.5px; }
 
 .fin-groups { margin-top: 12px; }
 .fg + .fg { margin-top: 16px; }
@@ -5965,6 +6074,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Строка дохода с клиентом кликается в карточку. Курсор pointer у .trow уже глобальный;
    отличает кликабельную строку синее имя на ховере — как у строк ленты фондов (.fl-row.click). */
 .trow.click:hover .fo-what b { color: var(--blue); }
+/* Имя клиента в «Доходах» — ссылка в его карточку (data-lead). Отдельно от .trow.click:
+   тут кликается само имя, а не вся строка (строку у редактора занимает правка). */
+.fin-lead { cursor: pointer; }
+.fin-lead:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 2px; }
 .fst { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
   padding: 4px 9px; border-radius: var(--r-pill); }
 .fst.ok { color: var(--green-ink); background: var(--green-soft); }
@@ -5972,6 +6085,47 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* Чип приложенного документа (выплаты подрядчикам): нейтральная плашка с зелёной
+   галочкой. Не залитый зелёный, чтобы не читаться вторым статусом рядом с «факт». */
+.fst.doc { color: var(--ink-2); background: var(--fill); gap: 4px; }
+.fst.doc svg { color: var(--green); flex: none; }
+
+/* Плановый налог по месяцам: годовая табличка. Доход тихий, налог — акцент (это то,
+   что откладывают). У текущего месяца синяя полоса и синие цифры. */
+.tx-year { display: flex; align-items: center; gap: 8px; }
+.tx-year .num { font-size: 15px; font-weight: 700; min-width: 52px; text-align: center; }
+.tx-year .icobtn[disabled] { opacity: .35; cursor: default; }
+.tx-head, .tx-row { display: grid; grid-template-columns: 116px 1fr 118px 118px;
+  align-items: center; gap: 14px; }
+.tx-head { padding: 6px 0 10px; margin-top: 4px; font: 600 11px 'Manrope', sans-serif;
+  color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1px solid var(--line); }
+.tx-head span:nth-child(3), .tx-head span:nth-child(4),
+.tx-row .tx-inc, .tx-row .tx-tax { text-align: right; }
+.tx-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.tx-row:last-child { border-bottom: 0; }
+/* глобальный .empty (text-align:center) протекал в .tx-row.empty и центровал
+   месяц — держим название всегда по левому краю */
+.tx-m { font-size: 13.5px; font-weight: 600; color: var(--ink); text-align: left; }
+.tx-m i { font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--blue);
+  margin-left: 7px; text-transform: uppercase; letter-spacing: .03em; }
+.tx-bar { height: 6px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
+.tx-bar i { display: block; height: 100%; background: var(--blue-tint); border-radius: inherit;
+  transition: width .8s var(--ease); }
+.tx-inc { font-size: 13.5px; color: var(--ink-2); }
+.tx-tax { font-size: 14px; font-weight: 700; color: var(--ink); }
+.tx-row.cur .tx-bar i { background: var(--blue); }
+.tx-row.cur .tx-m, .tx-row.cur .tx-tax { color: var(--blue-d); }
+.tx-row.empty .tx-inc, .tx-row.empty .tx-tax { color: var(--ink-3); font-weight: 500; }
+.tx-row.total { border-top: 2px solid var(--line-2); border-bottom: 0;
+  margin-top: 4px; padding-top: 14px; }
+.tx-row.total .tx-m { font-weight: 700; }
+.tx-row.total .tx-tax { color: var(--blue-d); font-size: 15px; }
+@media (max-width: 640px) {
+  .tx-head, .tx-row { grid-template-columns: 1fr auto auto; gap: 10px; }
+  .tx-bar { display: none; }
+  .tx-head span:nth-child(2) { display: none; }
+}
 
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
    документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
@@ -5991,6 +6145,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
+.fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
+.fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }
+button.fsp-via { cursor: pointer; }
 
 /* Прямые расходы: у блока свой заголовок с итогом и своей кнопкой, между блоками
    воздух больше, чем внутри — блоки читаются как отдельные направления. */
@@ -7164,6 +7322,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gw-ava { fill: var(--navy); }
 .gw-dot { fill: var(--blue); }
 .gw-dn { fill: #fff; font: 700 9px 'Manrope', sans-serif; text-anchor: middle; }
+/* Схема расписания в обучении: те же четыре семейства чипов, что и в самом
+   разделе, иначе картинка учит не тому экрану. */
+.gw-free { fill: var(--green-soft); }
+.gw-busy { fill: var(--blue-tint); }
+.gw-meet { fill: var(--navy-soft); }
+.gw-hh { fill: var(--ink-3); font: 600 6px 'Manrope', sans-serif; }
 /* Легенда схемы: цифра на картинке и слово под ней — иначе схема остается
    красивым набором плашек, из которого человек ничего не узнает. */
 .gd-leg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; }
@@ -8113,6 +8277,67 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .stu-g .dy-row { padding-left: 0; padding-right: 0; }
 .stu-g .stu-gl { margin-bottom: 2px; }
 
+/* ════ ФОКУС НЕДЕЛИ — лист руководителя ════
+   Карточка фокуса = цель + ее шаги этой недели. Своих рецептов строки и статуса
+   не заводит: строка задачи — общая .dy-row, прогресс — .tsk-prog, полоса
+   «Вне фокусов» — .tsk-band. Свое здесь только оправа: номер фокуса, шапка цели,
+   строка «зачем» и колонка дня слева от строки. */
+.fw { padding: 18px 20px 12px; margin-bottom: 16px; }
+.fw-h { display: flex; align-items: flex-start; gap: 14px; }
+.fw-n {
+  width: 26px; height: 26px; border-radius: 9px; flex: none;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 13px; font-weight: 700; display: grid; place-items: center; margin-top: 2px;
+}
+.fw-hm { flex: 1 1 auto; min-width: 0; }
+.fw-t {
+  display: block; text-align: left; padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: 17px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); line-height: 1.25;
+  transition: color .13s var(--ease);
+}
+.fw-t:hover { color: var(--blue); }
+.fw-sub { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 5px; font-size: 12.5px; color: var(--ink-2); }
+.fw-nobody { color: var(--amber-ink); }
+.fw-prog { flex: none; width: 176px; padding-top: 4px; }
+.fw-prog .tsk-prog-n { white-space: nowrap; }
+.fw-plab {
+  display: block; margin-top: 5px; text-align: right;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
+.fw-why {
+  margin: 12px 0 4px; padding: 10px 12px; border-radius: 12px; background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink-2);
+}
+.fw-rows { margin-top: 6px; }
+.fw-day-wrap { display: flex; align-items: stretch; gap: 10px; }
+.fw-day-wrap .dy-row { flex: 1 1 auto; min-width: 0; }
+.fw-day {
+  flex: none; width: 46px; padding-top: 17px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3);
+}
+.fw-day.over { color: var(--red-ink); }
+.fw-loose { padding-top: 10px; }
+.fw-loose .tsk-band { margin-bottom: 2px; }
+@media (max-width: 720px) {
+  .fw { padding: 14px 14px 8px; }
+  .fw-h { flex-wrap: wrap; }
+  .fw-prog { width: 100%; padding-top: 0; }
+  .fw-plab { text-align: left; }
+  /* День уходит НАД строкой: боковая колонка на 390px отъедала ширину у
+     названия, и задачи обрывались на середине слова. */
+  .fw-day-wrap { flex-direction: column; gap: 0; }
+  .fw-day { width: auto; padding: 12px 0 0 2px; }
+}
+
+/* Ссылка на оплату счета: кнопка, а после запроса — поле со ссылкой и «копировать».
+   Живет под шапкой счета, поэтому отступ сверху меньше, чем до следующего счета. */
+.ord-link { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 0 10px; }
+.ord-link .oi-mark { justify-self: start; }
+.ord-link-i { flex: 1 1 240px; min-width: 0; padding: 6px 9px;
+  font: 500 12px 'Manrope', sans-serif; color: var(--ink-2);
+  background: var(--fill); border: 1px solid var(--line); border-radius: 8px; }
+.ord-link .oi-hint { flex: 1 0 100%; margin: 2px 0 0; }
 /* ── Что нового ─────────────────────────────────────────────────────────── */
 .nw { padding: 4px 0; }
 .nw-item { padding: 16px 20px 18px 20px; border-top: 1px solid var(--line); position: relative; }
@@ -8250,4 +8475,182 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      подписана шапкой, и пустая клетка держит сетку. */
   .map-grid .map-c.map-empty { display: none; }
   .map-bar .list-count { margin-left: 0; }
+}
+
+/* ── Раздел «Почта» карточки: адрес кейса и переписка с вузом ──
+   Плотно и тихо: якорь раздела — сам адрес, письма идут ровным списком на
+   полупрозрачных разделителях, без рамок и зебры. */
+.mail-hero { display: flex; align-items: center; gap: 16px; padding: 20px 22px;
+  background: var(--fill); border-radius: var(--r-lg); margin-bottom: 10px; }
+.mail-hero-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; color: var(--blue); }
+.mail-hero-b { flex: 1; min-width: 0; }
+.mail-empty-t { font-size: 14.5px; font-weight: 700; letter-spacing: -.015em; color: var(--ink); }
+.mail-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+.mail-addr { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 14px 16px; background: var(--fill); border-radius: var(--r-lg); }
+.mail-addr-v { flex: 1; min-width: 180px; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); word-break: break-all; }
+
+.mail-form { display: grid; gap: 8px; margin-top: 16px; }
+.mail-form input, .mail-form textarea { font-family: inherit; font-size: 13.5px; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  background: #fff; color: var(--ink); width: 100%; }
+.mail-form textarea { resize: vertical; }
+.mail-form input::placeholder, .mail-form textarea::placeholder { color: var(--ink-3); }
+.mail-form input:focus, .mail-form textarea:focus { outline: none; border-color: var(--blue); }
+.mail-form .bp { justify-self: start; }
+.mail-off { margin-top: 16px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.mail-list { margin-top: 20px; }
+.mail-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.mail-row:last-child { border-bottom: none; }
+.mail-rhead { display: flex; align-items: center; gap: 9px; }
+.mail-dir { flex: none; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--r-pill); }
+.mail-dir.in { background: var(--green-soft); color: var(--green-ink); }
+.mail-dir.out { background: var(--blue-tint); color: var(--blue-d); }
+.mail-who { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mail-docs { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.mail-when { flex: none; font-size: 12px; color: var(--ink-3); }
+.mail-subj { margin-top: 6px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink); }
+.mail-text { margin-top: 5px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+
+/* телефон: форма и шапка письма перестают быть строкой, ничего не уезжает за экран */
+@media (max-width: 520px) {
+  .mail-addr { gap: 8px; }
+  .mail-addr-v { min-width: 100%; }
+  .mail-rhead { flex-wrap: wrap; }
+  .mail-who { flex: 1 1 100%; white-space: normal; }
+}
+
+/* ── Запуски: путь человека плашками ──────────────────────────────────────── */
+/* Просьба Ольги: цифры плашками, а не строчками. Ширина колонки фиксируется
+   минимумом, а не числом колонок: ступеней в запуске то 12, то 16, и раскладка
+   не должна ломаться от добавления шага. */
+.lsteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; }
+.lstep { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
+         padding: 14px 16px 13px; background: var(--card); }
+.lstep .ls-i { position: absolute; top: 12px; right: 14px; font-size: 11px; color: var(--ink-3); }
+.lstep .ls-v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lstep .ls-t { font-size: 13px; font-weight: 600; margin-top: 3px; }
+.lstep .ls-s { font-size: 11px; color: var(--ink-3); margin-top: 3px; line-height: 1.35; }
+.lstep .ls-c { font-size: 11px; color: var(--ink-2); margin-top: 9px; }
+.lstep .ls-c b { font-weight: 700; color: var(--ink); }
+/* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
+.lstep.wait { background: var(--fill); }
+.lstep.wait .ls-v { color: var(--ink-3); }
+/* Единственный отмеченный провал: где теряем больше половины людей. */
+.lstep.drop { border-color: var(--red); background: var(--red-soft); }
+.lstep.drop .ls-c b { color: var(--red-ink); }
+
+.lper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 12px 16px; margin-bottom: 16px; }
+.lper-l { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-right: 4px; }
+.lper-d { color: var(--ink-3); }
+/* Поля дат — той же породы, что в поповере периода на других вкладках. */
+.lper-in { font: 500 13px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+           border: 1px solid transparent; border-radius: 9px; padding: 8px 10px; outline: none; }
+.lper-in:focus { border-color: var(--blue); }
+.lstep .ls-i.br { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+
+/* Воронка запуска столбиками: имя ступени, полоса, число, доля от регистраций. */
+.lfun { display: flex; flex-direction: column; gap: 9px; margin-top: 16px; }
+.lfun-row { display: grid; grid-template-columns: 1fr 80px 46px 40px; gap: 10px; align-items: center; }
+.lfun-nm { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lfun-bar { height: 10px; background: var(--fill); border-radius: var(--r-pill); overflow: hidden; }
+.lfun-bar i { display: block; height: 100%; background: var(--blue); border-radius: var(--r-pill); }
+.lfun-n { font-size: 13px; font-weight: 700; text-align: right; }
+.lfun-p { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+/* Запуск идёт днями, а не неделями: при двух-трёх днях столбик во всю колонку
+   выглядит стеной и ничего не сообщает — ограничиваем ширину. */
+.lchart .ch-day { max-width: 56px; }
+.lchart .chart { justify-content: flex-start; }
+.lchart .ch-labels span { max-width: 56px; }
+
+/* ── Воркшопы: библиотека обучения команды ──────────────────────────────────
+   Строка = один воркшоп: слева номер (по нему ориентируются в разговоре — «третий
+   воркшоп»), справа содержимое. Просмотренное гасим, а не прячем: библиотеку
+   перечитывают, и запись нужна и после первого раза. */
+.ws { padding: 4px 0; }
+.ws-item { display: flex; gap: 14px; padding: 16px 20px 18px; border-top: 1px solid var(--line); }
+.ws-item:first-child { border-top: 0; }
+.ws-item.done .ws-title, .ws-item.done .ws-n { color: var(--ink-2); }
+.ws-item.arch { opacity: .55; }
+.ws-n {
+  flex: none; width: 30px; height: 30px; border-radius: 10px; margin-top: 1px;
+  background: var(--blue-tint); color: var(--blue);
+  font-size: 13px; font-weight: 700; display: grid; place-items: center;
+}
+.ws-item.done .ws-n { background: var(--fill); }
+.ws-main { flex: 1 1 auto; min-width: 0; }
+.ws-top { display: flex; align-items: flex-start; gap: 10px; }
+.ws-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em;
+  color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+.ws-edit { flex: none; opacity: 0; transition: opacity .15s var(--ease); }
+.ws-item:hover .ws-edit, .ws-edit:focus-visible { opacity: 1; }
+.ws-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.ws-about { margin: 9px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; }
+.ws-hw { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); max-width: 720px; white-space: pre-wrap; }
+.ws-hw-l { display: block; margin-bottom: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
+.ws-mats { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.ws-mat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border: 1px solid var(--line-2); border-radius: 9px; background: #fff;
+  font-size: 12.5px; color: var(--ink-2); text-decoration: none; transition: .15s; }
+.ws-mat:hover { border-color: var(--blue); color: var(--blue); }
+.ws-act { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ws-play { text-decoration: none; }
+/* Просмотренное тише: строка остается на месте (к записи возвращаются), но
+   тянуть на себя внимание ей больше незачем. */
+.ws-item.done .ws-play { background: #fff; color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: none; }
+.ws-item.done .ws-play:hover { color: var(--blue); border-color: var(--blue); }
+.ws-norec { font-size: 12.5px; color: var(--ink-3); }
+.ws-seen.on { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
+.ws-cnt { margin-left: 2px; font-size: 12px; color: var(--ink-3); }
+.ws-card { max-width: 640px; }
+.ws-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.ws-row .al-f { flex: 1 1 140px; min-width: 0; }
+.ws-mrow { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ws-mrow .ws-mt { flex: 0 1 180px; min-width: 0; }
+.ws-mrow .ws-mu { flex: 1 1 220px; min-width: 0; }
+.ws-madd { margin-top: 2px; }
+@media (max-width: 720px) {
+  .ws-item { padding: 14px 14px 16px; gap: 10px; }
+  .ws-mrow { flex-wrap: wrap; }
+  .ws-mrow .ws-mt, .ws-mrow .ws-mu { flex: 1 1 100%; }
+}
+
+/* ── Дубли карточек интенсива (вкладка «Дубли» в разделе «Люди») ───────────
+   Экран решений, а не таблица: карточки-кандидаты одна под другой, главная
+   подсвечена синим, действия крупные — Вера смотрит его с телефона. */
+.idup-note { color: var(--ink-2); font-size: 13px; line-height: 1.5; margin: 0 0 14px; }
+.idup-g { padding: 18px; margin-bottom: 14px; }
+.idup-h b { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.idup-k { color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+.idup-list { display: grid; gap: 10px; margin-top: 14px; }
+.idup-c { border: 1px solid var(--line-2); border-radius: var(--r-lg); padding: 12px 14px; }
+.idup-c.main { border-color: var(--blue); background: var(--blue-tint); }
+.idup-c.off { opacity: .5; }
+.idup-c-t { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+           font-size: 15px; font-weight: 700; }
+.idup-main { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: var(--blue); }
+.idup-c-s { color: var(--ink-2); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+.idup-c-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.idup-t { font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill);
+         background: var(--fill); color: var(--ink-2); }
+.idup-t.money { background: var(--green-soft); color: var(--green-ink); }
+.idup-t.open { background: var(--blue-tint); color: var(--blue); }
+.idup-c-b { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.idup-a { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.idup-log { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+           padding: 10px 0; border-top: 1px solid var(--line);
+           color: var(--ink-2); font-size: 13px; }
+.idup-log .idup-k { margin: 0; }
+@media (max-width: 560px) {
+  .idup-g { padding: 14px; }
+  .idup-c-b button, .idup-a button { flex: 1 1 100%; }
 }
