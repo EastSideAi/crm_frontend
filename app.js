@@ -26067,15 +26067,34 @@
     if (n < 1048576) return Math.round(n / 1024) + ' КБ';
     return (n / 1048576).toFixed(1) + ' МБ';
   }
+  /* Кто принес файл. Документы висят на ДЕЛЕ, а не на аккаунте: мама и ребенок
+     грузят в одну карточку, и без подписи менеджер видит стопку «от клиента» и не
+     знает, чего еще ждать от кого (Мария 17.09.2026). Роль пишется в момент загрузки
+     (client_docs.uploaded_relation), имя — из uploaded_by; служебные значения старых
+     записей именем не считаем, лучше пусто, чем «загрузил client». */
+  var DOC_BY_SERVICE = { client: 1, team: 1, crm: 1, student: 1, parent: 1 };
+  function docBy(dc) {
+    var role = dc.uploaded_side === 'team' ? 'Мы'
+      : dc.uploaded_relation === 'self' ? 'Ученик'
+      : dc.uploaded_relation === 'parent' ? 'Родитель'
+      : dc.uploaded_side === 'client' ? 'Клиент' : '';
+    var name = (dc.uploaded_by || '').trim();
+    if (!name || DOC_BY_SERVICE[name.toLowerCase()]) name = '';
+    if (role === 'Мы') name = '';   // кто из команды — в карточке не разбираем
+    if (!role) return '';
+    return role + (name ? ', ' + name : '');
+  }
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
       /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
       var href = dc.link || '#';
+      var by = docBy(dc);
       var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
+      var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
-        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + esc(meta) + '</div></div>' +
+        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + m + '</div></div>' +
         '<div class="doc-act">' +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
