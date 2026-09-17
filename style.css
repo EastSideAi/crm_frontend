@@ -3234,6 +3234,21 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-claimsel { min-width: 260px; margin-left: auto; }
 .sc-claimnone { margin-left: auto; color: var(--ink-3); }
 
+/* Подсказка над сеткой: почему фильтр типов «ничего не делает». Тихая, как
+   .sc-claim рядом: это объяснение, а не предупреждение. */
+.zw-note { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; margin-bottom: 10px;
+  border: 1px solid var(--line-2); border-radius: 12px; background: var(--fill);
+  font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+.zw-note svg { color: var(--ink-3); flex: none; margin-top: 1px; }
+
+/* Поиск по списку участников: строка над списком, а не рядом с ним — список и
+   поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
+   иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
+.sc-find { margin-bottom: 8px; }
+.sc-p[hidden] { display: none; }
+.sc-pnone { padding: 6px 2px; font-size: 12.5px; color: var(--ink-3); }
+.sc-pcnt { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+
 .sc-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; max-height: 210px; overflow-y: auto; }
 .sc-p { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 13px; color: var(--ink); cursor: pointer; }
 .sc-p input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
