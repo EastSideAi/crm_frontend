@@ -20811,7 +20811,7 @@
   }
   function socialTable(posts) {
     if (!posts || !posts.length) return '';
-    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Длит', 'Куда вела'];
+    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Подписч', 'Длит', 'Куда вела'];
     var rows = posts.slice().reverse().map(function (p) {
       var d = (p.published_at || '').slice(0, 10).split('-').reverse().join('.');
       return '<tr>' +
@@ -20826,6 +20826,7 @@
         '<td class="num">' + (p.reposts != null ? p.reposts : '—') + '</td>' +
         '<td class="num">' + (p.link_clicks != null ? p.link_clicks : '—') + '</td>' +
         '<td class="num">' + (p.saves != null ? snum(p.saves) : '—') + '</td>' +
+        '<td class="num">' + (p.new_subscribers != null ? snum(p.new_subscribers) : '—') + '</td>' +
         '<td class="num">' + (p.duration_sec != null ? (Math.floor(p.duration_sec / 60) + ':' + ('0' + (p.duration_sec % 60)).slice(-2)) : '—') + '</td>' +
         '<td>' + (p.link_url ? '<a href="' + esc(p.link_url) + '" target="_blank" rel="noopener" class="soc-out">' + esc(linkHost(p.link_url)) + ' ↗</a>' : '—') + '</td>' +
         '</tr>';
