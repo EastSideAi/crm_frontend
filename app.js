@@ -322,6 +322,9 @@
       compass: '<circle cx="10" cy="10" r="7.2"/><path d="M12.8 7.2 8.9 8.9 7.2 12.8l3.9-1.7 1.7-3.9z" fill="currentColor" stroke="none"/>',
       lock: '<rect x="4" y="8.5" width="12" height="8.5" rx="2.2"/><path d="M7 8.5V6.4a3 3 0 0 1 6 0v2.1"/>',
       pause: '<rect x="6" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/><rect x="11" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/>',
+      // Значок «к сведению» звали и раньше (заметки в заездах), но его в наборе не
+      // было: svg рисовался пустым и просто занимал место.
+      info: '<circle cx="10" cy="10" r="7.4"/><path d="M10 9.3v4.2"/><circle cx="10" cy="6.5" r=".95" fill="currentColor" stroke="none"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -6504,7 +6507,7 @@
   // Рамка суток. Данные за ее пределами раздвигают сетку сами: уроки с Китаем
   // стоят и в 7 утра, и поздно вечером.
   var SC_FROM = 8, SC_TO = 21;
-  var SC_WHAT = { teacher: 'урок', curator: 'разбор' };
+  var SC_WHAT = { teacher: 'урок', curator: 'разбор', staff: 'встреча' };
 
   function schedWeekStart(off) {
     var d = new Date(); d.setHours(0, 0, 0, 0);
@@ -6557,7 +6560,8 @@
       (a.meetings || []).forEach(function (m) {
         var st = new Date(m.start);
         out.push({ day: zoomYmd(st), hour: st.getHours(), topic: m.topic, acc: a.name,
-                   slot: a.slot, id: m.id, kind: m.kind || '', url: m.join_url || '' });
+                   slot: a.slot, id: m.id, kind: m.kind || '', url: m.join_url || '',
+                   mine: !!m.mine });
       });
     });
     return out;
@@ -6589,27 +6593,38 @@
       (attr || '') + '>' + esc(text) + '</span>';
   }
 
+  /* Как меня зовут в расписании. Пока человек не выбрал себя, берем имя из учетки:
+     в планерку его добавляют именно им, и фильтр «только я» работает сразу, без
+     предварительной настройки. */
+  function schedMyName(d) { return (d && d.me && d.me.person) || state.userName || ''; }
+
   /* Что стоит в этот час этого дня: планерки, занятые окна, свободные окна, зумы.
      Порядок один и в неделе, и в дне — сверху то, что уже назначено. */
-  function schedAt(d, zooms, day, hour, who) {
+  function schedAt(d, zooms, day, hour, who, mineOnly) {
     var fit = function (p) { return !who || p === who; };
     var meets = (d.meetings || []).filter(function (m) {
       return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
         (!who || (m.people || []).some(function (x) { return x.person === who; }));
     });
     var slots = (d.slots || []).filter(function (s) { return s.date === day && s.hour === hour && fit(s.person); });
+    // Зум участников не знает: зум знает только владельца аккаунта, а аккаунт общий.
+    // Поэтому в режиме «только я» показываем те, что человек завел сам (mine), а при
+    // выборе другого человека зумы прячем: приписать их ему было бы враньем.
+    var mine = !who || mineOnly
+      ? zooms.filter(function (z) { return z.day === day && z.hour === hour && (!mineOnly || z.mine); })
+      : [];
     return {
       meets: meets,
       busy: slots.filter(function (s) { return s.booked; }),
       free: slots.filter(function (s) { return !s.booked && !s.blocked; }),
-      zooms: who ? [] : zooms.filter(function (z) { return z.day === day && z.hour === hour; }),
+      zooms: mine,
     };
   }
 
   function schedWeekGrid(d, zooms, lo, today) {
     var days = [], i, todayKey = zoomYmd(today);
     for (i = 0; i < 7; i++) days.push(new Date(lo.getTime() + i * 86400000));
-    var who = state.schedWho || '';
+    var who = state.schedWho || '', mineOnly = who && who === schedMyName(d);
     var lo_h = SC_FROM, hi_h = SC_TO;
     (d.slots || []).forEach(function (s) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); });
     (d.meetings || []).forEach(function (m) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); });
@@ -6623,7 +6638,7 @@
     var rows = [];
     for (var h = lo_h; h <= hi_h; h++) {
       var cells = days.map(function (x) {
-        var day = zoomYmd(x), at = schedAt(d, zooms, day, h, who), out = [];
+        var day = zoomYmd(x), at = schedAt(d, zooms, day, h, who, mineOnly), out = [];
         at.meets.forEach(function (m) {
           var long = (m.duration || 1) > 1;
           out.push(schedChip('meet' + (long ? (h === m.hour ? ' long' : ' cont') : '') + (d.can_edit_all ? ' act' : ''), m.title,
@@ -6655,7 +6670,7 @@
   }
 
   function schedDayList(d, zooms, day, today) {
-    var key = zoomYmd(day), who = state.schedWho || '';
+    var key = zoomYmd(day), who = state.schedWho || '', mineOnly = who && who === schedMyName(d);
     var lo_h = SC_FROM, hi_h = SC_TO;
     (d.slots || []).forEach(function (s) { if (s.date === key) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); } });
     (d.meetings || []).forEach(function (m) { if (m.date === key) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); } });
@@ -6663,7 +6678,7 @@
     var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
     var rows = [], seen = 0;
     for (var h = lo_h; h <= hi_h; h++) {
-      var at = schedAt(d, zooms, key, h, who), cells = [];
+      var at = schedAt(d, zooms, key, h, who, mineOnly), cells = [];
       // В списке дня планерка стоит один раз, в свой первый час: границы времени
       // написаны прямо в строке, и повтор того же текста в каждом часе только мешает.
       at.meets.forEach(function (m) {
@@ -6764,35 +6779,51 @@
       ZOOM_KINDS.map(function (k) {
         return '<option value="' + k[0] + '"' + (state.zoomKind === k[0] ? ' selected' : '') + '>' + esc(k[2] || k[1]) + '</option>';
       }).join('') + '</select></label>';
+    // «Только мои встречи» (просьба Павла 17.09.2026) стоит первым и работает до
+    // того, как человек выбрал себя в расписании: имя берется из учетки.
+    var myName = schedMyName(d);
     var flt = '<div class="zw-fltrow"><label class="al-selwrap sc-who"><select class="al-sel" id="sc-who">' +
       '<option value="">Все люди</option>' +
-      (d.me ? '<option value="' + esc(d.me.person) + '"' + (state.schedWho === d.me.person ? ' selected' : '') + '>Только я</option>' : '') +
-      people.map(function (p) {
+      (myName ? '<option value="' + esc(myName) + '"' + (state.schedWho === myName ? ' selected' : '') + '>Только мои встречи</option>' : '') +
+      people.filter(function (p) { return p.person !== myName; }).map(function (p) {
         return '<option value="' + esc(p.person) + '"' + (state.schedWho === p.person ? ' selected' : '') + '>' + esc(p.person) + '</option>';
       }).join('') + '</select></label>' + kindSel +
-      '<div class="sc-legend"><span class="sc-chip free">свободно</span>' +
-        '<span class="sc-chip busy">занято</span><span class="sc-chip meet">планерка</span>' +
-        '<span class="sc-chip zoom">зум</span></div></div>';
+      // Цвет без слова рядом читается только тем, кто его придумал. Подпись к
+      // каждому чипу — что именно он означает в этой сетке (Павел 17.09.2026).
+      '<div class="sc-legend">' +
+        '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
+        '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
+        '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
+        '<span class="sc-chip zoom" title="Встреча в зуме, ссылку видно в слоте">зум</span></div></div>';
 
     // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
     // и в расписании разные, угадывать их нельзя (можно отметить чужие часы).
     var claim = '';
     if (!d.me) {
       var free = (d.people || []).filter(function (p) { return !p.taken; });
+      // Список отвечает на вопрос «кто вы», поэтому чужое имя здесь не выбирают.
+      // Кто уроков не ведет, до сих пор не мог выбрать никого и в расписании не
+      // существовал (Павел 17.09.2026): последняя строка заводит его самого,
+      // именем из учетки.
       claim = '<div class="sc-claim">' + ic('team', 15) +
-        '<span>Чтобы отмечать свое время, выберите себя в расписании.</span>' +
-        (free.length
-          ? '<label class="al-selwrap sc-claimsel"><select class="al-sel" id="sc-me"><option value="">Кто вы в расписании</option>' +
-            free.map(function (p) { return '<option value="' + p.id + '">' + esc(p.person) + ' · ' + (SC_WHAT[p.role] || p.role) + '</option>'; }).join('') +
-            '</select></label>'
-          : '<span class="sc-claimnone">Свободных имен в расписании нет — попросите руководителя.</span>') + '</div>';
+        '<span>Чтобы отмечать свое время и фильтровать свои встречи, выберите себя в расписании.</span>' +
+        '<label class="al-selwrap sc-claimsel"><select class="al-sel" id="sc-me"><option value="">Кто вы в расписании</option>' +
+          free.map(function (p) { return '<option value="' + p.id + '">' + esc(p.person) + ' · ' + (SC_WHAT[p.role] || p.role) + '</option>'; }).join('') +
+          (state.userName ? '<option value="staff">' + esc(state.userName) + ' · уроков не веду</option>' : '') +
+        '</select></label></div>';
     }
 
     var body = dayView ? schedDayList(d, zooms, day, today) : schedWeekGrid(d, zooms, lo, today);
+    // Фильтр типов относится только к зумам, и когда их в неделе нет, он выглядит
+    // сломанным: человек переключает и не видит разницы. Поэтому говорим прямо.
+    var kindNote = state.zoomKind && !zooms.length
+      ? '<div class="zw-note">' + ic('info', 13) + '<span>Зумов типа «' +
+        esc(zoomKindLabel(state.zoomKind)) + '» в этом периоде нет. Фильтр типов меняет только зумы: планерки и свободные часы он не трогает.</span></div>'
+      : '';
     var hint = state.schedEdit
       ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
-      : '<div class="zw-hint">Свободные часы отмечают сами преподаватели и тьюторы — здесь или в боте по четвергам. Планерки ставит руководитель отдела.</div>';
-    view.innerHTML = '<div class="card zw sc">' + head + flt + claim + body + hint + '</div>';
+      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
+    view.innerHTML = '<div class="card zw sc">' + head + flt + claim + kindNote + body + hint + '</div>';
     schedWire(view, d);
   }
 
@@ -6848,8 +6879,10 @@
     if (el('sc-kind')) el('sc-kind').addEventListener('change', function () { state.zoomKind = el('sc-kind').value || ''; renderView(); });
     if (el('sc-edit')) el('sc-edit').addEventListener('click', function () { state.schedEdit = !state.schedEdit; renderView(); });
     if (el('sc-me')) el('sc-me').addEventListener('change', function () {
-      var id = +el('sc-me').value; if (!id) return;
-      apiSend('/admin/api/sched/me', 'POST', { person_id: id }, function () { schedReload(); },
+      var v = el('sc-me').value; if (!v) return;
+      apiSend('/admin/api/sched/me', 'POST',
+        v === 'staff' ? { staff: true } : { person_id: +v },
+        function () { schedReload(); },
         function (code, e) { showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — обнови страницу'); });
     });
     if (el('sc-meet')) el('sc-meet').addEventListener('click', function () { openSchedMeet(d); });
@@ -6967,10 +7000,16 @@
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
               '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
           '</div>' +
+          // Людей в списке два десятка, и крутить его колесом дольше, чем набрать
+          // три буквы фамилии (Павел 17.09.2026). Отмеченные при этом не теряются:
+          // счетчик под списком считает всех, включая спрятанных поиском.
           '<div class="al-f"><span class="al-l">Кто участвует</span>' +
+            '<input id="sm-q" class="al-in sm sc-find" type="search" autocomplete="off" placeholder="Поиск по имени">' +
             '<div class="sc-people">' + all.map(function (p, i) {
               return '<label class="sc-p"><input type="checkbox" data-sm-p="' + i + '"><span>' + esc(p.label) + '</span></label>';
-            }).join('') + '</div></div>' +
+            }).join('') + '</div>' +
+            '<div class="sc-pnone" id="sm-none" hidden>Никого с таким именем нет</div>' +
+            '<div class="sc-pcnt" id="sm-cnt"></div></div>' +
           '<div class="ct-err" id="sm-err"></div>' +
         '</div>' +
         '<div class="al-foot"><button class="al-cancel" id="sm-cancel">Отмена</button>' +
@@ -6991,6 +7030,25 @@
     el('sm-x').addEventListener('click', close);
     el('sm-cancel').addEventListener('click', close);
     el('sm-title').focus();
+
+    var boxes = ov.querySelectorAll('[data-sm-p]');
+    var smCount = function () {
+      var n = 0;
+      Array.prototype.forEach.call(boxes, function (c) { if (c.checked) n++; });
+      el('sm-cnt').textContent = n ? 'Выбрано: ' + n : '';
+    };
+    var smFind = function () {
+      var q = (el('sm-q').value || '').trim().toLowerCase(), shown = 0;
+      Array.prototype.forEach.call(boxes, function (c, i) {
+        var hit = !q || all[i].label.toLowerCase().indexOf(q) >= 0;
+        c.parentNode.hidden = !hit;
+        if (hit) shown++;
+      });
+      el('sm-none').hidden = !!shown;
+    };
+    el('sm-q').addEventListener('input', smFind);
+    ov.addEventListener('change', function (e) { if (e.target.hasAttribute('data-sm-p')) smCount(); });
+
     el('sm-ok').addEventListener('click', function () {
       var people = [];
       Array.prototype.forEach.call(ov.querySelectorAll('[data-sm-p]'), function (c) {
@@ -29307,6 +29365,10 @@
     ['consult', 'Продающая консультация', 'Консультации'],
     ['lesson', 'Учебное занятие', 'Занятия']
   ];
+  function zoomKindLabel(key) {
+    var k = ZOOM_KINDS.filter(function (x) { return x[0] === key; })[0];
+    return k ? (k[2] || k[1]) : key;
+  }
   function zoomKindOptions(sel, withNone) {
     return (withNone ? '<option value=""' + (sel ? '' : ' selected') + '>Без типа</option>' : '') +
       ZOOM_KINDS.map(function (k) {
