@@ -1570,7 +1570,7 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    строка начинается с автора и он на ступень темнее остальной меты. Свои файлы
    («Мы») не выделяем: интересно, что принесла семья. */
 .doc-by { color: var(--ink-2); font-weight: 600; }
-.doc-by.own { color: var(--ink-3); font-weight: 500; }
+.doc-by-own { color: var(--ink-3); font-weight: 500; }
 .doc-act { display: flex; gap: 6px; flex: none; }
 .icobtn { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line-2); background: #fff;
   display: grid; place-items: center; color: var(--ink-2); transition: .15s; }

@@ -30041,7 +30041,7 @@
       var href = dc.link || '#';
       var by = docBy(dc);
       var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
-      var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
+      var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' doc-by-own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
         '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + m + '</div></div>' +
