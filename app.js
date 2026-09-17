@@ -6547,7 +6547,16 @@
 
   /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
      фамилия, и она же и есть то, чем людей различают на слух. */
-  function schedShort(name) { return String(name || '').trim().split(/\s+/)[0] || ''; }
+  /* Имя человека в сетке. Одно правило на всех: убираем инициалы («Тестова А. А.»
+     → «Тестова»), остальное показываем как есть. Брать первое слово было нельзя:
+     у преподавателя это фамилия, а у сотрудника («Павел Демидов») — имя, и в
+     одном списке одни и те же люди назывались по-разному. */
+  function schedShort(name) {
+    var parts = String(name || '').trim().split(/\s+/).filter(function (x) {
+      return x && !/^[A-Za-zА-Яа-яЁё]\.$/.test(x);
+    });
+    return parts.join(' ') || String(name || '').trim();
+  }
 
   function schedMine(d, s) {
     return !!(d.me && s.person === d.me.person && s.role === d.me.role);
@@ -7056,12 +7065,16 @@
                       '<button type="button" data-scope="all">всю серию</button></span>' +
                     '<div class="sc-sfacts" id="sm-facts"></div></div>'
                 : '') +
-              '<div class="al-row"><label class="al-f"><span class="al-l">Сколько раз повторить</span>' +
+              '<label class="al-f"><span class="al-l">Повторять</span>' +
                 '<span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
-                  '<option value="" selected>оставить как есть</option>' +
-                  '<option value="1">только эта встреча</option><option value="4">4 недели</option>' +
+                  '<option value="" selected>как есть</option>' +
+                  // «Только эту» здесь писать нельзя: ровно так называется соседний
+                  // сегмент области правки, и человек выбрал бы согласованный по
+                  // словам вариант, который вместо этого снимает все будущие.
+                  (m.series ? '<option value="1">дальше не повторять</option>' : '') +
+                  '<option value="4">4 недели</option>' +
                   '<option value="12">12 недель</option><option value="26">полгода</option>' +
-                '</select></span></label><span class="al-f"></span></div>' +
+                '</select></span></label>' +
               '<div class="sc-shint" id="sm-rhint" hidden></div>'
             : '<div class="al-row"><label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
@@ -7129,7 +7142,22 @@
     // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
     // соседних экранах нельзя.
     var scope = 'one';
-    var day0 = m && m.date, hour0 = m && m.hour;
+    var day0 = m && m.date, hour0 = m && m.hour, facts = null;
+    // Рисунок серии пересчитывается по тому дню, который сейчас стоит в форме:
+    // иначе при переносе пятницы на среду рядом со «сдвинем серию» осталось бы
+    // «повторяется по пятницам».
+    var showFacts = function () {
+      if (!facts || !el('sm-facts')) return;
+      var last = new Date((facts.series_last || '') + 'T00:00:00');
+      var w = new Date((el('sm-day').value || facts.date || '') + 'T00:00:00');
+      var moved = el('sm-day').value !== day0;
+      el('sm-facts').textContent = 'Повторяется по ' +
+        (isNaN(w.getTime()) ? 'неделям' : WDAYS_EVERY_RU[w.getDay()]) +
+        ', впереди ' + facts.series_ahead + ' ' +
+        plural(facts.series_ahead, 'встреча', 'встречи', 'встреч') +
+        (moved || isNaN(last.getTime()) ? ''
+          : ', последняя ' + last.getDate() + ' ' + MONTHS_RU[last.getMonth()]);
+    };
     var warn = function () {
       if (!el('sm-rhint')) return;
       var moved = scope === 'all' &&
@@ -7138,8 +7166,9 @@
       var txt = [];
       if (moved) txt.push('День и час поменяются у всех повторов: серия сдвинется целиком на ту же разницу.');
       if (rep) txt.push(rep === '1'
-        ? 'Останется только эта встреча, будущие повторы снимутся.'
-        : 'Повторы считаются от этой встречи вперед, прошедшие занятия остаются на месте.');
+        ? 'Будущие повторы снимутся, останется только эта встреча.'
+        : 'Повторы считаются от этой встречи вперед' +
+          (m && m.series ? ', прошедшие встречи серии остаются на месте' : '') + '.');
       el('sm-rhint').innerHTML = txt.join(' ');
       el('sm-rhint').hidden = !txt.length;
     };
@@ -7155,18 +7184,14 @@
     });
     if (m) {
       ['sm-day', 'sm-hour', 'sm-rep'].forEach(function (id) {
-        if (el(id)) el(id).addEventListener('change', warn);
+        if (el(id)) el(id).addEventListener('change', function () { warn(); showFacts(); });
       });
       // Факты серии в сетке недели не лежат: спрашиваем саму встречу.
       api('/admin/api/sched/meetings/' + m.id).then(function (r) {
         var x = r && r.meeting;
         if (!x || !el('sm-facts')) return;
-        var d2 = new Date((x.series_last || '') + 'T00:00:00');
-        var when = isNaN(d2.getTime()) ? '' : d2.getDate() + ' ' + MONTHS_RU[d2.getMonth()];
-        var w = new Date((x.date || '') + 'T00:00:00');
-        el('sm-facts').textContent = 'Повторяется по ' + (isNaN(w.getTime()) ? 'неделям' : WDAYS_EVERY_RU[w.getDay()]) +
-          ', впереди ' + x.series_ahead + ' ' + plural(x.series_ahead, 'занятие', 'занятия', 'занятий') +
-          (when ? ', последнее ' + when : '');
+        facts = x;
+        showFacts();
       }).catch(function () {});
     }
 
@@ -7182,7 +7207,9 @@
         el('sm-err').textContent = t;
         el('sm-err').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       };
-      if (!title) return fail('Напишите, как называется встреча');
+      // Курсор возвращаем в поле, но экран не дергаем: само сообщение стоит у
+      // кнопки, и прокрутить надо к нему, а не к началу формы.
+      if (!title) { el('sm-title').focus({ preventScroll: true }); return fail('Напишите, как называется встреча'); }
       if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
       var body = {
