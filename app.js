@@ -2164,7 +2164,9 @@
     { id: 'roadmap', label: 'Карта', icon: 'kanban', cap: 'clients' },
     /* «Дубли» — не пункт меню, а вкладка внутри «Людей» (renderTopbar): задача
        редкая, а меню и так длинное. В NAV_ALL он нужен ради cap и пространства. */
-    { id: 'dupes', label: 'Дубли', icon: 'leads', cap: 'clients', hidden: true },
+    /* Экран целиком под cap team: в списке кандидатов лежат почты и телеграм-аккаунты
+       детей, а объединять карточки все равно может только руководитель. */
+    { id: 'dupes', label: 'Дубли', icon: 'leads', cap: 'team', hidden: true },
     { id: 'students', label: 'Обучение', icon: 'cap', cap: 'students' },
     // «Расписание» видят все (cap dash есть у каждой роли): вопрос «кто когда
     // свободен и когда планерка» возникает у всей команды, а отмечает человек
@@ -2517,12 +2519,13 @@
       // Дубли карточек интенсива — вкладка тут же, рядом с людьми: это те же люди,
       // просто заведенные дважды. Цифра — сколько групп сервер предлагает свести.
       var dupN = (state._dup && state._dup !== 'none' && state._dup.groups) ? state._dup.groups.length : 0;
+      var dupTab = can('team') ? '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
+        (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a>' : '';
       tb.innerHTML = '<nav class="tabs">' + Object.keys(SEGS).map(function (s) {
         var n = s === 'queue' ? c.queue : s === 'all' ? c.all : s === 'clients' ? c.clients : s === 'rejected' ? c.rejected : 0;
         return '<a class="tab' + (!onDup && state.seg === s ? ' on' : '') + '" data-seg="' + s + '">' +
           SEGS[s].label + (n ? '<span class="n num">' + n + '</span>' : '') + '</a>';
-      }).join('') + '<a class="tab' + (onDup ? ' on' : '') + '" data-seg="dupes">Дубли' +
-        (dupN ? '<span class="n num">' + dupN + '</span>' : '') + '</a></nav>';
+      }).join('') + dupTab + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
           var to = t.getAttribute('data-seg');
@@ -20571,7 +20574,7 @@
 
     var body = groups.length ? groups.map(function (g, gi) {
       var pick = idupPick(gi, g);
-      return '<div class="card dup-g">' +
+      return '<div class="card idup-g">' +
         '<div class="idup-h"><b>Похоже, один человек: ' + g.cards.length + ' карточки</b>' +
           '<div class="idup-k">совпадает — ' + esc((g.keys || []).join(', ')) + '</div></div>' +
         '<div class="idup-list">' + g.cards.map(function (c) { return idupCard(c, gi, pick); }).join('') + '</div>' +
@@ -20581,7 +20584,7 @@
         '</div></div>';
     }).join('') : '<div class="card"><div class="empty">Дублей нет — все карточки интенсива разные.</div></div>';
 
-    var merges = (d.merges || []).length ? '<div class="card dup-g"><div class="idup-h"><b>Что уже объединили</b>' +
+    var merges = (d.merges || []).length ? '<div class="card idup-g"><div class="idup-h"><b>Что уже объединили</b>' +
       '<div class="idup-k">если склеили зря — можно разделить обратно, уроки вернутся на свою карточку</div></div>' +
       d.merges.map(function (m) {
         return '<div class="idup-log"><span>' + esc(m.from_name || 'карточка') + ' → ' +
