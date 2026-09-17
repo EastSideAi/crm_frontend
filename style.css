@@ -9176,6 +9176,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
     min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--r-pill);
     background: var(--blue-tint); color: var(--blue); font-size: 10px; font-weight: 700; }
   .mm-cell.now .mm-cnt { background: #fff; }
+}
+
 /* ── Воркшопы: библиотека обучения команды ──────────────────────────────────
    Строка = один воркшоп: слева номер (по нему ориентируются в разговоре — «третий
    воркшоп»), справа содержимое. Просмотренное гасим, а не прячем: библиотеку
