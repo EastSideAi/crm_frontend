@@ -322,6 +322,9 @@
       compass: '<circle cx="10" cy="10" r="7.2"/><path d="M12.8 7.2 8.9 8.9 7.2 12.8l3.9-1.7 1.7-3.9z" fill="currentColor" stroke="none"/>',
       lock: '<rect x="4" y="8.5" width="12" height="8.5" rx="2.2"/><path d="M7 8.5V6.4a3 3 0 0 1 6 0v2.1"/>',
       pause: '<rect x="6" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/><rect x="11" y="5" width="3" height="10" rx="1.2" fill="currentColor" stroke="none"/>',
+      // Значок «к сведению» звали и раньше (заметки в заездах), но его в наборе не
+      // было: svg рисовался пустым и просто занимал место.
+      info: '<circle cx="10" cy="10" r="7.4"/><path d="M10 9.3v4.2"/><circle cx="10" cy="6.5" r=".95" fill="currentColor" stroke="none"/>',
     };
     var s = size || 18;
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
@@ -6819,7 +6822,7 @@
       : '';
     var hint = state.schedEdit
       ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
-      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Серое — час уже занят уроком или разбором. Сиреневое — планерка команды, синее — встреча в зуме. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
+      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
     view.innerHTML = '<div class="card zw sc">' + head + flt + claim + kindNote + body + hint + '</div>';
     schedWire(view, d);
   }
