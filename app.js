@@ -2101,11 +2101,12 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
-    // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
-    // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
+    // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
+    // (`inbox_own`, Павел 17.09.2026). Полного инбокса с воронкой продаж и портала
+    // у него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
-    // нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy'] },
+    // нет намеренно — решение владельца. Список диалогов режет сервер, не экран.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy', 'zaezdy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
@@ -2172,7 +2173,7 @@
     // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
     // одного человека, а этот вопрос про всю компанию (и cap другой).
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
-    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
@@ -25474,6 +25475,17 @@
       return;
     }
     var convos = inboxConvos();
+    // У тьютора в списке только семьи его карточек (cap inbox_own). Пока семья не
+    // написала или карточку на него не назначили, список пуст — и пустой экран без
+    // слов читается как поломка, поэтому говорим, чего ждать и что проверить.
+    if (!convos.length && !can('inbox')) {
+      view.innerHTML = inboxBlank('<div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+        '<div style="font-weight:700;color:var(--ink)">Пока нет переписки с вашими семьями</div>' +
+        '<div style="max-width:420px;text-align:center;line-height:1.55">Сюда приходят сообщения семей, которые закреплены за вами: из телеграма, ВК, Макса и чата кабинета. ' +
+        'Если ждете сообщение от своей семьи, а его нет, проверьте в карточке ученика, что ответственный — вы.</div>');
+      bindInboxSwitch(view);
+      return;
+    }
     // сортировка строго по дате последнего сообщения (стабильно — клик не двигает список)
     convos.sort(function (a, b) { return new Date(b.last_at || 0) - new Date(a.last_at || 0); });
     var counts = {}; CHAN_ORDER.forEach(function (k) { counts[k] = 0; });
@@ -27234,9 +27246,10 @@
       if (sct.id === 'pay') return can('finance');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
       if (sct.id === 'consult') return can('clients');
-      // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
-      // пункт, который открывается только отказом, хуже отсутствующего пункта.
-      if (sct.id === 'dialog') return can('inbox');
+      // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
+      // открывается только отказом, хуже отсутствующего пункта. У тьютора право
+      // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
+      if (sct.id === 'dialog') return can('inbox|inbox_own');
       // Заезд ведут тьюторы — раздел виден только с доступом к заездам.
       if (sct.id === 'arrival') return can('zaezdy');
       return true;
