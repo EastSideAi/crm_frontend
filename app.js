@@ -23060,6 +23060,11 @@
         '<div class="s">' + esc(f.sub || 'как делится каждая продажа') + '</div></div></div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Фонд</th>' + ths + '</tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="po-note"><b>Что откладывать с каждого клиента</b><br>' +
+        ts.map(function (t) {
+          return esc(t.name) + ': <span data-ec="fundsplit:' + esc(t.id) + '"></span>';
+        }).join('<br>') +
+        '<br>Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
       (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
       '</div>';
   }
@@ -23126,6 +23131,17 @@
         if (kind === 'stage') {
           var sv = r[parts[2]];
           if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
+          return;
+        }
+        if (kind === 'fundsplit') {
+          /* Строка «что откладывать»: если доли одинаковые — говорим одной суммой,
+             разошлись — перечисляем по фондам, иначе цифра соврет. */
+          var fl = (((p.economics || {}).funds || {}).items) || [], pr = econNum(m.price[parts[1]]);
+          if (!fl.length) return;
+          var same = fl.every(function (x) { return econNum(x.pct) === econNum(fl[0].pct); });
+          c.textContent = same
+            ? 'по ' + fmtMoney(Math.round(pr * econNum(fl[0].pct) / 100)) + ' ₽ в каждый из ' + fl.length + ' фондов'
+            : fl.map(function (x) { return x.label + ' ' + fmtMoney(Math.round(pr * econNum(x.pct) / 100)) + ' ₽'; }).join(', ');
           return;
         }
         if (kind === 'fund' || kind === 'fundspent' || kind === 'fundleft') {
