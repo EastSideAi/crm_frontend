@@ -23027,6 +23027,47 @@
     if (!saved || !saved.updated_at) return 'Цифры общие для команды: правку видят все, у кого есть доступ к деньгам.';
     return 'Последняя правка — ' + esc(saved.updated_by || 'кто-то из команды') + ', ' + fmtWhen(saved.updated_at) + '.';
   }
+  /* Фонды по отделам (Виталий, 14.09.2026): каждая продажа режется на равные доли,
+     и отдел живет внутри своей. Здесь же видно, сколько от фонда уже съедено теми
+     расходами, что посчитаны выше, — иначе доля в процентах ни о чем не говорит. */
+  function econFund(p, id) {
+    var items = (((p.economics || {}).funds || {}).items) || [];
+    for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
+    return null;
+  }
+  function econFundsCard(p) {
+    var f = (p.economics || {}).funds, ts = p.tariffs || [];
+    if (!f || !(f.items || []).length || !ts.length) return '';
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var rows = f.items.map(function (it) {
+      var head = '<tr class="po-r-stage"><td class="po-rl">' + esc(it.label) +
+        '<span class="po-hint">' + econNum(it.pct) + ' % с продажи</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="fund:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+      if (!it.spent || it.spent === 'none') {
+        return head + (it.spent_label ? '<tr class="po-r-item"><td class="po-rl">' + esc(it.spent_label) + '</td>' +
+          ts.map(function () { return '<td class="num">—</td>'; }).join('') + '</tr>' : '');
+      }
+      return head +
+        '<tr class="po-r-item"><td class="po-rl">уже уходит' +
+          (it.spent_label ? '<span class="po-hint">' + esc(it.spent_label) + '</span>' : '') + '</td>' +
+          ts.map(function (t) { return '<td class="num" data-ec="fundspent:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
+        '<tr class="po-r-item"><td class="po-rl">остается в фонде</td>' +
+          ts.map(function (t) { return '<td class="num" data-ec="fundleft:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+    }).join('');
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">' + esc(f.title || 'Фонды по отделам') + '</div>' +
+        '<div class="s">' + esc(f.sub || 'как делится каждая продажа') + '</div></div></div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Фонд</th>' + ths + '</tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>' +
+      '<div class="po-note"><b>Что откладывать с каждого клиента</b><br>' +
+        ts.map(function (t) {
+          return esc(t.name) + ': <span data-ec="fundsplit:' + esc(t.id) + '"></span>';
+        }).join('<br>') +
+        '<br>Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
+      (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
+      '</div>';
+  }
   function portalEcon(p) {
     if (!state._poEconApi) { econLoad(); return dashSkeleton(); }
     if (state._poEconApi === 'denied') {
@@ -23078,7 +23119,7 @@
       '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
       '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
       '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
-      '</div>';
+      '</div>' + econFundsCard(p);
   }
   function portalWireEcon(view, p) {
     if (!state._poEconApi || typeof state._poEconApi === 'string') return;
@@ -23090,6 +23131,27 @@
         if (kind === 'stage') {
           var sv = r[parts[2]];
           if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
+          return;
+        }
+        if (kind === 'fundsplit') {
+          /* Строка «что откладывать»: если доли одинаковые — говорим одной суммой,
+             разошлись — перечисляем по фондам, иначе цифра соврет. */
+          var fl = (((p.economics || {}).funds || {}).items) || [], pr = econNum(m.price[parts[1]]);
+          if (!fl.length) return;
+          var same = fl.every(function (x) { return econNum(x.pct) === econNum(fl[0].pct); });
+          c.textContent = same
+            ? 'по ' + fmtMoney(Math.round(pr * econNum(fl[0].pct) / 100)) + ' ₽ в каждый из ' + fl.length + ' фондов'
+            : fl.map(function (x) { return x.label + ' ' + fmtMoney(Math.round(pr * econNum(x.pct) / 100)) + ' ₽'; }).join(', ');
+          return;
+        }
+        if (kind === 'fund' || kind === 'fundspent' || kind === 'fundleft') {
+          var fv = r[parts[2]], fi = econFund(p, parts[1]);
+          if (!fv || !fi) return;
+          var pot = Math.round(econNum(m.price[parts[2]]) * econNum(fi.pct) / 100);
+          var used = fi.spent === 'cost' ? fv.cost
+            : /^rate:/.test(fi.spent || '') ? (fv.rates[(fi.spent || '').slice(5)] || 0) : 0;
+          c.textContent = fmtMoney(kind === 'fund' ? pot : kind === 'fundspent' ? used : pot - used);
+          if (kind === 'fundleft') c.className = 'num' + (pot - used < 0 ? ' po-neg' : ' po-pos');
           return;
         }
         var v = r[parts[1]];
