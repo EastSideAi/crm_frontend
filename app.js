@@ -2101,11 +2101,12 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
-    // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
-    // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
+    // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
+    // (`inbox_own`, Павел 17.09.2026). Полного инбокса с воронкой продаж и портала
+    // у него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
-    // нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy'] },
+    // нет намеренно — решение владельца. Список диалогов режет сервер, не экран.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy', 'zaezdy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
@@ -2172,7 +2173,7 @@
     // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
     // одного человека, а этот вопрос про всю компанию (и cap другой).
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
-    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
@@ -5745,6 +5746,10 @@
     late: { label: 'закрыта поздно',  cls: 'rh-late' },
   };
   var WDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  // «Повторяется по пятницам» — в карточке планерки день недели пишется
+  // словом и во множественном числе: так говорят про регулярную встречу.
+  var WDAYS_EVERY_RU = ['воскресеньям', 'понедельникам', 'вторникам', 'средам',
+    'четвергам', 'пятницам', 'субботам'];
 
   function wkShift() { return state.weekShift || 0; }
 
@@ -6543,7 +6548,16 @@
 
   /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
      фамилия, и она же и есть то, чем людей различают на слух. */
-  function schedShort(name) { return String(name || '').trim().split(/\s+/)[0] || ''; }
+  /* Имя человека в сетке. Одно правило на всех: убираем инициалы («Тестова А. А.»
+     → «Тестова»), остальное показываем как есть. Брать первое слово было нельзя:
+     у преподавателя это фамилия, а у сотрудника («Павел Демидов») — имя, и в
+     одном списке одни и те же люди назывались по-разному. */
+  function schedShort(name) {
+    var parts = String(name || '').trim().split(/\s+/).filter(function (x) {
+      return x && !/^[A-Za-zА-Яа-яЁё]\.$/.test(x);
+    });
+    return parts.join(' ') || String(name || '').trim();
+  }
 
   function schedMine(d, s) {
     return !!(d.me && s.person === d.me.person && s.role === d.me.role);
@@ -6702,7 +6716,7 @@
         // «Пробников · урок» у занятого часа и «Пробников (урок)» у свободного
         // отличались только цветом, а на телефоне легенды нет: так и продают уже
         // занятый час. Состояние пишем словом, роль уводим в подсказку.
-        cells.push(schedChip('busy', s.person + ' · занято' + (s.client ? ' · ' + s.client : ''),
+        cells.push(schedChip('busy', schedShort(s.person) + ' · занято' + (s.client ? ' · ' + s.client : ''),
           (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
       at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
@@ -7014,9 +7028,11 @@
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
-          '<div class="al-title">' + (m ? 'Встреча' : 'Планерка') + '</div></div>' +
+          '<div class="al-title">Планерка</div></div>' +
           '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.</div>' +
+        '<div class="al-sub">' + (m
+          ? 'Меняется то, что вы поправите. Час планерки занят у каждого участника, а название видно в общем рабочем календаре.'
+          : 'Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.') + '</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
@@ -7039,12 +7055,28 @@
               }).join('') + '</select></span></label>' +
           '</div>' +
           (m
-            // У заведенной встречи повтор уже случился: спрашиваем не «сколько недель»,
-            // а «править одну или всю серию» — это разные намерения, и по ошибке
-            // сдвинуть весь квартал нельзя.
+            // У заведенной встречи повтор уже случился, поэтому здесь два разных
+            // вопроса. Первый — что правим: только это занятие или всю серию
+            // (тот же сегмент, что в карточке зума). Второй — сколько раз она
+            // повторяется дальше; прошедшие занятия при этом не трогаются.
             ? (m.series
-                ? '<label class="sc-all"><input type="checkbox" id="sm-all"><span>Править всю серию повторов, а не только это занятие</span></label>'
-                : '')
+                ? '<div class="al-f"><span class="al-l">Что меняем</span>' +
+                    '<span class="due-seg sc-scope">' +
+                      '<button type="button" data-scope="one" class="on">только эту</button>' +
+                      '<button type="button" data-scope="all">всю серию</button></span>' +
+                    '<div class="sc-sfacts" id="sm-facts"></div></div>'
+                : '') +
+              '<label class="al-f"><span class="al-l">Повторять</span>' +
+                '<span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
+                  '<option value="" selected>как есть</option>' +
+                  // «Только эту» здесь писать нельзя: ровно так называется соседний
+                  // сегмент области правки, и человек выбрал бы согласованный по
+                  // словам вариант, который вместо этого снимает все будущие.
+                  (m.series ? '<option value="1">дальше не повторять</option>' : '') +
+                  '<option value="4">4 недели</option>' +
+                  '<option value="12">12 недель</option><option value="26">полгода</option>' +
+                '</select></span></label>' +
+              '<div class="sc-shint" id="sm-rhint" hidden></div>'
             : '<div class="al-row"><label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
               '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
@@ -7063,7 +7095,7 @@
           '<div class="ct-err" id="sm-err"></div>' +
         '</div>' +
         '<div class="al-foot">' +
-          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять встречу</button>' : '') +
+          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять планерку</button>' : '') +
           '<button class="al-cancel" id="sm-cancel">Отмена</button>' +
           '<button class="bp al-save" id="sm-ok">' + (m ? 'Сохранить' : 'Поставить') + '</button></div>' +
       '</div>';
@@ -7107,14 +7139,79 @@
       openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
     });
 
+    // Область правки: «только эту» или «всю серию». Сегмент тот же, что в карточке
+    // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
+    // соседних экранах нельзя.
+    var scope = 'one';
+    var day0 = m && m.date, hour0 = m && m.hour, facts = null;
+    // Рисунок серии пересчитывается по тому дню, который сейчас стоит в форме:
+    // иначе при переносе пятницы на среду рядом со «сдвинем серию» осталось бы
+    // «повторяется по пятницам».
+    var showFacts = function () {
+      if (!facts || !el('sm-facts')) return;
+      var last = new Date((facts.series_last || '') + 'T00:00:00');
+      var w = new Date((el('sm-day').value || facts.date || '') + 'T00:00:00');
+      var moved = el('sm-day').value !== day0;
+      el('sm-facts').textContent = 'Повторяется по ' +
+        (isNaN(w.getTime()) ? 'неделям' : WDAYS_EVERY_RU[w.getDay()]) +
+        ', впереди ' + facts.series_ahead + ' ' +
+        plural(facts.series_ahead, 'встреча', 'встречи', 'встреч') +
+        (moved || isNaN(last.getTime()) ? ''
+          : ', последняя ' + last.getDate() + ' ' + MONTHS_RU[last.getMonth()]);
+    };
+    var warn = function () {
+      if (!el('sm-rhint')) return;
+      var moved = scope === 'all' &&
+        (el('sm-day').value !== day0 || +el('sm-hour').value !== hour0);
+      var rep = el('sm-rep') && el('sm-rep').value;
+      var txt = [];
+      if (moved) txt.push('День и час поменяются у всех повторов: серия сдвинется целиком на ту же разницу.');
+      if (rep) txt.push(rep === '1'
+        ? 'Будущие повторы снимутся, останется только эта встреча.'
+        : 'Повторы считаются от этой встречи вперед' +
+          (m && m.series ? ', прошедшие встречи серии остаются на месте' : '') + '.');
+      el('sm-rhint').innerHTML = txt.join(' ');
+      el('sm-rhint').hidden = !txt.length;
+    };
+    var seg = ov.querySelector('.sc-scope');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-scope]');
+      if (!b) return;
+      scope = b.getAttribute('data-scope');
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      warn();
+    });
+    if (m) {
+      ['sm-day', 'sm-hour', 'sm-rep'].forEach(function (id) {
+        if (el(id)) el(id).addEventListener('change', function () { warn(); showFacts(); });
+      });
+      // Факты серии в сетке недели не лежат: спрашиваем саму встречу.
+      api('/admin/api/sched/meetings/' + m.id).then(function (r) {
+        var x = r && r.meeting;
+        if (!x || !el('sm-facts')) return;
+        facts = x;
+        showFacts();
+      }).catch(function () {});
+    }
+
     el('sm-ok').addEventListener('click', function () {
       var people = [];
       Array.prototype.forEach.call(boxes, function (c) {
         if (c.checked) people.push({ role: all[+c.getAttribute('data-sm-p')].role, person: all[+c.getAttribute('data-sm-p')].person });
       });
       var title = (el('sm-title').value || '').trim();
-      if (!title) return (el('sm-err').textContent = 'Напишите, как называется встреча');
-      if (!people.length) return (el('sm-err').textContent = 'Отметьте хотя бы одного участника');
+      // Ошибка живет под списком людей, а он на телефоне развернут целиком: без
+      // прокрутки нажатие «Сохранить» выглядит как «ничего не произошло».
+      var fail = function (t) {
+        el('sm-err').textContent = t;
+        el('sm-err').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+      // Курсор возвращаем в поле, но экран не дергаем: само сообщение стоит у
+      // кнопки, и прокрутить надо к нему, а не к началу формы.
+      if (!title) { el('sm-title').focus({ preventScroll: true }); return fail('Напишите, как называется встреча'); }
+      if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
       var body = {
         title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
@@ -7122,16 +7219,17 @@
       };
       var ok = function (r) {
         close();
-        showToast(m ? 'Встреча изменена'
+        showToast(m ? 'Планерка изменена'
           : (r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании'));
         schedReload();
       };
       var bad = function (code, e) {
         el('sm-ok').disabled = false;
-        el('sm-err').textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть';
+        fail((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть');
       };
       if (m) {
-        body.series = !!(el('sm-all') && el('sm-all').checked);
+        body.series = scope === 'all';
+        if (el('sm-rep').value) body.repeat = +el('sm-rep').value;
         apiSend('/admin/api/sched/meetings/' + m.id, 'PATCH', body, ok, bad);
       } else {
         body.repeat = +el('sm-rep').value;
@@ -25474,6 +25572,17 @@
       return;
     }
     var convos = inboxConvos();
+    // У тьютора в списке только семьи его карточек (cap inbox_own). Пока семья не
+    // написала или карточку на него не назначили, список пуст — и пустой экран без
+    // слов читается как поломка, поэтому говорим, чего ждать и что проверить.
+    if (!convos.length && !can('inbox')) {
+      view.innerHTML = inboxBlank('<div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+        '<div style="font-weight:700;color:var(--ink)">Пока нет переписки с вашими семьями</div>' +
+        '<div style="max-width:420px;text-align:center;line-height:1.55">Сюда приходят сообщения семей, которые закреплены за вами: из телеграма, ВК, Макса и чата кабинета. ' +
+        'Если ждете сообщение от своей семьи, а его нет, проверьте в карточке ученика, что ответственный — вы.</div>');
+      bindInboxSwitch(view);
+      return;
+    }
     // сортировка строго по дате последнего сообщения (стабильно — клик не двигает список)
     convos.sort(function (a, b) { return new Date(b.last_at || 0) - new Date(a.last_at || 0); });
     var counts = {}; CHAN_ORDER.forEach(function (k) { counts[k] = 0; });
@@ -27234,9 +27343,10 @@
       if (sct.id === 'pay') return can('finance');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
       if (sct.id === 'consult') return can('clients');
-      // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
-      // пункт, который открывается только отказом, хуже отсутствующего пункта.
-      if (sct.id === 'dialog') return can('inbox');
+      // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
+      // открывается только отказом, хуже отсутствующего пункта. У тьютора право
+      // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
+      if (sct.id === 'dialog') return can('inbox|inbox_own');
       // Заезд ведут тьюторы — раздел виден только с доступом к заездам.
       if (sct.id === 'arrival') return can('zaezdy');
       return true;
