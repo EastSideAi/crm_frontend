@@ -33,6 +33,7 @@ CRM — рабочий инструмент команды. Ценности п�
 --line:#EDEEF2; --line-2:#E3E5EB; --fill:#F5F6F9;   /* бордеры, серая заливка */
 --po-wire:#C9CEDA;  /* локальный, только .po-tree: линии-связи дерева портала */
 --blue:#2F6BFF; --blue-d:#1E50E6; --navy:#1C2B4A; --blue-tint:#EAF0FF;
+--navy-soft:#E9ECF4;   /* пара к --navy: планерка в расписании, встреча команды */
 --black:#15161C;
 --green:#18A957; --green-ink:#0E7C3F; --green-soft:#E4F6EC;
 --red:#E5484D;   --red-ink:#C42A2F;   --red-soft:#FCEBEC;
@@ -194,11 +195,13 @@ CRM — рабочий инструмент команды. Ценности п�
 | Контролы | кнопки, инпуты, селекты, сегменты | `design/controls.html` | `.bp .icobtn .ed-input .al-in .dperiod .task-chk` |
 | Чипы и статусы | статус, бейдж, тег, дельта | `design/chips.html` | `.sev .kd .pt-node .uz-tag .bdg .cnt` |
 | Дашборды | Обзор / Путь / Финансы | `design/dashboard.html` | `.kpi .statbar .chart .cvc .uz-* .fin-* .shim` |
+| Фокус недели | лист руководителя: цели с шагами недели | `design/focus.html` | `.fw .fw-h .fw-n .fw-why .fw-day-wrap .fw-loose` |
 | Оверлеи | модалка-форма, баг-панель, тост, меню | `design/overlays.html` | `.al-* .bug-* #toast #smenu` |
 | Диктовка | микрофон в блоке помощника (форма задачи) | витрины нет (см. `style.css` «Помощник в форме постановки») | `.al-mic .al-mic-dot .al-mic.rec .al-mic.busy` |
 | Мой день | список дел после диктовки, галочка и перенос в строке | витрины нет (см. `style.css` «Мой день») | `.dp-list .dp-row .dp-mark .dp-in .dp-when .tsk-chk .tsk-move` |
 | AI и каталог | AI-блоки, диагностика, витрина продуктов | `design/ai.html` | `.ai-hero .diag-* .pchat .rm-ai .of-* .pd-*` |
-| Карта клиентов | дорожка этапов и список на экране «Карта» | витрины нет (см. `style.css` «КАРТА») | `.map-rail .map-seg .map-grid .map-track .map-tar` |
+| Карта клиентов | дорожка этапов и список на экране «Карта» | витрины нет (см. `style.css` «КАРТА») | `.map-rail .map-seg .map-gap .map-gap.lost .map-grid .map-track .map-new .map-tar` |
+| Кабинет семьи | блок «кто заходил и что делает» в карточке клиента | витрины нет (см. `style.css` «КАБИНЕТ СЕМЬИ») | `.cab-seats .cab-seat .cab-seat.off .cab-seat.fresh .cab-acts .cab-sts .cab-st` |
 | Инбокс | «Диалоги» + «Обсуждения» | `design/inbox.html` | `.tg-* .tg-cact .th-* .ibsw .handoff-banner` |
 | Лиды | холодные контакты до перехода в «Люди» | витрины нет (см. `style.css` «ЛИДЫ») | `.pr-grid .pr-ch .pr-why .pr-age .pr-take .pr-empty` |
 | Поступление | план, задачи, шаблоны | `design/admissions.html` | `.rm-* .tpl-*` |
