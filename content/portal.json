@@ -1158,8 +1158,8 @@
               "id": "sales",
               "label": "Продажи",
               "pct": 20,
-              "spent": "rate:sales",
-              "spent_label": "сдельная часть диагноста и менеджера",
+              "spent": "rate:sales,rop",
+              "spent_label": "сдельная часть диагноста и менеджера и процент руководителя",
               "when": "sale"
             },
             {
