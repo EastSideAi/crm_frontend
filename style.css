@@ -7057,10 +7057,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-sub:first-of-type { margin-top: 20px; }
 .po-sel { width: auto; max-width: 100%; cursor: pointer; }
 .po-cpct { white-space: nowrap; }
-.po-tbl.econ.w6 { min-width: 940px; }
-.po-tbl.econ.w5 { min-width: 840px; }
+.po-tbl.econ.w6 { min-width: 860px; }
+.po-tbl.econ.w6 .po-rl { width: 208px; }
+.po-tbl.econ.w5 { min-width: 780px; }
 .po-tbl.econ.w3 { min-width: 560px; }
 .po-tbl.econ.w3 .po-rl { width: 320px; }
+/* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
+.po-board4 { grid-template-columns: repeat(4, 1fr); margin-top: 14px; }
+.po-board4 .pc-v.po-pos { color: var(--green-ink); }
+.po-board4 .pc-v.po-neg { color: var(--red-ink); }
+@media (max-width: 1100px) { .po-board4 { grid-template-columns: repeat(2, 1fr); } }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;

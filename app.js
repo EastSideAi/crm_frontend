@@ -23190,17 +23190,21 @@
           '<td class="num" data-ec="y:fixedm"></td><td class="num" data-ec="y:fixedy"></td></tr>' +
         '</tbody></table></div>' +
       ((fx || {}).note ? '<div class="po-note">' + esc(fx.note) + '</div>' : '') : '';
+    /* Итог сезона — четыре цифры, ради которых экран и открывают. Табличной
+       строкой они читаются как еще один расход, поэтому берем системный свод
+       (.pay-board), а якорь у него один: точка безубыточности. */
     var out =
       '<div class="po-sub">Итог сезона</div>' +
-      '<div class="po-tblwrap"><table class="po-tbl econ w3"><tbody>' +
-        '<tr><td class="po-rl">Средний чек<span class="po-hint">при этом плане</span></td>' +
-          '<td class="num" data-ec="y:avgprice"></td></tr>' +
-        '<tr><td class="po-rl">Вклад с одного клиента</td><td class="num" data-ec="y:avgcontrib"></td></tr>' +
-        '<tr class="po-r-big"><td class="po-rl">Точка безубыточности</td>' +
-          '<td class="num" data-ec="y:be"></td></tr>' +
-        '<tr class="po-r-big"><td class="po-rl">Прибыль за сезон<span class="po-hint">вклад минус постоянные расходы</span></td>' +
-          '<td class="num" data-ec="y:profit"></td></tr>' +
-      '</tbody></table></div>' +
+      '<div class="pay-board po-board4">' +
+        '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
+          '<div class="pc-v num" data-ec="y:avgprice"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Вклад с клиента</div>' +
+          '<div class="pc-v num" data-ec="y:avgcontrib"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Точка безубыточности</div>' +
+          '<div class="pc-v num" data-ec="y:be"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Прибыль за сезон</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div></div>' +
+      '</div>' +
       '<div class="po-note"><span data-ec="y:be_words"></span></div>';
     return '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
@@ -23336,22 +23340,29 @@
         }
         if (kind === 'y') {
           var k = parts[1];
-          if (k === 'clients') c.textContent = econNum(y.clients) + ' чел.';
+          if (k === 'clients') c.textContent = econNum(y.clients) + ' ' +
+            plural(y.clients, 'клиент', 'клиента', 'клиентов');
           else if (k === 'be') {
-            c.textContent = y.breakeven ? y.breakeven + ' клиентов за сезон' : 'нужен план и вклад';
-            c.className = 'num' + (y.breakeven && y.clients >= y.breakeven ? ' po-pos' : '');
+            c.textContent = y.breakeven
+              ? y.breakeven + ' ' + plural(y.breakeven, 'клиент', 'клиента', 'клиентов')
+              : 'нужен план';
           } else if (k === 'be_words') {
             c.textContent = !y.breakeven
               ? 'Поставьте план и постоянные расходы, и точка безубыточности посчитается сама.'
               : 'Постоянные расходы за сезон ' + fmtMoney(y.fixedYear) + ' рублей, вклад с одного клиента ' +
-                fmtMoney(y.avgContrib) + '. Значит ' + y.breakeven + ' клиентов за сезон выводят в ноль, ' +
-                'это примерно ' + (Math.round(y.breakeven / 12 * 10) / 10) + ' клиента в месяц. ' +
+                fmtMoney(y.avgContrib) + '. Значит ' + y.breakeven + ' ' +
+                plural(y.breakeven, 'клиент выводит', 'клиента выводят', 'клиентов выводят') +
+                ' компанию в ноль, это примерно ' +
+                (y.breakeven / 12).toFixed(1).replace('.', ',') + ' клиента в месяц. ' +
                 (y.clients >= y.breakeven
-                  ? 'План выше этой точки на ' + (y.clients - y.breakeven) + ' клиентов.'
-                  : 'Плана не хватает: до нуля не достает ' + (y.breakeven - y.clients) + ' клиентов.');
+                  ? 'План выше этой точки на ' + (y.clients - y.breakeven) + ' ' +
+                    plural(y.clients - y.breakeven, 'клиента', 'клиента', 'клиентов') + '.'
+                  : 'Плана не хватает: до нуля не достает ' + (y.breakeven - y.clients) + ' ' +
+                    plural(y.breakeven - y.clients, 'клиента', 'клиента', 'клиентов') + '.');
           } else if (k === 'profit') {
             c.textContent = fmtMoney(y.profit);
-            c.className = 'num' + (y.profit < 0 ? ' po-neg' : ' po-pos');
+            c.className = (c.classList.contains('pc-v') ? 'pc-v num' : 'num') +
+              (y.profit < 0 ? ' po-neg' : ' po-pos');
           } else c.textContent = fmtMoney(
             k === 'rev' ? y.rev : k === 'direct' ? y.direct : k === 'contrib' ? y.contrib :
             k === 'fixedm' ? y.fixedMonth : k === 'fixedy' ? y.fixedYear :
