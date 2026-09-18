@@ -23065,7 +23065,12 @@
   function econFundSpent(f, v) {
     if (!f || !f.spent || f.spent === 'none') return 0;
     if (f.spent === 'cost') return v.cost;
-    return /^rate:/.test(f.spent) ? (v.rates[f.spent.slice(5)] || 0) : 0;
+    /* «rate:sales,rop» — из фонда продаж уходит и сдельная часть, и процент
+       руководителя: это один отдел, а ставок у него две. */
+    if (!/^rate:/.test(f.spent)) return 0;
+    return f.spent.slice(5).split(',').reduce(function (a, id) {
+      return a + (v.rates[id] || 0);
+    }, 0);
   }
   /* Сезон — двенадцать месяцев: продажи идут волной, а оклады платятся каждый
      месяц, поэтому план и вклад считаем за год, а постоянные расходы вводим
