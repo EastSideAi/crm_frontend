@@ -22967,6 +22967,13 @@
       m.price[t.id] = (d.price && d.price[t.id] != null) ? d.price[t.id] : (t.price || 0);
     });
     (ec.rates || []).forEach(function (r) { m.rates[r.id] = (d.rates && d.rates[r.id]) || 0; });
+    /* Доли фондов: в базе — то, что команда поставила сама, в portal.json — те,
+       с которых начинали. Пока в базе пусто, показываем исходные, иначе первый
+       же заход на вкладку увидит нули вместо схемы. */
+    m.funds = {};
+    ((ec.funds || {}).items || []).forEach(function (f) {
+      m.funds[f.id] = (d.funds && d.funds[f.id] != null) ? d.funds[f.id] : econNum(f.pct);
+    });
     (ec.costs || []).forEach(function (c) {
       m.costs[c.id] = {};
       (p.tariffs || []).forEach(function (t) {
@@ -23036,12 +23043,12 @@
     return null;
   }
   function econFundsCard(p) {
-    var f = (p.economics || {}).funds, ts = p.tariffs || [];
+    var f = (p.economics || {}).funds, ts = p.tariffs || [], m = econModel(p);
     if (!f || !(f.items || []).length || !ts.length) return '';
     var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
     var rows = f.items.map(function (it) {
       var head = '<tr class="po-r-stage"><td class="po-rl">' + esc(it.label) +
-        '<span class="po-hint">' + econNum(it.pct) + ' % с продажи</span></td>' +
+        '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-fund="' + esc(it.id) + '" value="' + econNum(m.funds[it.id]) + '"><span class="po-pc">% с продажи</span></td>' +
         ts.map(function (t) { return '<td class="num" data-ec="fund:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
       if (!it.spent || it.spent === 'none') {
         return head + (it.spent_label ? '<tr class="po-r-item"><td class="po-rl">' + esc(it.spent_label) + '</td>' +
@@ -23064,6 +23071,7 @@
         ts.map(function (t) {
           return esc(t.name) + ': <span data-ec="fundsplit:' + esc(t.id) + '"></span>';
         }).join('<br>') +
+        '<br><span data-ec="fundsum:all"></span>' +
         '<br>Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
       (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
       '</div>';
@@ -23133,21 +23141,34 @@
           if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
           return;
         }
+        if (kind === 'fundsum') {
+          /* Доли правит человек, и он легко наберет 15+20+20+20+20. Молчать
+             нельзя: сумма не сто процентов значит, что часть денег никуда не
+             отложена или отложена дважды. */
+          var fs = (((p.economics || {}).funds || {}).items) || [];
+          var tot = fs.reduce(function (a, x) { return a + econNum(m.funds[x.id]); }, 0);
+          tot = Math.round(tot * 10) / 10;
+          c.textContent = tot === 100 ? 'Доли сходятся в 100 процентов.'
+            : 'Доли в сумме дают ' + tot + ' процентов, а не 100: ' +
+              (tot < 100 ? 'часть денег не отложена никуда.' : 'одни и те же деньги отложены дважды.');
+          c.className = tot === 100 ? 'po-pos' : 'po-neg';
+          return;
+        }
         if (kind === 'fundsplit') {
           /* Строка «что откладывать»: если доли одинаковые — говорим одной суммой,
              разошлись — перечисляем по фондам, иначе цифра соврет. */
           var fl = (((p.economics || {}).funds || {}).items) || [], pr = econNum(m.price[parts[1]]);
           if (!fl.length) return;
-          var same = fl.every(function (x) { return econNum(x.pct) === econNum(fl[0].pct); });
+          var same = fl.every(function (x) { return econNum(m.funds[x.id]) === econNum(m.funds[fl[0].id]); });
           c.textContent = same
-            ? 'по ' + fmtMoney(Math.round(pr * econNum(fl[0].pct) / 100)) + ' ₽ в каждый из ' + fl.length + ' фондов'
-            : fl.map(function (x) { return x.label + ' ' + fmtMoney(Math.round(pr * econNum(x.pct) / 100)) + ' ₽'; }).join(', ');
+            ? 'по ' + fmtMoney(Math.round(pr * econNum(m.funds[fl[0].id]) / 100)) + ' ₽ в каждый из ' + fl.length + ' фондов'
+            : fl.map(function (x) { return x.label + ' ' + fmtMoney(Math.round(pr * econNum(m.funds[x.id]) / 100)) + ' ₽'; }).join(', ');
           return;
         }
         if (kind === 'fund' || kind === 'fundspent' || kind === 'fundleft') {
           var fv = r[parts[2]], fi = econFund(p, parts[1]);
           if (!fv || !fi) return;
-          var pot = Math.round(econNum(m.price[parts[2]]) * econNum(fi.pct) / 100);
+          var pot = Math.round(econNum(m.price[parts[2]]) * econNum(m.funds[parts[1]]) / 100);
           var used = fi.spent === 'cost' ? fv.cost
             : /^rate:/.test(fi.spent || '') ? (fv.rates[(fi.spent || '').slice(5)] || 0) : 0;
           c.textContent = fmtMoney(kind === 'fund' ? pot : kind === 'fundspent' ? used : pot - used);
@@ -23182,7 +23203,7 @@
       mark('сохраняем…');
       saveTimer = setTimeout(function () {
         apiSend('/admin/api/portal/econ/' + encodeURIComponent(p.id), 'PUT',
-          { price: m.price, rates: m.rates, costs: m.costs },
+          { price: m.price, rates: m.rates, costs: m.costs, funds: m.funds },
           function (r) {
             if (state._poEconApi && typeof state._poEconApi === 'object') state._poEconApi[p.id] = r;
             mark('сохранено');
@@ -23195,6 +23216,7 @@
         var k;
         if ((k = i.getAttribute('data-price'))) m.price[k] = econNum(i.value);
         else if ((k = i.getAttribute('data-rate'))) m.rates[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fund'))) m.funds[k] = econNum(i.value);
         else if ((k = i.getAttribute('data-cost'))) {
           var pr = k.split(':');
           (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
