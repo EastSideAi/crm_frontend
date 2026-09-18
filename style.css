@@ -7059,7 +7059,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-cpct { white-space: nowrap; }
 .po-tbl.econ.w6 { min-width: 860px; }
 .po-tbl.econ.w6 .po-rl { width: 208px; }
-.po-tbl.econ.w5 { min-width: 780px; }
+.po-tbl.econ.w5 { min-width: 940px; }
+.po-tbl.econ.w5 .po-rl { width: 292px; }
+.po-tbl.econ.w5 .po-hint + .po-hint { margin-top: 1px; }
+/* «Подобрать доли» — единственная кнопка калькулятора: она ничего не удаляет, а
+   считает, поэтому тихая и стоит рядом со своим объяснением, а не в шапке */
+.po-act { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.po-fit { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
+.po-act .po-hint { flex: 1 1 280px; margin-top: 0; }
 .po-tbl.econ.w3 { min-width: 560px; }
 .po-tbl.econ.w3 .po-rl { width: 320px; }
 /* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */

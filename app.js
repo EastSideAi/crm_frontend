@@ -23060,34 +23060,53 @@
     for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
     return null;
   }
-  /* Сколько расходов фонда посчитано выше: у фонда продукта это вся себестоимость,
-     у фонда продаж и фонда налогов — своя ставка с оплаты. */
-  function econFundSpent(f, v) {
-    if (!f || !f.spent || f.spent === 'none') return 0;
-    if (f.spent === 'cost') return v.cost;
-    /* «rate:sales,rop» — из фонда продаж уходит и сдельная часть, и процент
-       руководителя: это один отдел, а ставок у него две. */
-    if (!/^rate:/.test(f.spent)) return 0;
-    return f.spent.slice(5).split(',').reduce(function (a, id) {
-      return a + (v.rates[id] || 0);
-    }, 0);
-  }
   /* Сезон — двенадцать месяцев: продажи идут волной, а оклады платятся каждый
      месяц, поэтому план и вклад считаем за год, а постоянные расходы вводим
      помесячно и умножаем на двенадцать. */
   function econYear(p, m) {
     var ec = p.economics || {}, ts = p.tariffs || [], r = econCalc(p, m);
-    var y = { per: r, clients: 0, rev: 0, direct: 0, contrib: 0, funds: {}, spent: {} };
+    var y = { per: r, clients: 0, rev: 0, direct: 0, contrib: 0, freeAll: 0, spentAll: 0, loose: 0,
+      funds: {}, spent: {}, spentVar: {}, spentFix: {}, free: {} };
     ts.forEach(function (t) {
       var n = econNum(m.plan[t.id]), v = r[t.id];
       y.clients += n; y.rev += n * econNum(m.price[t.id]);
       y.direct += n * v.total; y.contrib += n * v.contrib;
     });
+    /* Кто за что платит. Фонд — это кошелек отдела, и каждая ставка, статья
+       себестоимости и постоянный расход привязаны в portal.json полем fund к
+       своему кошельку. Без привязки «свободно» врет: фонд дивидендов показывал
+       283 тысячи свободных в месяц при прибыли за сезон втрое меньше, и Павел
+       18.09.2026 справедливо не понял, откуда берутся такие деньги. */
+    var known = {};
+    ((ec.funds || {}).items || []).forEach(function (f) { known[f.id] = true; });
+    function add(bucket, fid, v) {
+      if (!v) return;
+      if (!known[fid]) { y.loose += v; return; }
+      bucket[fid] = (bucket[fid] || 0) + v;
+    }
+    function byPlan(get) {
+      var sum = 0;
+      ts.forEach(function (t) { sum += econNum(m.plan[t.id]) * get(t); });
+      return sum;
+    }
+    (ec.rates || []).forEach(function (rt) {
+      add(y.spentVar, rt.fund, byPlan(function (t) { return (r[t.id].rates[rt.id] || 0); }));
+    });
+    (ec.costs || []).forEach(function (c) {
+      add(y.spentVar, c.fund, byPlan(function (t) { return econNum((m.costs[c.id] || {})[t.id]); }));
+    });
+    ((ec.fixed || {}).items || []).forEach(function (i) {
+      add(y.spentFix, i.fund, econNum(m.fixed[i.id]) * 12);
+    });
+    y.loose = Math.round(y.loose);
     ((ec.funds || {}).items || []).forEach(function (f) {
       y.funds[f.id] = Math.round(y.rev * econNum(m.funds[f.id]) / 100);
-      var used = 0;
-      ts.forEach(function (t) { used += econNum(m.plan[t.id]) * econFundSpent(f, r[t.id]); });
-      y.spent[f.id] = Math.round(used);
+      y.spentVar[f.id] = Math.round(y.spentVar[f.id] || 0);
+      y.spentFix[f.id] = Math.round(y.spentFix[f.id] || 0);
+      y.spent[f.id] = y.spentVar[f.id] + y.spentFix[f.id];
+      y.free[f.id] = y.funds[f.id] - y.spent[f.id];
+      y.freeAll += y.free[f.id];
+      y.spentAll += y.spent[f.id];
     });
     y.pct = ((ec.funds || {}).items || []).reduce(function (a, f) { return a + econNum(m.funds[f.id]); }, 0);
     y.pct = Math.round(y.pct * 10) / 10;
@@ -23105,6 +23124,28 @@
     var w = econWhen(when);
     if (w.n) return Math.round(sum / w.n);
     return clients ? Math.round(sum / clients) : 0;
+  }
+  /* «Подобрать доли под план» — обратный счет, а не магия: расход отдела за
+     сезон делим на выручку за сезон, это и есть его честная доля. Остаток
+     достается фонду владельцев (owner в portal.json), потому что дивиденды —
+     единственный фонд, у которого нет своих расходов. */
+  function econFit(p, m) {
+    var items = (((p.economics || {}).funds || {}).items) || [], y = econYear(p, m);
+    if (!y.rev || !items.length) return false;
+    var own = null, used = 0;
+    items.forEach(function (f) { if (f.owner) own = f; });
+    items.forEach(function (f) {
+      if (own && f.id === own.id) return;
+      /* Фонд с keep — это решение, а не расчет: доля маркетинга в 20 процентов
+         принята командой, и бюджет отдела считается от нее, а не наоборот
+         (Павел, 18.09.2026). Такой фонд подбор не трогает. */
+      if (f.keep) { used += econNum(m.funds[f.id]); return; }
+      var pct = Math.ceil((y.spent[f.id] || 0) / y.rev * 1000) / 10;
+      m.funds[f.id] = pct > 0 ? pct : 0;
+      used += m.funds[f.id];
+    });
+    if (own) m.funds[own.id] = Math.max(0, Math.round((100 - used) * 10) / 10);
+    return true;
   }
   function econFundsCard(p) {
     var f = (p.economics || {}).funds, ts = p.tariffs || [], m = econModel(p);
@@ -23130,7 +23171,8 @@
         '<td class="num" data-ec="workyear"></td></tr>';
     var payRows = f.items.map(function (it) {
       var cur = m.fundwhen[it.id];
-      return '<tr><td class="po-rl">' + esc(it.label) + '</td>' +
+      return '<tr><td class="po-rl">' + esc(it.label) +
+        (it.pays ? '<span class="po-hint">платим из него: ' + esc(it.pays) + '</span>' : '') + '</td>' +
         '<td><select class="al-in sm po-in po-sel" data-fundwhen="' + esc(it.id) + '">' +
           ECON_WHEN.map(function (o) {
             return '<option value="' + o.id + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>';
@@ -23138,7 +23180,11 @@
         '<td class="num" data-ec="fundpay:' + esc(it.id) + '"></td>' +
         '<td class="num" data-ec="fundused:' + esc(it.id) + '"></td>' +
         '<td class="num" data-ec="fundrest:' + esc(it.id) + '"></td></tr>';
-    }).join('');
+    }).join('') +
+      '<tr class="po-r-sum"><td class="po-rl">Итого за сезон</td><td></td>' +
+        '<td class="num" data-ec="fundtotyear"></td>' +
+        '<td class="num" data-ec="spentyear"></td>' +
+        '<td class="num" data-ec="freeyear"></td></tr>';
     return '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">' + esc(f.title || 'Фонды по отделам') + '</div>' +
@@ -23149,14 +23195,18 @@
       '<tbody>' + rows + sumRows + '</tbody></table></div>' +
       '<div class="po-note"><span data-ec="fundcheck"></span> ' +
         'Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
-      '<div class="po-sub">Уходит из фонда</div>' +
+      '<div class="po-act"><button class="al-cancel po-fit" data-econfit="1">Подобрать доли под план</button>' +
+        '<span class="po-hint">поставит каждому фонду ровно ту долю, которую он тратит по плану, ' +
+        'а весь остаток отдаст дивидендам. Долю маркетинга не трогает: она задана решением</span></div>' +
+      '<div class="po-sub">Что каждый фонд платит за сезон</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ w5"><thead><tr><th class="po-rl">Фонд</th>' +
-        '<th>Когда уходит</th><th>Накопится к выплате</th><th>Из них уже расписано</th><th>Свободно</th></tr></thead>' +
+        '<th>Когда уходит</th><th>Накопится за сезон</th><th>Уходит из фонда</th><th>Свободно</th></tr></thead>' +
       '<tbody>' + payRows + '</tbody></table></div>' +
-      '<div class="po-note">Столбец «уже расписано» — это расходы из таблицы выше, которые ' +
-        'и так платятся из этого фонда: себестоимость из фонда продукта, сдельная часть продаж ' +
-        'из фонда продаж, налоги и эквайринг из фонда безопасности. Свободно — то, чем отдел ' +
-        'реально распоряжается. Минус значит, что фонда на свои же расходы не хватает.</div>' +
+      '<div class="po-note">Расходы не висят в воздухе: каждая строка себестоимости, каждая ставка ' +
+        'с оплаты и каждый оклад привязаны к своему фонду, и здесь видно, сколько фонд собрал и ' +
+        'сколько из него уже уходит. Свободно — то, чем отдел реально распоряжается; минус значит, ' +
+        'что доли фонду не хватает на его же расходы.</div>' +
+      '<div class="po-note" data-ec="fundfoot"></div>' +
       (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
       '</div>';
   }
@@ -23325,14 +23375,45 @@
           return;
         }
         if (kind === 'fundpay' || kind === 'fundused' || kind === 'fundrest') {
-          /* Одна и та же доля выглядит по-разному в зависимости от срока: фонд,
-             который платится раз в месяц, накапливает двенадцатую часть сезона. */
-          var w = econWhen(m.fundwhen[parts[1]]);
-          var pot = econPer(y.funds[parts[1]] || 0, w.id, y.clients);
-          var spent = econPer(y.spent[parts[1]] || 0, w.id, y.clients);
-          var val = kind === 'fundpay' ? pot : kind === 'fundused' ? spent : pot - spent;
-          c.textContent = fmtMoney(val) + (kind === 'fundpay' ? ' ' + w.per : '');
+          /* Базовая единица во всей таблице одна — сезон, иначе столбцы не
+             складываются в итог. Срок выплаты уходит в подпись под цифрой: одна
+             и та же доля в месяц и в квартал выглядит по-разному. */
+          var fid = parts[1], w = econWhen(m.fundwhen[fid]);
+          var val = kind === 'fundpay' ? (y.funds[fid] || 0)
+            : kind === 'fundused' ? (y.spent[fid] || 0) : (y.free[fid] || 0);
+          var sub = kind !== 'fundused'
+            ? '<span class="po-hint">' + fmtMoney(econPer(val, w.id, y.clients)) + ' ' + w.per + '</span>'
+            /* разбивку показываем, только когда есть что разбивать: «на клиентов 0,
+               постоянных 0» под нулем — шум, а не объяснение */
+            : val ? '<span class="po-hint">на клиентов ' + fmtMoney(y.spentVar[fid] || 0) + '</span>' +
+                    '<span class="po-hint">постоянных ' + fmtMoney(y.spentFix[fid] || 0) + '</span>' : '';
+          c.innerHTML = fmtMoney(val) + sub;
           if (kind === 'fundrest') c.className = 'num' + (val < 0 ? ' po-neg' : ' po-pos');
+          return;
+        }
+        if (kind === 'spentyear') { c.textContent = fmtMoney(y.spentAll); return; }
+        if (kind === 'freeyear') {
+          c.textContent = fmtMoney(y.freeAll);
+          c.className = 'num' + (y.freeAll < 0 ? ' po-neg' : ' po-pos');
+          return;
+        }
+        if (kind === 'fundfoot') {
+          /* Главная проверка всей вкладки: если доли дают сто процентов и каждая
+             статья к кому-то привязана, свободное по фондам обязано сойтись с
+             прибылью за сезон. Не сошлось — человек должен увидеть почему. */
+          c.className = 'po-note';
+          if (y.loose > 0) {
+            c.textContent = 'Внимание: расходов на ' + fmtMoney(y.loose) + ' рублей за сезон не привязано ' +
+              'ни к одному фонду, платить их неоткуда. Такую статью надо отнести к фонду в структуре портала.';
+            c.className = 'po-note po-neg';
+          } else if (y.pct !== 100) {
+            c.textContent = 'Свободно по всем фондам ' + fmtMoney(y.freeAll) + ', прибыль за сезон ' +
+              fmtMoney(y.profit) + '. Разница ' + fmtMoney(Math.abs(y.profit - y.freeAll)) +
+              ' — это рабочий счет: доли дают ' + y.pct + ' процентов, а не сто.';
+          } else {
+            c.textContent = 'Сходится: свободно по всем фондам ' + fmtMoney(y.freeAll) +
+              ' — это и есть прибыль компании за сезон.';
+          }
           return;
         }
         if (kind === 'fixyear') { c.textContent = fmtMoney(econNum(m.fixed[parts[1]]) * 12); return; }
@@ -23428,6 +23509,14 @@
         }
         recalc(); save();
       });
+    });
+    var fit = view.querySelector('[data-econfit]');
+    if (fit) fit.addEventListener('click', function () {
+      if (!econFit(p, m)) return;
+      Array.prototype.forEach.call(view.querySelectorAll('[data-fund]'), function (i) {
+        i.value = econNum(m.funds[i.getAttribute('data-fund')]);
+      });
+      recalc(); save();
     });
     recalc();
   }
