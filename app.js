@@ -2222,6 +2222,12 @@
        есть строка расхода фонда. */
     { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
       cap: 'finmodel|finmodel_contractors', hideCap: 'finmodel' },
+    /* Начисления продавцам: расчетный лист продаж по каждому продавцу — процент
+       капает автоматически с каждой оплаты клиента (ответственный на карточке ×
+       ставка), человек только сверяет. Плюс раздел «без разнесения» — оплаты, по
+       которым процент не начислен (нет ответственного или он из сервисной роли). */
+    { id: 'finsales', label: 'Начисления продаж', icon: 'coins', space: 'fin',
+      cap: 'finmodel_edit|finmodel_sales' },
     /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
        (сервисы, административное), но всю ведомость с зарплатами не видит. У кого есть
        ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
@@ -3201,6 +3207,7 @@
     else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finpayouts') renderFinPayouts(view);
+    else if (state.page === 'finsales') renderFinSales(view);
     else if (state.page === 'finopex') renderFinOpex(view);
     else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
@@ -13902,6 +13909,7 @@
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
+    FIN.salesSheet = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -15898,6 +15906,136 @@
         });
       });
     }
+    pageAnim(view);
+  }
+
+  // Расчетный лист продаж: два запроса — начисления продавцам (лист продаж) и доходы
+  // периода (чтобы найти оплаты, по которым процент не начислен). Один за другим, потому
+  // что второй нужен только вместе с первым; finStale отсекает ответ по чужому периоду.
+  function finLoadSalesSheet() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadSalesSheet(); });
+    finBusy('salesSheet', function (done) {
+      api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('лист-продаж')))
+        .then(function (sr) {
+          if (finStale(sr)) return null;
+          return api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('доход')))
+            .then(function (ir) {
+              if (finStale(ir)) return;
+              FIN.salesSheet = { sales: (sr.items || []), incomes: (ir.items || []),
+                                 period: sr.period };
+              FIN.err = '';
+              if (curSpace() === 'fin') renderAll();
+            });
+        }).catch(function (e) { finFail(e, 'salesSheet'); }).then(done);
+    });
+  }
+
+  /* Начисления продаж: расчетный лист по каждому продавцу. Процент капает автоматически
+     с каждой оплаты (см. finmodel_sync на бэкенде), тут только показываем — сгруппировав
+     по продавцу и с итогом к выплате. Плюс «Без разнесения»: оплаты, по которым процент
+     не начислен (нет ответственного на карточке или он из сервисной роли). */
+  function renderFinSales(view) {
+    if (!FIN.salesSheet) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSalesSheet(); return;
+    }
+    if (FIN.salesSheet === 'none') return finErrView(view);
+    var S = FIN.salesSheet, per = finPeriod();
+    var sales = S.sales || [], incomes = S.incomes || [];
+
+    // Группируем начисления по продавцу (кому платим процент = payout_to).
+    var bySeller = {}, order = [], totalAccrued = 0;
+    sales.forEach(function (it) {
+      var who = it.payout_to || '—';
+      if (!bySeller[who]) { bySeller[who] = { name: who, rows: [], total: 0 }; order.push(who); }
+      bySeller[who].rows.push(it);
+      if (it.status === 'факт' && it.included) {
+        bySeller[who].total += it.amount; totalAccrued += it.amount;
+      }
+    });
+
+    // «Без разнесения» — оплаты периода, по которым нет строки листа продаж с тем же
+    // paymentId: процент не начислен, потому что ответственного нет или он сервисный.
+    var accruedPays = {};
+    sales.forEach(function (it) { if (it.payment_id) accruedPays[it.payment_id] = true; });
+    var unassigned = incomes.filter(function (it) {
+      return it.status === 'факт' && it.included &&
+             !(it.payment_id && accruedPays[it.payment_id]);
+    });
+
+    var tiles = [
+      { label: 'Начислено', value: finRub(totalAccrued), sub: 'продавцам за период' },
+      { label: 'Продавцов', value: String(order.length), sub: 'с начислениями' },
+      { label: 'Без разнесения', value: String(unassigned.length),
+        sub: unassigned.length ? 'оплат без процента' : 'все оплаты разнесены' },
+    ];
+
+    var salesRow = function (it) {
+      var sub = [
+        it.sale_amount ? finRub(it.sale_amount) + ' × ' +
+          finNum(it.percent, it.percent % 1 ? 2 : 0) + '%' : '',
+        it.product || '',
+      ].filter(Boolean).map(esc).join(' · ');
+      return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st">' +
+          '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+            esc(it.status) + '</span>' +
+          (it.included === false ? '<span class="fst wait">сторно</span>' : '') +
+        '</span>' +
+      '</div>';
+    };
+
+    var sellerCards = order.map(function (who) {
+      var s = bySeller[who];
+      return '<div class="card listcard fs-seller">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">' + esc(s.name) + '</div>' +
+            '<div class="s fe-s">' + s.rows.length + ' ' +
+              plural(s.rows.length, 'начисление', 'начисления', 'начислений') + '</div></div>' +
+          '<span class="list-count fin-count">к выплате <b>' + finRub(s.total) + '</b></span>' +
+        '</div>' +
+        s.rows.map(salesRow).join('') +
+      '</div>';
+    }).join('');
+
+    var unaRows = unassigned.map(function (it) {
+      return '<div class="trow fin-grid fe-grid">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || 'без клиента') + '</b>' +
+          '<i>нет ответственного или сервисная роль — разнесите вручную</i></span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst wait">не разнесено</span></span>' +
+      '</div>';
+    }).join('');
+
+    var unaCard = unassigned.length ?
+      '<div class="card listcard fs-una">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Без разнесения</div>' +
+            '<div class="s fe-s">оплаты без начисления процента: нет ответственного ' +
+              'на карточке или он из сервисной роли</div></div>' +
+          '<span class="list-count fin-count"><b>' + unassigned.length + '</b> ' +
+            plural(unassigned.length, 'оплата', 'оплаты', 'оплат') + '</span>' +
+        '</div>' + unaRows +
+      '</div>' : '';
+
+    var head = '<div class="card listcard"><div class="list-tools">' +
+      '<div><div class="t fe-t">Начисления продаж' +
+        (per ? ' · ' + esc(per.name) : '') + '</div>' +
+        '<div class="s fe-s">процент продавцу капает сам с каждой оплаты клиента; ' +
+          'здесь только сверяете и передаете в выплату</div></div></div></div>';
+
+    var body = sellerCards || unaCard
+      ? sellerCards + unaCard
+      : '<div class="card listcard"><div class="empty">Начислений продаж в этой ' +
+        'ведомости пока нет. Как пройдет оплата клиента с продавцом в ответственных — ' +
+        'строка появится здесь сама.</div></div>';
+
+    view.innerHTML = statBar(tiles) + head + body;
     pageAnim(view);
   }
 

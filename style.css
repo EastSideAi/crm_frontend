@@ -6120,6 +6120,10 @@ button.fsp-via { cursor: pointer; }
 .fe-grid { grid-template-columns: 92px 1.6fr 150px 150px; cursor: pointer; }
 .fe-t { font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
 .fe-s { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
+/* Начисления продаж: карточки продавцов идут стопкой, отбиваем их друг от друга и от
+   шапки, чтобы список одного продавца не сливался с соседним. */
+.fs-seller, .fs-una { margin-top: 12px; }
+.fs-una .fe-t { color: var(--amber-ink); }
 .fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 /* Крестик удаления строки: тихий, проявляется по наведению на строку, краснеет на себе.
    Всегда виден на тач-экранах — там наведения нет. */
