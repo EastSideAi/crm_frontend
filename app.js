@@ -17804,9 +17804,12 @@
              !(it.payment_id && accruedPays[it.payment_id]);
     });
 
+    var incFact = incomes.filter(function (it) { return it.status === 'факт' && it.included; });
     var tiles = [
       { label: 'Начислено', value: finRub(totalAccrued), sub: 'продавцам за период' },
       { label: 'Продавцов', value: String(order.length), sub: 'с начислениями' },
+      { label: 'Разнесено', value: String(incFact.length - unassigned.length),
+        sub: 'оплат с процентом' },
       { label: 'Без разнесения', value: String(unassigned.length),
         sub: unassigned.length ? 'оплат без процента' : 'все оплаты разнесены' },
     ];
