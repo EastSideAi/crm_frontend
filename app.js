@@ -22970,10 +22970,17 @@
     /* Доли фондов: в базе — то, что команда поставила сама, в portal.json — те,
        с которых начинали. Пока в базе пусто, показываем исходные, иначе первый
        же заход на вкладку увидит нули вместо схемы. */
-    m.funds = {};
+    m.funds = {}; m.fundwhen = {};
     ((ec.funds || {}).items || []).forEach(function (f) {
       m.funds[f.id] = (d.funds && d.funds[f.id] != null) ? d.funds[f.id] : econNum(f.pct);
+      m.fundwhen[f.id] = (d.fundwhen && d.fundwhen[f.id]) || f.when || 'month';
     });
+    /* План и постоянные расходы в portal.json не лежат: этот файл раздается
+       статикой, а оклады и план продаж внутренние. В файле только строки, сами
+       суммы приходят из базы, и пока их там нет — ноли. */
+    m.plan = {}; m.fixed = {};
+    (p.tariffs || []).forEach(function (t) { m.plan[t.id] = (d.plan && d.plan[t.id]) || 0; });
+    ((ec.fixed || {}).items || []).forEach(function (i) { m.fixed[i.id] = (d.fixed && d.fixed[i.id]) || 0; });
     (ec.costs || []).forEach(function (c) {
       m.costs[c.id] = {};
       (p.tariffs || []).forEach(function (t) {
@@ -23034,46 +23041,180 @@
     if (!saved || !saved.updated_at) return 'Цифры общие для команды: правку видят все, у кого есть доступ к деньгам.';
     return 'Последняя правка — ' + esc(saved.updated_by || 'кто-то из команды') + ', ' + fmtWhen(saved.updated_at) + '.';
   }
-  /* Фонды по отделам (Виталий, 14.09.2026): каждая продажа режется на равные доли,
-     и отдел живет внутри своей. Здесь же видно, сколько от фонда уже съедено теми
-     расходами, что посчитаны выше, — иначе доля в процентах ни о чем не говорит. */
+  /* Фонды и деньги во времени. Отвечаем на три разных вопроса и не смешиваем их:
+     сколько откладываем в момент оплаты, когда эти деньги уходят из фонда и
+     сколько клиентов нужно, чтобы компания вышла в ноль. Все поля правятся руками:
+     Павел 18.09.2026 попросил калькулятор, а не картинку с посчитанными цифрами. */
+  var ECON_WHEN = [
+    { id: 'sale', label: 'сразу с продажи', per: 'с одной продажи', n: 0 },
+    { id: 'month', label: 'раз в месяц', per: 'в месяц', n: 12 },
+    { id: 'quarter', label: 'раз в квартал', per: 'в квартал', n: 4 },
+    { id: 'year', label: 'раз в сезон', per: 'за сезон', n: 1 }
+  ];
+  function econWhen(id) {
+    for (var i = 0; i < ECON_WHEN.length; i++) if (ECON_WHEN[i].id === id) return ECON_WHEN[i];
+    return ECON_WHEN[1];
+  }
   function econFund(p, id) {
     var items = (((p.economics || {}).funds || {}).items) || [];
     for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
     return null;
+  }
+  /* Сколько расходов фонда посчитано выше: у фонда продукта это вся себестоимость,
+     у фонда продаж и фонда налогов — своя ставка с оплаты. */
+  function econFundSpent(f, v) {
+    if (!f || !f.spent || f.spent === 'none') return 0;
+    if (f.spent === 'cost') return v.cost;
+    return /^rate:/.test(f.spent) ? (v.rates[f.spent.slice(5)] || 0) : 0;
+  }
+  /* Сезон — двенадцать месяцев: продажи идут волной, а оклады платятся каждый
+     месяц, поэтому план и вклад считаем за год, а постоянные расходы вводим
+     помесячно и умножаем на двенадцать. */
+  function econYear(p, m) {
+    var ec = p.economics || {}, ts = p.tariffs || [], r = econCalc(p, m);
+    var y = { per: r, clients: 0, rev: 0, direct: 0, contrib: 0, funds: {}, spent: {} };
+    ts.forEach(function (t) {
+      var n = econNum(m.plan[t.id]), v = r[t.id];
+      y.clients += n; y.rev += n * econNum(m.price[t.id]);
+      y.direct += n * v.total; y.contrib += n * v.contrib;
+    });
+    ((ec.funds || {}).items || []).forEach(function (f) {
+      y.funds[f.id] = Math.round(y.rev * econNum(m.funds[f.id]) / 100);
+      var used = 0;
+      ts.forEach(function (t) { used += econNum(m.plan[t.id]) * econFundSpent(f, r[t.id]); });
+      y.spent[f.id] = Math.round(used);
+    });
+    y.pct = ((ec.funds || {}).items || []).reduce(function (a, f) { return a + econNum(m.funds[f.id]); }, 0);
+    y.pct = Math.round(y.pct * 10) / 10;
+    y.fixedMonth = ((ec.fixed || {}).items || []).reduce(function (a, i) { return a + econNum(m.fixed[i.id]); }, 0);
+    y.fixedYear = y.fixedMonth * 12;
+    y.profit = y.contrib - y.fixedYear;
+    y.avgPrice = y.clients ? Math.round(y.rev / y.clients) : 0;
+    y.avgContrib = y.clients ? Math.round(y.contrib / y.clients) : 0;
+    y.breakeven = y.avgContrib > 0 ? Math.ceil(y.fixedYear / y.avgContrib) : 0;
+    return y;
+  }
+  /* Сумма за один период выплаты: месячный фонд — это годовой, деленный на
+     двенадцать, а фонд, который уходит сразу, считается на одну продажу. */
+  function econPer(sum, when, clients) {
+    var w = econWhen(when);
+    if (w.n) return Math.round(sum / w.n);
+    return clients ? Math.round(sum / clients) : 0;
   }
   function econFundsCard(p) {
     var f = (p.economics || {}).funds, ts = p.tariffs || [], m = econModel(p);
     if (!f || !(f.items || []).length || !ts.length) return '';
     var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
     var rows = f.items.map(function (it) {
-      var head = '<tr class="po-r-stage"><td class="po-rl">' + esc(it.label) +
-        '<input class="al-in sm po-in po-pct num" type="number" step="0.1" data-fund="' + esc(it.id) + '" value="' + econNum(m.funds[it.id]) + '"><span class="po-pc">% с продажи</span></td>' +
-        ts.map(function (t) { return '<td class="num" data-ec="fund:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
-      if (!it.spent || it.spent === 'none') {
-        return head + (it.spent_label ? '<tr class="po-r-item"><td class="po-rl">' + esc(it.spent_label) + '</td>' +
-          ts.map(function () { return '<td class="num">—</td>'; }).join('') + '</tr>' : '');
-      }
-      return head +
-        '<tr class="po-r-item"><td class="po-rl">уже уходит' +
-          (it.spent_label ? '<span class="po-hint">' + esc(it.spent_label) + '</span>' : '') + '</td>' +
-          ts.map(function (t) { return '<td class="num" data-ec="fundspent:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
-        '<tr class="po-r-item"><td class="po-rl">остается в фонде</td>' +
-          ts.map(function (t) { return '<td class="num" data-ec="fundleft:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
+      return '<tr><td class="po-rl">' + esc(it.label) +
+        (it.hint ? '<span class="po-hint">' + esc(it.hint) + '</span>' : '') + '</td>' +
+        '<td class="po-cpct"><input class="al-in sm po-in po-pct num" type="number" step="0.1" min="0" ' +
+          'data-fund="' + esc(it.id) + '" value="' + econNum(m.funds[it.id]) + '"><span class="po-pc">%</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="fund:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="fundyear:' + esc(it.id) + '"></td></tr>';
+    }).join('');
+    var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Итого откладываем</td>' +
+        '<td class="num" data-ec="fundsum"></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="fundtot:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="fundtotyear"></td></tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Остается на рабочем счете' +
+        '<span class="po-hint">из него платим тьюторов, документы, оклады и подписки</span></td>' +
+        '<td class="num" data-ec="workpct"></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="work:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="workyear"></td></tr>';
+    var payRows = f.items.map(function (it) {
+      var cur = m.fundwhen[it.id];
+      return '<tr><td class="po-rl">' + esc(it.label) + '</td>' +
+        '<td><select class="al-in sm po-in po-sel" data-fundwhen="' + esc(it.id) + '">' +
+          ECON_WHEN.map(function (o) {
+            return '<option value="' + o.id + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+          }).join('') + '</select></td>' +
+        '<td class="num" data-ec="fundpay:' + esc(it.id) + '"></td>' +
+        '<td class="num" data-ec="fundused:' + esc(it.id) + '"></td>' +
+        '<td class="num" data-ec="fundrest:' + esc(it.id) + '"></td></tr>';
     }).join('');
     return '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">' + esc(f.title || 'Фонды по отделам') + '</div>' +
         '<div class="s">' + esc(f.sub || 'как делится каждая продажа') + '</div></div></div>' +
-      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Фонд</th>' + ths + '</tr></thead>' +
-      '<tbody>' + rows + '</tbody></table></div>' +
-      '<div class="po-note"><b>Что откладывать с каждого клиента</b><br>' +
-        ts.map(function (t) {
-          return esc(t.name) + ': <span data-ec="fundsplit:' + esc(t.id) + '"></span>';
-        }).join('<br>') +
-        '<br><span data-ec="fundsum:all"></span>' +
-        '<br>Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
+      '<div class="po-sub">Откладываем в день оплаты</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w6"><thead><tr><th class="po-rl">Фонд</th>' +
+        '<th>Доля</th>' + ths + '<th>За сезон по плану</th></tr></thead>' +
+      '<tbody>' + rows + sumRows + '</tbody></table></div>' +
+      '<div class="po-note"><span data-ec="fundcheck"></span> ' +
+        'Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
+      '<div class="po-sub">Уходит из фонда</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w5"><thead><tr><th class="po-rl">Фонд</th>' +
+        '<th>Когда уходит</th><th>Накопится к выплате</th><th>Из них уже расписано</th><th>Свободно</th></tr></thead>' +
+      '<tbody>' + payRows + '</tbody></table></div>' +
+      '<div class="po-note">Столбец «уже расписано» — это расходы из таблицы выше, которые ' +
+        'и так платятся из этого фонда: себестоимость из фонда продукта, сдельная часть продаж ' +
+        'из фонда продаж, налоги и эквайринг из фонда безопасности. Свободно — то, чем отдел ' +
+        'реально распоряжается. Минус значит, что фонда на свои же расходы не хватает.</div>' +
       (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
+      '</div>';
+  }
+  /* План, постоянные расходы и точка безубыточности. Отдельная карточка, потому
+     что это уже не «сколько с одного клиента», а «сколько клиентов нужно». */
+  function econPlanCard(p) {
+    var ec = p.economics || {}, pl = ec.plan, fx = ec.fixed, ts = p.tariffs || [], m = econModel(p);
+    if (!pl || !ts.length) return '';
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var planRows =
+      '<tr><td class="po-rl">Клиентов за сезон<span class="po-hint">двенадцать месяцев</span></td>' +
+        ts.map(function (t) {
+          return '<td><input class="al-in sm po-in num" type="number" min="0" step="1" data-plan="' +
+            esc(t.id) + '" value="' + econNum(m.plan[t.id]) + '"></td>';
+        }).join('') + '<td class="num" data-ec="y:clients"></td></tr>' +
+      '<tr><td class="po-rl">Выручка за сезон</td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="yrev:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:rev"></td></tr>' +
+      '<tr><td class="po-rl">Прямые расходы за сезон</td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="ydirect:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:direct"></td></tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Вклад за сезон<span class="po-hint">до постоянных расходов</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="ycontrib:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:contrib"></td></tr>';
+    var fixRows = ((fx || {}).items || []).map(function (i) {
+      return '<tr><td class="po-rl">' + esc(i.label) +
+        (i.hint ? '<span class="po-hint">' + esc(i.hint) + '</span>' : '') + '</td>' +
+        '<td><input class="al-in sm po-in num" type="number" min="0" step="1000" data-fixed="' +
+          esc(i.id) + '" value="' + econNum(m.fixed[i.id]) + '"></td>' +
+        '<td class="num" data-ec="fixyear:' + esc(i.id) + '"></td></tr>';
+    }).join('');
+    var fixTable = fixRows ? '<div class="po-sub">' + esc((fx || {}).title || 'Постоянные расходы, в месяц') + '</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w3"><thead><tr><th class="po-rl">Статья</th>' +
+        '<th>В месяц</th><th>За сезон</th></tr></thead><tbody>' + fixRows +
+        '<tr class="po-r-sum"><td class="po-rl">Итого постоянных</td>' +
+          '<td class="num" data-ec="y:fixedm"></td><td class="num" data-ec="y:fixedy"></td></tr>' +
+        '</tbody></table></div>' +
+      ((fx || {}).note ? '<div class="po-note">' + esc(fx.note) + '</div>' : '') : '';
+    /* Итог сезона — четыре цифры, ради которых экран и открывают. Табличной
+       строкой они читаются как еще один расход, поэтому берем системный свод
+       (.pay-board), а якорь у него один: точка безубыточности. */
+    var out =
+      '<div class="po-sub">Итог сезона</div>' +
+      '<div class="pay-board po-board4">' +
+        '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
+          '<div class="pc-v num" data-ec="y:avgprice"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Вклад с клиента</div>' +
+          '<div class="pc-v num" data-ec="y:avgcontrib"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Точка безубыточности</div>' +
+          '<div class="pc-v num" data-ec="y:be"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Прибыль за сезон</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div></div>' +
+      '</div>' +
+      '<div class="po-note"><span data-ec="y:be_words"></span></div>';
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">' + esc(pl.title || 'Месяц, год и точка безубыточности') + '</div>' +
+        '<div class="s">' + esc(pl.sub || '') + '</div></div></div>' +
+      '<div class="po-sub">План продаж</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Показатель</th>' +
+        ths + '<th>Всего</th></tr></thead><tbody>' + planRows + '</tbody></table></div>' +
+      fixTable + out +
+      (pl.note ? '<div class="po-note">' + esc(pl.note) + '</div>' : '') +
       '</div>';
   }
   function portalEcon(p) {
@@ -23127,13 +23268,13 @@
       '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
       '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
       '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
-      '</div>' + econFundsCard(p);
+      '</div>' + econPlanCard(p) + econFundsCard(p);
   }
   function portalWireEcon(view, p) {
     if (!state._poEconApi || typeof state._poEconApi === 'string') return;
     var m = econModel(p), saveTimer = null;
     function recalc() {
-      var r = econCalc(p, m);
+      var r = econCalc(p, m), y = econYear(p, m);
       Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
         var parts = c.getAttribute('data-ec').split(':'), kind = parts[0];
         if (kind === 'stage') {
@@ -23141,38 +23282,91 @@
           if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
           return;
         }
-        if (kind === 'fundsum') {
+        if (kind === 'fundcheck') {
           /* Доли правит человек, и он легко наберет 15+20+20+20+20. Молчать
-             нельзя: сумма не сто процентов значит, что часть денег никуда не
-             отложена или отложена дважды. */
-          var fs = (((p.economics || {}).funds || {}).items) || [];
-          var tot = fs.reduce(function (a, x) { return a + econNum(m.funds[x.id]); }, 0);
-          tot = Math.round(tot * 10) / 10;
-          c.textContent = tot === 100 ? 'Доли сходятся в 100 процентов.'
-            : 'Доли в сумме дают ' + tot + ' процентов, а не 100: ' +
-              (tot < 100 ? 'часть денег не отложена никуда.' : 'одни и те же деньги отложены дважды.');
-          c.className = tot === 100 ? 'po-pos' : 'po-neg';
+             нельзя: сумма больше ста значит, что одни и те же деньги отложены
+             дважды, меньше ста — что остаток лежит на рабочем счете. */
+          c.textContent = y.pct === 100
+            ? 'Доли дают ровно 100 процентов: на рабочем счете не остается ничего, все расходы платятся из фондов.'
+            : y.pct < 100
+              ? 'Доли дают ' + y.pct + ' процентов, остальные ' + Math.round((100 - y.pct) * 10) / 10 +
+                ' остаются на рабочем счете.'
+              : 'Доли дают ' + y.pct + ' процентов, это больше ста: часть денег отложена дважды.';
+          c.className = y.pct > 100 ? 'po-neg' : '';
           return;
         }
-        if (kind === 'fundsplit') {
-          /* Строка «что откладывать»: если доли одинаковые — говорим одной суммой,
-             разошлись — перечисляем по фондам, иначе цифра соврет. */
-          var fl = (((p.economics || {}).funds || {}).items) || [], pr = econNum(m.price[parts[1]]);
-          if (!fl.length) return;
-          var same = fl.every(function (x) { return econNum(m.funds[x.id]) === econNum(m.funds[fl[0].id]); });
-          c.textContent = same
-            ? 'по ' + fmtMoney(Math.round(pr * econNum(m.funds[fl[0].id]) / 100)) + ' ₽ в каждый из ' + fl.length + ' фондов'
-            : fl.map(function (x) { return x.label + ' ' + fmtMoney(Math.round(pr * econNum(m.funds[x.id]) / 100)) + ' ₽'; }).join(', ');
+        if (kind === 'fundsum') { c.textContent = y.pct + ' %'; return; }
+        if (kind === 'workpct') {
+          c.textContent = Math.round((100 - y.pct) * 10) / 10 + ' %';
+          c.className = 'num' + (y.pct > 100 ? ' po-neg' : '');
           return;
         }
-        if (kind === 'fund' || kind === 'fundspent' || kind === 'fundleft') {
-          var fv = r[parts[2]], fi = econFund(p, parts[1]);
-          if (!fv || !fi) return;
-          var pot = Math.round(econNum(m.price[parts[2]]) * econNum(m.funds[parts[1]]) / 100);
-          var used = fi.spent === 'cost' ? fv.cost
-            : /^rate:/.test(fi.spent || '') ? (fv.rates[(fi.spent || '').slice(5)] || 0) : 0;
-          c.textContent = fmtMoney(kind === 'fund' ? pot : kind === 'fundspent' ? used : pot - used);
-          if (kind === 'fundleft') c.className = 'num' + (pot - used < 0 ? ' po-neg' : ' po-pos');
+        if (kind === 'fund') {
+          c.textContent = fmtMoney(Math.round(econNum(m.price[parts[2]]) * econNum(m.funds[parts[1]]) / 100));
+          return;
+        }
+        if (kind === 'fundtot' || kind === 'work') {
+          var pv = econNum(m.price[parts[1]]), off = Math.round(pv * y.pct / 100);
+          c.textContent = fmtMoney(kind === 'fundtot' ? off : pv - off);
+          if (kind === 'work') c.className = 'num' + (pv - off < 0 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'fundyear') { c.textContent = fmtMoney(y.funds[parts[1]] || 0); return; }
+        if (kind === 'fundtotyear') { c.textContent = fmtMoney(Math.round(y.rev * y.pct / 100)); return; }
+        if (kind === 'workyear') {
+          var left = y.rev - Math.round(y.rev * y.pct / 100);
+          c.textContent = fmtMoney(left);
+          c.className = 'num' + (left < 0 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'fundpay' || kind === 'fundused' || kind === 'fundrest') {
+          /* Одна и та же доля выглядит по-разному в зависимости от срока: фонд,
+             который платится раз в месяц, накапливает двенадцатую часть сезона. */
+          var w = econWhen(m.fundwhen[parts[1]]);
+          var pot = econPer(y.funds[parts[1]] || 0, w.id, y.clients);
+          var spent = econPer(y.spent[parts[1]] || 0, w.id, y.clients);
+          var val = kind === 'fundpay' ? pot : kind === 'fundused' ? spent : pot - spent;
+          c.textContent = fmtMoney(val) + (kind === 'fundpay' ? ' ' + w.per : '');
+          if (kind === 'fundrest') c.className = 'num' + (val < 0 ? ' po-neg' : ' po-pos');
+          return;
+        }
+        if (kind === 'fixyear') { c.textContent = fmtMoney(econNum(m.fixed[parts[1]]) * 12); return; }
+        if (kind === 'yrev' || kind === 'ydirect' || kind === 'ycontrib') {
+          var tv = r[parts[1]], n = econNum(m.plan[parts[1]]);
+          if (!tv) return;
+          c.textContent = fmtMoney(Math.round(n * (kind === 'yrev' ? econNum(m.price[parts[1]])
+            : kind === 'ydirect' ? tv.total : tv.contrib)));
+          return;
+        }
+        if (kind === 'y') {
+          var k = parts[1];
+          if (k === 'clients') c.textContent = econNum(y.clients) + ' ' +
+            plural(y.clients, 'клиент', 'клиента', 'клиентов');
+          else if (k === 'be') {
+            c.textContent = y.breakeven
+              ? y.breakeven + ' ' + plural(y.breakeven, 'клиент', 'клиента', 'клиентов')
+              : 'нужен план';
+          } else if (k === 'be_words') {
+            c.textContent = !y.breakeven
+              ? 'Поставьте план и постоянные расходы, и точка безубыточности посчитается сама.'
+              : 'Постоянные расходы за сезон ' + fmtMoney(y.fixedYear) + ' рублей, вклад с одного клиента ' +
+                fmtMoney(y.avgContrib) + '. Значит ' + y.breakeven + ' ' +
+                plural(y.breakeven, 'клиент выводит', 'клиента выводят', 'клиентов выводят') +
+                ' компанию в ноль, это примерно ' +
+                (y.breakeven / 12).toFixed(1).replace('.', ',') + ' клиента в месяц. ' +
+                (y.clients >= y.breakeven
+                  ? 'План выше этой точки на ' + (y.clients - y.breakeven) + ' ' +
+                    plural(y.clients - y.breakeven, 'клиента', 'клиента', 'клиентов') + '.'
+                  : 'Плана не хватает: до нуля не достает ' + (y.breakeven - y.clients) + ' ' +
+                    plural(y.breakeven - y.clients, 'клиента', 'клиента', 'клиентов') + '.');
+          } else if (k === 'profit') {
+            c.textContent = fmtMoney(y.profit);
+            c.className = (c.classList.contains('pc-v') ? 'pc-v num' : 'num') +
+              (y.profit < 0 ? ' po-neg' : ' po-pos');
+          } else c.textContent = fmtMoney(
+            k === 'rev' ? y.rev : k === 'direct' ? y.direct : k === 'contrib' ? y.contrib :
+            k === 'fixedm' ? y.fixedMonth : k === 'fixedy' ? y.fixedYear :
+            k === 'avgprice' ? y.avgPrice : k === 'avgcontrib' ? y.avgContrib : 0);
           return;
         }
         var v = r[parts[1]];
@@ -23203,7 +23397,8 @@
       mark('сохраняем…');
       saveTimer = setTimeout(function () {
         apiSend('/admin/api/portal/econ/' + encodeURIComponent(p.id), 'PUT',
-          { price: m.price, rates: m.rates, costs: m.costs, funds: m.funds },
+          { price: m.price, rates: m.rates, costs: m.costs, funds: m.funds,
+            fundwhen: m.fundwhen, fixed: m.fixed, plan: m.plan },
           function (r) {
             if (state._poEconApi && typeof state._poEconApi === 'object') state._poEconApi[p.id] = r;
             mark('сохранено');
@@ -23212,11 +23407,16 @@
       }, 700);
     }
     Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
-      i.addEventListener('input', function () {
+      /* у списка выбора своего «input» в старых браузерах нет, поэтому слушаем
+         и его штатное событие тоже */
+      i.addEventListener(i.tagName === 'SELECT' ? 'change' : 'input', function () {
         var k;
         if ((k = i.getAttribute('data-price'))) m.price[k] = econNum(i.value);
         else if ((k = i.getAttribute('data-rate'))) m.rates[k] = econNum(i.value);
         else if ((k = i.getAttribute('data-fund'))) m.funds[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-plan'))) m.plan[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fixed'))) m.fixed[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fundwhen'))) m.fundwhen[k] = i.value;
         else if ((k = i.getAttribute('data-cost'))) {
           var pr = k.split(':');
           (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
