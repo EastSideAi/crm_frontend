@@ -2206,6 +2206,8 @@
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
+    // Рассылки — журнал отправок бота: кому писали и что ответила площадка.
+    { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing' },
     { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
@@ -3261,6 +3263,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'gifts') renderGifts(view);
+    else if (state.page === 'broadcasts') renderBroadcasts(view);
     else if (state.page === 'social') renderSocial(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
@@ -21562,6 +21565,289 @@
     });
   }
 
+
+
+  /* ── РАССЫЛКИ — кому писали, что ответила площадка, что человек сделал потом ──
+     Вера, 19.09.2026: «а если мне не пришло, как она может доказать, что она всем
+     отправила?». Данные — журнал бота (`/admin/api/broadcasts/*`): строка на каждого
+     адресата с дословным ответом телеграма или ВК. Второй экран того же раздела —
+     когорты: кто на рассылку реагирует, а кто молчит. */
+  /* Своя семья чипов (`.sev.bc-*`), не статусы лида: «дошло» и «закрыл бота» —
+     про доставку, а не про сделку, и словари не должны разъезжаться. Красное одно —
+     потерянный контакт: закрыл бота, значит написать ему мы больше не можем. */
+  var BC_ST = { ok: ['bc-ok', 'дошло'], blocked: ['bc-blocked', 'закрыл бота'],
+                fail: ['bc-fail', 'не дошло'] };
+
+  function bcQ() {
+    if (!state._bcQ) state._bcQ = { run: null, q: '', status: '', offset: 0, find: '' };
+    return state._bcQ;
+  }
+
+  function fetchBcList() {
+    api('/admin/api/broadcasts/list').then(function (r) {
+      state._bcList = r; if (state.page === 'broadcasts') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._bcList = 'none'; if (state.page === 'broadcasts') renderView(); }
+    });
+  }
+
+  function fetchBcRun(id) {
+    api('/admin/api/broadcasts/run/' + id).then(function (r) {
+      state._bcRun = r; if (state.page === 'broadcasts') renderView();
+    }).catch(function () { state._bcRun = 'none'; if (state.page === 'broadcasts') renderView(); });
+  }
+
+  function fetchBcPeople() {
+    var q = bcQ();
+    state._bcPeopleWait = true;
+    api('/admin/api/broadcasts/run/' + q.run + '/people?offset=' + q.offset +
+        '&status=' + encodeURIComponent(q.status) + '&q=' + encodeURIComponent(q.q))
+      .then(function (r) {
+        state._bcPeopleWait = false;
+        if (q.offset && state._bcPeople && state._bcPeople.people) {
+          r.people = state._bcPeople.people.concat(r.people);
+        }
+        state._bcPeople = r;
+        if (state.page === 'broadcasts') renderView();
+      }).catch(function () {
+        state._bcPeopleWait = false; state._bcPeople = 'none';
+        if (state.page === 'broadcasts') renderView();
+      });
+  }
+
+  function bcOpen(id) {
+    var q = bcQ();
+    q.run = id; q.q = ''; q.status = ''; q.offset = 0;
+    state._bcRun = null; state._bcPeople = null;
+    saveUi(); renderView();
+  }
+
+  /* Ступени отклика: считаются от даты отправки этому человеку, а не от даты прогона —
+     досылка после обрыва идёт днём позже, и общая дата занизила бы отклик. */
+  function bcLadder(t) {
+    var steps = [
+      { label: 'Дошло', hint: 'площадка приняла сообщение', n: t.delivered || 0 },
+      { label: 'Ответил боту', hint: 'написал что-то после рассылки', n: t.replied || 0 },
+      { label: 'Вошёл в воронку', hint: 'нажал кнопку, пошёл по сценарию', n: t.funnel || 0 },
+      { label: 'Дошёл до анкеты', hint: 'начал диагностику на сайте', n: t.form || 0 }
+    ];
+    var first = steps[0].n;
+    return steps.map(function (s, i) {
+      var w = first ? Math.round(s.n / first * 100) : 0;
+      var conv = i ? (steps[i - 1].n ? Math.round(s.n / steps[i - 1].n * 100) : 0) : 100;
+      var lost = i ? Math.max(0, steps[i - 1].n - s.n) : 0;
+      return '<div class="lad-row gf-flat">' +
+        '<div class="lad-nm">' + s.label + '<small>' + s.hint + '</small></div>' +
+        '<div class="lad-track"><div class="lad-fill" style="width:' + Math.max(w, s.n ? 4 : 0) + '%"></div></div>' +
+        '<div class="lad-n num">' + s.n + '</div>' +
+        '<div class="lad-right"><span class="lad-conv num">' + (i ? conv + '% с шага' : 'все') + '</span>' +
+        (i ? '<span class="lad-drop zero num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '') +
+        '</div></div>';
+    }).join('');
+  }
+
+  function bcCohort(title, hint, rows) {
+    var body = (rows || []).length ? rows.map(function (c) {
+      var base = c.delivered || 0;
+      var pct = function (n) { return base ? Math.round(n / base * 100) : 0; };
+      return '<div class="bc-co">' +
+        '<div class="bc-co-nm">' + esc(c.name) +
+          '<small class="num">' + c.sent + ' ' + plural(c.sent, 'адресат', 'адресата', 'адресатов') +
+          ' · дошло ' + base + '</small></div>' +
+        '<div class="bc-co-n num">' + pct(c.replied || 0) + '%<small>ответили</small></div>' +
+        '<div class="bc-co-n num">' + pct(c.funnel || 0) + '%<small>в воронку</small></div>' +
+      '</div>';
+    }).join('') : '<div class="empty">Пусто.</div>';
+    return '<div class="card sp4" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('funnel', 14) + '</span>' +
+      '<div><div class="t">' + title + '</div><div class="s">' + hint + '</div></div></div>' +
+      '<div style="border-top:1px solid var(--line)">' + body + '</div></div>';
+  }
+
+  /* Ответ площадки приходит как есть: 'http 403 {"ok":false,...,"description":"Forbidden:
+     bot was blocked by the user"}'. В строке показываем ту часть, ради которой его и
+     читают, — description; полный ответ раскрывается по нажатию и остаётся дословным. */
+  function bcDetail(detail) {
+    if (!detail) return '';
+    var human = detail;
+    var m = /"description"\s*:\s*"([^"]+)"/.exec(detail);
+    if (m) human = m[1];
+    else if (detail.length > 90) human = detail.slice(0, 90) + '…';
+    if (human === detail) return '<small class="bc-detail">' + esc(detail) + '</small>';
+    return '<details class="bc-detail"><summary>' + esc(human) + '</summary>' +
+      '<div class="bc-raw">' + esc(detail) + '</div></details>';
+  }
+
+  function bcPersonRow(p) {
+    var st = BC_ST[p.status] || BC_ST.fail;
+    var who = p.name || ('id ' + p.channel_user_id);
+    var mark = [];
+    if (p.replied) mark.push('ответил');
+    if (p.funnel) mark.push('воронка');
+    if (p.form) mark.push('анкета');
+    return '<div class="trow bc-grid">' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(who) + '</div>' +
+        '<div class="t-sub num">' + esc(p.channel) + ' · ' + esc(p.channel_user_id) +
+        (mark.length ? ' · ' + mark.join(', ') : '') + '</div></div>' +
+      '<div class="bc-st"><span class="sev ' + st[0] + '">' + st[1] + '</span>' +
+        bcDetail(p.detail) + '</div>' +
+      '<div class="t-when num">' + fmtWhen(p.sent_at) + '</div>' +
+    '</div>';
+  }
+
+  function renderBroadcasts(view) {
+    var q = bcQ();
+    if (q.run) return renderBcRun(view, q);
+
+    if (!state._bcList) { view.innerHTML = dashSkeleton(); fetchBcList(); return; }
+    if (state._bcList === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить рассылки — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var runs = state._bcList.runs || [];
+    /* ready:false — таблицы журнала в базе еще нет (бот с миграцией не выехал).
+       Это не ошибка и не «рассылок не было»: говорим прямо, иначе человек решит,
+       что мы ничего не отправляли. */
+    var notReady = state._bcList.ready === false;
+    var rows = runs.length ? runs.map(function (r) {
+      return '<div class="trow bc-run" data-run="' + r.id + '">' +
+        '<div class="t-cell"><div class="t-ttl">' + esc(r.title) + '</div>' +
+          '<div class="t-sub num">' + esc(r.channel || '—') + ' · ' + fmtWhen(r.started_at) + '</div></div>' +
+        '<div class="bc-nums">' +
+          '<span class="bc-n"><b class="num">' + (r.sent || 0) + '</b><small>в списке</small></span>' +
+          '<span class="bc-n"><b class="num">' + (r.delivered || 0) + '</b><small>дошло</small></span>' +
+          '<span class="bc-n"><b class="num">' + (r.blocked || 0) + '</b><small>закрыли бота</small></span>' +
+          '<span class="bc-n"><b class="num">' + (r.failed || 0) + '</b><small>не дошло</small></span>' +
+        '</div>' +
+        '<div class="bc-go">' + ic('go', 14) + '</div>' +
+      '</div>';
+    }).join('') : (notReady
+      ? '<div class="empty">Журнал ещё не завёлся: бот с этой доработкой пока не выехал. Появится сразу после выкатки.</div>'
+      : '<div class="empty">Рассылок ещё не было.</div>');
+
+    var find = state._bcFind;
+    var findRows = '';
+    if (find === 'none') {
+      /* Запрос не прошёл. Молчание тут читается как «не писали», а это прямо
+         противоположный ответ на вопрос, ради которого раздел и сделан. */
+      findRows = '<div class="empty">Не смогли проверить — проверь сеть и нажми ещё раз.</div>';
+    } else if (find) {
+      findRows = (find.rows || []).length ? (find.rows || []).map(function (r) {
+        var st = BC_ST[r.status] || BC_ST.fail;
+        return '<div class="trow bc-grid">' +
+          '<div class="t-cell"><div class="t-ttl">' + esc(r.title) + '</div>' +
+            '<div class="t-sub num">' + esc(r.full_name || r.username || r.channel_user_id) + ' · ' + esc(r.channel) + '</div></div>' +
+          '<div class="bc-st"><span class="sev ' + st[0] + '">' + st[1] + '</span>' +
+            bcDetail(r.detail) + '</div>' +
+          '<div class="t-when num">' + fmtWhen(r.sent_at) + '</div>' +
+        '</div>';
+      }).join('') : '<div class="empty">Этому человеку мы не писали ни разу.</div>';
+    }
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp12" style="padding:22px 24px">' +
+        '<div class="sec-head"><span class="ic">' + ic('search', 14) + '</span>' +
+        '<div><div class="t">Писали ли мы человеку</div>' +
+        '<div class="s">id телеграма или ВК, ник, имя — покажу все рассылки, где он был</div></div></div>' +
+        '<div class="bc-find"><input id="bc-find" class="al-in" placeholder="1029309438 или Вера" value="' + esc(q.find) + '">' +
+        '<button class="bp" id="bc-find-go">Проверить</button></div>' +
+        (findRows ? '<div class="bc-found">' + findRows + '</div>' : '') +
+      '</div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('send', 14) + '</span>' +
+        '<div><div class="t">Рассылки</div><div class="s">каждый прогон — строка на адресата с ответом площадки</div></div></div>' +
+        '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
+    '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
+      row.addEventListener('click', function () { bcOpen(parseInt(row.getAttribute('data-run'), 10)); });
+    });
+    var go = el('bc-find-go'), inp = el('bc-find');
+    function doFind() {
+      q.find = (inp.value || '').trim();
+      if (!q.find) { state._bcFind = null; renderView(); return; }
+      api('/admin/api/broadcasts/person?q=' + encodeURIComponent(q.find)).then(function (r) {
+        state._bcFind = r; renderView();
+      }).catch(function () { state._bcFind = 'none'; renderView(); });
+    }
+    if (go) go.addEventListener('click', doFind);
+    if (inp) inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') doFind(); });
+  }
+
+  function renderBcRun(view, q) {
+    if (!state._bcRun) { view.innerHTML = dashSkeleton(); fetchBcRun(q.run); return; }
+    if (state._bcRun === 'none' || !state._bcRun.run) {
+      view.innerHTML = '<div class="card"><div class="empty">Рассылка не открылась.</div></div>';
+      return;
+    }
+    var d = state._bcRun, r = d.run, t = d.total || {}, co = d.cohorts || {};
+    if (!state._bcPeople && !state._bcPeopleWait) fetchBcPeople();
+    var pp = state._bcPeople && state._bcPeople !== 'none' ? state._bcPeople : null;
+    var people = pp ? (pp.people || []).map(bcPersonRow).join('') : '<div class="empty">Загружаю адресатов…</div>';
+    var more = pp && pp.total > (pp.people || []).length;
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp12" style="padding:20px 24px">' +
+        '<div class="bc-head"><button class="qchip" id="bc-back">← Все рассылки</button>' +
+        '<div class="bc-title"><div class="t">' + esc(r.title) + '</div>' +
+        '<div class="s num">' + esc(r.channel || '—') + ' · ' + fmtWhen(r.started_at) +
+        (r.source ? ' · ' + esc(r.source) : '') + '</div></div></div>' +
+        '<div class="statbar bc-stat">' +
+          '<div class="stat"><div class="sl">В списке</div><div class="sv num">' + (t.sent || 0) + '</div></div>' +
+          '<div class="stat"><div class="sl"><span class="sdot green"></span>Дошло</div>' +
+            '<div class="sv num">' + (t.delivered || 0) + '</div></div>' +
+          '<div class="stat"><div class="sl"><span class="sdot red"></span>Закрыли бота</div>' +
+            '<div class="sv num">' + (t.blocked || 0) + '</div></div>' +
+          '<div class="stat"><div class="sl"><span class="sdot amber"></span>Не дошло</div>' +
+            '<div class="sv num">' + (t.failed || 0) + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">Что было после</div><div class="s">считается от даты отправки каждому человеку</div></div></div>' +
+        '<div class="bc-lad" style="border-top:1px solid var(--line)">' + bcLadder(t) + '</div></div>' +
+      bcCohort('По каналу', 'где человек нас читает', co.channel) +
+      bcCohort('По давности', 'когда он в последний раз писал нам сам', co.age) +
+      bcCohort('Откуда он у нас', 'своя аудитория или старая база', co.origin) +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">Адресаты</div><div class="s">' +
+        (pp ? pp.total + ' ' + plural(pp.total, 'человек', 'человека', 'человек') : 'считаю') +
+        ' · ответ площадки как есть</div></div></div>' +
+        '<div class="bc-filters">' +
+          '<div class="searchwrap">' + ic('search', 15) +
+            '<input id="bc-q" class="search" placeholder="имя, ник или id" value="' + esc(q.q) + '">' +
+          '</div>' +
+          '<nav class="tabs">' + [['', 'Все'], ['ok', 'Дошло'], ['blocked', 'Закрыли бота'], ['fail', 'Не дошло']]
+            .map(function (o) {
+              return '<a class="tab' + (q.status === o[0] ? ' on' : '') + '" data-bcs="' + o[0] + '">' + o[1] + '</a>';
+            }).join('') + '</nav>' +
+        '</div>' +
+        '<div style="border-top:1px solid var(--line)">' + people + '</div>' +
+        (more ? '<div class="bc-more"><button class="qchip" id="bc-more">Показать ещё</button></div>' : '') +
+      '</div>' +
+    '</div>';
+
+    var back = el('bc-back');
+    if (back) back.addEventListener('click', function () {
+      q.run = null; state._bcRun = null; state._bcPeople = null; saveUi(); renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-bcs]'), function (tab) {
+      tab.addEventListener('click', function () {
+        q.status = tab.getAttribute('data-bcs'); q.offset = 0;
+        state._bcPeople = null; renderView();
+      });
+    });
+    var qi = el('bc-q');
+    if (qi) qi.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      q.q = (qi.value || '').trim(); q.offset = 0; state._bcPeople = null; renderView();
+    });
+    var mb = el('bc-more');
+    if (mb) mb.addEventListener('click', function () {
+      q.offset = (state._bcPeople.people || []).length; fetchBcPeople();
+    });
+  }
 
   /* ── ПОДАРКИ — что берут из бота и где встают ──
      Данные — лог бота (`/admin/api/gifts/overview`), а не события платформы: в бота
