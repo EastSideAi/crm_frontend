@@ -3273,11 +3273,14 @@ button.tr-crumb:hover { color: var(--blue); }
    поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
    иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
 .sc-find { margin-bottom: 8px; }
-/* «Править всю серию» — согласие, а не поле: ставим его строкой над списком людей,
-   с тем же отступом, что у полей формы. */
-.sc-all { display: flex; align-items: center; gap: 9px; margin: 2px 0 2px;
-  font-size: 13px; color: var(--ink-2); cursor: pointer; }
-.sc-all input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+/* Факты серии и последствия правки — тихие строки под своим полем: это не
+   предупреждение об опасности, а описание того, что сейчас произойдет. */
+.sc-sfacts { margin-top: 7px; font-size: 12px; color: var(--ink-3); }
+.sc-shint { margin: -2px 0 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.sc-shint[hidden] { display: none; }
+/* Сегмент области правки — ровно тот же рецепт, что в карточке зума (.due-seg),
+   своего размера ему не заводим: вопрос один и тот же. */
+.sc-scope { align-self: flex-start; }
 /* Снятие встречи — действие в другую сторону, поэтому уезжает к левому краю
    футера, подальше от «Сохранить». */
 .sc-mdrop { margin-right: auto; }
@@ -6871,7 +6874,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tabs::-webkit-scrollbar { height: 0; }
 .po-card { padding: 20px 22px; margin-bottom: 16px; }
 .po-txt { margin-top: 13px; font-size: 13.5px; color: var(--ink-2); line-height: 1.62; }
-.po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+.po-note { margin-top: 14px; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
 .po-note.wide { margin: 16px 0 26px; }
 
 /* путь студента — лента маршрута над тарифами.
@@ -7048,13 +7051,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tblwrap::-webkit-scrollbar { height: 6px; }
 .po-tblwrap::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 .po-tbl { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
-.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 10.5px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 11px; font-weight: 700;
+  color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
 .po-tbl td { padding: 13px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
   color: var(--ink-2); line-height: 1.5; vertical-align: top; }
 .po-tbl tbody tr:last-child td { border-bottom: 0; }
 .po-rl { width: 178px; font-weight: 600; color: var(--ink); }
-.po-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+/* подпись под строкой — это объяснение, а не фон: серый --ink-3 на белом дает
+   контраст 2,3 к 1 и не читается (Павел, 18.09.2026), поэтому берем --ink-2 */
+.po-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-2); }
 .po-pluses { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
 .po-plus { position: relative; padding-left: 14px; font-size: 12.5px; }
 .po-plus::before { content: '+'; position: absolute; left: 0; top: -1px; color: var(--blue); font-weight: 700; }
@@ -7068,8 +7073,31 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-in { max-width: 152px; }
 .po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
   display: inline-block; vertical-align: middle; }
-.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-2); font-weight: 500; }
 .po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
+/* калькулятор фондов и плана: подзаголовок внутри карточки отделяет три разных
+   вопроса — что откладываем, когда уходит, сколько клиентов нужно */
+.po-sub { margin: 26px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.po-sub:first-of-type { margin-top: 20px; }
+.po-sel { width: auto; max-width: 100%; cursor: pointer; }
+.po-cpct { white-space: nowrap; }
+.po-tbl.econ.w6 { min-width: 860px; }
+.po-tbl.econ.w6 .po-rl { width: 208px; }
+.po-tbl.econ.w5 { min-width: 940px; }
+.po-tbl.econ.w5 .po-rl { width: 292px; }
+.po-tbl.econ.w5 .po-hint + .po-hint { margin-top: 1px; }
+/* «Подобрать доли» — единственная кнопка калькулятора: она ничего не удаляет, а
+   считает, поэтому тихая и стоит рядом со своим объяснением, а не в шапке */
+.po-act { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.po-fit { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
+.po-act .po-hint { flex: 1 1 280px; margin-top: 0; }
+.po-tbl.econ.w3 { min-width: 560px; }
+.po-tbl.econ.w3 .po-rl { width: 320px; }
+/* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
+.po-board4 { grid-template-columns: repeat(4, 1fr); margin-top: 14px; }
+.po-board4 .pc-v.po-pos { color: var(--green-ink); }
+.po-board4 .pc-v.po-neg { color: var(--red-ink); }
+@media (max-width: 1100px) { .po-board4 { grid-template-columns: repeat(2, 1fr); } }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
