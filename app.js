@@ -25060,7 +25060,7 @@
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
         return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
-                 atts: m.attachments || [], sending: m.sending === true,
+                 atts: attsWithSrc(m.attachments, c.id, m.id), sending: m.sending === true,
                  // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
                  // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
                  // копия правила разъедется с первой в день, когда канал его поменяет.
@@ -25184,8 +25184,39 @@
      рецепта для одной и той же сущности в системе быть не должно. Входящий файл лежит в
      хранилище платформы, и на него есть ссылка; наш исходящий нигде не хранится — копить
      чужие документы незачем, — поэтому он показан строкой без ссылки. */
+  /* Адрес присланного файла. У ВК и Макса вложение приезжает прямой ссылкой канала,
+     у телеграма ссылки нет вовсе: файл лежит у мессенджера, и достать его может только
+     бот. Тогда адрес наш — бэкенд проверяет доступ к переписке и отдает байты. */
+  function attSrc(a, convId, msgId, i) {
+    a = a || {};
+    if (/^https?:\/\//i.test(String(a.url || ''))) return a;
+    if (!a.file_id || convId == null || msgId == null) return a;
+    var u = API + '/admin/api/bot/conversations/' + encodeURIComponent(convId) +
+      '/messages/' + encodeURIComponent(msgId) + '/file/' + i +
+      '?k=' + encodeURIComponent(getKey());
+    var out = {}; for (var kk in a) if (Object.prototype.hasOwnProperty.call(a, kk)) out[kk] = a[kk];
+    out.url = u;
+    return out;
+  }
+  function attsWithSrc(list, convId, msgId) {
+    return (list || []).map(function (a, i) { return attSrc(a, convId, msgId, i); });
+  }
+  function attIsImage(a) {
+    var k = String((a || {}).kind || '');
+    return k === 'image' || k === 'photo' || /^image\//i.test(String((a || {}).mime || ''));
+  }
+
   function tgFileCard(a) {
     a = a || {};
+    // Ссылку пускаем только http(s): esc() экранирует кавычки, но схему не смотрит, а
+    // вложения приходят из переписки — это чужие данные, и javascript: там недопустим.
+    var img = /^https?:\/\//i.test(String(a.url || '')) ? a.url : '';
+    // Скриншот показываем сразу: менеджер спрашивает «какая ошибка?» и должен увидеть
+    // ее сам, а не читать слово «[изображение]» (Вера, 19.09.2026).
+    if (img && attIsImage(a)) {
+      return '<a class="tg-img" href="' + esc(img) + '" target="_blank" rel="noopener" ' +
+        'title="Открыть во весь экран"><img src="' + esc(img) + '" alt="вложение из переписки" loading="lazy"></a>';
+    }
     // Длинное имя режем по основе, а расширение оставляем целым: «podborka-vuzov….pdf»
     // говорит, что это за файл, а «podborka-vuzov….» — уже нет.
     var nm = String(a.name || 'файл'), dot = nm.lastIndexOf('.');
@@ -25200,6 +25231,18 @@
       ? '<a class="rm-catt file" href="' + esc(href) + '" target="_blank" rel="noopener">' + inner + '</a>'
       : '<span class="rm-catt file">' + inner + '</span>';
   }
+
+  /* Ссылка на картинку живет не вечно: у ВК, Макса и инстаграма адрес выдает сам
+     канал и через несколько дней гасит, а телеграмный файл бот может не достать. Битая
+     иконка в переписке читается как поломка CRM, поэтому не загрузившийся снимок
+     превращаем в строку «вложение не открылось». Один обработчик на документ: событие
+     error у картинки не всплывает, ловим на погружении. */
+  document.addEventListener('error', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'IMG' || !t.parentElement) return;
+    var a = t.parentElement.closest ? t.parentElement.closest('.tg-img') : null;
+    if (a) a.classList.add('gone');
+  }, true);
 
   function buildThread(msgs) {
     if (msgs === null) {
@@ -25238,7 +25281,14 @@
       var files = atts.length ? '<div class="tg-atts">' + atts.map(tgFileCard).join('') + '</div>' : '';
       // Бот пишет в историю «[файл] имя», когда подписи к документу не было. Карточка
       // вложения говорит то же самое, и второй раз это читать незачем.
-      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || ''));
+      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || '') ||
+        m.text === '[изображение]' || m.text === '[вложение]');
+      // Снимок без подписи — это фотография, а не сообщение с вложением: белая плашка
+      // под ней тянулась на всю колонку, а сам кадр оставался узким. Пузырь тут не
+      // нужен вовсе, время ложится поверх кадра.
+      var picOnly = fileTxt && !!atts.length && atts.every(function (a) {
+        return attIsImage(a) && /^https?:\/\//i.test(String((a || {}).url || ''));
+      });
       if (m.sending) {
         foot = '<span class="tg-by">' + ic('clock', 9) + 'отправляется…</span>';
       }
@@ -25251,14 +25301,14 @@
               '<button class="tg-edok" data-edsave="' + m.id + '">Сохранить</button>' +
             '</div>' +
           '</div>'
-        : '<div class="tg-bub">' + files + (fileTxt ? '' : mdMsg(m.text)) +
+        : '<div class="tg-bub' + (picOnly ? ' pic' : '') + '">' + files + (fileTxt ? '' : mdMsg(m.text)) +
             '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
             ((m.canEdit || m.canDel) ? '<span class="tg-acts">' +
               (m.canEdit ? '<button class="tg-edit" data-edit="' + m.id + '" title="Изменить текст у клиента">' + ic('pen', 11) + '</button>' : '') +
               (m.canDel ? '<button class="tg-del" data-del="' + m.id + '" title="Убрать сообщение у клиента">' + ic('x', 11) + '</button>' : '') +
             '</span>' : '') +
           '</div>';
-      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + (m.delAt ? ' gone' : '') + (editing ? ' editing' : '') + '">' +
+      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + (m.delAt ? ' gone' : '') + (editing ? ' editing' : '') + (picOnly && !editing ? ' pic' : '') + '">' +
         bub + foot + '</div>';
     }).join('');
   }
@@ -25932,7 +25982,7 @@
     return (d.messages || []).map(function (m) {
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
       return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
-               atts: m.attachments || [], sending: m.sending === true,
+               atts: attsWithSrc(m.attachments, d.user_id, m.id), sending: m.sending === true,
                canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
                canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
