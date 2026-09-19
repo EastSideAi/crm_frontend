@@ -1078,6 +1078,23 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-copylink:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
 .m-copylink:hover svg { color: var(--blue); }
 
+/* Ведет — ответственный за клиента в шапке карточки: процент продаж капает именно
+   на него, поэтому он на виду, а не спрятан во вкладке «Сейчас». Клик ведет к
+   селектору, где его назначают. «не назначен» подсвечен амбером — это повод действия. */
+.m-own-head { display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  margin-top: 8px; padding: 0 10px 0 8px; border-radius: 8px;
+  font: 600 12.5px 'Manrope', sans-serif; background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); cursor: pointer;
+  transition: color .15s, background .15s, box-shadow .15s; }
+.m-own-head svg { width: 13px; height: 13px; color: var(--ink-3); transition: color .15s; }
+.m-own-head .mo-k { color: var(--ink-3); font-weight: 600; }
+.m-own-head .mo-v { color: var(--ink); font-weight: 700; letter-spacing: -.01em; }
+.m-own-head:hover { background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
+.m-own-head:hover svg, .m-own-head:hover .mo-k { color: var(--blue); }
+.m-own-head.none { background: var(--amber-soft); box-shadow: inset 0 0 0 1px rgba(224,146,47,.28); }
+.m-own-head.none svg, .m-own-head.none .mo-k { color: var(--amber); }
+.m-own-head.none .mo-v { color: var(--amber-ink); }
+
 .m-load { padding: 64px 26px; text-align: center; font-size: 13.5px; color: var(--ink-3); }
 
 .m-pulse { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 7px;

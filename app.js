@@ -27931,6 +27931,7 @@
     var pos = list.indexOf(id);
 
     var nm = ov(ctx, 'name');
+    var ownHd = crm.owner || null;
     var openTasks = (crm.tasks || []).filter(function (t) { return !t.done; }).length;
     // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
@@ -27986,6 +27987,14 @@
             '<div class="m-name' + (nm ? '' : ' anon') + '" id="m-name" data-raw="' + esc(nm) + '">' + esc(nm || 'Без имени') + '</div>' +
             '<button class="m-edit" id="m-name-edit" title="Изменить имя">' + ic('note', 14) + '</button>' +
           '</div>' +
+          // Ведет клиента — в шапке, а не спрятан во вкладке «Сейчас»: процент продаж
+          // капает именно на ответственного, значит он должен быть на виду. Клик ведет
+          // к селектору в «Сейчас», где его назначают и меняют.
+          '<button class="m-own-head' + (ownHd ? '' : ' none') + '" id="m-own-jump" ' +
+            'title="Кто ведет клиента. Нажми, чтобы назначить или сменить">' +
+            ic('user', 13) + '<span class="mo-k">Ведет</span>' +
+            '<span class="mo-v">' + esc(ownHd ? (ownHd.name || ('#' + ownHd.id)) : 'не назначен') + '</span>' +
+          '</button>' +
           '<div class="m-sub">' + subBits + '</div>' +
         '</div>' +
       '</div>' +
@@ -28005,6 +28014,8 @@
       '</div>';
 
     el('m-close').addEventListener('click', closeDrawer);
+    var ownJump = el('m-own-jump');
+    if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
     var hideBtn = el('m-hide');
     if (hideBtn) hideBtn.addEventListener('click', function () {
       if (window.confirm('Скрыть этого лида? Он уйдёт из списков в архив, данные сохранятся — можно вернуть.')) rmHideLead(id, true);
