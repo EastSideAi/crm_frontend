@@ -59,7 +59,15 @@ jobs:
             --exclude='./_*.html' \
             --exclude='./fonts/*.txt' \
             -C . .
-          tar -tzf _out/site.tgz | head -20
+          # Список файлов пишем в файл и печатаем из него. Было
+          # `tar -tzf ... | head -20`: head уходит после двадцатой строки, tar
+          # получает закрытую трубу, падает с кодом 2, а pipefail роняет весь шаг —
+          # и выкладка не доезжает, хотя пакет собран. Срабатывало как повезет,
+          # 17.09.2026 не повезло: промоут уехал в main, а на сайте осталась
+          # вчерашняя CRM. Чтение архива целиком заодно проверяет, что он цел.
+          tar -tzf _out/site.tgz > _out/list.txt
+          sed -n '1,20p' _out/list.txt
+          echo "всего файлов в пакете: $(wc -l < _out/list.txt)"
 
       - name: Deploy to Selectel (jailed forced-command)
         env:
