@@ -29381,6 +29381,8 @@
       '<div class="m-csub">Кто это, как пользуется платформой и где остановился — вся картина на одном экране.</div>';
     html += buildUsageDash(ctx, L);
     html += buildCabinet(id);
+    html += '<div class="uz-jh"><span>Что делает в кабинете</span><i></i></div>';
+    html += buildCabinetSteps(id);
     html += '<div class="uz-jh"><span>Как шел по платформе</span><i></i></div>';
     html += buildPathTimeline(L, d || null);
     return html;
@@ -29684,6 +29686,54 @@
     }).join('') + '</div>' +
       '<div class="uz-line"><b class="num">' + fam.length + '</b> ' + plural(fam.length, 'участник', 'участника', 'участников') + ' семьи</div>';
     return uzPanel({ icon: 'team', title: 'Семья', body: body });
+  }
+
+  /* ── «Что делает в кабинете» ───────────────────────────────────────────────
+     Шаги человека по кабинету: какой экран открыл, что нажал, где вылезла ошибка
+     (бэкенд: app/routers/activity.py, поток пишет сам кабинет). Показываем
+     заходами — «за один раз он дошел до документов и уперся» читается, а плоская
+     простыня нажатий нет. Строку шага собирает сервер: словарь экранов один на
+     систему, и двум копиям разъезжаться нельзя. */
+  function fetchCabinetSteps(caseId, cb) {
+    var box = state._cabsteps || (state._cabsteps = {});
+    if (box[caseId]) { cb(box[caseId]); return; }
+    api('/admin/api/leads/' + encodeURIComponent(caseId) + '/activity').then(function (r) {
+      box[caseId] = (r && r.visits) || [];
+      cb(box[caseId]);
+    }).catch(function () { box[caseId] = []; cb([]); });
+  }
+
+  function cabVisit(v) {
+    var steps = v.steps || [];
+    var mins = Math.round((new Date(v.ended_at || v.started_at) - new Date(v.started_at)) / 60000);
+    var head = fmtWhen(v.started_at) + ' · ' + steps.length + ' ' +
+      plural(steps.length, 'шаг', 'шага', 'шагов') + (mins >= 1 ? ' · ' + mins + ' мин' : '');
+    /* Длинный заход сворачиваем с начала: важнее конец — там человек и уперся. */
+    var shown = steps.length > 14 ? steps.slice(steps.length - 14) : steps;
+    var cut = steps.length - shown.length;
+    var rows = shown.map(function (st) {
+      return '<div class="pt-sub' + (st.kind === 'error' ? ' err' : (st.kind === 'tap' ? ' hi' : '')) + '">' +
+        esc(st.text || st.name || '') + '<span class="sw num">' + fmtTime(st.at) + '</span></div>';
+    }).join('');
+    return '<div class="cab-v"><div class="uz-mini">' + esc(head) +
+      (cut ? ' · показаны последние ' + shown.length : '') + '</div>' +
+      '<div class="pt-subs">' + rows + '</div></div>';
+  }
+
+  function buildCabinetSteps(caseId) {
+    var box = state._cabsteps || {};
+    var mine = box[caseId];
+    if (!mine) {
+      fetchCabinetSteps(caseId, function () {
+        if (state.drawerId === caseId && state.modalSection === 'path') renderModalContent();
+      });
+      return '<div class="uz-empty">Смотрим, что человек делал в кабинете…</div>';
+    }
+    if (!mine.length) {
+      return '<div class="uz-empty">Шагов по кабинету пока нет: человек либо не заходил, ' +
+        'либо заходил до того, как мы начали их записывать.</div>';
+    }
+    return '<div class="cab-steps">' + mine.slice(0, 5).map(cabVisit).join('') + '</div>';
   }
 
   /* группирует реальные события под шаги платформы */

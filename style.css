@@ -1552,6 +1552,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .pt-sub.comm::before { background: var(--green); }
 .pt-sub .sw { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-3); font-weight: 500; }
 
+/* — шаги по кабинету: заходы человека (buildCabinetSteps) — */
+.cab-steps { display: flex; flex-direction: column; gap: 10px; }
+.cab-v { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); }
+.cab-v .uz-mini { margin-bottom: 8px; }
+.cab-v .pt-subs { display: flex; flex-direction: column; gap: 5px; }
+.cab-v .pt-sub { word-break: break-word; }
+.pt-sub.err { color: var(--red-ink); font-weight: 600; }
+.pt-sub.err::before { background: var(--red); }
+
 @media (max-width: 560px) {
   .uz-hero { flex-direction: column; }
   .uz-pulse { width: auto; flex-direction: row; }
