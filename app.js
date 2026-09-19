@@ -17799,19 +17799,24 @@
     // paymentId: процент не начислен, потому что ответственного нет или он сервисный.
     var accruedPays = {};
     sales.forEach(function (it) { if (it.payment_id) accruedPays[it.payment_id] = true; });
+    // Продления языка: доход, который мост пометил salesSkip='renewal' — процент не
+    // начисляем, показываем отдельно. «Без разнесения» — оплаты, где процент мог бы
+    // капнуть (нет продления), но некому: нет ответственного или он из сервисной роли.
+    var renewals = incomes.filter(function (it) {
+      return it.status === 'факт' && it.included && it.sales_skip === 'renewal';
+    });
     var unassigned = incomes.filter(function (it) {
-      return it.status === 'факт' && it.included &&
+      return it.status === 'факт' && it.included && it.sales_skip !== 'renewal' &&
              !(it.payment_id && accruedPays[it.payment_id]);
     });
 
-    var incFact = incomes.filter(function (it) { return it.status === 'факт' && it.included; });
     var tiles = [
       { label: 'Начислено', value: finRub(totalAccrued), sub: 'продавцам за период' },
       { label: 'Продавцов', value: String(order.length), sub: 'с начислениями' },
-      { label: 'Разнесено', value: String(incFact.length - unassigned.length),
-        sub: 'оплат с процентом' },
+      { label: 'Продления', value: String(renewals.length),
+        sub: renewals.length ? 'языка, без процента' : 'нет' },
       { label: 'Без разнесения', value: String(unassigned.length),
-        sub: unassigned.length ? 'оплат без процента' : 'все оплаты разнесены' },
+        sub: unassigned.length ? 'оплат без процента' : 'все разнесено' },
     ];
 
     var salesRow = function (it) {
@@ -17867,14 +17872,35 @@
         '</div>' + unaRows +
       '</div>' : '';
 
+    var renRows = renewals.map(function (it) {
+      return '<div class="trow fin-grid fe-grid muted">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || 'без клиента') + '</b>' +
+          '<i>продление языка — процент не начисляем</i></span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst wait">продление</span></span>' +
+      '</div>';
+    }).join('');
+
+    var renCard = renewals.length ?
+      '<div class="card listcard fs-ren">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Продления языка</div>' +
+            '<div class="s fe-s">повторная оплата языка тем же клиентом: процент за ' +
+              'первую продажу уже начислен, за продление не начисляем</div></div>' +
+          '<span class="list-count fin-count"><b>' + renewals.length + '</b> ' +
+            plural(renewals.length, 'оплата', 'оплаты', 'оплат') + '</span>' +
+        '</div>' + renRows +
+      '</div>' : '';
+
     var head = '<div class="card listcard"><div class="list-tools">' +
       '<div><div class="t fe-t">Начисления продаж' +
         (per ? ' · ' + esc(per.name) : '') + '</div>' +
         '<div class="s fe-s">процент продавцу капает сам с каждой оплаты клиента; ' +
           'здесь только сверяете и передаете в выплату</div></div></div></div>';
 
-    var body = sellerCards || unaCard
-      ? sellerCards + unaCard
+    var body = (sellerCards || unaCard || renCard)
+      ? sellerCards + unaCard + renCard
       : '<div class="card listcard"><div class="empty">Начислений продаж в этой ' +
         'ведомости пока нет. Как пройдет оплата клиента с продавцом в ответственных — ' +
         'строка появится здесь сама.</div></div>';
