@@ -2101,11 +2101,12 @@
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
-    // Тьютор ведет учеников: карточки и обучение. Продажных диалогов и портала у
-    // него нет — правило Павла от 2026-08-20: до разбора портала по разделам
+    // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
+    // (`inbox_own`, Павел 17.09.2026). Полного инбокса с воронкой продаж и портала
+    // у него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
-    // нет намеренно — решение владельца.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy'] },
+    // нет намеренно — решение владельца. Список диалогов режет сервер, не экран.
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy', 'zaezdy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
@@ -2172,7 +2173,7 @@
     // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
     // одного человека, а этот вопрос про всю компанию (и cap другой).
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
-    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox' },
+    { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
     { id: 'leads', label: 'Люди', icon: 'leads', cap: 'clients' },
@@ -5752,6 +5753,10 @@
     late: { label: 'закрыта поздно',  cls: 'rh-late' },
   };
   var WDAYS_RU = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  // «Повторяется по пятницам» — в карточке планерки день недели пишется
+  // словом и во множественном числе: так говорят про регулярную встречу.
+  var WDAYS_EVERY_RU = ['воскресеньям', 'понедельникам', 'вторникам', 'средам',
+    'четвергам', 'пятницам', 'субботам'];
 
   function wkShift() { return state.weekShift || 0; }
 
@@ -6550,7 +6555,16 @@
 
   /* «Гудалина Е. С.», «Митрофанова Мария Валерьевна» — в клетке недели помещается
      фамилия, и она же и есть то, чем людей различают на слух. */
-  function schedShort(name) { return String(name || '').trim().split(/\s+/)[0] || ''; }
+  /* Имя человека в сетке. Одно правило на всех: убираем инициалы («Тестова А. А.»
+     → «Тестова»), остальное показываем как есть. Брать первое слово было нельзя:
+     у преподавателя это фамилия, а у сотрудника («Павел Демидов») — имя, и в
+     одном списке одни и те же люди назывались по-разному. */
+  function schedShort(name) {
+    var parts = String(name || '').trim().split(/\s+/).filter(function (x) {
+      return x && !/^[A-Za-zА-Яа-яЁё]\.$/.test(x);
+    });
+    return parts.join(' ') || String(name || '').trim();
+  }
 
   function schedMine(d, s) {
     return !!(d.me && s.person === d.me.person && s.role === d.me.role);
@@ -6709,7 +6723,7 @@
         // «Пробников · урок» у занятого часа и «Пробников (урок)» у свободного
         // отличались только цветом, а на телефоне легенды нет: так и продают уже
         // занятый час. Состояние пишем словом, роль уводим в подсказку.
-        cells.push(schedChip('busy', s.person + ' · занято' + (s.client ? ' · ' + s.client : ''),
+        cells.push(schedChip('busy', schedShort(s.person) + ' · занято' + (s.client ? ' · ' + s.client : ''),
           (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
       at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
@@ -7021,9 +7035,11 @@
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div><div class="al-eyebrow">Расписание</div>' +
-          '<div class="al-title">' + (m ? 'Встреча' : 'Планерка') + '</div></div>' +
+          '<div class="al-title">Планерка</div></div>' +
           '<button class="al-x" id="sm-x" title="Закрыть">' + ic('x', 16) + '</button></div>' +
-        '<div class="al-sub">Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.</div>' +
+        '<div class="al-sub">' + (m
+          ? 'Меняется то, что вы поправите. Час планерки занят у каждого участника, а название видно в общем рабочем календаре.'
+          : 'Час встречи станет занятым у каждого участника: продать его клиенту уже не получится. Название уедет в общий рабочий календарь — имя ученика в него не пишем.') + '</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="sm-title" class="al-in" type="text" maxlength="200" placeholder="Планерка отдела продукта" value="' + esc((m && m.title) || '') + '"></label>' +
@@ -7046,12 +7062,28 @@
               }).join('') + '</select></span></label>' +
           '</div>' +
           (m
-            // У заведенной встречи повтор уже случился: спрашиваем не «сколько недель»,
-            // а «править одну или всю серию» — это разные намерения, и по ошибке
-            // сдвинуть весь квартал нельзя.
+            // У заведенной встречи повтор уже случился, поэтому здесь два разных
+            // вопроса. Первый — что правим: только это занятие или всю серию
+            // (тот же сегмент, что в карточке зума). Второй — сколько раз она
+            // повторяется дальше; прошедшие занятия при этом не трогаются.
             ? (m.series
-                ? '<label class="sc-all"><input type="checkbox" id="sm-all"><span>Править всю серию повторов, а не только это занятие</span></label>'
-                : '')
+                ? '<div class="al-f"><span class="al-l">Что меняем</span>' +
+                    '<span class="due-seg sc-scope">' +
+                      '<button type="button" data-scope="one" class="on">только эту</button>' +
+                      '<button type="button" data-scope="all">всю серию</button></span>' +
+                    '<div class="sc-sfacts" id="sm-facts"></div></div>'
+                : '') +
+              '<label class="al-f"><span class="al-l">Повторять</span>' +
+                '<span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
+                  '<option value="" selected>как есть</option>' +
+                  // «Только эту» здесь писать нельзя: ровно так называется соседний
+                  // сегмент области правки, и человек выбрал бы согласованный по
+                  // словам вариант, который вместо этого снимает все будущие.
+                  (m.series ? '<option value="1">дальше не повторять</option>' : '') +
+                  '<option value="4">4 недели</option>' +
+                  '<option value="12">12 недель</option><option value="26">полгода</option>' +
+                '</select></span></label>' +
+              '<div class="sc-shint" id="sm-rhint" hidden></div>'
             : '<div class="al-row"><label class="al-f"><span class="al-l">Повтор</span><span class="al-selwrap"><select id="sm-rep" class="al-sel">' +
               '<option value="1" selected>один раз</option><option value="4">4 недели</option>' +
               '<option value="12">12 недель</option><option value="26">полгода</option></select></span></label>' +
@@ -7070,7 +7102,7 @@
           '<div class="ct-err" id="sm-err"></div>' +
         '</div>' +
         '<div class="al-foot">' +
-          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять встречу</button>' : '') +
+          (m ? '<button class="bp ghost sm sc-mdrop" id="sm-drop">Снять планерку</button>' : '') +
           '<button class="al-cancel" id="sm-cancel">Отмена</button>' +
           '<button class="bp al-save" id="sm-ok">' + (m ? 'Сохранить' : 'Поставить') + '</button></div>' +
       '</div>';
@@ -7114,14 +7146,79 @@
       openSchedMeetDrop(m.id, !!m.series, m.title || '', m.date, m.hour);
     });
 
+    // Область правки: «только эту» или «всю серию». Сегмент тот же, что в карточке
+    // зума, — вопрос один и тот же, и спрашивать его двумя разными способами на
+    // соседних экранах нельзя.
+    var scope = 'one';
+    var day0 = m && m.date, hour0 = m && m.hour, facts = null;
+    // Рисунок серии пересчитывается по тому дню, который сейчас стоит в форме:
+    // иначе при переносе пятницы на среду рядом со «сдвинем серию» осталось бы
+    // «повторяется по пятницам».
+    var showFacts = function () {
+      if (!facts || !el('sm-facts')) return;
+      var last = new Date((facts.series_last || '') + 'T00:00:00');
+      var w = new Date((el('sm-day').value || facts.date || '') + 'T00:00:00');
+      var moved = el('sm-day').value !== day0;
+      el('sm-facts').textContent = 'Повторяется по ' +
+        (isNaN(w.getTime()) ? 'неделям' : WDAYS_EVERY_RU[w.getDay()]) +
+        ', впереди ' + facts.series_ahead + ' ' +
+        plural(facts.series_ahead, 'встреча', 'встречи', 'встреч') +
+        (moved || isNaN(last.getTime()) ? ''
+          : ', последняя ' + last.getDate() + ' ' + MONTHS_RU[last.getMonth()]);
+    };
+    var warn = function () {
+      if (!el('sm-rhint')) return;
+      var moved = scope === 'all' &&
+        (el('sm-day').value !== day0 || +el('sm-hour').value !== hour0);
+      var rep = el('sm-rep') && el('sm-rep').value;
+      var txt = [];
+      if (moved) txt.push('День и час поменяются у всех повторов: серия сдвинется целиком на ту же разницу.');
+      if (rep) txt.push(rep === '1'
+        ? 'Будущие повторы снимутся, останется только эта встреча.'
+        : 'Повторы считаются от этой встречи вперед' +
+          (m && m.series ? ', прошедшие встречи серии остаются на месте' : '') + '.');
+      el('sm-rhint').innerHTML = txt.join(' ');
+      el('sm-rhint').hidden = !txt.length;
+    };
+    var seg = ov.querySelector('.sc-scope');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-scope]');
+      if (!b) return;
+      scope = b.getAttribute('data-scope');
+      Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+        x.classList.toggle('on', x === b);
+      });
+      warn();
+    });
+    if (m) {
+      ['sm-day', 'sm-hour', 'sm-rep'].forEach(function (id) {
+        if (el(id)) el(id).addEventListener('change', function () { warn(); showFacts(); });
+      });
+      // Факты серии в сетке недели не лежат: спрашиваем саму встречу.
+      api('/admin/api/sched/meetings/' + m.id).then(function (r) {
+        var x = r && r.meeting;
+        if (!x || !el('sm-facts')) return;
+        facts = x;
+        showFacts();
+      }).catch(function () {});
+    }
+
     el('sm-ok').addEventListener('click', function () {
       var people = [];
       Array.prototype.forEach.call(boxes, function (c) {
         if (c.checked) people.push({ role: all[+c.getAttribute('data-sm-p')].role, person: all[+c.getAttribute('data-sm-p')].person });
       });
       var title = (el('sm-title').value || '').trim();
-      if (!title) return (el('sm-err').textContent = 'Напишите, как называется встреча');
-      if (!people.length) return (el('sm-err').textContent = 'Отметьте хотя бы одного участника');
+      // Ошибка живет под списком людей, а он на телефоне развернут целиком: без
+      // прокрутки нажатие «Сохранить» выглядит как «ничего не произошло».
+      var fail = function (t) {
+        el('sm-err').textContent = t;
+        el('sm-err').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      };
+      // Курсор возвращаем в поле, но экран не дергаем: само сообщение стоит у
+      // кнопки, и прокрутить надо к нему, а не к началу формы.
+      if (!title) { el('sm-title').focus({ preventScroll: true }); return fail('Напишите, как называется встреча'); }
+      if (!people.length) return fail('Отметьте хотя бы одного участника');
       el('sm-ok').disabled = true;
       var body = {
         title: title, date: el('sm-day').value, hour: +el('sm-hour').value,
@@ -7129,16 +7226,17 @@
       };
       var ok = function (r) {
         close();
-        showToast(m ? 'Встреча изменена'
+        showToast(m ? 'Планерка изменена'
           : (r && r.created > 1 ? 'Планерка стоит на ' + r.created + ' недель вперед' : 'Планерка в расписании'));
         schedReload();
       };
       var bad = function (code, e) {
         el('sm-ok').disabled = false;
-        el('sm-err').textContent = (e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть';
+        fail((e && e.body && typeof e.body.detail === 'string' && e.body.detail) || 'Не получилось — проверь сеть');
       };
       if (m) {
-        body.series = !!(el('sm-all') && el('sm-all').checked);
+        body.series = scope === 'all';
+        if (el('sm-rep').value) body.repeat = +el('sm-rep').value;
         apiSend('/admin/api/sched/meetings/' + m.id, 'PATCH', body, ok, bad);
       } else {
         body.repeat = +el('sm-rep').value;
@@ -23036,6 +23134,20 @@
       m.price[t.id] = (d.price && d.price[t.id] != null) ? d.price[t.id] : (t.price || 0);
     });
     (ec.rates || []).forEach(function (r) { m.rates[r.id] = (d.rates && d.rates[r.id]) || 0; });
+    /* Доли фондов: в базе — то, что команда поставила сама, в portal.json — те,
+       с которых начинали. Пока в базе пусто, показываем исходные, иначе первый
+       же заход на вкладку увидит нули вместо схемы. */
+    m.funds = {}; m.fundwhen = {};
+    ((ec.funds || {}).items || []).forEach(function (f) {
+      m.funds[f.id] = (d.funds && d.funds[f.id] != null) ? d.funds[f.id] : econNum(f.pct);
+      m.fundwhen[f.id] = (d.fundwhen && d.fundwhen[f.id]) || f.when || 'month';
+    });
+    /* План и постоянные расходы в portal.json не лежат: этот файл раздается
+       статикой, а оклады и план продаж внутренние. В файле только строки, сами
+       суммы приходят из базы, и пока их там нет — ноли. */
+    m.plan = {}; m.fixed = {};
+    (p.tariffs || []).forEach(function (t) { m.plan[t.id] = (d.plan && d.plan[t.id]) || 0; });
+    ((ec.fixed || {}).items || []).forEach(function (i) { m.fixed[i.id] = (d.fixed && d.fixed[i.id]) || 0; });
     (ec.costs || []).forEach(function (c) {
       m.costs[c.id] = {};
       (p.tariffs || []).forEach(function (t) {
@@ -23096,6 +23208,237 @@
     if (!saved || !saved.updated_at) return 'Цифры общие для команды: правку видят все, у кого есть доступ к деньгам.';
     return 'Последняя правка — ' + esc(saved.updated_by || 'кто-то из команды') + ', ' + fmtWhen(saved.updated_at) + '.';
   }
+  /* Фонды и деньги во времени. Отвечаем на три разных вопроса и не смешиваем их:
+     сколько откладываем в момент оплаты, когда эти деньги уходят из фонда и
+     сколько клиентов нужно, чтобы компания вышла в ноль. Все поля правятся руками:
+     Павел 18.09.2026 попросил калькулятор, а не картинку с посчитанными цифрами. */
+  var ECON_WHEN = [
+    { id: 'sale', label: 'сразу с продажи', per: 'с одной продажи', n: 0 },
+    { id: 'month', label: 'раз в месяц', per: 'в месяц', n: 12 },
+    { id: 'quarter', label: 'раз в квартал', per: 'в квартал', n: 4 },
+    { id: 'year', label: 'раз в сезон', per: 'за сезон', n: 1 }
+  ];
+  function econWhen(id) {
+    for (var i = 0; i < ECON_WHEN.length; i++) if (ECON_WHEN[i].id === id) return ECON_WHEN[i];
+    return ECON_WHEN[1];
+  }
+  function econFund(p, id) {
+    var items = (((p.economics || {}).funds || {}).items) || [];
+    for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i];
+    return null;
+  }
+  /* Сезон — двенадцать месяцев: продажи идут волной, а оклады платятся каждый
+     месяц, поэтому план и вклад считаем за год, а постоянные расходы вводим
+     помесячно и умножаем на двенадцать. */
+  function econYear(p, m) {
+    var ec = p.economics || {}, ts = p.tariffs || [], r = econCalc(p, m);
+    var y = { per: r, clients: 0, rev: 0, direct: 0, contrib: 0, freeAll: 0, spentAll: 0, loose: 0,
+      funds: {}, spent: {}, spentVar: {}, spentFix: {}, free: {} };
+    ts.forEach(function (t) {
+      var n = econNum(m.plan[t.id]), v = r[t.id];
+      y.clients += n; y.rev += n * econNum(m.price[t.id]);
+      y.direct += n * v.total; y.contrib += n * v.contrib;
+    });
+    /* Кто за что платит. Фонд — это кошелек отдела, и каждая ставка, статья
+       себестоимости и постоянный расход привязаны в portal.json полем fund к
+       своему кошельку. Без привязки «свободно» врет: фонд дивидендов показывал
+       283 тысячи свободных в месяц при прибыли за сезон втрое меньше, и Павел
+       18.09.2026 справедливо не понял, откуда берутся такие деньги. */
+    var known = {};
+    ((ec.funds || {}).items || []).forEach(function (f) { known[f.id] = true; });
+    function add(bucket, fid, v) {
+      if (!v) return;
+      if (!known[fid]) { y.loose += v; return; }
+      bucket[fid] = (bucket[fid] || 0) + v;
+    }
+    function byPlan(get) {
+      var sum = 0;
+      ts.forEach(function (t) { sum += econNum(m.plan[t.id]) * get(t); });
+      return sum;
+    }
+    (ec.rates || []).forEach(function (rt) {
+      add(y.spentVar, rt.fund, byPlan(function (t) { return (r[t.id].rates[rt.id] || 0); }));
+    });
+    (ec.costs || []).forEach(function (c) {
+      add(y.spentVar, c.fund, byPlan(function (t) { return econNum((m.costs[c.id] || {})[t.id]); }));
+    });
+    ((ec.fixed || {}).items || []).forEach(function (i) {
+      add(y.spentFix, i.fund, econNum(m.fixed[i.id]) * 12);
+    });
+    y.loose = Math.round(y.loose);
+    ((ec.funds || {}).items || []).forEach(function (f) {
+      y.funds[f.id] = Math.round(y.rev * econNum(m.funds[f.id]) / 100);
+      y.spentVar[f.id] = Math.round(y.spentVar[f.id] || 0);
+      y.spentFix[f.id] = Math.round(y.spentFix[f.id] || 0);
+      y.spent[f.id] = y.spentVar[f.id] + y.spentFix[f.id];
+      y.free[f.id] = y.funds[f.id] - y.spent[f.id];
+      y.freeAll += y.free[f.id];
+      y.spentAll += y.spent[f.id];
+    });
+    y.pct = ((ec.funds || {}).items || []).reduce(function (a, f) { return a + econNum(m.funds[f.id]); }, 0);
+    y.pct = Math.round(y.pct * 10) / 10;
+    y.fixedMonth = ((ec.fixed || {}).items || []).reduce(function (a, i) { return a + econNum(m.fixed[i.id]); }, 0);
+    y.fixedYear = y.fixedMonth * 12;
+    y.profit = y.contrib - y.fixedYear;
+    y.avgPrice = y.clients ? Math.round(y.rev / y.clients) : 0;
+    y.avgContrib = y.clients ? Math.round(y.contrib / y.clients) : 0;
+    y.breakeven = y.avgContrib > 0 ? Math.ceil(y.fixedYear / y.avgContrib) : 0;
+    return y;
+  }
+  /* Сумма за один период выплаты: месячный фонд — это годовой, деленный на
+     двенадцать, а фонд, который уходит сразу, считается на одну продажу. */
+  function econPer(sum, when, clients) {
+    var w = econWhen(when);
+    if (w.n) return Math.round(sum / w.n);
+    return clients ? Math.round(sum / clients) : 0;
+  }
+  /* «Подобрать доли под план» — обратный счет, а не магия: расход отдела за
+     сезон делим на выручку за сезон, это и есть его честная доля. Остаток
+     достается фонду владельцев (owner в portal.json), потому что дивиденды —
+     единственный фонд, у которого нет своих расходов. */
+  function econFit(p, m) {
+    var items = (((p.economics || {}).funds || {}).items) || [], y = econYear(p, m);
+    if (!y.rev || !items.length) return false;
+    var own = null, used = 0;
+    items.forEach(function (f) { if (f.owner) own = f; });
+    items.forEach(function (f) {
+      if (own && f.id === own.id) return;
+      /* Фонд с keep — это решение, а не расчет: доля маркетинга в 20 процентов
+         принята командой, и бюджет отдела считается от нее, а не наоборот
+         (Павел, 18.09.2026). Такой фонд подбор не трогает. */
+      if (f.keep) { used += econNum(m.funds[f.id]); return; }
+      var pct = Math.ceil((y.spent[f.id] || 0) / y.rev * 1000) / 10;
+      m.funds[f.id] = pct > 0 ? pct : 0;
+      used += m.funds[f.id];
+    });
+    if (own) m.funds[own.id] = Math.max(0, Math.round((100 - used) * 10) / 10);
+    return true;
+  }
+  function econFundsCard(p) {
+    var f = (p.economics || {}).funds, ts = p.tariffs || [], m = econModel(p);
+    if (!f || !(f.items || []).length || !ts.length) return '';
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var rows = f.items.map(function (it) {
+      return '<tr><td class="po-rl">' + esc(it.label) +
+        (it.hint ? '<span class="po-hint">' + esc(it.hint) + '</span>' : '') + '</td>' +
+        '<td class="po-cpct"><input class="al-in sm po-in po-pct num" type="number" step="0.1" min="0" ' +
+          'data-fund="' + esc(it.id) + '" value="' + econNum(m.funds[it.id]) + '"><span class="po-pc">%</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="fund:' + esc(it.id) + ':' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="fundyear:' + esc(it.id) + '"></td></tr>';
+    }).join('');
+    var sumRows =
+      '<tr class="po-r-sum"><td class="po-rl">Итого откладываем</td>' +
+        '<td class="num" data-ec="fundsum"></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="fundtot:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="fundtotyear"></td></tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Остается на рабочем счете' +
+        '<span class="po-hint">из него платим тьюторов, документы, оклады и подписки</span></td>' +
+        '<td class="num" data-ec="workpct"></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="work:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="workyear"></td></tr>';
+    var payRows = f.items.map(function (it) {
+      var cur = m.fundwhen[it.id];
+      return '<tr><td class="po-rl">' + esc(it.label) +
+        (it.pays ? '<span class="po-hint">платим из него: ' + esc(it.pays) + '</span>' : '') + '</td>' +
+        '<td><select class="al-in sm po-in po-sel" data-fundwhen="' + esc(it.id) + '">' +
+          ECON_WHEN.map(function (o) {
+            return '<option value="' + o.id + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+          }).join('') + '</select></td>' +
+        '<td class="num" data-ec="fundpay:' + esc(it.id) + '"></td>' +
+        '<td class="num" data-ec="fundused:' + esc(it.id) + '"></td>' +
+        '<td class="num" data-ec="fundrest:' + esc(it.id) + '"></td></tr>';
+    }).join('') +
+      '<tr class="po-r-sum"><td class="po-rl">Итого за сезон</td><td></td>' +
+        '<td class="num" data-ec="fundtotyear"></td>' +
+        '<td class="num" data-ec="spentyear"></td>' +
+        '<td class="num" data-ec="freeyear"></td></tr>';
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">' + esc(f.title || 'Фонды по отделам') + '</div>' +
+        '<div class="s">' + esc(f.sub || 'как делится каждая продажа') + '</div></div></div>' +
+      '<div class="po-sub">Откладываем в день оплаты</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w6"><thead><tr><th class="po-rl">Фонд</th>' +
+        '<th>Доля</th>' + ths + '<th>За сезон по плану</th></tr></thead>' +
+      '<tbody>' + rows + sumRows + '</tbody></table></div>' +
+      '<div class="po-note"><span data-ec="fundcheck"></span> ' +
+        'Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
+      '<div class="po-act"><button class="al-cancel po-fit" data-econfit="1">Подобрать доли под план</button>' +
+        '<span class="po-hint">поставит каждому фонду ровно ту долю, которую он тратит по плану, ' +
+        'а весь остаток отдаст дивидендам. Долю маркетинга не трогает: она задана решением</span></div>' +
+      '<div class="po-sub">Что каждый фонд платит за сезон</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w5"><thead><tr><th class="po-rl">Фонд</th>' +
+        '<th>Когда уходит</th><th>Накопится за сезон</th><th>Уходит из фонда</th><th>Свободно</th></tr></thead>' +
+      '<tbody>' + payRows + '</tbody></table></div>' +
+      '<div class="po-note">Расходы не висят в воздухе: каждая строка себестоимости, каждая ставка ' +
+        'с оплаты и каждый оклад привязаны к своему фонду, и здесь видно, сколько фонд собрал и ' +
+        'сколько из него уже уходит. Свободно — то, чем отдел реально распоряжается; минус значит, ' +
+        'что доли фонду не хватает на его же расходы.</div>' +
+      '<div class="po-note" data-ec="fundfoot"></div>' +
+      (f.note ? '<div class="po-note">' + esc(f.note) + '</div>' : '') +
+      '</div>';
+  }
+  /* План, постоянные расходы и точка безубыточности. Отдельная карточка, потому
+     что это уже не «сколько с одного клиента», а «сколько клиентов нужно». */
+  function econPlanCard(p) {
+    var ec = p.economics || {}, pl = ec.plan, fx = ec.fixed, ts = p.tariffs || [], m = econModel(p);
+    if (!pl || !ts.length) return '';
+    var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
+    var planRows =
+      '<tr><td class="po-rl">Клиентов за сезон<span class="po-hint">двенадцать месяцев</span></td>' +
+        ts.map(function (t) {
+          return '<td><input class="al-in sm po-in num" type="number" min="0" step="1" data-plan="' +
+            esc(t.id) + '" value="' + econNum(m.plan[t.id]) + '"></td>';
+        }).join('') + '<td class="num" data-ec="y:clients"></td></tr>' +
+      '<tr><td class="po-rl">Выручка за сезон</td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="yrev:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:rev"></td></tr>' +
+      '<tr><td class="po-rl">Прямые расходы за сезон</td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="ydirect:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:direct"></td></tr>' +
+      '<tr class="po-r-sum"><td class="po-rl">Вклад за сезон<span class="po-hint">до постоянных расходов</span></td>' +
+        ts.map(function (t) { return '<td class="num" data-ec="ycontrib:' + esc(t.id) + '"></td>'; }).join('') +
+        '<td class="num" data-ec="y:contrib"></td></tr>';
+    var fixRows = ((fx || {}).items || []).map(function (i) {
+      return '<tr><td class="po-rl">' + esc(i.label) +
+        (i.hint ? '<span class="po-hint">' + esc(i.hint) + '</span>' : '') + '</td>' +
+        '<td><input class="al-in sm po-in num" type="number" min="0" step="1000" data-fixed="' +
+          esc(i.id) + '" value="' + econNum(m.fixed[i.id]) + '"></td>' +
+        '<td class="num" data-ec="fixyear:' + esc(i.id) + '"></td></tr>';
+    }).join('');
+    var fixTable = fixRows ? '<div class="po-sub">' + esc((fx || {}).title || 'Постоянные расходы, в месяц') + '</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w3"><thead><tr><th class="po-rl">Статья</th>' +
+        '<th>В месяц</th><th>За сезон</th></tr></thead><tbody>' + fixRows +
+        '<tr class="po-r-sum"><td class="po-rl">Итого постоянных</td>' +
+          '<td class="num" data-ec="y:fixedm"></td><td class="num" data-ec="y:fixedy"></td></tr>' +
+        '</tbody></table></div>' +
+      ((fx || {}).note ? '<div class="po-note">' + esc(fx.note) + '</div>' : '') : '';
+    /* Итог сезона — четыре цифры, ради которых экран и открывают. Табличной
+       строкой они читаются как еще один расход, поэтому берем системный свод
+       (.pay-board), а якорь у него один: точка безубыточности. */
+    var out =
+      '<div class="po-sub">Итог сезона</div>' +
+      '<div class="pay-board po-board4">' +
+        '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
+          '<div class="pc-v num" data-ec="y:avgprice"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Вклад с клиента</div>' +
+          '<div class="pc-v num" data-ec="y:avgcontrib"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Точка безубыточности</div>' +
+          '<div class="pc-v num" data-ec="y:be"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Прибыль за сезон</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div></div>' +
+      '</div>' +
+      '<div class="po-note"><span data-ec="y:be_words"></span></div>';
+    return '<div class="card po-card">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">' + esc(pl.title || 'Месяц, год и точка безубыточности') + '</div>' +
+        '<div class="s">' + esc(pl.sub || '') + '</div></div></div>' +
+      '<div class="po-sub">План продаж</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Показатель</th>' +
+        ths + '<th>Всего</th></tr></thead><tbody>' + planRows + '</tbody></table></div>' +
+      fixTable + out +
+      (pl.note ? '<div class="po-note">' + esc(pl.note) + '</div>' : '') +
+      '</div>';
+  }
   function portalEcon(p) {
     if (!state._poEconApi) { econLoad(); return dashSkeleton(); }
     if (state._poEconApi === 'denied') {
@@ -23147,18 +23490,136 @@
       '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
       '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
       '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
-      '</div>';
+      '</div>' + econPlanCard(p) + econFundsCard(p);
   }
   function portalWireEcon(view, p) {
     if (!state._poEconApi || typeof state._poEconApi === 'string') return;
     var m = econModel(p), saveTimer = null;
     function recalc() {
-      var r = econCalc(p, m);
+      var r = econCalc(p, m), y = econYear(p, m);
       Array.prototype.forEach.call(view.querySelectorAll('[data-ec]'), function (c) {
         var parts = c.getAttribute('data-ec').split(':'), kind = parts[0];
         if (kind === 'stage') {
           var sv = r[parts[2]];
           if (sv) c.textContent = fmtMoney(sv.stages[parts[1]] || 0);
+          return;
+        }
+        if (kind === 'fundcheck') {
+          /* Доли правит человек, и он легко наберет 15+20+20+20+20. Молчать
+             нельзя: сумма больше ста значит, что одни и те же деньги отложены
+             дважды, меньше ста — что остаток лежит на рабочем счете. */
+          c.textContent = y.pct === 100
+            ? 'Доли дают ровно 100 процентов: на рабочем счете не остается ничего, все расходы платятся из фондов.'
+            : y.pct < 100
+              ? 'Доли дают ' + y.pct + ' процентов, остальные ' + Math.round((100 - y.pct) * 10) / 10 +
+                ' остаются на рабочем счете.'
+              : 'Доли дают ' + y.pct + ' процентов, это больше ста: часть денег отложена дважды.';
+          c.className = y.pct > 100 ? 'po-neg' : '';
+          return;
+        }
+        if (kind === 'fundsum') { c.textContent = y.pct + ' %'; return; }
+        if (kind === 'workpct') {
+          c.textContent = Math.round((100 - y.pct) * 10) / 10 + ' %';
+          c.className = 'num' + (y.pct > 100 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'fund') {
+          c.textContent = fmtMoney(Math.round(econNum(m.price[parts[2]]) * econNum(m.funds[parts[1]]) / 100));
+          return;
+        }
+        if (kind === 'fundtot' || kind === 'work') {
+          var pv = econNum(m.price[parts[1]]), off = Math.round(pv * y.pct / 100);
+          c.textContent = fmtMoney(kind === 'fundtot' ? off : pv - off);
+          if (kind === 'work') c.className = 'num' + (pv - off < 0 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'fundyear') { c.textContent = fmtMoney(y.funds[parts[1]] || 0); return; }
+        if (kind === 'fundtotyear') { c.textContent = fmtMoney(Math.round(y.rev * y.pct / 100)); return; }
+        if (kind === 'workyear') {
+          var left = y.rev - Math.round(y.rev * y.pct / 100);
+          c.textContent = fmtMoney(left);
+          c.className = 'num' + (left < 0 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'fundpay' || kind === 'fundused' || kind === 'fundrest') {
+          /* Базовая единица во всей таблице одна — сезон, иначе столбцы не
+             складываются в итог. Срок выплаты уходит в подпись под цифрой: одна
+             и та же доля в месяц и в квартал выглядит по-разному. */
+          var fid = parts[1], w = econWhen(m.fundwhen[fid]);
+          var val = kind === 'fundpay' ? (y.funds[fid] || 0)
+            : kind === 'fundused' ? (y.spent[fid] || 0) : (y.free[fid] || 0);
+          var sub = kind !== 'fundused'
+            ? '<span class="po-hint">' + fmtMoney(econPer(val, w.id, y.clients)) + ' ' + w.per + '</span>'
+            /* разбивку показываем, только когда есть что разбивать: «на клиентов 0,
+               постоянных 0» под нулем — шум, а не объяснение */
+            : val ? '<span class="po-hint">на клиентов ' + fmtMoney(y.spentVar[fid] || 0) + '</span>' +
+                    '<span class="po-hint">постоянных ' + fmtMoney(y.spentFix[fid] || 0) + '</span>' : '';
+          c.innerHTML = fmtMoney(val) + sub;
+          if (kind === 'fundrest') c.className = 'num' + (val < 0 ? ' po-neg' : ' po-pos');
+          return;
+        }
+        if (kind === 'spentyear') { c.textContent = fmtMoney(y.spentAll); return; }
+        if (kind === 'freeyear') {
+          c.textContent = fmtMoney(y.freeAll);
+          c.className = 'num' + (y.freeAll < 0 ? ' po-neg' : ' po-pos');
+          return;
+        }
+        if (kind === 'fundfoot') {
+          /* Главная проверка всей вкладки: если доли дают сто процентов и каждая
+             статья к кому-то привязана, свободное по фондам обязано сойтись с
+             прибылью за сезон. Не сошлось — человек должен увидеть почему. */
+          c.className = 'po-note';
+          if (y.loose > 0) {
+            c.textContent = 'Внимание: расходов на ' + fmtMoney(y.loose) + ' рублей за сезон не привязано ' +
+              'ни к одному фонду, платить их неоткуда. Такую статью надо отнести к фонду в структуре портала.';
+            c.className = 'po-note po-neg';
+          } else if (y.pct !== 100) {
+            c.textContent = 'Свободно по всем фондам ' + fmtMoney(y.freeAll) + ', прибыль за сезон ' +
+              fmtMoney(y.profit) + '. Разница ' + fmtMoney(Math.abs(y.profit - y.freeAll)) +
+              ' — это рабочий счет: доли дают ' + y.pct + ' процентов, а не сто.';
+          } else {
+            c.textContent = 'Сходится: свободно по всем фондам ' + fmtMoney(y.freeAll) +
+              ' — это и есть прибыль компании за сезон.';
+          }
+          return;
+        }
+        if (kind === 'fixyear') { c.textContent = fmtMoney(econNum(m.fixed[parts[1]]) * 12); return; }
+        if (kind === 'yrev' || kind === 'ydirect' || kind === 'ycontrib') {
+          var tv = r[parts[1]], n = econNum(m.plan[parts[1]]);
+          if (!tv) return;
+          c.textContent = fmtMoney(Math.round(n * (kind === 'yrev' ? econNum(m.price[parts[1]])
+            : kind === 'ydirect' ? tv.total : tv.contrib)));
+          return;
+        }
+        if (kind === 'y') {
+          var k = parts[1];
+          if (k === 'clients') c.textContent = econNum(y.clients) + ' ' +
+            plural(y.clients, 'клиент', 'клиента', 'клиентов');
+          else if (k === 'be') {
+            c.textContent = y.breakeven
+              ? y.breakeven + ' ' + plural(y.breakeven, 'клиент', 'клиента', 'клиентов')
+              : 'нужен план';
+          } else if (k === 'be_words') {
+            c.textContent = !y.breakeven
+              ? 'Поставьте план и постоянные расходы, и точка безубыточности посчитается сама.'
+              : 'Постоянные расходы за сезон ' + fmtMoney(y.fixedYear) + ' рублей, вклад с одного клиента ' +
+                fmtMoney(y.avgContrib) + '. Значит ' + y.breakeven + ' ' +
+                plural(y.breakeven, 'клиент выводит', 'клиента выводят', 'клиентов выводят') +
+                ' компанию в ноль, это примерно ' +
+                (y.breakeven / 12).toFixed(1).replace('.', ',') + ' клиента в месяц. ' +
+                (y.clients >= y.breakeven
+                  ? 'План выше этой точки на ' + (y.clients - y.breakeven) + ' ' +
+                    plural(y.clients - y.breakeven, 'клиента', 'клиента', 'клиентов') + '.'
+                  : 'Плана не хватает: до нуля не достает ' + (y.breakeven - y.clients) + ' ' +
+                    plural(y.breakeven - y.clients, 'клиента', 'клиента', 'клиентов') + '.');
+          } else if (k === 'profit') {
+            c.textContent = fmtMoney(y.profit);
+            c.className = (c.classList.contains('pc-v') ? 'pc-v num' : 'num') +
+              (y.profit < 0 ? ' po-neg' : ' po-pos');
+          } else c.textContent = fmtMoney(
+            k === 'rev' ? y.rev : k === 'direct' ? y.direct : k === 'contrib' ? y.contrib :
+            k === 'fixedm' ? y.fixedMonth : k === 'fixedy' ? y.fixedYear :
+            k === 'avgprice' ? y.avgPrice : k === 'avgcontrib' ? y.avgContrib : 0);
           return;
         }
         var v = r[parts[1]];
@@ -23189,7 +23650,8 @@
       mark('сохраняем…');
       saveTimer = setTimeout(function () {
         apiSend('/admin/api/portal/econ/' + encodeURIComponent(p.id), 'PUT',
-          { price: m.price, rates: m.rates, costs: m.costs },
+          { price: m.price, rates: m.rates, costs: m.costs, funds: m.funds,
+            fundwhen: m.fundwhen, fixed: m.fixed, plan: m.plan },
           function (r) {
             if (state._poEconApi && typeof state._poEconApi === 'object') state._poEconApi[p.id] = r;
             mark('сохранено');
@@ -23198,16 +23660,30 @@
       }, 700);
     }
     Array.prototype.forEach.call(view.querySelectorAll('.po-in'), function (i) {
-      i.addEventListener('input', function () {
+      /* у списка выбора своего «input» в старых браузерах нет, поэтому слушаем
+         и его штатное событие тоже */
+      i.addEventListener(i.tagName === 'SELECT' ? 'change' : 'input', function () {
         var k;
         if ((k = i.getAttribute('data-price'))) m.price[k] = econNum(i.value);
         else if ((k = i.getAttribute('data-rate'))) m.rates[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fund'))) m.funds[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-plan'))) m.plan[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fixed'))) m.fixed[k] = econNum(i.value);
+        else if ((k = i.getAttribute('data-fundwhen'))) m.fundwhen[k] = i.value;
         else if ((k = i.getAttribute('data-cost'))) {
           var pr = k.split(':');
           (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
         }
         recalc(); save();
       });
+    });
+    var fit = view.querySelector('[data-econfit]');
+    if (fit) fit.addEventListener('click', function () {
+      if (!econFit(p, m)) return;
+      Array.prototype.forEach.call(view.querySelectorAll('[data-fund]'), function (i) {
+        i.value = econNum(m.funds[i.getAttribute('data-fund')]);
+      });
+      recalc(); save();
     });
     recalc();
   }
@@ -25227,7 +25703,7 @@
       return (d.messages || []).map(function (m) {
         var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
         return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
-                 atts: m.attachments || [], sending: m.sending === true,
+                 atts: attsWithSrc(m.attachments, c.id, m.id), sending: m.sending === true,
                  // Можно ли ещё отозвать: считает сервер по правилам канала (48 часов у
                  // телеграма, сутки у ВК). Своей арифметики тут нет намеренно — вторая
                  // копия правила разъедется с первой в день, когда канал его поменяет.
@@ -25351,8 +25827,39 @@
      рецепта для одной и той же сущности в системе быть не должно. Входящий файл лежит в
      хранилище платформы, и на него есть ссылка; наш исходящий нигде не хранится — копить
      чужие документы незачем, — поэтому он показан строкой без ссылки. */
+  /* Адрес присланного файла. У ВК и Макса вложение приезжает прямой ссылкой канала,
+     у телеграма ссылки нет вовсе: файл лежит у мессенджера, и достать его может только
+     бот. Тогда адрес наш — бэкенд проверяет доступ к переписке и отдает байты. */
+  function attSrc(a, convId, msgId, i) {
+    a = a || {};
+    if (/^https?:\/\//i.test(String(a.url || ''))) return a;
+    if (!a.file_id || convId == null || msgId == null) return a;
+    var u = API + '/admin/api/bot/conversations/' + encodeURIComponent(convId) +
+      '/messages/' + encodeURIComponent(msgId) + '/file/' + i +
+      '?k=' + encodeURIComponent(getKey());
+    var out = {}; for (var kk in a) if (Object.prototype.hasOwnProperty.call(a, kk)) out[kk] = a[kk];
+    out.url = u;
+    return out;
+  }
+  function attsWithSrc(list, convId, msgId) {
+    return (list || []).map(function (a, i) { return attSrc(a, convId, msgId, i); });
+  }
+  function attIsImage(a) {
+    var k = String((a || {}).kind || '');
+    return k === 'image' || k === 'photo' || /^image\//i.test(String((a || {}).mime || ''));
+  }
+
   function tgFileCard(a) {
     a = a || {};
+    // Ссылку пускаем только http(s): esc() экранирует кавычки, но схему не смотрит, а
+    // вложения приходят из переписки — это чужие данные, и javascript: там недопустим.
+    var img = /^https?:\/\//i.test(String(a.url || '')) ? a.url : '';
+    // Скриншот показываем сразу: менеджер спрашивает «какая ошибка?» и должен увидеть
+    // ее сам, а не читать слово «[изображение]» (Вера, 19.09.2026).
+    if (img && attIsImage(a)) {
+      return '<a class="tg-img" href="' + esc(img) + '" target="_blank" rel="noopener" ' +
+        'title="Открыть во весь экран"><img src="' + esc(img) + '" alt="вложение из переписки" loading="lazy"></a>';
+    }
     // Длинное имя режем по основе, а расширение оставляем целым: «podborka-vuzov….pdf»
     // говорит, что это за файл, а «podborka-vuzov….» — уже нет.
     var nm = String(a.name || 'файл'), dot = nm.lastIndexOf('.');
@@ -25367,6 +25874,18 @@
       ? '<a class="rm-catt file" href="' + esc(href) + '" target="_blank" rel="noopener">' + inner + '</a>'
       : '<span class="rm-catt file">' + inner + '</span>';
   }
+
+  /* Ссылка на картинку живет не вечно: у ВК, Макса и инстаграма адрес выдает сам
+     канал и через несколько дней гасит, а телеграмный файл бот может не достать. Битая
+     иконка в переписке читается как поломка CRM, поэтому не загрузившийся снимок
+     превращаем в строку «вложение не открылось». Один обработчик на документ: событие
+     error у картинки не всплывает, ловим на погружении. */
+  document.addEventListener('error', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'IMG' || !t.parentElement) return;
+    var a = t.parentElement.closest ? t.parentElement.closest('.tg-img') : null;
+    if (a) a.classList.add('gone');
+  }, true);
 
   function buildThread(msgs) {
     if (msgs === null) {
@@ -25405,7 +25924,14 @@
       var files = atts.length ? '<div class="tg-atts">' + atts.map(tgFileCard).join('') + '</div>' : '';
       // Бот пишет в историю «[файл] имя», когда подписи к документу не было. Карточка
       // вложения говорит то же самое, и второй раз это читать незачем.
-      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || ''));
+      var fileTxt = !!atts.length && (!m.text || m.text === '[файл] ' + (atts[0].name || '') ||
+        m.text === '[изображение]' || m.text === '[вложение]');
+      // Снимок без подписи — это фотография, а не сообщение с вложением: белая плашка
+      // под ней тянулась на всю колонку, а сам кадр оставался узким. Пузырь тут не
+      // нужен вовсе, время ложится поверх кадра.
+      var picOnly = fileTxt && !!atts.length && atts.every(function (a) {
+        return attIsImage(a) && /^https?:\/\//i.test(String((a || {}).url || ''));
+      });
       if (m.sending) {
         foot = '<span class="tg-by">' + ic('clock', 9) + 'отправляется…</span>';
       }
@@ -25418,14 +25944,14 @@
               '<button class="tg-edok" data-edsave="' + m.id + '">Сохранить</button>' +
             '</div>' +
           '</div>'
-        : '<div class="tg-bub">' + files + (fileTxt ? '' : mdMsg(m.text)) +
+        : '<div class="tg-bub' + (picOnly ? ' pic' : '') + '">' + files + (fileTxt ? '' : mdMsg(m.text)) +
             '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
             ((m.canEdit || m.canDel) ? '<span class="tg-acts">' +
               (m.canEdit ? '<button class="tg-edit" data-edit="' + m.id + '" title="Изменить текст у клиента">' + ic('pen', 11) + '</button>' : '') +
               (m.canDel ? '<button class="tg-del" data-del="' + m.id + '" title="Убрать сообщение у клиента">' + ic('x', 11) + '</button>' : '') +
             '</span>' : '') +
           '</div>';
-      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + (m.delAt ? ' gone' : '') + (editing ? ' editing' : '') + '">' +
+      return sep + '<div class="tg-msg ' + side + (m.who === 'manager' ? ' mgr' : m.who === 'bot' ? ' ai' : '') + (m.undelivered ? ' undelivered' : '') + (m.delAt ? ' gone' : '') + (editing ? ' editing' : '') + (picOnly && !editing ? ' pic' : '') + '">' +
         bub + foot + '</div>';
     }).join('');
   }
@@ -25641,6 +26167,17 @@
       return;
     }
     var convos = inboxConvos();
+    // У тьютора в списке только семьи его карточек (cap inbox_own). Пока семья не
+    // написала или карточку на него не назначили, список пуст — и пустой экран без
+    // слов читается как поломка, поэтому говорим, чего ждать и что проверить.
+    if (!convos.length && !can('inbox')) {
+      view.innerHTML = inboxBlank('<div class="tg-blank-ic">' + ic('chat', 26) + '</div>' +
+        '<div style="font-weight:700;color:var(--ink)">Пока нет переписки с вашими семьями</div>' +
+        '<div style="max-width:420px;text-align:center;line-height:1.55">Сюда приходят сообщения семей, которые закреплены за вами: из телеграма, ВК, Макса и чата кабинета. ' +
+        'Если ждете сообщение от своей семьи, а его нет, проверьте в карточке ученика, что ответственный — вы.</div>');
+      bindInboxSwitch(view);
+      return;
+    }
     // сортировка строго по дате последнего сообщения (стабильно — клик не двигает список)
     convos.sort(function (a, b) { return new Date(b.last_at || 0) - new Date(a.last_at || 0); });
     var counts = {}; CHAN_ORDER.forEach(function (k) { counts[k] = 0; });
@@ -26099,7 +26636,7 @@
     return (d.messages || []).map(function (m) {
       var who = m.role === 'user' ? 'client' : (m.sender === 'manager' ? 'manager' : 'bot');
       return { who: who, text: m.text, at: m.at, id: m.id, undelivered: m.undelivered, reason: m.reason,
-               atts: m.attachments || [], sending: m.sending === true,
+               atts: attsWithSrc(m.attachments, d.user_id, m.id), sending: m.sending === true,
                canDel: m.can_delete === true, delAt: m.deleted_at, delBy: m.deleted_by,
                canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
@@ -27401,9 +27938,10 @@
       if (sct.id === 'pay') return can('finance');
       // Консультации ведёт тот, кто ведёт карточку клиента (та же дверь, cap clients).
       if (sct.id === 'consult') return can('clients');
-      // Переписка воронки продаж закрыта тем же правом, что и раздел «Диалоги»:
-      // пункт, который открывается только отказом, хуже отсутствующего пункта.
-      if (sct.id === 'dialog') return can('inbox');
+      // Переписка закрыта тем же правом, что и раздел «Диалоги»: пункт, который
+      // открывается только отказом, хуже отсутствующего пункта. У тьютора право
+      // своё (`inbox_own`) — он пишет семье, но потока продаж не видит.
+      if (sct.id === 'dialog') return can('inbox|inbox_own');
       // Заезд ведут тьюторы — раздел виден только с доступом к заездам.
       if (sct.id === 'arrival') return can('zaezdy');
       return true;
@@ -29010,6 +29548,8 @@
       '<div class="m-csub">Кто это, как пользуется платформой и где остановился — вся картина на одном экране.</div>';
     html += buildUsageDash(ctx, L);
     html += buildCabinet(id);
+    html += '<div class="uz-jh"><span>Что делает в кабинете</span><i></i></div>';
+    html += buildCabinetSteps(id);
     html += '<div class="uz-jh"><span>Как шел по платформе</span><i></i></div>';
     html += buildPathTimeline(L, d || null);
     return html;
@@ -29313,6 +29853,54 @@
     }).join('') + '</div>' +
       '<div class="uz-line"><b class="num">' + fam.length + '</b> ' + plural(fam.length, 'участник', 'участника', 'участников') + ' семьи</div>';
     return uzPanel({ icon: 'team', title: 'Семья', body: body });
+  }
+
+  /* ── «Что делает в кабинете» ───────────────────────────────────────────────
+     Шаги человека по кабинету: какой экран открыл, что нажал, где вылезла ошибка
+     (бэкенд: app/routers/activity.py, поток пишет сам кабинет). Показываем
+     заходами — «за один раз он дошел до документов и уперся» читается, а плоская
+     простыня нажатий нет. Строку шага собирает сервер: словарь экранов один на
+     систему, и двум копиям разъезжаться нельзя. */
+  function fetchCabinetSteps(caseId, cb) {
+    var box = state._cabsteps || (state._cabsteps = {});
+    if (box[caseId]) { cb(box[caseId]); return; }
+    api('/admin/api/leads/' + encodeURIComponent(caseId) + '/activity').then(function (r) {
+      box[caseId] = (r && r.visits) || [];
+      cb(box[caseId]);
+    }).catch(function () { box[caseId] = []; cb([]); });
+  }
+
+  function cabVisit(v) {
+    var steps = v.steps || [];
+    var mins = Math.round((new Date(v.ended_at || v.started_at) - new Date(v.started_at)) / 60000);
+    var head = fmtWhen(v.started_at) + ' · ' + steps.length + ' ' +
+      plural(steps.length, 'шаг', 'шага', 'шагов') + (mins >= 1 ? ' · ' + mins + ' мин' : '');
+    /* Длинный заход сворачиваем с начала: важнее конец — там человек и уперся. */
+    var shown = steps.length > 14 ? steps.slice(steps.length - 14) : steps;
+    var cut = steps.length - shown.length;
+    var rows = shown.map(function (st) {
+      return '<div class="pt-sub' + (st.kind === 'error' ? ' err' : (st.kind === 'tap' ? ' hi' : '')) + '">' +
+        esc(st.text || st.name || '') + '<span class="sw num">' + fmtTime(st.at) + '</span></div>';
+    }).join('');
+    return '<div class="cab-v"><div class="uz-mini">' + esc(head) +
+      (cut ? ' · показаны последние ' + shown.length : '') + '</div>' +
+      '<div class="pt-subs">' + rows + '</div></div>';
+  }
+
+  function buildCabinetSteps(caseId) {
+    var box = state._cabsteps || {};
+    var mine = box[caseId];
+    if (!mine) {
+      fetchCabinetSteps(caseId, function () {
+        if (state.drawerId === caseId && state.modalSection === 'path') renderModalContent();
+      });
+      return '<div class="uz-empty">Смотрим, что человек делал в кабинете…</div>';
+    }
+    if (!mine.length) {
+      return '<div class="uz-empty">Шагов по кабинету пока нет: человек либо не заходил, ' +
+        'либо заходил до того, как мы начали их записывать.</div>';
+    }
+    return '<div class="cab-steps">' + mine.slice(0, 5).map(cabVisit).join('') + '</div>';
   }
 
   /* группирует реальные события под шаги платформы */

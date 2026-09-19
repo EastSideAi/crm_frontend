@@ -1552,6 +1552,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .pt-sub.comm::before { background: var(--green); }
 .pt-sub .sw { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-3); font-weight: 500; }
 
+/* — шаги по кабинету: заходы человека (buildCabinetSteps) — */
+.cab-steps { display: flex; flex-direction: column; gap: 10px; }
+.cab-v { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); }
+.cab-v .uz-mini { margin-bottom: 8px; }
+.cab-v .pt-subs { display: flex; flex-direction: column; gap: 5px; }
+.cab-v .pt-sub { word-break: break-word; }
+.pt-sub.err { color: var(--red-ink); font-weight: 600; }
+.pt-sub.err::before { background: var(--red); }
+
 @media (max-width: 560px) {
   .uz-hero { flex-direction: column; }
   .uz-pulse { width: auto; flex-direction: row; }
@@ -2227,6 +2236,20 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tg-msg.out .rm-catt.file { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
 .tg-msg.out .rm-catt.file svg { color: #fff; }
 .tg-msg.out .rm-catt.img { box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); }
+/* Присланный скриншот показываем самой картинкой: менеджер спрашивает «какая ошибка?»
+   и должен увидеть ее, а не слово «[изображение]». Высоту ограничиваем — переписку
+   должно быть видно вокруг вложения. */
+.tg-img { display: block; max-width: min(320px, 100%); border-radius: 12px; overflow: hidden;
+  background: var(--fill); box-shadow: inset 0 0 0 1px var(--line-2); }
+.tg-img img { display: block; width: 100%; max-height: 380px; object-fit: contain; }
+/* contain, а не cover: скриншот присылают, чтобы показать ОШИБКУ, а обрезка по
+   центру съедает как раз ее. Вертикальный снимок с телефона ложится в кадр
+   целиком, полный размер открывается нажатием. */
+.tg-img:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+.tg-img.gone { max-width: none; padding: 7px 11px; font-size: 12px; color: var(--ink-3); }
+.tg-img.gone img { display: none; }
+.tg-img.gone::after { content: 'вложение не открылось'; }
+.tg-msg.out .tg-img { box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); }
 /* шапка обсуждения = шапка диалога (.tg-chead), плюс мета задачи */
 .th-chead { padding: 11px 18px; }
 .th-chead .tg-cs { font-size: 12px; color: var(--ink-3); }
@@ -3259,11 +3282,14 @@ button.tr-crumb:hover { color: var(--blue); }
    поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
    иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
 .sc-find { margin-bottom: 8px; }
-/* «Править всю серию» — согласие, а не поле: ставим его строкой над списком людей,
-   с тем же отступом, что у полей формы. */
-.sc-all { display: flex; align-items: center; gap: 9px; margin: 2px 0 2px;
-  font-size: 13px; color: var(--ink-2); cursor: pointer; }
-.sc-all input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+/* Факты серии и последствия правки — тихие строки под своим полем: это не
+   предупреждение об опасности, а описание того, что сейчас произойдет. */
+.sc-sfacts { margin-top: 7px; font-size: 12px; color: var(--ink-3); }
+.sc-shint { margin: -2px 0 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.sc-shint[hidden] { display: none; }
+/* Сегмент области правки — ровно тот же рецепт, что в карточке зума (.due-seg),
+   своего размера ему не заводим: вопрос один и тот же. */
+.sc-scope { align-self: flex-start; }
 /* Снятие встречи — действие в другую сторону, поэтому уезжает к левому краю
    футера, подальше от «Сохранить». */
 .sc-mdrop { margin-right: auto; }
@@ -4199,6 +4225,16 @@ button.tsk-mimp { cursor: pointer; }
 .tg-by.warn { color: var(--red-ink); }
 .tg-msg.undelivered .tg-bub { box-shadow: inset 0 0 0 1px var(--red); }
 .tg-msg.out.undelivered .tg-bub { opacity: .82; }
+/* Фотография в переписке пузыря не требует: рамка вокруг снимка растягивала белую
+   плашку на всю колонку, а кадр оставался узким. Время — поверх кадра, как в
+   мессенджерах, поэтому пузырь тут позиционируемый. */
+.tg-msg.pic { max-width: min(320px, 74%); }
+.tg-msg.in .tg-bub.pic, .tg-msg.out .tg-bub.pic { padding: 0; position: relative;
+  background: none; box-shadow: none; border-radius: 12px; }
+.tg-bub.pic .tg-atts { margin-bottom: 0; }
+.tg-msg.in .tg-bub.pic .tg-mt, .tg-msg.out .tg-bub.pic .tg-mt { position: absolute; float: none;
+  right: 7px; bottom: 7px; top: auto; margin: 0; padding: 1px 7px 2px; border-radius: var(--r-pill);
+  background: rgba(3,8,28,.55); color: #fff; }
 /* разделитель дня в треде (Сегодня / Вчера / дата) */
 .tg-day { display: flex; justify-content: center; margin: 10px 0 4px; }
 .tg-day:first-child { margin-top: 0; }
@@ -6851,7 +6887,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tabs::-webkit-scrollbar { height: 0; }
 .po-card { padding: 20px 22px; margin-bottom: 16px; }
 .po-txt { margin-top: 13px; font-size: 13.5px; color: var(--ink-2); line-height: 1.62; }
-.po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+.po-note { margin-top: 14px; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
 .po-note.wide { margin: 16px 0 26px; }
 
 /* путь студента — лента маршрута над тарифами.
@@ -7028,13 +7064,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tblwrap::-webkit-scrollbar { height: 6px; }
 .po-tblwrap::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 .po-tbl { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
-.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 10.5px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 11px; font-weight: 700;
+  color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
 .po-tbl td { padding: 13px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
   color: var(--ink-2); line-height: 1.5; vertical-align: top; }
 .po-tbl tbody tr:last-child td { border-bottom: 0; }
 .po-rl { width: 178px; font-weight: 600; color: var(--ink); }
-.po-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+/* подпись под строкой — это объяснение, а не фон: серый --ink-3 на белом дает
+   контраст 2,3 к 1 и не читается (Павел, 18.09.2026), поэтому берем --ink-2 */
+.po-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-2); }
 .po-pluses { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
 .po-plus { position: relative; padding-left: 14px; font-size: 12.5px; }
 .po-plus::before { content: '+'; position: absolute; left: 0; top: -1px; color: var(--blue); font-weight: 700; }
@@ -7048,8 +7086,31 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-in { max-width: 152px; }
 .po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
   display: inline-block; vertical-align: middle; }
-.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-2); font-weight: 500; }
 .po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
+/* калькулятор фондов и плана: подзаголовок внутри карточки отделяет три разных
+   вопроса — что откладываем, когда уходит, сколько клиентов нужно */
+.po-sub { margin: 26px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.po-sub:first-of-type { margin-top: 20px; }
+.po-sel { width: auto; max-width: 100%; cursor: pointer; }
+.po-cpct { white-space: nowrap; }
+.po-tbl.econ.w6 { min-width: 860px; }
+.po-tbl.econ.w6 .po-rl { width: 208px; }
+.po-tbl.econ.w5 { min-width: 940px; }
+.po-tbl.econ.w5 .po-rl { width: 292px; }
+.po-tbl.econ.w5 .po-hint + .po-hint { margin-top: 1px; }
+/* «Подобрать доли» — единственная кнопка калькулятора: она ничего не удаляет, а
+   считает, поэтому тихая и стоит рядом со своим объяснением, а не в шапке */
+.po-act { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.po-fit { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
+.po-act .po-hint { flex: 1 1 280px; margin-top: 0; }
+.po-tbl.econ.w3 { min-width: 560px; }
+.po-tbl.econ.w3 .po-rl { width: 320px; }
+/* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
+.po-board4 { grid-template-columns: repeat(4, 1fr); margin-top: 14px; }
+.po-board4 .pc-v.po-pos { color: var(--green-ink); }
+.po-board4 .pc-v.po-neg { color: var(--red-ink); }
+@media (max-width: 1100px) { .po-board4 { grid-template-columns: repeat(2, 1fr); } }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
