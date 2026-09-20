@@ -9362,3 +9362,106 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .idup-g { padding: 14px; }
   .idup-c-b button, .idup-a button { flex: 1 1 100%; }
 }
+
+/* ── Рассылки (`bc-*`) — журнал отправок бота ────────────────────────────────
+   Строка прогона и строка адресата живут на общей .trow: это такой же список,
+   как лиды и подарки, свой рецепт строки заводить незачем. Своё тут только
+   раскладка цифр прогона, когортный ряд и поле «писали ли мы человеку».
+   Ответ площадки («bot was blocked by the user») показываем дословно — он и есть
+   доказательство отправки, поэтому ему отдан второй уровень чернил, а не мелкий
+   серый шум. */
+/* Доставка — своя семья чипов, не воронка продаж: «дошло» про сообщение, а не
+   про сделку. Красное — потерянный навсегда контакт (закрыл бота), амбер — сбой,
+   который можно перевыслать. */
+.sev.bc-ok      { color: var(--green-ink); background: var(--green-soft); }
+.sev.bc-blocked { color: var(--red-ink);   background: var(--red-soft); }
+.sev.bc-fail    { color: var(--amber-ink); background: var(--amber-soft); }
+.bc-run { grid-template-columns: minmax(0, 1fr) auto 24px; cursor: pointer; }
+/* Колонки одинаковой ширины: числа стоят друг под другом от строки к строке.
+   Флексом они разъезжались, и взгляд не мог сравнить две рассылки по вертикали. */
+.bc-nums { display: grid; grid-template-columns: repeat(4, 86px); align-items: center; }
+.bc-n { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.bc-n b { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.bc-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
+.bc-go { color: var(--ink-3); display: flex; justify-content: flex-end; }
+.bc-run:hover .bc-go { color: var(--blue); }
+
+.bc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.bc-title .t { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.bc-title .s { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+.bc-stat { margin: 0 -6px -6px; }
+
+/* Когорта — имя и два процента. Шкалы тут нет намеренно: 90px не дают сравнить
+   3% с 9%, а на телефоне шкала пряталась совсем — колонка без работы. Три карточки
+   когорт стоят рядом, поэтому имя занимает всю ширину, а цифры идут под ним. */
+.bc-co { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
+  gap: 4px 18px; padding: 13px 24px; border-bottom: 1px solid var(--line); }
+.bc-co:last-child { border-bottom: none; }
+.bc-co-nm { grid-column: 1 / -1; font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.bc-co-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+.bc-co-n { font-size: 15px; font-weight: 700; color: var(--ink); display: flex;
+  align-items: baseline; gap: 6px; }
+.bc-co-n:first-of-type { margin-left: auto; }
+.bc-co-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+
+.bc-grid { grid-template-columns: minmax(0, 1fr) minmax(150px, 280px) 96px; height: auto;
+  padding-top: 11px; padding-bottom: 11px; }
+.bc-st { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+/* Ответ площадки. В строке видна его суть, полный текст раскрывается по нажатию:
+   он и есть доказательство отправки, прятать его в подсказку по наведению нельзя —
+   на телефоне наведения не существует. */
+.bc-detail { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; line-height: 1.35; }
+.bc-detail summary { cursor: pointer; list-style: none; color: var(--ink-2);
+  text-decoration: underline; text-decoration-color: var(--line-2);
+  text-underline-offset: 3px; }
+.bc-detail summary::-webkit-details-marker { display: none; }
+.bc-detail summary:hover { color: var(--ink); }
+.bc-raw { margin-top: 5px; padding: 7px 9px; border-radius: 9px; background: var(--fill);
+  font-size: 10.5px; color: var(--ink-2); line-height: 1.4; }
+
+.bc-find { display: flex; gap: 10px; margin-top: 14px; }
+.bc-find .al-in { flex: 1 1 auto; min-width: 0; }
+.bc-found { margin: 16px -24px -22px; border-top: 1px solid var(--line); }
+.bc-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 24px 14px; }
+.bc-filters .al-in { flex: 1 1 220px; min-width: 0; }
+.bc-more { padding: 14px 24px; display: flex; justify-content: center; }
+
+@media (max-width: 760px) {
+  /* Телефон: ни одна из этих таблиц не уезжает вбок — строки становятся карточками,
+     цифры прогона переносятся под название. */
+  .trow.bc-run { grid-template-columns: minmax(0, 1fr) 20px !important; height: auto;
+    padding: 14px 16px; row-gap: 10px; }
+  .bc-nums { grid-column: 1 / -1; gap: 18px; justify-content: flex-start; }
+  .bc-n { align-items: flex-start; }
+  .bc-go { grid-column: 2; grid-row: 1; align-self: center; }
+  /* Адресат: имя и время в одной строке, статус с ответом площадки — под ними.
+     Время отдельной третьей строкой читалось как оторванная от всего дата. */
+  .trow.bc-grid { grid-template-columns: minmax(0, 1fr) auto !important; height: auto;
+    padding: 12px 16px; row-gap: 6px; }
+  .trow.bc-grid .t-cell { grid-column: 1; grid-row: 1; }
+  .trow.bc-grid .t-when { grid-column: 2; grid-row: 1; align-self: start; }
+  .bc-st { grid-column: 1 / -1; grid-row: 2; }
+  .bc-co { padding: 12px 16px; }
+  /* Возврат и название прогона не делят одну строку: на 390px заголовку оставалось
+     пол-экрана, и он ломался на три строки. */
+  .bc-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .bc-find { flex-direction: column; }
+  .bc-find .bp { width: 100%; }
+  .bc-found { margin: 14px -18px -18px; }
+  .bc-filters { padding: 0 16px 12px; }
+  /* Фильтры статуса переносятся, а не уезжают за край: четыре слова в строку на
+     390px не влезают, и «Не дошло» пропадало из виду. */
+  .bc-filters .tabs { flex-wrap: wrap; row-gap: 6px; }
+  /* Лестница отклика: конверсия уходит под название. Общая раскладка ставит её
+     третьей колонкой, и на узком экране она налезала на название шага. */
+  .bc-lad .lad-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .bc-lad .lad-row .lad-right { grid-column: 1 / -1; grid-row: 2; flex-direction: row;
+    align-items: center; justify-content: flex-start; gap: 10px; }
+}
+
+@media (max-width: 480px) {
+  /* Четыре коротких числа доставки читаются парами: одной колонкой это 4 экрана
+     скролла до списка людей. Денежных сумм тут нет, перенос строки им не грозит. */
+  .statbar.bc-stat { grid-template-columns: 1fr 1fr; }
+}
