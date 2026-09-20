@@ -9552,18 +9552,28 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pay-who select { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 10px;
   font: inherit; font-size: 12.5px; color: var(--ink); background: var(--card); max-width: 190px; }
 
-@media (max-width: 880px) {
+@media (max-width: 760px) {
   /* Телефон: шапка таблицы прячется, и каждое число называет себя само — тот же
-     прием, что на отчете по исполнителям. */
-  .trow.mot-grid { grid-template-columns: 1fr 1fr !important; gap: 10px 14px; }
+     прием, что на отчете по исполнителям. height: auto обязателен — общая .trow
+     прибита к 58px, и без этого строки налезают друг на друга. */
+  .trow.mot-grid { grid-template-columns: 1fr 1fr !important; gap: 10px 14px;
+    height: auto; padding: 14px 16px; align-items: start; }
   .trow.mot-grid.thead { display: none; }
   .trow.mot-grid .mot-name { grid-column: 1 / -1; }
   .trow.mot-grid .mot-num { text-align: left; }
   .trow.mot-grid .mot-num::before { content: attr(data-l); display: block;
-    font-size: 10.5px; font-weight: 700; color: var(--ink-3); }
+    font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 2px; }
+  .mot-detail { padding: 2px 12px 14px; }
+  .mm-grid input { width: 100%; }
+  .mm-grid label { flex: 1 1 130px; }
+  .mot-stat b { font-size: 20px; }
   .mot-line { grid-template-columns: 44px minmax(0, 1fr) 84px; }
   .mot-line .ml-r { display: none; }
   .mot-line .ml-b { display: none; }
-  .mot-un { grid-template-columns: minmax(0, 1fr) 100px; }
-  .mot-un .un-s { grid-column: span 1; }
+  .mot-un { grid-template-columns: minmax(0, 1fr) auto; }
+  /* Выпадашки на телефоне занимают всю ширину строки: в 100 px имя человека
+     обрезается на середине, и выбрать наугад — ровно то, чего экран избегает. */
+  .mot-un .un-s { grid-column: 1 / -1; }
+  .mot-un .un-s select { width: 100%; max-width: none; }
 }
