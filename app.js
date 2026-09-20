@@ -28871,7 +28871,7 @@
         var a = byS[sj[0]] || {};
         var cb = cab[CSCA_CAB[sj[0]]] || null;
         var cabSt = !c.has_account
-          ? (c.account_by === 'unverified' ? 'кабинет не подтвержден' : 'кабинета нет')
+          ? (c.account_by === 'unverified' ? 'почта в кабинете не подтверждена' : 'кабинета нет')
           : (cb && cb.open
               ? 'кабинет — открыт' + (cb.until ? ' до ' + esc(fmtUntil(cb.until)) : ' без срока')
               : 'кабинет — закрыт');
