@@ -28763,6 +28763,7 @@
       // нужны оба состояния в одной строке, иначе он не понимает, что именно открыл.
       r.cabinet = (rr[1] && rr[1].cabinet) || {};
       r.has_account = !!(rr[1] && rr[1].has_account);
+      r.account_by = (rr[1] && rr[1].account_by) || '';
       r.trainer_error = rr[1] && rr[1].trainer_error;
       CSCA_BUSY[id] = false; CSCA[id] = r;
       if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
@@ -28870,7 +28871,7 @@
         var a = byS[sj[0]] || {};
         var cb = cab[CSCA_CAB[sj[0]]] || null;
         var cabSt = !c.has_account
-          ? 'кабинета нет'
+          ? (c.account_by === 'unverified' ? 'кабинет не подтвержден' : 'кабинета нет')
           : (cb && cb.open
               ? 'кабинет — открыт' + (cb.until ? ' до ' + esc(fmtUntil(cb.until)) : ' без срока')
               : 'кабинет — закрыт');
@@ -28897,11 +28898,19 @@
       var accessBlock = (!c.has_account && c.access_reason === 'no_contact')
         ? '<div class="field-empty">У карточки нет ни кабинета на платформе, ни почты с ' +
           'телефоном — открывать некому. Добавьте контакт.</div>'
-        : (c.trainer_error
-            ? '<div class="m-csub" style="margin:0 0 10px">Старый тренажер сейчас не ' +
-              'отвечает, его состояние показать нечем. Кабинет открывается и закрывается ' +
-              'как обычно.</div>' + accessRows
-            : accessRows);
+        : ((c.trainer_error
+              ? '<div class="m-csub" style="margin:0 0 10px">Старый тренажер сейчас не ' +
+                'отвечает, его состояние показать нечем. Кабинет открывается и закрывается ' +
+                'как обычно.</div>'
+              : '') +
+           (c.account_by === 'unverified'
+              // Совпадения почты мало: прямая регистрация открыта, и аккаунт на чужой
+              // ящик заводится без кода из письма. Открыть курс такому — значит отдать
+              // его тому, кто первым занял адрес.
+              ? '<div class="m-csub" style="margin:0 0 10px">По почте карточки нашелся ' +
+                'аккаунт, но почта в нем не подтверждена — в кабинете открыть нечего. ' +
+                'Пусть ученик войдет в кабинет по этой почте и подтвердит ее.</div>'
+              : '') + accessRows);
 
       csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
         '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
