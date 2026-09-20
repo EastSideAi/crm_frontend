@@ -21749,7 +21749,7 @@
         '<div class="sec-head"><span class="ic">' + ic('search', 14) + '</span>' +
         '<div><div class="t">Писали ли мы человеку</div>' +
         '<div class="s">id телеграма или ВК, ник, имя — покажу все рассылки, где он был</div></div></div>' +
-        '<div class="bc-find"><input id="bc-find" class="al-in" placeholder="1029309438 или Вера" value="' + esc(q.find) + '">' +
+        '<div class="bc-find"><input id="bc-find" class="al-in" placeholder="id телеграма, ник или имя" value="' + esc(q.find) + '">' +
         '<button class="bp" id="bc-find-go">Проверить</button></div>' +
         (findRows ? '<div class="bc-found">' + findRows + '</div>' : '') +
       '</div>' +
