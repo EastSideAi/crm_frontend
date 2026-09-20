@@ -25544,7 +25544,7 @@
     var m = p.manual || {};
     var lines = (p.lines || []).map(function (l) {
       var sign = l.rub < 0 ? ' neg' : '';
-      return '<div class="mot-line' + sign + '" data-motlead="' + esc(l.session_id) + '">' +
+      return '<div class="mot-line' + sign + (l.session_id ? '" data-motlead="' + esc(l.session_id) : '') + '">' +
         '<span class="ml-d">' + esc(l.date.slice(8, 10) + '.' + l.date.slice(5, 7)) + '</span>' +
         '<span class="ml-c">' + esc(l.client) +
           '<span class="ml-t">' + esc(l.title) + (l.kind === 'refunded' ? ' · возврат' : '') + '</span></span>' +
@@ -25608,20 +25608,22 @@
   function motRates(rules) {
     if (!MOT.rates) {
       return '<div class="mot-rates-closed"><button class="qchip" id="mot-rates-open">' +
-        ic('pen', 13) + 'Ставки: ' + rules.pct_full + '% целиком, ' + rules.pct_closer + '% диагносту, ' +
-        rules.pct_setter + '% чатовику</button></div>';
+        ic('pen', 13) + 'Ставки: ' + esc(String(rules.pct_full)) + '% целиком, ' +
+        esc(String(rules.pct_closer)) + '% диагносту, ' + esc(String(rules.pct_setter)) +
+        '% чатовику</button></div>';
     }
+    var rv = function (k) { return esc(String(rules[k] === undefined ? '' : rules[k])); };
     return '<div class="card sp12 mot-rates" style="padding:22px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('pen', 14) + '</span>' +
       '<div><div class="t">Ставки</div><div class="s">условия Павла 10.09.2026, пока не утверждены окончательно</div></div>' +
       '<button class="qchip" id="mot-rates-close">свернуть</button></div>' +
       '<div class="mm-grid">' +
-        '<label>Вел чат и сам провел, %<input data-rf="pct_full" inputmode="decimal" value="' + rules.pct_full + '"></label>' +
-        '<label>Провел диагностику, %<input data-rf="pct_closer" inputmode="decimal" value="' + rules.pct_closer + '"></label>' +
-        '<label>Довел до диагностики, %<input data-rf="pct_setter" inputmode="decimal" value="' + rules.pct_setter + '"></label>' +
-        '<label>Смена, ₽<input data-rf="shift_rub" inputmode="numeric" value="' + rules.shift_rub + '"></label>' +
-        '<label>Диагностика до аттестации, ₽<input data-rf="diag_base_rub" inputmode="numeric" value="' + rules.diag_base_rub + '"></label>' +
-        '<label>После аттестации, ₽<input data-rf="diag_senior_rub" inputmode="numeric" value="' + rules.diag_senior_rub + '"></label>' +
+        '<label>Вел чат и сам провел, %<input data-rf="pct_full" inputmode="decimal" value="' + rv('pct_full') + '"></label>' +
+        '<label>Провел диагностику, %<input data-rf="pct_closer" inputmode="decimal" value="' + rv('pct_closer') + '"></label>' +
+        '<label>Довел до диагностики, %<input data-rf="pct_setter" inputmode="decimal" value="' + rv('pct_setter') + '"></label>' +
+        '<label>Смена, ₽<input data-rf="shift_rub" inputmode="numeric" value="' + rv('shift_rub') + '"></label>' +
+        '<label>Диагностика до аттестации, ₽<input data-rf="diag_base_rub" inputmode="numeric" value="' + rv('diag_base_rub') + '"></label>' +
+        '<label>После аттестации, ₽<input data-rf="diag_senior_rub" inputmode="numeric" value="' + rv('diag_senior_rub') + '"></label>' +
         '<button class="bp sm" id="mot-rates-save">Сохранить</button>' +
       '</div>' +
       '<div class="mm-note">Процент считается от полной суммы платежа, до эквайринга. Возврат снимает начисление тем месяцем, в котором деньги вернули.</div>' +
