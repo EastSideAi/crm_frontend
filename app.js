@@ -2207,6 +2207,10 @@
     // «Платежи», а не «Финансы»: здесь только оплаты клиентов. Пространство
     // «Финансы» — соседнее и про другие деньги, два одинаковых имени путали бы.
     { id: 'finance', label: 'Платежи', icon: 'coins', cap: 'finance' },
+    /* «Мотивация» — сколько заработал каждый продающий за месяц. Рядом с «Платежами»
+       намеренно: считается она из тех же оплат, и человек, который видит деньги
+       клиентов, видит и начисление с них. */
+    { id: 'motivation', label: 'Мотивация', icon: 'award', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
@@ -2954,6 +2958,18 @@
       html = '<div><h2>Платежи</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase2 + '</span></div></div>';
     }
+    if (state.page === 'motivation') {
+      var mt = MOT.data && MOT.data.totals;
+      var mun = MOT.data && MOT.data.unassigned;
+      var mph;
+      if (!MOT.data) mph = 'Считаю начисления…';
+      else if (mun && mun.count) mph = 'Начислено <b>' + motMoney(mt.total_rub) + '</b>. ' +
+        'У ' + mun.count + ' ' + plural(mun.count, 'оплаты', 'оплат', 'оплат') + ' на ' + motMoney(mun.amount_rub) +
+        ' нет продавца — процент по ним не считается никому.';
+      else mph = 'Начислено <b>' + motMoney(mt.total_rub) + '</b> с ' + motMoney(mt.money_in) + ' пришедших денег.';
+      html = '<div><h2>Мотивация</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('coins', 13) + '</span><span>' + mph + '</span></div></div>';
+    }
     if (state.page === 'contractors') {
       var s = CZ.stats;
       var phrase3;
@@ -3262,6 +3278,7 @@
     if (state.page === 'dash') renderDash(view);
     else if (state.page === 'path') renderPath(view);
     else if (state.page === 'finance') renderFinance(view);
+    else if (state.page === 'motivation') renderMotivation(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'focus') renderFocus(view);
@@ -25476,6 +25493,243 @@
     });
   }
 
+  /* ── Мотивация отдела продаж ──────────────────────────────────────────────
+     Кто сколько заработал за месяц. Процент считается от ДЕНЕГ, которые пришли,
+     а не от подписанного договора: рассрочка тогда платится частями сама собой.
+
+     Продавец живет на самой оплате (поля seller_id/setter_id), а не берется из
+     ответственного за карточку: ответственный меняется, и начисление за прошлый
+     месяц задним числом переехало бы на другого человека.
+
+     Смены и диагностики вводятся руками: смен в CRM пока нет и журнала диагностик
+     тоже. Появятся — те же две цифры приедут из данных, а экран не изменится. */
+  var MOT = { data: null, month: '', err: '', open: 0, rates: false };
+  var MOT_ROLE = { full: 'вел чат и провел диагностику', closer: 'провел диагностику',
+                   setter: 'довел до диагностики' };
+  function motMonth() {
+    if (MOT.month) return MOT.month;
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  }
+  function motMonths() {
+    // Только месяцы: «все время» тут бессмысленно — зарплату платят за период.
+    var out = [], d = new Date(), yNow = d.getFullYear();
+    for (var i = 0; i < 6; i++) {
+      var y = d.getFullYear(), m = d.getMonth();
+      out.push([y + '-' + ('0' + (m + 1)).slice(-2), REP_MON[m] + (y !== yNow ? ' ' + y : '')]);
+      d.setMonth(m - 1);
+    }
+    return out;
+  }
+  function motLoad() {
+    api('/admin/api/motivation?period=' + encodeURIComponent(motMonth())).then(function (r) {
+      MOT.data = r; MOT.err = '';
+      if (state.page === 'motivation') { renderHead(); renderView(); }
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      MOT.data = MOT.data || { people: [], totals: {}, unassigned: { rows: [] }, staff: [], rules: {} };
+      MOT.err = 'Не удалось собрать мотивацию. Обновите страницу.';
+      if (state.page === 'motivation') renderView();
+    });
+  }
+  function motMoney(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
+  function motStaffOpts(staff, cur) {
+    return '<option value="">— не выбран —</option>' + (staff || []).map(function (s) {
+      return '<option value="' + s.id + '"' + (cur === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    }).join('');
+  }
+  /* Строка человека. Якорь строки — итог: именно эту цифру человек получит. */
+  function motRow(p) {
+    var open = MOT.open === p.person_id;
+    var m = p.manual || {};
+    var lines = (p.lines || []).map(function (l) {
+      var sign = l.rub < 0 ? ' neg' : '';
+      return '<div class="mot-line' + sign + '" data-motlead="' + esc(l.session_id) + '">' +
+        '<span class="ml-d">' + esc(l.date.slice(8, 10) + '.' + l.date.slice(5, 7)) + '</span>' +
+        '<span class="ml-c">' + esc(l.client) +
+          '<span class="ml-t">' + esc(l.title) + (l.kind === 'refunded' ? ' · возврат' : '') + '</span></span>' +
+        '<span class="ml-r">' + esc(MOT_ROLE[l.role] || l.role) + ' · ' + l.pct + '%</span>' +
+        '<span class="ml-b num">' + motMoney(l.amount_rub) + '</span>' +
+        '<span class="ml-s num">' + (l.rub > 0 ? '+' : '') + motMoney(l.rub) + '</span></div>';
+    }).join('');
+    var detail = !open ? '' :
+      '<div class="mot-detail">' +
+        (lines ? '<div class="mot-lines">' + lines + '</div>'
+               : '<div class="field-empty">Оплат с его отметкой в этом месяце нет.</div>') +
+        '<div class="mot-manual" data-motform="' + p.person_id + '">' +
+          '<div class="mm-h">Смены и диагностики за месяц</div>' +
+          '<div class="mm-grid">' +
+            '<label>Смен<input data-mf="shifts" inputmode="decimal" value="' + (m.shifts || 0) + '"></label>' +
+            '<label>Коэффициент<input data-mf="shift_coef" inputmode="decimal" value="' + (m.shift_coef === undefined ? 1 : m.shift_coef) + '"></label>' +
+            '<label>Диагностик до аттестации<input data-mf="diags_base" inputmode="numeric" value="' + (m.diags_base || 0) + '"></label>' +
+            '<label>После аттестации<input data-mf="diags_senior" inputmode="numeric" value="' + (m.diags_senior || 0) + '"></label>' +
+            '<label>Доплата, ₽<input data-mf="bonus_rub" inputmode="numeric" value="' + (m.bonus_rub || 0) + '"></label>' +
+            '<button class="bp sm" data-motsave="' + p.person_id + '">Сохранить</button>' +
+          '</div>' +
+          '<div class="mm-note">Пока смены и диагностики не ведутся в CRM, цифры ставятся руками. Коэффициент — качество смены, от 0,6 до 1.</div>' +
+        '</div>' +
+      '</div>';
+    return '<div class="mot-item' + (open ? ' open' : '') + '">' +
+      '<div class="trow mot-grid mot-row" data-motp="' + p.person_id + '">' +
+        '<span class="mot-name">' + esc(p.name) +
+          '<span class="mot-sub">' + (p.deals ? p.deals + ' ' + plural(p.deals, 'оплата', 'оплаты', 'оплат') : 'оплат нет') + '</span></span>' +
+        '<span class="mot-num" data-l="Процент">' + motMoney(p.percent_rub) + '</span>' +
+        '<span class="mot-num" data-l="Смены">' + motMoney(p.shift_rub) + '</span>' +
+        '<span class="mot-num" data-l="Диагностики">' + motMoney(p.diag_rub) + '</span>' +
+        '<span class="mot-num mot-total num" data-l="Итого">' + motMoney(p.total_rub) + '</span>' +
+      '</div>' + detail + '</div>';
+  }
+  /* Оплаты без продавца. Не счетчик, а рабочее место: разметить надо тут же,
+     иначе никто не пойдет искать карточку клиента ради одного поля. */
+  function motUnassigned(u, staff) {
+    if (!u || !u.rows || !u.rows.length) {
+      return '<div class="card sp5" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('check', 14) + '</span>' +
+        '<div><div class="t">Все оплаты размечены</div><div class="s">у каждой есть продавец</div></div></div>' +
+        '<div class="empty">Ничего разбирать не нужно.</div></div>';
+    }
+    var rows = u.rows.map(function (r) {
+      return '<div class="mot-un" data-unpay="' + r.payment_id + '">' +
+        '<div class="un-l"><div class="un-c">' + esc(r.client) + '</div>' +
+          '<div class="un-t">' + esc(r.title) + ' · ' + esc(r.date.slice(8, 10) + '.' + r.date.slice(5, 7)) +
+          (r.status === 'refunded' ? ' · возврат' : '') + '</div></div>' +
+        '<span class="un-a num">' + motMoney(r.amount_rub) + '</span>' +
+        '<label class="un-s">кто продал<select data-unseller="' + r.payment_id + '">' + motStaffOpts(staff, null) + '</select></label>' +
+        '<label class="un-s">кто довел<select data-unsetter="' + r.payment_id + '">' + motStaffOpts(staff, r.setter_id) + '</select></label>' +
+        '</div>';
+    }).join('');
+    return '<div class="card sp12" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+      '<div><div class="t">Продавец не назначен</div>' +
+      '<div class="s">' + u.count + ' ' + plural(u.count, 'оплата', 'оплаты', 'оплат') + ' на ' +
+        motMoney(u.amount_rub) + ' — процент по ним никому не считается</div></div></div>' +
+      '<div class="mot-uns">' + rows + '</div></div>';
+  }
+  function motRates(rules) {
+    if (!MOT.rates) {
+      return '<div class="mot-rates-closed"><button class="qchip" id="mot-rates-open">' +
+        ic('pen', 13) + 'Ставки: ' + rules.pct_full + '% целиком, ' + rules.pct_closer + '% диагносту, ' +
+        rules.pct_setter + '% чатовику</button></div>';
+    }
+    return '<div class="card sp12 mot-rates" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('pen', 14) + '</span>' +
+      '<div><div class="t">Ставки</div><div class="s">условия Павла 10.09.2026, пока не утверждены окончательно</div></div>' +
+      '<button class="qchip" id="mot-rates-close">свернуть</button></div>' +
+      '<div class="mm-grid">' +
+        '<label>Вел чат и сам провел, %<input data-rf="pct_full" inputmode="decimal" value="' + rules.pct_full + '"></label>' +
+        '<label>Провел диагностику, %<input data-rf="pct_closer" inputmode="decimal" value="' + rules.pct_closer + '"></label>' +
+        '<label>Довел до диагностики, %<input data-rf="pct_setter" inputmode="decimal" value="' + rules.pct_setter + '"></label>' +
+        '<label>Смена, ₽<input data-rf="shift_rub" inputmode="numeric" value="' + rules.shift_rub + '"></label>' +
+        '<label>Диагностика до аттестации, ₽<input data-rf="diag_base_rub" inputmode="numeric" value="' + rules.diag_base_rub + '"></label>' +
+        '<label>После аттестации, ₽<input data-rf="diag_senior_rub" inputmode="numeric" value="' + rules.diag_senior_rub + '"></label>' +
+        '<button class="bp sm" id="mot-rates-save">Сохранить</button>' +
+      '</div>' +
+      '<div class="mm-note">Процент считается от полной суммы платежа, до эквайринга. Возврат снимает начисление тем месяцем, в котором деньги вернули.</div>' +
+      '</div>';
+  }
+  function renderMotivation(view) {
+    if (MOT.data === null) { view.innerHTML = dashSkeleton(); motLoad(); return; }
+    var d = MOT.data, t = d.totals || {}, staff = d.staff || [];
+    var chips = motMonths().map(function (m) {
+      return '<button class="qchip' + (motMonth() === m[0] ? ' on' : '') + '" data-motm="' + m[0] + '">' + m[1] + '</button>';
+    }).join('');
+    var body = MOT.err
+      ? '<div class="empty">' + esc(MOT.err) + '</div>'
+      : (!d.people.length
+        ? '<div class="empty">За этот месяц начислять нечего. Строка появится, как только у оплаты будет продавец или вы впишете человеку смены.</div>'
+        : d.people.map(function (p) { return motRow(p); }).join(''));
+
+    view.innerHTML =
+      '<div class="mo-stats">' +
+        '<div class="mot-stat"><b>' + motMoney(t.total_rub) + '</b><span>Начислено за месяц</span></div>' +
+        '<div class="mot-stat"><b>' + motMoney(t.percent_rub) + '</b><span>Процент с оплат</span></div>' +
+        '<div class="mot-stat"><b>' + motMoney((t.shift_rub || 0) + (t.diag_rub || 0) + (t.bonus_rub || 0)) + '</b><span>Смены, диагностики, доплаты</span></div>' +
+        '<div class="mot-stat mot-in"><b>' + motMoney(t.money_in) + '</b><span>Пришло денег от семей</span></div>' +
+      '</div>' +
+      motRates(d.rules || {}) +
+      '<div class="card listcard">' +
+        '<div class="list-tools">' +
+          '<span class="list-hint">Процент считается от денег, которые пришли в этом месяце. Нажмите на строку — видно, из каких оплат она сложилась, и там же вписываются смены.</span>' +
+        '</div>' +
+        '<div class="list-quick">' + chips + '</div>' +
+        '<div class="trow mot-grid thead">' +
+          '<span class="th">Человек</span><span class="th r">Процент</span>' +
+          '<span class="th r">Смены</span><span class="th r">Диагностики</span><span class="th r">Итого</span>' +
+        '</div>' + body +
+      '</div>' +
+      motUnassigned(d.unassigned, staff);
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motm]'), function (b) {
+      b.addEventListener('click', function () {
+        MOT.month = b.getAttribute('data-motm'); MOT.data = null; MOT.open = 0; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motp]'), function (r) {
+      r.addEventListener('click', function () {
+        var pid = parseInt(r.getAttribute('data-motp'), 10);
+        MOT.open = MOT.open === pid ? 0 : pid; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motlead]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openDrawer(n.getAttribute('data-motlead'), [n.getAttribute('data-motlead')]);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-motsave]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var box = b.closest('[data-motform]'), body = { period: motMonth(), person_id: parseInt(b.getAttribute('data-motsave'), 10) };
+        Array.prototype.forEach.call(box.querySelectorAll('[data-mf]'), function (i) {
+          var v = parseFloat(String(i.value).replace(',', '.')) || 0;
+          body[i.getAttribute('data-mf')] = v;
+        });
+        b.disabled = true;
+        apiSend('/admin/api/motivation/manual', 'PUT', body, function () {
+          MOT.data = null; showToast('Записал'); renderView();
+        }, function (code, err) {
+          b.disabled = false;
+          showToast(code === 422 ? ((err.body && err.body.detail) || 'Проверьте цифры') : 'Не сохранилось — проверьте сеть');
+        });
+      });
+    });
+    // Клик внутри формы не должен складывать раскрытую строку.
+    Array.prototype.forEach.call(view.querySelectorAll('.mot-detail'), function (n) {
+      n.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    var ro = el('mot-rates-open'); if (ro) ro.addEventListener('click', function () { MOT.rates = true; renderView(); });
+    var rc = el('mot-rates-close'); if (rc) rc.addEventListener('click', function () { MOT.rates = false; renderView(); });
+    var rs = el('mot-rates-save');
+    if (rs) rs.addEventListener('click', function () {
+      var body = { base: 'gross', refund: 'subtract' };
+      Array.prototype.forEach.call(view.querySelectorAll('[data-rf]'), function (i) {
+        body[i.getAttribute('data-rf')] = parseFloat(String(i.value).replace(',', '.')) || 0;
+      });
+      rs.disabled = true;
+      apiSend('/admin/api/motivation/rules', 'PUT', body, function (r) {
+        MOT.data = null;
+        showToast(r && r.warn_split
+          ? 'Сохранил. Но разделенная сделка теперь дороже целой — проверьте проценты'
+          : 'Ставки сохранены');
+        renderView();
+      }, function () { rs.disabled = false; showToast('Не сохранилось — проверьте сеть'); });
+    });
+    function unSave(sel, field) {
+      Array.prototype.forEach.call(view.querySelectorAll('[' + sel + ']'), function (s) {
+        s.addEventListener('change', function () {
+          var pid = s.getAttribute(sel), val = s.value ? parseInt(s.value, 10) : null;
+          var body = {}; body[field] = val;
+          if (val === null) body[field === 'seller_id' ? 'clear_seller' : 'clear_setter'] = true;
+          apiSend('/admin/api/payments/' + pid, 'PATCH', body, function () {
+            MOT.data = null; renderView();
+          });
+        });
+      });
+    }
+    unSave('data-unseller', 'seller_id');
+    unSave('data-unsetter', 'setter_id');
+  }
+
   function renderFinance(view) {
     var f = state.finance;
     if (!f) {
@@ -31583,13 +31837,20 @@
       var rcpt = p.receipt_doc_id
         ? '<a class="pay-rcpt has" href="#" data-docdl="' + p.receipt_doc_id + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
         : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
-      return '<div class="pay-row">' +
+      return '<div class="pay-wrap">' +
+        '<div class="pay-row">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
           ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
           '<div class="doc-m">' + [when, p.note].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
         rcpt +
         '<span class="pay-amt' + amtCls + ' num">' + fmtMoney(p.amount_rub) + ' ₽</span>' +
-        '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>';
+        '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>' +
+        /* Кто продал — у самой оплаты, а не у карточки: ответственного меняют, и
+           начисление за прошлый месяц уехало бы на другого человека. */
+        '<div class="pay-who">' +
+          '<label>продал<select class="pay-sel" data-payseller="' + p.id + '" data-cur="' + (p.seller_id || '') + '"></select></label>' +
+          '<label>довел<select class="pay-sel" data-paysetter="' + p.id + '" data-cur="' + (p.setter_id || '') + '"></select></label>' +
+        '</div></div>';
     }).join('');
 
     var manualCount = pays.length;
@@ -31659,6 +31920,10 @@
                 '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
                 '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
                 '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
+              '</div>' +
+              '<div class="pay-who new">' +
+                '<label>кто продал<select class="pay-sel" id="pay-seller" data-cur=""></select></label>' +
+                '<label>кто довел до диагностики<select class="pay-sel" id="pay-setter" data-cur=""></select></label>' +
               '</div>' +
               '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
             '</div></div>' +
@@ -32859,6 +33124,33 @@
       });
     });
 
+    /* Выпадашки «кто продал» и «кто довел». Список людей один на сессию (fetchPeople),
+       поэтому наполняем их после отрисовки, а не тянем сервер на каждую карточку. */
+    var paySels = host.querySelectorAll('select.pay-sel');
+    if (paySels.length) fetchPeople(function (people) {
+      Array.prototype.forEach.call(paySels, function (sel) {
+        var cur = sel.getAttribute('data-cur');
+        sel.innerHTML = '<option value="">— не выбран —</option>' + people.map(function (pp) {
+          return '<option value="' + pp.id + '"' + (String(pp.id) === String(cur) ? ' selected' : '') + '>' +
+            esc(pp.name || pp.login) + '</option>';
+        }).join('');
+        var pid = sel.getAttribute('data-payseller') || sel.getAttribute('data-paysetter');
+        if (!pid) return;   // форма нового платежа: значение уйдет вместе с ним
+        sel.addEventListener('change', function () {
+          var field = sel.getAttribute('data-payseller') ? 'seller_id' : 'setter_id';
+          var body = {};
+          if (sel.value) body[field] = parseInt(sel.value, 10);
+          else body[field === 'seller_id' ? 'clear_seller' : 'clear_setter'] = true;
+          apiSend('/admin/api/payments/' + pid, 'PATCH', body, function () {
+            showToast('Записал, кто продал');
+            refreshDetail(id, function () {
+              if (state.drawerId === id && state.modalSection === 'pay') renderDrawer(true);
+            });
+          });
+        });
+      });
+    });
+
     var payBtn = el('pay-add-btn');
     if (payBtn) {
       var payStEl = el('pay-st'), payStatus = 'paid';
@@ -32875,6 +33167,9 @@
         if (!title) { el('pay-title').focus(); return; }
         var body = { title: title, amount_rub: amt, status: payStatus };
         if (payStatus === 'paid' || payStatus === 'refunded') body.paid_at = date;
+        var selA = el('pay-seller'), selB = el('pay-setter');
+        if (selA && selA.value) body.seller_id = parseInt(selA.value, 10);
+        if (selB && selB.value) body.setter_id = parseInt(selB.value, 10);
         apiSend('/admin/api/leads/' + id + '/payments', 'POST', body, function (r) {
           if (stagedRcpt && r && r.id) {  // догружаем квитанцию и привязываем к созданной оплате
             var pid = r.id;

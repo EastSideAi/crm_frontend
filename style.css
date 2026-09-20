@@ -9468,3 +9468,102 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      скролла до списка людей. Денежных сумм тут нет, перенос строки им не грозит. */
   .statbar.bc-stat { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Мотивация отдела продаж ──────────────────────────────────────────────
+   Экран отвечает на один вопрос: сколько человек получит за месяц. Поэтому
+   якорь строки — итог, а не проценты, из которых он сложился; они тише и правее
+   слева направо не по важности, а по порядку счета. Своих цветов тут нет: суммы
+   черные, единственное цветное место — оплаты без продавца, потому что это долг
+   по работе, а не факт. */
+.mot-stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mot-stat b { font-size: 26px; font-weight: 800; letter-spacing: -.035em; color: var(--ink);
+  line-height: 1.1; font-variant-numeric: tabular-nums; }
+.mot-stat span { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.mot-stat.mot-in b { color: var(--ink-2); }
+
+.mot-grid { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, .9fr)); }
+.mot-row { cursor: pointer; }
+.mot-name { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.mot-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.mot-num { text-align: right; font-size: 14px; color: var(--ink-2); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.mot-num.mot-total { color: var(--ink); font-weight: 700; }
+.mot-item { border-bottom: 1px solid var(--line); }
+.mot-item:last-child { border-bottom: 0; }
+.mot-item.open { background: var(--fill); }
+.mot-item.open .trow { border-bottom: 0; }
+
+.mot-detail { padding: 2px 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.mot-lines { display: flex; flex-direction: column; border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
+.mot-line { display: grid; grid-template-columns: 46px minmax(0, 1.6fr) minmax(0, 1fr) 96px 92px;
+  gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line);
+  cursor: pointer; font-size: 13px; }
+.mot-line:last-child { border-bottom: 0; }
+.mot-line:hover { background: var(--fill); }
+.ml-d { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ml-c { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--ink); font-weight: 600; }
+.ml-t { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.ml-r { font-size: 11.5px; color: var(--ink-2); }
+.ml-b, .ml-s { text-align: right; font-variant-numeric: tabular-nums; }
+.ml-b { color: var(--ink-3); }
+.ml-s { font-weight: 700; color: var(--ink); }
+.mot-line.neg .ml-s { color: var(--red-ink); }
+
+/* Ручной ввод — служебная часть экрана, поэтому она тише таблицы: подписи мелкие,
+   поля узкие. Когда смены поедут из CRM, блок уйдет отсюда целиком. */
+.mot-manual { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; }
+.mm-h { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.mm-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.mm-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.mm-grid input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
+  border-radius: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--card);
+  font-variant-numeric: tabular-nums; }
+.mm-grid input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
+.mm-note { font-size: 11.5px; color: var(--ink-3); }
+
+.mot-rates-closed { margin-bottom: 12px; }
+.mot-rates .mm-grid { margin-top: 12px; }
+
+.mot-uns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.mot-un { display: grid; grid-template-columns: minmax(0, 1.4fr) 110px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--card); }
+.un-c { font-weight: 600; color: var(--ink); }
+.un-t { font-size: 11.5px; color: var(--ink-3); }
+.un-a { text-align: right; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.un-s { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600;
+  color: var(--ink-3); min-width: 0; }
+.un-s select { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 10px;
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--card); max-width: 100%; }
+
+/* Кто продал — прямо под строкой оплаты в карточке клиента. Не отдельным экраном:
+   отмечает это тот же человек, который заводит платеж, и в тот же момент. */
+.pay-wrap { display: flex; flex-direction: column; }
+.pay-who { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 0 0 10px 2px; }
+.pay-who.new { padding-top: 4px; }
+.pay-who label { display: flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.pay-who select { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 10px;
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--card); max-width: 190px; }
+
+@media (max-width: 880px) {
+  /* Телефон: шапка таблицы прячется, и каждое число называет себя само — тот же
+     прием, что на отчете по исполнителям. */
+  .trow.mot-grid { grid-template-columns: 1fr 1fr !important; gap: 10px 14px; }
+  .trow.mot-grid.thead { display: none; }
+  .trow.mot-grid .mot-name { grid-column: 1 / -1; }
+  .trow.mot-grid .mot-num { text-align: left; }
+  .trow.mot-grid .mot-num::before { content: attr(data-l); display: block;
+    font-size: 10.5px; font-weight: 700; color: var(--ink-3); }
+  .mot-line { grid-template-columns: 44px minmax(0, 1fr) 84px; }
+  .mot-line .ml-r { display: none; }
+  .mot-line .ml-b { display: none; }
+  .mot-un { grid-template-columns: minmax(0, 1fr) 100px; }
+  .mot-un .un-s { grid-column: span 1; }
+}
