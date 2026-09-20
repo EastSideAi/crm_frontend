@@ -378,6 +378,14 @@
     return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + ' ' + hm;
   }
   function fmtTime(iso) { if (!iso) return ''; var d = new Date(iso); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  /* Срок «до когда открыто» — это будущее, и год в нем обязателен: fmtWhen заточен под
+     недавние события и год отбрасывает, поэтому доступ на год выглядел как «до 20.09»,
+     то есть как будто он кончается на днях. Минуты в дедлайне — шум. */
+  function fmtUntil(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear();
+  }
   var MONTHS_RU = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   function dayLabel(iso) {
     if (!iso) return '';
@@ -28736,6 +28744,8 @@
      поступления: математика, физика, химия) своей вкладки не имеет и живет целиком тут. */
   var CSCA = {}, CSCA_BUSY = {};
   var CSCA_SUBJ = [['mathematics', 'Математика'], ['physics', 'Физика'], ['chemistry', 'Химия']];
+  // Один предмет, два имени: тренажер писался раньше и назвал математику полным словом.
+  var CSCA_CAB = { mathematics: 'math', physics: 'physics', chemistry: 'chemistry' };
   function loadCsca(id, force) {
     if (CSCA_BUSY[id]) return;
     if (force) delete CSCA[id];
@@ -28749,6 +28759,12 @@
       var r = rr[0];
       r.access = (rr[1] && rr[1].access) || [];
       r.access_reason = rr[1] && rr[1].reason;
+      // Замка два: курс в кабинете платформы и старый тренажер на сайте. Менеджеру
+      // нужны оба состояния в одной строке, иначе он не понимает, что именно открыл.
+      r.cabinet = (rr[1] && rr[1].cabinet) || {};
+      r.has_account = !!(rr[1] && rr[1].has_account);
+      r.account_by = (rr[1] && rr[1].account_by) || '';
+      r.trainer_error = rr[1] && rr[1].trainer_error;
       CSCA_BUSY[id] = false; CSCA[id] = r;
       if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
     }).catch(function (e) {
@@ -28843,40 +28859,69 @@
           }).join('')
         : '<div class="field-empty">Пробный CSCA еще не проходил. Тест открыт всем — ссылку ' +
           'дает лендинг экзамена, результат придет сюда сам.</div>';
-      // Доступ к тренажеру — по предметам: экзамен обычно сдают один, и открытая
-      // математика не должна тащить за собой физику с химией.
+      // Доступ — по предметам: экзамен обычно сдают один, и открытая математика не
+      // должна тащить за собой физику с химией. Мест, где предмет заперт, два:
+      // курс в кабинете платформы (там сейчас уроки, тесты и тренировка) и старый
+      // тренажер на сайте. Кнопка открывает оба сразу, но состояния показываем
+      // раздельно: у лида без кабинета есть только тренажер, и это должно быть видно.
       var byS = {};
       (c.access || []).forEach(function (a) { byS[a.subject] = a; });
+      var cab = c.cabinet || {};
       var accessRows = CSCA_SUBJ.map(function (sj) {
         var a = byS[sj[0]] || {};
-        var st = !a.open
-          ? (a.trial_used ? 'Закрыт, неделя израсходована' : 'Закрыт')
-          : (a.kind === 'trial' ? 'Бесплатная неделя до ' + esc(fmtWhen(a.until))
-                                : 'Открыт до ' + esc(fmtWhen(a.until)));
+        var cb = cab[CSCA_CAB[sj[0]]] || null;
+        var cabSt = !c.has_account
+          ? (c.account_by === 'unverified' ? 'почта в кабинете не подтверждена' : 'кабинета нет')
+          : (cb && cb.open
+              ? 'кабинет — открыт' + (cb.until ? ' до ' + esc(fmtUntil(cb.until)) : ' без срока')
+              : 'кабинет — закрыт');
+        // Тренажер не ответил — пишем это один раз над списком, а не в каждой строке:
+        // три одинаковые жалобы подряд только мешают прочитать состояние кабинета.
+        var trSt = c.trainer_error
+          ? ''
+          : (!a.open
+              ? (a.trial_used ? 'тренажер — закрыт, неделя израсходована' : 'тренажер — закрыт')
+              : (a.kind === 'trial' ? 'тренажер — неделя до ' + esc(fmtUntil(a.until))
+                                    : 'тренажер — до ' + esc(fmtUntil(a.until))));
+        var isOpen = (cb && cb.open) || a.open;
         return '<div class="det-term">' +
-          '<div class="det-term-s"><b>' + esc(sj[1]) + '</b> · ' + st + '</div>' +
+          '<div class="det-term-s"><b>' + esc(sj[1]) + '</b> · ' + cabSt +
+            (trSt ? ' · ' + trSt : '') + '</div>' +
           '<div class="det-term-b">' +
             '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="30">+ месяц</button>' +
             '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="365">+ год</button>' +
-            (a.open && a.kind === 'paid'
+            (isOpen
               ? '<button type="button" class="bp ghost sm" data-csca-open="' + sj[0] + '" data-days="0">закрыть</button>'
               : '') +
           '</div></div>';
       }).join('');
-      var accessBlock = c.access_reason === 'no_contact'
-        ? '<div class="field-empty">В карточке нет почты и телефона — тренажер не узнает ' +
-          'человека, открывать нечего. Добавьте контакт.</div>'
-        : accessRows;
+      var accessBlock = (!c.has_account && c.access_reason === 'no_contact')
+        ? '<div class="field-empty">У карточки нет ни кабинета на платформе, ни почты с ' +
+          'телефоном — открывать некому. Добавьте контакт.</div>'
+        : ((c.trainer_error
+              ? '<div class="m-csub" style="margin:0 0 10px">Старый тренажер сейчас не ' +
+                'отвечает, его состояние показать нечем. Кабинет открывается и закрывается ' +
+                'как обычно.</div>'
+              : '') +
+           (c.account_by === 'unverified'
+              // Совпадения почты мало: прямая регистрация открыта, и аккаунт на чужой
+              // ящик заводится без кода из письма. Открыть курс такому — значит отдать
+              // его тому, кто первым занял адрес.
+              ? '<div class="m-csub" style="margin:0 0 10px">По почте карточки нашелся ' +
+                'аккаунт, но почта в нем не подтверждена — в кабинете открыть нечего. ' +
+                'Пусть ученик войдет в кабинет по этой почте и подтвердит ее.</div>'
+              : '') + accessRows);
 
       csca = '<div class="m-sec"><div class="m-sec-h">CSCA — экзамен для поступления' +
         '<span class="hr" id="ex-refresh">' + ic('refresh', 12) + 'обновить</span></div>' +
         '<div class="m-csub" style="margin:0 0 12px">Лучший результат по каждому предмету. ' +
         'Балла нет у попыток, где остались задания на ручную проверку.</div>' +
         board + '<div class="det-prl">' + rows + '</div></div>' +
-        '<div class="m-sec"><div class="m-sec-h">Доступ к тренажеру CSCA</div>' +
-        '<div class="m-csub" style="margin:0 0 12px">Тест и разбор слабых тем бесплатны ' +
-        'всем. Тренажер — неделя бесплатно, дальше платно, и по каждому предмету ' +
-        'отдельно. Открытие продлевает срок, остаток не сгорает.</div>' +
+        '<div class="m-sec"><div class="m-sec-h">Доступ к CSCA</div>' +
+        '<div class="m-csub" style="margin:0 0 12px">Кнопка открывает предмет сразу в ' +
+        'кабинете платформы и в старом тренажере на сайте. Пробный тест и разбор слабых ' +
+        'тем бесплатны всем; уроки, пробники и тренировка — по каждому предмету отдельно. ' +
+        'Открытие продлевает срок, остаток не сгорает.</div>' +
         accessBlock + '</div>';
     }
 
@@ -31973,12 +32018,23 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ subject: b.getAttribute('data-csca-open'), days: days }),
         }).then(function (r) {
-          if (CSCA[id] && r.access) CSCA[id].access = r.access;
+          if (CSCA[id]) {
+            if (r.access) CSCA[id].access = r.access;
+            CSCA[id].cabinet = r.cabinet || {};
+            CSCA[id].has_account = !!r.has_account;
+            CSCA[id].trainer_error = r.trainer_error;
+          }
           if (state.drawerId === id && state.modalSection === 'exams') renderModalContent();
-          showToast(days ? (days === 30 ? 'Открыт на месяц' : 'Открыт на год') : 'Доступ закрыт');
+          // Говорим, где именно сработало: половина может не сработать (нет кабинета,
+          // не ответил тренажер), и «Открыт на год» без уточнения вводит в заблуждение.
+          var where = r.cabinet_done && r.trainer_done ? 'в кабинете и тренажере'
+            : r.cabinet_done ? 'в кабинете' : 'в тренажере';
+          showToast(days
+            ? (days === 30 ? 'Открыт на месяц ' : 'Открыт на год ') + where
+            : 'Доступ закрыт ' + where);
         }).catch(function (e) {
           b.disabled = false; b.style.opacity = '';
-          if (e.message !== '403') showToast('Тренажер не ответил, попробуйте еще раз');
+          if (e.message !== '403') showToast('Не получилось открыть, попробуйте еще раз');
         });
       });
     });
