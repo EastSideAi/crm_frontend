@@ -9432,7 +9432,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      цифры прогона переносятся под название. */
   .trow.bc-run { grid-template-columns: minmax(0, 1fr) 20px !important; height: auto;
     padding: 14px 16px; row-gap: 10px; }
-  .bc-nums { grid-column: 1 / -1; gap: 18px; justify-content: flex-start; }
+  /* Четыре колонки по 86px плюс зазоры — это 398px, на 390px последнее число
+     («не дошло») срезалось краем экрана. Парами влезает с запасом. */
+  .bc-nums { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 14px; row-gap: 10px; justify-content: stretch; }
   .bc-n { align-items: flex-start; }
   .bc-go { grid-column: 2; grid-row: 1; align-self: center; }
   /* Адресат: имя и время в одной строке, статус с ответом площадки — под ними.
