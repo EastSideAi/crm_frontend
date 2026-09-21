@@ -9492,3 +9492,57 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
      скролла до списка людей. Денежных сумм тут нет, перенос строки им не грозит. */
   .statbar.bc-stat { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Домашки CSCA в разделе «Обучение» ───────────────────────────────────────
+   Преподаватель курса (Арсений: математика и физика) проверяет работы там же, где
+   работает команда, — своей учеткой CRM, без второго входа (Вера 21.09.2026).
+   Ждущая работа выделена кантом слева: очередь должна читаться одним взглядом. */
+.csw-list { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.csw-card { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--card); }
+.csw-card.wait { border-color: #CFE0FF; box-shadow: inset 3px 0 0 var(--blue); }
+.csw-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.csw-top b { font-size: 15px; font-weight: 600; letter-spacing: -.015em; color: var(--ink); }
+.csw-when { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.csw-tag { margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+.csw-tag.new { color: var(--blue); background: var(--blue-tint); }
+.csw-tag.ok { color: var(--green-ink); background: var(--green-soft); }
+.csw-tag.ret { color: var(--red-ink); background: var(--red-soft); }
+.csw-task { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.csw-src { margin-left: 10px; font-weight: 600; color: var(--blue); text-decoration: none;
+  border-bottom: 1px solid rgba(47,107,255,.3); }
+.csw-src:hover { border-color: var(--blue); }
+.csw-ans { margin-top: 12px; padding: 12px 14px; border-radius: 11px; background: var(--fill);
+  font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+.csw-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 12px;
+  padding: 12px 14px; border-radius: 11px; background: var(--fill); }
+.csw-score b { font-size: 19px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+.csw-score span { font-size: 12.5px; color: var(--ink-3); }
+.csw-wrong { padding-left: 10px; border-left: 1px solid var(--line-2); }
+.csw-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.csw-file { font-size: 12px; color: var(--ink-2); background: var(--fill); border-radius: 8px;
+  padding: 4px 9px; word-break: break-all; }
+.csw-note { margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.csw-note b { color: var(--ink); }
+.csw-ta { margin-top: 12px; }
+.csw-err { color: var(--red-ink); font-size: 12.5px; font-weight: 600; margin-top: 8px; }
+.csw-err:empty { display: none; }
+.csw-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.csw-seg { margin-left: auto; display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px;
+  background: var(--fill); }
+.csw-seg button { border: 0; background: 0; cursor: pointer; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--ink-2); padding: 7px 12px; border-radius: 9px; }
+.csw-seg button.on { color: #fff; background: var(--blue); }
+@media (max-width: 560px) {
+  /* на телефоне переключатель уезжает ПОД заголовок: в одной строке с ним название
+     раздела ломалось на три строки и читалось столбиком */
+  .csw-head { flex-wrap: wrap; }
+  /* :not(.csw-seg) — переключатель это тоже div, и общее правило забирало
+     у него нашу ширину обратно */
+  .csw-head > div:not(.csw-seg) { flex: 1; min-width: 0; }
+  /* flex: 0 0 100% — иначе строка-переключатель ужимается и остается в одной
+     строке с заголовком: width:100% у flex-элемента можно сжать */
+  .csw-seg { flex: 0 0 100%; margin-left: 0; margin-top: 12px; }
+  .csw-seg button { flex: 1; }
+  .csw-acts { flex-direction: column; }
+  .csw-acts .bp { width: 100%; }
+}
