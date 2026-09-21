@@ -21776,7 +21776,7 @@
      одних и тех же людей дважды. */
   function launchTrafficSpan(t) {
     var d = function (v) { return v ? v.split('-').reverse().slice(0, 2).join('.') : ''; };
-    if (t.period_from && t.period_to) return 'с ' + d(t.period_from) + ' по ' + d(t.period_to);
+    if (t.period_from && t.period_to) return d(t.period_from) + '–' + d(t.period_to);
     if (t.period_from) return 'с ' + d(t.period_from);
     if (t.period_to) return 'по ' + d(t.period_to);
     return '';
@@ -21884,14 +21884,14 @@
     var seen = tr ? (tr.visitors || tr.visits || 0) : 0;
     var base = Math.max(reg.total, clicksN, seen) || 1;
     var trSmall = tr
-      ? ['из Метрики', launchTrafficSpan(tr),
+      ? ['Метрика', launchTrafficSpan(tr),
          tr.visitors && tr.visits ? 'визитов ' + fmtMoney(tr.visits) : ''
         ].filter(Boolean).join(' · ')
       : 'знает только Метрика';
     var ladder =
       (seen
         ? ladRow('Посетители страницы', trSmall, seen, pct(seen, base),
-            conv(pct(reg.total, seen) + '% зарегистрировались'))
+            conv('конверсия ' + pct(reg.total, seen) + '%'))
         : ladRow('Посетители страницы', trSmall, '—', null, convMut('нет данных'))) +
       ladRow('Клики по нашим ссылкам', clicksN ? 'короткие ссылки в постах и письме' : 'коды заведены, ждут раздачи',
         clicksN || 0, pct(clicksN, base), clicksN ? '' : convMut('ждет раздачи')) +

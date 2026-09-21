@@ -4851,7 +4851,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .lt-was b { color: var(--ink); }
 @media (max-width: 900px) {
   .lt-form { grid-template-columns: 1fr 1fr; }
-  .lt-form .bp { grid-column: 1 / -1; }
+  /* Заметка и кнопка — во всю ширину: в половине колонки заметка не читается,
+     а кнопка рядом с полем выглядит как его часть. */
+  .lt-form .al-f:nth-child(5), .lt-form .bp { grid-column: 1 / -1; }
 }
 
 .sp-total { font-size: 13px; font-weight: 700; color: var(--ink-2); white-space: nowrap; }
