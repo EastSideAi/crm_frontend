@@ -98,6 +98,7 @@
     cardCalls: {},
     // продуктовый портал: открытый продукт, вкладка внутри него, поиск по порталу
     portalProduct: null, portalTab: 'tariffs', portalQ: '', portalItem: null,
+    econSeg: 'unit',
     // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
     portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
@@ -23916,6 +23917,44 @@
   }
   /* План, постоянные расходы и точка безубыточности. Отдельная карточка, потому
      что это уже не «сколько с одного клиента», а «сколько клиентов нужно». */
+  /* Вкладка «Экономика» выросла в три экрана подряд, и Павел 21.09.2026 сказал
+     прямо: листать вниз тяжело. Поэтому наверху теперь закреплен свод сезона —
+     три числа, ради которых сюда и заходят, — а все остальное разнесено по
+     разделам и переключается одним кликом. Свод виден в любом разделе: цифры,
+     которые крутят ниже, меняют именно его. */
+  var ECON_SEGS = [
+    { id: 'unit', label: 'Клиент' },
+    { id: 'plan', label: 'План' },
+    { id: 'funds', label: 'Фонды' }
+  ];
+  function econTopCard(p) {
+    return '<div class="card po-card po-econtop">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Деньги компании за сезон</div>' +
+        '<div class="s">двенадцать месяцев по нынешнему плану и нынешним расходам</div></div>' +
+        '<span class="po-saved" id="po-saved"></span></div>' +
+      '<div class="pay-board po-board3">' +
+        '<div class="pay-cell"><div class="pc-l">Заработали</div>' +
+          '<div class="pc-v num" data-ec="y:rev"></div>' +
+          '<div class="pc-s num" data-ec="y:revm"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Потратили</div>' +
+          '<div class="pc-v num" data-ec="y:spend"></div>' +
+          '<div class="pc-s num" data-ec="y:spendm"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Чистая прибыль</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div>' +
+          '<div class="pc-s num" data-ec="y:profitm"></div></div>' +
+      '</div>' +
+      '<div class="po-note">В «потратили» входит все: себестоимость по каждому клиенту, ' +
+        'оклады команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
+        'расход, их берут уже из чистой прибыли.</div>' +
+      '<div class="po-tabs po-econsegs"><div class="dperiod">' +
+        ECON_SEGS.map(function (sg) {
+          return '<button type="button" data-econseg="' + sg.id + '"' +
+            (state.econSeg === sg.id ? ' class="on"' : '') + '>' + esc(sg.label) + '</button>';
+        }).join('') +
+      '</div></div>' +
+      '</div>';
+  }
   function econPlanCard(p) {
     var ec = p.economics || {}, pl = ec.plan, fx = ec.fixed, ts = p.tariffs || [], m = econModel(p);
     if (!pl || !ts.length) return '';
@@ -23955,21 +23994,6 @@
        идет ровно это, а средний чек и точка безубыточности — вторым рядом:
        чтобы понять, зарабатывает компания или нет, фонды читать не должен никто. */
     var out =
-      '<div class="po-sub">Деньги компании за сезон</div>' +
-      '<div class="pay-board po-board3">' +
-        '<div class="pay-cell"><div class="pc-l">Заработали</div>' +
-          '<div class="pc-v num" data-ec="y:rev"></div>' +
-          '<div class="pc-s num" data-ec="y:revm"></div></div>' +
-        '<div class="pay-cell"><div class="pc-l">Потратили</div>' +
-          '<div class="pc-v num" data-ec="y:spend"></div>' +
-          '<div class="pc-s num" data-ec="y:spendm"></div></div>' +
-        '<div class="pay-cell lead"><div class="pc-l">Чистая прибыль</div>' +
-          '<div class="pc-v num" data-ec="y:profit"></div>' +
-          '<div class="pc-s num" data-ec="y:profitm"></div></div>' +
-      '</div>' +
-      '<div class="po-note">В «потратили» входит все: себестоимость по каждому клиенту, ' +
-        'оклады команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
-        'расход, их берут уже из чистой прибыли.</div>' +
       '<div class="po-sub">Сколько клиентов нужно</div>' +
       '<div class="pay-board po-board3">' +
         '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
@@ -24035,14 +24059,18 @@
       '<tr class="po-r-sum"><td class="po-rl">Вклад с клиента, ₽</td>' + ts.map(function (t) { return '<td class="num" data-ec="contrib:' + esc(t.id) + '"></td>'; }).join('') + '</tr>' +
       '<tr class="po-r-big"><td class="po-rl">Маржа вклада</td>' + ts.map(function (t) { return '<td class="num" data-ec="margin:' + esc(t.id) + '"></td>'; }).join('') + '</tr>';
 
-    return '<div class="card po-card">' +
+    var unitCard = '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">Юнит-экономика</div><div class="s">сколько остается компании с одного клиента до постоянных расходов</div></div>' +
-        '<span class="po-saved" id="po-saved"></span></div>' +
+        '</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ"><thead><tr><th class="po-rl">Статья</th>' + ths + '</tr></thead>' +
       '<tbody>' + priceRow + rateRows + costRows + sumRows + '</tbody></table></div>' +
       '<div class="po-note">' + esc(ec.note || '') + ' ' + econWhoLine(p) + '</div>' +
-      '</div>' + econPlanCard(p) + econFundsCard(p);
+      '</div>';
+    if (!ECON_SEGS.some(function (sg) { return sg.id === state.econSeg; })) state.econSeg = 'unit';
+    return econTopCard(p) +
+      (state.econSeg === 'plan' ? econPlanCard(p)
+        : state.econSeg === 'funds' ? econFundsCard(p) : unitCard);
   }
   function portalWireEcon(view, p) {
     if (!state._poEconApi || typeof state._poEconApi === 'string') return;
@@ -24256,6 +24284,12 @@
           (m.costs[pr[0]] = m.costs[pr[0]] || {})[pr[1]] = econNum(i.value);
         }
         recalc(); save();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-econseg]'), function (b) {
+      b.addEventListener('click', function () {
+        state.econSeg = b.getAttribute('data-econseg');
+        renderView();
       });
     });
     var fit = view.querySelector('[data-econfit]');
