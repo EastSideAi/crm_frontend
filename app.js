@@ -23245,20 +23245,35 @@
           '<td class="num" data-ec="y:fixedm"></td><td class="num" data-ec="y:fixedy"></td></tr>' +
         '</tbody></table></div>' +
       ((fx || {}).note ? '<div class="po-note">' + esc(fx.note) + '</div>' : '') : '';
-    /* Итог сезона — четыре цифры, ради которых экран и открывают. Табличной
-       строкой они читаются как еще один расход, поэтому берем системный свод
-       (.pay-board), а якорь у него один: точка безубыточности. */
+    /* Итог сезона. Владельцы 20.09.2026 сказали прямым текстом: «Фонды,
+       дивиденды, но нет конкретных цифр. Зарабатываем столько, расходов
+       столько, чистая прибыль такая». Значит первым и самым крупным на экране
+       идет ровно это, а средний чек и точка безубыточности — вторым рядом:
+       чтобы понять, зарабатывает компания или нет, фонды читать не должен никто. */
     var out =
-      '<div class="po-sub">Итог сезона</div>' +
-      '<div class="pay-board po-board4">' +
+      '<div class="po-sub">Деньги компании за сезон</div>' +
+      '<div class="pay-board po-board3">' +
+        '<div class="pay-cell"><div class="pc-l">Заработали</div>' +
+          '<div class="pc-v num" data-ec="y:rev"></div>' +
+          '<div class="pc-s num" data-ec="y:revm"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Потратили</div>' +
+          '<div class="pc-v num" data-ec="y:spend"></div>' +
+          '<div class="pc-s num" data-ec="y:spendm"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Чистая прибыль</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div>' +
+          '<div class="pc-s num" data-ec="y:profitm"></div></div>' +
+      '</div>' +
+      '<div class="po-note">В «потратили» входит все: себестоимость по каждому клиенту, ' +
+        'оклады команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
+        'расход, их берут уже из чистой прибыли.</div>' +
+      '<div class="po-sub">Сколько клиентов нужно</div>' +
+      '<div class="pay-board po-board3">' +
         '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
           '<div class="pc-v num" data-ec="y:avgprice"></div></div>' +
         '<div class="pay-cell"><div class="pc-l">Вклад с клиента</div>' +
           '<div class="pc-v num" data-ec="y:avgcontrib"></div></div>' +
         '<div class="pay-cell lead"><div class="pc-l">Точка безубыточности</div>' +
           '<div class="pc-v num" data-ec="y:be"></div></div>' +
-        '<div class="pay-cell"><div class="pc-l">Прибыль за сезон</div>' +
-          '<div class="pc-v num" data-ec="y:profit"></div></div>' +
       '</div>' +
       '<div class="po-note"><span data-ec="y:be_words"></span></div>';
     return '<div class="card po-card">' +
@@ -23449,8 +23464,14 @@
             c.textContent = fmtMoney(y.profit);
             c.className = (c.classList.contains('pc-v') ? 'pc-v num' : 'num') +
               (y.profit < 0 ? ' po-neg' : ' po-pos');
+          } else if (k === 'revm' || k === 'spendm' || k === 'profitm') {
+            /* «в среднем в месяц» — именно в среднем: продажи идут волной, и
+               писать это без оговорки значит обещать ровный доход, которого нет. */
+            var year = k === 'revm' ? y.rev : k === 'spendm' ? (y.direct + y.fixedYear) : y.profit;
+            c.textContent = 'в среднем ' + fmtMoney(Math.round(year / 12)) + ' в месяц';
           } else c.textContent = fmtMoney(
             k === 'rev' ? y.rev : k === 'direct' ? y.direct : k === 'contrib' ? y.contrib :
+            k === 'spend' ? y.direct + y.fixedYear :
             k === 'fixedm' ? y.fixedMonth : k === 'fixedy' ? y.fixedYear :
             k === 'avgprice' ? y.avgPrice : k === 'avgcontrib' ? y.avgContrib : 0);
           return;

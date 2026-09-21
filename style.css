@@ -7070,10 +7070,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tbl.econ.w3 { min-width: 560px; }
 .po-tbl.econ.w3 .po-rl { width: 320px; }
 /* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
-.po-board4 { grid-template-columns: repeat(4, 1fr); margin-top: 14px; }
-.po-board4 .pc-v.po-pos { color: var(--green-ink); }
-.po-board4 .pc-v.po-neg { color: var(--red-ink); }
-@media (max-width: 1100px) { .po-board4 { grid-template-columns: repeat(2, 1fr); } }
+.po-board3 { margin-top: 14px; }
+.po-board3 .pc-v.po-pos { color: var(--green-ink); }
+.po-board3 .pc-v.po-neg { color: var(--red-ink); }
+/* вторая строка в ячейке свода: сезон это двенадцать месяцев, и владельцу нужна
+   не только сумма за год, но и то, как она выглядит в месяц (Олеся, 20.09.2026) */
+.pay-cell .pc-s { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.pay-cell.lead .pc-s { color: var(--blue); }
+@media (max-width: 760px) { .po-board3 { grid-template-columns: 1fr; } }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
