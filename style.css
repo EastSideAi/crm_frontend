@@ -9395,7 +9395,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Контрольный получатель — живой человек из команды в общем списке рассылки. */
 .bc-wit { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
   text-transform: uppercase; color: var(--blue); background: var(--blue-tint);
-  padding: 3px 8px; border-radius: 999px; margin-right: 8px; }
+  padding: 3px 8px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
 .bc-chat { font-size: 12px; font-weight: 600; color: var(--blue); margin-left: 10px;
   text-decoration: none; white-space: nowrap; }
 .bc-chat:hover { text-decoration: underline; }
@@ -9425,7 +9425,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .bc-grid { grid-template-columns: minmax(0, 1fr) minmax(150px, 280px) 96px; height: auto;
   padding-top: 11px; padding-bottom: 11px; }
-.bc-st { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+/* Чипы статуса стоят в строку (контрольный + дошло читаются одним взглядом),
+   а пояснение площадки и кнопка проверки переносятся под них целой строкой. */
+.bc-st { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center;
+  align-content: flex-start; min-width: 0; }
+.bc-st > .bc-detail, .bc-st > .bc-verdict, .bc-st > .bc-act { flex: 0 0 100%; }
+.bc-act { display: flex; }   /* кнопка проверки: с новой строки, но по своему размеру */
 /* Ответ площадки. В строке видна его суть, полный текст раскрывается по нажатию:
    он и есть доказательство отправки, прятать его в подсказку по наведению нельзя —
    на телефоне наведения не существует. */
