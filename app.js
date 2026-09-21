@@ -27701,6 +27701,10 @@
     { id: 'consult',   label: 'Консультации', icon: 'phone' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'apply',     label: 'Подача',       icon: 'send' },
+    // Контрольные точки тьютора: из них складывается его ставка за ученика
+    // (_specs/tutors/motivation-v1.md). Рядом с «Подачей» намеренно: обе
+    // секции про работу, которую принимают, а не про переписку.
+    { id: 'points',    label: 'Точки',        icon: 'check' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'exams',     label: 'Экзамены',    icon: 'award' },
@@ -28898,6 +28902,7 @@
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
+    if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
@@ -28906,6 +28911,7 @@
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
+    else if (s === 'points') host.innerHTML = buildPointsSection(ctx);
     else if (s === 'path') host.innerHTML = buildPathSection(ctx);
     else if (s === 'arrival') host.innerHTML = buildArrivalSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
@@ -28947,6 +28953,7 @@
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     if (s === 'apply') wireApplySection(id);
+    if (s === 'points') wirePointsSection(id);
     if (s === 'offers' && ctx.d) {
       wireOffersSection(id);
       // чат витрины всегда открыт рядом — как чат плана у доски
@@ -28960,6 +28967,7 @@
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
                  apply: ['Подача', 'Поднимаю заявки в вузы'],
+                 points: ['Контрольные точки', 'Считаю точки и деньги по ним'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
@@ -33756,6 +33764,215 @@
   function sec(title, inner, extra) {
     if (!inner) return '';
     return '<div class="dr-sec"><div class="dr-h">' + title + (extra || '') + '</div>' + inner + '</div>';
+  }
+
+  /* ════ ТОЧКИ — контрольные точки тьютора по ученику ════
+     Схема мотивации (_specs/tutors/motivation-v1.md, 3.2) платит тьютору за пять
+     закрытых точек, чек-листы этих точек — в _specs/tutors/checklists.md. Состав
+     точек, сроки и расчет денег держит сервер (routers/tutor_points.py); здесь
+     экран: план, отметки, закрытие, деньги.
+     Коэффициент вовлеченности считается по ОДНОЙ измеренной метрике из четырех,
+     поэтому внизу стоит блок «что пока не считается»: без него «1,00» читается
+     как «про остальное забыли», а человек должен видеть, за что его меряют. */
+  var PTS = {}, PTS_BUSY = {};
+
+  function loadPoints(id, force) {
+    if (PTS_BUSY[id]) return;
+    if (force) delete PTS[id];
+    PTS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/points').then(function (r) {
+      PTS_BUSY[id] = false; PTS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'points') renderModalContent();
+    }).catch(function () {
+      PTS_BUSY[id] = false; PTS[id] = { points: [], failed: true };
+      if (state.drawerId === id && state.modalSection === 'points') renderModalContent();
+    });
+  }
+
+  function ptTile(label, value, sub) {
+    return '<div class="cp-tile"><div class="cp-tile__l">' + label + '</div>' +
+      '<div class="cp-tile__v num">' + value + '</div>' +
+      '<div class="cp-tile__s">' + sub + '</div></div>';
+  }
+
+  function ptK(k) { return String(k.toFixed ? k.toFixed(2) : k).replace('.', ','); }
+
+  function buildPointsSection(ctx) {
+    var id = ctx.id;
+    var box = PTS[id];
+    if (!box) { loadPoints(id); return skeletonSection('points'); }
+    if (box.failed) {
+      return '<div class="m-ctitle">Точки</div>' +
+        '<div class="ap-empty">Точки не открылись — похоже, отвалилась сеть. Обнови страницу.</div>';
+    }
+
+    var done = box.points.filter(function (p) { return p.closedAt; }).length;
+    var m = box.metric;
+    var mline = m.score == null
+      ? 'закрытых точек со сроком пока нет'
+      : 'точки в срок: ' + m.score + ' из 100 по ' + m.counted +
+        (m.counted === 1 ? ' закрытой точке' : ' закрытым точкам');
+
+    var board = '<div class="cp-board">' +
+      ptTile('Начислено за закрытые точки', fmtMoney(box.money.earned) + ' ₽',
+        done + ' из 5 закрыто') +
+      ptTile('Осталось по этому ученику', fmtMoney(box.money.ahead) + ' ₽',
+        'если закрыть остальные с нынешним коэффициентом') +
+      ptTile('Коэффициент', ptK(box.kvovl), mline) +
+      '</div>';
+
+    var cards = box.points.map(function (p, i) {
+      var items = p.items.map(function (it) {
+        return '<button class="cp-item' + (it.done ? ' on' : '') + '"' +
+          (p.closedAt ? ' disabled' : '') +
+          ' data-ptitem="' + p.key + '" data-key="' + esc(it.key) + '" data-done="' + (it.done ? '1' : '') + '">' +
+          '<span class="cp-box">' + (it.done ? ic('check', 12) : '') + '</span>' +
+          '<span class="cp-item__t">' + esc(it.title) + '</span>' +
+          (it.done && it.by ? '<span class="cp-item__w">' + esc(it.by) + '</span>' : '') +
+          '</button>';
+      }).join('');
+
+      var plan;
+      if (p.closedAt) {
+        plan = '<div class="cp-line">Закрыта ' + fmtDay(p.closedAt) +
+          (p.closedBy ? ', ' + esc(p.closedBy) : '') +
+          (p.lateDays ? '<span class="cp-late">просрочка ' + p.lateDays + ' дн.</span>' : '') +
+          (p.planDate ? '<span class="cp-dim">план был ' + fmtDay(p.planDate) + '</span>' : '') +
+          '</div>';
+      } else if (p.byResult) {
+        plan = '<div class="cp-line cp-dim">Срок этой точки назначает вуз, в счет просрочек она не идет.</div>';
+      } else {
+        // Поля переноса показываем только когда дата уже стоит: пустая форма с
+        // «причиной переноса» рядом с незаполненной датой — это вопрос ни о чем.
+        plan = '<div class="cp-plan' + (p.planDate ? ' moved' : '') + '">' +
+          '<label>Плановая дата<input type="date" data-ptplan="' + p.key + '" value="' + esc(p.planDate || '') + '"></label>' +
+          (p.planDate
+            ? '<label>Причина переноса<input data-ptwhy="' + p.key + '" value="' + esc(p.movedReason) + '" placeholder="без нее дату не сдвинуть"></label>' +
+              '<label class="cp-ext"><input type="checkbox" data-ptext="' + p.key + '"' + (p.movedExt ? ' checked' : '') + '>' +
+              'перенос из-за вуза, визового центра или консульства</label>'
+            : '') +
+          '<div class="cp-due">' + (p.due ? 'по схеме: ' + esc(p.due) : '') + '</div>' +
+          '</div>';
+      }
+
+      var res = '';
+      if (p.byResult) {
+        res = '<div class="cp-res"><span>Письмо вуза</span><select data-ptres' +
+          (p.closedAt ? ' disabled' : '') + '>' +
+          '<option value="">не выбрано</option>' +
+          box.results.map(function (r) {
+            return '<option value="' + r.key + '"' + (p.result === r.key ? ' selected' : '') + '>' +
+              esc(r.title) + ' — ' + fmtMoney(r.amount) + ' ₽</option>';
+          }).join('') + '</select></div>';
+      }
+
+      var foot;
+      if (p.closedAt) {
+        foot = '<div class="cp-foot">' +
+          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽ при коэффициенте ' + ptK(p.kvovl) + '</span>' +
+          (can('zaezd_review')
+            ? '<button class="bp ghost sm" data-ptreopen="' + p.key + '">Вернуть точку</button>' : '') +
+          '</div>';
+      } else {
+        foot = '<div class="cp-foot">' +
+          '<span class="cp-left">' + (p.left ? 'не отмечено пунктов: ' + p.left : 'чек-лист закрыт целиком') + '</span>' +
+          '<button class="bp sm" data-ptclose="' + p.key + '"' + (p.left ? ' disabled' : '') + '>Закрыть точку</button>' +
+          '</div>';
+      }
+
+      var log = (p.log || []).filter(function (e) { return e.what === 'reopen'; }).slice(-2)
+        .map(function (e) {
+          return '<div class="cp-log">Вернул ' + esc(e.who || '') + ': ' + esc(e.why || '') + '</div>';
+        }).join('');
+
+      return '<div class="cp-card' + (p.closedAt ? ' done' : '') + '">' +
+        '<div class="cp-h"><span class="cp-n num">' + (i + 1) + '</span>' +
+          '<div class="cp-hb"><div class="cp-t">' + esc(p.title) + '</div>' +
+            '<div class="cp-s">' + esc(p.about) + '</div></div>' +
+          '<div class="cp-sum num">' + fmtMoney(p.amount) + ' ₽</div></div>' +
+        plan + res + log +
+        '<div class="cp-items">' + items + '</div>' + foot +
+        '</div>';
+    }).join('');
+
+    var pend = '<div class="cp-pend"><div class="cp-pend__h">Что пока не считается</div>' +
+      box.pending.map(function (x) {
+        return '<div class="cp-pend__r"><b>' + esc(x.title) + '</b>' +
+          '<span>вес ' + x.weight + '</span><i>' + esc(x.why) + '</i></div>';
+      }).join('') +
+      '<div class="cp-note">Эти три метрики схемы система еще не измеряет, поэтому в коэффициент они не входят вовсе. ' +
+      'Ноль за неизмеренное — это снятие денег за счетчик, которого нет.</div></div>';
+
+    return '<div class="m-ctitle">Контрольные точки</div>' +
+      '<div class="m-csub">Пять точек, из которых складывается ставка тьютора за этого ученика. ' +
+      'Точка закрывается, когда отмечен весь ее чек-лист, включая «семье сказано». ' +
+      'Коэффициент и сумма фиксируются в момент закрытия и потом не пересчитываются.</div>' +
+      board + cards + pend;
+  }
+
+  function wirePointsSection(id) {
+    var host = el('m-content');
+    if (!host) return;
+
+    function put(path, body, bad) {
+      var method = body.__method || 'PUT';
+      delete body.__method;
+      api('/admin/api/leads/' + id + '/points' + path, {
+        method: method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (r) { PTS[id] = r; renderModalContent(); })
+        .catch(function (e) {
+          showToast(e && e.status === 422 ? (bad || 'Так нельзя') :
+            e && e.status === 409 ? 'Точка уже закрыта' : 'Не сохранилось, попробуй еще раз');
+          loadPoints(id, true);
+        });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptplan]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var key = inp.getAttribute('data-ptplan');
+        var why = host.querySelector('[data-ptwhy="' + key + '"]');
+        var ext = host.querySelector('[data-ptext="' + key + '"]');
+        put('/' + key + '/plan', {
+          plan_date: inp.value || null,
+          reason: why ? why.value.trim() : '',
+          external: !!(ext && ext.checked),
+        }, 'Дату уже ставили — напиши причину переноса, она останется в карточке');
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptitem]'), function (b) {
+      b.addEventListener('click', function () {
+        put('/' + b.getAttribute('data-ptitem') + '/item', {
+          __method: 'POST', key: b.getAttribute('data-key'),
+          done: !b.getAttribute('data-done'),
+        });
+      });
+    });
+
+    var sel = host.querySelector('[data-ptres]');
+    if (sel) sel.addEventListener('change', function () {
+      if (!sel.value) return;
+      put('/p4/result', { result: sel.value });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptclose]'), function (b) {
+      b.addEventListener('click', function () {
+        // Закрытие считает деньги и фиксирует коэффициент — переспрашиваем один раз.
+        if (!confirm('Закрыть точку? Коэффициент и сумма зафиксируются на сегодня, сама себя точка не откроет.')) return;
+        put('/' + b.getAttribute('data-ptclose') + '/close', { __method: 'POST' },
+          'Сначала отметь весь чек-лист');
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptreopen]'), function (b) {
+      b.addEventListener('click', function () {
+        var why = prompt('Почему возвращаем точку? Причина останется в карточке и будет видна тьютору.');
+        if (why == null || !why.trim()) return;
+        put('/' + b.getAttribute('data-ptreopen') + '/reopen',
+          { __method: 'POST', reason: why.trim() }, 'Нужна причина возврата');
+      });
+    });
   }
 
   /* ════ ВИТРИНА — продукты, которые семья видит на платформе ════
