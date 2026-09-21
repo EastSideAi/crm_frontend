@@ -11530,13 +11530,28 @@
     return id || '';
   }
 
+  /* Карта грузилась один раз на весь заход в CRM и дальше жила вчерашним днем: тариф
+     клиенту меняют и в соседнем окне, и автоматом при оплате, а человек видел старую
+     раскладку, пока не перезагрузит страницу. Поэтому у нее срок годности пять минут,
+     как у сводки по соцсетям. Пока идет перечитывание, на экране остаются прежние
+     строки: мигать скелетом на каждом возврате во вкладку хуже, чем показать на
+     секунду данные пятиминутной давности. */
+  var MAP_TTL = 5 * 60 * 1000;
   function mapLoad(force) {
-    if (state._map && !force) return;
-    state._map = null;
+    if (state._map && !force && (Date.now() - (state._mapAt || 0)) < MAP_TTL) return;
+    if (state._mapLoading) return;
+    state._mapLoading = true;
     api('/admin/api/board').then(function (r) {
       state._map = r || { clients: [], stages: [] };
+      state._mapAt = Date.now();
+      state._mapLoading = false;
       if (state.page === 'roadmap') renderView();
-    }).catch(function () { state._map = 'none'; if (state.page === 'roadmap') renderView(); });
+    }).catch(function () {
+      state._mapLoading = false;
+      // сеть отвалилась, а карта уже нарисована — оставляем ее, а не пустой экран
+      if (!state._map) state._map = 'none';
+      if (state.page === 'roadmap') renderView();
+    });
   }
   function mapSeg(c) { return c.stage_key || MAP_NONE; }
   /* «Плана нет» и «этапа нет» — разные дыры, и считать их надо по-разному.
@@ -11765,6 +11780,7 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту. Проверьте сеть и обновите страницу.</div></div>';
       return;
     }
+    mapLoad();   // кэш просрочен — перечитаем в фоне, экран при этом не мигает
     var d = state._map, stages = mapStages(), all = d.clients || [];
     if (!all.length) {
       view.innerHTML = '<div class="card"><div class="empty">Клиентов пока нет. Сюда попадают те, у кого статус «клиент» ' +
@@ -32013,7 +32029,7 @@
       var tarSel = qlHost.querySelector('select[data-tariff]');
       if (tarSel) tarSel.addEventListener('change', function () {
         patch(id, { overrides: { tariff: tarSel.value } });
-        state._map = null;   // карта считает по тарифам — пусть перечитает
+        state._mapAt = 0;   // карта считает по тарифам — пусть перечитает при заходе
       });
     }
 
