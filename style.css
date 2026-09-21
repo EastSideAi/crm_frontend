@@ -7010,6 +7010,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-noall { background: var(--fill); color: var(--ink-2); border-radius: var(--r-lg);
   padding: 11px 13px; font-size: 12.5px; line-height: 1.45; }
 
+/* машинный состав тарифа: пары «что — что именно», выровненные по левому столбцу.
+   Значение темнее подписи, потому что смотрят на него; расхождение с каталогом
+   заказов — красной заливкой того же рецепта, что .po-noall: это не украшение,
+   а единственное место, где видно, что цена на странице и цена в оплате разошлись */
+.po-kvs { display: flex; flex-direction: column; gap: 11px; }
+/* подпись над значением, а не слева: карточка тарифа узкая, в две колонки
+   значение ломается на три строки и список перестает читаться сверху вниз */
+.po-kv { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.45; }
+.po-kvl { color: var(--ink-3); }
+.po-kvv { color: var(--ink); font-weight: 600; }
+.po-kvn { margin-top: 13px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.po-noall.po-warn { background: var(--red-soft); color: var(--red-ink); font-weight: 600;
+  margin-bottom: 12px; }
+
 /* продукты направления и путь клиента.
    Один рецепт на оба экрана: подпись-микролейбл, шаги с тихими номерами,
    список «что делает команда» теми же .po-feat, что и состав тарифа.

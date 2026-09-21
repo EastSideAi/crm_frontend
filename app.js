@@ -22951,7 +22951,71 @@
      чтобы глаз падал на нее первой. Блок «Не входит» — не мелкий шрифт внизу
      договора: обещание, которого нет в тарифе, всплывет через полгода и будет
      стоить дороже скидки. */
+  /* ── ЧТО ОТКРЫВАЕТ ДОСТУП ──
+     Текст тарифа в этом файле пишет команда для людей, а что система реально
+     открывает клиенту после оплаты, знает только каталог заказов. Разъезжаются они
+     молча: цену поменяли на странице, в каталоге осталась старая, и человек платит
+     по старой. Поэтому машинный состав кладем прямо в карточку тарифа рядом с
+     текстом — GET /admin/api/tariffs, право «портал». Ручка появилась позже портала:
+     пока сервер ее не отдает, блока просто нет, ошибку показывать не за что. */
+  var TAR_TRAINER = { hsk: 'HSK (китайский)', det: 'DET (английский)', csca: 'CSCA' };
+  // предмет зовется и коротко (доступ), и полностью (тренажер) — понимаем оба имени
+  var TAR_SUBJ = { math: 'Математика', mathematics: 'Математика', physics: 'Физика', chemistry: 'Химия' };
+  var TAR_TEAM = { intensive_lang: 'Видеоинтенсив по языковому экзамену',
+                   intensive_csca: 'Видеоинтенсив по CSCA',
+                   course_study: 'Курс по методам обучения' };
+  function fetchTariffCat() {
+    if (state._tarcat) return;
+    state._tarcat = 'wait';
+    api('/admin/api/tariffs').then(function (r) {
+      // ответ не того вида — считаем, что ручки нет: лучше не показать блок,
+      // чем объявить все тарифы отсутствующими в каталоге заказов
+      if (!r || !r.tariffs || !r.tariffs.length) { state._tarcat = 'none'; return; }
+      state._tarcat = {};
+      r.tariffs.forEach(function (t) { state._tarcat[t.id] = t; });
+      if (state.page === 'portal') renderView();
+    }).catch(function () { state._tarcat = 'none'; });
+  }
+  function tarNames(list, dict) {
+    // разделяем точкой: в названиях пунктов встречаются свои запятые
+    return (list || []).map(function (k) { return dict[k] || k; }).join(' · ');
+  }
+  function tariffAccess(t) {
+    var cat = state._tarcat;
+    if (!cat || cat === 'wait' || cat === 'none') return '';
+    var c = cat[t.id];
+    if (!c) {
+      return '<div class="po-fsec po-tsec"><div class="po-flbl">Что открывает доступ</div>' +
+        '<div class="po-noall po-warn">Этого тарифа нет в каталоге заказов: оплатить его по ' +
+        'ссылке нельзя, пока он там не заведен.</div></div>';
+    }
+    var m = c.composition || {}, rows = [];
+    function row(label, val) {
+      if (!val) return;
+      rows.push('<div class="po-kv"><span class="po-kvl">' + label + '</span>' +
+        '<span class="po-kvv">' + esc(val) + '</span></div>');
+    }
+    row('Тренажеры', tarNames(m.trainers, TAR_TRAINER));
+    row('Предметы CSCA', tarNames(m.csca_subjects, TAR_SUBJ));
+    row('Открывает менеджер', (m.team || []).length ? tarNames(m.team, TAR_TEAM) : 'нечего, все по тарифу');
+    row('Вузов в заявке', m.uni_limit ? 'до ' + m.uni_limit : '');
+    var warn = '';
+    if (c.is_active === false) {
+      warn = 'Тариф погашен в каталоге заказов: новую ссылку на оплату по нему не выставить.';
+    } else if (c.price_amount && Math.round(c.price_amount) !== Math.round(t.price || 0)) {
+      warn = 'Цена в каталоге заказов ' + fmtMoney(Math.round(c.price_amount)) + ' ₽, а на этой ' +
+        'странице ' + fmtMoney(t.price || 0) + ' ₽. Человек заплатит столько, сколько в каталоге.';
+    }
+    return '<div class="po-fsec po-tsec"><div class="po-flbl">Что открывает доступ</div>' +
+      (warn ? '<div class="po-noall po-warn">' + esc(warn) + '</div>' : '') +
+      '<div class="po-kvs">' + rows.join('') + '</div>' +
+      '<div class="po-kvn">Это не весь тариф, а то, чем управляет система: тренажеры, предметы и ' +
+      'число вузов в заявке. Живые пункты — консультация тьютора, репетиция интервью, встреча в ' +
+      'аэропорту — идут планом поступления, их тут не видно.</div></div>';
+  }
+
   function portalTariffs(p) {
+    fetchTariffCat();
     var sts = p.stages || [];
     var cards = (p.tariffs || []).map(function (t, ti) {
       /* у младшего тарифа «свое наполнение» — это вообще все, помечать там нечего;
@@ -23009,6 +23073,7 @@
         '<div class="po-fsec po-tsec"><div class="po-flbl">Не входит</div>' +
           (nos ? '<div class="po-feats">' + nos + '</div>'
                : '<div class="po-noall">' + esc(t.excludes_note || '') + '</div>') + '</div>' +
+        tariffAccess(t) +
       '</div>';
     }).join('');
 
