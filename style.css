@@ -7125,6 +7125,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pay-cell .pc-s { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .pay-cell.lead .pc-s { color: var(--blue); }
 @media (max-width: 760px) { .po-board3 { grid-template-columns: 1fr; } }
+/* строка дивидендов в таблице фондов: у нее нет доли, она остаток после всего,
+   и это надо видеть глазами, не вчитываясь. Тихая синяя заливка того же рецепта,
+   что итоговая строка, но холодная — итог и остаток разные вещи */
+.po-r-own td { background: var(--blue-tint); }
+.po-r-own .po-rl { background: var(--blue-tint); }
+.po-r-own td:first-child, .po-r-own .num { font-weight: 700; color: var(--ink); }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
