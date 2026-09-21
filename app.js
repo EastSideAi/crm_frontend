@@ -21599,6 +21599,21 @@
     });
   }
 
+  /* Сводка по всем рассылкам сразу. Когорты внутри одной рассылки отвечают на вопрос
+     «как прошла эта», а главный вопрос другой — кто нам вообще отвечает. Он и стоит
+     первым на входе в раздел (Вера, 21.09.2026: «про когорты пока нету ничего»). */
+  function fetchBcSummary() {
+    if (state._bcSumWait) return;
+    state._bcSumWait = true;
+    api('/admin/api/broadcasts/summary').then(function (r) {
+      state._bcSumWait = false; state._bcSum = r;
+      if (state.page === 'broadcasts') renderView();
+    }).catch(function () {
+      state._bcSumWait = false; state._bcSum = 'none';
+      if (state.page === 'broadcasts') renderView();
+    });
+  }
+
   function fetchBcRun(id) {
     api('/admin/api/broadcasts/run/' + id).then(function (r) {
       state._bcRun = r; if (state.page === 'broadcasts') renderView();
@@ -21694,20 +21709,43 @@
     if (p.funnel) mark.push('воронка');
     if (p.form) mark.push('анкета');
     return '<div class="trow bc-grid">' +
-      '<div class="t-cell"><div class="t-ttl">' + esc(who) + '</div>' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(who) + bcChat(p.user_id) + '</div>' +
         '<div class="t-sub num">' + esc(p.channel) + ' · ' + esc(p.channel_user_id) +
         (mark.length ? ' · ' + mark.join(', ') : '') + '</div></div>' +
       '<div class="bc-st"><span class="sev ' + st[0] + '">' + st[1] + '</span>' +
-        bcDetail(p.detail) + '</div>' +
+        bcDetail(p.detail) + bcProof(p) + '</div>' +
       '<div class="t-when num">' + fmtWhen(p.sent_at) + '</div>' +
     '</div>';
+  }
+
+  /* Кнопка «проверить у площадки». Журнал ведём мы сами, поэтому доказательством он
+     быть не может: тот же код и отправляет, и ставит отметку (Вера, 21.09.2026 —
+     «что мешает агенту не отправить и написать, что отправил?»). Кнопка спрашивает
+     телеграм или ВК про конкретное сообщение по номеру, который выдала сама площадка.
+     У рассылок до 21.09.2026 номера нет — там кнопки не будет, и это честнее заглушки. */
+  function bcProof(p) {
+    var mark = p.witness ? '<span class="bc-wit">контрольный</span>' : '';
+    if (p.status !== 'ok' || !p.provider_msg_id) return mark;
+    return mark + '<button class="bc-verify" data-ch="' + esc(p.channel) +
+      '" data-who="' + esc(p.channel_user_id) + '" data-mid="' + esc(p.provider_msg_id) +
+      '">проверить у площадки</button>';
+  }
+
+  /* «Дошло» — это ответ площадки, а не доказательство того, ЧТО человек получил.
+     Поэтому у каждого, кто заведён у нас, рядом с именем стоит вход в его переписку:
+     там лежит само сообщение (Вера, 21.09.2026: «элементарно же — посмотреть чат»).
+     У холодной базы Salebot переписки нет физически: эти люди нам не писали ни разу. */
+  function bcChat(userId) {
+    if (!userId) return '';
+    return '<a class="bc-chat" href="#dialog/' + encodeURIComponent(userId) + '">переписка</a>';
   }
 
   function renderBroadcasts(view) {
     var q = bcQ();
     if (q.run) return renderBcRun(view, q);
 
-    if (!state._bcList) { view.innerHTML = dashSkeleton(); fetchBcList(); return; }
+    if (!state._bcList) { view.innerHTML = dashSkeleton(); fetchBcList(); fetchBcSummary(); return; }
+    if (!state._bcSum) fetchBcSummary();
     if (state._bcList === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить рассылки — проверь сеть или доступ.</div></div>';
       return;
@@ -21724,6 +21762,7 @@
         '<div class="bc-nums">' +
           '<span class="bc-n"><b class="num">' + (r.sent || 0) + '</b><small>в списке</small></span>' +
           '<span class="bc-n"><b class="num">' + (r.delivered || 0) + '</b><small>дошло</small></span>' +
+          '<span class="bc-n"><b class="num">' + (r.replied || 0) + '</b><small>ответили</small></span>' +
           '<span class="bc-n"><b class="num">' + (r.blocked || 0) + '</b><small>закрыли бота</small></span>' +
           '<span class="bc-n"><b class="num">' + (r.failed || 0) + '</b><small>не дошло</small></span>' +
         '</div>' +
@@ -21743,7 +21782,7 @@
       findRows = (find.rows || []).length ? (find.rows || []).map(function (r) {
         var st = BC_ST[r.status] || BC_ST.fail;
         return '<div class="trow bc-grid">' +
-          '<div class="t-cell"><div class="t-ttl">' + esc(r.title) + '</div>' +
+          '<div class="t-cell"><div class="t-ttl">' + esc(r.title) + bcChat(r.user_id) + '</div>' +
             '<div class="t-sub num">' + esc(r.full_name || r.username || r.channel_user_id) + ' · ' + esc(r.channel) + '</div></div>' +
           '<div class="bc-st"><span class="sev ' + st[0] + '">' + st[1] + '</span>' +
             bcDetail(r.detail) + '</div>' +
@@ -21752,7 +21791,36 @@
       }).join('') : '<div class="empty">Этому человеку мы не писали ни разу.</div>';
     }
 
+    var sum = state._bcSum;
+    var sumCards = '', sumCohorts = '';
+    if (sum && sum !== 'none' && sum.ready && (sum.total || {}).delivered) {
+      var st = sum.total || {};
+      var conv = function (n) { return st.delivered ? Math.round(n / st.delivered * 100) : 0; };
+      sumCards =
+        '<div class="card sp12" style="padding:20px 24px">' +
+          '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
+          '<div><div class="t">Кто нам отвечает</div>' +
+          '<div class="s">по всем рассылкам вместе, считается от доставленных</div></div></div>' +
+          '<div class="statbar bc-stat">' +
+            '<div class="stat"><div class="sl">Дошло всего</div><div class="sv num">' + (st.delivered || 0) + '</div></div>' +
+            '<div class="stat"><div class="sl"><span class="sdot green"></span>Ответили</div>' +
+              '<div class="sv num">' + conv(st.replied || 0) + '%</div></div>' +
+            '<div class="stat"><div class="sl"><span class="sdot green"></span>В воронку</div>' +
+              '<div class="sv num">' + conv(st.funnel || 0) + '%</div></div>' +
+            '<div class="stat"><div class="sl"><span class="sdot amber"></span>До анкеты</div>' +
+              '<div class="sv num">' + conv(st.form || 0) + '%</div></div>' +
+          '</div>' +
+        '</div>';
+      /* Разрезы идут ПОД списком рассылок: сверху отвечаем «сколько и кому ушло»,
+         ниже — «кто из них отвечает». Обратный порядок уводил от главного экрана. */
+      sumCohorts =
+        bcCohort('Откуда человек у нас', 'своя аудитория или старая база', (sum.cohorts || {}).origin) +
+        bcCohort('Когда он писал нам сам', 'давность контакта на момент рассылки', (sum.cohorts || {}).age) +
+        bcCohort('Где он нас читает', 'канал, в который ушло сообщение', (sum.cohorts || {}).channel);
+    }
+
     view.innerHTML = '<div class="grid">' +
+      sumCards +
       '<div class="card sp12" style="padding:22px 24px">' +
         '<div class="sec-head"><span class="ic">' + ic('search', 14) + '</span>' +
         '<div><div class="t">Писали ли мы человеку</div>' +
@@ -21763,8 +21831,9 @@
       '</div>' +
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('send', 14) + '</span>' +
-        '<div><div class="t">Рассылки</div><div class="s">каждый прогон — строка на адресата с ответом площадки</div></div></div>' +
+        '<div><div class="t">Рассылки</div><div class="s">нажми на строку — внутри разбор: кто ответил, кто дошёл до анкеты, и срезы по группам</div></div></div>' +
         '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
+      sumCohorts +
     '</div>';
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-run]'), function (row) {
@@ -21854,6 +21923,24 @@
     var mb = el('bc-more');
     if (mb) mb.addEventListener('click', function () {
       q.offset = (state._bcPeople.people || []).length; fetchBcPeople();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.bc-verify'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true; b.textContent = 'спрашиваю площадку…';
+        api('/admin/api/broadcasts/verify', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: b.getAttribute('data-ch'),
+                                 channel_user_id: b.getAttribute('data-who'),
+                                 provider_msg_id: b.getAttribute('data-mid') })
+        }).then(function (r) {
+          var out = document.createElement('small');
+          out.className = 'bc-verdict ' + (r && r.ok ? 'yes' : 'no');
+          out.textContent = (r && r.human) || 'площадка не ответила';
+          b.parentNode.replaceChild(out, b);
+        }).catch(function () {
+          b.disabled = false; b.textContent = 'не вышло, попробуй ещё раз';
+        });
+      });
     });
   }
 
