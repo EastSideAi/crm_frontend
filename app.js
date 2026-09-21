@@ -2514,6 +2514,7 @@
   function setPage(p) {
     if (state.page === p) return;
     if (CZ.openId) closeCz();   // карточка исполнителя не переезжает в другой раздел
+    if (state._lpPeople) launchPeopleClose();   // и список людей ступени тоже
     state.page = p;
     state.sort = null;
     saveUi();
@@ -21388,9 +21389,18 @@
     } else {
       conv = 'нет данных';
     }
+    /* За ступенью со своими людьми стоит список: такая плашка кликабельна, и это
+       видно до клика. Приглушённой (state !== 'live') списка не положено — открывать
+       нечего, поэтому и курсор на ней обычный. */
+    var canOpen = !wait && s.people != null;
     return '<div class="lstep' + (wait ? ' wait' : '') +
-      (s.key === worstKey ? ' drop' : '') + '">' +
-      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' + (s.branch ? 'ветка' : (i + 1)) + '</div>' +
+      (s.key === worstKey ? ' drop' : '') + (canOpen ? ' lstep-open' : '') + '"' +
+      (canOpen ? ' data-lstep="' + esc(s.key) + '" role="button" tabindex="0"' +
+                 ' title="Показать людей этой ступени"' : '') + '>' +
+      /* «из них», а не «ветка»: ответвление от основного пути читается как «из них
+         столько-то». Формулировка выбрана владельцем осознанно — это не описка,
+         правку уже один раз откатили чужим мержем, возвращать «ветку» не надо. */
+      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' + (s.branch ? 'из них' : (i + 1)) + '</div>' +
       '<div class="ls-v num">' + val + '</div>' +
       '<div class="ls-t">' + esc(s.title) + '</div>' +
       (s.note ? '<div class="ls-s">' + esc(s.note) + '</div>' : '') +
@@ -21420,6 +21430,196 @@
     }).join('') + '</div>';
   }
 
+  /* ── Кто эти люди: список за цифрой ступени ────────────────────────────────
+     Ольга объяснила недоверие к экрану прямо: «на Геткурсе я заходила в шаг,
+     смотрела людей и считала руками, а здесь только цифры и проверить нечем».
+     Поэтому плашка открывает поимённый список тех, из кого она сложилась, а строка
+     человека ведёт в его карточку — тем же openLeadTab, которым в карточку ходят из
+     ведомости и из ленты доходов (новая вкладка, чтобы список не терялся).
+     Период берём ТОТ ЖЕ, что на экране: список обязан показывать ровно тех людей,
+     которых посчитала плашка, иначе проверка теряет смысл.
+     Все имена с приставкой launch/lp намеренно: в app.js одна область видимости,
+     и одноимённая функция молча перебивает чужую. */
+  var LP_LIMIT = 100;   /* столько строк просим за раз — как в контракте ручки */
+
+  function launchPeopleQS(offset) {
+    var p = state._lpPeople;
+    var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
+             'limit=' + LP_LIMIT, 'offset=' + offset];
+    if (p.from) q.push('from=' + encodeURIComponent(p.from));
+    if (p.to) q.push('to=' + encodeURIComponent(p.to));
+    return '?' + q.join('&');
+  }
+
+  function launchPeopleOpen(slug, step, launchTitle, plate) {
+    state._lpPeople = {
+      slug: slug, step: step.key, title: step.title,
+      plate: step.people == null ? 0 : step.people,
+      launch: launchTitle || '',
+      from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: plate || null,          /* куда вернуть фокус после закрытия */
+    };
+    launchPeopleLoad(false);
+  }
+
+  function launchPeopleClose() {
+    var back = state._lpPeople && state._lpPeople.back;
+    state._lpPeople = null;
+    launchPeopleModal();
+    try { if (back && document.body.contains(back)) back.focus(); } catch (e) {}
+  }
+
+  function launchPeopleLoad(more) {
+    var p = state._lpPeople;
+    if (!p) return;
+    p.error = '';
+    p.loading = true;
+    if (!more) { p.rows = []; p.total = null; }
+    var offset = p.rows.length;
+    var step = p.step;
+    launchPeopleModal();
+    api('/admin/api/marketing/launch/people' + launchPeopleQS(offset)).then(function (r) {
+      var cur = state._lpPeople;
+      if (!cur || cur.step !== step) return;   /* успели кликнуть другую ступень */
+      cur.rows = cur.rows.concat((r && r.people) || []);
+      if (r && r.total != null) cur.total = r.total;
+      else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
+      if (r && r.title) cur.title = r.title;
+      cur.loading = false;
+      launchPeopleModal();
+    }).catch(function (e) {
+      var cur = state._lpPeople;
+      if (!cur || cur.step !== step) return;
+      /* '403' — токен протух, api уже увёл на экран входа: попап просто убираем */
+      if (e && e.message === '403') { state._lpPeople = null; launchPeopleModal(); return; }
+      cur.loading = false;
+      cur.error = (e && e.message === '403acl')
+        ? 'Списка людей этой роли не видно — нужен доступ к клиентам.'
+        : 'Не удалось загрузить список — проверь сеть и попробуй ещё раз.';
+      launchPeopleModal();
+    });
+  }
+
+  /* Пустое значение показываем прочерком: «null» на экране CRM читается как поломка. */
+  function lpCell(v) { return v ? esc(v) : '<i class="lp-dash">—</i>'; }
+
+  function launchPeopleRow(p) {
+    var id = (p.session_id == null || p.session_id === '') ? '' : String(p.session_id);
+    /* Откуда пришёл: метка ссылки — главное, канал связи — подпись. Метки нет —
+       показываем канал, он тоже ответ на вопрос «откуда». */
+    var src = p.source ? mkSourceName(p.source) : (p.channel ? mkSourceName(p.channel) : '');
+    var sub = (p.source && p.channel) ? mkSourceName(p.channel) : '';
+    if (sub === src) sub = '';   /* метка и канал совпали — «Telegram / Telegram» не пишем */
+    return '<div class="lp-tr' + (id ? ' go' : '') + '"' +
+      (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
+      '><span class="lp-nm">' + esc(p.name || 'Без имени') +
+        (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</span>' +
+      '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
+      '<span class="lp-sr">' + lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+      '<span class="lp-dt">' + (p.registered_at ? esc(fmtWhen(p.registered_at)) : '<i class="lp-dash">—</i>') +
+      '</span></div>';
+  }
+
+  /* ESC закрывает список людей (навешивается один раз). Попап маркетинга ловит свой
+     ESC по id mk-ovl — у нашего id другой, поэтому два обработчика не спорят. */
+  if (!window._lpEscBound) {
+    window._lpEscBound = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.getElementById('lp-ovl')) launchPeopleClose();
+    });
+  }
+
+  function launchPeopleModal() {
+    var host = el('lp-ovl-host');
+    var p = state._lpPeople;
+    if (!p) { if (host) host.remove(); return; }
+    if (!host) { host = document.createElement('div'); host.id = 'lp-ovl-host'; document.body.appendChild(host); }
+
+    var shown = p.rows.length;
+    var total = p.total == null ? p.plate : p.total;
+    var body;
+    if (p.error) {
+      body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
+    } else if (p.loading && !shown) {
+      body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
+             '<div class="loaddot"></div><div class="loaddot"></div></div>';
+    } else if (!shown) {
+      body = '<div class="mk-logic-empty">На этой ступени пока никого — ' +
+             'людей здесь не появится, пока шаг не сработает хотя бы у одного человека.</div>';
+    } else {
+      body = '<div class="lp-tbl"><div class="lp-th"><span>Человек</span><span>Контакт</span>' +
+        '<span>Откуда пришёл</span><span>Регистрация</span></div>' +
+        p.rows.map(launchPeopleRow).join('') + '</div>';
+    }
+
+    var more = shown > 0 && p.total != null && shown < p.total;
+    var foot = shown ? '<div class="lp-foot"><span class="lp-cnt">' +
+      (more ? 'Показано ' + shown + ' из ' + total
+            : 'Все ' + shown + ' ' + plural(shown, 'человек', 'человека', 'человек') + ' на экране') +
+      '</span>' +
+      (more ? '<button class="mk-btn" id="lp-more"' + (p.loading ? ' disabled' : '') + '>' +
+              (p.loading ? 'Загружаю…' : 'Показать ещё') + '</button>' : '') +
+      '</div>' : '';
+
+    var per = (p.from || p.to)
+      ? ('период ' + (p.from ? fmtDay(p.from) : '…') + ' — ' + (p.to ? fmtDay(p.to) : '…'))
+      : 'весь запуск';
+    /* Заголовок называет ступень и её число: человек должен видеть, что список и
+       цифра на плашке — про одно и то же, иначе проверка ничего не доказывает. */
+    /* .mk-modal-t — flex-контейнер, поэтому вся подпись идёт ОДНИМ элементом:
+       иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
+    var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
+        ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
+      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') + esc(per) +
+        ' · это те же люди, что посчитаны на плашке</div>';
+
+    /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
+       страницу под затемнением. Запоминаем, где он был, и возвращаем после сборки:
+       по id — если элемент именованный (кнопка «Показать ещё»), иначе на само окно. */
+    var prevOvl = el('lp-ovl');
+    var hadFocus = !!(prevOvl && prevOvl.contains(document.activeElement));
+    var focusId = (hadFocus && document.activeElement.id) ? document.activeElement.id : '';
+    var wasOpen = !!prevOvl;
+    host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="lp-ovl">' +
+      '<div class="mk-modal wide" id="lp-modal" role="dialog" aria-modal="true" tabindex="-1">' +
+      '<button class="mk-xbtn" id="lp-x" title="Закрыть">' + ic('x', 14) + '</button>' +
+      head + body + foot + '</div></div>';
+
+    var ovl = el('lp-ovl'), mdl = el('lp-modal');
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) launchPeopleClose(); });
+    el('lp-x').addEventListener('click', launchPeopleClose);
+    var moreBtn = el('lp-more');
+    if (moreBtn) moreBtn.addEventListener('click', function () {
+      if (state._lpPeople && !state._lpPeople.loading) launchPeopleLoad(true);
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-lead]'), function (row) {
+      var go = function () { openLeadTab(row.getAttribute('data-lp-lead')); };
+      row.addEventListener('click', go);
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+    });
+    /* Фокус не уходит за окно: по кругу внутри попапа. Без этого Tab уводил на
+       страницу под затемнением, и клавиатурой оттуда было не выбраться. */
+    ovl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      var f = mdl.querySelectorAll('button, [tabindex="0"], a[href]');
+      if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === mdl)) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+    });
+    if (p.fresh || hadFocus) {
+      p.fresh = false;
+      var back2 = focusId ? el(focusId) : null;
+      try { (back2 || mdl).focus(); } catch (e2) {}
+    }
+  }
+
   /* Панель периода. Даты — по дате регистрации человека: «сколько людей пришло за
      эти дни и что с ними стало дальше». Кнопки-пресеты закрывают три вопроса,
      которые задают чаще всего, поля — всё остальное. */
@@ -21444,6 +21644,9 @@
       state._mkLaunchFrom = from || '';
       state._mkLaunchTo = to || '';
       state._mkLaunch = null;          /* перезапрашиваем: период считает сервер */
+      /* открытый список людей посчитан по прежнему периоду — закрываем, иначе он
+         молча противоречил бы новым цифрам на плашках */
+      if (state._lpPeople) launchPeopleClose();
       renderView();
     }
     Array.prototype.forEach.call(view.querySelectorAll('[data-lper]'), function (b) {
@@ -21651,7 +21854,10 @@
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
-          'каждая ступень считает людей из числа зарегистрировавшихся' + '</div></div></div>' +
+          /* подсказка про клик тут не украшение: без неё поимённый список никто не
+             найдёт, а он и есть ответ на «цифру вижу, проверить не могу» */
+          'каждая ступень считает людей из числа зарегистрировавшихся · ' +
+          'нажмите на ступень, чтобы увидеть этих людей поимённо' + '</div></div></div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
       launchCharts(cur) +
@@ -21683,13 +21889,29 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-launch]'), function (t) {
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
+        if (state._lpPeople) launchPeopleClose();   /* список был про другой запуск */
         renderView();
+      });
+    });
+    /* Плашка ступени → поимённый список людей за этой цифрой. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
+      var openIt = function () {
+        var key = n.getAttribute('data-lstep');
+        var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
+        if (st) launchPeopleOpen(cur.slug, st, cur.title, n);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
       });
     });
     launchPeriodBind(view);
   }
 
   function renderMarketing(view) {
+    /* список людей принадлежит вкладке «Запуски»: на соседней он висел бы поверх
+       чужого экрана и объяснял цифры, которых там нет */
+    if (state._lpPeople && state.mkTab !== 'launch') launchPeopleClose();
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
     if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
