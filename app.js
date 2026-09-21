@@ -11688,13 +11688,28 @@
     return id || '';
   }
 
+  /* Карта грузилась один раз на весь заход в CRM и дальше жила вчерашним днем: тариф
+     клиенту меняют и в соседнем окне, и автоматом при оплате, а человек видел старую
+     раскладку, пока не перезагрузит страницу. Поэтому у нее срок годности пять минут,
+     как у сводки по соцсетям. Пока идет перечитывание, на экране остаются прежние
+     строки: мигать скелетом на каждом возврате во вкладку хуже, чем показать на
+     секунду данные пятиминутной давности. */
+  var MAP_TTL = 5 * 60 * 1000;
   function mapLoad(force) {
-    if (state._map && !force) return;
-    state._map = null;
+    if (state._map && !force && (Date.now() - (state._mapAt || 0)) < MAP_TTL) return;
+    if (state._mapLoading) return;
+    state._mapLoading = true;
     api('/admin/api/board').then(function (r) {
       state._map = r || { clients: [], stages: [] };
+      state._mapAt = Date.now();
+      state._mapLoading = false;
       if (state.page === 'roadmap') renderView();
-    }).catch(function () { state._map = 'none'; if (state.page === 'roadmap') renderView(); });
+    }).catch(function () {
+      state._mapLoading = false;
+      // сеть отвалилась, а карта уже нарисована — оставляем ее, а не пустой экран
+      if (!state._map) state._map = 'none';
+      if (state.page === 'roadmap') renderView();
+    });
   }
   function mapSeg(c) { return c.stage_key || MAP_NONE; }
   /* «Плана нет» и «этапа нет» — разные дыры, и считать их надо по-разному.
@@ -11923,6 +11938,7 @@
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить карту. Проверьте сеть и обновите страницу.</div></div>';
       return;
     }
+    mapLoad();   // кэш просрочен — перечитаем в фоне, экран при этом не мигает
     var d = state._map, stages = mapStages(), all = d.clients || [];
     if (!all.length) {
       view.innerHTML = '<div class="card"><div class="empty">Клиентов пока нет. Сюда попадают те, у кого статус «клиент» ' +
@@ -23093,7 +23109,71 @@
      чтобы глаз падал на нее первой. Блок «Не входит» — не мелкий шрифт внизу
      договора: обещание, которого нет в тарифе, всплывет через полгода и будет
      стоить дороже скидки. */
+  /* ── ЧТО ОТКРЫВАЕТ ДОСТУП ──
+     Текст тарифа в этом файле пишет команда для людей, а что система реально
+     открывает клиенту после оплаты, знает только каталог заказов. Разъезжаются они
+     молча: цену поменяли на странице, в каталоге осталась старая, и человек платит
+     по старой. Поэтому машинный состав кладем прямо в карточку тарифа рядом с
+     текстом — GET /admin/api/tariffs, право «портал». Ручка появилась позже портала:
+     пока сервер ее не отдает, блока просто нет, ошибку показывать не за что. */
+  var TAR_TRAINER = { hsk: 'HSK (китайский)', det: 'DET (английский)', csca: 'CSCA' };
+  // предмет зовется и коротко (доступ), и полностью (тренажер) — понимаем оба имени
+  var TAR_SUBJ = { math: 'Математика', mathematics: 'Математика', physics: 'Физика', chemistry: 'Химия' };
+  var TAR_TEAM = { intensive_lang: 'Видеоинтенсив по языковому экзамену',
+                   intensive_csca: 'Видеоинтенсив по CSCA',
+                   course_study: 'Курс по методам обучения' };
+  function fetchTariffCat() {
+    if (state._tarcat) return;
+    state._tarcat = 'wait';
+    api('/admin/api/tariffs').then(function (r) {
+      // ответ не того вида — считаем, что ручки нет: лучше не показать блок,
+      // чем объявить все тарифы отсутствующими в каталоге заказов
+      if (!r || !r.tariffs || !r.tariffs.length) { state._tarcat = 'none'; return; }
+      state._tarcat = {};
+      r.tariffs.forEach(function (t) { state._tarcat[t.id] = t; });
+      if (state.page === 'portal') renderView();
+    }).catch(function () { state._tarcat = 'none'; });
+  }
+  function tarNames(list, dict) {
+    // разделяем точкой: в названиях пунктов встречаются свои запятые
+    return (list || []).map(function (k) { return dict[k] || k; }).join(' · ');
+  }
+  function tariffAccess(t) {
+    var cat = state._tarcat;
+    if (!cat || cat === 'wait' || cat === 'none') return '';
+    var c = cat[t.id];
+    if (!c) {
+      return '<div class="po-fsec po-tsec"><div class="po-flbl">Что открывает доступ</div>' +
+        '<div class="po-noall po-warn">Этого тарифа нет в каталоге заказов: оплатить его по ' +
+        'ссылке нельзя, пока он там не заведен.</div></div>';
+    }
+    var m = c.composition || {}, rows = [];
+    function row(label, val) {
+      if (!val) return;
+      rows.push('<div class="po-kv"><span class="po-kvl">' + label + '</span>' +
+        '<span class="po-kvv">' + esc(val) + '</span></div>');
+    }
+    row('Тренажеры', tarNames(m.trainers, TAR_TRAINER));
+    row('Предметы CSCA', tarNames(m.csca_subjects, TAR_SUBJ));
+    row('Открывает менеджер', (m.team || []).length ? tarNames(m.team, TAR_TEAM) : 'нечего, все по тарифу');
+    row('Вузов в заявке', m.uni_limit ? 'до ' + m.uni_limit : '');
+    var warn = '';
+    if (c.is_active === false) {
+      warn = 'Тариф погашен в каталоге заказов: новую ссылку на оплату по нему не выставить.';
+    } else if (c.price_amount && Math.round(c.price_amount) !== Math.round(t.price || 0)) {
+      warn = 'Цена в каталоге заказов ' + fmtMoney(Math.round(c.price_amount)) + ' ₽, а на этой ' +
+        'странице ' + fmtMoney(t.price || 0) + ' ₽. Человек заплатит столько, сколько в каталоге.';
+    }
+    return '<div class="po-fsec po-tsec"><div class="po-flbl">Что открывает доступ</div>' +
+      (warn ? '<div class="po-noall po-warn">' + esc(warn) + '</div>' : '') +
+      '<div class="po-kvs">' + rows.join('') + '</div>' +
+      '<div class="po-kvn">Это не весь тариф, а то, чем управляет система: тренажеры, предметы и ' +
+      'число вузов в заявке. Живые пункты — консультация тьютора, репетиция интервью, встреча в ' +
+      'аэропорту — идут планом поступления, их тут не видно.</div></div>';
+  }
+
   function portalTariffs(p) {
+    fetchTariffCat();
     var sts = p.stages || [];
     var cards = (p.tariffs || []).map(function (t, ti) {
       /* у младшего тарифа «свое наполнение» — это вообще все, помечать там нечего;
@@ -23151,6 +23231,7 @@
         '<div class="po-fsec po-tsec"><div class="po-flbl">Не входит</div>' +
           (nos ? '<div class="po-feats">' + nos + '</div>'
                : '<div class="po-noall">' + esc(t.excludes_note || '') + '</div>') + '</div>' +
+        tariffAccess(t) +
       '</div>';
     }).join('');
 
@@ -23526,7 +23607,12 @@
        же заход на вкладку увидит нули вместо схемы. */
     m.funds = {}; m.fundwhen = {};
     ((ec.funds || {}).items || []).forEach(function (f) {
-      m.funds[f.id] = (d.funds && d.funds[f.id] != null) ? d.funds[f.id] : econNum(f.pct);
+      /* Доля есть не у всех строк: зарплаты и сервисы платятся до фондов, а
+         дивиденды — остаток. Хранить им процент незачем, иначе в базе осядет
+         число, которое ни на что не влияет, и следующий читатель ему поверит. */
+      if (!f.before && !f.owner) {
+        m.funds[f.id] = (d.funds && d.funds[f.id] != null) ? d.funds[f.id] : econNum(f.pct);
+      }
       m.fundwhen[f.id] = (d.fundwhen && d.fundwhen[f.id]) || f.when || 'month';
     });
     /* План и постоянные расходы в portal.json не лежат: этот файл раздается
@@ -23620,6 +23706,7 @@
   function econYear(p, m) {
     var ec = p.economics || {}, ts = p.tariffs || [], r = econCalc(p, m);
     var y = { per: r, clients: 0, rev: 0, direct: 0, contrib: 0, freeAll: 0, spentAll: 0, loose: 0,
+      beforeAll: 0, shareAll: 0, share: 0, ownPct: 0, beforePct: 0, restAll: 0, offPer: {},
       funds: {}, spent: {}, spentVar: {}, spentFix: {}, free: {} };
     ts.forEach(function (t) {
       var n = econNum(m.plan[t.id]), v = r[t.id];
@@ -23653,17 +23740,53 @@
       add(y.spentFix, i.fund, econNum(m.fixed[i.id]) * 12);
     });
     y.loose = Math.round(y.loose);
-    ((ec.funds || {}).items || []).forEach(function (f) {
-      y.funds[f.id] = Math.round(y.rev * econNum(m.funds[f.id]) / 100);
+    /* Порядок как в ведомости (решение Павла 21.09.2026). Сначала из поступления
+       платятся зарплаты и сервисы — это расходы, а не фонды, доли у них нет.
+       Потом от того же поступления откладываются фонды по своим процентам. Что
+       осталось — дивиденды: они не доля, а остаток, поэтому их процент считается,
+       а не вводится. Именно этот вопрос задавала Алина: откуда берутся 20%. */
+    var items = ((ec.funds || {}).items) || [], own = null, rest = [];
+    items.forEach(function (f) {
       y.spentVar[f.id] = Math.round(y.spentVar[f.id] || 0);
       y.spentFix[f.id] = Math.round(y.spentFix[f.id] || 0);
       y.spent[f.id] = y.spentVar[f.id] + y.spentFix[f.id];
+      y.spentAll += y.spent[f.id];
+      if (f.before) { y.beforeAll += y.spent[f.id]; return; }
+      if (f.owner) { own = f; return; }
+      if (f.rest) { rest.push(f); return; }
+      /* Отчисление считаем по тарифам и складываем, а не берем процент от общей
+         выручки: ставка с одной оплаты округляется до рубля, и процент от суммы
+         разошелся бы с колонками выше на несколько рублей. Тогда у фонда налогов
+         вылезало «свободно минус пять» — копеечный мусор, который человек читает
+         как ошибку расчета. */
+      var fp = econNum(m.funds[f.id]);
+      y.funds[f.id] = byPlan(function (t) { return Math.round(econNum(m.price[t.id]) * fp / 100); });
+      ts.forEach(function (t) {
+        y.offPer[t.id] = (y.offPer[t.id] || 0) + Math.round(econNum(m.price[t.id]) * fp / 100);
+      });
+      y.share += fp;
+      y.shareAll += y.funds[f.id];
       y.free[f.id] = y.funds[f.id] - y.spent[f.id];
       y.freeAll += y.free[f.id];
-      y.spentAll += y.spent[f.id];
     });
-    y.pct = ((ec.funds || {}).items || []).reduce(function (a, f) { return a + econNum(m.funds[f.id]); }, 0);
-    y.pct = Math.round(y.pct * 10) / 10;
+    /* Флекс проджекта считается не от поступления, а от того, что осталось после
+       расходов и фондов, — и уходит до дивидендов. Так он посчитан и в ведомости,
+       и в правилах финмодели (finmodel.period_rules, 20 процентов чистой прибыли). */
+    var left = y.rev - y.beforeAll - y.shareAll;
+    rest.forEach(function (f) {
+      y.funds[f.id] = Math.round(left * econNum(m.funds[f.id]) / 100);
+      y.free[f.id] = y.funds[f.id] - y.spent[f.id];
+      y.freeAll += y.free[f.id];
+      y.restAll += y.funds[f.id];
+    });
+    if (own) {
+      y.funds[own.id] = left - y.restAll;
+      y.free[own.id] = y.funds[own.id] - y.spent[own.id];
+      y.freeAll += y.free[own.id];
+      y.ownPct = y.rev ? Math.round(y.funds[own.id] / y.rev * 1000) / 10 : 0;
+    }
+    y.share = Math.round(y.share * 10) / 10;
+    y.beforePct = y.rev ? Math.round(y.beforeAll / y.rev * 1000) / 10 : 0;
     y.fixedMonth = ((ec.fixed || {}).items || []).reduce(function (a, i) { return a + econNum(m.fixed[i.id]); }, 0);
     y.fixedYear = y.fixedMonth * 12;
     y.profit = y.contrib - y.fixedYear;
@@ -23686,26 +23809,45 @@
   function econFit(p, m) {
     var items = (((p.economics || {}).funds || {}).items) || [], y = econYear(p, m);
     if (!y.rev || !items.length) return false;
-    var own = null, used = 0;
-    items.forEach(function (f) { if (f.owner) own = f; });
     items.forEach(function (f) {
-      if (own && f.id === own.id) return;
+      /* Зарплаты, сервисы и дивиденды подбирать нечего: у первых двух доли нет
+         вовсе, а дивиденды и так остаток. */
+      if (f.before || f.owner || f.rest) return;
       /* Фонд с keep — это решение, а не расчет: доля маркетинга в 20 процентов
          принята командой, и бюджет отдела считается от нее, а не наоборот
          (Павел, 18.09.2026). Такой фонд подбор не трогает. */
-      if (f.keep) { used += econNum(m.funds[f.id]); return; }
+      if (f.keep) return;
       var pct = Math.ceil((y.spent[f.id] || 0) / y.rev * 1000) / 10;
       m.funds[f.id] = pct > 0 ? pct : 0;
-      used += m.funds[f.id];
     });
-    if (own) m.funds[own.id] = Math.max(0, Math.round((100 - used) * 10) / 10);
     return true;
   }
   function econFundsCard(p) {
     var f = (p.economics || {}).funds, ts = p.tariffs || [], m = econModel(p);
     if (!f || !(f.items || []).length || !ts.length) return '';
+    var all = f.items;
+    var before = all.filter(function (i) { return i.before; });
+    var share = all.filter(function (i) { return !i.before && !i.owner && !i.rest; });
+    var rest = all.filter(function (i) { return i.rest; });
+    var own = null;
+    all.forEach(function (i) { if (i.owner) own = i; });
     var ths = ts.map(function (t) { return '<th>' + esc(t.name) + '</th>'; }).join('');
-    var rows = f.items.map(function (it) {
+
+    /* Первый шаг ведомости: зарплаты и сервисы платятся ДО деления по фондам,
+       поэтому у них нет доли и нет колонки «с одной продажи» — это не кошелек
+       отдела, а расход компании за месяц. */
+    var beforeRows = before.map(function (i) {
+      return '<tr><td class="po-rl">' + esc(i.label) +
+        (i.pays ? '<span class="po-hint">' + esc(i.pays) + '</span>' : '') + '</td>' +
+        '<td class="num" data-ec="beforem:' + esc(i.id) + '"></td>' +
+        '<td class="num" data-ec="beforey:' + esc(i.id) + '"></td></tr>';
+    }).join('') +
+      '<tr class="po-r-sum"><td class="po-rl">Итого до фондов' +
+        '<span class="po-hint" data-ec="beforepct"></span></td>' +
+        '<td class="num" data-ec="beforetotm"></td>' +
+        '<td class="num" data-ec="beforetoty"></td></tr>';
+
+    var rows = share.map(function (it) {
       return '<tr><td class="po-rl">' + esc(it.label) +
         (it.hint ? '<span class="po-hint">' + esc(it.hint) + '</span>' : '') + '</td>' +
         '<td class="po-cpct"><input class="al-in sm po-in po-pct num" type="number" step="0.1" min="0" ' +
@@ -23719,13 +23861,15 @@
         ts.map(function (t) { return '<td class="num" data-ec="fundtot:' + esc(t.id) + '"></td>'; }).join('') +
         '<td class="num" data-ec="fundtotyear"></td></tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Остается на рабочем счете' +
-        '<span class="po-hint">из него платим тьюторов, документы, оклады и подписки</span></td>' +
+        '<span class="po-hint">из него платим зарплаты и сервисы, а что не потратили — дивиденды</span></td>' +
         '<td class="num" data-ec="workpct"></td>' +
         ts.map(function (t) { return '<td class="num" data-ec="work:' + esc(t.id) + '"></td>'; }).join('') +
         '<td class="num" data-ec="workyear"></td></tr>';
-    var payRows = f.items.map(function (it) {
+
+    var payItems = share.concat(rest, own ? [own] : []);
+    var payRows = payItems.map(function (it) {
       var cur = m.fundwhen[it.id];
-      return '<tr><td class="po-rl">' + esc(it.label) +
+      return '<tr' + (it.owner ? ' class="po-r-own"' : '') + '><td class="po-rl">' + esc(it.label) +
         (it.pays ? '<span class="po-hint">платим из него: ' + esc(it.pays) + '</span>' : '') + '</td>' +
         '<td><select class="al-in sm po-in po-sel" data-fundwhen="' + esc(it.id) + '">' +
           ECON_WHEN.map(function (o) {
@@ -23736,28 +23880,34 @@
         '<td class="num" data-ec="fundrest:' + esc(it.id) + '"></td></tr>';
     }).join('') +
       '<tr class="po-r-sum"><td class="po-rl">Итого за сезон</td><td></td>' +
-        '<td class="num" data-ec="fundtotyear"></td>' +
-        '<td class="num" data-ec="spentyear"></td>' +
+        '<td class="num" data-ec="paytotyear"></td>' +
+        '<td class="num" data-ec="spentfundyear"></td>' +
         '<td class="num" data-ec="freeyear"></td></tr>';
+
     return '<div class="card po-card">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
-        '<div><div class="t">' + esc(f.title || 'Фонды по отделам') + '</div>' +
+        '<div><div class="t">' + esc(f.title || 'Куда уходят деньги') + '</div>' +
         '<div class="s">' + esc(f.sub || 'как делится каждая продажа') + '</div></div></div>' +
-      '<div class="po-sub">Откладываем в день оплаты</div>' +
+      '<div class="po-sub">Сначала платим, до всякого деления</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ w3"><thead><tr><th class="po-rl">Статья</th>' +
+        '<th>В месяц</th><th>За сезон</th></tr></thead><tbody>' + beforeRows + '</tbody></table></div>' +
+      '<div class="po-note">Эти две строки считаются сами из окладов, процентов с продаж и подписок ' +
+        'ниже по вкладке. Править их тут нечего: меняются они там, где заводятся сами расходы.</div>' +
+      '<div class="po-sub">Потом откладываем с каждой оплаты</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ w6"><thead><tr><th class="po-rl">Фонд</th>' +
         '<th>Доля</th>' + ths + '<th>За сезон по плану</th></tr></thead>' +
       '<tbody>' + rows + sumRows + '</tbody></table></div>' +
       '<div class="po-note"><span data-ec="fundcheck"></span> ' +
         'Оплата пришла частями — откладывай те же доли с каждого поступления, а не с договора целиком.</div>' +
       '<div class="po-act"><button class="al-cancel po-fit" data-econfit="1">Подобрать доли под план</button>' +
-        '<span class="po-hint">поставит каждому фонду ровно ту долю, которую он тратит по плану, ' +
-        'а весь остаток отдаст дивидендам. Долю маркетинга не трогает: она задана решением</span></div>' +
-      '<div class="po-sub">Что каждый фонд платит за сезон</div>' +
+        '<span class="po-hint">поставит каждому фонду ровно ту долю, которую он тратит по плану. ' +
+        'Долю маркетинга не трогает: она задана решением</span></div>' +
+      '<div class="po-sub">Что фонды соберут и потратят за сезон</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ w5"><thead><tr><th class="po-rl">Фонд</th>' +
         '<th>Когда уходит</th><th>Накопится за сезон</th><th>Уходит из фонда</th><th>Свободно</th></tr></thead>' +
       '<tbody>' + payRows + '</tbody></table></div>' +
       '<div class="po-note">Расходы не висят в воздухе: каждая строка себестоимости, каждая ставка ' +
-        'с оплаты и каждый оклад привязаны к своему фонду, и здесь видно, сколько фонд собрал и ' +
+        'с оплаты и каждый оклад привязаны к своему кошельку, и здесь видно, сколько кошелек собрал и ' +
         'сколько из него уже уходит. Свободно — то, чем отдел реально распоряжается; минус значит, ' +
         'что доли фонду не хватает на его же расходы.</div>' +
       '<div class="po-note" data-ec="fundfoot"></div>' +
@@ -23799,20 +23949,35 @@
           '<td class="num" data-ec="y:fixedm"></td><td class="num" data-ec="y:fixedy"></td></tr>' +
         '</tbody></table></div>' +
       ((fx || {}).note ? '<div class="po-note">' + esc(fx.note) + '</div>' : '') : '';
-    /* Итог сезона — четыре цифры, ради которых экран и открывают. Табличной
-       строкой они читаются как еще один расход, поэтому берем системный свод
-       (.pay-board), а якорь у него один: точка безубыточности. */
+    /* Итог сезона. Владельцы 20.09.2026 сказали прямым текстом: «Фонды,
+       дивиденды, но нет конкретных цифр. Зарабатываем столько, расходов
+       столько, чистая прибыль такая». Значит первым и самым крупным на экране
+       идет ровно это, а средний чек и точка безубыточности — вторым рядом:
+       чтобы понять, зарабатывает компания или нет, фонды читать не должен никто. */
     var out =
-      '<div class="po-sub">Итог сезона</div>' +
-      '<div class="pay-board po-board4">' +
+      '<div class="po-sub">Деньги компании за сезон</div>' +
+      '<div class="pay-board po-board3">' +
+        '<div class="pay-cell"><div class="pc-l">Заработали</div>' +
+          '<div class="pc-v num" data-ec="y:rev"></div>' +
+          '<div class="pc-s num" data-ec="y:revm"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Потратили</div>' +
+          '<div class="pc-v num" data-ec="y:spend"></div>' +
+          '<div class="pc-s num" data-ec="y:spendm"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Чистая прибыль</div>' +
+          '<div class="pc-v num" data-ec="y:profit"></div>' +
+          '<div class="pc-s num" data-ec="y:profitm"></div></div>' +
+      '</div>' +
+      '<div class="po-note">В «потратили» входит все: себестоимость по каждому клиенту, ' +
+        'оклады команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
+        'расход, их берут уже из чистой прибыли.</div>' +
+      '<div class="po-sub">Сколько клиентов нужно</div>' +
+      '<div class="pay-board po-board3">' +
         '<div class="pay-cell"><div class="pc-l">Средний чек</div>' +
           '<div class="pc-v num" data-ec="y:avgprice"></div></div>' +
         '<div class="pay-cell"><div class="pc-l">Вклад с клиента</div>' +
           '<div class="pc-v num" data-ec="y:avgcontrib"></div></div>' +
         '<div class="pay-cell lead"><div class="pc-l">Точка безубыточности</div>' +
           '<div class="pc-v num" data-ec="y:be"></div></div>' +
-        '<div class="pay-cell"><div class="pc-l">Прибыль за сезон</div>' +
-          '<div class="pc-v num" data-ec="y:profit"></div></div>' +
       '</div>' +
       '<div class="po-note"><span data-ec="y:be_words"></span></div>';
     return '<div class="card po-card">' +
@@ -23892,22 +24057,32 @@
           return;
         }
         if (kind === 'fundcheck') {
-          /* Доли правит человек, и он легко наберет 15+20+20+20+20. Молчать
-             нельзя: сумма больше ста значит, что одни и те же деньги отложены
-             дважды, меньше ста — что остаток лежит на рабочем счете. */
-          c.textContent = y.pct === 100
-            ? 'Доли дают ровно 100 процентов: на рабочем счете не остается ничего, все расходы платятся из фондов.'
-            : y.pct < 100
-              ? 'Доли дают ' + y.pct + ' процентов, остальные ' + Math.round((100 - y.pct) * 10) / 10 +
-                ' остаются на рабочем счете.'
-              : 'Доли дают ' + y.pct + ' процентов, это больше ста: часть денег отложена дважды.';
-          c.className = y.pct > 100 ? 'po-neg' : '';
+          /* Доли правит человек, и он легко наберет больше ста. Молчать нельзя:
+             на рабочем счете должно остаться хотя бы на зарплаты, иначе платить
+             их будет нечем, а дивиденды уйдут в минус. */
+          var left = Math.round((100 - y.share) * 10) / 10;
+          c.textContent = left < 0
+            ? 'Доли дают ' + y.share + ' процентов, это больше ста: откладывать нечего, деньги уже кончились.'
+            : 'Доли дают ' + y.share + ' процентов, на рабочем счете остается ' + left +
+              '. Из них платим зарплаты и сервисы, остальное — дивиденды.';
+          c.className = left < 0 ? 'po-neg' : '';
           return;
         }
-        if (kind === 'fundsum') { c.textContent = y.pct + ' %'; return; }
+        if (kind === 'fundsum') { c.textContent = y.share + ' %'; return; }
         if (kind === 'workpct') {
-          c.textContent = Math.round((100 - y.pct) * 10) / 10 + ' %';
-          c.className = 'num' + (y.pct > 100 ? ' po-neg' : '');
+          c.textContent = Math.round((100 - y.share) * 10) / 10 + ' %';
+          c.className = 'num' + (y.share > 100 ? ' po-neg' : '');
+          return;
+        }
+        if (kind === 'beforem' || kind === 'beforey') {
+          var bv = y.spent[parts[1]] || 0;
+          c.textContent = fmtMoney(kind === 'beforey' ? bv : Math.round(bv / 12));
+          return;
+        }
+        if (kind === 'beforetotm') { c.textContent = fmtMoney(Math.round(y.beforeAll / 12)); return; }
+        if (kind === 'beforetoty') { c.textContent = fmtMoney(y.beforeAll); return; }
+        if (kind === 'beforepct') {
+          c.textContent = y.rev ? 'это ' + String(y.beforePct).replace('.', ',') + ' процента поступления' : '';
           return;
         }
         if (kind === 'fund') {
@@ -23915,26 +24090,43 @@
           return;
         }
         if (kind === 'fundtot' || kind === 'work') {
-          var pv = econNum(m.price[parts[1]]), off = Math.round(pv * y.pct / 100);
+          var pv = econNum(m.price[parts[1]]), off = y.offPer[parts[1]] || 0;
           c.textContent = fmtMoney(kind === 'fundtot' ? off : pv - off);
           if (kind === 'work') c.className = 'num' + (pv - off < 0 ? ' po-neg' : '');
           return;
         }
         if (kind === 'fundyear') { c.textContent = fmtMoney(y.funds[parts[1]] || 0); return; }
-        if (kind === 'fundtotyear') { c.textContent = fmtMoney(Math.round(y.rev * y.pct / 100)); return; }
+        if (kind === 'fundtotyear') { c.textContent = fmtMoney(y.shareAll); return; }
         if (kind === 'workyear') {
-          var left = y.rev - Math.round(y.rev * y.pct / 100);
-          c.textContent = fmtMoney(left);
-          c.className = 'num' + (left < 0 ? ' po-neg' : '');
+          var rest = y.rev - y.shareAll;
+          c.textContent = fmtMoney(rest);
+          c.className = 'num' + (rest < 0 ? ' po-neg' : '');
           return;
         }
+        if (kind === 'paytotyear') { c.textContent = fmtMoney(y.rev - y.beforeAll); return; }
+        if (kind === 'spentfundyear') { c.textContent = fmtMoney(y.spentAll - y.beforeAll); return; }
         if (kind === 'fundpay' || kind === 'fundused' || kind === 'fundrest') {
           /* Базовая единица во всей таблице одна — сезон, иначе столбцы не
              складываются в итог. Срок выплаты уходит в подпись под цифрой: одна
              и та же доля в месяц и в квартал выглядит по-разному. */
           var fid = parts[1], w = econWhen(m.fundwhen[fid]);
-          var val = kind === 'fundpay' ? (y.funds[fid] || 0)
+          var fitem = econFund(p, fid), val = kind === 'fundpay' ? (y.funds[fid] || 0)
             : kind === 'fundused' ? (y.spent[fid] || 0) : (y.free[fid] || 0);
+          /* У дивидендов доли нет, они остаток — и в колонке «накопится» человек
+             должен видеть, какой это процент поступления, иначе непонятно, много
+             это или мало. */
+          if (kind === 'fundpay' && fitem && fitem.rest) {
+            c.innerHTML = fmtMoney(val) + '<span class="po-hint">' +
+              econNum(m.funds[fid]) + ' процентов от чистой прибыли</span>' +
+              '<span class="po-hint">' + fmtMoney(econPer(val, w.id, y.clients)) + ' ' + w.per + '</span>';
+            return;
+          }
+          if (kind === 'fundpay' && fitem && fitem.owner) {
+            c.innerHTML = fmtMoney(val) + '<span class="po-hint">' +
+              String(y.ownPct).replace('.', ',') + ' процента поступления</span>' +
+              '<span class="po-hint">' + fmtMoney(econPer(val, w.id, y.clients)) + ' ' + w.per + '</span>';
+            return;
+          }
           var sub = kind !== 'fundused'
             ? '<span class="po-hint">' + fmtMoney(econPer(val, w.id, y.clients)) + ' ' + w.per + '</span>'
             /* разбивку показываем, только когда есть что разбивать: «на клиентов 0,
@@ -23960,13 +24152,9 @@
             c.textContent = 'Внимание: расходов на ' + fmtMoney(y.loose) + ' рублей за сезон не привязано ' +
               'ни к одному фонду, платить их неоткуда. Такую статью надо отнести к фонду в структуре портала.';
             c.className = 'po-note po-neg';
-          } else if (y.pct !== 100) {
-            c.textContent = 'Свободно по всем фондам ' + fmtMoney(y.freeAll) + ', прибыль за сезон ' +
-              fmtMoney(y.profit) + '. Разница ' + fmtMoney(Math.abs(y.profit - y.freeAll)) +
-              ' — это рабочий счет: доли дают ' + y.pct + ' процентов, а не сто.';
           } else {
-            c.textContent = 'Сходится: свободно по всем фондам ' + fmtMoney(y.freeAll) +
-              ' — это и есть прибыль компании за сезон.';
+            c.textContent = 'Сходится: дивиденды и свободное по фондам вместе дают ' +
+              fmtMoney(y.freeAll) + ' — это и есть прибыль компании за сезон.';
           }
           return;
         }
@@ -24003,8 +24191,14 @@
             c.textContent = fmtMoney(y.profit);
             c.className = (c.classList.contains('pc-v') ? 'pc-v num' : 'num') +
               (y.profit < 0 ? ' po-neg' : ' po-pos');
+          } else if (k === 'revm' || k === 'spendm' || k === 'profitm') {
+            /* «в среднем в месяц» — именно в среднем: продажи идут волной, и
+               писать это без оговорки значит обещать ровный доход, которого нет. */
+            var year = k === 'revm' ? y.rev : k === 'spendm' ? (y.direct + y.fixedYear) : y.profit;
+            c.textContent = 'в среднем ' + fmtMoney(Math.round(year / 12)) + ' в месяц';
           } else c.textContent = fmtMoney(
             k === 'rev' ? y.rev : k === 'direct' ? y.direct : k === 'contrib' ? y.contrib :
+            k === 'spend' ? y.direct + y.fixedYear :
             k === 'fixedm' ? y.fixedMonth : k === 'fixedy' ? y.fixedYear :
             k === 'avgprice' ? y.avgPrice : k === 'avgcontrib' ? y.avgContrib : 0);
           return;
@@ -32252,7 +32446,7 @@
       var tarSel = qlHost.querySelector('select[data-tariff]');
       if (tarSel) tarSel.addEventListener('change', function () {
         patch(id, { overrides: { tariff: tarSel.value } });
-        state._map = null;   // карта считает по тарифам — пусть перечитает
+        state._mapAt = 0;   // карта считает по тарифам — пусть перечитает при заходе
       });
     }
 

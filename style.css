@@ -7010,6 +7010,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-noall { background: var(--fill); color: var(--ink-2); border-radius: var(--r-lg);
   padding: 11px 13px; font-size: 12.5px; line-height: 1.45; }
 
+/* машинный состав тарифа: пары «что — что именно», выровненные по левому столбцу.
+   Значение темнее подписи, потому что смотрят на него; расхождение с каталогом
+   заказов — красной заливкой того же рецепта, что .po-noall: это не украшение,
+   а единственное место, где видно, что цена на странице и цена в оплате разошлись */
+.po-kvs { display: flex; flex-direction: column; gap: 11px; }
+/* подпись над значением, а не слева: карточка тарифа узкая, в две колонки
+   значение ломается на три строки и список перестает читаться сверху вниз */
+.po-kv { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.45; }
+.po-kvl { color: var(--ink-3); }
+.po-kvv { color: var(--ink); font-weight: 600; }
+.po-kvn { margin-top: 13px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.po-noall.po-warn { background: var(--red-soft); color: var(--red-ink); font-weight: 600;
+  margin-bottom: 12px; }
+
 /* продукты направления и путь клиента.
    Один рецепт на оба экрана: подпись-микролейбл, шаги с тихими номерами,
    список «что делает команда» теми же .po-feat, что и состав тарифа.
@@ -7103,10 +7117,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tbl.econ.w3 { min-width: 560px; }
 .po-tbl.econ.w3 .po-rl { width: 320px; }
 /* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
-.po-board4 { grid-template-columns: repeat(4, 1fr); margin-top: 14px; }
-.po-board4 .pc-v.po-pos { color: var(--green-ink); }
-.po-board4 .pc-v.po-neg { color: var(--red-ink); }
-@media (max-width: 1100px) { .po-board4 { grid-template-columns: repeat(2, 1fr); } }
+.po-board3 { margin-top: 14px; }
+.po-board3 .pc-v.po-pos { color: var(--green-ink); }
+.po-board3 .pc-v.po-neg { color: var(--red-ink); }
+/* вторая строка в ячейке свода: сезон это двенадцать месяцев, и владельцу нужна
+   не только сумма за год, но и то, как она выглядит в месяц (Олеся, 20.09.2026) */
+.pay-cell .pc-s { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.pay-cell.lead .pc-s { color: var(--blue); }
+@media (max-width: 760px) { .po-board3 { grid-template-columns: 1fr; } }
+/* строка дивидендов в таблице фондов: у нее нет доли, она остаток после всего,
+   и это надо видеть глазами, не вчитываясь. Тихая синяя заливка того же рецепта,
+   что итоговая строка, но холодная — итог и остаток разные вещи */
+.po-r-own td { background: var(--blue-tint); }
+.po-r-own .po-rl { background: var(--blue-tint); }
+.po-r-own td:first-child, .po-r-own .num { font-weight: 700; color: var(--ink); }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
