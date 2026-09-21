@@ -21789,6 +21789,12 @@
     var days = cur.days_to_event;
     var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
 
+    /* Регистрации за выбранный период — берём у первой ступени пути, а не считаем
+       заново: у неё и у плитки обязано быть одно число. null — периода нет. */
+    var regStep = (cur.path || []).filter(function (s) { return s.key === 'reg'; })[0];
+    var regInPeriod = (state._mkLaunchFrom || state._mkLaunchTo) && regStep
+      ? regStep.people : null;
+
     /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
        регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
        что 200 регистраций, и шкала врала бы. */
@@ -21842,8 +21848,15 @@
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
-        { label: 'Регистрации', value: reg.total,
-          sub: 'бесплатно ' + reg.free + ' · платно ' + reg.vip },
+        /* Период выбран — плитка обязана показывать ТО ЖЕ, что первая плашка пути.
+           Раньше плитка всегда считала весь запуск, а плашка слушалась периода: на
+           экране рядом стояли 31 и 26, и это читалось как сломанный счётчик (нашла
+           Ольга 22.09). Число за период берём у самой плашки — она и есть источник,
+           а «всего за запуск» уходит в подпись, чтобы обе цифры были названы. */
+        { label: 'Регистрации', value: (regInPeriod == null ? reg.total : regInPeriod),
+          sub: (regInPeriod == null || regInPeriod === reg.total)
+            ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
+            : 'за выбранный период · всего за запуск ' + reg.total },
         { label: 'Счет на 690', value: pay.invoiced,
           sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
         { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
