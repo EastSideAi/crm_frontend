@@ -11411,6 +11411,158 @@
      деньгам: роль открывает только этот раздел, и видит она в нем ТОЛЬКО своих
      учеников — список приходит с сервера уже отфильтрованным по логину. Контактов
      здесь нет намеренно: телефон ребенка к работе преподавателя отношения не имеет. */
+  /* ── Домашки CSCA: преподаватель проверяет их прямо в CRM ───────────────────
+     Вера 21.09.2026: «надо чтобы доступ был прямо с CRM, без ввода всяких лишних
+     паролей и логинов». Арсений ведет математику и физику, учетка в CRM у него уже
+     есть — сервер связывает ее с преподавателем курса и отдает ЕГО очередь
+     (eastside-backend, routers/csca_homework.py). У кого связи нет, тот блока не
+     видит вовсе: это фамилии детей по чужому предмету, а не общая сводка.
+     Домашка бывает двух видов: живая работа (текст и файлы, ждет вердикта) и
+     сверенная платформой по ключу — та приходит со счетом, принимать ее не надо,
+     но вернуть на доработку можно. */
+  // Бланк задания лежит статикой рядом с платформой. Домен выбираем как у API:
+  // зона .рф резолвится не у всех провайдеров, с зеркала ходим на зеркало.
+  var PLAT_URL = /(^|\.)eastside\.study$/.test(location.hostname)
+    ? 'https://app.eastside.study' : 'https://app.xn--80aikf2bag.xn--p1ai';
+  var CSCA_HW = null;                 // null — не спрашивали, 'no' — не наш человек
+  var CSCA_HW_SCOPE = 'open';
+  var CSCA_HW_BACK = '';              // ключ работы, у которой раскрыт возврат
+  var CSCA_HW_BUSY = '';
+  var CSCA_SUBJ_RU = { math: 'Математика', physics: 'Физика', chemistry: 'Химия' };
+
+  function cscaHwKey(x) { return x.accountId + ':' + x.hwId; }
+  function cscaHwLoad() {
+    api('/admin/api/csca/homework/queue?scope=' + CSCA_HW_SCOPE).then(function (r) {
+      CSCA_HW = r || { items: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () {
+      // 403 — человек не преподаватель курса, и это норма, а не поломка.
+      CSCA_HW = 'no';
+      if (state.page === 'students') renderView();
+    });
+  }
+  function cscaHwWhen(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var m = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+             'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    return d.getDate() + ' ' + m[d.getMonth()] + ', ' +
+      ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function cscaHwSize(n) {
+    if (!n && n !== 0) return '';
+    if (n < 1024) return n + ' Б';
+    if (n < 1048576) return Math.round(n / 1024) + ' КБ';
+    return (n / 1048576).toFixed(1).replace('.', ',') + ' МБ';
+  }
+  function cscaHwCard(x) {
+    var key = cscaHwKey(x);
+    var auto = x.kind === 'auto';
+    var res = x.result || {};
+    var back = CSCA_HW_BACK === key;
+    var busy = CSCA_HW_BUSY === key;
+    // Зеленого «принято» у автопроверки нет: ключ сошелся и на 12 из 30, а зеленая
+    // метка в списке уводит взгляд мимо работы, которую как раз надо вернуть.
+    var tag = x.status === 'returned' ? '<span class="csw-tag ret">Вернули</span>'
+      : x.status === 'accepted' ? (auto ? '' : '<span class="csw-tag ok">Принято</span>')
+      : '<span class="csw-tag new">Ждет проверки</span>';
+    var task = esc((CSCA_SUBJ_RU[x.subject] || x.subject) + ' · ' + (x.title || x.hwId)) +
+      (x.src ? ' <a class="csw-src" href="' + esc(PLAT_URL + '/' + x.src) +
+               '" target="_blank" rel="noopener">Открыть задание</a>' : '');
+    var body = auto
+      ? '<div class="csw-score"><b class="num">' + (res.right || 0) + ' из ' + (res.total || 0) + '</b>' +
+        '<span>проверено платформой</span>' +
+        ((res.wrong && res.wrong.length)
+          ? '<span class="csw-wrong num">ошибки: ' + esc(res.wrong.join(', ')) + '</span>' : '') + '</div>'
+      : '<div class="csw-ans">' + (x.answer ? esc(x.answer) : 'Текста нет — работа приложена файлами.') + '</div>';
+    var files = (x.files || []).map(function (f) {
+      return '<span class="csw-file">' + esc(f.name || '') +
+        (f.size ? ' · ' + cscaHwSize(f.size) : '') + '</span>';
+    }).join('');
+    var note = x.status !== 'sent' && x.comment
+      ? '<div class="csw-note"><b>' + esc(x.teacher || 'вы') + ':</b> ' + esc(x.comment) + '</div>' : '';
+    // Вернуть можно и уже решенную автопроверкой работу: «12 из 30, перереши 4 и 7».
+    var canAct = x.status === 'sent' || (auto && x.status !== 'returned');
+    var acts = '';
+    if (canAct) {
+      acts = (back ? '<textarea class="mk-inp csw-ta" data-k="' + esc(key) + '" rows="3" ' +
+                     'placeholder="Что исправить: номер задачи и в чем ошибка"></textarea>' : '') +
+        '<div class="csw-err" data-err="' + esc(key) + '"></div>' +
+        '<div class="csw-acts">' +
+        (back
+          ? '<button class="bp sm" data-csw="send" data-k="' + esc(key) + '"' + (busy ? ' disabled' : '') + '>' +
+            (busy ? 'Отправляем…' : 'Отправить на доработку') + '</button>'
+          : (auto ? '' : '<button class="bp sm" data-csw="ok" data-k="' + esc(key) + '"' + (busy ? ' disabled' : '') + '>' +
+             (busy ? 'Сохраняем…' : 'Принять') + '</button>')) +
+        '<button class="bp sm ghost" data-csw="back" data-k="' + esc(key) + '">' +
+          (back ? 'Отмена' : 'Вернуть с комментарием') + '</button></div>';
+    }
+    return '<div class="csw-card' + (x.status === 'sent' ? ' wait' : '') + '">' +
+      '<div class="csw-top"><b>' + esc(x.student || '') + '</b>' +
+        '<span class="csw-when">' + esc(cscaHwWhen(x.sentAt)) + '</span>' + tag + '</div>' +
+      '<div class="csw-task">' + task + '</div>' + body +
+      (files ? '<div class="csw-files">' + files + '</div>' : '') + note + acts + '</div>';
+  }
+  function cscaHwBlock() {
+    if (!CSCA_HW || CSCA_HW === 'no') return '';
+    var items = CSCA_HW.items || [];
+    var t = CSCA_HW.teacher || {};
+    var subjects = (t.subjects || []).map(function (s) { return CSCA_SUBJ_RU[s] || s; });
+    var waiting = items.filter(function (x) { return x.status === 'sent'; }).length;
+    var seg = '<div class="csw-seg">' +
+      '<button class="' + (CSCA_HW_SCOPE === 'open' ? 'on' : '') + '" data-csw="scope" data-s="open">' +
+        'Ждут проверки' + (waiting ? ' · ' + waiting : '') + '</button>' +
+      '<button class="' + (CSCA_HW_SCOPE === 'all' ? 'on' : '') + '" data-csw="scope" data-s="all">Все работы</button></div>';
+    var list = items.length ? items.map(cscaHwCard).join('')
+      : '<div class="empty">' + (CSCA_HW_SCOPE === 'open'
+          ? 'Нечего проверять. Работа появится здесь, как только ученик сдаст домашку.'
+          : 'Работ пока нет.') + '</div>';
+    return '<div class="card" style="padding:24px 26px;margin-bottom:14px">' +
+      '<div class="sec-head csw-head"><span class="ic">' + ic('task', 14) + '</span><div>' +
+      '<div class="t">Домашки CSCA</div><div class="s">' +
+        (subjects.join(' и ').toLowerCase() || 'ваши предметы') +
+        ' · ' + (waiting ? 'ждут проверки: ' + waiting : 'все проверено') + '</div></div>' +
+      seg + '</div><div class="csw-list">' + list + '</div></div>';
+  }
+  function cscaHwReview(key, status, comment, view) {
+    var parts = key.split(':');
+    var errBox = view.querySelector('[data-err="' + key + '"]');
+    if (status === 'returned' && !comment) {
+      if (errBox) errBox.textContent = 'Напишите, что исправить: без этого ученик пришлет ту же работу.';
+      return;
+    }
+    CSCA_HW_BUSY = key; renderView();
+    api('/admin/api/csca/homework/review', { method: 'POST', body: JSON.stringify({
+      account_id: parts[0], hw_id: parts.slice(1).join(':'), status: status, comment: comment || '' }) })
+      .then(function () {
+        CSCA_HW_BUSY = ''; CSCA_HW_BACK = '';
+        cscaHwLoad();
+      })
+      .catch(function (e) {
+        CSCA_HW_BUSY = ''; renderView();
+        var box = document.querySelector('[data-err="' + key + '"]');
+        if (box) box.textContent = (e && e.detail) || 'Не сохранилось. Попробуйте еще раз.';
+      });
+  }
+  function cscaHwBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-csw]'), function (b) {
+      b.addEventListener('click', function () {
+        var what = b.getAttribute('data-csw'), key = b.getAttribute('data-k');
+        if (what === 'scope') {
+          CSCA_HW_SCOPE = b.getAttribute('data-s'); CSCA_HW_BACK = '';
+          CSCA_HW = null; renderView(); cscaHwLoad(); return;
+        }
+        if (what === 'back') { CSCA_HW_BACK = CSCA_HW_BACK === key ? '' : key; renderView(); return; }
+        if (what === 'ok') { cscaHwReview(key, 'accepted', '', view); return; }
+        if (what === 'send') {
+          var ta = view.querySelector('.csw-ta[data-k="' + key + '"]');
+          cscaHwReview(key, 'returned', ta ? ta.value.trim() : '', view);
+        }
+      });
+    });
+  }
+
   function studentsLoad(force) {
     if (state._students && !force) return;
     state._students = null;
@@ -11440,14 +11592,19 @@
   }
   function renderStudents(view) {
     if (state.studentId) return renderStudentCard(view);
-    if (!state._students) { studentsLoad(); view.innerHTML = dashSkeleton(); return; }
+    // Домашки CSCA идут первыми: для преподавателя курса это и есть его работа,
+    // а список учеников по английскому к ней отношения не имеет.
+    if (CSCA_HW === null) cscaHwLoad();
+    var csca = cscaHwBlock();
+    if (!state._students) { studentsLoad(); view.innerHTML = csca + dashSkeleton(); cscaHwBind(view); return; }
     if (state._students === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      view.innerHTML = csca + '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
+      cscaHwBind(view);
       return;
     }
     var list = state._students.students || [];
     var mine = state._students.mine_only;
-    view.innerHTML = '<div class="card" style="padding:24px 26px">' +
+    view.innerHTML = csca + '<div class="card" style="padding:24px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
       '<div class="t">' + (mine ? 'Мои ученики' : 'Ученики по английскому') + '</div>' +
       '<div class="s">' + (mine
@@ -11457,6 +11614,7 @@
       '<div class="tm-list">' + (list.map(studentRow).join('') ||
         '<div class="empty">Пока никого. Ученик появится здесь, когда менеджер назначит преподавателя ' +
         'в карточке человека, вкладка «Английский».</div>') + '</div></div>';
+    cscaHwBind(view);
     Array.prototype.forEach.call(view.querySelectorAll('.st-row'), function (row) {
       var go = function () { studentOpen(row.getAttribute('data-sid')); };
       row.addEventListener('click', go);
