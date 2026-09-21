@@ -21712,7 +21712,8 @@
       '<div class="t-cell"><div class="t-ttl">' + esc(who) + bcChat(p.user_id) + '</div>' +
         '<div class="t-sub num">' + esc(p.channel) + ' · ' + esc(p.channel_user_id) +
         (mark.length ? ' · ' + mark.join(', ') : '') + '</div></div>' +
-      '<div class="bc-st"><span class="sev ' + st[0] + '">' + st[1] + '</span>' +
+      '<div class="bc-st">' + (p.witness ? '<span class="bc-wit">контрольный</span>' : '') +
+        '<span class="sev ' + st[0] + '">' + st[1] + '</span>' +
         bcDetail(p.detail) + bcProof(p) + '</div>' +
       '<div class="t-when num">' + fmtWhen(p.sent_at) + '</div>' +
     '</div>';
@@ -21724,11 +21725,10 @@
      телеграм или ВК про конкретное сообщение по номеру, который выдала сама площадка.
      У рассылок до 21.09.2026 номера нет — там кнопки не будет, и это честнее заглушки. */
   function bcProof(p) {
-    var mark = p.witness ? '<span class="bc-wit">контрольный</span>' : '';
-    if (p.status !== 'ok' || !p.provider_msg_id) return mark;
-    return mark + '<button class="bc-verify" data-ch="' + esc(p.channel) +
+    if (p.status !== 'ok' || !p.provider_msg_id) return '';
+    return '<span class="bc-act"><button class="bc-verify" data-ch="' + esc(p.channel) +
       '" data-who="' + esc(p.channel_user_id) + '" data-mid="' + esc(p.provider_msg_id) +
-      '">проверить у площадки</button>';
+      '">проверить у площадки</button></span>';
   }
 
   /* «Дошло» — это ответ площадки, а не доказательство того, ЧТО человек получил.
