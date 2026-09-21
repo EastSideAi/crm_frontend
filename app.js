@@ -21858,6 +21858,20 @@
       return;
     }
     var d = state._bcRun, r = d.run, t = d.total || {}, co = d.cohorts || {};
+    /* Контрольные получатели — первое, что видно в рассылке: это свои люди, и проверка
+       начинается с них. Из общей статистики они исключены на сервере, иначе портили бы
+       и отклик, и доставку (Вера, 21.09.2026: контролем будут все сотрудники CRM). */
+    var wit = d.witness || [];
+    var witCard = wit.length ? '<div class="card sp12" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('check', 14) + '</span>' +
+      '<div><div class="t">Контрольные получатели</div>' +
+      '<div class="s">свои люди в общем списке рассылки — сверь со своим телефоном</div></div></div>' +
+      '<div style="border-top:1px solid var(--line)">' +
+        wit.map(function (w) {
+          w.name = w.name || ('id ' + w.channel_user_id);
+          return bcPersonRow(w);
+        }).join('') +
+      '</div></div>' : '';
     if (!state._bcPeople && !state._bcPeopleWait) fetchBcPeople();
     var pp = state._bcPeople && state._bcPeople !== 'none' ? state._bcPeople : null;
     var people = pp ? (pp.people || []).map(bcPersonRow).join('') : '<div class="empty">Загружаю адресатов…</div>';
@@ -21879,6 +21893,7 @@
             '<div class="sv num">' + (t.failed || 0) + '</div></div>' +
         '</div>' +
       '</div>' +
+      witCard +
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Что было после</div><div class="s">считается от даты отправки каждому человеку</div></div></div>' +
