@@ -1552,6 +1552,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .pt-sub.comm::before { background: var(--green); }
 .pt-sub .sw { margin-left: auto; flex: none; font-size: 11px; color: var(--ink-3); font-weight: 500; }
 
+/* — шаги по кабинету: заходы человека (buildCabinetSteps) — */
+.cab-steps { display: flex; flex-direction: column; gap: 10px; }
+.cab-v { background: #fff; border-radius: 14px; padding: 12px 14px; box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); }
+.cab-v .uz-mini { margin-bottom: 8px; }
+.cab-v .pt-subs { display: flex; flex-direction: column; gap: 5px; }
+.cab-v .pt-sub { word-break: break-word; }
+.pt-sub.err { color: var(--red-ink); font-weight: 600; }
+.pt-sub.err::before { background: var(--red); }
+
 @media (max-width: 560px) {
   .uz-hero { flex-direction: column; }
   .uz-pulse { width: auto; flex-direction: row; }
@@ -2243,6 +2252,20 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tg-msg.out .rm-catt.file { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.28); }
 .tg-msg.out .rm-catt.file svg { color: #fff; }
 .tg-msg.out .rm-catt.img { box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); }
+/* Присланный скриншот показываем самой картинкой: менеджер спрашивает «какая ошибка?»
+   и должен увидеть ее, а не слово «[изображение]». Высоту ограничиваем — переписку
+   должно быть видно вокруг вложения. */
+.tg-img { display: block; max-width: min(320px, 100%); border-radius: 12px; overflow: hidden;
+  background: var(--fill); box-shadow: inset 0 0 0 1px var(--line-2); }
+.tg-img img { display: block; width: 100%; max-height: 380px; object-fit: contain; }
+/* contain, а не cover: скриншот присылают, чтобы показать ОШИБКУ, а обрезка по
+   центру съедает как раз ее. Вертикальный снимок с телефона ложится в кадр
+   целиком, полный размер открывается нажатием. */
+.tg-img:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+.tg-img.gone { max-width: none; padding: 7px 11px; font-size: 12px; color: var(--ink-3); }
+.tg-img.gone img { display: none; }
+.tg-img.gone::after { content: 'вложение не открылось'; }
+.tg-msg.out .tg-img { box-shadow: inset 0 0 0 1px rgba(255,255,255,.32); }
 /* шапка обсуждения = шапка диалога (.tg-chead), плюс мета задачи */
 .th-chead { padding: 11px 18px; }
 .th-chead .tg-cs { font-size: 12px; color: var(--ink-3); }
@@ -3275,11 +3298,14 @@ button.tr-crumb:hover { color: var(--blue); }
    поиск читаются как одно поле. Спрятанную поиском строку убираем display: none,
    иначе flex у .sc-p сильнее атрибута hidden и человек видит пустые места. */
 .sc-find { margin-bottom: 8px; }
-/* «Править всю серию» — согласие, а не поле: ставим его строкой над списком людей,
-   с тем же отступом, что у полей формы. */
-.sc-all { display: flex; align-items: center; gap: 9px; margin: 2px 0 2px;
-  font-size: 13px; color: var(--ink-2); cursor: pointer; }
-.sc-all input { width: 16px; height: 16px; accent-color: var(--blue); flex: none; cursor: pointer; }
+/* Факты серии и последствия правки — тихие строки под своим полем: это не
+   предупреждение об опасности, а описание того, что сейчас произойдет. */
+.sc-sfacts { margin-top: 7px; font-size: 12px; color: var(--ink-3); }
+.sc-shint { margin: -2px 0 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.sc-shint[hidden] { display: none; }
+/* Сегмент области правки — ровно тот же рецепт, что в карточке зума (.due-seg),
+   своего размера ему не заводим: вопрос один и тот же. */
+.sc-scope { align-self: flex-start; }
 /* Снятие встречи — действие в другую сторону, поэтому уезжает к левому краю
    футера, подальше от «Сохранить». */
 .sc-mdrop { margin-right: auto; }
@@ -4215,6 +4241,16 @@ button.tsk-mimp { cursor: pointer; }
 .tg-by.warn { color: var(--red-ink); }
 .tg-msg.undelivered .tg-bub { box-shadow: inset 0 0 0 1px var(--red); }
 .tg-msg.out.undelivered .tg-bub { opacity: .82; }
+/* Фотография в переписке пузыря не требует: рамка вокруг снимка растягивала белую
+   плашку на всю колонку, а кадр оставался узким. Время — поверх кадра, как в
+   мессенджерах, поэтому пузырь тут позиционируемый. */
+.tg-msg.pic { max-width: min(320px, 74%); }
+.tg-msg.in .tg-bub.pic, .tg-msg.out .tg-bub.pic { padding: 0; position: relative;
+  background: none; box-shadow: none; border-radius: 12px; }
+.tg-bub.pic .tg-atts { margin-bottom: 0; }
+.tg-msg.in .tg-bub.pic .tg-mt, .tg-msg.out .tg-bub.pic .tg-mt { position: absolute; float: none;
+  right: 7px; bottom: 7px; top: auto; margin: 0; padding: 1px 7px 2px; border-radius: var(--r-pill);
+  background: rgba(3,8,28,.55); color: #fff; }
 /* разделитель дня в треде (Сегодня / Вчера / дата) */
 .tg-day { display: flex; justify-content: center; margin: 10px 0 4px; }
 .tg-day:first-child { margin-top: 0; }
@@ -6863,7 +6899,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tabs::-webkit-scrollbar { height: 0; }
 .po-card { padding: 20px 22px; margin-bottom: 16px; }
 .po-txt { margin-top: 13px; font-size: 13.5px; color: var(--ink-2); line-height: 1.62; }
-.po-note { margin-top: 14px; font-size: 12.5px; color: var(--ink-3); line-height: 1.55; }
+.po-note { margin-top: 14px; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
 .po-note.wide { margin: 16px 0 26px; }
 
 /* путь студента — лента маршрута над тарифами.
@@ -6990,6 +7026,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-noall { background: var(--fill); color: var(--ink-2); border-radius: var(--r-lg);
   padding: 11px 13px; font-size: 12.5px; line-height: 1.45; }
 
+/* машинный состав тарифа: пары «что — что именно», выровненные по левому столбцу.
+   Значение темнее подписи, потому что смотрят на него; расхождение с каталогом
+   заказов — красной заливкой того же рецепта, что .po-noall: это не украшение,
+   а единственное место, где видно, что цена на странице и цена в оплате разошлись */
+.po-kvs { display: flex; flex-direction: column; gap: 11px; }
+/* подпись над значением, а не слева: карточка тарифа узкая, в две колонки
+   значение ломается на три строки и список перестает читаться сверху вниз */
+.po-kv { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.45; }
+.po-kvl { color: var(--ink-3); }
+.po-kvv { color: var(--ink); font-weight: 600; }
+.po-kvn { margin-top: 13px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.po-noall.po-warn { background: var(--red-soft); color: var(--red-ink); font-weight: 600;
+  margin-bottom: 12px; }
+
 /* продукты направления и путь клиента.
    Один рецепт на оба экрана: подпись-микролейбл, шаги с тихими номерами,
    список «что делает команда» теми же .po-feat, что и состав тарифа.
@@ -7040,13 +7090,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-tblwrap::-webkit-scrollbar { height: 6px; }
 .po-tblwrap::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 .po-tbl { width: 100%; border-collapse: collapse; min-width: 680px; table-layout: fixed; }
-.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 10.5px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); border-bottom: 1px solid var(--line-2); }
+.po-tbl th { padding: 0 12px 11px; text-align: left; font-size: 11px; font-weight: 700;
+  color: var(--ink-2); border-bottom: 1px solid var(--line-2); }
 .po-tbl td { padding: 13px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
   color: var(--ink-2); line-height: 1.5; vertical-align: top; }
 .po-tbl tbody tr:last-child td { border-bottom: 0; }
 .po-rl { width: 178px; font-weight: 600; color: var(--ink); }
-.po-hint { display: block; margin-top: 4px; font-size: 11.5px; color: var(--ink-3); }
+/* подпись под строкой — это объяснение, а не фон: серый --ink-3 на белом дает
+   контраст 2,3 к 1 и не читается (Павел, 18.09.2026), поэтому берем --ink-2 */
+.po-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--ink-2); }
 .po-pluses { display: flex; flex-direction: column; gap: 6px; margin-top: 9px; }
 .po-plus { position: relative; padding-left: 14px; font-size: 12.5px; }
 .po-plus::before { content: '+'; position: absolute; left: 0; top: -1px; color: var(--blue); font-weight: 700; }
@@ -7060,8 +7112,46 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-in { max-width: 152px; }
 .po-pct { width: 62px; max-width: 62px; margin-left: 9px; padding: 6px 9px; font-size: 12.5px;
   display: inline-block; vertical-align: middle; }
-.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-3); font-weight: 500; }
+.po-pc { margin-left: 4px; font-size: 12px; color: var(--ink-2); font-weight: 500; }
 .po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
+/* калькулятор фондов и плана: подзаголовок внутри карточки отделяет три разных
+   вопроса — что откладываем, когда уходит, сколько клиентов нужно */
+/* свод сезона закреплен наверху вкладки «Экономика», под ним переключатель
+   разделов: листать три экрана подряд оказалось тяжело (Павел, 21.09.2026) */
+.po-econtop .po-board3 { margin-top: 16px; }
+.po-econsegs { margin: 20px 0 2px; }
+.po-econsegs .dperiod { display: inline-flex; }
+.po-sub { margin: 26px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
+.po-sub:first-of-type { margin-top: 20px; }
+.po-sel { width: auto; max-width: 100%; cursor: pointer; }
+.po-cpct { white-space: nowrap; }
+.po-tbl.econ.w6 { min-width: 860px; }
+.po-tbl.econ.w6 .po-rl { width: 208px; }
+.po-tbl.econ.w5 { min-width: 940px; }
+.po-tbl.econ.w5 .po-rl { width: 292px; }
+.po-tbl.econ.w5 .po-hint + .po-hint { margin-top: 1px; }
+/* «Подобрать доли» — единственная кнопка калькулятора: она ничего не удаляет, а
+   считает, поэтому тихая и стоит рядом со своим объяснением, а не в шапке */
+.po-act { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.po-fit { height: 36px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
+.po-act .po-hint { flex: 1 1 280px; margin-top: 0; }
+.po-tbl.econ.w3 { min-width: 560px; }
+.po-tbl.econ.w3 .po-rl { width: 320px; }
+/* свод сезона: четыре цифры в ряд, на узком — системная одна колонка */
+.po-board3 { margin-top: 14px; }
+.po-board3 .pc-v.po-pos { color: var(--green-ink); }
+.po-board3 .pc-v.po-neg { color: var(--red-ink); }
+/* вторая строка в ячейке свода: сезон это двенадцать месяцев, и владельцу нужна
+   не только сумма за год, но и то, как она выглядит в месяц (Олеся, 20.09.2026) */
+.pay-cell .pc-s { margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.pay-cell.lead .pc-s { color: var(--blue); }
+@media (max-width: 760px) { .po-board3 { grid-template-columns: 1fr; } }
+/* строка дивидендов в таблице фондов: у нее нет доли, она остаток после всего,
+   и это надо видеть глазами, не вчитываясь. Тихая синяя заливка того же рецепта,
+   что итоговая строка, но холодная — итог и остаток разные вещи */
+.po-r-own td { background: var(--blue-tint); }
+.po-r-own .po-rl { background: var(--blue-tint); }
+.po-r-own td:first-child, .po-r-own .num { font-weight: 700; color: var(--ink); }
 .po-r-sum td { font-weight: 700; color: var(--ink); background: var(--fill); }
 .po-r-sum .po-rl { background: var(--fill); }
 .po-r-big td { padding-top: 15px; padding-bottom: 15px; font-size: 19px; font-weight: 700;
@@ -9126,6 +9216,47 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Единственный отмеченный провал: где теряем больше половины людей. */
 .lstep.drop { border-color: var(--red); background: var(--red-soft); }
 .lstep.drop .ls-c b { color: var(--red-ink); }
+/* Плашка, за которой есть список людей. Кликабельность должна читаться ДО клика —
+   иначе проверить цифру никто не догадается, а ради этого всё и делалось. */
+.lstep-open { cursor: pointer; transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
+.lstep-open:hover { border-color: var(--blue); box-shadow: 0 6px 18px rgba(47,107,255,.10); }
+.lstep-open.drop:hover { border-color: var(--red); box-shadow: 0 6px 18px rgba(229,72,77,.12); }
+.lstep-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* ── Список людей ступени ────────────────────────────────────────────────────
+   Оболочка попапа общая с маркетингом (.mk-ovl/.mk-modal.wide/.mk-xbtn) — второй
+   вид всплывашки в одной CRM читался бы как другой продукт. Здесь только таблица. */
+.lp-tbl { margin-top: 12px; border-top: 1px solid var(--line);
+  max-height: calc(100vh - 300px); min-height: 120px; overflow: auto; }
+.lp-tbl::-webkit-scrollbar { width: 8px; }
+.lp-tbl::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
+.lp-tbl::-webkit-scrollbar-track { background: transparent; }
+.lp-th, .lp-tr { display: grid; gap: 12px; align-items: center;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(120px, 1.1fr) minmax(110px, 1fr) 112px; }
+/* шапка таблицы едет со списком, но остаётся видимой: иначе на 300 строках
+   посреди прокрутки непонятно, какая колонка что */
+.lp-th { padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--fill);
+  position: sticky; top: 0; z-index: 1; }
+.lp-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.lp-th span:last-child { text-align: right; }
+.lp-tr { padding: 9px 10px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink); }
+.lp-tr:last-child { border-bottom: 0; }
+.lp-tr > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-tr small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; }
+.lp-nm { font-weight: 600; }
+.lp-dt { color: var(--ink-2); text-align: right; }
+/* прочерк вместо пустоты — но бледнее значения, чтобы не читался как данные */
+.lp-dash { color: var(--ink-3); font-style: normal; }
+.lp-tr.go { cursor: pointer; border-radius: 8px; }
+.lp-tr.go:hover { background: var(--fill); }
+.lp-tr.go:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.lp-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.lp-cnt { font-size: 12px; color: var(--ink-3); }
+.lp-foot .mk-btn { margin-left: auto; }
+.lp-foot .mk-btn[disabled] { opacity: .6; cursor: default; }
 
 .lper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         padding: 12px 16px; margin-bottom: 16px; }
@@ -9316,4 +9447,216 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 560px) {
   .idup-g { padding: 14px; }
   .idup-c-b button, .idup-a button { flex: 1 1 100%; }
+}
+
+/* ── Рассылки (`bc-*`) — журнал отправок бота ────────────────────────────────
+   Строка прогона и строка адресата живут на общей .trow: это такой же список,
+   как лиды и подарки, свой рецепт строки заводить незачем. Своё тут только
+   раскладка цифр прогона, когортный ряд и поле «писали ли мы человеку».
+   Ответ площадки («bot was blocked by the user») показываем дословно — он и есть
+   доказательство отправки, поэтому ему отдан второй уровень чернил, а не мелкий
+   серый шум. */
+/* Доставка — своя семья чипов, не воронка продаж: «дошло» про сообщение, а не
+   про сделку. Красное — потерянный навсегда контакт (закрыл бота), амбер — сбой,
+   который можно перевыслать. */
+.sev.bc-ok      { color: var(--green-ink); background: var(--green-soft); }
+.sev.bc-blocked { color: var(--red-ink);   background: var(--red-soft); }
+.sev.bc-fail    { color: var(--amber-ink); background: var(--amber-soft); }
+.bc-run { grid-template-columns: minmax(0, 1fr) auto 24px; cursor: pointer; }
+/* Колонки одинаковой ширины: числа стоят друг под другом от строки к строке.
+   Флексом они разъезжались, и взгляд не мог сравнить две рассылки по вертикали. */
+.bc-nums { display: grid; grid-template-columns: repeat(5, 84px); align-items: center; }
+/* Вход в переписку с человеком прямо из строки: ответ площадки доказывает отправку,
+   а чат показывает само сообщение. */
+/* Проверка у площадки: кнопка рядом со статусом и её вердикт на месте кнопки.
+   Зелёный/красный тут семантика по формуле статусов, а не украшение. */
+.bc-verify { border: 1px solid var(--line-2); background: #fff; color: var(--ink-2);
+  font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  cursor: pointer; transition: color .12s var(--ease), border-color .12s var(--ease); }
+.bc-verify:hover { color: var(--blue); border-color: var(--blue); }
+.bc-verify[disabled] { color: var(--ink-3); cursor: default; }
+.bc-verdict { display: block; font-size: 11.5px; font-weight: 600; margin-top: 4px; line-height: 1.35; }
+.bc-verdict.yes { color: var(--green-ink); }
+.bc-verdict.no  { color: var(--red-ink); }
+/* Контрольный получатель — живой человек из команды в общем списке рассылки. */
+.bc-wit { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--blue); background: var(--blue-tint);
+  padding: 3px 8px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
+.bc-chat { font-size: 12px; font-weight: 600; color: var(--blue); margin-left: 10px;
+  text-decoration: none; white-space: nowrap; }
+.bc-chat:hover { text-decoration: underline; }
+.bc-n { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
+.bc-n b { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
+.bc-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
+.bc-go { color: var(--ink-3); display: flex; justify-content: flex-end; }
+.bc-run:hover .bc-go { color: var(--blue); }
+
+.bc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.bc-title .t { font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.bc-title .s { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+.bc-stat { margin: 0 -6px -6px; }
+
+/* Когорта — имя и два процента. Шкалы тут нет намеренно: 90px не дают сравнить
+   3% с 9%, а на телефоне шкала пряталась совсем — колонка без работы. Три карточки
+   когорт стоят рядом, поэтому имя занимает всю ширину, а цифры идут под ним. */
+.bc-co { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
+  gap: 4px 18px; padding: 13px 24px; border-bottom: 1px solid var(--line); }
+.bc-co:last-child { border-bottom: none; }
+.bc-co-nm { grid-column: 1 / -1; font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.bc-co-nm small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+.bc-co-n { font-size: 15px; font-weight: 700; color: var(--ink); display: flex;
+  align-items: baseline; gap: 6px; }
+.bc-co-n:first-of-type { margin-left: auto; }
+.bc-co-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); }
+
+.bc-grid { grid-template-columns: minmax(0, 1fr) minmax(150px, 280px) 96px; height: auto;
+  padding-top: 11px; padding-bottom: 11px; }
+/* Чипы статуса стоят в строку (контрольный + дошло читаются одним взглядом),
+   а пояснение площадки и кнопка проверки переносятся под них целой строкой. */
+.bc-st { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center;
+  align-content: flex-start; min-width: 0; }
+.bc-st > .bc-detail, .bc-st > .bc-verdict, .bc-st > .bc-act { flex: 0 0 100%; }
+.bc-act { display: flex; }   /* кнопка проверки: с новой строки, но по своему размеру */
+/* Ответ площадки. В строке видна его суть, полный текст раскрывается по нажатию:
+   он и есть доказательство отправки, прятать его в подсказку по наведению нельзя —
+   на телефоне наведения не существует. */
+.bc-detail { font-size: 11px; color: var(--ink-2); overflow-wrap: anywhere; line-height: 1.35; }
+.bc-detail summary { cursor: pointer; list-style: none; color: var(--ink-2);
+  text-decoration: underline; text-decoration-color: var(--line-2);
+  text-underline-offset: 3px; }
+.bc-detail summary::-webkit-details-marker { display: none; }
+.bc-detail summary:hover { color: var(--ink); }
+.bc-raw { margin-top: 5px; padding: 7px 9px; border-radius: 9px; background: var(--fill);
+  font-size: 10.5px; color: var(--ink-2); line-height: 1.4; }
+
+.bc-find { display: flex; gap: 10px; margin-top: 14px; }
+.bc-find .al-in { flex: 1 1 auto; min-width: 0; }
+.bc-found { margin: 16px -24px -22px; border-top: 1px solid var(--line); }
+.bc-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 0 24px 14px; }
+.bc-filters .al-in { flex: 1 1 220px; min-width: 0; }
+.bc-more { padding: 14px 24px; display: flex; justify-content: center; }
+
+@media (max-width: 760px) {
+  /* Телефон: ни одна из этих таблиц не уезжает вбок — строки становятся карточками,
+     цифры прогона переносятся под название. */
+  .trow.bc-run { grid-template-columns: minmax(0, 1fr) 20px !important; height: auto;
+    padding: 14px 16px; row-gap: 10px; }
+  /* Четыре колонки по 86px плюс зазоры — это 398px, на 390px последнее число
+     («не дошло») срезалось краем экрана. Парами влезает с запасом. */
+  .bc-nums { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 10px; row-gap: 10px; justify-content: stretch; }
+  .bc-n { align-items: flex-start; }
+  .bc-go { grid-column: 2; grid-row: 1; align-self: center; }
+  /* Адресат: имя и время в одной строке, статус с ответом площадки — под ними.
+     Время отдельной третьей строкой читалось как оторванная от всего дата. */
+  .trow.bc-grid { grid-template-columns: minmax(0, 1fr) auto !important; height: auto;
+    padding: 12px 16px; row-gap: 6px; }
+  .trow.bc-grid .t-cell { grid-column: 1; grid-row: 1; }
+  .trow.bc-grid .t-when { grid-column: 2; grid-row: 1; align-self: start; }
+  .bc-st { grid-column: 1 / -1; grid-row: 2; }
+  .bc-co { padding: 12px 16px; }
+  /* Возврат и название прогона не делят одну строку: на 390px заголовку оставалось
+     пол-экрана, и он ломался на три строки. */
+  .bc-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .bc-find { flex-direction: column; }
+  .bc-find .bp { width: 100%; }
+  .bc-found { margin: 14px -18px -18px; }
+  .bc-filters { padding: 0 16px 12px; }
+  /* Фильтры статуса переносятся, а не уезжают за край: четыре слова в строку на
+     390px не влезают, и «Не дошло» пропадало из виду. */
+  .bc-filters .tabs { flex-wrap: wrap; row-gap: 6px; }
+  /* Лестница отклика: конверсия уходит под название. Общая раскладка ставит её
+     третьей колонкой, и на узком экране она налезала на название шага. */
+  .bc-lad .lad-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .bc-lad .lad-row .lad-right { grid-column: 1 / -1; grid-row: 2; flex-direction: row;
+    align-items: center; justify-content: flex-start; gap: 10px; }
+}
+
+@media (max-width: 480px) {
+  /* Четыре коротких числа доставки читаются парами: одной колонкой это 4 экрана
+     скролла до списка людей. Денежных сумм тут нет, перенос строки им не грозит. */
+  .statbar.bc-stat { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Домашки CSCA в разделе «Обучение» ───────────────────────────────────────
+   Преподаватель курса (Арсений: математика и физика) проверяет работы там же, где
+   работает команда, — своей учеткой CRM, без второго входа (Вера 21.09.2026).
+   Ждущая работа выделена кантом слева: очередь должна читаться одним взглядом. */
+.csw-list { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.csw-card { border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; background: var(--card); }
+.csw-card.wait { border-color: #CFE0FF; box-shadow: inset 3px 0 0 var(--blue); }
+.csw-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.csw-top b { font-size: 15px; font-weight: 600; letter-spacing: -.015em; color: var(--ink); }
+.csw-when { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.csw-tag { margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 99px; }
+.csw-tag.new { color: var(--blue); background: var(--blue-tint); }
+.csw-tag.ok { color: var(--green-ink); background: var(--green-soft); }
+.csw-tag.ret { color: var(--red-ink); background: var(--red-soft); }
+.csw-task { margin-top: 4px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.csw-src { margin-left: 10px; font-weight: 600; color: var(--blue); text-decoration: none;
+  border-bottom: 1px solid rgba(47,107,255,.3); }
+.csw-src:hover { border-color: var(--blue); }
+/* Условие разбора: та же плашка, что у ответа, но подписью — это задача, а не
+   работа ученика, и взгляд не должен их путать. */
+/* Строка про жалобу: тихая, но не спрятанная — преподаватель должен видеть, куда
+   писать, из того места, где он работает. */
+.csw-help { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-2);
+  font-size: 12.5px; color: var(--ink-3); }
+.csw-link { font: inherit; font-weight: 600; color: var(--blue); background: none; border: none;
+  padding: 0; cursor: pointer; border-bottom: 1px solid rgba(47,107,255,.3); }
+.csw-link:hover { border-color: var(--blue); }
+.csw-link:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47,107,255,.25); border-radius: 3px; }
+
+/* Ученики CSCA: та же строка, что у команды, плюс колонка «когда заходил».
+   На телефоне колонка уходит под имя — три колонки в 390 не живут. */
+.cst-row { display: flex; align-items: center; gap: 14px; padding: 13px 0;
+  border-top: 1px solid var(--line-2); }
+.cst-row:first-child { border-top: none; }
+.cst-when { flex: none; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .cst-row { flex-wrap: wrap; }
+  .cst-row .tm-i { min-width: 0; }
+  /* На телефоне подстрочник переносится: в одну строку сюда влезает только предмет,
+     а отметки про проверку и занятия уезжали в многоточие. */
+  .cst-row .tm-l { white-space: normal; }
+  .cst-when { flex: 0 0 100%; margin-left: 52px; }
+}
+.csw-cond { margin-top: 10px; padding: 10px 14px; border-radius: 11px;
+  border-left: 2px solid var(--line-2); font-size: 13px; line-height: 1.55;
+  color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+.csw-ans { margin-top: 12px; padding: 12px 14px; border-radius: 11px; background: var(--fill);
+  font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+.csw-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 12px;
+  padding: 12px 14px; border-radius: 11px; background: var(--fill); }
+.csw-score b { font-size: 19px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); }
+.csw-score span { font-size: 12.5px; color: var(--ink-3); }
+.csw-wrong { padding-left: 10px; border-left: 1px solid var(--line-2); }
+.csw-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.csw-file { font-size: 12px; color: var(--ink-2); background: var(--fill); border-radius: 8px;
+  padding: 4px 9px; word-break: break-all; }
+.csw-note { margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.csw-note b { color: var(--ink); }
+.csw-ta { margin-top: 12px; }
+.csw-err { color: var(--red-ink); font-size: 12.5px; font-weight: 600; margin-top: 8px; }
+.csw-err:empty { display: none; }
+.csw-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.csw-seg { margin-left: auto; display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px;
+  background: var(--fill); }
+.csw-seg button { border: 0; background: 0; cursor: pointer; font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--ink-2); padding: 7px 12px; border-radius: 9px; }
+.csw-seg button.on { color: #fff; background: var(--blue); }
+@media (max-width: 560px) {
+  /* на телефоне переключатель уезжает ПОД заголовок: в одной строке с ним название
+     раздела ломалось на три строки и читалось столбиком */
+  .csw-head { flex-wrap: wrap; }
+  /* :not(.csw-seg) — переключатель это тоже div, и общее правило забирало
+     у него нашу ширину обратно */
+  .csw-head > div:not(.csw-seg) { flex: 1; min-width: 0; }
+  /* flex: 0 0 100% — иначе строка-переключатель ужимается и остается в одной
+     строке с заголовком: width:100% у flex-элемента можно сжать */
+  .csw-seg { flex: 0 0 100%; margin-left: 0; margin-top: 12px; }
+  .csw-seg button { flex: 1; }
+  .csw-acts { flex-direction: column; }
+  .csw-acts .bp { width: 100%; }
 }
