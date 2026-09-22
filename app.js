@@ -21434,8 +21434,16 @@
       '<div class="lad-right">' + (right || '') + '</div></div>';
   }
 
-  function flatRow(name, small, n) {
-    return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
+  /* `open` (необязательный) — {block, value}: строка блока разворачивается в поимённый
+     список тех же людей, что она посчитала. Без него строка остаётся как была —
+     обычной, некликабельной. Это тот же приём, что у плашек ступени: цифра, которую
+     нельзя проверить глазами, команду не убеждает. */
+  function flatRow(name, small, n, open) {
+    var can = !!(open && open.block);
+    return '<div class="lad-row gf-flat' + (can ? ' brk-open' : '') + '"' +
+      (can ? ' data-lblock="' + esc(open.block) + '" data-lvalue="' + esc(open.value || '') +
+             '" role="button" tabindex="0" title="Показать этих людей поимённо"' : '') +
+      '><div class="lad-nm">' + esc(name) +
       (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-n num">' + n + '</div></div>';
   }
@@ -21513,6 +21521,14 @@
 
   function launchPeopleQS(offset) {
     var p = state._lpPeople;
+    if (p.kind === 'block') {
+      /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
+         Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
+      return '?' + ['slug=' + encodeURIComponent(p.slug),
+                    'block=' + encodeURIComponent(p.block),
+                    'value=' + encodeURIComponent(p.value || ''),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
              'limit=' + LP_LIMIT, 'offset=' + offset];
     if (p.from) q.push('from=' + encodeURIComponent(p.from));
@@ -21522,12 +21538,29 @@
 
   function launchPeopleOpen(slug, step, launchTitle, plate) {
     state._lpPeople = {
+      kind: 'step', id: 'step:' + step.key,
       slug: slug, step: step.key, title: step.title,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
       from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
+    };
+    launchPeopleLoad(false);
+  }
+
+  /* Список людей за цифрой БЛОКА под лестницей. Блоки считают не только
+     зарегистрировавшихся: тест открывают из постов, в канал вступают по общей ссылке.
+     Связать их с регистрацией нечем — но показать, кто это, можно и нужно: «тест прошли
+     22» без имён команда проверить не может и пересчитывает у себя. */
+  function launchBlockOpen(slug, block, value, title, launchTitle, count, node) {
+    state._lpPeople = {
+      kind: 'block', id: 'block:' + block + ':' + value,
+      slug: slug, block: block, value: value, step: '',
+      title: title, plate: count || 0, launch: launchTitle || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
     };
     launchPeopleLoad(false);
   }
@@ -21546,11 +21579,15 @@
     p.loading = true;
     if (!more) { p.rows = []; p.total = null; }
     var offset = p.rows.length;
-    var step = p.step;
+    /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
+       пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
+    var who = p.id;
+    var url = (p.kind === 'block') ? '/admin/api/marketing/launch/block'
+                                   : '/admin/api/marketing/launch/people';
     launchPeopleModal();
-    api('/admin/api/marketing/launch/people' + launchPeopleQS(offset)).then(function (r) {
+    api(url + launchPeopleQS(offset)).then(function (r) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;   /* успели кликнуть другую ступень */
+      if (!cur || cur.id !== who) return;      /* успели кликнуть другую строку */
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
@@ -21559,7 +21596,7 @@
       launchPeopleModal();
     }).catch(function (e) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;
+      if (!cur || cur.id !== who) return;
       /* '403' — токен протух, api уже увёл на экран входа: попап просто убираем */
       if (e && e.message === '403') { state._lpPeople = null; launchPeopleModal(); return; }
       cur.loading = false;
@@ -21614,11 +21651,22 @@
       body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
              '<div class="loaddot"></div><div class="loaddot"></div></div>';
     } else if (!shown) {
-      body = '<div class="mk-logic-empty">На этой ступени пока никого — ' +
-             'людей здесь не появится, пока шаг не сработает хотя бы у одного человека.</div>';
+      body = '<div class="mk-logic-empty">' + (p.kind === 'block'
+        ? 'Здесь пока никого — людей в этой строке ещё нет.'
+        : 'На этой ступени пока никого — людей здесь не появится, ' +
+          'пока шаг не сработает хотя бы у одного человека.') + '</div>';
     } else {
-      body = '<div class="lp-tbl"><div class="lp-th"><span>Человек</span><span>Контакт</span>' +
-        '<span>Откуда пришёл</span><span>Регистрация</span></div>' +
+      /* Заголовки колонок зависят от того, ОТКУДА люди. У зарегистрировавшихся есть
+         телефон и дата регистрации, у людей из бота — только ник и дата входа.
+         Назвать чужой столбец «Контакт» и «Регистрация» значит пообещать данные,
+         которых в строке нет. */
+      var bot = p.kind === 'block' && p.block !== 'source';
+      var cols = bot
+        ? ['Человек', 'Ник', 'Откуда пришёл',
+           p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
+        : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
+      body = '<div class="lp-tbl"><div class="lp-th">' +
+        cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(launchPeopleRow).join('') + '</div>';
     }
 
@@ -21640,8 +21688,14 @@
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
-      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') + esc(per) +
-        ' · это те же люди, что посчитаны на плашке</div>';
+      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
+        esc(p.kind === 'block' ? 'весь запуск' : per) + ' · ' +
+        (p.kind === 'block'
+          ? (p.block === 'source'
+              ? 'это те же люди, что посчитаны в блоке'
+              : 'это те же люди, что посчитаны в блоке · ' +
+                'связаны ли они с регистрацией — мы не знаем')
+          : 'это те же люди, что посчитаны на плашке') + '</div>';
 
     /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
        страницу под затемнением. Запоминаем, где он был, и возвращаем после сборки:
@@ -21892,16 +21946,20 @@
       ladRow('Оплата диагностики', 'деньги запуска', '—', null, convMut('после эфира'));
 
     var diagRows = (cur.diag || []).map(function (d) {
-      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done, d.done);
+      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done,
+        d.done, { block: 'diag', value: d.channel });
     }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
 
     var srcRows = (reg.sources || []).map(function (s) {
       return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
-        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n);
+        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n,
+        { block: 'source', value: s.source || '' });
     }).join('') || '<div class="empty">Регистраций пока нет.</div>';
 
+    /* ВК и MAX кликом не разворачиваются намеренно: это снимки счётчика площадки,
+       а не список людей — их подписчиков мы поимённо не знаем и делать вид не будем. */
     var chRows =
-      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0) +
+      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0, { block: 'channel', value: 'member' }) +
       flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
       flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
 
@@ -21949,13 +22007,16 @@
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid" style="margin-top:16px">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
+          '<div><div class="t">Диагностический тест</div><div class="s">все, кто запускал тест ' +
+            '· нажмите на строку, чтобы увидеть их поимённо</div></div></div>' +
           '<div class="brk">' + diagRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
+          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок ' +
+            '· нажмите на метку, чтобы увидеть этих людей</div></div></div>' +
           '<div class="brk">' + srcRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
+          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам ' +
+            '· телеграм разворачивается в список</div></div></div>' +
           '<div class="brk">' + chRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
@@ -21981,6 +22042,23 @@
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
         if (st) launchPeopleOpen(cur.slug, st, cur.title, n);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    /* Строка блока под лестницей → те же люди поимённо. Название и число берём с
+       самой строки: пока ответ ручки не пришёл, в шапке попапа стоит ровно то, на
+       что человек нажал, а не «Загружаю». */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lblock]'), function (n) {
+      var openIt = function () {
+        var nm = n.querySelector('.lad-nm');
+        var num = parseInt((n.querySelector('.lad-n') || {}).textContent, 10);
+        launchBlockOpen(cur.slug, n.getAttribute('data-lblock'),
+          n.getAttribute('data-lvalue') || '',
+          (nm && nm.firstChild ? String(nm.firstChild.textContent).trim() : 'Люди'),
+          cur.title, isNaN(num) ? 0 : num, n);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
