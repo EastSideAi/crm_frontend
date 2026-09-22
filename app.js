@@ -11530,7 +11530,67 @@
       '<div class="t">Домашки CSCA</div><div class="s">' +
         (subjects.join(' и ').toLowerCase() || 'ваши предметы') +
         ' · ' + (waiting ? 'ждут проверки: ' + waiting : 'все проверено') + '</div></div>' +
-      seg + '</div><div class="csw-list">' + list + '</div></div>';
+      seg + '</div><div class="csw-list">' + list + '</div>' +
+      // Вера 22.09.2026: «если ему что-то не нравится, надо кнопочку, чтобы он не
+      // мне писал». Кнопка жалоб живет слева внизу, и преподаватель ее там не ищет —
+      // зовем ее оттуда, где он работает.
+      '<div class="csw-help">Что-то не работает или неудобно — ' +
+      '<button type="button" class="csw-link" data-csw="bug">напишите сюда</button>. ' +
+      'Уйдет тому, кто делает платформу.</div></div>';
+  }
+  /* ── Ученики CSCA ─────────────────────────────────────────────────────────
+     Вера 22.09.2026: «он видит, кто что делает». Раздел «Обучение» знал только
+     учеников по английскому — их назначает менеджер в карточке человека, — и
+     преподаватель курса заходил в пустой экран, хотя доступы к предметам выданы.
+     Человек без единого занятия из списка не убирается: «доступ открыли, а он не
+     заходил» — это и есть новость, ради которой список нужен. */
+  var CSCA_ST = null;
+  function cscaStLoad() {
+    api('/admin/api/csca/students').then(function (r) {
+      CSCA_ST = r || { items: [] };
+      if (state.page === 'students') renderView();
+    }).catch(function () { CSCA_ST = 'no'; if (state.page === 'students') renderView(); });
+  }
+  function cscaStWord(n) {
+    var t = n % 100, o = n % 10;
+    if (t > 10 && t < 20) return 'занятий';
+    if (o === 1) return 'занятие';
+    if (o > 1 && o < 5) return 'занятия';
+    return 'занятий';
+  }
+  function cscaStRow(x) {
+    var hw = x.homework || {};
+    var subj = (x.subjects || []).map(function (s) { return CSCA_SUBJ_RU[s] || s; }).join(', ');
+    // Цифра без своей истории врет: «0 занятий» у того, кому доступ дали вчера,
+    // и у того, кто получил его месяц назад, — разные новости.
+    var marks = [];
+    // То, что требует действия, идет первым: на узком экране подстрочник обрезается,
+    // и «ждет проверки» не должно уехать в многоточие.
+    if (hw.waiting) marks.push('ждет проверки: ' + hw.waiting);
+    else if (hw.accepted) marks.push('принято: ' + hw.accepted);
+    marks.push(x.lessons ? x.lessons + ' ' + cscaStWord(x.lessons) : 'занятий нет');
+    if (x.mockPct != null) marks.push('пробник ' + x.mockPct + '%');
+    return '<div class="cst-row">' +
+      '<span class="tm-av">' + esc(initials(x.student)) + '</span>' +
+      '<div class="tm-i"><div class="tm-n">' + esc(x.student) + '</div>' +
+        '<div class="tm-l">' + esc(subj) + ' · ' + esc(marks.join(' · ')) + '</div></div>' +
+      // Без рода: в списке и мальчики, и девочки, «не заходил» тут врет половине.
+      '<span class="cst-when">' + esc(x.seenAt ? cscaHwWhen(x.seenAt) : 'заходов нет') + '</span></div>';
+  }
+  function cscaStBlock() {
+    if (!CSCA_ST || CSCA_ST === 'no') return '';
+    var items = CSCA_ST.items || [];
+    var live = items.filter(function (x) { return x.lessons > 0; }).length;
+    return '<div class="card" style="padding:24px 26px;margin-bottom:14px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div>' +
+      '<div class="t">Ученики CSCA</div><div class="s">' +
+        (items.length
+          ? 'у кого открыты ваши предметы · занимались ' + live + ' из ' + items.length
+          : 'доступ к вашим предметам пока никому не открыт') + '</div></div>' +
+      '<span class="cnt num">' + items.length + '</span></div>' +
+      '<div class="tm-list">' + (items.map(cscaStRow).join('') ||
+        '<div class="empty">Ученик появится здесь, когда менеджер откроет ему предмет ' +
+        'в карточке человека.</div>') + '</div></div>';
   }
   function cscaHwReview(key, status, comment, view) {
     var parts = key.split(':');
@@ -11560,6 +11620,7 @@
           CSCA_HW_SCOPE = b.getAttribute('data-s'); CSCA_HW_BACK = '';
           CSCA_HW = null; renderView(); cscaHwLoad(); return;
         }
+        if (what === 'bug') { openBugPanel('report'); return; }
         if (what === 'back') { CSCA_HW_BACK = CSCA_HW_BACK === key ? '' : key; renderView(); return; }
         if (what === 'ok') { cscaHwReview(key, 'accepted', '', view); return; }
         if (what === 'send') {
@@ -11602,7 +11663,8 @@
     // Домашки CSCA идут первыми: для преподавателя курса это и есть его работа,
     // а список учеников по английскому к ней отношения не имеет.
     if (CSCA_HW === null) cscaHwLoad();
-    var csca = cscaHwBlock();
+    if (CSCA_ST === null) cscaStLoad();
+    var csca = cscaHwBlock() + cscaStBlock();
     if (!state._students) { studentsLoad(); view.innerHTML = csca + dashSkeleton(); cscaHwBind(view); return; }
     if (state._students === 'none') {
       view.innerHTML = csca + '<div class="card"><div class="empty">Не удалось загрузить учеников.</div></div>';
