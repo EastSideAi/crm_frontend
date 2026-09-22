@@ -4110,6 +4110,7 @@
     if (sc.type === 'chklist') extra = acChkHTML(sc);
     if (sc.type === 'howto') extra = acHowHTML(sc);
     if (sc.type === 'calc') extra = acCalcHTML(sc);
+    if (sc.type === 'scalc') extra = acSalHTML(sc);
     // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
     // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
     if (sc.type === 'q') return acQHTML(sc);
@@ -4293,6 +4294,70 @@
       '</ul>' +
       '<div class="ac-ctot"><span>Итого за год</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
   }
+  /* ── Калькулятор месяца продавца (тип экрана scalc) ────────────────────────
+     Второй калькулятор, а не ветка первого: у тьютора считается ГОД по точкам
+     ученика, у продавца — МЕСЯЦ из трех разных источников. Общая функция на оба
+     означала бы один набор полей на две разные схемы мотивации.
+     Ставки те же, что в уроке «Деньги», менять надо в обоих местах сразу. */
+  var SAL_CALC = { sh: 40, kq: 0, dg: 20, rt: 1, dl: 3, ro: 0, tr: 0 };
+  var SAL_KQ = [['1,00', 1], ['0,90', 0.9], ['0,80', 0.8], ['0,60', 0.6]];
+  var SAL_RT = [['300 ₽, на обучении', 300], ['500 ₽, после аттестации', 500]];
+  var SAL_RO = [['Чат и диагностика сам · 3,2%', 3.2], ['Только диагностика · 2,2%', 2.2],
+                ['Только чат · 1,0%', 1]];
+  var SAL_TR = [['Стандарт · 159 000', 159000], ['Стандарт Плюс · 299 990', 299990],
+                ['Премиум · 399 990', 399990]];
+  var SAL_SHIFT = 750;
+  var SAL_LIM = { sh: [0, 60], dg: [0, 60], dl: [0, 15] };
+
+  function acSalSum() {
+    var c = SAL_CALC;
+    var shift = Math.round(c.sh * SAL_SHIFT * SAL_KQ[c.kq][1]);
+    var deals = Math.round(c.dl * SAL_TR[c.tr][1] * SAL_RO[c.ro][1] / 100);
+    var diag = c.dg * SAL_RT[c.rt][1];
+    return { shift: shift, deals: deals, diag: diag, total: shift + deals + diag };
+  }
+  function acSalOut() {
+    var s = acSalSum(), c = SAL_CALC;
+    return '<ul class="ac-clist">' +
+      acCalcRow('Смены: ' + c.sh + ' × 750 ₽ × коэффициент ' + SAL_KQ[c.kq][0], s.shift) +
+      acCalcRow('Проценты: ' + c.dl + ' × ' + SAL_RO[c.ro][0].split(' · ')[1], s.deals) +
+      acCalcRow('Диагностики: ' + c.dg + ' × ' + SAL_RT[c.rt][1] + ' ₽', s.diag) +
+      '</ul>' +
+      '<div class="ac-ctot"><span>Итого за месяц, до налогов</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
+  }
+  function acSalHTML(sc) {
+    return '<div class="ac-calc" id="ac-scalc">' +
+      '<div class="ac-cfs">' +
+        '<div class="ac-cf"><span class="ac-cfl">Смен в месяц</span>' + acCalcStep('sh', SAL_CALC.sh) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Коэффициент качества смен</span>' + acCalcSeg('kq', SAL_KQ, SAL_CALC.kq) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Проведено диагностик</span>' + acCalcStep('dg', SAL_CALC.dg) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Ставка за диагностику</span>' + acCalcSeg('rt', SAL_RT, SAL_CALC.rt) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Продаж в месяц</span>' + acCalcStep('dl', SAL_CALC.dl) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Ваша роль в сделке</span>' + acCalcSeg('ro', SAL_RO, SAL_CALC.ro) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Средний тариф сделки</span>' + acCalcSeg('tr', SAL_TR, SAL_CALC.tr) + '</div>' +
+      '</div>' +
+      '<div class="ac-cout" id="ac-sout">' + acSalOut() + '</div>' +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+  function acBindSal() {
+    var box = el('ac-scalc'); if (!box) return;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!b || !box.contains(b)) return;
+      var wrap = b.parentNode, f = wrap.getAttribute('data-f');
+      if (!f) return;
+      if (b.hasAttribute('data-d')) {
+        var lim = SAL_LIM[f];
+        SAL_CALC[f] = Math.max(lim[0], Math.min(lim[1], SAL_CALC[f] + (+b.getAttribute('data-d'))));
+        wrap.querySelector('b').textContent = SAL_CALC[f];
+      } else {
+        SAL_CALC[f] = +b.getAttribute('data-v');
+        [].forEach.call(wrap.children, function (x, i) { x.classList.toggle('on', i === SAL_CALC[f]); });
+      }
+      el('ac-sout').innerHTML = acSalOut();
+    });
+  }
+
   function acCalcHTML(sc) {
     return '<div class="ac-calc" id="ac-calc">' +
       '<div class="ac-cfs">' +
@@ -4370,6 +4435,7 @@
     }
     if (sc.type === 'chklist') acBindChk(sc);
     if (sc.type === 'calc') acBindCalc();
+    if (sc.type === 'scalc') acBindSal();
     acZoomBind(scr);
     acVoiceMount(acC().id + '-' + A.li + '-' + A.si);
     acBuildRoute();
