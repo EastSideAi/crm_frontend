@@ -746,6 +746,35 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .ch-legend { display: flex; gap: 18px; margin-top: 14px; font-size: 12.5px; color: var(--ink-2); }
 .ch-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; }
 
+/* ── Подсказка на столбике графика ───────────────────────────────────────────
+   Нативный title не годится: он появляется почти через секунду, рисуется
+   браузером в его собственном стиле и на телефоне не показывается вовсе.
+   Здесь — наша плашка, мгновенная (без задержки перехода на появлении) и по
+   нажатию тоже: на телефоне наведения не существует, а цифру посмотреть надо.
+
+   Класс отдельный: графики дашборда трогать незачем, там подсказка не нужна. */
+.tipchart .chart { padding-top: 40px; }           /* место для плашки над самым высоким столбиком */
+.tipchart .ch-day { position: relative; cursor: pointer; }
+.tipchart .ch-day .b1 { position: relative; }
+.tipchart .ch-day .b1[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 12px; font-weight: 500; line-height: 1.25;
+  padding: 7px 11px; border-radius: 10px;
+  background: var(--navy); color: #fff;
+  box-shadow: 0 8px 20px rgba(3, 8, 28, .18);
+  opacity: 0; pointer-events: none; transition: opacity .09s var(--ease);
+  z-index: 3;
+}
+.tipchart .ch-day:hover .b1[data-tip]::after,
+.tipchart .ch-day:focus-visible .b1[data-tip]::after,
+.tipchart .ch-day.on .b1[data-tip]::after { opacity: 1; }
+/* Крайние столбики: по центру плашка уезжала бы за край окна. */
+.tipchart .ch-day:first-child .b1[data-tip]::after { left: 0; transform: none; }
+.tipchart .ch-day:last-child .b1[data-tip]::after { left: auto; right: 0; transform: none; }
+.tipchart .ch-day:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+.tipchart .ch-day:hover .b1, .tipchart .ch-day.on .b1 { background: var(--blue); }
+
 /* ════ воронка продаж (cvc) ════ */
 .cvc-body { display: grid; grid-template-columns: 176px 1fr; gap: 26px; align-items: stretch; margin-top: 18px; }
 .cvc-left { display: flex; flex-direction: column; justify-content: center; align-items: flex-start;

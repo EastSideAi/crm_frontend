@@ -21567,21 +21567,27 @@
     if (!days.length) return '';
     var max = 1, i;
     for (i = 0; i < days.length; i++) max = Math.max(max, days[i].users);
+    /* Подпись столбика — своей плашкой (data-tip), а не нативным title: тот всплывает
+       почти через секунду, выглядит по-браузерному и на телефоне не появляется вовсе.
+       Столбик получает tabindex, чтобы цифру можно было достать и с клавиатуры. */
     var bars = days.map(function (d) {
       var h = Math.max(3, Math.round(d.users / max * 100));
       var dd = d.day.split('-');
-      return '<div class="ch-day" title="' + dd[2] + '.' + dd[1] + ': заходов ' + d.users +
-        ', регистраций ' + (regBy[d.day] || 0) + '">' +
-        '<div class="b1" style="height:' + h + '%"></div></div>';
+      var tip = dd[2] + '.' + dd[1] + ' · заходов ' + d.users +
+                ' · регистраций ' + (regBy[d.day] || 0);
+      /* data-tip висит на САМОМ столбике, а не на колонке: content: attr() читает
+         только собственные атрибуты элемента, и на колонке плашка выходила пустой. */
+      return '<div class="ch-day" tabindex="0" role="button">' +
+        '<div class="b1" data-tip="' + esc(tip) + '" style="height:' + h + '%"></div></div>';
     }).join('');
     var labels = days.map(function (d, idx) {
       var show = days.length <= 8 || idx % 2 === 1;
       return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
     }).join('');
-    return '<div class="lchart" style="margin-top:12px"><div class="chart">' + bars + '</div>' +
+    return '<div class="lchart tipchart" style="margin-top:12px"><div class="chart">' + bars + '</div>' +
       '<div class="ch-labels">' + labels + '</div></div>' +
       '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>заходы на страницу · ' +
-      'наведите на столбик, чтобы увидеть регистрации этого дня</span></div>';
+      'наведите на столбик или нажмите на него, чтобы увидеть регистрации этого дня</span></div>';
   }
 
   if (!window._lsEscBound) {
@@ -21633,6 +21639,27 @@
     var ovl = el('ls-ovl');
     ovl.addEventListener('click', function (e) { if (e.target === ovl) launchSeenClose(); });
     el('ls-x').addEventListener('click', launchSeenClose);
+    /* Нажатие по столбику держит подсказку открытой: на телефоне наведения нет, а
+       цифру посмотреть надо. Открытая всегда одна — иначе график зарастает плашками. */
+    Array.prototype.forEach.call(host.querySelectorAll('.tipchart .ch-day'), function (bar) {
+      var show = function (e) {
+        if (e) e.stopPropagation();
+        Array.prototype.forEach.call(host.querySelectorAll('.ch-day.on'), function (o) {
+          if (o !== bar) o.classList.remove('on');
+        });
+        bar.classList.toggle('on');
+      };
+      bar.addEventListener('click', show);
+      bar.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+      });
+    });
+    /* Клик мимо графика гасит закреплённую подсказку. */
+    el('ls-modal').addEventListener('click', function () {
+      Array.prototype.forEach.call(host.querySelectorAll('.ch-day.on'), function (o) {
+        o.classList.remove('on');
+      });
+    });
     try { el('ls-modal').focus(); } catch (e) {}
   }
 
