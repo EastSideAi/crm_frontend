@@ -21508,6 +21508,30 @@
     return worst ? worst.key : null;
   }
 
+  /* Плитка «Страницу видели» — сколько людей открывало посадочную запуска, по
+     Яндекс Метрике. Без неё экран начинается с регистраций, и «трафика не было»
+     неотличимо от «трафик был, а форму не заполнили»: два разных диагноза, один вид.
+
+     Показываем ТОЛЬКО когда бэкенд прислал блок. Нет блока — плиток снова пять, а не
+     ноль в шестой: ноль здесь читался бы как «на страницу никто не заходил».
+
+     В подписи обязательно дата начала: счётчик на странице появился позже старта
+     запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
+     людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
+     Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  function launchSeenTile(cur, reg) {
+    var p = cur.pages;
+    if (!p || !p.users) return [];
+    var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
+    var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
+    return [{
+      label: 'Страницу видели',
+      value: fmtMoney(p.users),
+      sub: (pct == null ? since : 'заполнили форму ' + pct + '% · ' + since) +
+           ' · Яндекс Метрика',
+    }];
+  }
+
   function launchPlates(path) {
     var worst = launchWorstStep(path);
     return '<div class="lsteps">' + path.map(function (s, i) {
@@ -21998,7 +22022,7 @@
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
-      ], 'five') +
+      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -22032,7 +22056,14 @@
         '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
           '<div style="border-top:1px solid var(--line)">' +
-            '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сюда она не подключена</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+            /* Раньше здесь стояло «Метрика сюда не подключена». С появлением плитки
+               «Страницу видели» это перестало быть правдой — но только про страницу
+               интенсива: страницу теста считает отдельный счётчик, и её мы пока не
+               показываем. Пишем ровно то, что есть, иначе список «чего нет» сам
+               становится местом, где написана неправда. */
+            (cur.pages
+              ? '<div class="mkd-gap"><div><b>Посетители страницы теста</b><small>заходы на истсайд.рф/diag считает отдельный счётчик Метрики, на экран он пока не выведен</small></div><span class="sev n-wait">не в цифрах</span></div>'
+              : '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сейчас она недоступна</small></div><span class="sev n-wait">не в цифрах</span></div>') +
             '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
           '</div></div>' +
       '</div></div>';
