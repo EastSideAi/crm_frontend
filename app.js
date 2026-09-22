@@ -30034,17 +30034,54 @@
     if (!role) return '';
     return role + (name ? ', ' + name : '');
   }
+  /* Категории документов из пакета семьи (backend GET /admin/api/docs/kinds).
+     Держим одну копию на сессию: список меняется правкой чек-листа на бэкенде, и
+     хардкодить его здесь нельзя — разъедется на первой же правке. */
+  var DOC_KINDS = null, DOC_KINDS_BUSY = false;
+  function loadDocKinds(cb) {
+    if (DOC_KINDS) { if (cb) cb(DOC_KINDS); return; }
+    if (DOC_KINDS_BUSY) return;
+    DOC_KINDS_BUSY = true;
+    api('/admin/api/docs/kinds').then(function (r) {
+      DOC_KINDS_BUSY = false;
+      DOC_KINDS = (r && r.kinds) || [];
+      if (cb) cb(DOC_KINDS);
+    }).catch(function () { DOC_KINDS_BUSY = false; });
+  }
+  /* Выпадашка категории. Пустое значение — «без категории»: это честное состояние
+     для договора или итогов консультации, которых в пакете семьи нет. */
+  function docKindSelect(cls, id, current) {
+    var cur = (current || '').trim();
+    var seen = false;
+    var opts = (DOC_KINDS || []).map(function (k) {
+      var on = k.kind.toLowerCase() === cur.toLowerCase();
+      if (on) seen = true;
+      return '<option value="' + esc(k.kind) + '"' + (on ? ' selected' : '') + '>' + esc(k.name) + '</option>';
+    }).join('');
+    // Категория, которой нет в пакете (квитанция, итоги консультации), не должна
+    // молча слететь при открытии выпадашки.
+    var extra = (cur && !seen) ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' : '';
+    return '<select class="' + cls + '"' + (id ? ' id="' + id + '"' : '') + '>' +
+      '<option value=""' + (cur ? '' : ' selected') + '>Без категории</option>' + extra + opts + '</select>';
+  }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
       /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
       var href = dc.link || '#';
       var by = docBy(dc);
-      var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
+      var meta = [dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' doc-by-own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
-        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + m + '</div></div>' +
+        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div>' +
+          '<div class="doc-m">' +
+            // Категория правится прямо в строке: именно она закрывает пункт пакета в
+            // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
+            docKindSelect('doc-kind', '', dc.kind) +
+            (m ? '<span class="doc-mt">' + m + '</span>' : '') +
+          '</div></div>' +
         '<div class="doc-act">' +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
@@ -30055,6 +30092,11 @@
     return '<div class="m-ctitle">Документы</div>' +
       '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до 12 МБ или ссылка.</div>' +
       (docs.length ? '<div>' + rows + '</div>' : '') +
+      // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
+      // кабинете, и семья видит «ждет вас» поверх уже загруженного документа
+      // (карточка Белой, 22.09.2026).
+      '<div class="doc-kindrow"><span class="doc-kindlbl">Категория</span>' +
+        docKindSelect('doc-kind doc-kind--new', 'm-dkind', '') + '</div>' +
       '<div class="dropzone" id="m-drop"><input type="file" id="m-file" style="display:none">' +
         '<div class="dz-ic">' + ic('dl', 18) + '</div>' +
         '<div><b>Выбери файл</b> или перетащи сюда</div></div>' +
@@ -31405,18 +31447,39 @@
 
     // документы: загрузка файла / ссылки / удаление
     var drop = el('m-drop'), fileIn = el('m-file');
+    var kindOf = function () { var sel = el('m-dkind'); return (sel && sel.value) || null; };
     if (drop && fileIn) {
       drop.addEventListener('click', function () { fileIn.click(); });
-      fileIn.addEventListener('change', function () { if (fileIn.files && fileIn.files[0]) uploadDoc(id, fileIn.files[0]); });
+      fileIn.addEventListener('change', function () { if (fileIn.files && fileIn.files[0]) uploadDoc(id, fileIn.files[0], kindOf()); });
       drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
       drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
-      drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadDoc(id, e.dataTransfer.files[0]); });
+      drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadDoc(id, e.dataTransfer.files[0], kindOf()); });
     }
+    // Справочник категорий приезжает асинхронно: приехал — перерисовываем секцию,
+    // иначе выпадашки останутся с одним пунктом «Без категории».
+    if (!DOC_KINDS) loadDocKinds(function () {
+      if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true);
+    });
+    // Смена категории у уже загруженного файла: пункт пакета в кабинете закрывается
+    // именно категорией, поэтому чинить ее должен уметь менеджер, а не только я.
+    Array.prototype.forEach.call(host.querySelectorAll('.doc-row .doc-kind'), function (sel) {
+      sel.addEventListener('change', function () {
+        var row = sel.closest('.doc-row');
+        var did = row && row.getAttribute('data-did');
+        if (!did) return;
+        sel.disabled = true;
+        apiSend('/admin/api/docs/' + did, 'PATCH', { kind: sel.value || '' }, function () {
+          sel.disabled = false;
+          showToast(sel.value ? 'Категория: ' + sel.value : 'Категория снята');
+          refreshDetail(id);
+        }, function () { sel.disabled = false; showToast('Категория не сохранилась'); });
+      });
+    });
     var linkAdd = el('m-link-add'), linkIn = el('m-link');
     if (linkAdd && linkIn) linkAdd.addEventListener('click', function () {
       var url = linkIn.value.trim(); if (!url) return;
       var nm = url.split('/').filter(Boolean).pop() || 'Ссылка';
-      apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url }, function () {
+      apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url, kind: kindOf() }, function () {
         refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); });
       });
     });
@@ -32086,7 +32149,7 @@
       });
     }
   }
-  function uploadDoc(id, file) {
+  function uploadDoc(id, file, kind) {
     if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
     // моментальный фидбек — не ждём сервер
     var drop = el('m-drop');
@@ -32094,7 +32157,7 @@
     var reader = new FileReader();
     reader.onload = function () {
       apiSend('/admin/api/leads/' + id + '/docs', 'POST',
-        { name: file.name, mime: file.type || 'application/octet-stream', data_base64: String(reader.result) },
+        { name: file.name, kind: kind || null, mime: file.type || 'application/octet-stream', data_base64: String(reader.result) },
         function () { refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); }); });
     };
     reader.readAsDataURL(file);
