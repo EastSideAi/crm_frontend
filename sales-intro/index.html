@@ -52,9 +52,9 @@ img{display:block; max-width:100%}
   overflow-y:auto; overscroll-behavior:contain;
 }
 .slide.on{opacity:1; visibility:visible; transform:none}
-.slide > *:not(.shot-bg){width:min(1240px,100%); margin-inline:auto}
-.slide > .hold{max-width:min(760px,74%); margin-inline:0}
-@media (max-width:860px){.slide > .hold{max-width:100%}}
+.slide > *:not(.shot-bg):not(.sky){width:min(1240px,100%); margin-inline:auto}
+.slide > .hold:not(.sky){max-width:min(760px,74%); margin-inline:0}
+@media (max-width:860px){.slide > .hold:not(.sky){max-width:100%}}
 /* три поверхности, чтобы соседние слайды не выглядели одинаково */
 .slide.dark{color:#fff;
   background:
@@ -85,7 +85,59 @@ img{display:block; max-width:100%}
     linear-gradient(100deg, rgba(8,26,58,.94) 0%, rgba(8,26,58,.84) 42%, rgba(8,26,58,.42) 68%, rgba(8,26,58,.2) 100%),
     linear-gradient(to top, rgba(8,26,58,.5), transparent 40%);
 }
-.slide.dark > *:not(.shot-bg){position:relative; z-index:1}
+.slide.dark > *:not(.shot-bg):not(.sky){position:relative; z-index:1}
+
+
+/* ── фон темных слайдов: поле, которое плывет навстречу ────────────────── */
+/* Три слоя точек разной крупности и скорости дают параллакс, две мягкие
+   полосы света дрейфуют поверх. Все на transform, поэтому браузер считает
+   это на видеокарте и слайд не дергается. */
+.sky{position:absolute; inset:0; overflow:hidden; z-index:0; pointer-events:none}
+.sky i{position:absolute; left:-10%; right:-10%; top:-100%; height:200%; display:block;
+  background-repeat:repeat; will-change:transform}
+.sky i:nth-child(1){
+  background-image:
+    radial-gradient(1.5px 1.5px at 34px 28px, rgba(255,255,255,.62), transparent 60%),
+    radial-gradient(1.5px 1.5px at 178px 96px, rgba(214,236,255,.5), transparent 60%),
+    radial-gradient(2px 2px at 92px 168px, rgba(255,255,255,.44), transparent 60%);
+  background-size:240px 220px; animation:sky 38s linear infinite; opacity:.9}
+.sky i:nth-child(2){
+  background-image:
+    radial-gradient(1px 1px at 20px 60px, rgba(255,255,255,.5), transparent 60%),
+    radial-gradient(1px 1px at 120px 20px, rgba(190,222,255,.42), transparent 60%),
+    radial-gradient(1px 1px at 86px 130px, rgba(255,255,255,.34), transparent 60%);
+  background-size:160px 150px; animation:sky 64s linear infinite; opacity:.7}
+.sky i:nth-child(3){
+  background-image:
+    radial-gradient(.8px .8px at 14px 22px, rgba(255,255,255,.4), transparent 60%),
+    radial-gradient(.8px .8px at 70px 74px, rgba(255,255,255,.28), transparent 60%);
+  background-size:110px 100px; animation:sky 96s linear infinite; opacity:.5}
+@keyframes sky{from{transform:translate3d(0,0,0)} to{transform:translate3d(0,50%,0)}}
+/* полосы света: медленное дыхание, без резких краев */
+.sky b{position:absolute; border-radius:50%; filter:blur(60px); display:block}
+.sky b:nth-of-type(1){left:-14%; top:6%; width:52%; height:58%;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(60,132,226,.34), transparent 70%);
+  animation:glow 26s ease-in-out infinite alternate}
+.sky b:nth-of-type(2){right:-12%; bottom:-16%; width:56%; height:62%;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(126,186,255,.22), transparent 70%);
+  animation:glow 34s ease-in-out infinite alternate-reverse}
+@keyframes glow{from{transform:translate3d(0,0,0) scale(1)} to{transform:translate3d(6%,-6%,0) scale(1.16)}}
+/* редкий росчерк: короткий, раз в полминуты, чтобы не мельтешило */
+.sky u{position:absolute; width:150px; height:1.5px; border-radius:2px; opacity:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.85));
+  transform:rotate(18deg)}
+.sky u:nth-of-type(1){top:22%; left:-16%; animation:dash 17s 3s linear infinite}
+.sky u:nth-of-type(2){top:58%; left:-16%; animation:dash 23s 11s linear infinite}
+@keyframes dash{
+  0%{opacity:0; transform:translate3d(0,0,0) rotate(18deg)}
+  6%{opacity:.9}
+  22%{opacity:0; transform:translate3d(120vw,-32vh,0) rotate(18deg)}
+  100%{opacity:0; transform:translate3d(120vw,-32vh,0) rotate(18deg)}
+}
+@media (prefers-reduced-motion:reduce){
+  .sky i, .sky b, .sky u{animation:none !important}
+  .sky u{display:none}
+}
 
 /* ── типографика ────────────────────────────────────────────────────────── */
 .kicker{display:inline-flex; align-items:center; height:32px; padding:0 14px; border-radius:999px;
@@ -144,7 +196,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
 .note{margin-top:clamp(14px,2.4vh,22px); max-width:92ch; border:1px solid var(--line); border-radius:var(--r-s);
   background:rgba(255,255,255,.66); padding:15px 19px; font-size:15px; line-height:1.55; color:var(--soft)}
-.slide > .note{margin-left:0; margin-right:auto}
+.slide > .note:not(.sky){margin-left:0; margin-right:auto}
 .note b{color:var(--ink)}
 .note.warn{background:var(--amber-soft); border-color:rgba(138,91,18,.2); color:#6c4a17}
 .note.warn b{color:#5a3d12}
@@ -200,6 +252,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   display:flex; flex-direction:column; gap:8px}
 .tr-br{position:relative; font-size:12.5px; color:var(--soft)}
 .tr-br::before{content:''; position:absolute; left:-12px; top:8px; width:8px; height:1px; background:var(--wire)}
+.tr-flag{text-align:left; width:100%}
+.tr-flag[aria-pressed=true]{border-color:rgba(23,99,200,.5); background:#fff}
+.tr-open{margin-top:22px; border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.72);
+  padding:18px 22px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:center; min-height:96px}
+.tr-open h3{margin-top:6px; font-size:19px}
+.tr-open p{margin-top:7px; max-width:76ch; font-size:14.5px; line-height:1.5; color:var(--soft)}
+@media (max-width:900px){.tr-open{grid-template-columns:1fr}}
 .tr-extras{margin-top:22px; background:rgba(255,255,255,.6); border:1px solid var(--line); border-radius:var(--r-s); padding:15px 18px}
 .tr-extras b{font-size:13.5px}
 .tr-extras small{display:block; margin-top:3px; font-size:12.5px; color:var(--soft)}
@@ -224,11 +283,11 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   stroke-dasharray:34 var(--len,2000); stroke-dashoffset:var(--len,2000)}
 .slide.on .rd-car{animation:rdcar 7s 1.5s linear infinite}
 @keyframes rdcar{from{stroke-dashoffset:var(--len,2000)} to{stroke-dashoffset:0}}
-.rd-dot{position:absolute; transform:translate(-50%,-50%); width:28px; height:28px; padding:0;
+.rd-dot{position:absolute; transform:translate(-50%,-50%); width:25px; height:25px; padding:0;
   border-radius:50%; border:1px solid rgba(255,255,255,.5); background:rgba(11,33,72,.88);
   color:rgba(255,255,255,.82); font-size:12px; font-weight:660; display:grid; place-items:center;
   transition:transform .18s, background .18s, border-color .18s, color .18s; z-index:2}
-.rd-dot:hover{transform:translate(-50%,-50%) scale(1.14); border-color:#fff; color:#fff}
+.rd-dot:hover{transform:translate(-50%,-50%) scale(1.18); border-color:#fff; color:#fff}
 .rd-dot[aria-pressed=true]{background:#fff; color:#123f85; border-color:#fff; transform:translate(-50%,-50%) scale(1.2)}
 .rd-dot i{position:absolute; inset:-8px; border-radius:50%; border:1px solid rgba(255,255,255,.4); opacity:0}
 .rd-dot[aria-pressed=true] i{opacity:1; animation:pulse 2.4s ease-out infinite}
@@ -241,6 +300,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .rd-card p{margin-top:8px; max-width:78ch; font-size:14.5px; line-height:1.5; color:rgba(255,255,255,.86)}
 .rd-who{flex:none; border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:8px 15px; font-size:12.5px; white-space:nowrap}
 .rd-who.fam{background:rgba(245,200,76,.16); border-color:rgba(245,200,76,.42)}
+.rd-who.prem{background:rgba(140,190,255,.18); border-color:rgba(160,205,255,.5)}
 .rd-nav{display:flex; gap:8px; margin-top:14px; align-items:center}
 .rd-nav button{width:36px; height:36px; border-radius:11px; border:1px solid rgba(255,255,255,.3);
   background:rgba(255,255,255,.12); color:#fff; display:grid; place-items:center; font-size:15px}
@@ -316,6 +376,15 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .part{background:rgba(255,255,255,.9); padding:13px 16px}
 .part i{display:block; font-style:normal; font-size:13px; color:var(--soft)}
 .part b{display:block; margin-top:5px; font-size:18px; font-weight:660; letter-spacing:-.02em}
+
+/* снимок системы во весь экран: на встрече в него будут тыкать */
+.lbx{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:clamp(20px,4vw,60px);
+  background:rgba(8,26,58,.88); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
+.lbx[hidden]{display:none}
+.lbx img{max-width:100%; max-height:100%; border-radius:var(--r-s); border:1px solid rgba(255,255,255,.2)}
+.lbx button{position:absolute; top:20px; right:24px; width:42px; height:42px; border-radius:12px;
+  border:1px solid rgba(255,255,255,.3); background:rgba(255,255,255,.12); color:#fff; font-size:22px; line-height:1}
+.shots figure{cursor:zoom-in}
 
 /* ── панель управления ──────────────────────────────────────────────────── */
 .bar{position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
@@ -490,7 +559,30 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 13 · гарантии 1 -->
+  <!-- 13 · кейсы -->
+  <section class="slide tint" data-chap="Почему мы">
+    <div class="rise">
+      <span class="kicker">Кейсы</span>
+      <h2>Истории, которые можно показывать</h2>
+      <p class="lead">Настоящие семьи, отзывы лежат в открытом канале. Ссылку отправляем прямо в переписку.</p>
+    </div>
+    <div class="tsw rise" id="csw">
+      <button type="button" data-c="0" aria-pressed="true">Руслан</button>
+      <button type="button" data-c="1" aria-pressed="false">Захар</button>
+      <button type="button" data-c="2" aria-pressed="false">Арсений</button>
+      <button type="button" data-c="3" aria-pressed="false">Языковой год</button>
+    </div>
+    <div class="tpanel rise">
+      <div class="tp-head"><span class="p" id="csName">Руслан Назаров</span><span class="s" id="csWho">средние оценки, китайского ноль</span></div>
+      <div class="tp-body">
+        <div class="tp-col"><span class="h">Точка А</span><ul id="csA"></ul></div>
+        <div class="tp-col"><span class="h">Точка Б</span><ul id="csB"></ul></div>
+      </div>
+    </div>
+    <div class="note rise"><b>Чем меньше превосходных степеней, тем сильнее кейс.</b> И обещанный отзыв обязательно отправьте: кейс, обещанный и не присланный, работает против вас.</div>
+  </section>
+
+  <!-- 14 · гарантии 1 -->
   <section class="slide" data-chap="Обязательства">
     <div class="rise">
       <span class="kicker">Обязательства</span>
@@ -553,34 +645,37 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       <div class="tr-cols" style="--n:5">
         <div class="tr-col">
           <span class="tr-tick"></span>
-          <div class="tr-flag main"><b>Поступление на грант</b><small>флагман, три тарифа</small></div>
+          <button type="button" class="tr-flag main" data-br="grant" aria-pressed="true"><b>Поступление на грант</b><small>флагман, три тарифа</small></button>
           <div class="tr-brs"><span class="tr-br">Языковой год</span><span class="tr-br">Бакалавриат</span><span class="tr-br">Магистратура</span><span class="tr-br">Колледж после 9</span></div>
         </div>
         <div class="tr-col">
           <span class="tr-tick"></span>
-          <div class="tr-flag"><b>Платная основа</b><small>когда грант не подходит</small></div>
+          <button type="button" class="tr-flag" data-br="paid" aria-pressed="false"><b>Платная основа</b><small>когда грант не подходит</small></button>
           <div class="tr-brs"><span class="tr-br">Платный языковой год</span><span class="tr-br">Платный бакалавриат</span></div>
         </div>
         <div class="tr-col">
           <span class="tr-tick"></span>
-          <div class="tr-flag"><b>Краткосрочные</b><small>поездки в Китай</small></div>
+          <button type="button" class="tr-flag" data-br="short" aria-pressed="false"><b>Краткосрочные</b><small>поездки в Китай</small></button>
           <div class="tr-brs"><span class="tr-br">Язык на базе вуза</span><span class="tr-br">Экспедиция будущего</span></div>
         </div>
         <div class="tr-col">
           <span class="tr-tick"></span>
-          <div class="tr-flag"><b>Языки и обучение</b><small>входы в поступление</small></div>
+          <button type="button" class="tr-flag" data-br="lang" aria-pressed="false"><b>Языки и обучение</b><small>входы в поступление</small></button>
           <div class="tr-brs"><span class="tr-br">Живой китайский</span><span class="tr-br">CSCA</span><span class="tr-br">Duolingo</span><span class="tr-br">Тренажеры DET и HSK</span></div>
         </div>
         <div class="tr-col">
           <span class="tr-tick"></span>
-          <div class="tr-flag"><b>Проекты</b><small>академический профиль</small></div>
+          <button type="button" class="tr-flag" data-br="proj" aria-pressed="false"><b>Проекты</b><small>академический профиль</small></button>
           <div class="tr-brs"><span class="tr-br">Свой проект ученика</span></div>
         </div>
       </div>
-      <div class="tr-extras">
-        <b>Дополнительные продукты и услуги</b>
-        <small>оборачивают флагманские направления</small>
-        <div class="tr-xs"><span class="tr-x">письма</span><span class="tr-x">виза</span><span class="tr-x">медсправка</span><span class="tr-x">адаптация</span><span class="tr-x">персональный тьютор</span></div>
+      <div class="tr-open" id="trOpen">
+        <div>
+          <span class="tr-lbl" id="trLbl">Направление</span>
+          <h3 id="trTitle">Поступление на грант</h3>
+          <p id="trText">Основной продукт и основные деньги отдела.</p>
+        </div>
+        <div class="tr-xs" id="trTags"></div>
       </div>
     </div>
   </section>
@@ -656,7 +751,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <div class="rd-nav rise">
       <button type="button" id="rdPrev" aria-label="Предыдущий этап">‹</button>
       <button type="button" id="rdNext" aria-label="Следующий этап">›</button>
-      <span id="rdCount">1 из 12</span>
+      <span id="rdCount">1 из 16</span>
     </div>
   </section>
 
@@ -691,13 +786,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   <section class="slide tint" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Ветка · языки и обучение</span>
-      <h2>Что отдаем бесплатно</h2>
-      <p class="lead">Платой служит контакт, и это честно написано в форме. Пробным периодом это не называем.</p>
+      <h2>Что отдаем бесплатно и что идет подарком</h2>
+      <p class="lead">Платой за вход служит контакт, и это честно написано в форме. Пробным периодом это не называем.</p>
     </div>
     <div class="langs rise">
-      <div class="lang"><h3>Китайский с носителем</h3><span class="w">Мини-курс: 10 коротких блоков с русскими субтитрами.</span><span class="pr free">бесплатно</span></div>
-      <div class="lang"><h3>Входной тест DET</h3><span class="w">Английский по шкале 10–160. Балл решает, подавать сейчас или заниматься.</span><span class="pr free">бесплатно</span></div>
-      <div class="lang"><h3>Кабинеты DET и HSK</h3><span class="w">Тренажеры английского и китайского с домашкой от тьютора.</span><span class="pr free">бесплатно</span></div>
+      <div class="lang"><h3>Входной тест DET</h3><span class="w">Английский по шкале 10–160. Балл решает, подавать сейчас или сначала заниматься.</span><span class="pr free">бесплатно, вход в воронку</span></div>
+      <div class="lang"><h3>Кабинеты DET и HSK</h3><span class="w">Тренажеры английского и китайского. Попробовать можно бесплатно, дальше доступ открывает менеджер.</span><span class="pr free">проба бесплатно</span></div>
+      <div class="lang"><h3>Китайский с носителем</h3><span class="w">Мини-курс: 10 коротких блоков с русскими субтитрами.</span><span class="pr">подарок к «Живому китайскому»</span></div>
     </div>
   </section>
 
@@ -886,11 +981,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
 </div>
 
+<div class="lbx" id="lbx" hidden><img id="lbxImg" alt=""><button type="button" id="lbxX" aria-label="Закрыть">×</button></div>
+
 <div class="bar">
   <span class="brand">ИСТСАЙД.РФ</span>
   <span class="chap" id="chap">Компания</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 33</span>
+  <span class="count" id="count">1 / 34</span>
   <div class="arrows">
     <button id="prev" aria-label="Предыдущий слайд">‹</button>
     <button id="next" aria-label="Следующий слайд">›</button>
@@ -906,6 +1003,16 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   var chap = document.getElementById('chap');
   var prev = document.getElementById('prev'), next = document.getElementById('next');
   var i = 0;
+
+  // живой фон рисуем только там, где нет фотографии на весь экран
+  slides.forEach(function (s) {
+    if (!s.classList.contains('dark') || s.querySelector('.shot-bg')) return;
+    var sky = document.createElement('div');
+    sky.className = 'sky';
+    sky.setAttribute('aria-hidden', 'true');
+    sky.innerHTML = '<i></i><i></i><i></i><b></b><b></b><u></u><u></u>';
+    s.insertBefore(sky, s.firstChild);
+  });
 
   slides.forEach(function (s, n) {
     var b = document.createElement('button');
@@ -928,8 +1035,33 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     draw();
     // дорога меряется по своей кривой: пока слайд скрыт, длина пути нулевая
     if (slides[i].querySelector('#road')) roadLay();
+    countUp(slides[i]);
     history.replaceState(null, '', '#' + (i + 1));
   }
+  // счет чисел: цифра набирается при входе на слайд, единицы и знаки остаются
+  function countUp(box) {
+    [].forEach.call(box.querySelectorAll('.fact b, .num b'), function (el) {
+      var raw = el.dataset.v || el.textContent;
+      el.dataset.v = raw;
+      var m = raw.match(/[\d  ]+(?:[.,]\d+)?/);
+      if (!m) return;
+      var txt = m[0], target = parseFloat(txt.replace(/[  ]/g, '').replace(',', '.'));
+      if (!isFinite(target) || target === 0) return;
+      var dec = (txt.indexOf(',') !== -1) ? 1 : 0;
+      var t0 = 0, dur = 900;
+      function frame(ts) {
+        if (!t0) t0 = ts;
+        var k = Math.min(1, (ts - t0) / dur);
+        var v = target * (1 - Math.pow(1 - k, 3));
+        var out = dec ? v.toFixed(1).replace('.', ',') : Math.round(v).toLocaleString('ru-RU');
+        el.textContent = raw.replace(txt, out);
+        if (k < 1) requestAnimationFrame(frame);
+      }
+      el.textContent = raw.replace(txt, dec ? '0,0' : '0');
+      requestAnimationFrame(frame);
+    });
+  }
+
   function draw() {
     [].forEach.call(dots.children, function (b, n) { b.setAttribute('aria-current', String(n === i)); });
     count.textContent = (i + 1) + ' / ' + slides.length;
@@ -947,6 +1079,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     // ползунки калькулятора тоже слушают стрелки, им они нужнее
     var t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
+    if (!document.getElementById('lbx').hidden) return;
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(i + 1); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
     else if (e.key === 'Home') { go(0); }
@@ -1001,22 +1134,106 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   });
   tarDraw('std');
 
+
+
+  /* ── кейсы: наши истории с опубликованными отзывами ──────────────────── */
+  var CS = [
+    { n: 'Руслан Назаров', w: 'средние оценки, китайского ноль',
+      a: ['Аттестат средний, китайского нет совсем', 'Английский нормальный', 'Семья была уверена, что с такими оценками не светит'],
+      b: ['Грант в Zhejiang University of Technology, Ханчжоу', 'Отзыв мамы, Гульшат: t.me/eastside_grants/89'] },
+    { n: 'Захар Хормушев', w: 'пришел в 10 классе, готовился заранее',
+      a: ['Начали за полтора года до подачи', 'Английский нужно было усиливать', 'Портфолио не было'],
+      b: ['Бакалавриат по гранту', 'Отзыв папы: t.me/eastside_grants/71', 'Эфир с ним: vkvideo.ru/video-57756175_456239992'] },
+    { n: 'Арсений Румянцев', w: 'семья долго сомневалась',
+      a: ['Родители боялись отпускать ребенка в Китай', 'Решение откладывали несколько месяцев'],
+      b: ['Поступил и учится', 'Текстовый отзыв семьи: t.me/eastside_grants/79', 'Видеоотзыв: t.me/EastSide_RF/1357'] },
+    { n: 'Языковой год', w: 'прямая подача была слабой',
+      a: ['Профиль не тянул на бакалавриат сразу', 'Языка не хватало для проходного балла'],
+      b: ['Пошел через языковой год в Китае и поступил уже оттуда', 'Видеоотзыв студента: youtu.be/zl554iX-u14'] }
+  ];
+  var csw = document.getElementById('csw');
+  function csShow(k) {
+    var c = CS[k];
+    [].forEach.call(csw.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(+b.getAttribute('data-c') === k));
+    });
+    document.getElementById('csName').textContent = c.n;
+    document.getElementById('csWho').textContent = c.w;
+    document.getElementById('csA').innerHTML = c.a.map(function (x) { return '<li>' + x + '</li>'; }).join('');
+    document.getElementById('csB').innerHTML = c.b.map(function (x) { return '<li>' + x + '</li>'; }).join('');
+  }
+  csw.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    csShow(+b.getAttribute('data-c'));
+  });
+  csShow(0);
+
+  /* ── дерево: направление раскрывается под ним ────────────────────────── */
+  var BR = {
+    grant: { l: 'Ствол · флагман', t: 'Поступление на грант',
+      d: 'Основной продукт компании и основные деньги отдела: три тарифа, четыре формата, шестнадцать этапов до первых месяцев в Китае. Продаем вероятность гранта и работу команды, а не гарантию результата.',
+      x: ['письма', 'виза', 'медсправка', 'адаптация', 'тьютор в городе'] },
+    paid: { l: 'Ветка', t: 'Поступление на платной основе',
+      d: 'Платный языковой год и платный бакалавриат. Берем, когда грант семье не подходит или ребенок не проходит по требованиям, но уехать учиться он хочет.',
+      x: ['языковой год', 'бакалавриат'] },
+    short: { l: 'Ветка', t: 'Краткосрочные программы',
+      d: 'Язык на базе вуза и «Экспедиция будущего». Часто первый шаг семьи, которой страшно отпускать ребенка на четыре года: съездили на две недели, посмотрели и вернулись к разговору про поступление.',
+      x: ['две недели', 'с сопровождением'] },
+    lang: { l: 'Ветка · вход в воронку', t: 'Языки и обучение',
+      d: 'Курсы, тесты и тренажеры. Часть отдаем бесплатно за контакт, часть продаем: человек знакомится с нами, попадает в CRM и дальше идет в поступление.',
+      x: ['DET', 'HSK', 'CSCA', 'Живой китайский'] },
+    proj: { l: 'Ветка', t: 'Проектная деятельность',
+      d: 'Ученик ведет собственный проект и усиливает академический профиль до подачи. Отдельное направление: здесь другой результат и другая работа с ребенком.',
+      x: ['портфолио', 'до подачи'] }
+  };
+  var trFlags = [].slice.call(document.querySelectorAll('.tr-flag'));
+  function trShow(id) {
+    var b = BR[id];
+    trFlags.forEach(function (f) { f.setAttribute('aria-pressed', String(f.getAttribute('data-br') === id)); });
+    document.getElementById('trLbl').textContent = b.l;
+    document.getElementById('trTitle').textContent = b.t;
+    document.getElementById('trText').textContent = b.d;
+    document.getElementById('trTags').innerHTML = b.x.map(function (x) { return '<span class="tr-x">' + x + '</span>'; }).join('');
+  }
+  trFlags.forEach(function (f) {
+    f.addEventListener('click', function () { trShow(f.getAttribute('data-br')); });
+  });
+  trShow('grant');
+
+  /* ── снимки системы открываются во весь экран ────────────────────────── */
+  var lbx = document.getElementById('lbx'), lbxImg = document.getElementById('lbxImg');
+  [].forEach.call(document.querySelectorAll('.shots figure img'), function (im) {
+    im.parentNode.addEventListener('click', function () {
+      lbxImg.src = im.getAttribute('src');
+      lbxImg.alt = im.getAttribute('alt') || '';
+      lbx.hidden = false;
+    });
+  });
+  function lbxClose() { lbx.hidden = true; lbxImg.removeAttribute('src'); }
+  lbx.addEventListener('click', lbxClose);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !lbx.hidden) lbxClose(); });
+
   /* ── дорога: этапы пути ученика ──────────────────────────────────────── */
   var RD = [
-    { w: 'день оплаты', t: 'Доступ к платформе', who: 'платформа', d: 'Семья получает кабинет: маршрут с датами волн, календарь, задачи от команды, документы и чат с нами. Отдельный вход у ученика и у родителя.' },
-    { w: 'день 1–5', t: 'Диагностика профиля', who: 'мы', d: 'Модель считает шансы по каждому вузу и гранту, диагност разбирает результат с семьей: где профиль проседает и что это меняет в списке вузов.' },
-    { w: 'неделя 1–2', t: 'Выбор направления и вузов', who: 'мы', d: 'Нейропрофориентация по профессиям будущего, подбор вузов и грантов под профиль, маршрут и календарь поступления с датами волн.' },
-    { w: 'месяц 1', t: 'Документы и нотариус', who: 'семья', d: 'Сбор, перевод и нотариальное заверение, медицинская справка по форме вуза. На Стандарте нотариуса и справку семья проходит сама.' },
-    { w: 'месяц 1–2', t: 'Усиление профиля', who: 'мы', d: 'Портфолио и собственный проект ученика: то, чем заявка отличается от тысяч других с такими же оценками.' },
-    { w: 'месяц 2', t: 'Мотивационное письмо', who: 'мы', d: 'Мотивационное и рекомендательные письма пишем мы. Китай ищет тех, кто станет мостом между странами.' },
-    { w: 'месяц 2–3', t: 'Методы обучения', who: 'прем', d: 'Курс по эффективному обучению и запоминанию перед экзаменами. Работает и на языковом, и на CSCA, и на первой сессии в Китае.' },
-    { w: 'до подачи', t: 'Языковой экзамен', who: 'мы', d: 'Подготовка к HSK или DET: тренажеры на платформе, видеоинтенсивы, пробники и разбор ошибок.' },
-    { w: 'до подачи', t: 'Тестирование CSCA', who: 'мы', d: 'Математика и профильные предметы: записанные уроки, домашние задания и свои пробники.' },
-    { w: 'до подачи', t: 'Онлайн-интервью', who: 'мы', d: 'Репетиция интервью с тьютором и разбор записи. Живой человек решает судьбу заявки, и несвязный ответ топит сильное досье.' },
-    { w: 'волна подачи', t: 'Подача и мониторинг', who: 'мы', d: 'Подаем в согласованный список вузов и следим за статусом каждой заявки. Вузы отвечают с мая до середины июля.' },
-    { w: 'май – сентябрь', t: 'Зачисление, виза, Китай', who: 'мы', d: 'Выбор гранта из пришедших ответов, учебная виза, адаптация. На Премиуме встречаем в аэропорту и ведем первые два месяца.' }
+    { w: 'день 0', t: 'Доступ к платформе', who: 'платформа', d: 'Личный кабинет ученику и родителю в день оплаты: маршрут с датами волн, календарь, задачи, тренажеры, документы и чат с командой.' },
+    { w: 'день 1–5', t: 'Диагностика профиля и оценка шансов', who: 'мы', d: 'Реальные шансы по каждому вузу и гранту в цифрах и разбор с диагностом: где профиль проседает и что это меняет в списке вузов.' },
+    { w: 'неделя 1–2', t: 'Выбор направления и подбор вузов', who: 'платформа', d: 'Профессия по Nexis, вузы и гранты под профиль, маршрут и календарь поступления с датами волн.' },
+    { w: 'сентябрь – декабрь', t: 'Документы, перевод, нотариус, медсправка', who: 'семья', d: 'Точный список, шаблоны и требования вузов, бот проверяет комплектность. На Стандарте к нотариусу и за справкой семья идет сама.' },
+    { w: 'сентябрь – январь', t: 'Усиление профиля и портфолио', who: 'семья', d: 'Стратегия усиления: какие курсы и сертификаты добрать под направление. Проходит их ученик сам.' },
+    { w: 'октябрь – декабрь', t: 'Мотивационное и рекомендательные письма', who: 'мы', d: 'Пишем по логике грантовых кейсов, доводит и проверяет тьютор.' },
+    { w: 'сентябрь – ноябрь', t: 'Как учиться: методы обучения', who: 'прем', d: 'Курс по методам обучения и запоминания: как учить иероглифы и термины, держать темп и повторять. Идет до экзаменов.' },
+    { w: 'сентябрь – январь', t: 'Подготовка к языковому экзамену', who: 'платформа', d: 'Тест уровня, план под него и безлимитные тренажеры DET и HSK. Помогаем оплатить экзамен на иностранный счет.' },
+    { w: 'ноябрь – март', t: 'Подготовка к CSCA по математике', who: 'платформа', d: 'Диагностика уровня и безлимитный тренажер по темам экзамена.' },
+    { w: 'январь – апрель', t: 'Подготовка к онлайн-интервью', who: 'платформа', d: 'Тренажер интервью: вопросы приемных комиссий, разбор ответов, работа над самопрезентацией.' },
+    { w: 'декабрь – апрель', t: 'Подача в вузы и мониторинг заявок', who: 'мы', d: 'Анкеты, документы, переписка с приемной комиссией. Статус каждой заявки виден семье в кабинете.' },
+    { w: 'март – июнь', t: 'Зачисление и выбор гранта', who: 'мы', d: 'Получаем Admission Letter и JW201, объясняем условия оффера словами и помогаем выбрать лучший вариант.' },
+    { w: 'июнь – август', t: 'Учебная виза', who: 'семья', d: 'Пошаговая инструкция и бот, который отвечает по анкете. На Стандарте в визовый центр семья идет сама.' },
+    { w: 'август – октябрь', t: 'Адаптация в Китае', who: 'платформа', d: 'Симулятор первого дня: общежитие, банк, симка, транспорт и платежные системы.' },
+    { w: 'август – сентябрь', t: 'Теплый прием в Китае', who: 'прем', d: 'Встречаем в аэропорту, довозим до вуза и заселяем. Родителю приходит подтверждение, что ребенок на месте.' },
+    { w: 'сентябрь – ноябрь', t: 'Первые месяцы в Китае', who: 'плюс', d: 'Персональный тьютор в городе после заселения: банк, страховка, деканат, общежитие. Приходит и разбирается на месте.' }
   ];
-  var WHO = { 'платформа': 'платформа', 'мы': 'делаем мы', 'семья': 'часть делает семья', 'прем': 'только Премиум' };
+  var WHO = { 'платформа': 'платформа', 'мы': 'делаем мы', 'семья': 'часть делает семья',
+    'прем': 'только Премиум', 'плюс': 'Плюс и Премиум' };
   var road = document.getElementById('road');
   var rdPath = document.getElementById('rdPath');
   var rdIdx = 0, rdDots = [];
@@ -1065,7 +1282,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     document.getElementById('rdCount').textContent = (rdIdx + 1) + ' из ' + RD.length;
     var who = document.getElementById('rdWho');
     who.textContent = WHO[s.who];
-    who.className = 'rd-who' + (s.who === 'семья' ? ' fam' : '');
+    who.className = 'rd-who' + (s.who === 'семья' ? ' fam' : '') + (s.who === 'прем' || s.who === 'плюс' ? ' prem' : '');
   }
   document.getElementById('rdPrev').addEventListener('click', function () { rdShow(rdIdx - 1); });
   document.getElementById('rdNext').addEventListener('click', function () { rdShow(rdIdx + 1); });
