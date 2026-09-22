@@ -7100,6 +7100,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-r-price .al-in.sm { font-size: 14px; font-weight: 700; }
 /* калькулятор фондов и плана: подзаголовок внутри карточки отделяет три разных
    вопроса — что откладываем, когда уходит, сколько клиентов нужно */
+/* свод сезона закреплен наверху вкладки «Экономика», под ним переключатель
+   разделов: листать три экрана подряд оказалось тяжело (Павел, 21.09.2026) */
+.po-econtop .po-board3 { margin-top: 16px; }
+.po-econsegs { margin: 20px 0 2px; }
+.po-econsegs .dperiod { display: inline-flex; }
 .po-sub { margin: 26px 0 0; font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -.01em; }
 .po-sub:first-of-type { margin-top: 20px; }
 .po-sel { width: auto; max-width: 100%; cursor: pointer; }
@@ -9195,6 +9200,47 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Единственный отмеченный провал: где теряем больше половины людей. */
 .lstep.drop { border-color: var(--red); background: var(--red-soft); }
 .lstep.drop .ls-c b { color: var(--red-ink); }
+/* Плашка, за которой есть список людей. Кликабельность должна читаться ДО клика —
+   иначе проверить цифру никто не догадается, а ради этого всё и делалось. */
+.lstep-open { cursor: pointer; transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
+.lstep-open:hover { border-color: var(--blue); box-shadow: 0 6px 18px rgba(47,107,255,.10); }
+.lstep-open.drop:hover { border-color: var(--red); box-shadow: 0 6px 18px rgba(229,72,77,.12); }
+.lstep-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* ── Список людей ступени ────────────────────────────────────────────────────
+   Оболочка попапа общая с маркетингом (.mk-ovl/.mk-modal.wide/.mk-xbtn) — второй
+   вид всплывашки в одной CRM читался бы как другой продукт. Здесь только таблица. */
+.lp-tbl { margin-top: 12px; border-top: 1px solid var(--line);
+  max-height: calc(100vh - 300px); min-height: 120px; overflow: auto; }
+.lp-tbl::-webkit-scrollbar { width: 8px; }
+.lp-tbl::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
+.lp-tbl::-webkit-scrollbar-track { background: transparent; }
+.lp-th, .lp-tr { display: grid; gap: 12px; align-items: center;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(120px, 1.1fr) minmax(110px, 1fr) 112px; }
+/* шапка таблицы едет со списком, но остаётся видимой: иначе на 300 строках
+   посреди прокрутки непонятно, какая колонка что */
+.lp-th { padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--fill);
+  position: sticky; top: 0; z-index: 1; }
+.lp-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.lp-th span:last-child { text-align: right; }
+.lp-tr { padding: 9px 10px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink); }
+.lp-tr:last-child { border-bottom: 0; }
+.lp-tr > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-tr small { display: block; font-size: 11px; font-weight: 500; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; }
+.lp-nm { font-weight: 600; }
+.lp-dt { color: var(--ink-2); text-align: right; }
+/* прочерк вместо пустоты — но бледнее значения, чтобы не читался как данные */
+.lp-dash { color: var(--ink-3); font-style: normal; }
+.lp-tr.go { cursor: pointer; border-radius: 8px; }
+.lp-tr.go:hover { background: var(--fill); }
+.lp-tr.go:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.lp-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.lp-cnt { font-size: 12px; color: var(--ink-3); }
+.lp-foot .mk-btn { margin-left: auto; }
+.lp-foot .mk-btn[disabled] { opacity: .6; cursor: default; }
 
 .lper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         padding: 12px 16px; margin-bottom: 16px; }
