@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#eef2fc">
+<title>Отдел продаж ИСТСАЙД.РФ — знакомство</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231763c8'/><path d='M8 20l5-8 5 5 6-9' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+/* Стилистика взята с истсайд.рф/admission-v2: светлый сапфир, стекло, крупная
+   типографика без теней снаружи. Страница внутренняя (noindex): тут условия
+   работы отдела и деньги, в поиске ей делать нечего. */
+:root{
+  --ink:#182440; --soft:#505d77; --mute:#7a86a0;
+  --blue:#1763c8; --blue-d:#0f4ea6; --blue-soft:#e7effc;
+  --bg:#f1f3fc; --card:rgba(255,255,255,.72); --line:rgba(74,111,173,.17);
+  --green:#127a4a; --green-soft:#e2f4ea; --amber:#8a5b12; --amber-soft:#fbf1dc;
+  --r:20px; --r-s:14px;
+  font-family:'SF Pro Display','Inter',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
+  color:var(--ink); color-scheme:light;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth; scroll-padding-top:96px; -webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); font-synthesis:none; -webkit-font-smoothing:antialiased;
+  font-feature-settings:'tnum';
+  background-image:
+    radial-gradient(1100px 620px at 78% -8%, rgba(96,158,255,.30), transparent 62%),
+    radial-gradient(820px 520px at 6% 12%, rgba(150,190,255,.26), transparent 60%),
+    radial-gradient(900px 700px at 50% 108%, rgba(120,170,255,.20), transparent 64%);
+  background-attachment:fixed;
+}
+h1,h2,h3,h4,p,figure,blockquote{margin:0}
+h1,h2,h3{text-wrap:balance; letter-spacing:-.03em; font-weight:660}
+a{color:inherit; text-decoration:none}
+button{font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent}
+input,select{font:inherit}
+.wrap{width:min(1180px,calc(100% - 48px)); margin-inline:auto}
+
+/* ── шапка ──────────────────────────────────────────────────────────── */
+.header{
+  position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:30;
+  width:min(1120px,calc(100% - 40px)); height:60px; padding:10px 12px 10px 22px;
+  display:flex; align-items:center; justify-content:space-between; gap:24px;
+  border:1px solid rgba(255,255,255,.82); border-radius:18px;
+  background:rgba(239,245,255,.62); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+}
+.brand{font-size:16px; font-weight:760; letter-spacing:-.4px; white-space:nowrap}
+.header nav{display:flex; gap:24px; font-size:14px; color:var(--soft); overflow:auto; scrollbar-width:none}
+.header nav::-webkit-scrollbar{display:none}
+.header nav a{white-space:nowrap}
+.header nav a:hover{color:var(--blue)}
+.tag{
+  display:inline-flex; align-items:center; height:38px; padding:0 16px; border-radius:12px;
+  background:rgba(23,99,200,.10); color:var(--blue-d); font-size:13px; font-weight:620; white-space:nowrap;
+}
+
+/* ── герой ──────────────────────────────────────────────────────────── */
+.hero{padding:96px 0 8px}
+.hero-panel{
+  position:relative; overflow:hidden; border-radius:28px; padding:clamp(34px,5vw,64px) clamp(26px,4vw,58px) clamp(38px,5vw,66px);
+  color:#fff; border:1px solid rgba(255,255,255,.38);
+  background:
+    radial-gradient(760px 420px at 88% 8%, rgba(120,180,255,.55), transparent 62%),
+    radial-gradient(620px 460px at 8% 92%, rgba(64,124,222,.55), transparent 64%),
+    linear-gradient(140deg, #1d4f9e 0%, #123f85 52%, #0d2f68 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34), inset 0 -60px 120px rgba(6,26,60,.42);
+}
+.hero-panel::after{
+  content:''; position:absolute; right:-140px; top:-180px; width:520px; height:520px; border-radius:50%;
+  background:radial-gradient(circle at 34% 34%, rgba(255,255,255,.42), rgba(126,180,255,.18) 46%, transparent 68%);
+  pointer-events:none;
+}
+.hero-panel > *{position:relative; z-index:1}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 14px; border-radius:999px;
+  border:1px solid rgba(255,255,255,.34); background:rgba(255,255,255,.16);
+  font-size:12.5px; font-weight:600; letter-spacing:.02em; color:rgba(255,255,255,.92); margin-bottom:24px;
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+}
+.hero h1{font-size:clamp(38px,6.2vw,74px); line-height:1.02}
+.hero p.lead{margin-top:22px; max-width:640px; font-size:clamp(16px,2vw,19px); line-height:1.55; color:rgba(255,255,255,.84)}
+.stats{
+  margin-top:20px; display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+  border:1px solid var(--line); border-radius:var(--r); background:var(--line); overflow:hidden;
+}
+.stat{background:rgba(255,255,255,.78); padding:26px 24px; display:grid; grid-template-columns:auto minmax(0,1fr); gap:14px; align-items:baseline}
+.stat b{font-size:clamp(26px,3.6vw,40px); font-weight:680; letter-spacing:-.04em}
+.stat span{font-size:14px; color:var(--soft); line-height:1.35}
+
+/* ── секции ─────────────────────────────────────────────────────────── */
+section{padding:74px 0 0}
+.h2{font-size:clamp(28px,4vw,46px); line-height:1.06}
+.sub{margin-top:14px; max-width:680px; font-size:16.5px; line-height:1.6; color:var(--soft)}
+.grid{display:grid; gap:18px; margin-top:34px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.card{
+  border:1px solid var(--line); border-radius:var(--r); background:var(--card);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding:26px 24px;
+}
+.card h3{font-size:19px; line-height:1.25}
+.card p{margin-top:10px; font-size:15px; line-height:1.55; color:var(--soft)}
+.card .num{
+  display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:30px; padding:0 9px;
+  border-radius:9px; background:var(--blue-soft); color:var(--blue-d); font-size:13.5px; font-weight:700; margin-bottom:14px;
+}
+.note{
+  margin-top:18px; max-width:88ch; border:1px solid var(--line); border-radius:var(--r-s);
+  background:rgba(255,255,255,.6); padding:16px 18px; font-size:14.5px; line-height:1.55; color:var(--soft);
+}
+.note b{color:var(--ink)}
+.note.warn{background:var(--amber-soft); border-color:rgba(138,91,18,.18); color:#6c4a17}
+.note.warn b{color:#5a3d12}
+.note.ok{background:var(--green-soft); border-color:rgba(18,122,74,.18); color:#155f3f}
+.note.ok b{color:#0f4a31}
+
+/* ── список-строки ──────────────────────────────────────────────────── */
+.rows{margin-top:30px; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--line); display:grid; gap:1px}
+.row{background:rgba(255,255,255,.78); padding:20px 24px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:center}
+.row .t{font-size:16px; font-weight:600}
+.row .d{margin-top:6px; max-width:82ch; font-size:14.5px; line-height:1.5; color:var(--soft)}
+.row .v{font-size:17px; font-weight:660; white-space:nowrap; letter-spacing:-.02em}
+.row .v small{display:block; font-size:12.5px; font-weight:500; color:var(--mute); text-align:right; letter-spacing:0}
+
+/* ── тарифы ─────────────────────────────────────────────────────────── */
+.tars{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:34px}
+.tar{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:26px 24px; display:flex; flex-direction:column; gap:14px}
+.tar.acc{border-color:rgba(23,99,200,.34); background:rgba(233,241,254,.82)}
+.tar .n{font-size:13px; font-weight:680; letter-spacing:.04em; text-transform:uppercase; color:var(--blue-d)}
+.tar .p{font-size:clamp(24px,3vw,32px); font-weight:680; letter-spacing:-.03em}
+.tar ul{margin:0; padding:0; list-style:none; display:grid; gap:10px}
+.tar li{position:relative; padding-left:24px; font-size:14.5px; line-height:1.5; color:var(--soft)}
+.tar li::before{content:''; position:absolute; left:2px; top:7px; width:11px; height:7px; border-left:2px solid var(--blue); border-bottom:2px solid var(--blue); transform:rotate(-45deg)}
+
+/* ── калькулятор ────────────────────────────────────────────────────── */
+.calc{margin-top:34px; border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.76); backdrop-filter:blur(12px); overflow:hidden}
+.calc-in{display:grid; grid-template-columns:repeat(2,1fr); gap:22px; padding:28px 26px}
+.f{display:grid; gap:9px}
+.f label{font-size:13.5px; font-weight:600; color:var(--soft)}
+.f .hint{font-size:12.5px; color:var(--mute); line-height:1.4}
+.f input[type=range]{width:100%; accent-color:var(--blue)}
+.f .val{font-size:22px; font-weight:680; letter-spacing:-.02em}
+.seg{display:flex; gap:6px; flex-wrap:wrap}
+.seg button{
+  height:38px; padding:0 14px; border-radius:11px; border:1px solid var(--line);
+  background:rgba(255,255,255,.7); color:var(--soft); font-size:13.5px; font-weight:580;
+  transition:background .16s, color .16s, border-color .16s;
+}
+.seg button[aria-pressed=true]{background:var(--blue); border-color:var(--blue); color:#fff}
+.calc-out{border-top:1px solid var(--line); background:rgba(233,241,254,.66); padding:26px}
+.calc-out .total{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.calc-out .total b{font-size:clamp(34px,5vw,52px); font-weight:700; letter-spacing:-.04em}
+.calc-out .total span{font-size:15px; color:var(--soft)}
+.parts{margin-top:18px; display:grid; grid-template-columns:repeat(3,1fr); gap:1px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--line); overflow:hidden}
+.part{background:rgba(255,255,255,.86); padding:16px 18px}
+.part i{display:block; font-style:normal; font-size:12.5px; color:var(--mute)}
+.part b{display:block; margin-top:6px; font-size:19px; font-weight:660; letter-spacing:-.02em}
+
+/* ── шаги ───────────────────────────────────────────────────────────── */
+.steps{margin-top:34px; display:grid; gap:14px}
+.step{display:grid; grid-template-columns:auto minmax(0,1fr); gap:18px; align-items:start; border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:22px 24px}
+.step .n{width:34px; height:34px; border-radius:11px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:14.5px; font-weight:700}
+.step h3{font-size:17.5px}
+.step p{margin-top:8px; max-width:78ch; font-size:15px; line-height:1.55; color:var(--soft)}
+
+footer{padding:76px 0 70px; color:var(--mute); font-size:14px; line-height:1.6}
+footer b{color:var(--soft); font-weight:600}
+
+@media (max-width:1000px){
+  .g3,.tars,.parts{grid-template-columns:repeat(2,1fr)}
+  .stats{grid-template-columns:1fr; }
+  .calc-in{grid-template-columns:1fr}
+}
+@media (max-width:680px){
+  .wrap{width:calc(100% - 32px)}
+  .header{width:calc(100% - 24px); padding-left:16px}
+  .header nav{display:none}
+  .hero{padding-top:112px}
+  .g2,.g3,.tars,.parts{grid-template-columns:1fr}
+  .row{grid-template-columns:1fr}
+  .row .v{text-align:left} .row .v small{text-align:left}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a class="brand" href="#top">ИСТСАЙД.РФ</a>
+  <nav>
+    <a href="#company">Компания</a>
+    <a href="#why">Почему мы</a>
+    <a href="#products">Направления</a>
+    <a href="#work">Как работаем</a>
+    <a href="#money">Деньги</a>
+    <a href="#next">Что дальше</a>
+  </nav>
+  <span class="tag">Встреча 23 сентября, 16:00</span>
+</header>
+
+<main id="top">
+
+<div class="wrap hero">
+  <div class="hero-panel">
+    <span class="eyebrow">Отдел продаж · знакомство</span>
+    <h1>Мы доводим школьника<br>до места в китайском вузе</h1>
+    <p class="lead">Сегодня знакомимся: кто мы, почему семьи выбирают нас, что именно вы будете продавать, как устроена работа отдела и как считаются ваши деньги. Подробности — в обучении внутри CRM.</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>1 500+</b><span>семей доверили нам поступление</span></div>
+    <div class="stat"><b>$10+ млн</b><span>грантов получили наши студенты</span></div>
+    <div class="stat"><b>с 2016</b><span>помогаем поступать в Китай</span></div>
+  </div>
+</div>
+
+<section id="company" class="wrap">
+  <h2 class="h2">Кто мы</h2>
+  <p class="sub">Не посредник с формой заявки. Языковой центр, который вырос в компанию полного цикла: от первого теста по языку до встречи в аэропорту Китая.</p>
+  <div class="grid g3">
+    <div class="card">
+      <span class="num">1</span>
+      <h3>Языковой центр с опытом</h3>
+      <p>Десять лет учим языку и готовим к поступлению. Поэтому мы не «подаем документы», а доводим ребенка до уровня, с которым дают грант.</p>
+    </div>
+    <div class="card">
+      <span class="num">2</span>
+      <h3>Прямая работа с вузами</h3>
+      <p>Общаемся с приемными комиссиями напрямую, знаем требования этого сезона, а не прошлогодние советы из интернета.</p>
+    </div>
+    <div class="card">
+      <span class="num">3</span>
+      <h3>Своя платформа</h3>
+      <p>У семьи личный кабинет: путь по этапам, документы, оплаты, тренажеры языка, связь с командой. У нас — CRM, где видно каждого ученика.</p>
+    </div>
+  </div>
+</section>
+
+<section id="why" class="wrap">
+  <h2 class="h2">Почему выбирают нас</h2>
+  <p class="sub">Поступить в Китай можно и самому. Вопрос не в этом, а в том, чем семья платит за самостоятельную попытку: чаще всего не деньгами, а потерянным годом.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Стратегия, а не список вузов</h3>
+      <p>Под профиль ребенка собираем два уровня: куда проходит сейчас и куда успеваем подготовить. Плюс дорожная карта с датами — какие экзамены, какие документы, к какому числу.</p>
+    </div>
+    <div class="card">
+      <h3>Документы под требования КНР</h3>
+      <p>С семьи сканы, с нас перевод, нотариальное заверение и формат приемной комиссии. Заявки отклоняют не за слабого студента, а за неправильную бумагу.</p>
+    </div>
+    <div class="card">
+      <h3>Письма с правильными смыслами</h3>
+      <p>Мотивационное и рекомендательные пишем мы. Китай дает гранты не из благотворительности: он ищет тех, кто станет мостом между странами. Письмо показывает ребенка именно так.</p>
+    </div>
+    <div class="card">
+      <h3>Проект для портфолио</h3>
+      <p>Ученик участвует в наших проектах с тьюторами и собирает реальный кейс, связанный с Китаем. Заявок с одними документами тысячи, гранты идут тем, кто отличается.</p>
+    </div>
+    <div class="card">
+      <h3>Подготовка к отбору</h3>
+      <p>Интервью, CSCA, языковой экзамен. Живой человек решает судьбу заявки, и несвязный ответ топит сильное досье.</p>
+    </div>
+    <div class="card">
+      <h3>Адаптация на месте</h3>
+      <p>Встречаем в аэропорту, заселяем, ставим симкарту, показываем оплату и обмен валюты. Персональный менеджер в Китае на связи до полугода, и у него есть контакты родителей.</p>
+    </div>
+  </div>
+  <div class="note"><b>Главная продающая формулировка.</b> Вы продаете не заполнение документов, а вероятность пройти цикл один раз, а не изучать систему на своих ошибках два года подряд.</div>
+</section>
+
+<section id="guarantee" class="wrap">
+  <h2 class="h2">Что мы гарантируем</h2>
+  <p class="sub">Эти формулировки менять нельзя: гарантия — обязательство компании, а не фигура речи в разговоре.</p>
+  <div class="rows">
+    <div class="row">
+      <div>
+        <div class="t">Гарантия поступления</div>
+        <div class="d">Минимум в один согласованный вуз КНР, если ученик выполняет требования программ: набирает нужный языковой балл, сдает HSK или CSCA на проходной результат, проходит интервью, вовремя дает документы и подается в согласованный список.</div>
+      </div>
+      <div class="v">есть</div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="t">Гарантия финансирования</div>
+        <div class="d">При среднем балле от 4,0 за последние два года и выполнении требований — минимум один вариант на первый год: скидка или грант от 50 процентов стоимости обучения либо бесплатное общежитие.</div>
+      </div>
+      <div class="v">есть</div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="t">Полный грант</div>
+        <div class="d">Сто процентов обучения плюс проживание плюс стипендия возможны, но размер определяет университет или грантовая комиссия. Обещать его нельзя никому и никогда.</div>
+      </div>
+      <div class="v">не гарантируем</div>
+    </div>
+    <div class="row">
+      <div>
+        <div class="t">Если не сработало</div>
+        <div class="d">При выполнении всех условий и отсутствии зачисления или финансирования мы готовим и подаем на следующий год без повторной оплаты наших услуг либо ведем через языковой год, тоже без доплаты за услуги.</div>
+      </div>
+      <div class="v">повтор бесплатно</div>
+    </div>
+  </div>
+  <div class="note warn"><b>Везде говорим «повышаем вероятность сильного гранта», а не «гарантируем грант».</b> И никогда не называем неподтвержденные даты набора: нет точных — говорим «ориентировочно» и идем уточнять.</div>
+</section>
+
+<section id="products" class="wrap">
+  <h2 class="h2">Что продаем</h2>
+  <p class="sub">Пять направлений. Флагман — поступление на грант, остальное либо приводит к нему, либо решает задачу семьи, которой грант сейчас не подходит.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Поступление на грант</h3>
+      <p>Флагман. Языковой год, бакалавриат, магистратура, колледж после девятого. Три тарифа, двенадцать этапов до заселения, четыре формата.</p>
+    </div>
+    <div class="card">
+      <h3>Поступление на платной основе</h3>
+      <p>Когда грант не подходит или не проходим по требованиям: платный языковой год и платный бакалавриат.</p>
+    </div>
+    <div class="card">
+      <h3>Краткосрочные программы</h3>
+      <p>Поездки в Китай: язык на базе вуза и «Экспедиция будущего». Часто первый шаг семьи, которая боится отпускать ребенка на четыре года.</p>
+    </div>
+    <div class="card">
+      <h3>Языки и обучение</h3>
+      <p>Живой китайский, подготовка к CSCA, интенсив Duolingo, тренажеры DET и HSK, китайский с носителем. Большинство бесплатны или стоят мало: человек знакомится с нами и попадает в CRM.</p>
+    </div>
+    <div class="card">
+      <h3>Проектная деятельность</h3>
+      <p>Ученик ведет собственный проект и усиливает академический профиль до подачи. Отдельное направление, а не часть обучения.</p>
+    </div>
+    <div class="card">
+      <h3>Куда это ведет</h3>
+      <p>Бесплатный тест и тренажер — это не «подарки», а вход в воронку: человек попадает в CRM, и дальше с ним говорите вы.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:46px; font-size:22px">Три тарифа флагмана</h3>
+  <div class="tars">
+    <div class="tar">
+      <span class="n">Стандарт</span>
+      <span class="p">159 000 ₽</span>
+      <ul>
+        <li>Подачу и проверку ведет команда</li>
+        <li>Нотариус, переводы и виза на семье</li>
+        <li>До 5 вузов в подаче</li>
+      </ul>
+    </div>
+    <div class="tar acc">
+      <span class="n">Стандарт Плюс</span>
+      <span class="p">299 990 ₽</span>
+      <ul>
+        <li>Документы, переводы и нотариус берем мы</li>
+        <li>Подача до 7 вузов</li>
+        <li>Месяц сопровождения после заселения</li>
+      </ul>
+    </div>
+    <div class="tar">
+      <span class="n">Премиум</span>
+      <span class="p">399 990 ₽</span>
+      <ul>
+        <li>Виза без личной явки</li>
+        <li>Встреча в Китае, человек рядом два месяца</li>
+        <li>До 10 вузов в подаче</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note warn"><b>Тариф никогда не продается шансами.</b> «В Премиуме больше вероятность поступить» — ложь, и она разваливается в мае. Шанс одинаковый: работает одна команда. Отличается объем работы, который остается семье.</div>
+</section>
+
+<section id="work" class="wrap">
+  <h2 class="h2">Как устроена работа отдела</h2>
+  <p class="sub">Две линии и общая карточка в CRM. Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания.</p>
+  <div class="steps">
+    <div class="step">
+      <span class="n">1</span>
+      <div>
+        <h3>Первая линия: чаты и звонки</h3>
+        <p>Входящие разбирает тот, у кого смена, а не тот, кто первым увидел. Норматив: медиана первого ответа до 15 минут, ни одного пропущенного обращения за смену, доведение до диагностики.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="n">2</span>
+      <div>
+        <h3>Передача между линиями</h3>
+        <p>Перед встречей в карточке должно стоять: кто ребенок, чего хочет семья, кто принимает решение и будет ли он на звонке, история касаний, дата и время. Здесь чаще всего и теряются лиды.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="n">3</span>
+      <div>
+        <h3>Вторая линия: диагностика</h3>
+        <p>45–60 минут по протоколу: открытие от результата платформы, разбор метрик, блок родителя, диагноз, решение под диагноз, цена, возражения, следующий шаг с датой. Встреча идет с записью.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="n">4</span>
+      <div>
+        <h3>Сделка и передача в сопровождение</h3>
+        <p>Договор, оплата или первый взнос рассрочки. Дальше семью ведет тьютор, администратор по грантам и общий чат сопровождения — родителю важно знать это заранее.</p>
+      </div>
+    </div>
+  </div>
+  <div class="note ok"><b>Главный показатель отдела — количество проведенных консультаций.</b> Он влияет на план продаж сильнее конверсии: разговор, который не состоялся, невозможно вытянуть ни скриптом, ни скидкой.</div>
+
+  <h3 style="margin-top:46px; font-size:22px">Стандарты, которые не обсуждаются</h3>
+  <div class="grid g3">
+    <div class="card"><h3>Пятнадцать минут</h3><p>Медиана первого ответа внутри смены. Первый ответ решает больше, чем красота текста.</p></div>
+    <div class="card"><h3>Цена только на диагностике</h3><p>Не в чате и не на лендинге. Названная до разбора, она сравнивается не с результатом, а с воздухом.</p></div>
+    <div class="card"><h3>Запись встречи</h3><p>Диагностика без записи не считается проведенной и не оплачивается.</p></div>
+    <div class="card"><h3>Все в CRM</h3><p>Звонок, которого нет в системе, не было. Итог разговора — словами человека, а не вашим пересказом.</p></div>
+    <div class="card"><h3>Рабочий номер</h3><p>С семьями работаем с рабочего телефона: это работа компании, а не ваша личная договоренность.</p></div>
+    <div class="card"><h3>Честный контур</h3><p>Не обещаем грант, не рисуем портфолио, не называем неподтвержденные даты набора.</p></div>
+  </div>
+</section>
+
+<section id="money" class="wrap">
+  <h2 class="h2">Как считаются ваши деньги</h2>
+  <p class="sub">Три источника: смены, процент с доведенных сделок и оплата за проведенные диагностики. Покрутите ползунки и посмотрите свой месяц.</p>
+
+  <div class="calc">
+    <div class="calc-in">
+      <div class="f">
+        <label for="shifts">Смен в месяц</label>
+        <span class="val" id="shiftsV">40</span>
+        <input id="shifts" type="range" min="0" max="60" value="40" step="1">
+        <span class="hint">Смена — половина рабочего дня. Полный день — две смены. Ставка 750 ₽ за смену.</span>
+      </div>
+      <div class="f">
+        <label for="kq">Качество смен</label>
+        <span class="val" id="kqV">1,0</span>
+        <input id="kq" type="range" min="0.6" max="1" value="1" step="0.05">
+        <span class="hint">Коэффициент 0,6–1,0: скорость первого ответа, ни одного пропущенного обращения, доведение до диагностики.</span>
+      </div>
+      <div class="f">
+        <label for="diags">Проведено диагностик</label>
+        <span class="val" id="diagsV">20</span>
+        <input id="diags" type="range" min="0" max="60" value="20" step="1">
+        <span class="hint">Оплата идет сверх процентов и смен.</span>
+      </div>
+      <div class="f">
+        <label>Ставка за диагностику</label>
+        <div class="seg" id="rate">
+          <button data-v="300" aria-pressed="false">300 ₽ на обучении</button>
+          <button data-v="500" aria-pressed="true">500 ₽ после аттестации</button>
+        </div>
+        <span class="hint">Переход измеримый: 10 проведенных диагностик, конверсия не ниже средней по отделу за квартал и одна диагностика, прослушанная руководителем. Обратно не понижается.</span>
+      </div>
+      <div class="f">
+        <label for="deals">Продаж в месяц</label>
+        <span class="val" id="dealsV">3</span>
+        <input id="deals" type="range" min="0" max="15" value="3" step="1">
+        <span class="hint">Считаем по деньгам, которые семья реально заплатила, а не по подписанному договору.</span>
+      </div>
+      <div class="f">
+        <label>Ваша роль в сделке</label>
+        <div class="seg" id="role">
+          <button data-v="3.2" aria-pressed="true">Чат и диагностика сам — 3,2%</button>
+          <button data-v="2.2" aria-pressed="false">Только диагностика — 2,2%</button>
+          <button data-v="1.0" aria-pressed="false">Только чат — 1,0%</button>
+        </div>
+        <span class="hint">Условия одни для всех тарифов и для всех, кто продает.</span>
+      </div>
+      <div class="f" style="grid-column:1/-1">
+        <label>Средний тариф сделки</label>
+        <div class="seg" id="tariff">
+          <button data-v="159000" aria-pressed="true">Стандарт 159 000</button>
+          <button data-v="299990" aria-pressed="false">Стандарт Плюс 299 990</button>
+          <button data-v="399990" aria-pressed="false">Премиум 399 990</button>
+        </div>
+      </div>
+    </div>
+    <div class="calc-out">
+      <div class="total"><b id="total">—</b><span>за месяц до налогов</span></div>
+      <div class="parts">
+        <div class="part"><i>Смены</i><b id="pShift">—</b></div>
+        <div class="part"><i>Проценты с продаж</i><b id="pDeal">—</b></div>
+        <div class="part"><i>Диагностики</i><b id="pDiag">—</b></div>
+      </div>
+      <div class="note" style="margin-top:18px"><b>Когда приходят деньги.</b> Расчет за прошлый календарный месяц: с 1 по 3 система собирает, с 3 по 5 вы проверяете и можете оспорить, до 10 — выплата. Рассрочка у семьи — процент идет частями вслед за ее платежами.</div>
+    </div>
+  </div>
+</section>
+
+<section id="study" class="wrap">
+  <h2 class="h2">Обучение и допуск</h2>
+  <p class="sub">Вся конкретика лежит в CRM, в разделе «Академия»: курс «Продажи», 16 уроков со скриптами, разборами и проверочными вопросами.</p>
+  <div class="grid g3">
+    <div class="card"><span class="num">16</span><h3>Уроков</h3><p>Продукт и тарифы, маршруты семьи, гранты, девять этапов нашей работы, кейсы, смены, звонок, диагностика, возражения, деньги, документы.</p></div>
+    <div class="card"><span class="num">10</span><h3>Вопросов аттестации</h3><p>Проверяют знание: тарифы, гранты, сроки волн, что можно и чего нельзя обещать.</p></div>
+    <div class="card"><span class="num">2</span><h3>Практики</h3><p>Учебная диагностика с руководителем и с записью — это ролевка. И письменный ответ на возражение «дорого».</p></div>
+  </div>
+  <div class="note"><b>Без сданной аттестации на смены не выходим.</b> Ставка за диагностику до аттестации — 300 ₽, после — 500 ₽.</div>
+</section>
+
+<section id="next" class="wrap">
+  <h2 class="h2">Что дальше</h2>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><div><h3>Учетка в CRM</h3><p>Логин и пароль выдает Павел лично. Пароль показывается один раз — сохраните сразу.</p></div></div>
+    <div class="step"><span class="n">2</span><div><h3>Курс «Продажи»</h3><p>Раздел «Академия» в CRM. Проходим целиком, не по диагонали: вопросы аттестации собраны из уроков.</p></div></div>
+    <div class="step"><span class="n">3</span><div><h3>Ролевка</h3><p>Учебная диагностика с руководителем, с записью. Принимаем и разбираем вместе.</p></div></div>
+    <div class="step"><span class="n">4</span><div><h3>Выход на смены</h3><p>График смен, первая линия и первые диагностики под присмотром.</p></div></div>
+  </div>
+</section>
+
+<div class="wrap">
+  <footer>
+    Внутренний документ для команды ИСТСАЙД.РФ. <b>Не пересылайте ссылку наружу:</b> здесь условия работы и деньги.<br>
+    Цены и условия меняются — источник правды продуктовый портал в CRM, а не конспект с этой страницы.
+  </footer>
+</div>
+
+</main>
+
+<script>
+(function () {
+  var st = { shifts: 40, kq: 1, diags: 20, rate: 500, deals: 3, role: 3.2, tariff: 159000 };
+  var rub = function (n) { return Math.round(n).toLocaleString('ru-RU') + ' ₽'; };
+
+  function draw() {
+    var shift = st.shifts * 750 * st.kq;
+    var deal = st.deals * st.tariff * st.role / 100;
+    var diag = st.diags * st.rate;
+    document.getElementById('pShift').textContent = rub(shift);
+    document.getElementById('pDeal').textContent = rub(deal);
+    document.getElementById('pDiag').textContent = rub(diag);
+    document.getElementById('total').textContent = rub(shift + deal + diag);
+    document.getElementById('shiftsV').textContent = st.shifts;
+    document.getElementById('kqV').textContent = st.kq.toFixed(2).replace('.', ',').replace(',00', ',0');
+    document.getElementById('diagsV').textContent = st.diags;
+    document.getElementById('dealsV').textContent = st.deals;
+  }
+
+  [['shifts', 'shifts', 1], ['kq', 'kq', 0], ['diags', 'diags', 1], ['deals', 'deals', 1]].forEach(function (p) {
+    var el = document.getElementById(p[0]);
+    el.addEventListener('input', function () { st[p[1]] = p[2] ? +el.value : parseFloat(el.value); draw(); });
+  });
+
+  ['rate', 'role', 'tariff'].forEach(function (id) {
+    var box = document.getElementById(id);
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      Array.prototype.forEach.call(box.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      st[id] = parseFloat(b.getAttribute('data-v'));
+      draw();
+    });
+  });
+
+  draw();
+})();
+</script>
+</body>
+</html>
