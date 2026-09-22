@@ -1583,7 +1583,23 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   background: var(--blue-tint); color: var(--blue); }
 .doc-b { flex: 1; min-width: 0; }
 .doc-n { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.doc-m { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.doc-m { font-size: 12px; color: var(--ink-3); margin-top: 3px; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; }
+.doc-mt { white-space: nowrap; }
+/* Категория документа. Это поле, а не подпись: именно она закрывает пункт пакета в
+   кабинете семьи, и менеджер должен видеть, что ее можно поменять. Но и кричать ей
+   незачем — в покое выглядит как часть меты, рамка проявляется на наведении. */
+.doc-kind { font: inherit; font-size: 12px; color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: 8px; padding: 2px 4px; max-width: 220px;
+  cursor: pointer; transition: .15s; }
+.doc-kind:hover { border-color: var(--line-2); background: #fff; }
+.doc-kind:focus { outline: none; border-color: #C9D7FB; background: #fff; color: var(--ink); }
+.doc-kind:disabled { opacity: .5; cursor: default; }
+/* Выбор категории перед загрузкой — здесь она не тихая: пропустить ее значит
+   отправить файл, который не закроет строку в кабинете. */
+.doc-kindrow { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.doc-kindlbl { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.doc-kind--new { border-color: var(--line-2); background: #fff; padding: 6px 9px; font-size: 12.5px; }
 /* Кто загрузил — первое, что спрашивают о файле в общей семейной карточке, поэтому
    строка начинается с автора и он на ступень темнее остальной меты. Свои файлы
    («Мы») не выделяем: интересно, что принесла семья. */
@@ -1594,7 +1610,7 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   display: grid; place-items: center; color: var(--ink-2); transition: .15s; }
 .icobtn:hover { color: var(--blue); border-color: #C9D7FB; }
 .icobtn.del:hover { color: var(--red); border-color: #F4CFD0; }
-.dropzone { margin-top: 16px; border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 26px 22px;
+.dropzone { margin-top: 10px; border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 26px 22px;
   text-align: center; color: var(--ink-2); font-size: 13px; cursor: pointer; transition: .15s; }
 .dropzone .dz-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--fill); color: var(--ink-2);
   display: grid; place-items: center; margin: 0 auto 11px; transition: .15s; }
