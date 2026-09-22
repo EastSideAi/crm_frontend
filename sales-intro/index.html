@@ -5,39 +5,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0d2f68">
-<title>Отдел продаж ИСТСАЙД.РФ, знакомство</title>
+<title>Отдел продаж ИСТСАЙД.РФ — знакомство</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <link rel="preload" as="image" href="img/hero-campus.webp">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231763c8'/><path d='M8 20l5-8 5 5 6-9' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <style>
-/* Презентация для первой встречи с отделом продаж.
-   Павел 23.09.2026: слайды переключаются, живые фотографии вместо рисованных
-   образов, продукты идут деревом, потом флагман с тарифами и этапами, потом
-   языковое направление. Сквозной материал это наши собственные кадры: слайд с
-   фотографией держит смысл, светлый слайд держит цифры и разборы.
-   Палитра и материал взяты со страницы истсайд.рф/admission-v2. Внешних теней
-   нет нигде, только внутренние. */
+/* Презентация первой встречи с отделом продаж, 23.09.2026.
+   Правки Павла по первой версии: текста на слайде должно быть мало (мысль
+   разносим на несколько слайдов, а не сокращаем смысл), слайды не должны быть
+   похожи друг на друга, дерево продуктов берем таким же, как в CRM, и нужен
+   интерактив — в первую очередь дорога-путь, по которому идет ученик.
+   Отсюда устройство: девять типов слайда (фото на весь экран, утверждение,
+   карточки, снимки системы, дерево, дорога, тарифы с переключателем,
+   калькулятор, шаги) и жесткое чередование трех поверхностей.
+   Палитра и материал — со страницы истсайд.рф/admission-v2, внешних теней нет. */
 :root{
   --ink:#182440; --soft:#4a5771; --mute:#5c6982;
   --blue:#1763c8; --blue-d:#0f4ea6; --blue-soft:#e7effc;
-  --bg:#eef2fc; --card:rgba(255,255,255,.76); --line:rgba(74,111,173,.18);
-  --amber:#8a5b12; --amber-soft:#fbf1dc;
+  --bg:#eef2fc; --card:rgba(255,255,255,.78); --line:rgba(74,111,173,.18);
+  --wire:#c2ccdf; --amber:#8a5b12; --amber-soft:#fbf1dc;
   --r:20px; --r-s:14px;
   font-family:'SF Pro Display','Inter',-apple-system,BlinkMacSystemFont,system-ui,'Segoe UI',sans-serif;
   color:var(--ink); color-scheme:light;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{
-  margin:0; overflow:hidden; background:var(--bg); -webkit-font-smoothing:antialiased;
-  font-synthesis:none; font-feature-settings:'tnum';
-}
+body{margin:0; overflow:hidden; background:var(--bg); -webkit-font-smoothing:antialiased;
+  font-synthesis:none; font-feature-settings:'tnum'}
 h1,h2,h3,p,ul,li,figure{margin:0}
 h1,h2,h3{text-wrap:balance; letter-spacing:-.035em; font-weight:660}
 ul{padding:0; list-style:none}
-button{font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent}
+button{font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; color:inherit}
 input{font:inherit}
 img{display:block; max-width:100%}
 :focus-visible{outline:2px solid var(--blue); outline-offset:3px}
@@ -46,176 +46,255 @@ img{display:block; max-width:100%}
 .deck{position:fixed; inset:0}
 .slide{
   position:absolute; inset:0; display:grid; align-content:center;
-  padding:clamp(28px,4.4vh,64px) clamp(24px,5vw,96px) clamp(72px,9vh,104px);
-  opacity:0; visibility:hidden; transform:translateY(18px);
-  transition:opacity .42s ease, transform .42s cubic-bezier(.22,1,.36,1), visibility .42s;
+  padding:clamp(26px,4vh,58px) clamp(24px,5vw,92px) clamp(74px,9vh,104px);
+  opacity:0; visibility:hidden; transform:translateY(16px);
+  transition:opacity .4s ease, transform .4s cubic-bezier(.22,1,.36,1), visibility .4s;
   overflow-y:auto; overscroll-behavior:contain;
 }
 .slide.on{opacity:1; visibility:visible; transform:none}
 .slide > *:not(.shot-bg){width:min(1240px,100%); margin-inline:auto}
+.slide > .hold{max-width:min(760px,74%); margin-inline:0}
+@media (max-width:860px){.slide > .hold{max-width:100%}}
+/* три поверхности, чтобы соседние слайды не выглядели одинаково */
 .slide.dark{color:#fff;
   background:
-    radial-gradient(120% 90% at 18% -10%, rgba(52,110,196,.42), transparent 62%),
-    radial-gradient(90% 70% at 92% 108%, rgba(24,68,140,.5), transparent 66%),
+    radial-gradient(120% 90% at 16% -12%, rgba(52,110,196,.44), transparent 62%),
+    radial-gradient(90% 70% at 92% 108%, rgba(24,68,140,.52), transparent 66%),
     #0b2148;
 }
+.slide.tint{background:linear-gradient(168deg, #e3ebfa 0%, #eef2fc 58%, #e8eefb 100%)}
 
-/* появление содержимого */
-.slide.on .rise{animation:rise .52s cubic-bezier(.22,1,.36,1) both}
+.slide.on .rise{animation:rise .5s cubic-bezier(.22,1,.36,1) both}
 .slide.on .rise:nth-child(2){animation-delay:.06s}
 .slide.on .rise:nth-child(3){animation-delay:.12s}
 .slide.on .rise:nth-child(4){animation-delay:.18s}
-@keyframes rise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
+@keyframes rise{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
 @media (prefers-reduced-motion:reduce){
   .slide{transition:opacity .01s}
   .slide.on .rise{animation:none}
-  .shot-bg img{animation:none !important}
+  .shot-bg img, .rd-run, .rd-car{animation:none !important}
 }
 
 /* ── фотография во весь слайд ───────────────────────────────────────────── */
-/* Кадр живет фоном, текст стоит на затемненной стороне: так фотография
-   остается фотографией, а не подложкой под плашку. */
 .shot-bg{position:absolute; inset:0; overflow:hidden; z-index:0}
 .shot-bg img{width:100%; height:100%; object-fit:cover; object-position:var(--pos,50% 50%)}
 .slide.on .shot-bg img{animation:drift 22s ease-out both}
-@keyframes drift{from{transform:scale(1.06)} to{transform:scale(1)}}
-.shot-bg::after{
-  content:''; position:absolute; inset:0;
+@keyframes drift{from{transform:scale(1.07)} to{transform:scale(1)}}
+.shot-bg::after{content:''; position:absolute; inset:0;
   background:
     linear-gradient(100deg, rgba(8,26,58,.94) 0%, rgba(8,26,58,.84) 42%, rgba(8,26,58,.42) 68%, rgba(8,26,58,.2) 100%),
-    linear-gradient(to top, rgba(8,26,58,.55), transparent 42%);
-}
-.shot-bg.center::after{
-  background:linear-gradient(to top, rgba(8,26,58,.88) 4%, rgba(8,26,58,.52) 46%, rgba(8,26,58,.34) 100%);
+    linear-gradient(to top, rgba(8,26,58,.5), transparent 40%);
 }
 .slide.dark > *:not(.shot-bg){position:relative; z-index:1}
 
-/* ── типографика слайда ─────────────────────────────────────────────────── */
-.kicker{
-  display:inline-flex; align-items:center; height:32px; padding:0 14px; border-radius:999px;
+/* ── типографика ────────────────────────────────────────────────────────── */
+.kicker{display:inline-flex; align-items:center; height:32px; padding:0 14px; border-radius:999px;
   font-size:12.5px; font-weight:600; margin-bottom:18px;
-  border:1px solid var(--line); background:rgba(255,255,255,.7); color:var(--blue-d);
-}
+  border:1px solid var(--line); background:rgba(255,255,255,.72); color:var(--blue-d)}
 .dark .kicker{border-color:rgba(255,255,255,.32); background:rgba(255,255,255,.16); color:#fff}
 h1{font-size:clamp(34px,5.4vw,70px); line-height:1.03}
 h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
-.lead{margin-top:18px; max-width:64ch; font-size:clamp(15px,1.5vw,19px); line-height:1.55; color:var(--soft)}
-.dark .lead{color:rgba(255,255,255,.88); max-width:58ch}
-.big{margin-top:20px; max-width:22ch; font-size:clamp(28px,4.4vw,56px); line-height:1.1; font-weight:660}
-.slide > .hold{max-width:min(720px,72%); margin-inline:0}
-@media (max-width:820px){.slide > .hold{max-width:100%}}
+.lead{margin-top:16px; max-width:58ch; font-size:clamp(15px,1.5vw,19px); line-height:1.55; color:var(--soft)}
+.dark .lead{color:rgba(255,255,255,.88); max-width:54ch}
+/* слайд-утверждение: одна мысль крупно и ничего больше */
+.say{margin-top:14px; max-width:20ch; font-size:clamp(30px,5vw,62px); line-height:1.06; font-weight:660; letter-spacing:-.04em}
+.say.wide{max-width:26ch}
+.sub{margin-top:20px; max-width:48ch; font-size:clamp(15px,1.4vw,18px); line-height:1.5; color:var(--soft)}
+.dark .sub{color:rgba(255,255,255,.84)}
 
-/* ── блоки ──────────────────────────────────────────────────────────────── */
-.grid{display:grid; gap:16px; margin-top:clamp(20px,3.4vh,34px)}
-.g2{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+/* ── карточки ───────────────────────────────────────────────────────────── */
+.grid{display:grid; gap:16px; margin-top:clamp(20px,3.2vh,32px)}
+.g2{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
 .g3{grid-template-columns:repeat(auto-fit,minmax(268px,1fr))}
-.card{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:clamp(18px,2.4vh,26px) clamp(18px,1.8vw,24px)}
-.card h3{font-size:clamp(17px,1.5vw,20px); line-height:1.25}
-.card p{margin-top:9px; font-size:clamp(14px,1.1vw,15.5px); line-height:1.55; max-width:56ch; color:var(--soft)}
-.card.wide{grid-column:1/-1; background:rgba(231,239,252,.86); border-color:rgba(23,99,200,.26)}
-.card.wide h3{font-size:clamp(19px,2vw,24px)}
+.card{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:clamp(20px,2.6vh,28px) clamp(18px,1.8vw,26px)}
+.card h3{font-size:clamp(18px,1.6vw,21px); line-height:1.25}
+.card p{margin-top:10px; font-size:clamp(14.5px,1.1vw,16px); line-height:1.55; max-width:48ch; color:var(--soft)}
+.card .n{display:block; font-size:12.5px; font-weight:660; color:var(--blue-d); margin-bottom:8px}
 .dark .card{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24)}
 .dark .card p{color:rgba(255,255,255,.84)}
+.dark .card .n{color:rgba(255,255,255,.78)}
 
 .facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1px; margin-top:clamp(22px,4vh,40px);
   border:1px solid rgba(255,255,255,.26); border-radius:18px; overflow:hidden; background:rgba(255,255,255,.22)}
 .fact{background:rgba(10,38,84,.52); padding:20px 22px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
 .fact b{display:block; font-size:clamp(24px,2.8vw,34px); font-weight:680; letter-spacing:-.04em}
 .fact span{display:block; margin-top:6px; font-size:13.5px; line-height:1.4; color:rgba(255,255,255,.84)}
+/* три больших числа */
+.nums{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:clamp(16px,2vw,28px); margin-top:clamp(22px,4vh,40px)}
+.num b{display:block; font-size:clamp(38px,5.6vw,70px); line-height:1; font-weight:700; letter-spacing:-.05em}
+.num span{display:block; margin-top:12px; font-size:15px; line-height:1.45; color:var(--soft); max-width:26ch}
+.dark .num span{color:rgba(255,255,255,.84)}
 
 .rows{margin-top:clamp(18px,3vh,30px); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--line); display:grid; gap:1px}
-.row{background:rgba(255,255,255,.82); padding:16px 22px; display:grid; grid-template-columns:minmax(0,1fr) 172px; gap:22px; align-items:center}
-.row .t{font-size:15.5px; font-weight:600}
-.row .d{margin-top:5px; max-width:70ch; font-size:14px; line-height:1.5; color:var(--soft)}
+.row{background:rgba(255,255,255,.86); padding:20px 24px; display:grid; grid-template-columns:minmax(0,1fr) 180px; gap:22px; align-items:center}
+.row .t{font-size:17px; font-weight:640}
+.row .d{margin-top:7px; max-width:66ch; font-size:14.5px; line-height:1.5; color:var(--soft)}
 .row .v{font-size:16px; font-weight:660; white-space:nowrap}
 .row .v.no{color:var(--amber)}
 
-.steps{display:grid; gap:12px; margin-top:clamp(18px,3vh,30px)}
-.steps.two{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
-.step{display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; align-items:start;
-  border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:16px 22px}
-.step .n{width:32px; height:32px; border-radius:10px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:14px; font-weight:700}
-.step h3{font-size:16.5px}
-.step p{margin-top:6px; max-width:70ch; font-size:14.5px; line-height:1.5; color:var(--soft)}
+.steps{display:grid; gap:14px; margin-top:clamp(18px,3vh,30px)}
+.step{display:grid; grid-template-columns:auto minmax(0,1fr); gap:18px; align-items:start;
+  border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:20px 24px}
+.step .n{width:34px; height:34px; border-radius:11px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:15px; font-weight:700}
+.step h3{font-size:18px}
+.step p{margin-top:8px; max-width:64ch; font-size:15px; line-height:1.5; color:var(--soft)}
 .dark .step{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24)}
 .dark .step p{color:rgba(255,255,255,.84)}
 .dark .step .n{background:rgba(255,255,255,.94); color:#123f85}
 
-.tars{display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:16px; margin-top:clamp(18px,3vh,30px)}
-.tar{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:22px; display:flex; flex-direction:column; gap:12px}
-.tar.acc{border-color:rgba(23,99,200,.34); background:rgba(231,239,252,.86)}
-.tar .n{font-size:13.5px; font-weight:660; color:var(--blue-d)}
-.tar .p{font-size:clamp(22px,2.6vw,30px); font-weight:680; letter-spacing:-.03em}
-.tar li{position:relative; padding-left:22px; font-size:14.5px; line-height:1.5; color:var(--soft); margin-top:9px}
-.tar li::before{content:''; position:absolute; left:2px; top:7px; width:10px; height:6px; border-left:2px solid var(--blue); border-bottom:2px solid var(--blue); transform:rotate(-45deg)}
-
-.note{margin-top:clamp(14px,2.4vh,22px); max-width:96ch; border:1px solid var(--line); border-radius:var(--r-s);
-  background:rgba(255,255,255,.66); padding:14px 18px; font-size:14.5px; line-height:1.55; color:var(--soft)}
-.note b{color:var(--ink)}
+.note{margin-top:clamp(14px,2.4vh,22px); max-width:92ch; border:1px solid var(--line); border-radius:var(--r-s);
+  background:rgba(255,255,255,.66); padding:15px 19px; font-size:15px; line-height:1.55; color:var(--soft)}
 .slide > .note{margin-left:0; margin-right:auto}
+.note b{color:var(--ink)}
 .note.warn{background:var(--amber-soft); border-color:rgba(138,91,18,.2); color:#6c4a17}
 .note.warn b{color:#5a3d12}
 .dark .note{background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.26); color:rgba(255,255,255,.9)}
 .dark .note b{color:#fff}
 
-/* ── фотография рядом с текстом ─────────────────────────────────────────── */
-.split{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.92fr); gap:clamp(20px,3vw,44px); align-items:center; margin-top:clamp(18px,3vh,28px)}
-.split .pic{border-radius:var(--r); overflow:hidden; border:1px solid var(--line); aspect-ratio:3/2}
-.dark .split .pic{border-color:rgba(255,255,255,.22)}
+/* фото рядом с текстом */
+.split{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.86fr); gap:clamp(20px,3.4vw,52px); align-items:center; margin-top:clamp(18px,3vh,28px)}
+.split.tall{grid-template-columns:minmax(0,1fr) minmax(0,.52fr)}
+.split .pic{border-radius:var(--r); overflow:hidden; border:1px solid var(--line); aspect-ratio:3/2; background:#dfe7f7}
+.split.tall .pic{aspect-ratio:3/4; max-height:54vh}
+.dark .split .pic{border-color:rgba(255,255,255,.24)}
 .split .pic img{width:100%; height:100%; object-fit:cover}
-@media (max-width:860px){.split{grid-template-columns:1fr} .split .pic{order:-1}}
+@media (max-width:880px){.split,.split.tall{grid-template-columns:1fr} .split .pic{order:-1; aspect-ratio:3/2}}
 
-.shots{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:clamp(18px,3vh,28px)}
-.shots figure{border-radius:var(--r-s); overflow:hidden; border:1px solid var(--line); position:relative; aspect-ratio:4/3}
-.shots img{width:100%; height:100%; object-fit:cover}
-.shots.two{grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px}
-.shots figure.tall{aspect-ratio:3/2; background:#e7edfb}
-.shots figure.tall img{object-fit:cover; object-position:50% 0%}
-.split .pic.card-pic{aspect-ratio:16/10; background:#e7edfb}
-.split .pic.card-pic img{object-fit:cover; object-position:50% 0%}
-.shots figcaption{
-  position:absolute; left:0; right:0; bottom:0; padding:30px 16px 14px; color:#fff;
+/* снимки в ряд */
+.shots{display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px; margin-top:clamp(18px,3vh,28px)}
+.shots.three{grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px}
+.shots figure{border-radius:var(--r-s); overflow:hidden; border:1px solid var(--line); position:relative; aspect-ratio:3/2; background:#e7edfb}
+.shots.three figure{aspect-ratio:4/3}
+.shots img{width:100%; height:100%; object-fit:cover; object-position:50% 0%}
+.shots.three img{object-position:50% 50%}
+.shots figcaption{position:absolute; left:0; right:0; bottom:0; padding:32px 16px 14px; color:#fff;
   font-size:14px; line-height:1.4; font-weight:560;
-  background:linear-gradient(to top, rgba(8,26,58,.86), transparent);
+  background:linear-gradient(to top, rgba(8,26,58,.88), transparent)}
+
+/* ── дерево продуктов: тот же рецепт, что в CRM (.po-*) ─────────────────── */
+.tree{margin-top:clamp(18px,3vh,30px)}
+.tr-lbl{font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--mute)}
+.tr-lane{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:11px}
+.tr-node{background:rgba(255,255,255,.62); border:1px solid var(--line); border-radius:var(--r-s); padding:12px 15px}
+.tr-node b{display:block; font-size:14px; font-weight:620}
+.tr-node small{display:block; margin-top:3px; font-size:12.5px; color:var(--soft)}
+.tr-stem{position:relative; height:36px; display:flex; align-items:center; justify-content:center}
+.tr-stem::before{content:''; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--wire)}
+.tr-stem .tr-lbl{position:relative; background:var(--bg); padding:0 12px}
+.slide.tint .tr-stem .tr-lbl{background:#e9effb}
+.tr-cols{display:grid; grid-template-columns:repeat(var(--n,5),minmax(0,1fr)); column-gap:14px; row-gap:0; align-items:start}
+.tr-col{display:grid; grid-template-rows:subgrid; grid-row:span 3}
+.tr-tick{display:block; height:22px; position:relative}
+.tr-tick::before{content:''; position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--wire)}
+.tr-tick::after{content:''; position:absolute; top:0; height:1px; left:-9px; right:-9px; background:var(--wire)}
+.tr-col:first-child .tr-tick::after{left:50%}
+.tr-col:last-child .tr-tick::after{right:50%}
+.tr-flag{background:rgba(255,255,255,.88); border:1px solid var(--line); border-radius:var(--r-s);
+  padding:15px 16px; transition:border-color .16s, background .16s, transform .16s}
+.tr-flag b{display:block; font-size:15.5px; font-weight:700; letter-spacing:-.02em}
+.tr-flag small{display:block; margin-top:6px; font-size:12.5px; line-height:1.4; color:var(--soft)}
+.tr-flag.main{border-color:rgba(23,99,200,.4); background:rgba(231,239,252,.92)}
+.tr-flag.main b{color:var(--blue-d)}
+.tr-col:hover .tr-flag{border-color:rgba(23,99,200,.42); background:#fff; transform:translateY(-2px)}
+.tr-brs{align-self:start; margin:11px 0 0 16px; padding-left:12px; border-left:1px solid var(--wire);
+  display:flex; flex-direction:column; gap:8px}
+.tr-br{position:relative; font-size:12.5px; color:var(--soft)}
+.tr-br::before{content:''; position:absolute; left:-12px; top:8px; width:8px; height:1px; background:var(--wire)}
+.tr-extras{margin-top:22px; background:rgba(255,255,255,.6); border:1px solid var(--line); border-radius:var(--r-s); padding:15px 18px}
+.tr-extras b{font-size:13.5px}
+.tr-extras small{display:block; margin-top:3px; font-size:12.5px; color:var(--soft)}
+.tr-xs{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px}
+.tr-x{background:rgba(255,255,255,.9); border:1px solid var(--line); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--soft)}
+@media (max-width:900px){
+  .tr-cols{grid-template-columns:1fr; row-gap:12px}
+  .tr-col{grid-row:auto; grid-template-rows:none}
+  .tr-tick{display:none}
 }
 
-/* ── дерево продуктов ───────────────────────────────────────────────────── */
-.tree{margin-top:clamp(18px,3vh,30px); display:grid; gap:14px}
-.trunk{border:1px solid rgba(23,99,200,.3); border-radius:var(--r); background:rgba(231,239,252,.9); padding:clamp(18px,2.4vh,24px) clamp(18px,2vw,26px);
-  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:center}
-.trunk .lbl{font-size:13px; font-weight:660; color:var(--blue-d)}
-.trunk h3{margin-top:7px; font-size:clamp(20px,2.2vw,27px)}
-.trunk p{margin-top:8px; max-width:70ch; font-size:15px; line-height:1.5; color:var(--soft)}
-.trunk .br{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
-.trunk .br span{border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:13px; background:rgba(255,255,255,.72)}
-.trunk .price{text-align:right; font-size:14px; color:var(--soft); white-space:nowrap}
-.trunk .price b{display:block; font-size:clamp(20px,2vw,26px); font-weight:680; color:var(--ink); letter-spacing:-.03em}
-.limbs{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px}
-.limb{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:18px 20px; position:relative}
-.limb .lbl{font-size:12.5px; font-weight:600; color:var(--mute)}
-.limb h3{margin-top:6px; font-size:17px}
-.limb p{margin-top:8px; font-size:14px; line-height:1.5; color:var(--soft)}
-.limb.feed{border-color:rgba(23,99,200,.28); background:rgba(231,239,252,.6)}
+/* ── дорога: путь ученика ───────────────────────────────────────────────── */
+.road{position:relative; margin-top:clamp(12px,2.2vh,22px); height:clamp(190px,26vh,250px)}
+.road svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible}
+.rd-bed{fill:none; stroke:rgba(255,255,255,.07); stroke-width:22; stroke-linecap:round}
+.rd-base{fill:none; stroke:rgba(255,255,255,.22); stroke-width:2.5; stroke-linecap:round}
+.rd-run{fill:none; stroke:url(#rdg); stroke-width:3.4; stroke-linecap:round;
+  stroke-dasharray:var(--len,2000) var(--len,2000); stroke-dashoffset:var(--len,2000)}
+.slide.on .rd-run{animation:rdrun 1.6s .2s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes rdrun{to{stroke-dashoffset:0}}
+.rd-car{fill:none; stroke:rgba(224,240,255,.95); stroke-width:3.4; stroke-linecap:round;
+  stroke-dasharray:34 var(--len,2000); stroke-dashoffset:var(--len,2000)}
+.slide.on .rd-car{animation:rdcar 7s 1.5s linear infinite}
+@keyframes rdcar{from{stroke-dashoffset:var(--len,2000)} to{stroke-dashoffset:0}}
+.rd-dot{position:absolute; transform:translate(-50%,-50%); width:28px; height:28px; padding:0;
+  border-radius:50%; border:1px solid rgba(255,255,255,.5); background:rgba(11,33,72,.88);
+  color:rgba(255,255,255,.82); font-size:12px; font-weight:660; display:grid; place-items:center;
+  transition:transform .18s, background .18s, border-color .18s, color .18s; z-index:2}
+.rd-dot:hover{transform:translate(-50%,-50%) scale(1.14); border-color:#fff; color:#fff}
+.rd-dot[aria-pressed=true]{background:#fff; color:#123f85; border-color:#fff; transform:translate(-50%,-50%) scale(1.2)}
+.rd-dot i{position:absolute; inset:-8px; border-radius:50%; border:1px solid rgba(255,255,255,.4); opacity:0}
+.rd-dot[aria-pressed=true] i{opacity:1; animation:pulse 2.4s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.85); opacity:.7} 100%{transform:scale(1.5); opacity:0}}
+.rd-card{margin-top:clamp(10px,1.8vh,18px); border:1px solid rgba(255,255,255,.26); border-radius:var(--r);
+  background:rgba(255,255,255,.12); padding:18px 22px; display:grid; grid-template-columns:minmax(0,1fr) auto;
+  gap:18px; align-items:center; min-height:108px}
+.rd-card .w{font-size:12.5px; font-weight:660; color:rgba(255,255,255,.74)}
+.rd-card h3{margin-top:6px; font-size:clamp(18px,2vw,23px)}
+.rd-card p{margin-top:8px; max-width:78ch; font-size:14.5px; line-height:1.5; color:rgba(255,255,255,.86)}
+.rd-who{flex:none; border:1px solid rgba(255,255,255,.3); border-radius:999px; padding:8px 15px; font-size:12.5px; white-space:nowrap}
+.rd-who.fam{background:rgba(245,200,76,.16); border-color:rgba(245,200,76,.42)}
+.rd-nav{display:flex; gap:8px; margin-top:14px; align-items:center}
+.rd-nav button{width:36px; height:36px; border-radius:11px; border:1px solid rgba(255,255,255,.3);
+  background:rgba(255,255,255,.12); color:#fff; display:grid; place-items:center; font-size:15px}
+.rd-nav span{font-size:13px; color:rgba(255,255,255,.72)}
+.rd-goal{position:absolute; width:max-content; max-width:200px; transform:translate(-92%,-190%);
+  text-align:right; pointer-events:none; z-index:3}
+.rd-goal b{display:block; font-size:14.5px; font-weight:660}
+.rd-goal small{display:block; margin-top:3px; font-size:12px; color:rgba(255,255,255,.66)}
+/* цель на конце дороги: точка со светом, а не иконка */
+.rd-flag{position:absolute; transform:translate(-50%,-50%); width:14px; height:14px; border-radius:50%;
+  background:#fff; z-index:3; pointer-events:none}
+.rd-flag::after{content:''; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:84px; height:84px; border-radius:50%;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(214,238,255,.42), transparent 70%)}
+.rd-start{position:absolute; transform:translate(-50%,16px); font-size:12px; color:rgba(255,255,255,.55); pointer-events:none}
+@media (max-width:900px){
+  .road{display:none}
+  .rd-card{grid-template-columns:1fr}
+}
 
-/* ── путь ученика ───────────────────────────────────────────────────────── */
-.path{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:clamp(18px,3vh,30px)}
-.phase{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:18px 20px}
-.phase .w{font-size:12.5px; font-weight:660; color:var(--blue-d)}
-.phase h3{margin-top:6px; font-size:16.5px}
-.phase li{position:relative; margin-top:9px; padding-left:16px; font-size:14px; line-height:1.45; color:var(--soft)}
-.phase li::before{content:''; position:absolute; left:0; top:8px; width:6px; height:6px; border-radius:50%; background:rgba(23,99,200,.5)}
+/* ── тарифы с переключателем ────────────────────────────────────────────── */
+.tsw{display:flex; gap:8px; flex-wrap:wrap; margin-top:clamp(16px,2.6vh,26px)}
+.tsw button{height:46px; padding:0 22px; border-radius:13px; border:1px solid var(--line);
+  background:rgba(255,255,255,.8); color:var(--soft); font-size:15px; font-weight:640;
+  transition:background .16s, color .16s, border-color .16s}
+.tsw button[aria-pressed=true]{background:var(--blue); border-color:var(--blue); color:#fff}
+.tpanel{margin-top:16px; border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.82); overflow:hidden}
+.tp-head{display:flex; align-items:baseline; gap:20px; flex-wrap:wrap; padding:20px 26px; border-bottom:1px solid var(--line)}
+.tp-head .p{font-size:clamp(26px,3.4vw,40px); font-weight:700; letter-spacing:-.04em; white-space:nowrap}
+.tp-head .s{font-size:15px; line-height:1.5; color:var(--soft); max-width:60ch}
+.tp-body{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1px; background:var(--line)}
+.tp-col{background:rgba(255,255,255,.94); padding:20px 24px}
+.tp-col .h{font-size:12.5px; font-weight:660; color:var(--blue-d)}
+.tp-col .h.fam{color:var(--amber)}
+.tp-col li{position:relative; margin-top:10px; padding-left:22px; font-size:14.5px; line-height:1.45; color:var(--soft)}
+.tp-col li::before{content:''; position:absolute; left:2px; top:8px; width:9px; height:5px;
+  border-left:2px solid var(--blue); border-bottom:2px solid var(--blue); transform:rotate(-45deg)}
+.tp-col.fam li::before{content:''; top:7px; left:3px; width:8px; height:8px; border-radius:50%; transform:none;
+  border:1px solid #c08a2a; border-left-width:1px; border-bottom-width:1px}
 
-/* ── языковое направление ───────────────────────────────────────────────── */
-.langs{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:clamp(16px,2.4vh,24px)}
-.lang{border:1px solid var(--line); border-radius:var(--r-s); background:var(--card); padding:14px 16px; display:flex; flex-direction:column; gap:6px}
-.lang h3{font-size:16px}
-.lang .w{font-size:13.5px; line-height:1.45; color:var(--soft)}
-.lang .pr{margin-top:auto; padding-top:8px; font-size:13.5px; font-weight:660; color:var(--blue-d)}
+/* ── языковые продукты ──────────────────────────────────────────────────── */
+.langs{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:clamp(18px,3vh,28px)}
+.lang{border:1px solid var(--line); border-radius:var(--r-s); background:var(--card); padding:18px 20px; display:flex; flex-direction:column; gap:8px}
+.dark .lang{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24)}
+.lang h3{font-size:17px}
+.lang .w{font-size:14px; line-height:1.45; color:var(--soft)}
+.dark .lang .w{color:rgba(255,255,255,.84)}
+.lang .pr{margin-top:auto; padding-top:10px; font-size:14px; font-weight:660; color:var(--blue-d)}
+.dark .lang .pr{color:#bcd8ff}
 .lang .pr.free{color:var(--soft); font-weight:600}
-.lang.wide{grid-column:1/-1}
+.dark .lang .pr.free{color:rgba(255,255,255,.74)}
 
 /* ── калькулятор ────────────────────────────────────────────────────────── */
-.calc{margin-top:clamp(16px,2.6vh,26px); border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.8); overflow:hidden}
+.calc{margin-top:clamp(16px,2.6vh,24px); border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.84); overflow:hidden}
 .calc-in{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px 26px; padding:clamp(16px,2.2vh,22px) clamp(18px,1.8vw,24px)}
 .f{display:grid; gap:7px; align-content:start}
 .f label{font-size:13px; font-weight:600; color:var(--soft)}
@@ -230,42 +309,37 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .calc-out{border-top:1px solid var(--line); background:rgba(214,230,252,.72); padding:clamp(14px,2vh,20px) clamp(16px,2.4vh,24px);
   display:flex; align-items:center; gap:clamp(16px,2.4vw,32px); flex-wrap:wrap}
 .calc-out .total{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
-.calc-out .total b{white-space:nowrap}
-.calc-out .total b{font-size:clamp(30px,4.4vw,48px); font-weight:700; letter-spacing:-.04em}
+.calc-out .total b{font-size:clamp(30px,4.2vw,46px); font-weight:700; letter-spacing:-.04em; white-space:nowrap}
 .calc-out .total span{font-size:14.5px; color:var(--soft)}
-.parts{flex:1 1 320px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1px;
+.parts{flex:1 1 320px; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1px;
   border:1px solid var(--line); border-radius:var(--r-s); background:var(--line); overflow:hidden}
 .part{background:rgba(255,255,255,.9); padding:13px 16px}
 .part i{display:block; font-style:normal; font-size:13px; color:var(--soft)}
 .part b{display:block; margin-top:5px; font-size:18px; font-weight:660; letter-spacing:-.02em}
 
-/* ── управление ─────────────────────────────────────────────────────────── */
-.bar{
-  position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
+/* ── панель управления ──────────────────────────────────────────────────── */
+.bar{position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:20;
   display:flex; align-items:center; gap:14px; height:52px; padding:0 8px 0 18px;
   border:1px solid rgba(255,255,255,.7); border-radius:16px;
-  background:rgba(240,245,255,.72); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  max-width:calc(100% - 24px);
-}
-.bar .brand{font-size:13.5px; font-weight:700; letter-spacing:-.3px; color:var(--ink); white-space:nowrap}
-.dots{display:flex; gap:6px; overflow:auto; scrollbar-width:none}
+  background:rgba(240,245,255,.74); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  max-width:calc(100% - 24px)}
+.bar .brand{font-size:13.5px; font-weight:700; letter-spacing:-.3px; white-space:nowrap}
+.bar .chap{font-size:13px; color:var(--soft); white-space:nowrap}
+.dots{display:flex; gap:5px; overflow:auto; scrollbar-width:none}
 .dots::-webkit-scrollbar{display:none}
-.dots button{width:9px; height:9px; padding:0; border:0; border-radius:50%; background:rgba(24,36,64,.24); transition:background .18s, transform .18s}
-.dots button[aria-current=true]{background:var(--blue); transform:scale(1.35)}
+.dots button{width:8px; height:8px; padding:0; border:0; border-radius:50%; background:rgba(24,36,64,.2); transition:background .18s, transform .18s}
+.dots button.chap-start{background:rgba(24,36,64,.42)}
+.dots button[aria-current=true]{background:var(--blue); transform:scale(1.4)}
 .arrows{display:flex; gap:6px}
-.arrows button{
-  width:38px; height:38px; border-radius:11px; border:1px solid var(--line);
-  background:rgba(255,255,255,.8); color:var(--ink); font-size:16px; line-height:1; display:grid; place-items:center;
-}
+.arrows button{width:38px; height:38px; border-radius:11px; border:1px solid var(--line);
+  background:rgba(255,255,255,.82); font-size:16px; line-height:1; display:grid; place-items:center}
 .arrows button:disabled{opacity:.36; cursor:default}
-.count{font-size:13px; color:var(--soft); white-space:nowrap; min-width:44px; text-align:right}
+.count{font-size:13px; color:var(--soft); white-space:nowrap; min-width:48px; text-align:right}
 
-@media (max-width:700px){
+@media (max-width:820px){
   .bar{gap:10px; padding:0 8px 0 12px; height:48px}
-  .bar .brand{display:none}
+  .bar .brand, .bar .chap{display:none}
   .row{grid-template-columns:1fr; gap:8px}
-  .trunk{grid-template-columns:1fr}
-  .trunk .price{text-align:left}
   .slide{padding-bottom:86px}
 }
 </style>
@@ -274,13 +348,12 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
 <div class="deck" id="deck">
 
-  <!-- 1. титул -->
-  <section class="slide dark on">
+  <!-- 1 · титул -->
+  <section class="slide dark on" data-chap="Компания">
     <div class="shot-bg" aria-hidden="true"><img src="img/hero-campus.webp" alt="" style="--pos:62% 50%"></div>
     <div class="rise hold">
       <span class="kicker">Отдел продаж · первая встреча</span>
       <h1>От первого разговора<br>до студенческого билета в Китае</h1>
-      <p class="lead">Для семьи это не покупка услуги, а развилка: поедет ребенок учиться за границу или останется с тем, что получилось. Сегодня знакомимся с компанией, продуктом, работой отдела и деньгами.</p>
     </div>
     <div class="facts rise">
       <div class="fact"><b>1 500+</b><span>семей доверили нам поступление</span></div>
@@ -289,271 +362,422 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 2. основатель -->
-  <section class="slide dark">
+  <!-- 2 · о чем встреча -->
+  <section class="slide" data-chap="Компания">
+    <div class="rise">
+      <span class="kicker">Сегодня</span>
+      <h2>О чем поговорим</h2>
+    </div>
+    <div class="grid g3 rise">
+      <div class="card"><span class="n">01</span><h3>Компания</h3><p>Кто мы, с чего начинали и почему семьи выбирают нас.</p></div>
+      <div class="card"><span class="n">02</span><h3>Продукт</h3><p>Что продаем, за сколько и что ученик проходит с нами.</p></div>
+      <div class="card"><span class="n">03</span><h3>Работа и деньги</h3><p>Как устроен отдел, какие стандарты и из чего складывается ваш месяц.</p></div>
+    </div>
+    <div class="note rise">Подробности будут в обучении внутри CRM. Сегодня общая картина, чтобы вы понимали, куда пришли.</div>
+  </section>
+
+  <!-- 3 · основатель -->
+  <section class="slide dark" data-chap="Компания">
     <div class="rise hold">
       <span class="kicker">С чего все началось</span>
       <h2>Языковой центр в Хабаровске</h2>
     </div>
-    <div class="split rise">
+    <div class="split tall rise">
       <div>
-        <p class="lead">Основатель компании Виталий начинал с языкового центра в Хабаровске: учил людей языку и видел, что за языком у них стоит другая цель: уехать учиться. Сначала помогал поступать за рубеж тем, кто уже занимался у него, потом это стало отдельным делом и выросло в компанию.</p>
-        <p class="lead">Отсюда особенность, о которой стоит говорить семьям: мы пришли в поступление со стороны обучения, а не со стороны документов. Сначала доводим ребенка до нужного уровня, потом подаем.</p>
+        <p class="lead">Основатель компании Виталий учил людей языку и видел, что за языком у них стоит другая цель: уехать учиться.</p>
+        <p class="lead">Сначала помогал поступать тем, кто занимался у него. Потом это стало отдельным делом и выросло в компанию.</p>
       </div>
-      <div class="pic"><img src="img/founder-class.webp" alt="Занятие в языковом классе"></div>
+      <div class="pic"><img src="img/founder.webp" alt="Виталий, основатель компании"></div>
     </div>
   </section>
 
-  <!-- 3. кто мы -->
-  <section class="slide">
+  <!-- 4 · особенность -->
+  <section class="slide tint" data-chap="Компания">
+    <div class="rise hold">
+      <span class="kicker">Наша особенность</span>
+      <p class="say wide">Мы пришли в поступление со стороны обучения, а не со стороны документов</p>
+      <p class="sub">Сначала доводим ребенка до уровня, с которым дают грант, и только потом подаем.</p>
+    </div>
+  </section>
+
+  <!-- 5 · кто мы -->
+  <section class="slide" data-chap="Компания">
     <div class="rise">
       <span class="kicker">Компания</span>
       <h2>Не посредник с формой заявки</h2>
-      <p class="lead">Начинали как языковой центр и учим языку до сих пор. Поэтому мы не «подаем документы», а доводим ребенка до уровня, с которым дают грант.</p>
     </div>
     <div class="grid g3 rise">
-      <div class="card"><h3>Прямая работа с вузами</h3><p>Общаемся с приемными комиссиями напрямую и знаем требования этого сезона, а не прошлогодние советы из интернета.</p></div>
-      <div class="card"><h3>Своя платформа</h3><p>У семьи личный кабинет: путь по этапам, документы, оплаты, тренажеры языка, связь с командой. У нас CRM, где видно каждого ученика.</p></div>
-      <div class="card"><h3>Команда, а не один менеджер</h3><p>Тьютор, администратор по грантам, специалист по документам, ассистент. У семьи общий чат, где отвечают все.</p></div>
+      <div class="card"><h3>Прямая работа с вузами</h3><p>Общаемся с приемными комиссиями и знаем требования этого сезона, а не советы из интернета.</p></div>
+      <div class="card"><h3>Своя платформа</h3><p>У семьи личный кабинет: путь по этапам, документы, тренажеры, связь с командой.</p></div>
+      <div class="card"><h3>Команда, а не менеджер</h3><p>Тьютор, администратор по грантам, специалист по документам. У семьи общий чат.</p></div>
     </div>
   </section>
 
-  <!-- 4. система своими глазами -->
-  <section class="slide">
+  <!-- 6 · экраны системы -->
+  <section class="slide tint" data-chap="Компания">
     <div class="rise">
       <span class="kicker">Система</span>
       <h2>Что видит семья и что видим мы</h2>
-      <p class="lead">Снимки настоящие, данные на них учебные. Слева кабинет семьи, справа наша карта клиентов: где идет каждый ученик, что у него просрочено и кто давно не заходил.</p>
-    </div>
-    <div class="shots two rise">
-      <figure class="tall"><img src="img/ui-cabinet.webp" alt="Кабинет ученика на платформе"><figcaption>Кабинет ученика: текущий этап, что сделать сейчас и путь целиком</figcaption></figure>
-      <figure class="tall"><img src="img/ui-roadmap.webp" alt="Карта клиентов в CRM"><figcaption>Карта клиентов: этап, тариф, задачи и кто давно не заходил</figcaption></figure>
-    </div>
-  </section>
-
-  <!-- 4. почему выбирают, часть 1 -->
-  <section class="slide">
-    <div class="rise">
-      <span class="kicker">Почему выбирают нас</span>
-      <h2>Поступить можно и самому. Вопрос в цене попытки</h2>
-      <p class="lead">Чаще всего семья платит не деньгами, а потерянным годом: требования меняются, дедлайн и удачный момент подачи это разные вещи, а на ошибку в документах вуз не присылает письмо «исправьте».</p>
-    </div>
-    <div class="grid g3 rise">
-      <div class="card wide"><h3>Стратегия, а не список вузов</h3><p>Под профиль ребенка собираем два уровня: куда проходит сейчас и куда успеваем подготовить. Плюс дорожная карта с датами: какие экзамены, какие документы, к какому числу.</p></div>
-      <div class="card"><h3>Документы под требования КНР</h3><p>С семьи сканы, с нас перевод, нотариальное заверение и формат приемной комиссии. Заявки отклоняют не за слабого студента, а за неправильную бумагу.</p></div>
-      <div class="card"><h3>Письма с правильными смыслами</h3><p>Мотивационное и рекомендательные пишем мы. Китай ищет тех, кто станет мостом между странами, и письмо показывает ребенка именно так.</p></div>
-      <div class="card"><h3>Проект для портфолио</h3><p>Ученик собирает реальный кейс, связанный с Китаем. Заявок с одними документами тысячи, гранты идут тем, кто отличается.</p></div>
-    </div>
-  </section>
-
-  <!-- 5. почему выбирают, часть 2 -->
-  <section class="slide">
-    <div class="rise">
-      <span class="kicker">Почему выбирают нас</span>
-      <h2>И то, что начинается после подачи</h2>
-      <p class="lead">Заявка подана, а работа не закончилась. Дальше отбор, ожидание и первые недели в чужой стране, и семья остается с этим одна, если рядом никого нет.</p>
+      <p class="lead">Снимки настоящие, данные на них учебные.</p>
     </div>
     <div class="shots rise">
-      <figure><img src="img/campus-lake.webp" alt="Кампус китайского университета"><figcaption>Подготовка к отбору: интервью, CSCA, языковой экзамен. Живой человек решает судьбу заявки.</figcaption></figure>
-      <figure><img src="img/family.webp" alt="Мама и сын дома за ноутбуком"><figcaption>Ожидание с мая до середины июля. Семья не сидит в неизвестности: объясняем, что происходит.</figcaption></figure>
-      <figure><img src="img/city-walk.webp" alt="Город в Китае"><figcaption>Встречаем в аэропорту, заселяем, ставим симкарту. Менеджер в Китае на связи до полугода.</figcaption></figure>
+      <figure><img src="img/ui-cabinet.webp" alt="Кабинет ученика на платформе"><figcaption>Кабинет ученика: текущий этап, что сделать сейчас и путь целиком</figcaption></figure>
+      <figure><img src="img/ui-roadmap.webp" alt="Карта клиентов в CRM"><figcaption>Наша карта клиентов: этап, тариф, задачи и кто давно не заходил</figcaption></figure>
     </div>
-    <div class="note rise"><b>Главная продающая формулировка.</b> Вы продаете не заполнение документов, а вероятность пройти цикл один раз, а не изучать систему на своих ошибках два года подряд.</div>
   </section>
 
-  <!-- 6. смысл -->
-  <section class="slide dark">
+  <!-- 7 · цена попытки -->
+  <section class="slide dark" data-chap="Почему мы">
+    <div class="rise hold">
+      <span class="kicker">Почему выбирают нас</span>
+      <p class="say">Поступить можно и самому. Вопрос в цене попытки</p>
+      <p class="sub">Чаще всего семья платит не деньгами, а потерянным годом.</p>
+    </div>
+  </section>
+
+  <!-- 8 · до подачи -->
+  <section class="slide" data-chap="Почему мы">
+    <div class="rise">
+      <span class="kicker">До подачи</span>
+      <h2>Стратегия и документы</h2>
+    </div>
+    <div class="grid g2 rise">
+      <div class="card"><h3>Стратегия, а не список вузов</h3><p>Под профиль ребенка собираем два уровня: куда проходит сейчас и куда успеваем подготовить. Плюс дорожная карта с датами.</p></div>
+      <div class="card"><h3>Документы под требования КНР</h3><p>С семьи сканы, с нас перевод, нотариус и формат приемной комиссии. Заявки отклоняют за неправильную бумагу, а не за слабого студента.</p></div>
+    </div>
+  </section>
+
+  <!-- 9 · профиль -->
+  <section class="slide tint" data-chap="Почему мы">
+    <div class="rise">
+      <span class="kicker">До подачи</span>
+      <h2>Чем ребенок отличается от тысяч таких же заявок</h2>
+    </div>
+    <div class="grid g2 rise">
+      <div class="card"><h3>Письма с правильными смыслами</h3><p>Мотивационное и рекомендательные пишем мы. Китай ищет тех, кто станет мостом между странами, и письмо показывает ребенка именно так.</p></div>
+      <div class="card"><h3>Проект для портфолио</h3><p>Ученик собирает реальный кейс, связанный с Китаем. Заявок с одними документами тысячи, гранты идут тем, кто выделяется.</p></div>
+    </div>
+  </section>
+
+  <!-- 10 · после подачи -->
+  <section class="slide" data-chap="Почему мы">
+    <div class="rise">
+      <span class="kicker">После подачи</span>
+      <h2>Работа не заканчивается отправкой заявки</h2>
+    </div>
+    <div class="shots three rise">
+      <figure><img src="img/campus-lake.webp" alt="Кампус китайского университета"><figcaption>Отбор: интервью, CSCA, языковой экзамен</figcaption></figure>
+      <figure><img src="img/family.webp" alt="Мама и сын дома за ноутбуком"><figcaption>Ожидание с мая до середины июля</figcaption></figure>
+      <figure><img src="img/city-walk.webp" alt="Город в Китае"><figcaption>Приезд: встреча, заселение, первые месяцы</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- 11 · продающая формулировка -->
+  <section class="slide dark" data-chap="Почему мы">
+    <div class="rise hold">
+      <span class="kicker">Как это продается</span>
+      <p class="say wide">Вы продаете вероятность пройти цикл один раз, а не изучать систему на своих ошибках два года</p>
+    </div>
+  </section>
+
+  <!-- 12 · смысл -->
+  <section class="slide dark" data-chap="Почему мы">
     <div class="shot-bg" aria-hidden="true"><img src="img/city-future.webp" alt="" style="--pos:62% 42%"></div>
     <div class="rise hold">
       <span class="kicker">Зачем это все</span>
-      <p class="big">Семья приходит за поступлением. Уезжает ребенок с другой жизнью.</p>
-      <p class="lead">Через год после разговора, который проведете вы, школьник из обычного города живет в Китае, учится на гранте и говорит на двух языках. Это и есть то, что мы продаем, а тарифы и проценты это механика вокруг.</p>
+      <p class="say">Семья приходит за поступлением. Уезжает ребенок с другой жизнью</p>
+      <p class="sub">Через год после разговора, который проведете вы, школьник из обычного города живет в Китае и учится на гранте.</p>
     </div>
   </section>
 
-  <!-- 7. гарантии -->
-  <section class="slide">
+  <!-- 13 · гарантии 1 -->
+  <section class="slide" data-chap="Обязательства">
     <div class="rise">
       <span class="kicker">Обязательства</span>
-      <h2>Что мы гарантируем, дословно</h2>
-      <p class="lead">Эти формулировки менять нельзя: гарантия это обязательство компании, а не фигура речи в разговоре.</p>
+      <h2>Что мы гарантируем</h2>
+      <p class="lead">Формулировки менять нельзя: это обязательство компании, а не фигура речи.</p>
     </div>
     <div class="rows rise">
       <div class="row">
-        <div><div class="t">Гарантия поступления</div><div class="d">Минимум в один согласованный вуз КНР, если ученик выполняет требования программ: набирает нужный языковой балл, сдает HSK или CSCA на проходной результат, проходит интервью, вовремя дает документы и подается в согласованный список.</div></div>
+        <div><div class="t">Гарантия поступления</div><div class="d">Минимум в один согласованный вуз КНР, если ученик выполняет требования: языковой балл, HSK или CSCA на проходной результат, интервью, документы вовремя.</div></div>
         <div class="v">есть</div>
       </div>
       <div class="row">
-        <div><div class="t">Гарантия финансирования</div><div class="d">При среднем балле от 4,0 за последние два года и выполнении требований даем минимум один вариант на первый год: скидка или грант от 50 процентов стоимости обучения либо бесплатное общежитие.</div></div>
+        <div><div class="t">Гарантия финансирования</div><div class="d">При среднем балле от 4,0 за два года даем минимум один вариант на первый год: скидка или грант от 50 процентов либо бесплатное общежитие.</div></div>
         <div class="v">есть</div>
       </div>
+    </div>
+  </section>
+
+  <!-- 14 · гарантии 2 -->
+  <section class="slide tint" data-chap="Обязательства">
+    <div class="rise">
+      <span class="kicker">Обязательства</span>
+      <h2>Чего не обещаем и что будет, если не сработало</h2>
+    </div>
+    <div class="rows rise">
       <div class="row">
-        <div><div class="t">Полный грант</div><div class="d">Сто процентов обучения плюс проживание плюс стипендия возможны, но размер определяет университет или грантовая комиссия.</div></div>
+        <div><div class="t">Полный грант</div><div class="d">Сто процентов обучения плюс проживание и стипендия возможны, но размер определяет университет или грантовая комиссия.</div></div>
         <div class="v no">не гарантируем</div>
       </div>
       <div class="row">
-        <div><div class="t">Если не сработало</div><div class="d">При выполнении всех условий и отсутствии зачисления или финансирования готовим и подаем на следующий год без повторной оплаты наших услуг либо ведем через языковой год.</div></div>
+        <div><div class="t">Если не сработало</div><div class="d">При выполнении всех условий готовим и подаем на следующий год без повторной оплаты наших услуг либо ведем через языковой год.</div></div>
         <div class="v">повтор бесплатно</div>
       </div>
     </div>
-    <div class="note warn rise"><b>Везде говорим «повышаем вероятность сильного гранта», а не «гарантируем грант».</b> И никогда не называем неподтвержденные даты набора: нет точных, говорим «ориентировочно» и идем уточнять.</div>
   </section>
 
-  <!-- 8. продуктовое дерево -->
-  <section class="slide">
+  <!-- 15 · честный контур -->
+  <section class="slide dark" data-chap="Обязательства">
+    <div class="rise hold">
+      <span class="kicker">Честный контур</span>
+      <p class="say wide">Говорим «повышаем вероятность сильного гранта». Никогда «гарантируем грант»</p>
+      <p class="sub">И не называем неподтвержденные даты набора: нет точных, говорим «ориентировочно» и идем уточнять.</p>
+    </div>
+  </section>
+
+  <!-- 16 · дерево продуктов -->
+  <section class="slide" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Продукт</span>
-      <h2>Дерево продуктов: один ствол и четыре ветки</h2>
-      <p class="lead">Все, что мы делаем, либо ведет семью к поступлению, либо решает ее задачу, когда грант сейчас не подходит.</p>
+      <h2>Дерево продуктов</h2>
     </div>
     <div class="tree rise">
-      <div class="trunk">
-        <div>
-          <span class="lbl">Ствол · флагман</span>
-          <h3>Поступление на грант</h3>
-          <p>Основной продукт компании и основные деньги отдела. Три тарифа, четыре формата, двенадцать этапов до заселения. Продаем вероятность гранта и работу команды, а не гарантию результата.</p>
-          <div class="br"><span>Языковой год</span><span>Бакалавриат</span><span>Магистратура</span><span>Колледж после 9 класса</span></div>
-        </div>
-        <div class="price">от <b>159 000 ₽</b>до 399 990 ₽</div>
+      <div class="tr-lbl">Вход</div>
+      <div class="tr-lane">
+        <div class="tr-node"><b>Квалификация лида</b><small>обработка заявки в CRM</small></div>
+        <div class="tr-node"><b>Нейропрофориентация</b><small>«Нексис»: не знает, кем быть</small></div>
+        <div class="tr-node"><b>Диагностика на платформе</b><small>профиль и что предлагаем</small></div>
       </div>
-      <div class="limbs">
-        <div class="limb"><span class="lbl">Ветка</span><h3>Поступление на платной основе</h3><p>Платный языковой год и платный бакалавриат, когда грант не подходит или семья не проходит по требованиям.</p></div>
-        <div class="limb"><span class="lbl">Ветка</span><h3>Краткосрочные программы</h3><p>Язык на базе вуза и «Экспедиция будущего». Часто первый шаг семьи, которой страшно отпускать ребенка надолго.</p></div>
-        <div class="limb feed"><span class="lbl">Ветка · вход в воронку</span><h3>Языки и обучение</h3><p>Семь продуктов, большинство бесплатные. Человек знакомится с нами, попадает в CRM и дальше идет в поступление.</p></div>
-        <div class="limb"><span class="lbl">Ветка</span><h3>Проектная деятельность</h3><p>Ученик ведет свой проект и усиливает академический профиль до подачи. Другой результат и другая работа с ребенком.</p></div>
+      <div class="tr-stem"><span class="tr-lbl">Направления</span></div>
+      <div class="tr-cols" style="--n:5">
+        <div class="tr-col">
+          <span class="tr-tick"></span>
+          <div class="tr-flag main"><b>Поступление на грант</b><small>флагман, три тарифа</small></div>
+          <div class="tr-brs"><span class="tr-br">Языковой год</span><span class="tr-br">Бакалавриат</span><span class="tr-br">Магистратура</span><span class="tr-br">Колледж после 9</span></div>
+        </div>
+        <div class="tr-col">
+          <span class="tr-tick"></span>
+          <div class="tr-flag"><b>Платная основа</b><small>когда грант не подходит</small></div>
+          <div class="tr-brs"><span class="tr-br">Платный языковой год</span><span class="tr-br">Платный бакалавриат</span></div>
+        </div>
+        <div class="tr-col">
+          <span class="tr-tick"></span>
+          <div class="tr-flag"><b>Краткосрочные</b><small>поездки в Китай</small></div>
+          <div class="tr-brs"><span class="tr-br">Язык на базе вуза</span><span class="tr-br">Экспедиция будущего</span></div>
+        </div>
+        <div class="tr-col">
+          <span class="tr-tick"></span>
+          <div class="tr-flag"><b>Языки и обучение</b><small>входы в поступление</small></div>
+          <div class="tr-brs"><span class="tr-br">Живой китайский</span><span class="tr-br">CSCA</span><span class="tr-br">Duolingo</span><span class="tr-br">Тренажеры DET и HSK</span></div>
+        </div>
+        <div class="tr-col">
+          <span class="tr-tick"></span>
+          <div class="tr-flag"><b>Проекты</b><small>академический профиль</small></div>
+          <div class="tr-brs"><span class="tr-br">Свой проект ученика</span></div>
+        </div>
+      </div>
+      <div class="tr-extras">
+        <b>Дополнительные продукты и услуги</b>
+        <small>оборачивают флагманские направления</small>
+        <div class="tr-xs"><span class="tr-x">письма</span><span class="tr-x">виза</span><span class="tr-x">медсправка</span><span class="tr-x">адаптация</span><span class="tr-x">персональный тьютор</span></div>
       </div>
     </div>
-    <div class="note rise"><b>Читаем дерево снизу вверх.</b> Бесплатный тренажер языка, краткосрочная поездка и платное поступление это разные входы к одному разговору про грант. Поэтому в CRM важен каждый, кто зашел даже за бесплатным тестом.</div>
   </section>
 
-  <!-- 9. флагман: тарифы -->
-  <section class="slide">
+  <!-- 17 · как читать дерево -->
+  <section class="slide dark" data-chap="Продукт">
+    <div class="rise hold">
+      <span class="kicker">Как читать дерево</span>
+      <p class="say wide">Бесплатный тренажер и поездка на две недели ведут к одному разговору: про грант</p>
+      <p class="sub">Поэтому в CRM важен каждый, кто зашел даже за бесплатным тестом.</p>
+    </div>
+  </section>
+
+  <!-- 18 · тарифы -->
+  <section class="slide tint" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Флагман · тарифы</span>
-      <h2>Три тарифа. Отличаются объемом работы, который остается семье</h2>
-      <p class="lead">Этапы везде одни и те же. Разница в том, что семья делает своими руками, в скольких вузах мы подаем и заканчивается ли наша работа на зачислении.</p>
+      <h2>Три тарифа. Нажмите и посмотрите, что меняется</h2>
     </div>
-    <div class="tars rise">
-      <div class="tar"><span class="n">Стандарт</span><span class="p">159 000 ₽</span>
-        <ul><li>Подачу и проверку ведет команда</li><li>Нотариус, переводы и виза на семье</li><li>До 5 вузов в подаче</li><li>Работа заканчивается на визе</li></ul></div>
-      <div class="tar acc"><span class="n">Стандарт Плюс</span><span class="p">299 990 ₽</span>
-        <ul><li>Документы, переводы и нотариус берем мы</li><li>Подача до 7 вузов</li><li>Виза: анкета и запись в визовый центр</li><li>Месяц сопровождения после заселения</li></ul></div>
-      <div class="tar"><span class="n">Премиум</span><span class="p">399 990 ₽</span>
-        <ul><li>Виза без личной явки</li><li>Встреча в аэропорту и заселение</li><li>Тьютор в городе два месяца</li><li>До 10 вузов в подаче</li></ul></div>
+    <div class="tsw rise" id="tsw">
+      <button type="button" data-t="std" aria-pressed="true">Стандарт</button>
+      <button type="button" data-t="plus" aria-pressed="false">Стандарт Плюс</button>
+      <button type="button" data-t="prem" aria-pressed="false">Премиум</button>
     </div>
-    <div class="note warn rise"><b>Тариф никогда не продается шансами.</b> «В Премиуме больше вероятность поступить» это ложь, и она разваливается в мае. Шанс одинаковый: работает одна команда. На диагностике показываем сначала Премиум, потом вниз.</div>
+    <div class="tpanel rise">
+      <div class="tp-head"><span class="p" id="tpPrice">159 000 ₽</span><span class="s" id="tpSay"></span></div>
+      <div class="tp-body">
+        <div class="tp-col"><span class="h">Делаем мы</span><ul id="tpWe"></ul></div>
+        <div class="tp-col fam"><span class="h fam">Остается семье</span><ul id="tpFam"></ul></div>
+      </div>
+    </div>
   </section>
 
-  <!-- 10. путь ученика -->
-  <section class="slide">
+  <!-- 19 · тариф не продается шансами -->
+  <section class="slide" data-chap="Продукт">
+    <div class="rise hold">
+      <span class="kicker">Правило разговора</span>
+      <p class="say wide">Тариф не продается шансами. Шанс одинаковый: работает одна команда</p>
+      <p class="sub">Отличается объем работы, который остается семье. На диагностике показываем сначала Премиум, потом вниз.</p>
+    </div>
+  </section>
+
+  <!-- 20 · дорога -->
+  <section class="slide dark" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Флагман · путь</span>
-      <h2>Что ученик проходит с нами</h2>
-      <p class="lead">Двенадцать этапов до заселения, у Премиума пятнадцать. В день оплаты семья получает личный кабинет, и дальше каждый шаг виден и ей, и нам.</p>
+      <h2>Дорога, по которой ученик идет с нами</h2>
     </div>
-    <div class="path rise">
-      <div class="phase">
-        <span class="w">День 0 – вторая неделя</span>
-        <h3>Старт и диагноз</h3>
-        <ul>
-          <li>Доступ к платформе: маршрут, календарь, задачи, чат с командой</li>
-          <li>Диагностика профиля: шансы по каждому вузу и гранту в цифрах</li>
-          <li>Выбор направления, подбор вузов и грантов под профиль</li>
-        </ul>
-      </div>
-      <div class="phase">
-        <span class="w">Месяц 1–3</span>
-        <h3>Профиль и документы</h3>
-        <ul>
-          <li>Сбор, перевод и нотариальное заверение, медицинская справка</li>
-          <li>Усиление профиля и портфолио, проект ученика</li>
-          <li>Мотивационное и рекомендательные письма</li>
-          <li>Методы обучения и запоминания перед экзаменами</li>
-        </ul>
-      </div>
-      <div class="phase">
-        <span class="w">До подачи</span>
-        <h3>Экзамены и подача</h3>
-        <ul>
-          <li>Подготовка к языковому экзамену</li>
-          <li>Подготовка к CSCA по математике</li>
-          <li>Репетиция онлайн-интервью</li>
-          <li>Подача в вузы и мониторинг заявок</li>
-        </ul>
-      </div>
-      <div class="phase">
-        <span class="w">Май – сентябрь</span>
-        <h3>Результат и Китай</h3>
-        <ul>
-          <li>Зачисление и выбор гранта из пришедших ответов</li>
-          <li>Учебная виза</li>
-          <li>Адаптация: симулятор первых дней, инструкции</li>
-          <li>Встреча в Китае и первые месяцы рядом с тьютором</li>
-        </ul>
-      </div>
+    <div class="road rise" id="road">
+      <span class="rd-goal" id="rdGoal"><b>Место в вузе Китая</b><small>и грант на обучение</small></span>
+      <span class="rd-flag" id="rdFlag"></span>
+      <span class="rd-start" id="rdStart">оплата</span>
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="rdg" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stop-color="#4d8ee0"/><stop offset="60%" stop-color="#a8d2ff"/><stop offset="100%" stop-color="#ffffff"/>
+          </linearGradient>
+        </defs>
+        <path class="rd-bed" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
+        <path id="rdPath" class="rd-base" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
+        <path class="rd-run" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
+        <path class="rd-car" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
+      </svg>
     </div>
-    <div class="note rise"><b>Это и есть ответ на «дорого».</b> Семья платит не за подачу бумаг, а за год работы команды рядом с ребенком: от первой диагностики до дня, когда он заселился в общежитие.</div>
+    <div class="rd-card rise" id="rdCard">
+      <div>
+        <span class="w" id="rdWhen">день оплаты</span>
+        <h3 id="rdTitle">Доступ к платформе</h3>
+        <p id="rdText">Семья получает кабинет.</p>
+      </div>
+      <span class="rd-who" id="rdWho">платформа</span>
+    </div>
+    <div class="rd-nav rise">
+      <button type="button" id="rdPrev" aria-label="Предыдущий этап">‹</button>
+      <button type="button" id="rdNext" aria-label="Следующий этап">›</button>
+      <span id="rdCount">1 из 12</span>
+    </div>
   </section>
 
-  <!-- 11. языковое направление -->
-  <section class="slide dark">
+  <!-- 21 · ответ на дорого -->
+  <section class="slide tint" data-chap="Продукт">
+    <div class="rise hold">
+      <span class="kicker">Ответ на «дорого»</span>
+      <p class="say wide">Семья платит не за подачу бумаг, а за год работы команды рядом с ребенком</p>
+    </div>
+    <div class="nums rise">
+      <div class="num"><b>12</b><span>этапов до заселения, у Премиума пятнадцать</span></div>
+      <div class="num"><b>4</b><span>человека ведут одну семью</span></div>
+      <div class="num"><b>10</b><span>вузов в подаче на старшем тарифе</span></div>
+    </div>
+  </section>
+
+  <!-- 22 · языки: платные -->
+  <section class="slide dark" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Ветка · языки и обучение</span>
-      <h2>Чему мы учим и что из этого бесплатно</h2>
-      <p class="lead">Почти все здесь это входы: человек знакомится с нами бесплатно или за небольшие деньги и с первого шага оказывается в CRM. Ведут они в одно, в поступление. Бесплатное не называем пробным периодом, платой служит контакт, и это честно написано в форме.</p>
+      <h2>Чему мы учим</h2>
+      <p class="lead">Почти все продукты здесь это входы: человек знакомится с нами и попадает в CRM.</p>
     </div>
-    <div class="split rise">
-      <div class="langs" style="margin:0">
-        <div class="lang"><h3>Живой китайский</h3><span class="w">Видеокурс, 26 записанных уроков. Первый урок открыт всем, доступ на 3 месяца.</span><span class="pr">12 990 ₽</span></div>
-        <div class="lang"><h3>Подготовка к CSCA</h3><span class="w">Математика, физика, химия: записанные уроки, домашние задания, свои пробники.</span><span class="pr">цена уточняется</span></div>
-        <div class="lang"><h3>Интенсив Duolingo English Test</h3><span class="w">10 уроков по формату экзамена и тренажер внутри. Первый урок бесплатно.</span><span class="pr">платный, открывает CRM</span></div>
-        <div class="lang"><h3>Китайский с носителем</h3><span class="w">Мини-курс: 10 коротких блоков с русскими субтитрами. Верх воронки.</span><span class="pr free">бесплатно</span></div>
-        <div class="lang wide"><h3>Тесты и тренажеры</h3><span class="w">Входной тест DET по шкале 10–160: балл решает, подавать сейчас или сначала заниматься. Кабинет DET закрывает слабые навыки, кабинет HSK тренирует китайский с нуля до HSK 5.</span><span class="pr free">бесплатно, ссылку открывает CRM</span></div>
-      </div>
-      <div class="pic"><img src="img/lang-desk.webp" alt="Ученик занимается дома"></div>
+    <div class="langs rise">
+      <div class="lang"><h3>Живой китайский</h3><span class="w">Видеокурс, 26 записанных уроков. Первый урок открыт всем.</span><span class="pr">12 990 ₽</span></div>
+      <div class="lang"><h3>Подготовка к CSCA</h3><span class="w">Математика, физика, химия: уроки, домашние задания, пробники.</span><span class="pr">цена уточняется</span></div>
+      <div class="lang"><h3>Интенсив Duolingo</h3><span class="w">10 уроков по формату экзамена и тренажер внутри.</span><span class="pr">платный, доступ открывает CRM</span></div>
     </div>
   </section>
 
-  <!-- 12. работа отдела -->
-  <section class="slide">
-    <div class="rise">
-      <span class="kicker">Как работаем</span>
-      <h2>Две линии и общая карточка в CRM</h2>
+  <!-- 23 · языки: бесплатные -->
+  <section class="slide tint" data-chap="Продукт">
+    <div class="rise hold">
+      <span class="kicker">Ветка · языки и обучение</span>
+      <h2>Что отдаем бесплатно</h2>
+      <p class="lead">Платой служит контакт, и это честно написано в форме. Пробным периодом это не называем.</p>
     </div>
+    <div class="langs rise">
+      <div class="lang"><h3>Китайский с носителем</h3><span class="w">Мини-курс: 10 коротких блоков с русскими субтитрами.</span><span class="pr free">бесплатно</span></div>
+      <div class="lang"><h3>Входной тест DET</h3><span class="w">Английский по шкале 10–160. Балл решает, подавать сейчас или заниматься.</span><span class="pr free">бесплатно</span></div>
+      <div class="lang"><h3>Кабинеты DET и HSK</h3><span class="w">Тренажеры английского и китайского с домашкой от тьютора.</span><span class="pr free">бесплатно</span></div>
+    </div>
+  </section>
+
+  <!-- 24 · главный показатель -->
+  <section class="slide" data-chap="Работа">
+    <div class="rise hold">
+      <span class="kicker">Как работаем</span>
+      <p class="say wide">Главный показатель отдела это количество проведенных консультаций</p>
+      <p class="sub">Он влияет на план сильнее конверсии: разговор, который не состоялся, не вытянуть ни скриптом, ни скидкой.</p>
+    </div>
+  </section>
+
+  <!-- 25 · первая линия -->
+  <section class="slide tint" data-chap="Работа">
     <div class="rise">
-      <p class="lead">Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания. Семью ведет отдел, а не один человек, и работа идет в одной карточке: анкета, история касаний, диагностика, оплаты, переписка.</p>
+      <span class="kicker">Первая линия</span>
+      <h2>Довести до встречи</h2>
     </div>
     <div class="steps rise">
-      <div class="step"><span class="n">1</span><div><h3>Первая линия: чаты и звонки</h3><p>Входящие разбирает тот, у кого смена. Норматив: медиана первого ответа до 15 минут, ни одного пропущенного обращения, доведение до диагностики.</p></div></div>
-      <div class="step"><span class="n">2</span><div><h3>Передача между линиями</h3><p>В карточке должно стоять: кто ребенок, чего хочет семья, кто принимает решение, история касаний, дата встречи. Здесь чаще всего и теряются лиды.</p></div></div>
-      <div class="step"><span class="n">3</span><div><h3>Вторая линия: диагностика</h3><p>45–60 минут по протоколу: открытие от результата платформы, разбор метрик, блок родителя, диагноз, решение, цена, возражения, следующий шаг с датой. С записью.</p></div></div>
-      <div class="step"><span class="n">4</span><div><h3>Сделка и передача в сопровождение</h3><p>Договор и оплата. Дальше семью ведет тьютор, администратор по грантам и общий чат. Родителю важно знать это заранее.</p></div></div>
+      <div class="step"><span class="n">1</span><div><h3>Чаты и звонки в свою смену</h3><p>Медиана первого ответа до 15 минут, ни одного пропущенного обращения, доведение до диагностики.</p></div></div>
+      <div class="step"><span class="n">2</span><div><h3>Передача между линиями</h3><p>В карточке стоит: кто ребенок, чего хочет семья, кто принимает решение, история касаний, дата встречи. Здесь чаще всего и теряются лиды.</p></div></div>
     </div>
-    <div class="note rise"><b>Главный показатель отдела это количество проведенных консультаций.</b> Он влияет на план продаж сильнее конверсии: разговор, который не состоялся, невозможно вытянуть ни скриптом, ни скидкой.</div>
   </section>
 
-  <!-- 13. стандарты -->
-  <section class="slide">
+  <!-- 26 · вторая линия -->
+  <section class="slide" data-chap="Работа">
+    <div class="rise">
+      <span class="kicker">Вторая линия</span>
+      <h2>Провести диагностику и закрыть</h2>
+    </div>
+    <div class="steps rise">
+      <div class="step"><span class="n">3</span><div><h3>Диагностика 45–60 минут по протоколу</h3><p>Открытие от результата платформы, разбор метрик, блок родителя, диагноз, решение, цена, возражения, следующий шаг с датой. С записью.</p></div></div>
+      <div class="step"><span class="n">4</span><div><h3>Сделка и передача в сопровождение</h3><p>Договор и оплата. Дальше семью ведет тьютор, администратор по грантам и общий чат.</p></div></div>
+    </div>
+  </section>
+
+  <!-- 27 · стандарты 1 -->
+  <section class="slide tint" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Стандарты</span>
       <h2>Что не обсуждается</h2>
     </div>
     <div class="grid g3 rise">
-      <div class="card"><h3>Пятнадцать минут</h3><p>Медиана первого ответа внутри смены. Первый ответ решает больше, чем красота текста.</p></div>
-      <div class="card"><h3>Цена только на диагностике</h3><p>Не в чате и не на лендинге. Названная до разбора, она сравнивается не с результатом, а с воздухом.</p></div>
+      <div class="card"><h3>15 минут</h3><p>Медиана первого ответа внутри смены. Первый ответ решает больше, чем красота текста.</p></div>
+      <div class="card"><h3>Цена только на диагностике</h3><p>Не в чате и не на лендинге. Названная до разбора, она сравнивается с воздухом.</p></div>
       <div class="card"><h3>Запись встречи</h3><p>Диагностика без записи не считается проведенной и не оплачивается.</p></div>
-      <div class="card"><h3>Все в CRM</h3><p>Звонок, которого нет в системе, не было. Итог разговора пишем словами человека, а не вашим пересказом.</p></div>
+    </div>
+  </section>
+
+  <!-- 28 · стандарты 2 -->
+  <section class="slide" data-chap="Работа">
+    <div class="rise">
+      <span class="kicker">Стандарты</span>
+      <h2>И еще три правила</h2>
+    </div>
+    <div class="grid g3 rise">
+      <div class="card"><h3>Все в CRM</h3><p>Звонка, которого нет в системе, не было. Итог разговора пишем словами человека.</p></div>
       <div class="card"><h3>Рабочий номер</h3><p>С семьями работаем с рабочего телефона: это работа компании, а не ваша личная договоренность.</p></div>
       <div class="card"><h3>Честный контур</h3><p>Не обещаем грант, не рисуем портфолио, не называем неподтвержденные даты набора.</p></div>
     </div>
   </section>
 
-  <!-- 14. деньги -->
-  <section class="slide">
-    <div class="rise">
+  <!-- 29 · деньги: три источника -->
+  <section class="slide dark" data-chap="Деньги">
+    <div class="rise hold">
       <span class="kicker">Деньги</span>
-      <h2>Смены, проценты, диагностики</h2>
-      <p class="lead">Покрутите ползунки и посмотрите свой месяц. Считает по тем же ставкам, что и система.</p>
+      <h2>Месяц складывается из трех частей</h2>
+    </div>
+    <div class="nums rise">
+      <div class="num"><b>750 ₽</b><span>за смену, с коэффициентом качества 0,6–1,0</span></div>
+      <div class="num"><b>3,2 %</b><span>с продажи, если вели чат и провели диагностику сами</span></div>
+      <div class="num"><b>500 ₽</b><span>за диагностику после аттестации, до нее 300 ₽</span></div>
+    </div>
+  </section>
+
+  <!-- 30 · калькулятор -->
+  <section class="slide" data-chap="Деньги">
+    <div class="rise">
+      <span class="kicker">Посчитайте свой месяц</span>
+      <h2>Калькулятор</h2>
     </div>
     <div class="calc rise">
       <div class="calc-in">
@@ -561,7 +785,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
           <label for="shifts">Смен в месяц</label>
           <span class="val" id="shiftsV">40</span>
           <input id="shifts" type="range" min="0" max="60" value="40" step="1">
-          <span class="hint">Смена это половина рабочего дня. Ставка 750 ₽ за смену.</span>
+          <span class="hint">Смена это половина рабочего дня.</span>
         </div>
         <div class="f">
           <label for="kq">Качество смен</label>
@@ -581,7 +805,6 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
             <button data-v="300" aria-pressed="false">300 ₽ на обучении</button>
             <button data-v="500" aria-pressed="true">500 ₽ после аттестации</button>
           </div>
-          <span class="hint">Переход после 10 диагностик и разбора с руководителем.</span>
         </div>
         <div class="f">
           <label for="deals">Продаж в месяц</label>
@@ -596,7 +819,6 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
             <button data-v="2.2" aria-pressed="false">Только диагностика · 2,2%</button>
             <button data-v="1.0" aria-pressed="false">Только чат · 1,0%</button>
           </div>
-          <span class="hint">Условия одни для всех тарифов.</span>
         </div>
         <div class="f">
           <label>Средний тариф сделки</label>
@@ -616,36 +838,47 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
         </div>
       </div>
     </div>
-    <div class="note rise"><b>Когда приходят деньги.</b> Расчет за прошлый месяц: с 1 по 3 система собирает, с 3 по 5 вы проверяете и можете оспорить, до 10 выплата. Рассрочка у семьи: процент идет частями вслед за ее платежами.</div>
   </section>
 
-  <!-- 15. обучение -->
-  <section class="slide">
+  <!-- 31 · когда приходят деньги -->
+  <section class="slide tint" data-chap="Деньги">
+    <div class="rise">
+      <span class="kicker">Выплата</span>
+      <h2>Когда приходят деньги</h2>
+    </div>
+    <div class="steps rise">
+      <div class="step"><span class="n">1</span><div><h3>С 1 по 3 число система собирает расчет</h3><p>Смены, диагностики и проценты за прошлый месяц считаются автоматически.</p></div></div>
+      <div class="step"><span class="n">2</span><div><h3>С 3 по 5 вы проверяете</h3><p>Видите свой расчет и можете оспорить любую строку.</p></div></div>
+      <div class="step"><span class="n">3</span><div><h3>До 10 числа выплата</h3><p>Рассрочка у семьи: ваш процент идет частями вслед за ее платежами.</p></div></div>
+    </div>
+  </section>
+
+  <!-- 32 · обучение -->
+  <section class="slide" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Обучение</span>
-      <h2>Курс и допуск к работе</h2>
-      <p class="lead">Вся конкретика лежит в CRM, в разделе «Академия»: курс «Продажи» со скриптами, разборами и проверочными вопросами. Все, что сегодня прозвучало, там разобрано подробно.</p>
+      <h2>Все подробности лежат в CRM</h2>
+      <p class="lead">Раздел «Академия», курс «Продажи»: скрипты, разборы, проверочные вопросы.</p>
     </div>
     <div class="grid g3 rise">
-      <div class="card"><h3>17 уроков</h3><p>Компания и продукт, маршруты семьи, гранты, девять этапов нашей работы, кейсы с именами, смены, звонок, диагностика, возражения, деньги, документы.</p></div>
-      <div class="card"><h3>10 вопросов аттестации</h3><p>Тарифы, гранты, сроки волн подачи, что можно и чего нельзя обещать.</p></div>
-      <div class="card"><h3>2 практики</h3><p>Учебная диагностика с руководителем и с записью, это ролевка. И письменный ответ на возражение «дорого».</p></div>
+      <div class="card"><h3>17 уроков</h3><p>Компания, продукт, гранты, кейсы с именами, смены, звонок, диагностика, возражения, деньги, документы.</p></div>
+      <div class="card"><h3>10 вопросов аттестации</h3><p>Тарифы, гранты, сроки волн, что можно и чего нельзя обещать.</p></div>
+      <div class="card"><h3>2 практики</h3><p>Учебная диагностика с руководителем под запись и письменный ответ на «дорого».</p></div>
     </div>
-    <div class="note rise"><b>Без сданной аттестации на смены не выходим.</b> Ставка за диагностику до аттестации 300 ₽, после 500 ₽.</div>
   </section>
 
-  <!-- 16. что дальше -->
-  <section class="slide dark">
+  <!-- 33 · что дальше -->
+  <section class="slide dark" data-chap="Дальше">
     <div class="rise hold">
       <span class="kicker">Что дальше</span>
       <h2>Четыре шага до первой смены</h2>
     </div>
     <div class="split rise">
       <div class="steps" style="margin-top:0">
-      <div class="step"><span class="n">1</span><div><h3>Учетка в CRM</h3><p>Логин и пароль выдает Павел лично. Пароль показывается один раз, сохраните сразу.</p></div></div>
-      <div class="step"><span class="n">2</span><div><h3>Курс «Продажи»</h3><p>Раздел «Академия». Проходим целиком: вопросы аттестации собраны из уроков.</p></div></div>
-      <div class="step"><span class="n">3</span><div><h3>Ролевка</h3><p>Учебная диагностика с руководителем, с записью. Принимаем и разбираем вместе.</p></div></div>
-      <div class="step"><span class="n">4</span><div><h3>Выход на смены</h3><p>График смен, первая линия и первые диагностики под присмотром.</p></div></div>
+        <div class="step"><span class="n">1</span><div><h3>Учетка в CRM</h3><p>Логин и пароль выдает Павел лично.</p></div></div>
+        <div class="step"><span class="n">2</span><div><h3>Курс «Продажи»</h3><p>Проходим целиком: вопросы аттестации собраны из уроков.</p></div></div>
+        <div class="step"><span class="n">3</span><div><h3>Ролевка</h3><p>Учебная диагностика с руководителем, с записью.</p></div></div>
+        <div class="step"><span class="n">4</span><div><h3>Выход на смены</h3><p>Первая линия и первые диагностики под присмотром.</p></div></div>
       </div>
       <div class="pic"><img src="img/team-call.webp" alt="Консультант на видеозвонке"></div>
     </div>
@@ -655,8 +888,9 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
 <div class="bar">
   <span class="brand">ИСТСАЙД.РФ</span>
+  <span class="chap" id="chap">Компания</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 17</span>
+  <span class="count" id="count">1 / 33</span>
   <div class="arrows">
     <button id="prev" aria-label="Предыдущий слайд">‹</button>
     <button id="next" aria-label="Следующий слайд">›</button>
@@ -669,6 +903,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   var slides = [].slice.call(document.querySelectorAll('.slide'));
   var dots = document.getElementById('dots');
   var count = document.getElementById('count');
+  var chap = document.getElementById('chap');
   var prev = document.getElementById('prev'), next = document.getElementById('next');
   var i = 0;
 
@@ -676,7 +911,9 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     var b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'tab');
-    b.setAttribute('aria-label', 'Слайд ' + (n + 1));
+    b.setAttribute('aria-label', 'Слайд ' + (n + 1) + ': ' + (s.dataset.chap || ''));
+    // начало новой части помечено темнее: видно, где мы в рассказе
+    if (n === 0 || s.dataset.chap !== slides[n - 1].dataset.chap) b.classList.add('chap-start');
     b.addEventListener('click', function () { go(n); });
     dots.appendChild(b);
   });
@@ -689,22 +926,25 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     slides[i].classList.add('on');
     slides[i].scrollTop = 0;
     draw();
-    // Адрес хранит номер слайда: обновил страницу посреди встречи — остался на месте.
+    // дорога меряется по своей кривой: пока слайд скрыт, длина пути нулевая
+    if (slides[i].querySelector('#road')) roadLay();
     history.replaceState(null, '', '#' + (i + 1));
   }
   function draw() {
     [].forEach.call(dots.children, function (b, n) { b.setAttribute('aria-current', String(n === i)); });
     count.textContent = (i + 1) + ' / ' + slides.length;
+    chap.textContent = slides[i].dataset.chap || '';
     prev.disabled = i === 0;
     next.disabled = i === slides.length - 1;
-    document.body.style.background = slides[i].classList.contains('dark') ? '#0b2148' : '#eef2fc';
+    document.body.style.background = slides[i].classList.contains('dark') ? '#0b2148'
+      : (slides[i].classList.contains('tint') ? '#e9effb' : '#eef2fc');
   }
 
   prev.addEventListener('click', function () { go(i - 1); });
   next.addEventListener('click', function () { go(i + 1); });
 
   document.addEventListener('keydown', function (e) {
-    // Ползунки калькулятора тоже слушают стрелки — им они нужнее.
+    // ползунки калькулятора тоже слушают стрелки, им они нужнее
     var t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) return;
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(i + 1); }
@@ -713,7 +953,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     else if (e.key === 'End') { go(slides.length - 1); }
   });
 
-  // Свайп на телефоне. Вертикальный жест не трогаем: внутри слайда бывает прокрутка.
+  // свайп на телефоне; вертикальный жест не трогаем, внутри слайда бывает прокрутка
   var x0 = null, y0 = null;
   document.addEventListener('touchstart', function (e) {
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
@@ -725,9 +965,114 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     x0 = y0 = null;
   }, { passive: true });
 
-  var start = parseInt((location.hash || '').replace('#', ''), 10);
-  if (start > 1 && start <= slides.length) { slides[0].classList.remove('on'); i = start - 1; slides[i].classList.add('on'); }
-  draw();
+  /* ── тарифы: переключатель вместо трех колонок текста ────────────────── */
+  var TAR = {
+    std: {
+      price: '159 000 ₽',
+      say: 'Подачу и проверку ведет наша команда, бытовые шаги семья делает сама. Работа заканчивается на визе.',
+      we: ['Подготовка и подача документов, проверка перед отправкой', 'Платформа целиком: тренажеры, письма, репетиция интервью', 'Диагностика шансов и подбор вузов под профиль', 'Подача до 5 вузов'],
+      fam: ['Перевод и нотариус по нашему списку и шаблонам', 'Медицинская справка в своей клинике', 'Анкета на визу и визовый центр']
+    },
+    plus: {
+      price: '299 990 ₽',
+      say: 'Документы, переводы и нотариуса берет на себя команда. Сопровождение продолжается месяц после заселения.',
+      we: ['Все, что в Стандарте', 'Документы, переводы и нотариус на нас, семья присылает сканы', 'Подача до 7 вузов', 'Виза: заполняем анкету и записываем в визовый центр', 'Месяц сопровождения после заселения, онлайн'],
+      fam: ['Биометрию в визовом центре кандидат сдает сам', 'Встреча в Китае и тьютор в городе не входят']
+    },
+    prem: {
+      price: '399 990 ₽',
+      say: 'Максимум делегирования: виза без личной явки, встреча в Китае и человек рядом первые два месяца.',
+      we: ['Все, что в Стандарте Плюс', 'Курс по методам обучения перед экзаменами', 'Виза без личной явки, оформляем дистанционно', 'Встреча в аэропорту, дорога до вуза и заселение', 'Персональный тьютор в городе два месяца', 'Подача до 10 вузов'],
+      fam: ['Ничего из нашего сопровождения: все пятнадцать этапов ведем мы']
+    }
+  };
+  var tsw = document.getElementById('tsw');
+  function tarDraw(id) {
+    var t = TAR[id];
+    document.getElementById('tpPrice').textContent = t.price;
+    document.getElementById('tpSay').textContent = t.say;
+    document.getElementById('tpWe').innerHTML = t.we.map(function (x) { return '<li>' + x + '</li>'; }).join('');
+    document.getElementById('tpFam').innerHTML = t.fam.map(function (x) { return '<li>' + x + '</li>'; }).join('');
+  }
+  tsw.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(tsw.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    tarDraw(b.getAttribute('data-t'));
+  });
+  tarDraw('std');
+
+  /* ── дорога: этапы пути ученика ──────────────────────────────────────── */
+  var RD = [
+    { w: 'день оплаты', t: 'Доступ к платформе', who: 'платформа', d: 'Семья получает кабинет: маршрут с датами волн, календарь, задачи от команды, документы и чат с нами. Отдельный вход у ученика и у родителя.' },
+    { w: 'день 1–5', t: 'Диагностика профиля', who: 'мы', d: 'Модель считает шансы по каждому вузу и гранту, диагност разбирает результат с семьей: где профиль проседает и что это меняет в списке вузов.' },
+    { w: 'неделя 1–2', t: 'Выбор направления и вузов', who: 'мы', d: 'Нейропрофориентация по профессиям будущего, подбор вузов и грантов под профиль, маршрут и календарь поступления с датами волн.' },
+    { w: 'месяц 1', t: 'Документы и нотариус', who: 'семья', d: 'Сбор, перевод и нотариальное заверение, медицинская справка по форме вуза. На Стандарте нотариуса и справку семья проходит сама.' },
+    { w: 'месяц 1–2', t: 'Усиление профиля', who: 'мы', d: 'Портфолио и собственный проект ученика: то, чем заявка отличается от тысяч других с такими же оценками.' },
+    { w: 'месяц 2', t: 'Мотивационное письмо', who: 'мы', d: 'Мотивационное и рекомендательные письма пишем мы. Китай ищет тех, кто станет мостом между странами.' },
+    { w: 'месяц 2–3', t: 'Методы обучения', who: 'прем', d: 'Курс по эффективному обучению и запоминанию перед экзаменами. Работает и на языковом, и на CSCA, и на первой сессии в Китае.' },
+    { w: 'до подачи', t: 'Языковой экзамен', who: 'мы', d: 'Подготовка к HSK или DET: тренажеры на платформе, видеоинтенсивы, пробники и разбор ошибок.' },
+    { w: 'до подачи', t: 'Тестирование CSCA', who: 'мы', d: 'Математика и профильные предметы: записанные уроки, домашние задания и свои пробники.' },
+    { w: 'до подачи', t: 'Онлайн-интервью', who: 'мы', d: 'Репетиция интервью с тьютором и разбор записи. Живой человек решает судьбу заявки, и несвязный ответ топит сильное досье.' },
+    { w: 'волна подачи', t: 'Подача и мониторинг', who: 'мы', d: 'Подаем в согласованный список вузов и следим за статусом каждой заявки. Вузы отвечают с мая до середины июля.' },
+    { w: 'май – сентябрь', t: 'Зачисление, виза, Китай', who: 'мы', d: 'Выбор гранта из пришедших ответов, учебная виза, адаптация. На Премиуме встречаем в аэропорту и ведем первые два месяца.' }
+  ];
+  var WHO = { 'платформа': 'платформа', 'мы': 'делаем мы', 'семья': 'часть делает семья', 'прем': 'только Премиум' };
+  var road = document.getElementById('road');
+  var rdPath = document.getElementById('rdPath');
+  var rdIdx = 0, rdDots = [];
+
+  RD.forEach(function (stg, n) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'rd-dot';
+    b.setAttribute('aria-pressed', String(n === 0));
+    b.setAttribute('aria-label', stg.t);
+    b.innerHTML = String(n + 1) + '<i></i>';
+    b.addEventListener('click', function () { rdShow(n); });
+    road.appendChild(b);
+    rdDots.push(b);
+  });
+
+  function roadLay() {
+    var len = rdPath.getTotalLength();
+    if (!len) return;
+    [].forEach.call(road.querySelectorAll('.rd-run, .rd-car'), function (p) { p.style.setProperty('--len', len); });
+    rdDots.forEach(function (b, n) {
+      // viewBox растягивается вместе со слайдом, поэтому координату точки
+      // переводим в проценты, а не в пиксели
+      var p = rdPath.getPointAtLength(len * (n + 0.6) / RD.length);
+      b.style.left = (p.x / 1200 * 100) + '%';
+      b.style.top = (p.y / 300 * 100) + '%';
+    });
+    var end = rdPath.getPointAtLength(len);
+    var goal = document.getElementById('rdGoal');
+    goal.style.left = (end.x / 1200 * 100) + '%';
+    goal.style.top = (end.y / 300 * 100) + '%';
+    var flag = document.getElementById('rdFlag');
+    flag.style.left = (end.x / 1200 * 100) + '%';
+    flag.style.top = (end.y / 300 * 100) + '%';
+    var beg = rdPath.getPointAtLength(0);
+    var stt = document.getElementById('rdStart');
+    stt.style.left = (beg.x / 1200 * 100) + '%';
+    stt.style.top = (beg.y / 300 * 100) + '%';
+  }
+  function rdShow(n) {
+    rdIdx = (n + RD.length) % RD.length;
+    var s = RD[rdIdx];
+    rdDots.forEach(function (b, k) { b.setAttribute('aria-pressed', String(k === rdIdx)); });
+    document.getElementById('rdWhen').textContent = s.w;
+    document.getElementById('rdTitle').textContent = s.t;
+    document.getElementById('rdText').textContent = s.d;
+    document.getElementById('rdCount').textContent = (rdIdx + 1) + ' из ' + RD.length;
+    var who = document.getElementById('rdWho');
+    who.textContent = WHO[s.who];
+    who.className = 'rd-who' + (s.who === 'семья' ? ' fam' : '');
+  }
+  document.getElementById('rdPrev').addEventListener('click', function () { rdShow(rdIdx - 1); });
+  document.getElementById('rdNext').addEventListener('click', function () { rdShow(rdIdx + 1); });
+  window.addEventListener('resize', roadLay);
+  window.addEventListener('load', roadLay);
+  rdShow(0);
+  roadLay();
 
   /* ── калькулятор ─────────────────────────────────────────────────────── */
   var st = { shifts: 40, kq: 1, diags: 20, rate: 500, deals: 3, role: 3.2, tariff: 159000 };
@@ -760,6 +1105,10 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     });
   });
   calc();
+
+  var start = parseInt((location.hash || '').replace('#', ''), 10);
+  if (start > 1 && start <= slides.length) { slides[0].classList.remove('on'); i = start - 1; slides[i].classList.add('on'); }
+  draw();
 })();
 </script>
 </body>
