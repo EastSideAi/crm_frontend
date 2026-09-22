@@ -20520,11 +20520,19 @@
     tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
+  /* Метка ссылки → человеческое название. Чего здесь нет, то показывается сырым кодом,
+     и маркетолог читает в отчёте «salebot» — служебное слово, которое ничего ему не
+     говорит и выглядит как чужая система (спросил владелец 22.09). Добавляем сюда ВСЕ
+     метки, которые реально встречаются в ссылках и регистрациях. */
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
     instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    /* Salebot — сторонняя платформа, через неё шли рассылки по старой базе. Название
+       платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
+    salebot: 'Рассылка по старой базе',
+    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
   };
 
   function mkUrl(code) {
