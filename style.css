@@ -336,6 +336,10 @@ a { color: inherit; text-decoration: none; }
    плиток ровно четыре, и «умная» сетка сломала бы их на промежуточных ширинах. */
 .statbar.five { grid-template-columns: repeat(5, 1fr); }
 .statbar.five .stat { padding: 16px 18px; }
+/* Шестая — «страницу видели» из Метрики на экране запусков. Появляется не всегда:
+   Метрика недоступна или счётчик не задан — плиток снова пять. */
+.statbar.six { grid-template-columns: repeat(6, 1fr); }
+.statbar.six .stat { padding: 16px 14px; }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
@@ -863,6 +867,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    (прецедент — комментарий у .mkd-row ниже). Ховер тоже гасим. */
 .lad-static .lad-row, .brk .lad-row { cursor: default; }
 .lad-static .lad-row:hover, .brk .lad-row:hover { background: transparent; }
+/* Строка блока, за которой стоит список людей. Подсветку берём ту же, что у обычной
+   строки лестницы, — иначе один и тот же жест выглядел бы в CRM двумя разными. */
+.brk .lad-row.brk-open { cursor: pointer; }
+.brk .lad-row.brk-open:hover { background: #FBFBFC; }
+.brk .lad-row.brk-open:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .mini-funnel { display: flex; align-items: flex-end; gap: 9px; height: 110px; padding: 6px 0 0; }
 .fcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 9px; height: 100%; }
@@ -4419,8 +4428,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
-  .statbar, .statbar.five { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
-  .stat, .statbar.five .stat { padding: 14px 16px; }
+  .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
   .stat + .stat::before { display: none; }
   .sg2 { grid-template-columns: 1fr; }
@@ -4542,11 +4551,11 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
    ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
 @media (max-width: 480px) {
-  .statbar, .statbar.five { grid-template-columns: 1fr; }
+  .statbar, .statbar.five, .statbar.six { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
   /* Пять плиток одной колонкой — 650px скролла до содержимого, и последняя
      (на «Запусках» это «До эфира») уезжала за экран. Пятая — во всю ширину. */
-  .statbar.five { grid-template-columns: 1fr 1fr; }
+  .statbar.five, .statbar.six { grid-template-columns: 1fr 1fr; }
   .statbar.five .stat:last-child { grid-column: 1 / -1; }
 }
 

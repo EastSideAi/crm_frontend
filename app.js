@@ -20520,11 +20520,19 @@
     tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
+  /* Метка ссылки → человеческое название. Чего здесь нет, то показывается сырым кодом,
+     и маркетолог читает в отчёте «salebot» — служебное слово, которое ничего ему не
+     говорит и выглядит как чужая система (спросил владелец 22.09). Добавляем сюда ВСЕ
+     метки, которые реально встречаются в ссылках и регистрациях. */
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
     instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    /* Salebot — сторонняя платформа, через неё шли рассылки по старой базе. Название
+       платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
+    salebot: 'Рассылка по старой базе',
+    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
   };
 
   function mkUrl(code) {
@@ -21434,8 +21442,16 @@
       '<div class="lad-right">' + (right || '') + '</div></div>';
   }
 
-  function flatRow(name, small, n) {
-    return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
+  /* `open` (необязательный) — {block, value}: строка блока разворачивается в поимённый
+     список тех же людей, что она посчитала. Без него строка остаётся как была —
+     обычной, некликабельной. Это тот же приём, что у плашек ступени: цифра, которую
+     нельзя проверить глазами, команду не убеждает. */
+  function flatRow(name, small, n, open) {
+    var can = !!(open && open.block);
+    return '<div class="lad-row gf-flat' + (can ? ' brk-open' : '') + '"' +
+      (can ? ' data-lblock="' + esc(open.block) + '" data-lvalue="' + esc(open.value || '') +
+             '" role="button" tabindex="0" title="Показать этих людей поимённо"' : '') +
+      '><div class="lad-nm">' + esc(name) +
       (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-n num">' + n + '</div></div>';
   }
@@ -21492,6 +21508,134 @@
     return worst ? worst.key : null;
   }
 
+  /* Плитка «Страницу видели» — сколько людей открывало посадочную запуска, по
+     Яндекс Метрике. Без неё экран начинается с регистраций, и «трафика не было»
+     неотличимо от «трафик был, а форму не заполнили»: два разных диагноза, один вид.
+
+     Показываем ТОЛЬКО когда бэкенд прислал блок. Нет блока — плиток снова пять, а не
+     ноль в шестой: ноль здесь читался бы как «на страницу никто не заходил».
+
+     В подписи обязательно дата начала: счётчик на странице появился позже старта
+     запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
+     людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
+     Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  function launchSeenTile(cur, reg) {
+    var p = cur.pages;
+    if (!p || !p.users) return [];
+    var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
+    var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
+    return [{
+      label: 'Страницу видели',
+      /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
+         уводит на другой экран. */
+      go: 'seen',
+      value: fmtMoney(p.users),
+      sub: (pct == null ? since : 'заполнили форму ' + pct + '% · ' + since) +
+           ' · Яндекс Метрика',
+    }];
+  }
+
+  /* ── Что стоит за цифрой «страницу видели» ─────────────────────────────────
+     Здесь НЕ будет списка людей, и это не недоделка: Метрика считает анонимные
+     заходы, имён и контактов у неё нет вовсе. Развернуть эту цифру в людей, как
+     разворачиваются остальные на экране, нельзя в принципе — поэтому попап прямо
+     об этом говорит, иначе «нажал и не увидел людей» читается как поломка.
+
+     Показываем то, что Метрика действительно знает и что отвечает на рабочий
+     вопрос: в какие дни люди приходили и откуда. Данные приезжают вместе с экраном,
+     отдельный запрос не нужен. */
+  function launchSeenOpen(cur, reg, node) {
+    state._lpSeen = { cur: cur, reg: reg, back: node || null };
+    launchSeenModal();
+  }
+
+  function launchSeenClose() {
+    var back = state._lpSeen && state._lpSeen.back;
+    state._lpSeen = null;
+    launchSeenModal();
+    try { if (back && document.body.contains(back)) back.focus(); } catch (e) {}
+  }
+
+  /* Заходы по дням. Столбик — заходы, в подсказке рядом регистрации того же дня:
+     сравнение и есть смысл картинки. Складывать их в один столбик нельзя — бывают
+     дни, когда регистраций больше, чем заходов (человек зашёл вчера, заполнил
+     сегодня; часть заходов Метрика не увидела), и стопка врала бы формой. */
+  function launchSeenChart(pages, byDay) {
+    var regBy = {};
+    (byDay || []).forEach(function (d) { regBy[d.day] = d.registered || 0; });
+    var days = (pages.by_day || []);
+    if (!days.length) return '';
+    var max = 1, i;
+    for (i = 0; i < days.length; i++) max = Math.max(max, days[i].users);
+    var bars = days.map(function (d) {
+      var h = Math.max(3, Math.round(d.users / max * 100));
+      var dd = d.day.split('-');
+      return '<div class="ch-day" title="' + dd[2] + '.' + dd[1] + ': заходов ' + d.users +
+        ', регистраций ' + (regBy[d.day] || 0) + '">' +
+        '<div class="b1" style="height:' + h + '%"></div></div>';
+    }).join('');
+    var labels = days.map(function (d, idx) {
+      var show = days.length <= 8 || idx % 2 === 1;
+      return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
+    }).join('');
+    return '<div class="lchart" style="margin-top:12px"><div class="chart">' + bars + '</div>' +
+      '<div class="ch-labels">' + labels + '</div></div>' +
+      '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>заходы на страницу · ' +
+      'наведите на столбик, чтобы увидеть регистрации этого дня</span></div>';
+  }
+
+  if (!window._lsEscBound) {
+    window._lsEscBound = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.getElementById('ls-ovl')) launchSeenClose();
+    });
+  }
+
+  function launchSeenModal() {
+    var host = el('ls-ovl-host');
+    var st = state._lpSeen;
+    if (!st) { if (host) host.remove(); return; }
+    if (!host) { host = document.createElement('div'); host.id = 'ls-ovl-host'; document.body.appendChild(host); }
+    var p = st.cur.pages || {};
+    var pct = st.reg.total && p.users ? Math.round(st.reg.total * 100 / p.users) : null;
+
+    var srcRows = (p.sources || []).map(function (s) {
+      return flatRow(s.title, '', s.users);
+    }).join('');
+
+    var head = '<div class="mk-modal-t"><span>Страницу видели · <span class="num">' +
+        fmtMoney(p.users || 0) + '</span></span></div>' +
+      '<div class="mk-modal-s">' + esc(st.cur.title || '') + ' · ' +
+        esc(p.path || '') + (p.since ? ' · с ' + esc(fmtDay(p.since)) : '') +
+        ' · данные Яндекс Метрики</div>';
+
+    var body =
+      '<div class="mk-logic-empty" style="text-align:left;margin-top:10px">' +
+        'Поимённо этих людей посмотреть нельзя: Метрика считает анонимные заходы, ' +
+        'имён и контактов у неё нет. Здесь — то, что она знает: когда заходили и откуда. ' +
+        'Из них заполнили форму ' + (pct == null ? '—' : pct + '%') + ' — это ' +
+        fmtMoney(st.reg.total) + ' ' + plural(st.reg.total, 'регистрация', 'регистрации', 'регистраций') +
+      '.</div>' +
+      launchSeenChart(p, st.cur.by_day) +
+      (srcRows
+        ? '<div class="sec-head" style="padding:16px 0 8px"><div><div class="t">Откуда приходили</div>' +
+          '<div class="s">по версии Метрики — это переходы, а не наши метки ссылок</div></div></div>' +
+          '<div class="brk">' + srcRows + '</div>'
+        : '');
+
+    var prev = el('ls-ovl');
+    var wasOpen = !!prev;
+    host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="ls-ovl">' +
+      '<div class="mk-modal wide" id="ls-modal" role="dialog" aria-modal="true" tabindex="-1">' +
+      '<button class="mk-xbtn" id="ls-x" title="Закрыть">' + ic('x', 14) + '</button>' +
+      head + body + '</div></div>';
+
+    var ovl = el('ls-ovl');
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) launchSeenClose(); });
+    el('ls-x').addEventListener('click', launchSeenClose);
+    try { el('ls-modal').focus(); } catch (e) {}
+  }
+
   function launchPlates(path) {
     var worst = launchWorstStep(path);
     return '<div class="lsteps">' + path.map(function (s, i) {
@@ -21513,6 +21657,14 @@
 
   function launchPeopleQS(offset) {
     var p = state._lpPeople;
+    if (p.kind === 'block') {
+      /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
+         Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
+      return '?' + ['slug=' + encodeURIComponent(p.slug),
+                    'block=' + encodeURIComponent(p.block),
+                    'value=' + encodeURIComponent(p.value || ''),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
              'limit=' + LP_LIMIT, 'offset=' + offset];
     if (p.from) q.push('from=' + encodeURIComponent(p.from));
@@ -21522,12 +21674,29 @@
 
   function launchPeopleOpen(slug, step, launchTitle, plate) {
     state._lpPeople = {
+      kind: 'step', id: 'step:' + step.key,
       slug: slug, step: step.key, title: step.title,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
       from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
+    };
+    launchPeopleLoad(false);
+  }
+
+  /* Список людей за цифрой БЛОКА под лестницей. Блоки считают не только
+     зарегистрировавшихся: тест открывают из постов, в канал вступают по общей ссылке.
+     Связать их с регистрацией нечем — но показать, кто это, можно и нужно: «тест прошли
+     22» без имён команда проверить не может и пересчитывает у себя. */
+  function launchBlockOpen(slug, block, value, title, launchTitle, count, node) {
+    state._lpPeople = {
+      kind: 'block', id: 'block:' + block + ':' + value,
+      slug: slug, block: block, value: value, step: '',
+      title: title, plate: count || 0, launch: launchTitle || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
     };
     launchPeopleLoad(false);
   }
@@ -21546,11 +21715,15 @@
     p.loading = true;
     if (!more) { p.rows = []; p.total = null; }
     var offset = p.rows.length;
-    var step = p.step;
+    /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
+       пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
+    var who = p.id;
+    var url = (p.kind === 'block') ? '/admin/api/marketing/launch/block'
+                                   : '/admin/api/marketing/launch/people';
     launchPeopleModal();
-    api('/admin/api/marketing/launch/people' + launchPeopleQS(offset)).then(function (r) {
+    api(url + launchPeopleQS(offset)).then(function (r) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;   /* успели кликнуть другую ступень */
+      if (!cur || cur.id !== who) return;      /* успели кликнуть другую строку */
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
@@ -21559,7 +21732,7 @@
       launchPeopleModal();
     }).catch(function (e) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;
+      if (!cur || cur.id !== who) return;
       /* '403' — токен протух, api уже увёл на экран входа: попап просто убираем */
       if (e && e.message === '403') { state._lpPeople = null; launchPeopleModal(); return; }
       cur.loading = false;
@@ -21614,11 +21787,22 @@
       body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
              '<div class="loaddot"></div><div class="loaddot"></div></div>';
     } else if (!shown) {
-      body = '<div class="mk-logic-empty">На этой ступени пока никого — ' +
-             'людей здесь не появится, пока шаг не сработает хотя бы у одного человека.</div>';
+      body = '<div class="mk-logic-empty">' + (p.kind === 'block'
+        ? 'Здесь пока никого — людей в этой строке ещё нет.'
+        : 'На этой ступени пока никого — людей здесь не появится, ' +
+          'пока шаг не сработает хотя бы у одного человека.') + '</div>';
     } else {
-      body = '<div class="lp-tbl"><div class="lp-th"><span>Человек</span><span>Контакт</span>' +
-        '<span>Откуда пришёл</span><span>Регистрация</span></div>' +
+      /* Заголовки колонок зависят от того, ОТКУДА люди. У зарегистрировавшихся есть
+         телефон и дата регистрации, у людей из бота — только ник и дата входа.
+         Назвать чужой столбец «Контакт» и «Регистрация» значит пообещать данные,
+         которых в строке нет. */
+      var bot = p.kind === 'block' && p.block !== 'source';
+      var cols = bot
+        ? ['Человек', 'Ник', 'Откуда пришёл',
+           p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
+        : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
+      body = '<div class="lp-tbl"><div class="lp-th">' +
+        cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(launchPeopleRow).join('') + '</div>';
     }
 
@@ -21640,8 +21824,14 @@
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
-      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') + esc(per) +
-        ' · это те же люди, что посчитаны на плашке</div>';
+      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
+        esc(p.kind === 'block' ? 'весь запуск' : per) + ' · ' +
+        (p.kind === 'block'
+          ? (p.block === 'source'
+              ? 'это те же люди, что посчитаны в блоке'
+              : 'это те же люди, что посчитаны в блоке · ' +
+                'связаны ли они с регистрацией — мы не знаем')
+          : 'это те же люди, что посчитаны на плашке') + '</div>';
 
     /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
        страницу под затемнением. Запоминаем, где он был, и возвращаем после сборки:
@@ -21892,16 +22082,20 @@
       ladRow('Оплата диагностики', 'деньги запуска', '—', null, convMut('после эфира'));
 
     var diagRows = (cur.diag || []).map(function (d) {
-      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done, d.done);
+      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done,
+        d.done, { block: 'diag', value: d.channel });
     }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
 
     var srcRows = (reg.sources || []).map(function (s) {
       return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
-        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n);
+        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n,
+        { block: 'source', value: s.source || '' });
     }).join('') || '<div class="empty">Регистраций пока нет.</div>';
 
+    /* ВК и MAX кликом не разворачиваются намеренно: это снимки счётчика площадки,
+       а не список людей — их подписчиков мы поимённо не знаем и делать вид не будем. */
     var chRows =
-      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0) +
+      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0, { block: 'channel', value: 'member' }) +
       flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
       flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
 
@@ -21932,7 +22126,7 @@
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
-      ], 'five') +
+      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -21949,13 +22143,16 @@
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid" style="margin-top:16px">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
+          '<div><div class="t">Диагностический тест</div><div class="s">все, кто запускал тест ' +
+            '· нажмите на строку, чтобы увидеть их поимённо</div></div></div>' +
           '<div class="brk">' + diagRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
+          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок ' +
+            '· нажмите на метку, чтобы увидеть этих людей</div></div></div>' +
           '<div class="brk">' + srcRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
+          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам ' +
+            '· телеграм разворачивается в список</div></div></div>' +
           '<div class="brk">' + chRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
@@ -21963,7 +22160,14 @@
         '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
           '<div style="border-top:1px solid var(--line)">' +
-            '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сюда она не подключена</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+            /* Раньше здесь стояло «Метрика сюда не подключена». С появлением плитки
+               «Страницу видели» это перестало быть правдой — но только про страницу
+               интенсива: страницу теста считает отдельный счётчик, и её мы пока не
+               показываем. Пишем ровно то, что есть, иначе список «чего нет» сам
+               становится местом, где написана неправда. */
+            (cur.pages
+              ? '<div class="mkd-gap"><div><b>Посетители страницы теста</b><small>заходы на истсайд.рф/diag считает отдельный счётчик Метрики, на экран он пока не выведен</small></div><span class="sev n-wait">не в цифрах</span></div>'
+              : '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сейчас она недоступна</small></div><span class="sev n-wait">не в цифрах</span></div>') +
             '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
           '</div></div>' +
       '</div></div>';
@@ -21981,6 +22185,31 @@
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
         if (st) launchPeopleOpen(cur.slug, st, cur.title, n);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    /* Плитка «Страницу видели» → разбор по дням и источникам. Людей там нет и быть
+       не может (Метрика анонимна), попап об этом говорит прямо. */
+    var seenTile = view.querySelector('.stat[data-go="seen"]');
+    if (seenTile) {
+      seenTile.addEventListener('click', function () {
+        launchSeenOpen(cur, reg, seenTile);
+      });
+    }
+    /* Строка блока под лестницей → те же люди поимённо. Название и число берём с
+       самой строки: пока ответ ручки не пришёл, в шапке попапа стоит ровно то, на
+       что человек нажал, а не «Загружаю». */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lblock]'), function (n) {
+      var openIt = function () {
+        var nm = n.querySelector('.lad-nm');
+        var num = parseInt((n.querySelector('.lad-n') || {}).textContent, 10);
+        launchBlockOpen(cur.slug, n.getAttribute('data-lblock'),
+          n.getAttribute('data-lvalue') || '',
+          (nm && nm.firstChild ? String(nm.firstChild.textContent).trim() : 'Люди'),
+          cur.title, isNaN(num) ? 0 : num, n);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
