@@ -11530,7 +11530,13 @@
       '<div class="t">Домашки CSCA</div><div class="s">' +
         (subjects.join(' и ').toLowerCase() || 'ваши предметы') +
         ' · ' + (waiting ? 'ждут проверки: ' + waiting : 'все проверено') + '</div></div>' +
-      seg + '</div><div class="csw-list">' + list + '</div></div>';
+      seg + '</div><div class="csw-list">' + list + '</div>' +
+      // Вера 22.09.2026: «если ему что-то не нравится, надо кнопочку, чтобы он не
+      // мне писал». Кнопка жалоб живет слева внизу, и преподаватель ее там не ищет —
+      // зовем ее оттуда, где он работает.
+      '<div class="csw-help">Что-то не работает или неудобно — ' +
+      '<button type="button" class="csw-link" data-csw="bug">напишите сюда</button>. ' +
+      'Уйдет тому, кто делает платформу.</div></div>';
   }
   /* ── Ученики CSCA ─────────────────────────────────────────────────────────
      Вера 22.09.2026: «он видит, кто что делает». Раздел «Обучение» знал только
@@ -11614,6 +11620,7 @@
           CSCA_HW_SCOPE = b.getAttribute('data-s'); CSCA_HW_BACK = '';
           CSCA_HW = null; renderView(); cscaHwLoad(); return;
         }
+        if (what === 'bug') { openBugPanel('report'); return; }
         if (what === 'back') { CSCA_HW_BACK = CSCA_HW_BACK === key ? '' : key; renderView(); return; }
         if (what === 'ok') { cscaHwReview(key, 'accepted', '', view); return; }
         if (what === 'send') {
