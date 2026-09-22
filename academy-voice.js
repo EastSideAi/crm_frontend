@@ -160,7 +160,7 @@ window.AC_VOICE = {
   "sales-0-1": "sales-ea0aec1f8779.mp3",
   "sales-0-2": "sales-bfd11434dd75.mp3",
   "sales-0-3": "sales-36ac8ebfe723.mp3",
-  "sales-1-0": "sales-fe9e45725300.mp3",
+  "sales-1-0": "sales-9b39a507038a.mp3",
   "sales-1-1": "sales-c90ed96eee43.mp3",
   "sales-1-2": "sales-3cc52847c1c0.mp3",
   "sales-1-3": "sales-29a21b123d89.mp3",

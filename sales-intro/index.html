@@ -5,17 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#0d2f68">
-<title>Отдел продаж ИСТСАЙД.РФ — знакомство</title>
+<title>Отдел продаж ИСТСАЙД.РФ, знакомство</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="preload" as="image" href="img/hero-campus.webp">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231763c8'/><path d='M8 20l5-8 5 5 6-9' stroke='%23fff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
 <style>
 /* Презентация для первой встречи с отделом продаж.
-   Павел 23.09.2026: «хочу переключать как слайды, интерактивно и красиво, как
-   дорога в будущее». Отсюда устройство: один экран — один слайд, переключение
-   клавишами, кликом и свайпом; сквозной образ — уходящая в перспективу дорога
-   на темных слайдах, светлые слайды между ними держат цифры и разборы.
+   Павел 23.09.2026: слайды переключаются, живые фотографии вместо рисованных
+   образов, продукты идут деревом, потом флагман с тарифами и этапами, потом
+   языковое направление. Сквозной материал это наши собственные кадры: слайд с
+   фотографией держит смысл, светлый слайд держит цифры и разборы.
    Палитра и материал взяты со страницы истсайд.рф/admission-v2. Внешних теней
    нет нигде, только внутренние. */
 :root{
@@ -38,6 +39,7 @@ h1,h2,h3{text-wrap:balance; letter-spacing:-.035em; font-weight:660}
 ul{padding:0; list-style:none}
 button{font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent}
 input{font:inherit}
+img{display:block; max-width:100%}
 :focus-visible{outline:2px solid var(--blue); outline-offset:3px}
 
 /* ── каркас колоды ──────────────────────────────────────────────────────── */
@@ -50,8 +52,13 @@ input{font:inherit}
   overflow-y:auto; overscroll-behavior:contain;
 }
 .slide.on{opacity:1; visibility:visible; transform:none}
-.slide > *:not(.road){width:min(1240px,100%); margin-inline:auto}
-.slide.dark{color:#fff; background:linear-gradient(160deg,#17478f 0%,#123f85 46%,#091f4a 100%)}
+.slide > *:not(.shot-bg){width:min(1240px,100%); margin-inline:auto}
+.slide.dark{color:#fff;
+  background:
+    radial-gradient(120% 90% at 18% -10%, rgba(52,110,196,.42), transparent 62%),
+    radial-gradient(90% 70% at 92% 108%, rgba(24,68,140,.5), transparent 66%),
+    #0b2148;
+}
 
 /* появление содержимого */
 .slide.on .rise{animation:rise .52s cubic-bezier(.22,1,.36,1) both}
@@ -62,40 +69,26 @@ input{font:inherit}
 @media (prefers-reduced-motion:reduce){
   .slide{transition:opacity .01s}
   .slide.on .rise{animation:none}
-  .road-grid{animation:none !important}
+  .shot-bg img{animation:none !important}
 }
 
-/* ── дорога ─────────────────────────────────────────────────────────────── */
-.road{position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; opacity:.9}
-/* свет над горизонтом */
-.road::before{
-  content:''; position:absolute; left:50%; top:34%; width:150%; height:32%; transform:translateX(-50%);
-  background:radial-gradient(46% 100% at 50% 100%, rgba(170,215,255,.42), rgba(120,175,255,.12) 52%, transparent 76%);
+/* ── фотография во весь слайд ───────────────────────────────────────────── */
+/* Кадр живет фоном, текст стоит на затемненной стороне: так фотография
+   остается фотографией, а не подложкой под плашку. */
+.shot-bg{position:absolute; inset:0; overflow:hidden; z-index:0}
+.shot-bg img{width:100%; height:100%; object-fit:cover; object-position:var(--pos,50% 50%)}
+.slide.on .shot-bg img{animation:drift 22s ease-out both}
+@keyframes drift{from{transform:scale(1.06)} to{transform:scale(1)}}
+.shot-bg::after{
+  content:''; position:absolute; inset:0;
+  background:
+    linear-gradient(100deg, rgba(8,26,58,.94) 0%, rgba(8,26,58,.84) 42%, rgba(8,26,58,.42) 68%, rgba(8,26,58,.2) 100%),
+    linear-gradient(to top, rgba(8,26,58,.55), transparent 42%);
 }
-/* сама линия горизонта */
-.road::after{
-  content:''; position:absolute; left:50%; top:66%; width:62%; height:1.5px; transform:translateX(-50%);
-  background:linear-gradient(to right, transparent, rgba(205,232,255,.72), transparent);
+.shot-bg.center::after{
+  background:linear-gradient(to top, rgba(8,26,58,.88) 4%, rgba(8,26,58,.52) 46%, rgba(8,26,58,.34) 100%);
 }
-.road-wrap{position:absolute; left:0; right:0; top:66%; bottom:0; perspective:190px; perspective-origin:50% 0%; overflow:hidden}
-.road-grid{
-  position:absolute; inset:0 -90% -10% -90%; transform:rotateX(79deg); transform-origin:50% 0%;
-  background-image:
-    linear-gradient(to right, rgba(182,220,255,.34) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(182,220,255,.40) 1.5px, transparent 1.5px);
-  background-size:54px 54px;
-  mask-image:linear-gradient(to bottom, rgba(0,0,0,.25) 0%, #000 34%, rgba(0,0,0,.18) 92%, transparent 100%);
-  -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,.25) 0%, #000 34%, rgba(0,0,0,.18) 92%, transparent 100%);
-  animation:road 5.5s linear infinite;
-}
-@keyframes road{from{background-position:0 0} to{background-position:0 54px}}
-/* свечение в точке схождения: дорога уходит в свет, а не в прямоугольник */
-.road-beam{
-  position:absolute; left:50%; top:66%; width:min(720px,72vw); height:min(300px,34vh);
-  transform:translate(-50%,-52%);
-  background:radial-gradient(50% 50% at 50% 50%, rgba(226,242,255,.38), rgba(150,200,255,.12) 44%, transparent 72%);
-}
-.slide.dark > *:not(.road){position:relative; z-index:1}
+.slide.dark > *:not(.shot-bg){position:relative; z-index:1}
 
 /* ── типографика слайда ─────────────────────────────────────────────────── */
 .kicker{
@@ -103,12 +96,14 @@ input{font:inherit}
   font-size:12.5px; font-weight:600; margin-bottom:18px;
   border:1px solid var(--line); background:rgba(255,255,255,.7); color:var(--blue-d);
 }
-.dark .kicker{border-color:rgba(255,255,255,.3); background:rgba(255,255,255,.14); color:rgba(255,255,255,.94)}
+.dark .kicker{border-color:rgba(255,255,255,.32); background:rgba(255,255,255,.16); color:#fff}
 h1{font-size:clamp(34px,5.4vw,70px); line-height:1.03}
 h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .lead{margin-top:18px; max-width:64ch; font-size:clamp(15px,1.5vw,19px); line-height:1.55; color:var(--soft)}
-.dark .lead{color:rgba(255,255,255,.86)}
+.dark .lead{color:rgba(255,255,255,.88); max-width:58ch}
 .big{margin-top:20px; max-width:22ch; font-size:clamp(28px,4.4vw,56px); line-height:1.1; font-weight:660}
+.slide > .hold{max-width:min(720px,72%); margin-inline:0}
+@media (max-width:820px){.slide > .hold{max-width:100%}}
 
 /* ── блоки ──────────────────────────────────────────────────────────────── */
 .grid{display:grid; gap:16px; margin-top:clamp(20px,3.4vh,34px)}
@@ -119,14 +114,14 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .card p{margin-top:9px; font-size:clamp(14px,1.1vw,15.5px); line-height:1.55; max-width:56ch; color:var(--soft)}
 .card.wide{grid-column:1/-1; background:rgba(231,239,252,.86); border-color:rgba(23,99,200,.26)}
 .card.wide h3{font-size:clamp(19px,2vw,24px)}
-.dark .card{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22)}
-.dark .card p{color:rgba(255,255,255,.82)}
+.dark .card{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24)}
+.dark .card p{color:rgba(255,255,255,.84)}
 
 .facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1px; margin-top:clamp(22px,4vh,40px);
   border:1px solid rgba(255,255,255,.26); border-radius:18px; overflow:hidden; background:rgba(255,255,255,.22)}
-.fact{background:rgba(10,38,84,.42); padding:20px 22px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
+.fact{background:rgba(10,38,84,.52); padding:20px 22px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px)}
 .fact b{display:block; font-size:clamp(24px,2.8vw,34px); font-weight:680; letter-spacing:-.04em}
-.fact span{display:block; margin-top:6px; font-size:13.5px; line-height:1.4; color:rgba(255,255,255,.82)}
+.fact span{display:block; margin-top:6px; font-size:13.5px; line-height:1.4; color:rgba(255,255,255,.84)}
 
 .rows{margin-top:clamp(18px,3vh,30px); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--line); display:grid; gap:1px}
 .row{background:rgba(255,255,255,.82); padding:16px 22px; display:grid; grid-template-columns:minmax(0,1fr) 172px; gap:22px; align-items:center}
@@ -136,14 +131,15 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .row .v.no{color:var(--amber)}
 
 .steps{display:grid; gap:12px; margin-top:clamp(18px,3vh,30px)}
+.steps.two{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
 .step{display:grid; grid-template-columns:auto minmax(0,1fr); gap:16px; align-items:start;
   border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:16px 22px}
 .step .n{width:32px; height:32px; border-radius:10px; background:var(--blue); color:#fff; display:grid; place-items:center; font-size:14px; font-weight:700}
 .step h3{font-size:16.5px}
 .step p{margin-top:6px; max-width:70ch; font-size:14.5px; line-height:1.5; color:var(--soft)}
-.dark .step{background:rgba(255,255,255,.1); border-color:rgba(255,255,255,.22)}
-.dark .step p{color:rgba(255,255,255,.82)}
-.dark .step .n{background:rgba(255,255,255,.92); color:#123f85}
+.dark .step{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24)}
+.dark .step p{color:rgba(255,255,255,.84)}
+.dark .step .n{background:rgba(255,255,255,.94); color:#123f85}
 
 .tars{display:grid; grid-template-columns:repeat(auto-fit,minmax(268px,1fr)); gap:16px; margin-top:clamp(18px,3vh,30px)}
 .tar{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:22px; display:flex; flex-direction:column; gap:12px}
@@ -156,29 +152,83 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .note{margin-top:clamp(14px,2.4vh,22px); max-width:96ch; border:1px solid var(--line); border-radius:var(--r-s);
   background:rgba(255,255,255,.66); padding:14px 18px; font-size:14.5px; line-height:1.55; color:var(--soft)}
 .note b{color:var(--ink)}
+.slide > .note{margin-left:0; margin-right:auto}
 .note.warn{background:var(--amber-soft); border-color:rgba(138,91,18,.2); color:#6c4a17}
 .note.warn b{color:#5a3d12}
-.dark .note{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.24); color:rgba(255,255,255,.88)}
+.dark .note{background:rgba(255,255,255,.14); border-color:rgba(255,255,255,.26); color:rgba(255,255,255,.9)}
 .dark .note b{color:#fff}
+
+/* ── фотография рядом с текстом ─────────────────────────────────────────── */
+.split{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.92fr); gap:clamp(20px,3vw,44px); align-items:center; margin-top:clamp(18px,3vh,28px)}
+.split .pic{border-radius:var(--r); overflow:hidden; border:1px solid var(--line); aspect-ratio:3/2}
+.dark .split .pic{border-color:rgba(255,255,255,.22)}
+.split .pic img{width:100%; height:100%; object-fit:cover}
+@media (max-width:860px){.split{grid-template-columns:1fr} .split .pic{order:-1}}
+
+.shots{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:clamp(18px,3vh,28px)}
+.shots figure{border-radius:var(--r-s); overflow:hidden; border:1px solid var(--line); position:relative; aspect-ratio:4/3}
+.shots img{width:100%; height:100%; object-fit:cover}
+.shots figcaption{
+  position:absolute; left:0; right:0; bottom:0; padding:30px 16px 14px; color:#fff;
+  font-size:14px; line-height:1.4; font-weight:560;
+  background:linear-gradient(to top, rgba(8,26,58,.86), transparent);
+}
+
+/* ── дерево продуктов ───────────────────────────────────────────────────── */
+.tree{margin-top:clamp(18px,3vh,30px); display:grid; gap:14px}
+.trunk{border:1px solid rgba(23,99,200,.3); border-radius:var(--r); background:rgba(231,239,252,.9); padding:clamp(18px,2.4vh,24px) clamp(18px,2vw,26px);
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:18px; align-items:center}
+.trunk .lbl{font-size:13px; font-weight:660; color:var(--blue-d)}
+.trunk h3{margin-top:7px; font-size:clamp(20px,2.2vw,27px)}
+.trunk p{margin-top:8px; max-width:70ch; font-size:15px; line-height:1.5; color:var(--soft)}
+.trunk .br{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
+.trunk .br span{border:1px solid var(--line); border-radius:999px; padding:6px 12px; font-size:13px; background:rgba(255,255,255,.72)}
+.trunk .price{text-align:right; font-size:14px; color:var(--soft); white-space:nowrap}
+.trunk .price b{display:block; font-size:clamp(20px,2vw,26px); font-weight:680; color:var(--ink); letter-spacing:-.03em}
+.limbs{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px}
+.limb{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:18px 20px; position:relative}
+.limb .lbl{font-size:12.5px; font-weight:600; color:var(--mute)}
+.limb h3{margin-top:6px; font-size:17px}
+.limb p{margin-top:8px; font-size:14px; line-height:1.5; color:var(--soft)}
+.limb.feed{border-color:rgba(23,99,200,.28); background:rgba(231,239,252,.6)}
+
+/* ── путь ученика ───────────────────────────────────────────────────────── */
+.path{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:clamp(18px,3vh,30px)}
+.phase{border:1px solid var(--line); border-radius:var(--r); background:var(--card); padding:18px 20px}
+.phase .w{font-size:12.5px; font-weight:660; color:var(--blue-d)}
+.phase h3{margin-top:6px; font-size:16.5px}
+.phase li{position:relative; margin-top:9px; padding-left:16px; font-size:14px; line-height:1.45; color:var(--soft)}
+.phase li::before{content:''; position:absolute; left:0; top:8px; width:6px; height:6px; border-radius:50%; background:rgba(23,99,200,.5)}
+
+/* ── языковое направление ───────────────────────────────────────────────── */
+.langs{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:clamp(16px,2.4vh,24px)}
+.lang{border:1px solid var(--line); border-radius:var(--r-s); background:var(--card); padding:14px 16px; display:flex; flex-direction:column; gap:6px}
+.lang h3{font-size:16px}
+.lang .w{font-size:13.5px; line-height:1.45; color:var(--soft)}
+.lang .pr{margin-top:auto; padding-top:8px; font-size:13.5px; font-weight:660; color:var(--blue-d)}
+.lang .pr.free{color:var(--soft); font-weight:600}
+.lang.wide{grid-column:1/-1}
 
 /* ── калькулятор ────────────────────────────────────────────────────────── */
 .calc{margin-top:clamp(16px,2.6vh,26px); border:1px solid var(--line); border-radius:var(--r); background:rgba(255,255,255,.8); overflow:hidden}
-.calc-in{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:18px 26px; padding:clamp(18px,2.6vh,26px)}
+.calc-in{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px 26px; padding:clamp(16px,2.2vh,22px) clamp(18px,1.8vw,24px)}
 .f{display:grid; gap:7px; align-content:start}
 .f label{font-size:13px; font-weight:600; color:var(--soft)}
 .f .val{font-size:20px; font-weight:680; letter-spacing:-.02em}
 .f input[type=range]{width:100%; accent-color:var(--blue)}
-.f .hint{font-size:13px; line-height:1.45; color:var(--soft)}
+.f .hint{font-size:12.5px; line-height:1.4; color:var(--soft)}
 .seg{display:flex; gap:6px; flex-wrap:wrap}
 .seg button{height:36px; padding:0 13px; border-radius:10px; border:1px solid var(--line);
   background:rgba(255,255,255,.72); color:var(--soft); font-size:13px; font-weight:560;
   transition:background .16s, color .16s, border-color .16s}
 .seg button[aria-pressed=true]{background:var(--blue); border-color:var(--blue); color:#fff}
-.calc-out{border-top:1px solid var(--line); background:rgba(214,230,252,.72); padding:clamp(16px,2.4vh,24px)}
-.calc-out .total{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+.calc-out{border-top:1px solid var(--line); background:rgba(214,230,252,.72); padding:clamp(14px,2vh,20px) clamp(16px,2.4vh,24px);
+  display:flex; align-items:center; gap:clamp(16px,2.4vw,32px); flex-wrap:wrap}
+.calc-out .total{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+.calc-out .total b{white-space:nowrap}
 .calc-out .total b{font-size:clamp(30px,4.4vw,48px); font-weight:700; letter-spacing:-.04em}
 .calc-out .total span{font-size:14.5px; color:var(--soft)}
-.parts{margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1px;
+.parts{flex:1 1 320px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:1px;
   border:1px solid var(--line); border-radius:var(--r-s); background:var(--line); overflow:hidden}
 .part{background:rgba(255,255,255,.9); padding:13px 16px}
 .part i{display:block; font-style:normal; font-size:13px; color:var(--soft)}
@@ -209,6 +259,8 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   .bar{gap:10px; padding:0 8px 0 12px; height:48px}
   .bar .brand{display:none}
   .row{grid-template-columns:1fr; gap:8px}
+  .trunk{grid-template-columns:1fr}
+  .trunk .price{text-align:left}
   .slide{padding-bottom:86px}
 }
 </style>
@@ -219,10 +271,10 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
   <!-- 1. титул -->
   <section class="slide dark on">
-    <div class="road" aria-hidden="true"><div class="road-wrap"><div class="road-grid"></div></div><div class="road-beam"></div></div>
-    <div class="rise">
+    <div class="shot-bg" aria-hidden="true"><img src="img/hero-campus.webp" alt="" style="--pos:62% 50%"></div>
+    <div class="rise hold">
       <span class="kicker">Отдел продаж · первая встреча</span>
-      <h1>Мы доводим школьника<br>до места в китайском вузе</h1>
+      <h1>От первого разговора<br>до студенческого билета в Китае</h1>
       <p class="lead">Для семьи это не покупка услуги, а развилка: поедет ребенок учиться за границу или останется с тем, что получилось. Сегодня знакомимся с компанией, продуктом, работой отдела и деньгами.</p>
     </div>
     <div class="facts rise">
@@ -234,12 +286,16 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 
   <!-- 2. основатель -->
   <section class="slide dark">
-    <div class="road" aria-hidden="true"><div class="road-wrap"><div class="road-grid"></div></div><div class="road-beam"></div></div>
-    <div class="rise">
+    <div class="rise hold">
       <span class="kicker">С чего все началось</span>
       <h2>Языковой центр в Хабаровске</h2>
-      <p class="lead">Основатель компании Виталий начинал с языкового центра в Хабаровске: учил людей языку и видел, что за языком у них стоит другая цель — уехать учиться. Сначала помогал поступать за рубеж тем, кто уже учился у него, потом это стало отдельным делом и выросло в компанию.</p>
-      <p class="lead">Отсюда наша особенность, о которой стоит говорить семьям: мы пришли в поступление со стороны обучения, а не со стороны документов. Поэтому сначала доводим ребенка до нужного уровня, а уже потом подаем.</p>
+    </div>
+    <div class="split rise">
+      <div>
+        <p class="lead">Основатель компании Виталий начинал с языкового центра в Хабаровске: учил людей языку и видел, что за языком у них стоит другая цель: уехать учиться. Сначала помогал поступать за рубеж тем, кто уже занимался у него, потом это стало отдельным делом и выросло в компанию.</p>
+        <p class="lead">Отсюда особенность, о которой стоит говорить семьям: мы пришли в поступление со стороны обучения, а не со стороны документов. Сначала доводим ребенка до нужного уровня, потом подаем.</p>
+      </div>
+      <div class="pic"><img src="img/founder-class.webp" alt="Занятие в языковом классе"></div>
     </div>
   </section>
 
@@ -257,51 +313,52 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 3. почему выбирают, часть 1 -->
+  <!-- 4. почему выбирают, часть 1 -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Почему выбирают нас</span>
       <h2>Поступить можно и самому. Вопрос в цене попытки</h2>
-      <p class="lead">Чаще всего семья платит не деньгами, а потерянным годом: требования меняются, дедлайн и удачный момент подачи — разные вещи, а на ошибку в документах вуз не присылает письмо «исправьте».</p>
+      <p class="lead">Чаще всего семья платит не деньгами, а потерянным годом: требования меняются, дедлайн и удачный момент подачи это разные вещи, а на ошибку в документах вуз не присылает письмо «исправьте».</p>
     </div>
     <div class="grid g3 rise">
-      <div class="card wide"><h3>Стратегия, а не список вузов</h3><p>Под профиль ребенка собираем два уровня: куда проходит сейчас и куда успеваем подготовить. Плюс дорожная карта с датами — какие экзамены, какие документы, к какому числу.</p></div>
+      <div class="card wide"><h3>Стратегия, а не список вузов</h3><p>Под профиль ребенка собираем два уровня: куда проходит сейчас и куда успеваем подготовить. Плюс дорожная карта с датами: какие экзамены, какие документы, к какому числу.</p></div>
       <div class="card"><h3>Документы под требования КНР</h3><p>С семьи сканы, с нас перевод, нотариальное заверение и формат приемной комиссии. Заявки отклоняют не за слабого студента, а за неправильную бумагу.</p></div>
       <div class="card"><h3>Письма с правильными смыслами</h3><p>Мотивационное и рекомендательные пишем мы. Китай ищет тех, кто станет мостом между странами, и письмо показывает ребенка именно так.</p></div>
       <div class="card"><h3>Проект для портфолио</h3><p>Ученик собирает реальный кейс, связанный с Китаем. Заявок с одними документами тысячи, гранты идут тем, кто отличается.</p></div>
     </div>
   </section>
 
-  <!-- 4. почему выбирают, часть 2 -->
+  <!-- 5. почему выбирают, часть 2 -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Почему выбирают нас</span>
       <h2>И то, что начинается после подачи</h2>
+      <p class="lead">Заявка подана, а работа не закончилась. Дальше отбор, ожидание и первые недели в чужой стране, и семья остается с этим одна, если рядом никого нет.</p>
     </div>
-    <div class="grid g3 rise">
-      <div class="card"><h3>Подготовка к отбору</h3><p>Интервью, CSCA, языковой экзамен. Живой человек решает судьбу заявки, и несвязный ответ топит сильное досье.</p></div>
-      <div class="card"><h3>Период ожидания</h3><p>Вузы отвечают с мая до середины июля, и заранее не угадать, кто когда. Семья не сидит в неизвестности: объясняем, что происходит.</p></div>
-      <div class="card"><h3>Адаптация на месте</h3><p>Встречаем в аэропорту, заселяем, ставим симкарту, показываем оплату и обмен валюты. Менеджер в Китае на связи до полугода, и у него есть контакты родителей.</p></div>
+    <div class="shots rise">
+      <figure><img src="img/campus-lake.webp" alt="Кампус китайского университета"><figcaption>Подготовка к отбору: интервью, CSCA, языковой экзамен. Живой человек решает судьбу заявки.</figcaption></figure>
+      <figure><img src="img/family.webp" alt="Мама и сын дома за ноутбуком"><figcaption>Ожидание с мая до середины июля. Семья не сидит в неизвестности: объясняем, что происходит.</figcaption></figure>
+      <figure><img src="img/city-walk.webp" alt="Город в Китае"><figcaption>Встречаем в аэропорту, заселяем, ставим симкарту. Менеджер в Китае на связи до полугода.</figcaption></figure>
     </div>
     <div class="note rise"><b>Главная продающая формулировка.</b> Вы продаете не заполнение документов, а вероятность пройти цикл один раз, а не изучать систему на своих ошибках два года подряд.</div>
   </section>
 
-  <!-- 5. акцент -->
+  <!-- 6. смысл -->
   <section class="slide dark">
-    <div class="road" aria-hidden="true"><div class="road-wrap"><div class="road-grid"></div></div><div class="road-beam"></div></div>
-    <div class="rise">
+    <div class="shot-bg" aria-hidden="true"><img src="img/city-future.webp" alt="" style="--pos:62% 42%"></div>
+    <div class="rise hold">
       <span class="kicker">Зачем это все</span>
-      <p class="big">Семья приходит за поступлением. Уезжает ребенок с другим будущим.</p>
-      <p class="lead">Через год после разговора, который проведете вы, школьник из обычного города живет в Китае, учится на гранте и говорит на двух языках. Это и есть то, что мы продаем, а тарифы и проценты — механика вокруг.</p>
+      <p class="big">Семья приходит за поступлением. Уезжает ребенок с другой жизнью.</p>
+      <p class="lead">Через год после разговора, который проведете вы, школьник из обычного города живет в Китае, учится на гранте и говорит на двух языках. Это и есть то, что мы продаем, а тарифы и проценты это механика вокруг.</p>
     </div>
   </section>
 
-  <!-- 6. гарантии -->
+  <!-- 7. гарантии -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Обязательства</span>
       <h2>Что мы гарантируем, дословно</h2>
-      <p class="lead">Эти формулировки менять нельзя: гарантия — обязательство компании, а не фигура речи в разговоре.</p>
+      <p class="lead">Эти формулировки менять нельзя: гарантия это обязательство компании, а не фигура речи в разговоре.</p>
     </div>
     <div class="rows rise">
       <div class="row">
@@ -309,7 +366,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
         <div class="v">есть</div>
       </div>
       <div class="row">
-        <div><div class="t">Гарантия финансирования</div><div class="d">При среднем балле от 4,0 за последние два года и выполнении требований — минимум один вариант на первый год: скидка или грант от 50 процентов стоимости обучения либо бесплатное общежитие.</div></div>
+        <div><div class="t">Гарантия финансирования</div><div class="d">При среднем балле от 4,0 за последние два года и выполнении требований даем минимум один вариант на первый год: скидка или грант от 50 процентов стоимости обучения либо бесплатное общежитие.</div></div>
         <div class="v">есть</div>
       </div>
       <div class="row">
@@ -321,60 +378,143 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
         <div class="v">повтор бесплатно</div>
       </div>
     </div>
-    <div class="note warn rise"><b>Везде говорим «повышаем вероятность сильного гранта», а не «гарантируем грант».</b> И никогда не называем неподтвержденные даты набора: нет точных — говорим «ориентировочно» и идем уточнять.</div>
+    <div class="note warn rise"><b>Везде говорим «повышаем вероятность сильного гранта», а не «гарантируем грант».</b> И никогда не называем неподтвержденные даты набора: нет точных, говорим «ориентировочно» и идем уточнять.</div>
   </section>
 
-  <!-- 7. направления -->
+  <!-- 8. продуктовое дерево -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Продукт</span>
-      <h2>Пять направлений</h2>
-      <p class="lead">Флагман один, остальное либо ведет к нему, либо решает задачу семьи, которой грант сейчас не подходит.</p>
+      <h2>Дерево продуктов: один ствол и четыре ветки</h2>
+      <p class="lead">Все, что мы делаем, либо ведет семью к поступлению, либо решает ее задачу, когда грант сейчас не подходит.</p>
     </div>
-    <div class="grid g3 rise">
-      <div class="card wide"><h3>Поступление на грант</h3><p>Языковой год, бакалавриат, магистратура, колледж после девятого. Три тарифа, двенадцать этапов до заселения, четыре формата.</p></div>
-      <div class="card"><h3>Поступление на платной основе</h3><p>Платный языковой год и платный бакалавриат, когда грант не подходит или не проходим по требованиям.</p></div>
-      <div class="card"><h3>Краткосрочные программы</h3><p>Язык на базе вуза и «Экспедиция будущего». Часто первый шаг семьи, которая боится отпускать ребенка надолго.</p></div>
-      <div class="card"><h3>Языки и обучение</h3><p>Живой китайский, подготовка к CSCA, интенсив Duolingo, тренажеры DET и HSK. Большинство бесплатны: человек знакомится с нами и попадает в CRM.</p></div>
-      <div class="card"><h3>Проектная деятельность</h3><p>Ученик ведет свой проект и усиливает академический профиль до подачи.</p></div>
+    <div class="tree rise">
+      <div class="trunk">
+        <div>
+          <span class="lbl">Ствол · флагман</span>
+          <h3>Поступление на грант</h3>
+          <p>Основной продукт компании и основные деньги отдела. Три тарифа, четыре формата, двенадцать этапов до заселения. Продаем вероятность гранта и работу команды, а не гарантию результата.</p>
+          <div class="br"><span>Языковой год</span><span>Бакалавриат</span><span>Магистратура</span><span>Колледж после 9 класса</span></div>
+        </div>
+        <div class="price">от <b>159 000 ₽</b>до 399 990 ₽</div>
+      </div>
+      <div class="limbs">
+        <div class="limb"><span class="lbl">Ветка</span><h3>Поступление на платной основе</h3><p>Платный языковой год и платный бакалавриат, когда грант не подходит или семья не проходит по требованиям.</p></div>
+        <div class="limb"><span class="lbl">Ветка</span><h3>Краткосрочные программы</h3><p>Язык на базе вуза и «Экспедиция будущего». Часто первый шаг семьи, которой страшно отпускать ребенка надолго.</p></div>
+        <div class="limb feed"><span class="lbl">Ветка · вход в воронку</span><h3>Языки и обучение</h3><p>Семь продуктов, большинство бесплатные. Человек знакомится с нами, попадает в CRM и дальше идет в поступление.</p></div>
+        <div class="limb"><span class="lbl">Ветка</span><h3>Проектная деятельность</h3><p>Ученик ведет свой проект и усиливает академический профиль до подачи. Другой результат и другая работа с ребенком.</p></div>
+      </div>
     </div>
+    <div class="note rise"><b>Читаем дерево снизу вверх.</b> Бесплатный тренажер языка, краткосрочная поездка и платное поступление это разные входы к одному разговору про грант. Поэтому в CRM важен каждый, кто зашел даже за бесплатным тестом.</div>
   </section>
 
-  <!-- 8. тарифы -->
+  <!-- 9. флагман: тарифы -->
   <section class="slide">
     <div class="rise">
-      <span class="kicker">Флагман</span>
-      <h2>Три тарифа</h2>
-      <p class="lead">Отличаются объемом работы, который остается семье.</p>
+      <span class="kicker">Флагман · тарифы</span>
+      <h2>Три тарифа. Отличаются объемом работы, который остается семье</h2>
+      <p class="lead">Этапы везде одни и те же. Разница в том, что семья делает своими руками, в скольких вузах мы подаем и заканчивается ли наша работа на зачислении.</p>
     </div>
     <div class="tars rise">
       <div class="tar"><span class="n">Стандарт</span><span class="p">159 000 ₽</span>
-        <ul><li>Подачу и проверку ведет команда</li><li>Нотариус, переводы и виза на семье</li><li>До 5 вузов в подаче</li></ul></div>
+        <ul><li>Подачу и проверку ведет команда</li><li>Нотариус, переводы и виза на семье</li><li>До 5 вузов в подаче</li><li>Работа заканчивается на визе</li></ul></div>
       <div class="tar acc"><span class="n">Стандарт Плюс</span><span class="p">299 990 ₽</span>
-        <ul><li>Документы, переводы и нотариус берем мы</li><li>Подача до 7 вузов</li><li>Месяц сопровождения после заселения</li></ul></div>
+        <ul><li>Документы, переводы и нотариус берем мы</li><li>Подача до 7 вузов</li><li>Виза: анкета и запись в визовый центр</li><li>Месяц сопровождения после заселения</li></ul></div>
       <div class="tar"><span class="n">Премиум</span><span class="p">399 990 ₽</span>
-        <ul><li>Виза без личной явки</li><li>Встреча в Китае, человек рядом два месяца</li><li>До 10 вузов в подаче</li></ul></div>
+        <ul><li>Виза без личной явки</li><li>Встреча в аэропорту и заселение</li><li>Тьютор в городе два месяца</li><li>До 10 вузов в подаче</li></ul></div>
     </div>
-    <div class="note warn rise"><b>Тариф никогда не продается шансами.</b> «В Премиуме больше вероятность поступить» — ложь, и она разваливается в мае. Шанс одинаковый: работает одна команда.</div>
+    <div class="note warn rise"><b>Тариф никогда не продается шансами.</b> «В Премиуме больше вероятность поступить» это ложь, и она разваливается в мае. Шанс одинаковый: работает одна команда. На диагностике показываем сначала Премиум, потом вниз.</div>
   </section>
 
-  <!-- 9. работа отдела -->
+  <!-- 10. путь ученика -->
+  <section class="slide">
+    <div class="rise">
+      <span class="kicker">Флагман · путь</span>
+      <h2>Что ученик проходит с нами</h2>
+      <p class="lead">Двенадцать этапов до заселения, у Премиума пятнадцать. В день оплаты семья получает личный кабинет, и дальше каждый шаг виден и ей, и нам.</p>
+    </div>
+    <div class="path rise">
+      <div class="phase">
+        <span class="w">День 0 – вторая неделя</span>
+        <h3>Старт и диагноз</h3>
+        <ul>
+          <li>Доступ к платформе: маршрут, календарь, задачи, чат с командой</li>
+          <li>Диагностика профиля: шансы по каждому вузу и гранту в цифрах</li>
+          <li>Выбор направления, подбор вузов и грантов под профиль</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <span class="w">Месяц 1–3</span>
+        <h3>Профиль и документы</h3>
+        <ul>
+          <li>Сбор, перевод и нотариальное заверение, медицинская справка</li>
+          <li>Усиление профиля и портфолио, проект ученика</li>
+          <li>Мотивационное и рекомендательные письма</li>
+          <li>Методы обучения и запоминания перед экзаменами</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <span class="w">До подачи</span>
+        <h3>Экзамены и подача</h3>
+        <ul>
+          <li>Подготовка к языковому экзамену</li>
+          <li>Подготовка к CSCA по математике</li>
+          <li>Репетиция онлайн-интервью</li>
+          <li>Подача в вузы и мониторинг заявок</li>
+        </ul>
+      </div>
+      <div class="phase">
+        <span class="w">Май – сентябрь</span>
+        <h3>Результат и Китай</h3>
+        <ul>
+          <li>Зачисление и выбор гранта из пришедших ответов</li>
+          <li>Учебная виза</li>
+          <li>Адаптация: симулятор первых дней, инструкции</li>
+          <li>Встреча в Китае и первые месяцы рядом с тьютором</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note rise"><b>Это и есть ответ на «дорого».</b> Семья платит не за подачу бумаг, а за год работы команды рядом с ребенком: от первой диагностики до дня, когда он заселился в общежитие.</div>
+  </section>
+
+  <!-- 11. языковое направление -->
+  <section class="slide dark">
+    <div class="rise hold">
+      <span class="kicker">Ветка · языки и обучение</span>
+      <h2>Чему мы учим и что из этого бесплатно</h2>
+      <p class="lead">Почти все здесь это входы: человек знакомится с нами бесплатно или за небольшие деньги и с первого шага оказывается в CRM. Ведут они в одно, в поступление. Бесплатное не называем пробным периодом, платой служит контакт, и это честно написано в форме.</p>
+    </div>
+    <div class="split rise">
+      <div class="langs" style="margin:0">
+        <div class="lang"><h3>Живой китайский</h3><span class="w">Видеокурс, 26 записанных уроков. Первый урок открыт всем, доступ на 3 месяца.</span><span class="pr">12 990 ₽</span></div>
+        <div class="lang"><h3>Подготовка к CSCA</h3><span class="w">Математика, физика, химия: записанные уроки, домашние задания, свои пробники.</span><span class="pr">цена уточняется</span></div>
+        <div class="lang"><h3>Интенсив Duolingo English Test</h3><span class="w">10 уроков по формату экзамена и тренажер внутри. Первый урок бесплатно.</span><span class="pr">платный, открывает CRM</span></div>
+        <div class="lang"><h3>Китайский с носителем</h3><span class="w">Мини-курс: 10 коротких блоков с русскими субтитрами. Верх воронки.</span><span class="pr free">бесплатно</span></div>
+        <div class="lang wide"><h3>Тесты и тренажеры</h3><span class="w">Входной тест DET по шкале 10–160: балл решает, подавать сейчас или сначала заниматься. Кабинет DET закрывает слабые навыки, кабинет HSK тренирует китайский с нуля до HSK 5.</span><span class="pr free">бесплатно, ссылку открывает CRM</span></div>
+      </div>
+      <div class="pic"><img src="img/lang-desk.webp" alt="Ученик занимается дома"></div>
+    </div>
+  </section>
+
+  <!-- 12. работа отдела -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Как работаем</span>
       <h2>Две линии и общая карточка в CRM</h2>
-      <p class="lead">Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания.</p>
+    </div>
+    <div class="rise">
+      <p class="lead">Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания. Семью ведет не один человек, а отдел, и следующий видит ровно то, что вы записали.</p>
     </div>
     <div class="steps rise">
       <div class="step"><span class="n">1</span><div><h3>Первая линия: чаты и звонки</h3><p>Входящие разбирает тот, у кого смена. Норматив: медиана первого ответа до 15 минут, ни одного пропущенного обращения, доведение до диагностики.</p></div></div>
       <div class="step"><span class="n">2</span><div><h3>Передача между линиями</h3><p>В карточке должно стоять: кто ребенок, чего хочет семья, кто принимает решение, история касаний, дата встречи. Здесь чаще всего и теряются лиды.</p></div></div>
       <div class="step"><span class="n">3</span><div><h3>Вторая линия: диагностика</h3><p>45–60 минут по протоколу: открытие от результата платформы, разбор метрик, блок родителя, диагноз, решение, цена, возражения, следующий шаг с датой. С записью.</p></div></div>
-      <div class="step"><span class="n">4</span><div><h3>Сделка и передача в сопровождение</h3><p>Договор и оплата. Дальше семью ведет тьютор, администратор по грантам и общий чат — родителю важно знать это заранее.</p></div></div>
+      <div class="step"><span class="n">4</span><div><h3>Сделка и передача в сопровождение</h3><p>Договор и оплата. Дальше семью ведет тьютор, администратор по грантам и общий чат. Родителю важно знать это заранее.</p></div></div>
     </div>
-    <div class="note rise"><b>Главный показатель отдела — количество проведенных консультаций.</b> Он влияет на план продаж сильнее конверсии: разговор, который не состоялся, невозможно вытянуть ни скриптом, ни скидкой.</div>
+    <div class="note rise"><b>Главный показатель отдела это количество проведенных консультаций.</b> Он влияет на план продаж сильнее конверсии: разговор, который не состоялся, невозможно вытянуть ни скриптом, ни скидкой.</div>
   </section>
 
-  <!-- 10. стандарты -->
+  <!-- 13. стандарты -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Стандарты</span>
@@ -384,13 +524,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       <div class="card"><h3>Пятнадцать минут</h3><p>Медиана первого ответа внутри смены. Первый ответ решает больше, чем красота текста.</p></div>
       <div class="card"><h3>Цена только на диагностике</h3><p>Не в чате и не на лендинге. Названная до разбора, она сравнивается не с результатом, а с воздухом.</p></div>
       <div class="card"><h3>Запись встречи</h3><p>Диагностика без записи не считается проведенной и не оплачивается.</p></div>
-      <div class="card"><h3>Все в CRM</h3><p>Звонок, которого нет в системе, не было. Итог разговора — словами человека, а не вашим пересказом.</p></div>
+      <div class="card"><h3>Все в CRM</h3><p>Звонок, которого нет в системе, не было. Итог разговора пишем словами человека, а не вашим пересказом.</p></div>
       <div class="card"><h3>Рабочий номер</h3><p>С семьями работаем с рабочего телефона: это работа компании, а не ваша личная договоренность.</p></div>
       <div class="card"><h3>Честный контур</h3><p>Не обещаем грант, не рисуем портфолио, не называем неподтвержденные даты набора.</p></div>
     </div>
   </section>
 
-  <!-- 11. деньги -->
+  <!-- 14. деньги -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Деньги</span>
@@ -403,13 +543,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
           <label for="shifts">Смен в месяц</label>
           <span class="val" id="shiftsV">40</span>
           <input id="shifts" type="range" min="0" max="60" value="40" step="1">
-          <span class="hint">Смена — половина рабочего дня. Ставка 750 ₽ за смену.</span>
+          <span class="hint">Смена это половина рабочего дня. Ставка 750 ₽ за смену.</span>
         </div>
         <div class="f">
           <label for="kq">Качество смен</label>
           <span class="val" id="kqV">1,0</span>
           <input id="kq" type="range" min="0.6" max="1" value="1" step="0.1">
-          <span class="hint">Коэффициент 0,6–1,0: скорость ответа, ни одного пропущенного обращения, доведение до диагностики.</span>
+          <span class="hint">0,6–1,0: скорость ответа, пропущенные обращения, доведение до встречи.</span>
         </div>
         <div class="f">
           <label for="diags">Проведено диагностик</label>
@@ -423,20 +563,20 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
             <button data-v="300" aria-pressed="false">300 ₽ на обучении</button>
             <button data-v="500" aria-pressed="true">500 ₽ после аттестации</button>
           </div>
-          <span class="hint">Переход измеримый: 10 диагностик, конверсия не ниже средней по отделу и одна прослушанная руководителем.</span>
+          <span class="hint">Переход после 10 диагностик и разбора с руководителем.</span>
         </div>
         <div class="f">
           <label for="deals">Продаж в месяц</label>
           <span class="val" id="dealsV">3</span>
           <input id="deals" type="range" min="0" max="15" value="3" step="1">
-          <span class="hint">Считаем по деньгам, которые семья реально заплатила.</span>
+          <span class="hint">По деньгам, которые семья реально заплатила.</span>
         </div>
         <div class="f">
           <label>Ваша роль в сделке</label>
           <div class="seg" id="role">
-            <button data-v="3.2" aria-pressed="true">Чат и диагностика сам — 3,2%</button>
-            <button data-v="2.2" aria-pressed="false">Только диагностика — 2,2%</button>
-            <button data-v="1.0" aria-pressed="false">Только чат — 1,0%</button>
+            <button data-v="3.2" aria-pressed="true">Чат и диагностика сам · 3,2%</button>
+            <button data-v="2.2" aria-pressed="false">Только диагностика · 2,2%</button>
+            <button data-v="1.0" aria-pressed="false">Только чат · 1,0%</button>
           </div>
           <span class="hint">Условия одни для всех тарифов.</span>
         </div>
@@ -458,36 +598,38 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
         </div>
       </div>
     </div>
-    <div class="note rise"><b>Когда приходят деньги.</b> Расчет за прошлый месяц: с 1 по 3 система собирает, с 3 по 5 вы проверяете и можете оспорить, до 10 — выплата. Рассрочка у семьи — процент идет частями вслед за ее платежами.</div>
+    <div class="note rise"><b>Когда приходят деньги.</b> Расчет за прошлый месяц: с 1 по 3 система собирает, с 3 по 5 вы проверяете и можете оспорить, до 10 выплата. Рассрочка у семьи: процент идет частями вслед за ее платежами.</div>
   </section>
 
-  <!-- 12. обучение -->
+  <!-- 15. обучение -->
   <section class="slide">
     <div class="rise">
       <span class="kicker">Обучение</span>
       <h2>Курс и допуск к работе</h2>
-      <p class="lead">Вся конкретика лежит в CRM, в разделе «Академия»: курс «Продажи» со скриптами, разборами и проверочными вопросами.</p>
+      <p class="lead">Вся конкретика лежит в CRM, в разделе «Академия»: курс «Продажи» со скриптами, разборами и проверочными вопросами. Все, что сегодня прозвучало, там разобрано подробно.</p>
     </div>
     <div class="grid g3 rise">
-      <div class="card"><h3>17 уроков</h3><p>Компания и продукт, маршруты семьи, гранты, девять этапов нашей работы, кейсы, смены, звонок, диагностика, возражения, деньги, документы.</p></div>
+      <div class="card"><h3>17 уроков</h3><p>Компания и продукт, маршруты семьи, гранты, девять этапов нашей работы, кейсы с именами, смены, звонок, диагностика, возражения, деньги, документы.</p></div>
       <div class="card"><h3>10 вопросов аттестации</h3><p>Тарифы, гранты, сроки волн подачи, что можно и чего нельзя обещать.</p></div>
-      <div class="card"><h3>2 практики</h3><p>Учебная диагностика с руководителем и с записью — это ролевка. И письменный ответ на возражение «дорого».</p></div>
+      <div class="card"><h3>2 практики</h3><p>Учебная диагностика с руководителем и с записью, это ролевка. И письменный ответ на возражение «дорого».</p></div>
     </div>
-    <div class="note rise"><b>Без сданной аттестации на смены не выходим.</b> Ставка за диагностику до аттестации 300 ₽, после — 500 ₽.</div>
+    <div class="note rise"><b>Без сданной аттестации на смены не выходим.</b> Ставка за диагностику до аттестации 300 ₽, после 500 ₽.</div>
   </section>
 
-  <!-- 13. что дальше -->
+  <!-- 16. что дальше -->
   <section class="slide dark">
-    <div class="road" aria-hidden="true"><div class="road-wrap"><div class="road-grid"></div></div><div class="road-beam"></div></div>
-    <div class="rise">
+    <div class="rise hold">
       <span class="kicker">Что дальше</span>
       <h2>Четыре шага до первой смены</h2>
     </div>
-    <div class="steps rise">
-      <div class="step"><span class="n">1</span><div><h3>Учетка в CRM</h3><p>Логин и пароль выдает Павел лично. Пароль показывается один раз — сохраните сразу.</p></div></div>
+    <div class="split rise">
+      <div class="steps" style="margin-top:0">
+      <div class="step"><span class="n">1</span><div><h3>Учетка в CRM</h3><p>Логин и пароль выдает Павел лично. Пароль показывается один раз, сохраните сразу.</p></div></div>
       <div class="step"><span class="n">2</span><div><h3>Курс «Продажи»</h3><p>Раздел «Академия». Проходим целиком: вопросы аттестации собраны из уроков.</p></div></div>
       <div class="step"><span class="n">3</span><div><h3>Ролевка</h3><p>Учебная диагностика с руководителем, с записью. Принимаем и разбираем вместе.</p></div></div>
       <div class="step"><span class="n">4</span><div><h3>Выход на смены</h3><p>График смен, первая линия и первые диагностики под присмотром.</p></div></div>
+      </div>
+      <div class="pic"><img src="img/team-call.webp" alt="Консультант на видеозвонке"></div>
     </div>
   </section>
 
@@ -496,7 +638,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 <div class="bar">
   <span class="brand">ИСТСАЙД.РФ</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 13</span>
+  <span class="count" id="count">1 / 16</span>
   <div class="arrows">
     <button id="prev" aria-label="Предыдущий слайд">‹</button>
     <button id="next" aria-label="Следующий слайд">›</button>
@@ -537,7 +679,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     count.textContent = (i + 1) + ' / ' + slides.length;
     prev.disabled = i === 0;
     next.disabled = i === slides.length - 1;
-    document.body.style.background = slides[i].classList.contains('dark') ? '#123f85' : '#eef2fc';
+    document.body.style.background = slides[i].classList.contains('dark') ? '#0b2148' : '#eef2fc';
   }
 
   prev.addEventListener('click', function () { go(i - 1); });
