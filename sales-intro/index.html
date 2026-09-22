@@ -46,6 +46,9 @@ img{display:block; max-width:100%}
 .deck{position:fixed; inset:0}
 .slide{
   position:absolute; inset:0; display:grid; align-content:center;
+  /* safe: на телефоне высокий слайд центрируется, и верх уезжает за край — safe
+     прижимает его к началу, как только содержимое выше экрана */
+  align-content:safe center;
   padding:clamp(26px,4vh,58px) clamp(24px,5vw,92px) clamp(74px,9vh,104px);
   opacity:0; visibility:hidden; transform:translateY(16px);
   transition:opacity .4s ease, transform .4s cubic-bezier(.22,1,.36,1), visibility .4s;
@@ -316,9 +319,25 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   width:84px; height:84px; border-radius:50%;
   background:radial-gradient(50% 50% at 50% 50%, rgba(214,238,255,.42), transparent 70%)}
 .rd-start{position:absolute; transform:translate(-50%,16px); font-size:12px; color:rgba(255,255,255,.55); pointer-events:none}
+/* на телефоне кривая с шестнадцатью точками нечитаема, поэтому путь
+   показываем полосой: видно, где ученик и сколько дороги осталось */
+.rd-mini{display:none}
 @media (max-width:900px){
   .road{display:none}
   .rd-card{grid-template-columns:1fr}
+  .rd-mini{display:block; margin-top:18px}
+  .rd-mini-line{position:relative; display:block; height:6px; border-radius:999px;
+    background:rgba(255,255,255,.16);
+    background-image:repeating-linear-gradient(90deg, rgba(255,255,255,.3) 0 1px, transparent 1px calc(100% / 16));
+    background-size:100% 100%}
+  .rd-mini-line i{position:absolute; left:0; top:0; bottom:0; width:6.25%; border-radius:999px;
+    background:linear-gradient(90deg, #4d8ee0, #a8d2ff 70%, #fff);
+    transition:width .28s cubic-bezier(.22,1,.36,1)}
+  .rd-mini-line i::after{content:''; position:absolute; right:-3px; top:50%; width:12px; height:12px;
+    transform:translateY(-50%); border-radius:50%; background:#fff;
+    box-shadow:0 0 0 6px rgba(214,238,255,.18)}
+  .rd-mini-ends{display:flex; justify-content:space-between; margin-top:9px;
+    font-size:12px; color:rgba(255,255,255,.6)}
 }
 
 /* ── тарифы с переключателем ────────────────────────────────────────────── */
@@ -409,7 +428,31 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   .bar{gap:10px; padding:0 8px 0 12px; height:48px}
   .bar .brand, .bar .chap{display:none}
   .row{grid-template-columns:1fr; gap:8px}
-  .slide{padding-bottom:86px}
+  .slide{padding-bottom:96px}
+  /* на телефоне кадры ниже: три фото подряд иначе не помещаются в экран */
+  .split.tall .pic{aspect-ratio:4/3; max-height:38vh}
+  .shots figure{aspect-ratio:16/9}
+  .shots.three figure{aspect-ratio:16/9}
+  .shots{gap:12px}
+  /* плотнее внутри сущностей: на узком экране отступы съедают целый экран */
+  .steps{gap:10px}
+  .step{padding:15px 17px; gap:13px}
+  .step .n{width:30px; height:30px; font-size:14px}
+  .step h3{font-size:16.5px}
+  .step p{margin-top:6px; font-size:14px}
+  .fact{padding:15px 17px}
+  .tr-lane{gap:10px}
+  .tr-node{padding:10px 13px}
+  .tr-cols{row-gap:10px}
+  .tr-flag{padding:12px 14px}
+  /* подпункты ветки на телефоне идут строкой, а не столбцом: вертикальный
+     список из четырех строк на каждую из пяти веток растягивал слайд вдвое */
+  .tr-brs{flex-direction:row; flex-wrap:wrap; margin:8px 0 0 15px; padding-left:0;
+    border-left:0; gap:4px 14px}
+  .tr-br{font-size:12px}
+  .tr-br::before{left:-9px; top:9px; width:5px}
+  .tr-br:first-child::before{display:none}
+  .tr-extras{margin-top:16px; padding:13px 15px}
 }
 </style>
 </head>
@@ -739,6 +782,10 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
         <path class="rd-run" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
         <path class="rd-car" d="M40 268 C 300 262, 380 152, 620 120 C 860 88, 980 70, 1160 34"/>
       </svg>
+    </div>
+    <div class="rd-mini" aria-hidden="true">
+      <span class="rd-mini-line"><i id="rdFill"></i></span>
+      <span class="rd-mini-ends"><span>оплата</span><span>место в вузе Китая</span></span>
     </div>
     <div class="rd-card rise" id="rdCard">
       <div>
@@ -1280,6 +1327,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     document.getElementById('rdTitle').textContent = s.t;
     document.getElementById('rdText').textContent = s.d;
     document.getElementById('rdCount').textContent = (rdIdx + 1) + ' из ' + RD.length;
+    document.getElementById('rdFill').style.width = ((rdIdx + 1) / RD.length * 100) + '%';
     var who = document.getElementById('rdWho');
     who.textContent = WHO[s.who];
     who.className = 'rd-who' + (s.who === 'семья' ? ' fam' : '') + (s.who === 'прем' || s.who === 'плюс' ? ' prem' : '');
