@@ -9581,6 +9581,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .csw-src { margin-left: 10px; font-weight: 600; color: var(--blue); text-decoration: none;
   border-bottom: 1px solid rgba(47,107,255,.3); }
 .csw-src:hover { border-color: var(--blue); }
+/* Условие разбора: та же плашка, что у ответа, но подписью — это задача, а не
+   работа ученика, и взгляд не должен их путать. */
+.csw-cond { margin-top: 10px; padding: 10px 14px; border-radius: 11px;
+  border-left: 2px solid var(--line-2); font-size: 13px; line-height: 1.55;
+  color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
 .csw-ans { margin-top: 12px; padding: 12px 14px; border-radius: 11px; background: var(--fill);
   font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
 .csw-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-top: 12px;

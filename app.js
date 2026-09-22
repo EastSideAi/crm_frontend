@@ -11505,7 +11505,10 @@
     return '<div class="csw-card' + (x.status === 'sent' ? ' wait' : '') + '">' +
       '<div class="csw-top"><b>' + esc(x.student || '') + '</b>' +
         '<span class="csw-when">' + esc(cscaHwWhen(x.sentAt)) + '</span>' + tag + '</div>' +
-      '<div class="csw-task">' + task + '</div>' + body +
+      '<div class="csw-task">' + task + '</div>' +
+      // Условие разбора: бланка у него нет, и без этой строки в карточке
+      // остается решение без задачи.
+      (x.task ? '<div class="csw-cond">' + esc(x.task) + '</div>' : '') + body +
       (files ? '<div class="csw-files">' + files + '</div>' : '') + note + acts + '</div>';
   }
   function cscaHwBlock() {
