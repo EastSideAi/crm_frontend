@@ -21526,10 +21526,114 @@
     var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
     return [{
       label: 'Страницу видели',
+      /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
+         уводит на другой экран. */
+      go: 'seen',
       value: fmtMoney(p.users),
       sub: (pct == null ? since : 'заполнили форму ' + pct + '% · ' + since) +
            ' · Яндекс Метрика',
     }];
+  }
+
+  /* ── Что стоит за цифрой «страницу видели» ─────────────────────────────────
+     Здесь НЕ будет списка людей, и это не недоделка: Метрика считает анонимные
+     заходы, имён и контактов у неё нет вовсе. Развернуть эту цифру в людей, как
+     разворачиваются остальные на экране, нельзя в принципе — поэтому попап прямо
+     об этом говорит, иначе «нажал и не увидел людей» читается как поломка.
+
+     Показываем то, что Метрика действительно знает и что отвечает на рабочий
+     вопрос: в какие дни люди приходили и откуда. Данные приезжают вместе с экраном,
+     отдельный запрос не нужен. */
+  function launchSeenOpen(cur, reg, node) {
+    state._lpSeen = { cur: cur, reg: reg, back: node || null };
+    launchSeenModal();
+  }
+
+  function launchSeenClose() {
+    var back = state._lpSeen && state._lpSeen.back;
+    state._lpSeen = null;
+    launchSeenModal();
+    try { if (back && document.body.contains(back)) back.focus(); } catch (e) {}
+  }
+
+  /* Заходы по дням. Столбик — заходы, в подсказке рядом регистрации того же дня:
+     сравнение и есть смысл картинки. Складывать их в один столбик нельзя — бывают
+     дни, когда регистраций больше, чем заходов (человек зашёл вчера, заполнил
+     сегодня; часть заходов Метрика не увидела), и стопка врала бы формой. */
+  function launchSeenChart(pages, byDay) {
+    var regBy = {};
+    (byDay || []).forEach(function (d) { regBy[d.day] = d.registered || 0; });
+    var days = (pages.by_day || []);
+    if (!days.length) return '';
+    var max = 1, i;
+    for (i = 0; i < days.length; i++) max = Math.max(max, days[i].users);
+    var bars = days.map(function (d) {
+      var h = Math.max(3, Math.round(d.users / max * 100));
+      var dd = d.day.split('-');
+      return '<div class="ch-day" title="' + dd[2] + '.' + dd[1] + ': заходов ' + d.users +
+        ', регистраций ' + (regBy[d.day] || 0) + '">' +
+        '<div class="b1" style="height:' + h + '%"></div></div>';
+    }).join('');
+    var labels = days.map(function (d, idx) {
+      var show = days.length <= 8 || idx % 2 === 1;
+      return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
+    }).join('');
+    return '<div class="lchart" style="margin-top:12px"><div class="chart">' + bars + '</div>' +
+      '<div class="ch-labels">' + labels + '</div></div>' +
+      '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>заходы на страницу · ' +
+      'наведите на столбик, чтобы увидеть регистрации этого дня</span></div>';
+  }
+
+  if (!window._lsEscBound) {
+    window._lsEscBound = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.getElementById('ls-ovl')) launchSeenClose();
+    });
+  }
+
+  function launchSeenModal() {
+    var host = el('ls-ovl-host');
+    var st = state._lpSeen;
+    if (!st) { if (host) host.remove(); return; }
+    if (!host) { host = document.createElement('div'); host.id = 'ls-ovl-host'; document.body.appendChild(host); }
+    var p = st.cur.pages || {};
+    var pct = st.reg.total && p.users ? Math.round(st.reg.total * 100 / p.users) : null;
+
+    var srcRows = (p.sources || []).map(function (s) {
+      return flatRow(s.title, '', s.users);
+    }).join('');
+
+    var head = '<div class="mk-modal-t"><span>Страницу видели · <span class="num">' +
+        fmtMoney(p.users || 0) + '</span></span></div>' +
+      '<div class="mk-modal-s">' + esc(st.cur.title || '') + ' · ' +
+        esc(p.path || '') + (p.since ? ' · с ' + esc(fmtDay(p.since)) : '') +
+        ' · данные Яндекс Метрики</div>';
+
+    var body =
+      '<div class="mk-logic-empty" style="text-align:left;margin-top:10px">' +
+        'Поимённо этих людей посмотреть нельзя: Метрика считает анонимные заходы, ' +
+        'имён и контактов у неё нет. Здесь — то, что она знает: когда заходили и откуда. ' +
+        'Из них заполнили форму ' + (pct == null ? '—' : pct + '%') + ' — это ' +
+        fmtMoney(st.reg.total) + ' ' + plural(st.reg.total, 'регистрация', 'регистрации', 'регистраций') +
+      '.</div>' +
+      launchSeenChart(p, st.cur.by_day) +
+      (srcRows
+        ? '<div class="sec-head" style="padding:16px 0 8px"><div><div class="t">Откуда приходили</div>' +
+          '<div class="s">по версии Метрики — это переходы, а не наши метки ссылок</div></div></div>' +
+          '<div class="brk">' + srcRows + '</div>'
+        : '');
+
+    var prev = el('ls-ovl');
+    var wasOpen = !!prev;
+    host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="ls-ovl">' +
+      '<div class="mk-modal wide" id="ls-modal" role="dialog" aria-modal="true" tabindex="-1">' +
+      '<button class="mk-xbtn" id="ls-x" title="Закрыть">' + ic('x', 14) + '</button>' +
+      head + body + '</div></div>';
+
+    var ovl = el('ls-ovl');
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) launchSeenClose(); });
+    el('ls-x').addEventListener('click', launchSeenClose);
+    try { el('ls-modal').focus(); } catch (e) {}
   }
 
   function launchPlates(path) {
@@ -22087,6 +22191,14 @@
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
       });
     });
+    /* Плитка «Страницу видели» → разбор по дням и источникам. Людей там нет и быть
+       не может (Метрика анонимна), попап об этом говорит прямо. */
+    var seenTile = view.querySelector('.stat[data-go="seen"]');
+    if (seenTile) {
+      seenTile.addEventListener('click', function () {
+        launchSeenOpen(cur, reg, seenTile);
+      });
+    }
     /* Строка блока под лестницей → те же люди поимённо. Название и число берём с
        самой строки: пока ответ ручки не пришёл, в шапке попапа стоит ровно то, на
        что человек нажал, а не «Загружаю». */
