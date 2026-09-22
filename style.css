@@ -770,8 +770,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .tipchart .ch-day:focus-visible .b1[data-tip]::after,
 .tipchart .ch-day.on .b1[data-tip]::after { opacity: 1; }
 /* Крайние столбики: по центру плашка уезжала бы за край окна. */
-.tipchart .ch-day:first-child .b1[data-tip]::after { left: 0; transform: none; }
-.tipchart .ch-day:last-child .b1[data-tip]::after { left: auto; right: 0; transform: none; }
+/* Попап больше не прокручивается вбок, значит вылезшая за край подсказка будет
+   обрезана. Прижимаем к краю ДВА крайних столбика с каждой стороны: у второго от
+   края плашка тоже не помещается по центру. */
+.tipchart .ch-day:nth-child(-n+2) .b1[data-tip]::after { left: 0; transform: none; }
+.tipchart .ch-day:nth-last-child(-n+2) .b1[data-tip]::after { left: auto; right: 0; transform: none; }
 .tipchart .ch-day:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
 .tipchart .ch-day:hover .b1, .tipchart .ch-day.on .b1 { background: var(--blue); }
 
@@ -4792,11 +4795,24 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-sl-fill { height: 100%; border-radius: 999px; background: var(--blue); transition: width .3s var(--ease); }
 .mk-sl-n { font-size: 12px; color: var(--ink-2); flex: 0 0 70px; text-align: right; }
 /* попап аналитики логики: шире + большие цифры */
-.mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow-y: auto; }
-/* прокрутка попапа — тонкая, в стиле остальных панелей (дефолтная урезала скругление) */
-.mk-modal.wide::-webkit-scrollbar { width: 8px; }
-.mk-modal.wide::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
-.mk-modal.wide::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  /* Вбок попап не прокручивается НИКОГДА. Без этого браузер сам ставит overflow-x: auto
+     (достаточно задать overflow по одной оси), и любой абсолютный элемент внутри —
+     например подсказка над столбиком графика — рисует внизу ненужную полосу. */
+  overflow-x: hidden;
+  overscroll-behavior: contain; }
+/* Прокрутка попапа — тонкая, в стиле остальных панелей. Ползунок держим на три
+   пикселя от края прозрачной рамкой: прижатый вплотную, он упирался в скругление
+   карточки и выглядел вылезающим наружу. */
+/* scrollbar-width/scrollbar-color здесь НЕ задаём намеренно: в Chrome они старше
+   правил ::-webkit-scrollbar и отменяют отступ ползунка от края — ровно то, из-за
+   чего он и выглядел вылезающим. */
+.mk-modal.wide::-webkit-scrollbar { width: 12px; }
+.mk-modal.wide::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px;
+  border: 3px solid transparent; background-clip: padding-box; }
+.mk-modal.wide::-webkit-scrollbar-thumb:hover { background: #D2D6DF; background-clip: padding-box; }
+.mk-modal.wide::-webkit-scrollbar-track { background: transparent; margin: 20px 0; }
 /* крестик закрытия: absolute — не участвует в потоке, отступы попапа не плывут */
 .mk-xbtn { position: absolute; top: 12px; right: 12px; z-index: 6;
   width: 32px; height: 32px; border: 0; border-radius: 10px;
