@@ -168,6 +168,11 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .shots{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin-top:clamp(18px,3vh,28px)}
 .shots figure{border-radius:var(--r-s); overflow:hidden; border:1px solid var(--line); position:relative; aspect-ratio:4/3}
 .shots img{width:100%; height:100%; object-fit:cover}
+.shots.two{grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:18px}
+.shots figure.tall{aspect-ratio:3/2; background:#e7edfb}
+.shots figure.tall img{object-fit:cover; object-position:50% 0%}
+.split .pic.card-pic{aspect-ratio:16/10; background:#e7edfb}
+.split .pic.card-pic img{object-fit:cover; object-position:50% 0%}
 .shots figcaption{
   position:absolute; left:0; right:0; bottom:0; padding:30px 16px 14px; color:#fff;
   font-size:14px; line-height:1.4; font-weight:560;
@@ -310,6 +315,19 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       <div class="card"><h3>Прямая работа с вузами</h3><p>Общаемся с приемными комиссиями напрямую и знаем требования этого сезона, а не прошлогодние советы из интернета.</p></div>
       <div class="card"><h3>Своя платформа</h3><p>У семьи личный кабинет: путь по этапам, документы, оплаты, тренажеры языка, связь с командой. У нас CRM, где видно каждого ученика.</p></div>
       <div class="card"><h3>Команда, а не один менеджер</h3><p>Тьютор, администратор по грантам, специалист по документам, ассистент. У семьи общий чат, где отвечают все.</p></div>
+    </div>
+  </section>
+
+  <!-- 4. система своими глазами -->
+  <section class="slide">
+    <div class="rise">
+      <span class="kicker">Система</span>
+      <h2>Что видит семья и что видим мы</h2>
+      <p class="lead">Снимки настоящие, данные на них учебные. Слева кабинет семьи, справа наша карта клиентов: где идет каждый ученик, что у него просрочено и кто давно не заходил.</p>
+    </div>
+    <div class="shots two rise">
+      <figure class="tall"><img src="img/ui-cabinet.webp" alt="Кабинет ученика на платформе"><figcaption>Кабинет ученика: текущий этап, что сделать сейчас и путь целиком</figcaption></figure>
+      <figure class="tall"><img src="img/ui-roadmap.webp" alt="Карта клиентов в CRM"><figcaption>Карта клиентов: этап, тариф, задачи и кто давно не заходил</figcaption></figure>
     </div>
   </section>
 
@@ -503,7 +521,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       <h2>Две линии и общая карточка в CRM</h2>
     </div>
     <div class="rise">
-      <p class="lead">Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания. Семью ведет не один человек, а отдел, и следующий видит ровно то, что вы записали.</p>
+      <p class="lead">Все, чего нет в системе, не существует: ни договоренности, ни звонка, ни обещания. Семью ведет отдел, а не один человек, и работа идет в одной карточке: анкета, история касаний, диагностика, оплаты, переписка.</p>
     </div>
     <div class="steps rise">
       <div class="step"><span class="n">1</span><div><h3>Первая линия: чаты и звонки</h3><p>Входящие разбирает тот, у кого смена. Норматив: медиана первого ответа до 15 минут, ни одного пропущенного обращения, доведение до диагностики.</p></div></div>
@@ -638,7 +656,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 <div class="bar">
   <span class="brand">ИСТСАЙД.РФ</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 16</span>
+  <span class="count" id="count">1 / 17</span>
   <div class="arrows">
     <button id="prev" aria-label="Предыдущий слайд">‹</button>
     <button id="next" aria-label="Следующий слайд">›</button>
