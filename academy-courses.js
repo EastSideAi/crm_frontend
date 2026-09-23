@@ -1270,7 +1270,11 @@ window.AC_COURSES = [
      Цены — content/portal.json, условия — _specs/sales/mop-motivation.md. */
   { id: 'sales', title: 'Продажи', tag: 'Продажи',
     about: 'Продукт, смены на чатах, диагностика, возражения, договор и деньги.',
-    mats: [],
+    // Презентация первой встречи отдела. Адрес случайный намеренно: CRM отдает
+    // страницы без входа, а на слайдах ставки и проценты — см. шаг выкладки
+    // в .github/workflows/deploy-selectel.yml.
+    mats: [['https://crm.eastside.study/s/02c41edba0a087/index.html',
+      'Презентация: знакомство с отделом продаж', 'open']],
     lessonIds: ['company', 'what', 'who', 'routes', 'grants', 'value', 'cases', 'leads', 'shift', 'call', 'diag', 'chances', 'objections', 'deal', 'crm', 'money', 'docs'],
     lessons: [
 

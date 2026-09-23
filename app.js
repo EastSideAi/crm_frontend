@@ -3997,8 +3997,14 @@
       A.exAnswers = []; A.pay = A.srv.pay_method || null; A.agreed = !!A.srv.agreement;
       A.tv = A.tv || {}; A.lt = A.lt || {}; A.cl = A.cl || {};
     }
+    /* Третий элемент 'open' — материал не скачивается, а открывается страницей:
+       презентация отдела продаж это веб-страница, скачанный html без своей папки
+       с картинками мертв. */
     var mats = (C.mats || []).map(function (m) {
-      return '<a class="ac-mat" href="' + esc(m[0]) + '" download>' + ic('doc', 14) + esc(m[1]) + '</a>';
+      var open = m[2] === 'open';
+      return '<a class="ac-mat" href="' + esc(m[0]) + '"' +
+        (open ? ' target="_blank" rel="noopener">' : ' download>') +
+        ic(open ? 'ext' : 'doc', 14) + esc(m[1]) + '</a>';
     }).join('');
     view.innerHTML =
       '<div class="academy"><div class="ac-wrap">' +
