@@ -2272,6 +2272,12 @@
        есть строка расхода фонда. */
     { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
       cap: 'finmodel|finmodel_contractors', hideCap: 'finmodel' },
+    /* Начисления продавцам: расчетный лист продаж по каждому продавцу — процент
+       капает автоматически с каждой оплаты клиента (ответственный на карточке ×
+       ставка), человек только сверяет. Плюс раздел «без разнесения» — оплаты, по
+       которым процент не начислен (нет ответственного или он из сервисной роли). */
+    { id: 'finsales', label: 'Начисления продаж', icon: 'coins', space: 'fin',
+      cap: 'finmodel_edit|finmodel_sales' },
     /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
        (сервисы, административное), но всю ведомость с зарплатами не видит. У кого есть
        ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
@@ -3304,6 +3310,7 @@
     else if (state.page === 'finedit') renderFinEdit(view);
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finpayouts') renderFinPayouts(view);
+    else if (state.page === 'finsales') renderFinSales(view);
     else if (state.page === 'finopex') renderFinOpex(view);
     else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
@@ -3990,8 +3997,14 @@
       A.exAnswers = []; A.pay = A.srv.pay_method || null; A.agreed = !!A.srv.agreement;
       A.tv = A.tv || {}; A.lt = A.lt || {}; A.cl = A.cl || {};
     }
+    /* Третий элемент 'open' — материал не скачивается, а открывается страницей:
+       презентация отдела продаж это веб-страница, скачанный html без своей папки
+       с картинками мертв. */
     var mats = (C.mats || []).map(function (m) {
-      return '<a class="ac-mat" href="' + esc(m[0]) + '" download>' + ic('doc', 14) + esc(m[1]) + '</a>';
+      var open = m[2] === 'open';
+      return '<a class="ac-mat" href="' + esc(m[0]) + '"' +
+        (open ? ' target="_blank" rel="noopener">' : ' download>') +
+        ic(open ? 'ext' : 'doc', 14) + esc(m[1]) + '</a>';
     }).join('');
     view.innerHTML =
       '<div class="academy"><div class="ac-wrap">' +
@@ -4103,6 +4116,7 @@
     if (sc.type === 'chklist') extra = acChkHTML(sc);
     if (sc.type === 'howto') extra = acHowHTML(sc);
     if (sc.type === 'calc') extra = acCalcHTML(sc);
+    if (sc.type === 'scalc') extra = acSalHTML(sc);
     // На вопросе реплика преподавателя ждет ответа: она объясняет, почему верно
     // именно это, и до ответа была бы подсказкой. Ее добавляет acBindQ.
     if (sc.type === 'q') return acQHTML(sc);
@@ -4286,6 +4300,70 @@
       '</ul>' +
       '<div class="ac-ctot"><span>Итого за год</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
   }
+  /* ── Калькулятор месяца продавца (тип экрана scalc) ────────────────────────
+     Второй калькулятор, а не ветка первого: у тьютора считается ГОД по точкам
+     ученика, у продавца — МЕСЯЦ из трех разных источников. Общая функция на оба
+     означала бы один набор полей на две разные схемы мотивации.
+     Ставки те же, что в уроке «Деньги», менять надо в обоих местах сразу. */
+  var SAL_CALC = { sh: 40, kq: 0, dg: 20, rt: 1, dl: 3, ro: 0, tr: 0 };
+  var SAL_KQ = [['1,00', 1], ['0,90', 0.9], ['0,80', 0.8], ['0,60', 0.6]];
+  var SAL_RT = [['300 ₽, на обучении', 300], ['500 ₽, после аттестации', 500]];
+  var SAL_RO = [['Чат и диагностика сам · 3,2%', 3.2], ['Только диагностика · 2,2%', 2.2],
+                ['Только чат · 1,0%', 1]];
+  var SAL_TR = [['Стандарт · 159 000', 159000], ['Стандарт Плюс · 299 990', 299990],
+                ['Премиум · 399 990', 399990]];
+  var SAL_SHIFT = 750;
+  var SAL_LIM = { sh: [0, 60], dg: [0, 60], dl: [0, 15] };
+
+  function acSalSum() {
+    var c = SAL_CALC;
+    var shift = Math.round(c.sh * SAL_SHIFT * SAL_KQ[c.kq][1]);
+    var deals = Math.round(c.dl * SAL_TR[c.tr][1] * SAL_RO[c.ro][1] / 100);
+    var diag = c.dg * SAL_RT[c.rt][1];
+    return { shift: shift, deals: deals, diag: diag, total: shift + deals + diag };
+  }
+  function acSalOut() {
+    var s = acSalSum(), c = SAL_CALC;
+    return '<ul class="ac-clist">' +
+      acCalcRow('Смены: ' + c.sh + ' × 750 ₽ × коэффициент ' + SAL_KQ[c.kq][0], s.shift) +
+      acCalcRow('Проценты: ' + c.dl + ' × ' + SAL_RO[c.ro][0].split(' · ')[1], s.deals) +
+      acCalcRow('Диагностики: ' + c.dg + ' × ' + SAL_RT[c.rt][1] + ' ₽', s.diag) +
+      '</ul>' +
+      '<div class="ac-ctot"><span>Итого за месяц, до налогов</span><b>' + fmtMoney(s.total) + '\u00a0₽</b></div>';
+  }
+  function acSalHTML(sc) {
+    return '<div class="ac-calc" id="ac-scalc">' +
+      '<div class="ac-cfs">' +
+        '<div class="ac-cf"><span class="ac-cfl">Смен в месяц</span>' + acCalcStep('sh', SAL_CALC.sh) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Коэффициент качества смен</span>' + acCalcSeg('kq', SAL_KQ, SAL_CALC.kq) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Проведено диагностик</span>' + acCalcStep('dg', SAL_CALC.dg) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Ставка за диагностику</span>' + acCalcSeg('rt', SAL_RT, SAL_CALC.rt) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Продаж в месяц</span>' + acCalcStep('dl', SAL_CALC.dl) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Ваша роль в сделке</span>' + acCalcSeg('ro', SAL_RO, SAL_CALC.ro) + '</div>' +
+        '<div class="ac-cf"><span class="ac-cfl">Средний тариф сделки</span>' + acCalcSeg('tr', SAL_TR, SAL_CALC.tr) + '</div>' +
+      '</div>' +
+      '<div class="ac-cout" id="ac-sout">' + acSalOut() + '</div>' +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+  function acBindSal() {
+    var box = el('ac-scalc'); if (!box) return;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!b || !box.contains(b)) return;
+      var wrap = b.parentNode, f = wrap.getAttribute('data-f');
+      if (!f) return;
+      if (b.hasAttribute('data-d')) {
+        var lim = SAL_LIM[f];
+        SAL_CALC[f] = Math.max(lim[0], Math.min(lim[1], SAL_CALC[f] + (+b.getAttribute('data-d'))));
+        wrap.querySelector('b').textContent = SAL_CALC[f];
+      } else {
+        SAL_CALC[f] = +b.getAttribute('data-v');
+        [].forEach.call(wrap.children, function (x, i) { x.classList.toggle('on', i === SAL_CALC[f]); });
+      }
+      el('ac-sout').innerHTML = acSalOut();
+    });
+  }
+
   function acCalcHTML(sc) {
     return '<div class="ac-calc" id="ac-calc">' +
       '<div class="ac-cfs">' +
@@ -4363,6 +4441,7 @@
     }
     if (sc.type === 'chklist') acBindChk(sc);
     if (sc.type === 'calc') acBindCalc();
+    if (sc.type === 'scalc') acBindSal();
     acZoomBind(scr);
     acVoiceMount(acC().id + '-' + A.li + '-' + A.si);
     acBuildRoute();
@@ -16096,6 +16175,7 @@
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
+    FIN.salesSheet = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -18092,6 +18172,165 @@
         });
       });
     }
+    pageAnim(view);
+  }
+
+  // Расчетный лист продаж: два запроса — начисления продавцам (лист продаж) и доходы
+  // периода (чтобы найти оплаты, по которым процент не начислен). Один за другим, потому
+  // что второй нужен только вместе с первым; finStale отсекает ответ по чужому периоду.
+  function finLoadSalesSheet() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadSalesSheet(); });
+    finBusy('salesSheet', function (done) {
+      api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('лист-продаж')))
+        .then(function (sr) {
+          if (finStale(sr)) return null;
+          return api('/admin/api/fin/lines' + finQ('form=' + encodeURIComponent('доход')))
+            .then(function (ir) {
+              if (finStale(ir)) return;
+              FIN.salesSheet = { sales: (sr.items || []), incomes: (ir.items || []),
+                                 period: sr.period };
+              FIN.err = '';
+              if (curSpace() === 'fin') renderAll();
+            });
+        }).catch(function (e) { finFail(e, 'salesSheet'); }).then(done);
+    });
+  }
+
+  /* Начисления продаж: расчетный лист по каждому продавцу. Процент капает автоматически
+     с каждой оплаты (см. finmodel_sync на бэкенде), тут только показываем — сгруппировав
+     по продавцу и с итогом к выплате. Плюс «Без разнесения»: оплаты, по которым процент
+     не начислен (нет ответственного на карточке или он из сервисной роли). */
+  function renderFinSales(view) {
+    if (!FIN.salesSheet) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSalesSheet(); return;
+    }
+    if (FIN.salesSheet === 'none') return finErrView(view);
+    var S = FIN.salesSheet, per = finPeriod();
+    var sales = S.sales || [], incomes = S.incomes || [];
+
+    // Группируем начисления по продавцу (кому платим процент = payout_to).
+    var bySeller = {}, order = [], totalAccrued = 0;
+    sales.forEach(function (it) {
+      var who = it.payout_to || '—';
+      if (!bySeller[who]) { bySeller[who] = { name: who, rows: [], total: 0 }; order.push(who); }
+      bySeller[who].rows.push(it);
+      if (it.status === 'факт' && it.included) {
+        bySeller[who].total += it.amount; totalAccrued += it.amount;
+      }
+    });
+
+    // «Без разнесения» — оплаты периода, по которым нет строки листа продаж с тем же
+    // paymentId: процент не начислен, потому что ответственного нет или он сервисный.
+    var accruedPays = {};
+    sales.forEach(function (it) { if (it.payment_id) accruedPays[it.payment_id] = true; });
+    // Продления языка: доход, который мост пометил salesSkip='renewal' — процент не
+    // начисляем, показываем отдельно. «Без разнесения» — оплаты, где процент мог бы
+    // капнуть (нет продления), но некому: нет ответственного или он из сервисной роли.
+    var renewals = incomes.filter(function (it) {
+      return it.status === 'факт' && it.included && it.sales_skip === 'renewal';
+    });
+    var unassigned = incomes.filter(function (it) {
+      return it.status === 'факт' && it.included && it.sales_skip !== 'renewal' &&
+             !(it.payment_id && accruedPays[it.payment_id]);
+    });
+
+    var tiles = [
+      { label: 'Начислено', value: finRub(totalAccrued), sub: 'продавцам за период' },
+      { label: 'Продавцов', value: String(order.length), sub: 'с начислениями' },
+      { label: 'Продления', value: String(renewals.length),
+        sub: renewals.length ? 'языка, без процента' : 'нет' },
+      { label: 'Без разнесения', value: String(unassigned.length),
+        sub: unassigned.length ? 'оплат без процента' : 'все разнесено' },
+    ];
+
+    var salesRow = function (it) {
+      var sub = [
+        it.sale_amount ? finRub(it.sale_amount) + ' × ' +
+          finNum(it.percent, it.percent % 1 ? 2 : 0) + '%' : '',
+        it.product || '',
+      ].filter(Boolean).map(esc).join(' · ');
+      return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') + '">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st">' +
+          '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+            esc(it.status) + '</span>' +
+          (it.included === false ? '<span class="fst wait">сторно</span>' : '') +
+        '</span>' +
+      '</div>';
+    };
+
+    var sellerCards = order.map(function (who) {
+      var s = bySeller[who];
+      return '<div class="card listcard fs-seller">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">' + esc(s.name) + '</div>' +
+            '<div class="s fe-s">' + s.rows.length + ' ' +
+              plural(s.rows.length, 'начисление', 'начисления', 'начислений') + '</div></div>' +
+          '<span class="list-count fin-count">к выплате <b>' + finRub(s.total) + '</b></span>' +
+        '</div>' +
+        s.rows.map(salesRow).join('') +
+      '</div>';
+    }).join('');
+
+    var unaRows = unassigned.map(function (it) {
+      return '<div class="trow fin-grid fe-grid">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || 'без клиента') + '</b>' +
+          '<i>нет ответственного или сервисная роль — разнесите вручную</i></span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst wait">не разнесено</span></span>' +
+      '</div>';
+    }).join('');
+
+    var unaCard = unassigned.length ?
+      '<div class="card listcard fs-una">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Без разнесения</div>' +
+            '<div class="s fe-s">оплаты без начисления процента: нет ответственного ' +
+              'на карточке или он из сервисной роли</div></div>' +
+          '<span class="list-count fin-count"><b>' + unassigned.length + '</b> ' +
+            plural(unassigned.length, 'оплата', 'оплаты', 'оплат') + '</span>' +
+        '</div>' + unaRows +
+      '</div>' : '';
+
+    var renRows = renewals.map(function (it) {
+      return '<div class="trow fin-grid fe-grid muted">' +
+        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+        '<span class="fo-what"><b>' + esc(it.counterparty || 'без клиента') + '</b>' +
+          '<i>продление языка — процент не начисляем</i></span>' +
+        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+        '<span class="fo-st"><span class="fst wait">продление</span></span>' +
+      '</div>';
+    }).join('');
+
+    var renCard = renewals.length ?
+      '<div class="card listcard fs-ren">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">Продления языка</div>' +
+            '<div class="s fe-s">повторная оплата языка тем же клиентом: процент за ' +
+              'первую продажу уже начислен, за продление не начисляем</div></div>' +
+          '<span class="list-count fin-count"><b>' + renewals.length + '</b> ' +
+            plural(renewals.length, 'оплата', 'оплаты', 'оплат') + '</span>' +
+        '</div>' + renRows +
+      '</div>' : '';
+
+    var head = '<div class="card listcard"><div class="list-tools">' +
+      '<div><div class="t fe-t">Начисления продаж' +
+        (per ? ' · ' + esc(per.name) : '') + '</div>' +
+        '<div class="s fe-s">процент продавцу капает сам с каждой оплаты клиента; ' +
+          'здесь только сверяете и передаете в выплату</div></div></div></div>';
+
+    var body = (sellerCards || unaCard || renCard)
+      ? sellerCards + unaCard + renCard
+      : '<div class="card listcard"><div class="empty">Начислений продаж в этой ' +
+        'ведомости пока нет. Как пройдет оплата клиента с продавцом в ответственных — ' +
+        'строка появится здесь сама.</div></div>';
+
+    view.innerHTML = statBar(tiles) + head + body;
     pageAnim(view);
   }
 
@@ -20520,11 +20759,19 @@
     tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
+  /* Метка ссылки → человеческое название. Чего здесь нет, то показывается сырым кодом,
+     и маркетолог читает в отчёте «salebot» — служебное слово, которое ничего ему не
+     говорит и выглядит как чужая система (спросил владелец 22.09). Добавляем сюда ВСЕ
+     метки, которые реально встречаются в ссылках и регистрациях. */
   var MK_SOURCE_NAMES = {
     direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
     instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
+    /* Salebot — сторонняя платформа, через неё шли рассылки по старой базе. Название
+       платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
+    salebot: 'Рассылка по старой базе',
+    max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
   };
 
   function mkUrl(code) {
@@ -21437,8 +21684,16 @@
       '<div class="lad-right">' + (right || '') + '</div></div>';
   }
 
-  function flatRow(name, small, n) {
-    return '<div class="lad-row gf-flat"><div class="lad-nm">' + esc(name) +
+  /* `open` (необязательный) — {block, value}: строка блока разворачивается в поимённый
+     список тех же людей, что она посчитала. Без него строка остаётся как была —
+     обычной, некликабельной. Это тот же приём, что у плашек ступени: цифра, которую
+     нельзя проверить глазами, команду не убеждает. */
+  function flatRow(name, small, n, open) {
+    var can = !!(open && open.block);
+    return '<div class="lad-row gf-flat' + (can ? ' brk-open' : '') + '"' +
+      (can ? ' data-lblock="' + esc(open.block) + '" data-lvalue="' + esc(open.value || '') +
+             '" role="button" tabindex="0" title="Показать этих людей поимённо"' : '') +
+      '><div class="lad-nm">' + esc(name) +
       (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-n num">' + n + '</div></div>';
   }
@@ -21495,6 +21750,161 @@
     return worst ? worst.key : null;
   }
 
+  /* Плитка «Страницу видели» — сколько людей открывало посадочную запуска, по
+     Яндекс Метрике. Без неё экран начинается с регистраций, и «трафика не было»
+     неотличимо от «трафик был, а форму не заполнили»: два разных диагноза, один вид.
+
+     Показываем ТОЛЬКО когда бэкенд прислал блок. Нет блока — плиток снова пять, а не
+     ноль в шестой: ноль здесь читался бы как «на страницу никто не заходил».
+
+     В подписи обязательно дата начала: счётчик на странице появился позже старта
+     запуска, и без неё «видели 110» рядом с «регистраций 34» читается как потеря
+     людей, которых мы просто не считали. Источник называем прямо — это НЕ наш счёт,
+     Метрика считает посетителей по-своему и с нашими цифрами сходится примерно. */
+  function launchSeenTile(cur, reg) {
+    var p = cur.pages;
+    if (!p || !p.users) return [];
+    var pct = reg.total && p.users ? Math.round(reg.total * 100 / p.users) : null;
+    var since = p.since ? ('с ' + fmtDay(p.since)) : 'по Метрике';
+    return [{
+      label: 'Страницу видели',
+      /* go — только маркер для обработчика ниже: плитка открывает разбор, а не
+         уводит на другой экран. */
+      go: 'seen',
+      value: fmtMoney(p.users),
+      sub: (pct == null ? since : 'заполнили форму ' + pct + '% · ' + since) +
+           ' · Яндекс Метрика',
+    }];
+  }
+
+  /* ── Что стоит за цифрой «страницу видели» ─────────────────────────────────
+     Здесь НЕ будет списка людей, и это не недоделка: Метрика считает анонимные
+     заходы, имён и контактов у неё нет вовсе. Развернуть эту цифру в людей, как
+     разворачиваются остальные на экране, нельзя в принципе — поэтому попап прямо
+     об этом говорит, иначе «нажал и не увидел людей» читается как поломка.
+
+     Показываем то, что Метрика действительно знает и что отвечает на рабочий
+     вопрос: в какие дни люди приходили и откуда. Данные приезжают вместе с экраном,
+     отдельный запрос не нужен. */
+  function launchSeenOpen(cur, reg, node) {
+    state._lpSeen = { cur: cur, reg: reg, back: node || null };
+    launchSeenModal();
+  }
+
+  function launchSeenClose() {
+    var back = state._lpSeen && state._lpSeen.back;
+    state._lpSeen = null;
+    launchSeenModal();
+    try { if (back && document.body.contains(back)) back.focus(); } catch (e) {}
+  }
+
+  /* Заходы по дням. Столбик — заходы, в подсказке рядом регистрации того же дня:
+     сравнение и есть смысл картинки. Складывать их в один столбик нельзя — бывают
+     дни, когда регистраций больше, чем заходов (человек зашёл вчера, заполнил
+     сегодня; часть заходов Метрика не увидела), и стопка врала бы формой. */
+  function launchSeenChart(pages, byDay) {
+    var regBy = {};
+    (byDay || []).forEach(function (d) { regBy[d.day] = d.registered || 0; });
+    var days = (pages.by_day || []);
+    if (!days.length) return '';
+    var max = 1, i;
+    for (i = 0; i < days.length; i++) max = Math.max(max, days[i].users);
+    /* Подпись столбика — своей плашкой (data-tip), а не нативным title: тот всплывает
+       почти через секунду, выглядит по-браузерному и на телефоне не появляется вовсе.
+       Столбик получает tabindex, чтобы цифру можно было достать и с клавиатуры. */
+    var bars = days.map(function (d) {
+      var h = Math.max(3, Math.round(d.users / max * 100));
+      var dd = d.day.split('-');
+      var tip = dd[2] + '.' + dd[1] + ' · заходов ' + d.users +
+                ' · регистраций ' + (regBy[d.day] || 0);
+      /* data-tip висит на САМОМ столбике, а не на колонке: content: attr() читает
+         только собственные атрибуты элемента, и на колонке плашка выходила пустой. */
+      return '<div class="ch-day" tabindex="0" role="button">' +
+        '<div class="b1" data-tip="' + esc(tip) + '" style="height:' + h + '%"></div></div>';
+    }).join('');
+    var labels = days.map(function (d, idx) {
+      var show = days.length <= 8 || idx % 2 === 1;
+      return '<span class="num">' + (show ? d.day.split('-')[2] : '') + '</span>';
+    }).join('');
+    return '<div class="lchart tipchart" style="margin-top:12px"><div class="chart">' + bars + '</div>' +
+      '<div class="ch-labels">' + labels + '</div></div>' +
+      '<div class="ch-legend"><span><i style="background:#1C2B4A"></i>заходы на страницу · ' +
+      'наведите на столбик или нажмите на него, чтобы увидеть регистрации этого дня</span></div>';
+  }
+
+  if (!window._lsEscBound) {
+    window._lsEscBound = true;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && document.getElementById('ls-ovl')) launchSeenClose();
+    });
+  }
+
+  function launchSeenModal() {
+    var host = el('ls-ovl-host');
+    var st = state._lpSeen;
+    if (!st) { if (host) host.remove(); return; }
+    if (!host) { host = document.createElement('div'); host.id = 'ls-ovl-host'; document.body.appendChild(host); }
+    var p = st.cur.pages || {};
+    var pct = st.reg.total && p.users ? Math.round(st.reg.total * 100 / p.users) : null;
+
+    var srcRows = (p.sources || []).map(function (s) {
+      return flatRow(s.title, '', s.users);
+    }).join('');
+
+    var head = '<div class="mk-modal-t"><span>Страницу видели · <span class="num">' +
+        fmtMoney(p.users || 0) + '</span></span></div>' +
+      '<div class="mk-modal-s">' + esc(st.cur.title || '') + ' · ' +
+        esc(p.path || '') + (p.since ? ' · с ' + esc(fmtDay(p.since)) : '') +
+        ' · данные Яндекс Метрики</div>';
+
+    var body =
+      '<div class="mk-logic-empty" style="text-align:left;margin-top:10px">' +
+        'Поимённо этих людей посмотреть нельзя: Метрика считает анонимные заходы, ' +
+        'имён и контактов у неё нет. Здесь — то, что она знает: когда заходили и откуда. ' +
+        'Из них заполнили форму ' + (pct == null ? '—' : pct + '%') + ' — это ' +
+        fmtMoney(st.reg.total) + ' ' + plural(st.reg.total, 'регистрация', 'регистрации', 'регистраций') +
+      '.</div>' +
+      launchSeenChart(p, st.cur.by_day) +
+      (srcRows
+        ? '<div class="sec-head" style="padding:16px 0 8px"><div><div class="t">Откуда приходили</div>' +
+          '<div class="s">по версии Метрики — это переходы, а не наши метки ссылок</div></div></div>' +
+          '<div class="brk">' + srcRows + '</div>'
+        : '');
+
+    var prev = el('ls-ovl');
+    var wasOpen = !!prev;
+    host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="ls-ovl">' +
+      '<div class="mk-modal wide" id="ls-modal" role="dialog" aria-modal="true" tabindex="-1">' +
+      '<button class="mk-xbtn" id="ls-x" title="Закрыть">' + ic('x', 14) + '</button>' +
+      head + body + '</div></div>';
+
+    var ovl = el('ls-ovl');
+    ovl.addEventListener('click', function (e) { if (e.target === ovl) launchSeenClose(); });
+    el('ls-x').addEventListener('click', launchSeenClose);
+    /* Нажатие по столбику держит подсказку открытой: на телефоне наведения нет, а
+       цифру посмотреть надо. Открытая всегда одна — иначе график зарастает плашками. */
+    Array.prototype.forEach.call(host.querySelectorAll('.tipchart .ch-day'), function (bar) {
+      var show = function (e) {
+        if (e) e.stopPropagation();
+        Array.prototype.forEach.call(host.querySelectorAll('.ch-day.on'), function (o) {
+          if (o !== bar) o.classList.remove('on');
+        });
+        bar.classList.toggle('on');
+      };
+      bar.addEventListener('click', show);
+      bar.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); }
+      });
+    });
+    /* Клик мимо графика гасит закреплённую подсказку. */
+    el('ls-modal').addEventListener('click', function () {
+      Array.prototype.forEach.call(host.querySelectorAll('.ch-day.on'), function (o) {
+        o.classList.remove('on');
+      });
+    });
+    try { el('ls-modal').focus(); } catch (e) {}
+  }
+
   function launchPlates(path) {
     var worst = launchWorstStep(path);
     return '<div class="lsteps">' + path.map(function (s, i) {
@@ -21516,6 +21926,14 @@
 
   function launchPeopleQS(offset) {
     var p = state._lpPeople;
+    if (p.kind === 'block') {
+      /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
+         Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
+      return '?' + ['slug=' + encodeURIComponent(p.slug),
+                    'block=' + encodeURIComponent(p.block),
+                    'value=' + encodeURIComponent(p.value || ''),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     var q = ['slug=' + encodeURIComponent(p.slug), 'step=' + encodeURIComponent(p.step),
              'limit=' + LP_LIMIT, 'offset=' + offset];
     if (p.from) q.push('from=' + encodeURIComponent(p.from));
@@ -21528,6 +21946,7 @@
 
   function launchPeopleOpen(slug, step, launchTitle, plate) {
     state._lpPeople = {
+      kind: 'step', id: 'step:' + step.key,
       slug: slug, step: step.key, title: step.title,
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
@@ -21535,6 +21954,22 @@
       day: state._mkLaunchDay || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
+    };
+    launchPeopleLoad(false);
+  }
+
+  /* Список людей за цифрой БЛОКА под лестницей. Блоки считают не только
+     зарегистрировавшихся: тест открывают из постов, в канал вступают по общей ссылке.
+     Связать их с регистрацией нечем — но показать, кто это, можно и нужно: «тест прошли
+     22» без имён команда проверить не может и пересчитывает у себя. */
+  function launchBlockOpen(slug, block, value, title, launchTitle, count, node) {
+    state._lpPeople = {
+      kind: 'block', id: 'block:' + block + ':' + value,
+      slug: slug, block: block, value: value, step: '',
+      title: title, plate: count || 0, launch: launchTitle || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
     };
     launchPeopleLoad(false);
   }
@@ -21553,11 +21988,15 @@
     p.loading = true;
     if (!more) { p.rows = []; p.total = null; }
     var offset = p.rows.length;
-    var step = p.step;
+    /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
+       пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
+    var who = p.id;
+    var url = (p.kind === 'block') ? '/admin/api/marketing/launch/block'
+                                   : '/admin/api/marketing/launch/people';
     launchPeopleModal();
-    api('/admin/api/marketing/launch/people' + launchPeopleQS(offset)).then(function (r) {
+    api(url + launchPeopleQS(offset)).then(function (r) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;   /* успели кликнуть другую ступень */
+      if (!cur || cur.id !== who) return;      /* успели кликнуть другую строку */
       cur.rows = cur.rows.concat((r && r.people) || []);
       if (r && r.total != null) cur.total = r.total;
       else cur.total = cur.rows.length;        /* ручка промолчала — считаем по факту */
@@ -21566,7 +22005,7 @@
       launchPeopleModal();
     }).catch(function (e) {
       var cur = state._lpPeople;
-      if (!cur || cur.step !== step) return;
+      if (!cur || cur.id !== who) return;
       /* '403' — токен протух, api уже увёл на экран входа: попап просто убираем */
       if (e && e.message === '403') { state._lpPeople = null; launchPeopleModal(); return; }
       cur.loading = false;
@@ -21621,11 +22060,22 @@
       body = '<div class="loadwrap" style="padding:28px 0"><div class="loaddot"></div>' +
              '<div class="loaddot"></div><div class="loaddot"></div></div>';
     } else if (!shown) {
-      body = '<div class="mk-logic-empty">На этой ступени пока никого — ' +
-             'людей здесь не появится, пока шаг не сработает хотя бы у одного человека.</div>';
+      body = '<div class="mk-logic-empty">' + (p.kind === 'block'
+        ? 'Здесь пока никого — людей в этой строке ещё нет.'
+        : 'На этой ступени пока никого — людей здесь не появится, ' +
+          'пока шаг не сработает хотя бы у одного человека.') + '</div>';
     } else {
-      body = '<div class="lp-tbl"><div class="lp-th"><span>Человек</span><span>Контакт</span>' +
-        '<span>Откуда пришёл</span><span>Регистрация</span></div>' +
+      /* Заголовки колонок зависят от того, ОТКУДА люди. У зарегистрировавшихся есть
+         телефон и дата регистрации, у людей из бота — только ник и дата входа.
+         Назвать чужой столбец «Контакт» и «Регистрация» значит пообещать данные,
+         которых в строке нет. */
+      var bot = p.kind === 'block' && p.block !== 'source';
+      var cols = bot
+        ? ['Человек', 'Ник', 'Откуда пришёл',
+           p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
+        : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
+      body = '<div class="lp-tbl"><div class="lp-th">' +
+        cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(launchPeopleRow).join('') + '</div>';
     }
 
@@ -21647,8 +22097,14 @@
        иначе «·» и число разъезжались на ширину gap и читались как два заголовка. */
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
-      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') + esc(per) +
-        ' · это те же люди, что посчитаны на плашке</div>';
+      '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
+        esc(p.kind === 'block' ? 'весь запуск' : per) + ' · ' +
+        (p.kind === 'block'
+          ? (p.block === 'source'
+              ? 'это те же люди, что посчитаны в блоке'
+              : 'это те же люди, что посчитаны в блоке · ' +
+                'связаны ли они с регистрацией — мы не знаем')
+          : 'это те же люди, что посчитаны на плашке') + '</div>';
 
     /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
        страницу под затемнением. Запоминаем, где он был, и возвращаем после сборки:
@@ -21933,16 +22389,20 @@
       ladRow('Оплата диагностики', 'деньги запуска', '—', null, convMut('после эфира'));
 
     var diagRows = (cur.diag || []).map(function (d) {
-      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done, d.done);
+      return flatRow(mkSourceName(d.channel), 'зашли ' + d.entered + ' · дошли ' + d.done,
+        d.done, { block: 'diag', value: d.channel });
     }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
 
     var srcRows = (reg.sources || []).map(function (s) {
       return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
-        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n);
+        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n,
+        { block: 'source', value: s.source || '' });
     }).join('') || '<div class="empty">Регистраций пока нет.</div>';
 
+    /* ВК и MAX кликом не разворачиваются намеренно: это снимки счётчика площадки,
+       а не список людей — их подписчиков мы поимённо не знаем и делать вид не будем. */
     var chRows =
-      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0) +
+      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0, { block: 'channel', value: 'member' }) +
       flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
       flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
 
@@ -21973,7 +22433,7 @@
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
-      ], 'five') +
+      ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
@@ -21994,13 +22454,16 @@
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid" style="margin-top:16px">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Диагностический тест</div><div class="s">зашли и дошли до конца, по соцсетям</div></div></div>' +
+          '<div><div class="t">Диагностический тест</div><div class="s">все, кто запускал тест ' +
+            '· нажмите на строку, чтобы увидеть их поимённо</div></div></div>' +
           '<div class="brk">' + diagRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок</div></div></div>' +
+          '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок ' +
+            '· нажмите на метку, чтобы увидеть этих людей</div></div></div>' +
           '<div class="brk">' + srcRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам</div></div></div>' +
+          '<div><div class="t">Закрытые каналы</div><div class="s">вступили и вышли, по площадкам ' +
+            '· телеграм разворачивается в список</div></div></div>' +
           '<div class="brk">' + chRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Клики по ссылкам</div><div class="s">короткие ссылки запуска</div></div></div>' +
@@ -22008,7 +22471,14 @@
         '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
           '<div style="border-top:1px solid var(--line)">' +
-            '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сюда она не подключена</small></div><span class="sev n-wait">не в цифрах</span></div>' +
+            /* Раньше здесь стояло «Метрика сюда не подключена». С появлением плитки
+               «Страницу видели» это перестало быть правдой — но только про страницу
+               интенсива: страницу теста считает отдельный счётчик, и её мы пока не
+               показываем. Пишем ровно то, что есть, иначе список «чего нет» сам
+               становится местом, где написана неправда. */
+            (cur.pages
+              ? '<div class="mkd-gap"><div><b>Посетители страницы теста</b><small>заходы на истсайд.рф/diag считает отдельный счётчик Метрики, на экран он пока не выведен</small></div><span class="sev n-wait">не в цифрах</span></div>'
+              : '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сейчас она недоступна</small></div><span class="sev n-wait">не в цифрах</span></div>') +
             '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
           '</div></div>' +
       '</div></div>';
@@ -22026,6 +22496,31 @@
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
         if (st) launchPeopleOpen(cur.slug, st, cur.title, n);
+      };
+      n.addEventListener('click', openIt);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openIt(); }
+      });
+    });
+    /* Плитка «Страницу видели» → разбор по дням и источникам. Людей там нет и быть
+       не может (Метрика анонимна), попап об этом говорит прямо. */
+    var seenTile = view.querySelector('.stat[data-go="seen"]');
+    if (seenTile) {
+      seenTile.addEventListener('click', function () {
+        launchSeenOpen(cur, reg, seenTile);
+      });
+    }
+    /* Строка блока под лестницей → те же люди поимённо. Название и число берём с
+       самой строки: пока ответ ручки не пришёл, в шапке попапа стоит ровно то, на
+       что человек нажал, а не «Загружаю». */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lblock]'), function (n) {
+      var openIt = function () {
+        var nm = n.querySelector('.lad-nm');
+        var num = parseInt((n.querySelector('.lad-n') || {}).textContent, 10);
+        launchBlockOpen(cur.slug, n.getAttribute('data-lblock'),
+          n.getAttribute('data-lvalue') || '',
+          (nm && nm.firstChild ? String(nm.firstChild.textContent).trim() : 'Люди'),
+          cur.title, isNaN(num) ? 0 : num, n);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
@@ -27815,6 +28310,10 @@
     { id: 'consult',   label: 'Консультации', icon: 'phone' },
     { id: 'admission', label: 'Поступление', icon: 'cap' },
     { id: 'apply',     label: 'Подача',       icon: 'send' },
+    // Контрольные точки тьютора: из них складывается его ставка за ученика
+    // (_specs/tutors/motivation-v1.md). Рядом с «Подачей» намеренно: обе
+    // секции про работу, которую принимают, а не про переписку.
+    { id: 'points',    label: 'Точки',        icon: 'check' },
     { id: 'det',       label: 'Английский',  icon: 'globe' },
     { id: 'course',    label: 'Китайский',   icon: 'play' },
     { id: 'exams',     label: 'Экзамены',    icon: 'award' },
@@ -28895,6 +29394,7 @@
     var pos = list.indexOf(id);
 
     var nm = ov(ctx, 'name');
+    var ownHd = crm.owner || null;
     var openTasks = (crm.tasks || []).filter(function (t) { return !t.done; }).length;
     // Оплаты в карточке — только финансовой роли: тьютор ведет ученика, но сколько
     // семья заплатила, не видит (бэк такую карточку и не отдает, см. can_money).
@@ -28950,6 +29450,14 @@
             '<div class="m-name' + (nm ? '' : ' anon') + '" id="m-name" data-raw="' + esc(nm) + '">' + esc(nm || 'Без имени') + '</div>' +
             '<button class="m-edit" id="m-name-edit" title="Изменить имя">' + ic('note', 14) + '</button>' +
           '</div>' +
+          // Ведет клиента — в шапке, а не спрятан во вкладке «Сейчас»: процент продаж
+          // капает именно на ответственного, значит он должен быть на виду. Клик ведет
+          // к селектору в «Сейчас», где его назначают и меняют.
+          '<button class="m-own-head' + (ownHd ? '' : ' none') + '" id="m-own-jump" ' +
+            'title="Кто ведет клиента. Нажми, чтобы назначить или сменить">' +
+            ic('user', 13) + '<span class="mo-k">Ведет</span>' +
+            '<span class="mo-v">' + esc(ownHd ? (ownHd.name || ('#' + ownHd.id)) : 'не назначен') + '</span>' +
+          '</button>' +
           '<div class="m-sub">' + subBits + '</div>' +
         '</div>' +
       '</div>' +
@@ -28969,6 +29477,8 @@
       '</div>';
 
     el('m-close').addEventListener('click', closeDrawer);
+    var ownJump = el('m-own-jump');
+    if (ownJump) ownJump.addEventListener('click', function () { setModalSection('now'); });
     var hideBtn = el('m-hide');
     if (hideBtn) hideBtn.addEventListener('click', function () {
       if (window.confirm('Скрыть этого лида? Он уйдёт из списков в архив, данные сохранятся — можно вернуть.')) rmHideLead(id, true);
@@ -29012,6 +29522,7 @@
     if (s === 'pay' && !can('finance')) { s = state.modalSection = 'main'; }
     if (s === 'consult' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'mail' && !can('clients')) { s = state.modalSection = 'main'; }
+    if (s === 'points' && !can('clients')) { s = state.modalSection = 'main'; }
     if (s === 'dialog' && !can('inbox')) { s = state.modalSection = 'main'; }
     if (s === 'arrival' && !can('zaezdy')) { s = state.modalSection = 'main'; }
     if (s === 'main') host.innerHTML = buildMain(ctx);
@@ -29020,6 +29531,7 @@
     else if (s === 'dialog') host.innerHTML = buildDialog(ctx);
     else if (s === 'admission') host.innerHTML = buildAdmissionSection(ctx);
     else if (s === 'apply') host.innerHTML = buildApplySection(ctx);
+    else if (s === 'points') host.innerHTML = buildPointsSection(ctx);
     else if (s === 'path') host.innerHTML = buildPathSection(ctx);
     else if (s === 'arrival') host.innerHTML = buildArrivalSection(ctx);
     else if (s === 'notes') host.innerHTML = buildNotesSection(ctx);
@@ -29061,6 +29573,7 @@
     if (s === 'arrival') wireArrivalSection(id);
     if (s === 'admission') { ensurePlanStatus(id); wirePlanToolbar(id); }
     if (s === 'apply') wireApplySection(id);
+    if (s === 'points') wirePointsSection(id);
     if (s === 'offers' && ctx.d) {
       wireOffersSection(id);
       // чат витрины всегда открыт рядом — как чат плана у доски
@@ -29074,6 +29587,7 @@
     var head = { docs: ['Документы', 'Собираю файлы клиента'],
                  pay: ['Оплаты', 'Считаю платежи'],
                  apply: ['Подача', 'Поднимаю заявки в вузы'],
+                 points: ['Контрольные точки', 'Считаю точки и деньги по ним'],
                  offers: ['Витрина', 'Поднимаю каталог продуктов'],
                  det: ['Английский', 'Поднимаю тест DET'],
                  course: ['Китайский', 'Смотрю доступ к курсу'],
@@ -31790,17 +32304,54 @@
     if (!role) return '';
     return role + (name ? ', ' + name : '');
   }
+  /* Категории документов из пакета семьи (backend GET /admin/api/docs/kinds).
+     Держим одну копию на сессию: список меняется правкой чек-листа на бэкенде, и
+     хардкодить его здесь нельзя — разъедется на первой же правке. */
+  var DOC_KINDS = null, DOC_KINDS_BUSY = false;
+  function loadDocKinds(cb) {
+    if (DOC_KINDS) { if (cb) cb(DOC_KINDS); return; }
+    if (DOC_KINDS_BUSY) return;
+    DOC_KINDS_BUSY = true;
+    api('/admin/api/docs/kinds').then(function (r) {
+      DOC_KINDS_BUSY = false;
+      DOC_KINDS = (r && r.kinds) || [];
+      if (cb) cb(DOC_KINDS);
+    }).catch(function () { DOC_KINDS_BUSY = false; });
+  }
+  /* Выпадашка категории. Пустое значение — «без категории»: это честное состояние
+     для договора или итогов консультации, которых в пакете семьи нет. */
+  function docKindSelect(cls, id, current) {
+    var cur = (current || '').trim();
+    var seen = false;
+    var opts = (DOC_KINDS || []).map(function (k) {
+      var on = k.kind.toLowerCase() === cur.toLowerCase();
+      if (on) seen = true;
+      return '<option value="' + esc(k.kind) + '"' + (on ? ' selected' : '') + '>' + esc(k.name) + '</option>';
+    }).join('');
+    // Категория, которой нет в пакете (квитанция, итоги консультации), не должна
+    // молча слететь при открытии выпадашки.
+    var extra = (cur && !seen) ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' : '';
+    return '<select class="' + cls + '"' + (id ? ' id="' + id + '"' : '') + '>' +
+      '<option value=""' + (cur ? '' : ' selected') + '>Без категории</option>' + extra + opts + '</select>';
+  }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
       /* Внешняя ссылка открывается как есть, файл в Storage — через openDoc. */
       var href = dc.link || '#';
       var by = docBy(dc);
-      var meta = [dc.kind, dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
+      var meta = [dc.link ? 'ссылка' : fmtSize(dc.size_bytes), fmtWhen(dc.created_at)].filter(Boolean).join(' · ');
       var m = (by ? '<span class="doc-by' + (dc.uploaded_side === 'team' ? ' doc-by-own' : '') + '">' + esc(by) + '</span> · ' : '') + esc(meta);
       return '<div class="doc-row" data-did="' + dc.id + '">' +
         '<span class="doc-ic">' + ic(dc.link ? 'ext' : 'doc', 17) + '</span>' +
-        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div><div class="doc-m">' + m + '</div></div>' +
+        '<div class="doc-b"><div class="doc-n">' + esc(dc.name) + '</div>' +
+          '<div class="doc-m">' +
+            // Категория правится прямо в строке: именно она закрывает пункт пакета в
+            // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
+            docKindSelect('doc-kind', '', dc.kind) +
+            (m ? '<span class="doc-mt">' + m + '</span>' : '') +
+          '</div></div>' +
         '<div class="doc-act">' +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
@@ -31811,6 +32362,11 @@
     return '<div class="m-ctitle">Документы</div>' +
       '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до 12 МБ или ссылка.</div>' +
       (docs.length ? '<div>' + rows + '</div>' : '') +
+      // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
+      // кабинете, и семья видит «ждет вас» поверх уже загруженного документа
+      // (карточка Белой, 22.09.2026).
+      '<div class="doc-kindrow"><span class="doc-kindlbl">Категория</span>' +
+        docKindSelect('doc-kind doc-kind--new', 'm-dkind', '') + '</div>' +
       '<div class="dropzone" id="m-drop"><input type="file" id="m-file" style="display:none">' +
         '<div class="dz-ic">' + ic('dl', 18) + '</div>' +
         '<div><b>Выбери файл</b> или перетащи сюда</div></div>' +
@@ -33172,18 +33728,39 @@
 
     // документы: загрузка файла / ссылки / удаление
     var drop = el('m-drop'), fileIn = el('m-file');
+    var kindOf = function () { var sel = el('m-dkind'); return (sel && sel.value) || null; };
     if (drop && fileIn) {
       drop.addEventListener('click', function () { fileIn.click(); });
-      fileIn.addEventListener('change', function () { if (fileIn.files && fileIn.files[0]) uploadDoc(id, fileIn.files[0]); });
+      fileIn.addEventListener('change', function () { if (fileIn.files && fileIn.files[0]) uploadDoc(id, fileIn.files[0], kindOf()); });
       drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
       drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
-      drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadDoc(id, e.dataTransfer.files[0]); });
+      drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadDoc(id, e.dataTransfer.files[0], kindOf()); });
     }
+    // Справочник категорий приезжает асинхронно: приехал — перерисовываем секцию,
+    // иначе выпадашки останутся с одним пунктом «Без категории».
+    if (!DOC_KINDS) loadDocKinds(function () {
+      if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true);
+    });
+    // Смена категории у уже загруженного файла: пункт пакета в кабинете закрывается
+    // именно категорией, поэтому чинить ее должен уметь менеджер, а не только я.
+    Array.prototype.forEach.call(host.querySelectorAll('.doc-row .doc-kind'), function (sel) {
+      sel.addEventListener('change', function () {
+        var row = sel.closest('.doc-row');
+        var did = row && row.getAttribute('data-did');
+        if (!did) return;
+        sel.disabled = true;
+        apiSend('/admin/api/docs/' + did, 'PATCH', { kind: sel.value || '' }, function () {
+          sel.disabled = false;
+          showToast(sel.value ? 'Категория: ' + sel.value : 'Категория снята');
+          refreshDetail(id);
+        }, function () { sel.disabled = false; showToast('Категория не сохранилась'); });
+      });
+    });
     var linkAdd = el('m-link-add'), linkIn = el('m-link');
     if (linkAdd && linkIn) linkAdd.addEventListener('click', function () {
       var url = linkIn.value.trim(); if (!url) return;
       var nm = url.split('/').filter(Boolean).pop() || 'Ссылка';
-      apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url }, function () {
+      apiSend('/admin/api/leads/' + id + '/docs', 'POST', { name: nm, link: url, kind: kindOf() }, function () {
         refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); });
       });
     });
@@ -33853,7 +34430,7 @@
       });
     }
   }
-  function uploadDoc(id, file) {
+  function uploadDoc(id, file, kind) {
     if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
     // моментальный фидбек — не ждём сервер
     var drop = el('m-drop');
@@ -33861,7 +34438,7 @@
     var reader = new FileReader();
     reader.onload = function () {
       apiSend('/admin/api/leads/' + id + '/docs', 'POST',
-        { name: file.name, mime: file.type || 'application/octet-stream', data_base64: String(reader.result) },
+        { name: file.name, kind: kind || null, mime: file.type || 'application/octet-stream', data_base64: String(reader.result) },
         function () { refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'docs') renderDrawer(true); }); });
     };
     reader.readAsDataURL(file);
@@ -33870,6 +34447,215 @@
   function sec(title, inner, extra) {
     if (!inner) return '';
     return '<div class="dr-sec"><div class="dr-h">' + title + (extra || '') + '</div>' + inner + '</div>';
+  }
+
+  /* ════ ТОЧКИ — контрольные точки тьютора по ученику ════
+     Схема мотивации (_specs/tutors/motivation-v1.md, 3.2) платит тьютору за пять
+     закрытых точек, чек-листы этих точек — в _specs/tutors/checklists.md. Состав
+     точек, сроки и расчет денег держит сервер (routers/tutor_points.py); здесь
+     экран: план, отметки, закрытие, деньги.
+     Коэффициент вовлеченности считается по ОДНОЙ измеренной метрике из четырех,
+     поэтому внизу стоит блок «что пока не считается»: без него «1,00» читается
+     как «про остальное забыли», а человек должен видеть, за что его меряют. */
+  var PTS = {}, PTS_BUSY = {};
+
+  function loadPoints(id, force) {
+    if (PTS_BUSY[id]) return;
+    if (force) delete PTS[id];
+    PTS_BUSY[id] = true;
+    api('/admin/api/leads/' + id + '/points').then(function (r) {
+      PTS_BUSY[id] = false; PTS[id] = r;
+      if (state.drawerId === id && state.modalSection === 'points') renderModalContent();
+    }).catch(function () {
+      PTS_BUSY[id] = false; PTS[id] = { points: [], failed: true };
+      if (state.drawerId === id && state.modalSection === 'points') renderModalContent();
+    });
+  }
+
+  function ptTile(label, value, sub) {
+    return '<div class="cp-tile"><div class="cp-tile__l">' + label + '</div>' +
+      '<div class="cp-tile__v num">' + value + '</div>' +
+      '<div class="cp-tile__s">' + sub + '</div></div>';
+  }
+
+  function ptK(k) { return String(k.toFixed ? k.toFixed(2) : k).replace('.', ','); }
+
+  function buildPointsSection(ctx) {
+    var id = ctx.id;
+    var box = PTS[id];
+    if (!box) { loadPoints(id); return skeletonSection('points'); }
+    if (box.failed) {
+      return '<div class="m-ctitle">Точки</div>' +
+        '<div class="ap-empty">Точки не открылись — похоже, отвалилась сеть. Обнови страницу.</div>';
+    }
+
+    var done = box.points.filter(function (p) { return p.closedAt; }).length;
+    var m = box.metric;
+    var mline = m.score == null
+      ? 'закрытых точек со сроком пока нет'
+      : 'точки в срок: ' + m.score + ' из 100 по ' + m.counted +
+        (m.counted === 1 ? ' закрытой точке' : ' закрытым точкам');
+
+    var board = '<div class="cp-board">' +
+      ptTile('Начислено за закрытые точки', fmtMoney(box.money.earned) + ' ₽',
+        done + ' из 5 закрыто') +
+      ptTile('Осталось по этому ученику', fmtMoney(box.money.ahead) + ' ₽',
+        'если закрыть остальные с нынешним коэффициентом') +
+      ptTile('Коэффициент', ptK(box.kvovl), mline) +
+      '</div>';
+
+    var cards = box.points.map(function (p, i) {
+      var items = p.items.map(function (it) {
+        return '<button class="cp-item' + (it.done ? ' on' : '') + '"' +
+          (p.closedAt ? ' disabled' : '') +
+          ' data-ptitem="' + p.key + '" data-key="' + esc(it.key) + '" data-done="' + (it.done ? '1' : '') + '">' +
+          '<span class="cp-box">' + (it.done ? ic('check', 12) : '') + '</span>' +
+          '<span class="cp-item__t">' + esc(it.title) + '</span>' +
+          (it.done && it.by ? '<span class="cp-item__w">' + esc(it.by) + '</span>' : '') +
+          '</button>';
+      }).join('');
+
+      var plan;
+      if (p.closedAt) {
+        plan = '<div class="cp-line">Закрыта ' + fmtDay(p.closedAt) +
+          (p.closedBy ? ', ' + esc(p.closedBy) : '') +
+          (p.lateDays ? '<span class="cp-late">просрочка ' + p.lateDays + ' дн.</span>' : '') +
+          (p.planDate ? '<span class="cp-dim">план был ' + fmtDay(p.planDate) + '</span>' : '') +
+          '</div>';
+      } else if (p.byResult) {
+        plan = '<div class="cp-line cp-dim">Срок этой точки назначает вуз, в счет просрочек она не идет.</div>';
+      } else {
+        // Поля переноса показываем только когда дата уже стоит: пустая форма с
+        // «причиной переноса» рядом с незаполненной датой — это вопрос ни о чем.
+        plan = '<div class="cp-plan' + (p.planDate ? ' moved' : '') + '">' +
+          '<label>Плановая дата<input type="date" data-ptplan="' + p.key + '" value="' + esc(p.planDate || '') + '"></label>' +
+          (p.planDate
+            ? '<label>Причина переноса<input data-ptwhy="' + p.key + '" value="' + esc(p.movedReason) + '" placeholder="без нее дату не сдвинуть"></label>' +
+              '<label class="cp-ext"><input type="checkbox" data-ptext="' + p.key + '"' + (p.movedExt ? ' checked' : '') + '>' +
+              'перенос из-за вуза, визового центра или консульства</label>'
+            : '') +
+          '<div class="cp-due">' + (p.due ? 'по схеме: ' + esc(p.due) : '') + '</div>' +
+          '</div>';
+      }
+
+      var res = '';
+      if (p.byResult) {
+        res = '<div class="cp-res"><span>Письмо вуза</span><select data-ptres' +
+          (p.closedAt ? ' disabled' : '') + '>' +
+          '<option value="">не выбрано</option>' +
+          box.results.map(function (r) {
+            return '<option value="' + r.key + '"' + (p.result === r.key ? ' selected' : '') + '>' +
+              esc(r.title) + ' — ' + fmtMoney(r.amount) + ' ₽</option>';
+          }).join('') + '</select></div>';
+      }
+
+      var foot;
+      if (p.closedAt) {
+        foot = '<div class="cp-foot">' +
+          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽ при коэффициенте ' + ptK(p.kvovl) + '</span>' +
+          (can('zaezd_review')
+            ? '<button class="bp ghost sm" data-ptreopen="' + p.key + '">Вернуть точку</button>' : '') +
+          '</div>';
+      } else {
+        foot = '<div class="cp-foot">' +
+          '<span class="cp-left">' + (p.left ? 'не отмечено пунктов: ' + p.left : 'чек-лист закрыт целиком') + '</span>' +
+          '<button class="bp sm" data-ptclose="' + p.key + '"' + (p.left ? ' disabled' : '') + '>Закрыть точку</button>' +
+          '</div>';
+      }
+
+      var log = (p.log || []).filter(function (e) { return e.what === 'reopen'; }).slice(-2)
+        .map(function (e) {
+          return '<div class="cp-log">Вернул ' + esc(e.who || '') + ': ' + esc(e.why || '') + '</div>';
+        }).join('');
+
+      return '<div class="cp-card' + (p.closedAt ? ' done' : '') + '">' +
+        '<div class="cp-h"><span class="cp-n num">' + (i + 1) + '</span>' +
+          '<div class="cp-hb"><div class="cp-t">' + esc(p.title) + '</div>' +
+            '<div class="cp-s">' + esc(p.about) + '</div></div>' +
+          '<div class="cp-sum num">' + fmtMoney(p.amount) + ' ₽</div></div>' +
+        plan + res + log +
+        '<div class="cp-items">' + items + '</div>' + foot +
+        '</div>';
+    }).join('');
+
+    var pend = '<div class="cp-pend"><div class="cp-pend__h">Что пока не считается</div>' +
+      box.pending.map(function (x) {
+        return '<div class="cp-pend__r"><b>' + esc(x.title) + '</b>' +
+          '<span>вес ' + x.weight + '</span><i>' + esc(x.why) + '</i></div>';
+      }).join('') +
+      '<div class="cp-note">Эти три метрики схемы система еще не измеряет, поэтому в коэффициент они не входят вовсе. ' +
+      'Ноль за неизмеренное — это снятие денег за счетчик, которого нет.</div></div>';
+
+    return '<div class="m-ctitle">Контрольные точки</div>' +
+      '<div class="m-csub">Пять точек, из которых складывается ставка тьютора за этого ученика. ' +
+      'Точка закрывается, когда отмечен весь ее чек-лист, включая «семье сказано». ' +
+      'Коэффициент и сумма фиксируются в момент закрытия и потом не пересчитываются.</div>' +
+      board + cards + pend;
+  }
+
+  function wirePointsSection(id) {
+    var host = el('m-content');
+    if (!host) return;
+
+    function put(path, body, bad) {
+      var method = body.__method || 'PUT';
+      delete body.__method;
+      api('/admin/api/leads/' + id + '/points' + path, {
+        method: method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (r) { PTS[id] = r; renderModalContent(); })
+        .catch(function (e) {
+          showToast(e && e.status === 422 ? (bad || 'Так нельзя') :
+            e && e.status === 409 ? 'Точка уже закрыта' : 'Не сохранилось, попробуй еще раз');
+          loadPoints(id, true);
+        });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptplan]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var key = inp.getAttribute('data-ptplan');
+        var why = host.querySelector('[data-ptwhy="' + key + '"]');
+        var ext = host.querySelector('[data-ptext="' + key + '"]');
+        put('/' + key + '/plan', {
+          plan_date: inp.value || null,
+          reason: why ? why.value.trim() : '',
+          external: !!(ext && ext.checked),
+        }, 'Дату уже ставили — напиши причину переноса, она останется в карточке');
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptitem]'), function (b) {
+      b.addEventListener('click', function () {
+        put('/' + b.getAttribute('data-ptitem') + '/item', {
+          __method: 'POST', key: b.getAttribute('data-key'),
+          done: !b.getAttribute('data-done'),
+        });
+      });
+    });
+
+    var sel = host.querySelector('[data-ptres]');
+    if (sel) sel.addEventListener('change', function () {
+      if (!sel.value) return;
+      put('/p4/result', { result: sel.value });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptclose]'), function (b) {
+      b.addEventListener('click', function () {
+        // Закрытие считает деньги и фиксирует коэффициент — переспрашиваем один раз.
+        if (!confirm('Закрыть точку? Коэффициент и сумма зафиксируются на сегодня, сама себя точка не откроет.')) return;
+        put('/' + b.getAttribute('data-ptclose') + '/close', { __method: 'POST' },
+          'Сначала отметь весь чек-лист');
+      });
+    });
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-ptreopen]'), function (b) {
+      b.addEventListener('click', function () {
+        var why = prompt('Почему возвращаем точку? Причина останется в карточке и будет видна тьютору.');
+        if (why == null || !why.trim()) return;
+        put('/' + b.getAttribute('data-ptreopen') + '/reopen',
+          { __method: 'POST', reason: why.trim() }, 'Нужна причина возврата');
+      });
+    });
   }
 
   /* ════ ВИТРИНА — продукты, которые семья видит на платформе ════

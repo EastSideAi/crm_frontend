@@ -336,6 +336,10 @@ a { color: inherit; text-decoration: none; }
    плиток ровно четыре, и «умная» сетка сломала бы их на промежуточных ширинах. */
 .statbar.five { grid-template-columns: repeat(5, 1fr); }
 .statbar.five .stat { padding: 16px 18px; }
+/* Шестая — «страницу видели» из Метрики на экране запусков. Появляется не всегда:
+   Метрика недоступна или счётчик не задан — плиток снова пять. */
+.statbar.six { grid-template-columns: repeat(6, 1fr); }
+.statbar.six .stat { padding: 16px 14px; }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
@@ -751,6 +755,38 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .ch-legend { display: flex; gap: 18px; margin-top: 14px; font-size: 12.5px; color: var(--ink-2); }
 .ch-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; }
 
+/* ── Подсказка на столбике графика ───────────────────────────────────────────
+   Нативный title не годится: он появляется почти через секунду, рисуется
+   браузером в его собственном стиле и на телефоне не показывается вовсе.
+   Здесь — наша плашка, мгновенная (без задержки перехода на появлении) и по
+   нажатию тоже: на телефоне наведения не существует, а цифру посмотреть надо.
+
+   Класс отдельный: графики дашборда трогать незачем, там подсказка не нужна. */
+.tipchart .chart { padding-top: 40px; }           /* место для плашки над самым высоким столбиком */
+.tipchart .ch-day { position: relative; cursor: pointer; }
+.tipchart .ch-day .b1 { position: relative; }
+.tipchart .ch-day .b1[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 12px; font-weight: 500; line-height: 1.25;
+  padding: 7px 11px; border-radius: 10px;
+  background: var(--navy); color: #fff;
+  box-shadow: 0 8px 20px rgba(3, 8, 28, .18);
+  opacity: 0; pointer-events: none; transition: opacity .09s var(--ease);
+  z-index: 3;
+}
+.tipchart .ch-day:hover .b1[data-tip]::after,
+.tipchart .ch-day:focus-visible .b1[data-tip]::after,
+.tipchart .ch-day.on .b1[data-tip]::after { opacity: 1; }
+/* Крайние столбики: по центру плашка уезжала бы за край окна. */
+/* Попап больше не прокручивается вбок, значит вылезшая за край подсказка будет
+   обрезана. Прижимаем к краю ДВА крайних столбика с каждой стороны: у второго от
+   края плашка тоже не помещается по центру. */
+.tipchart .ch-day:nth-child(-n+2) .b1[data-tip]::after { left: 0; transform: none; }
+.tipchart .ch-day:nth-last-child(-n+2) .b1[data-tip]::after { left: auto; right: 0; transform: none; }
+.tipchart .ch-day:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+.tipchart .ch-day:hover .b1, .tipchart .ch-day.on .b1 { background: var(--blue); }
+
 /* ════ воронка продаж (cvc) ════ */
 .cvc-body { display: grid; grid-template-columns: 176px 1fr; gap: 26px; align-items: stretch; margin-top: 18px; }
 .cvc-left { display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
@@ -872,6 +908,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    (прецедент — комментарий у .mkd-row ниже). Ховер тоже гасим. */
 .lad-static .lad-row, .brk .lad-row { cursor: default; }
 .lad-static .lad-row:hover, .brk .lad-row:hover { background: transparent; }
+/* Строка блока, за которой стоит список людей. Подсветку берём ту же, что у обычной
+   строки лестницы, — иначе один и тот же жест выглядел бы в CRM двумя разными. */
+.brk .lad-row.brk-open { cursor: pointer; }
+.brk .lad-row.brk-open:hover { background: #FBFBFC; }
+.brk .lad-row.brk-open:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
 .mini-funnel { display: flex; align-items: flex-end; gap: 9px; height: 110px; padding: 6px 0 0; }
 .fcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 9px; height: 100%; }
@@ -1086,6 +1127,23 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .m-copylink svg { width: 12px; height: 12px; color: var(--ink-3); transition: color .15s; }
 .m-copylink:hover { color: var(--blue); background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
 .m-copylink:hover svg { color: var(--blue); }
+
+/* Ведет — ответственный за клиента в шапке карточки: процент продаж капает именно
+   на него, поэтому он на виду, а не спрятан во вкладке «Сейчас». Клик ведет к
+   селектору, где его назначают. «не назначен» подсвечен амбером — это повод действия. */
+.m-own-head { display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  margin-top: 8px; padding: 0 10px 0 8px; border-radius: 8px;
+  font: 600 12.5px 'Manrope', sans-serif; background: var(--fill);
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.06); cursor: pointer;
+  transition: color .15s, background .15s, box-shadow .15s; }
+.m-own-head svg { width: 13px; height: 13px; color: var(--ink-3); transition: color .15s; }
+.m-own-head .mo-k { color: var(--ink-3); font-weight: 600; }
+.m-own-head .mo-v { color: var(--ink); font-weight: 700; letter-spacing: -.01em; }
+.m-own-head:hover { background: var(--blue-tint); box-shadow: inset 0 0 0 1px rgba(47,107,255,.22); }
+.m-own-head:hover svg, .m-own-head:hover .mo-k { color: var(--blue); }
+.m-own-head.none { background: var(--amber-soft); box-shadow: inset 0 0 0 1px rgba(224,146,47,.28); }
+.m-own-head.none svg, .m-own-head.none .mo-k { color: var(--amber); }
+.m-own-head.none .mo-v { color: var(--amber-ink); }
 
 .m-load { padding: 64px 26px; text-align: center; font-size: 13.5px; color: var(--ink-3); }
 
@@ -1583,7 +1641,23 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   background: var(--blue-tint); color: var(--blue); }
 .doc-b { flex: 1; min-width: 0; }
 .doc-n { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.doc-m { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.doc-m { font-size: 12px; color: var(--ink-3); margin-top: 3px; display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; }
+.doc-mt { white-space: nowrap; }
+/* Категория документа. Это поле, а не подпись: именно она закрывает пункт пакета в
+   кабинете семьи, и менеджер должен видеть, что ее можно поменять. Но и кричать ей
+   незачем — в покое выглядит как часть меты, рамка проявляется на наведении. */
+.doc-kind { font: inherit; font-size: 12px; color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: 8px; padding: 2px 4px; max-width: 220px;
+  cursor: pointer; transition: .15s; }
+.doc-kind:hover { border-color: var(--line-2); background: #fff; }
+.doc-kind:focus { outline: none; border-color: #C9D7FB; background: #fff; color: var(--ink); }
+.doc-kind:disabled { opacity: .5; cursor: default; }
+/* Выбор категории перед загрузкой — здесь она не тихая: пропустить ее значит
+   отправить файл, который не закроет строку в кабинете. */
+.doc-kindrow { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.doc-kindlbl { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.doc-kind--new { border-color: var(--line-2); background: #fff; padding: 6px 9px; font-size: 12.5px; }
 /* Кто загрузил — первое, что спрашивают о файле в общей семейной карточке, поэтому
    строка начинается с автора и он на ступень темнее остальной меты. Свои файлы
    («Мы») не выделяем: интересно, что принесла семья. */
@@ -1594,7 +1668,7 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   display: grid; place-items: center; color: var(--ink-2); transition: .15s; }
 .icobtn:hover { color: var(--blue); border-color: #C9D7FB; }
 .icobtn.del:hover { color: var(--red); border-color: #F4CFD0; }
-.dropzone { margin-top: 16px; border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 26px 22px;
+.dropzone { margin-top: 10px; border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 26px 22px;
   text-align: center; color: var(--ink-2); font-size: 13px; cursor: pointer; transition: .15s; }
 .dropzone .dz-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--fill); color: var(--ink-2);
   display: grid; place-items: center; margin: 0 auto 11px; transition: .15s; }
@@ -4412,8 +4486,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
-  .statbar, .statbar.five { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
-  .stat, .statbar.five .stat { padding: 14px 16px; }
+  .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
+  .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
   .stat + .stat::before { display: none; }
   .sg2 { grid-template-columns: 1fr; }
@@ -4535,11 +4609,11 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 /* Телефон. Идет ПОСЛЕ блока 960px: там метрики стоят в две колонки, а в половине
    ширины «18 006 620 ₽» переносится и знак рубля уезжает на отдельную строку. */
 @media (max-width: 480px) {
-  .statbar, .statbar.five { grid-template-columns: 1fr; }
+  .statbar, .statbar.five, .statbar.six { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
   /* Пять плиток одной колонкой — 650px скролла до содержимого, и последняя
      (на «Запусках» это «До эфира») уезжала за экран. Пятая — во всю ширину. */
-  .statbar.five { grid-template-columns: 1fr 1fr; }
+  .statbar.five, .statbar.six { grid-template-columns: 1fr 1fr; }
   .statbar.five .stat:last-child { grid-column: 1 / -1; }
 }
 
@@ -4747,11 +4821,24 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mk-sl-fill { height: 100%; border-radius: 999px; background: var(--blue); transition: width .3s var(--ease); }
 .mk-sl-n { font-size: 12px; color: var(--ink-2); flex: 0 0 70px; text-align: right; }
 /* попап аналитики логики: шире + большие цифры */
-.mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px); overflow-y: auto; }
-/* прокрутка попапа — тонкая, в стиле остальных панелей (дефолтная урезала скругление) */
-.mk-modal.wide::-webkit-scrollbar { width: 8px; }
-.mk-modal.wide::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px; }
-.mk-modal.wide::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.mk-modal.wide { width: min(720px, calc(100vw - 40px)); max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  /* Вбок попап не прокручивается НИКОГДА. Без этого браузер сам ставит overflow-x: auto
+     (достаточно задать overflow по одной оси), и любой абсолютный элемент внутри —
+     например подсказка над столбиком графика — рисует внизу ненужную полосу. */
+  overflow-x: hidden;
+  overscroll-behavior: contain; }
+/* Прокрутка попапа — тонкая, в стиле остальных панелей. Ползунок держим на три
+   пикселя от края прозрачной рамкой: прижатый вплотную, он упирался в скругление
+   карточки и выглядел вылезающим наружу. */
+/* scrollbar-width/scrollbar-color здесь НЕ задаём намеренно: в Chrome они старше
+   правил ::-webkit-scrollbar и отменяют отступ ползунка от края — ровно то, из-за
+   чего он и выглядел вылезающим. */
+.mk-modal.wide::-webkit-scrollbar { width: 12px; }
+.mk-modal.wide::-webkit-scrollbar-thumb { background: #E3E5EB; border-radius: 99px;
+  border: 3px solid transparent; background-clip: padding-box; }
+.mk-modal.wide::-webkit-scrollbar-thumb:hover { background: #D2D6DF; background-clip: padding-box; }
+.mk-modal.wide::-webkit-scrollbar-track { background: transparent; margin: 20px 0; }
 /* крестик закрытия: absolute — не участвует в потоке, отступы попапа не плывут */
 .mk-xbtn { position: absolute; top: 12px; right: 12px; z-index: 6;
   width: 32px; height: 32px; border: 0; border-radius: 10px;
@@ -6423,6 +6510,10 @@ button.fsp-via { cursor: pointer; }
 .fe-grid { grid-template-columns: 92px 1.6fr 150px 150px; cursor: pointer; }
 .fe-t { font: 700 15px 'Manrope', sans-serif; letter-spacing: -.02em; color: var(--ink); }
 .fe-s { margin-top: 2px; font-size: 12px; color: var(--ink-2); }
+/* Начисления продаж: карточки продавцов идут стопкой, отбиваем их друг от друга и от
+   шапки, чтобы список одного продавца не сливался с соседним. */
+.fs-seller, .fs-una, .fs-ren { margin-top: 12px; }
+.fs-una .fe-t { color: var(--amber-ink); }
 .fe-grid .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 /* Крестик удаления строки: тихий, проявляется по наведению на строку, краснеет на себе.
    Всегда виден на тач-экранах — там наведения нет. */
@@ -7787,6 +7878,102 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 @media (max-width: 720px) {
   .ap-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Контрольные точки тьютора (секция «Точки» в карточке) ──────────────────
+   Пять точек = пять денег. Якорь экрана один — сводка сверху; сами точки
+   тихие, закрытая уходит в фон и перестает звать к действию. Чек-лист
+   набран строками без рамок: рамка вокруг каждой строки превращает список
+   в панель управления, а это обычный список дел. */
+.cp-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px; margin-top: 16px; background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden; }
+.cp-tile { background: var(--card); padding: 14px 16px; }
+.cp-tile__l { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-tile__v { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.03em; }
+.cp-tile__s { margin-top: 3px; font-size: 12px; color: var(--ink-2); }
+
+.cp-card { margin-top: 12px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-xl); padding: 16px 18px; }
+.cp-card.done { background: #FCFCFD; border-color: var(--line-2); }
+.cp-h { display: flex; align-items: flex-start; gap: 12px; }
+.cp-n { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 9px;
+  background: var(--blue-tint); color: var(--blue); font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; }
+.cp-card.done .cp-n { background: var(--green-soft); color: var(--green-ink); }
+.cp-hb { flex: 1 1 auto; min-width: 0; }
+.cp-t { font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.cp-s { margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+.cp-sum { flex: 0 0 auto; font-size: 15px; font-weight: 700; color: var(--ink); }
+
+.cp-line { margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.cp-line .cp-late { margin-left: 8px; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--red-soft); color: var(--red-ink); font-weight: 600; font-size: 11.5px; }
+.cp-dim { color: var(--ink-3); }
+.cp-line .cp-dim { margin-left: 8px; }
+
+.cp-plan { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px 12px;
+  margin-top: 12px; align-items: end; }
+/* дата стоит одна, пока ее не двигали: вторая колонка остается пустой, но подпись
+   про коридор срока под ней растягивается на всю ширину и читается строкой */
+.cp-plan:not(.moved) { grid-template-columns: 170px minmax(0, 1fr); }
+.cp-plan label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-plan input[type="date"], .cp-plan input[type="text"], .cp-plan label input:not([type="checkbox"]) {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 11px; font: inherit;
+  font-size: 13px; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 10px; }
+.cp-plan input:focus { outline: none; border-color: var(--blue); }
+.cp-plan .cp-ext { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+  text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px;
+  color: var(--ink-2); cursor: pointer; }
+.cp-plan .cp-ext input { margin: 0; }
+.cp-due { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); }
+
+.cp-res { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.cp-res span { font-size: 12px; color: var(--ink-2); }
+.cp-res select { flex: 1 1 auto; padding: 8px 11px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: 10px; }
+
+.cp-items { margin-top: 12px; }
+.cp-item { display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  text-align: left; padding: 8px 2px; background: none; border: 0;
+  border-bottom: 1px solid var(--line); cursor: pointer; }
+.cp-item:last-child { border-bottom: 0; }
+.cp-item:disabled { cursor: default; }
+.cp-box { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; border-radius: 6px;
+  border: 1.5px solid var(--line-2); display: flex; align-items: center;
+  justify-content: center; color: #fff; transition: .15s; }
+.cp-item:hover:not(:disabled) .cp-box { border-color: var(--blue); }
+.cp-item.on .cp-box { background: var(--green); border-color: var(--green); }
+.cp-item__t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink); }
+.cp-item.on .cp-item__t { color: var(--ink-2); }
+.cp-item__w { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-3); }
+
+.cp-foot { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; }
+.cp-left, .cp-paid { font-size: 12.5px; color: var(--ink-2); }
+.cp-paid { font-weight: 600; color: var(--green-ink); }
+.cp-log { margin-top: 10px; padding: 8px 11px; border-radius: 10px;
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; }
+
+.cp-pend { margin-top: 18px; padding: 14px 16px; border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg); }
+.cp-pend__h { font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-pend__r { display: flex; align-items: baseline; gap: 8px; margin-top: 8px;
+  font-size: 13px; color: var(--ink); }
+.cp-pend__r span { font-size: 11.5px; color: var(--ink-3); }
+.cp-pend__r i { font-style: normal; color: var(--ink-2); font-size: 12.5px; }
+.cp-note { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+
+@media (max-width: 720px) {
+  .cp-board { grid-template-columns: 1fr; }
+  .cp-plan { grid-template-columns: 1fr; }
+  .cp-pend__r { flex-wrap: wrap; }
 }
 
 /* ── Академия тьютора ───────────────────────────────────────────────────────
