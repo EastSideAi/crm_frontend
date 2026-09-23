@@ -21658,6 +21658,9 @@
     var q = [];
     if (f) q.push('from=' + encodeURIComponent(f));
     if (t2) q.push('to=' + encodeURIComponent(t2));
+    /* День эфира: интенсив идет двумя вечерами, и ступени просмотра считаются по
+       выбранному. Пусто — оба вечера вместе, как было. */
+    if (state._mkLaunchDay) q.push('day=' + encodeURIComponent(state._mkLaunchDay));
     return q.length ? '?' + q.join('&') : '';
   }
 
@@ -21935,6 +21938,9 @@
              'limit=' + LP_LIMIT, 'offset=' + offset];
     if (p.from) q.push('from=' + encodeURIComponent(p.from));
     if (p.to) q.push('to=' + encodeURIComponent(p.to));
+    /* Тот же вечер, что и на плашке: иначе список за «смотрели 30 минут второго
+       дня» показал бы людей первого. */
+    if (p.day) q.push('day=' + encodeURIComponent(p.day));
     return '?' + q.join('&');
   }
 
@@ -21945,6 +21951,7 @@
       plate: step.people == null ? 0 : step.people,
       launch: launchTitle || '',
       from: state._mkLaunchFrom || '', to: state._mkLaunchTo || '',
+      day: state._mkLaunchDay || '',
       rows: [], total: null, loading: true, error: '', fresh: true,
       back: plate || null,          /* куда вернуть фокус после закрытия */
     };
@@ -22164,6 +22171,40 @@
     '</div>';
   }
 
+  /* Дни эфира. Интенсив идет двумя вечерами, и смотрят их разные люди: «смотрели
+     30 минут» суммой за оба вечера отвечает не на тот вопрос, который задают. На
+     день эфира завязаны только ступени просмотра — регистрации, тест и оплаты
+     считаются как прежде, об этом и говорит подпись. */
+  function launchDays(cur) {
+    var days = (cur && cur.event_days) || [];
+    if (days.length < 2) return '';
+    var sel = state._mkLaunchDay || '';
+    var btn = function (val, label) {
+      return '<button data-lday="' + esc(val) + '" class="' + (sel === val ? 'on' : '') + '">' +
+        esc(label) + '</button>';
+    };
+    return '<div class="dperiod lday-seg">' +
+      btn('', 'Оба дня') +
+      days.map(function (d, i) {
+        var t = new Date(d);
+        return btn(d, isNaN(t.getTime()) ? ('День ' + (i + 1))
+          : (t.getDate() + ' ' + MONTHS_RU[t.getMonth()]));
+      }).join('') +
+    '</div>';
+  }
+
+  function launchDaysBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lday]'), function (b) {
+      b.addEventListener('click', function () {
+        state._mkLaunchDay = b.getAttribute('data-lday') || '';
+        state._mkLaunch = null;            /* цифры дня считает сервер */
+        /* список людей посчитан по прежнему дню — иначе он молча спорил бы с плашками */
+        if (state._lpPeople) launchPeopleClose();
+        renderView();
+      });
+    });
+  }
+
   function launchPeriodBind(view) {
     function apply(from, to) {
       state._mkLaunchFrom = from || '';
@@ -22264,6 +22305,32 @@
     if (!days.length) return 'дней пока нет';
     var a = days[0].day.split('-'), b = days[days.length - 1].day.split('-');
     return 'с ' + a[2] + '.' + a[1] + ' по ' + b[2] + '.' + b[1];
+  }
+
+  /* Сколько человек вообще смотрело эфир. Ступени пути считают только тех, кто
+     оставил контакты, — это правильный счёт для воронки, но на вопрос «сколько
+     людей было в зале» он отвечает неверно: до 23.09.2026 зритель без регистрации
+     не считался вовсе. Здесь два числа рядом, а не сумма: тем, кого узнали, можно
+     позвонить, остальным — нет, и слипшаяся цифра это скрыла бы. */
+  function launchViewers(cur) {
+    var v = cur && cur.viewers;
+    if (!v || !v.anon) return '';
+    var rows = [
+      ['viewers', 'Смотрели эфир', 'открыли страницу и смотрели'],
+      ['watch10', '10 минут и больше', ''],
+      ['watch30', '30 минут и больше', ''],
+      ['watch60', 'Час и больше', 'досидели до продающей части'],
+    ].map(function (r) {
+      var known = (v.known && v.known[r[0]]) || 0, anon = v.anon[r[0]] || 0;
+      var sub = 'узнали ' + known + ' · без регистрации ' + anon;
+      return flatRow(r[1], r[2] ? r[2] + ' · ' + sub : sub, known + anon);
+    }).join('');
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Сколько человек смотрело</div>' +
+        '<div class="s">все зрители страницы эфира' +
+        (state._mkLaunchDay ? ' за выбранный вечер' : '') +
+        ' · кого не узнали, тому не позвонить, но в зале он был</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
   function launchCharts(cur) {
@@ -22394,14 +22461,19 @@
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
       ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
-      '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad">' +
+      '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
           /* подсказка про клик тут не украшение: без неё поимённый список никто не
              найдёт, а он и есть ответ на «цифру вижу, проверить не могу» */
           'каждая ступень считает людей из числа зарегистрировавшихся · ' +
-          'нажмите на ступень, чтобы увидеть этих людей поимённо' + '</div></div></div>' +
+          'нажмите на ступень, чтобы увидеть этих людей поимённо' +
+          (state._mkLaunchDay
+            ? ' · ступени просмотра — только за выбранный вечер, остальные за весь запуск'
+            : '') +
+        '</div></div>' + launchDays(cur) + '</div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">От показа до оплаты</div><div class="s">' +
@@ -22483,6 +22555,7 @@
       });
     });
     launchPeriodBind(view);
+    launchDaysBind(view);
   }
 
   function renderMarketing(view) {

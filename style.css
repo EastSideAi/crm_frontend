@@ -374,6 +374,15 @@ a { color: inherit; text-decoration: none; }
 .dperiod button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.12); }
 .dperiod .dp-custom { display: inline-flex; align-items: center; gap: 6px; }
 .dperiod .dp-custom svg { opacity: .85; }
+/* Дни эфира в шапке «Путь человека по запуску». Интенсив идёт двумя вечерами, и
+   переключатель живёт прямо в шапке карточки. На узком экране он уходит на свою
+   строку во всю ширину: иначе второй день обрезается краем карточки (390px). */
+.sec-head.wrap { flex-wrap: wrap; }
+.lday-seg { margin-left: auto; flex: none; }
+@media (max-width: 720px) {
+  .lday-seg { margin-left: 0; width: 100%; }
+  .lday-seg button { flex: 1; min-width: 0; padding: 8px 10px; }
+}
 .dp-pop { padding: 14px; }
 .dp-pop .dp-ttl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
 .dp-pop .dp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
