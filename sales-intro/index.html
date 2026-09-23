@@ -399,6 +399,26 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .part i{display:block; font-style:normal; font-size:13px; color:var(--soft)}
 .part b{display:block; margin-top:5px; font-size:18px; font-weight:660; letter-spacing:-.02em}
 
+/* экраны продукта с переключателем: на встрече показывают не текст, а систему */
+.pv{margin-top:clamp(14px,2.4vh,24px)}
+.pv-sw{display:flex; gap:8px; flex-wrap:wrap}
+.pv-sw button{height:40px; padding:0 16px; border-radius:12px; border:1px solid var(--line);
+  background:rgba(255,255,255,.74); color:var(--soft); font-size:14px; font-weight:620;
+  transition:background .16s, color .16s, border-color .16s}
+.pv-sw button[aria-pressed=true]{background:var(--blue); border-color:var(--blue); color:#fff}
+.dark .pv-sw button{background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.26); color:rgba(255,255,255,.82)}
+.dark .pv-sw button[aria-pressed=true]{background:#fff; border-color:#fff; color:#123f85}
+.pv-box{margin-top:14px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.46fr);
+  gap:clamp(16px,2.4vw,30px); align-items:start}
+.pv-pic{margin:0; border-radius:var(--r); overflow:hidden; border:1px solid var(--line);
+  aspect-ratio:16/9; max-height:52vh; background:#dfe7f7; cursor:zoom-in}
+.dark .pv-pic{border-color:rgba(255,255,255,.24)}
+.pv-pic img{width:100%; height:100%; object-fit:cover; object-position:50% 0}
+.pv-txt h3{font-size:clamp(17px,1.5vw,20px)}
+.pv-txt p{margin-top:9px; font-size:14.5px; line-height:1.55; color:var(--soft)}
+.dark .pv-txt p{color:rgba(255,255,255,.84)}
+@media (max-width:900px){.pv-box{grid-template-columns:1fr} .pv-pic{aspect-ratio:16/11}}
+
 /* снимок системы во весь экран: на встрече в него будут тыкать */
 .lbx{position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:clamp(20px,4vw,60px);
   background:rgba(8,26,58,.88); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
@@ -541,7 +561,28 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 7 · кто приходит -->
+  <!-- 7 · экраны платформы -->
+  <section class="slide dark" data-chap="Компания">
+    <div class="rise">
+      <span class="kicker">Платформа</span>
+      <h2>Что семья открывает в день оплаты</h2>
+      <p class="lead">Нажмите вкладку, чтобы посмотреть экран. Снимок открывается во весь экран по клику.</p>
+    </div>
+    <div class="pv rise">
+      <div class="pv-sw" id="pvsw">
+        <button type="button" data-p="cab" aria-pressed="true">Главная ученика</button>
+        <button type="button" data-p="diag" aria-pressed="false">Диагностика</button>
+        <button type="button" data-p="learn" aria-pressed="false">Обучение</button>
+        <button type="button" data-p="parent" aria-pressed="false">Кабинет родителя</button>
+      </div>
+      <div class="pv-box">
+        <figure class="pv-pic"><img id="pvImg" src="img/ui-cabinet.webp" alt="Главная ученика на платформе"></figure>
+        <div class="pv-txt"><h3 id="pvT">Главная ученика</h3><p id="pvD"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · кто приходит -->
   <section class="slide" data-chap="Компания">
     <div class="rise">
       <span class="kicker">Наши семьи</span>
@@ -567,7 +608,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 8 · два человека в продаже -->
+  <!-- 9 · два человека в продаже -->
   <section class="slide tint" data-chap="Компания">
     <div class="rise">
       <span class="kicker">Наши семьи</span>
@@ -589,7 +630,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note">Это настоящие вопросы с наших встреч, а не придуманные. Услышали такой — отвечайте прямо, без обхода.</p>
   </section>
 
-  <!-- 9 · цена попытки -->
+  <!-- 10 · цена попытки -->
   <section class="slide dark" data-chap="Почему мы">
     <div class="rise hold">
       <span class="kicker">Почему выбирают нас</span>
@@ -598,7 +639,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 10 · до подачи -->
+  <!-- 11 · до подачи -->
   <section class="slide" data-chap="Почему мы">
     <div class="rise">
       <span class="kicker">До подачи</span>
@@ -610,7 +651,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 11 · профиль -->
+  <!-- 12 · профиль -->
   <section class="slide tint" data-chap="Почему мы">
     <div class="rise">
       <span class="kicker">До подачи</span>
@@ -622,7 +663,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 12 · после подачи -->
+  <!-- 13 · после подачи -->
   <section class="slide" data-chap="Почему мы">
     <div class="rise">
       <span class="kicker">После подачи</span>
@@ -635,7 +676,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 13 · продающая формулировка -->
+  <!-- 14 · продающая формулировка -->
   <section class="slide dark" data-chap="Почему мы">
     <div class="rise hold">
       <span class="kicker">Как это продается</span>
@@ -643,7 +684,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 14 · смысл -->
+  <!-- 15 · смысл -->
   <section class="slide dark" data-chap="Почему мы">
     <div class="shot-bg" aria-hidden="true"><img src="img/city-future.webp" alt="" style="--pos:62% 42%"></div>
     <div class="rise hold">
@@ -653,7 +694,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 15 · кейсы -->
+  <!-- 16 · кейсы -->
   <section class="slide tint" data-chap="Почему мы">
     <div class="rise">
       <span class="kicker">Кейсы</span>
@@ -676,7 +717,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <div class="note rise"><b>Чем меньше превосходных степеней, тем сильнее кейс.</b> И обещанный отзыв обязательно отправьте: кейс, обещанный и не присланный, работает против вас.</div>
   </section>
 
-  <!-- 16 · гарантии 1 -->
+  <!-- 17 · гарантии 1 -->
   <section class="slide" data-chap="Обязательства">
     <div class="rise">
       <span class="kicker">Обязательства</span>
@@ -695,7 +736,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 17 · гарантии 2 -->
+  <!-- 18 · гарантии 2 -->
   <section class="slide tint" data-chap="Обязательства">
     <div class="rise">
       <span class="kicker">Обязательства</span>
@@ -713,7 +754,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 18 · честный контур -->
+  <!-- 19 · честный контур -->
   <section class="slide dark" data-chap="Обязательства">
     <div class="rise hold">
       <span class="kicker">Честный контур</span>
@@ -722,7 +763,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 19 · дерево продуктов -->
+  <!-- 20 · дерево продуктов -->
   <section class="slide" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Продукт</span>
@@ -774,7 +815,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 20 · как читать дерево -->
+  <!-- 21 · как читать дерево -->
   <section class="slide dark" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Как читать дерево</span>
@@ -783,7 +824,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 21 · тарифы -->
+  <!-- 22 · тарифы -->
   <section class="slide tint" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Флагман · тарифы</span>
@@ -803,7 +844,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 22 · тариф не продается шансами -->
+  <!-- 23 · тариф не продается шансами -->
   <section class="slide" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Правило разговора</span>
@@ -812,7 +853,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 23 · дорога -->
+  <!-- 24 · дорога -->
   <section class="slide dark" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Флагман · путь</span>
@@ -853,7 +894,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 24 · ответ на дорого -->
+  <!-- 25 · ответ на дорого -->
   <section class="slide tint" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Ответ на «дорого»</span>
@@ -866,7 +907,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 25 · языки: платные -->
+  <!-- 26 · языки: платные -->
   <section class="slide dark" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Ветка · языки и обучение</span>
@@ -880,7 +921,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 26 · языки: бесплатные -->
+  <!-- 27 · языки: бесплатные -->
   <section class="slide tint" data-chap="Продукт">
     <div class="rise hold">
       <span class="kicker">Ветка · языки и обучение</span>
@@ -895,7 +936,28 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 27 · семья покупает не один продукт -->
+  <!-- 28 · нексис -->
+  <section class="slide" data-chap="Продукт">
+    <div class="rise">
+      <span class="kicker">Вход в воронку</span>
+      <h2>«Нексис»: когда ребенок не знает, кем быть</h2>
+      <p class="lead">Отдельный сервис nexisai.ru, вход бесплатный. Часто это первое касание семьи с нами.</p>
+    </div>
+    <div class="pv rise">
+      <div class="pv-sw" id="nxsw">
+        <button type="button" data-n="0" aria-pressed="true">15 вопросов</button>
+        <button type="button" data-n="1" aria-pressed="false">10 минут с телефона</button>
+        <button type="button" data-n="2" aria-pressed="false">Результат сразу</button>
+        <button type="button" data-n="3" aria-pressed="false">Что дальше</button>
+      </div>
+      <div class="pv-box">
+        <figure class="pv-pic"><img src="img/ui-nexis.webp" alt="Сервис нейропрофориентации «Нексис»"></figure>
+        <div class="pv-txt"><h3 id="nxT">15 вопросов</h3><p id="nxD"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 29 · семья покупает не один продукт -->
   <section class="slide dark" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Ценность клиента</span>
@@ -910,16 +972,29 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note">Одна такая семья принесла больше миллиона за два года. Поэтому пришедшего за бесплатным тестом ведут так же, как пришедшего за Премиумом.</p>
   </section>
 
-  <!-- 28 · главный показатель -->
+  <!-- 30 · главный показатель -->
   <section class="slide" data-chap="Работа">
     <div class="rise hold">
       <span class="kicker">Как работаем</span>
       <p class="say wide">Главный показатель отдела это количество проведенных консультаций</p>
-      <p class="sub">Он влияет на план сильнее конверсии: разговор, который не состоялся, не вытянуть ни скриптом, ни скидкой.</p>
+      <p class="sub">Разговор, который не состоялся, не вытянуть ни скриптом, ни скидкой.</p>
     </div>
   </section>
 
-  <!-- 29 · первая линия -->
+  <!-- 31 · конверсии -->
+  <section class="slide dark" data-chap="Работа">
+    <div class="rise">
+      <span class="kicker">Воронка</span>
+      <h2>Две конверсии, и вторая решает все</h2>
+    </div>
+    <div class="steps rise">
+      <div class="step"><span class="n">1</span><div><h3>Обращение в диагностику</h3><p>Сколько написавших дошли до встречи. Держится на скорости ответа и на том, зачем человеку туда идти. Это работа смены.</p></div></div>
+      <div class="step"><span class="n">2</span><div><h3>Диагностика в договор</h3><p>Ключевая цифра отдела: от нее зависит и план, и ваш процент. Она же показывает, кого учить, а кому менять подход.</p></div></div>
+    </div>
+    <p class="note">Обе считаются в CRM по каждому менеджеру и за отдел целиком. Свои цифры сезона поставим после первых смен, чтобы сравнивать себя с собой, а не со средним по рынку.</p>
+  </section>
+
+  <!-- 32 · первая линия -->
   <section class="slide tint" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Первая линия</span>
@@ -931,7 +1006,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 30 · вторая линия -->
+  <!-- 33 · вторая линия -->
   <section class="slide" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Вторая линия</span>
@@ -943,7 +1018,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 31 · стандарты 1 -->
+  <!-- 34 · стандарты 1 -->
   <section class="slide tint" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Стандарты</span>
@@ -956,7 +1031,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 32 · стандарты 2 -->
+  <!-- 35 · стандарты 2 -->
   <section class="slide" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Стандарты</span>
@@ -969,7 +1044,22 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 33 · деньги: три источника -->
+  <!-- 36 · сколько стоит один клиент -->
+  <section class="slide tint" data-chap="Деньги">
+    <div class="rise">
+      <span class="kicker">Деньги</span>
+      <h2>Один клиент для компании — это около миллиона рублей</h2>
+      <p class="lead">Не 159 000 с первого договора, а все, что семья заплатит за годы: тариф, языки, экзамены, магистратура, младший ребенок.</p>
+    </div>
+    <div class="nums rise">
+      <div class="num"><b>≈1 млн</b><span>приносит семья, которую довели и удержали</span></div>
+      <div class="num"><b>3,2 %</b><span>ваш процент с продажи, если вели чат и провели диагностику сами</span></div>
+      <div class="num"><b>≈30 000 ₽</b><span>столько выходит с одной такой семьи, а не 5 000 с первого договора</span></div>
+    </div>
+    <p class="note">Отсюда правило, которое звучит скучно, но стоит денег: сервис после подписания это не вежливость. Семья, которую бросили сразу после оплаты, второй раз не платит и никого не приводит.</p>
+  </section>
+
+  <!-- 37 · деньги: три источника -->
   <section class="slide dark" data-chap="Деньги">
     <div class="rise hold">
       <span class="kicker">Деньги</span>
@@ -982,7 +1072,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 34 · калькулятор -->
+  <!-- 38 · калькулятор -->
   <section class="slide" data-chap="Деньги">
     <div class="rise">
       <span class="kicker">Посчитайте свой месяц</span>
@@ -1052,7 +1142,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 35 · когда приходят деньги -->
+  <!-- 39 · когда приходят деньги -->
   <section class="slide tint" data-chap="Деньги">
     <div class="rise">
       <span class="kicker">Выплата</span>
@@ -1065,7 +1155,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 36 · кроме денег -->
+  <!-- 40 · кроме денег -->
   <section class="slide dark" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Зачем здесь работать</span>
@@ -1091,7 +1181,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 37 · путь лианы -->
+  <!-- 41 · путь лианы -->
   <section class="slide tint" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Как это выглядит на практике</span>
@@ -1106,7 +1196,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 38 · обучение -->
+  <!-- 42 · обучение -->
   <section class="slide" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Обучение</span>
@@ -1120,7 +1210,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 39 · что дальше -->
+  <!-- 43 · что дальше -->
   <section class="slide dark" data-chap="Дальше">
     <div class="rise hold">
       <span class="kicker">Что дальше</span>
@@ -1145,7 +1235,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   <span class="brand">ИСТСАЙД.РФ</span>
   <span class="chap" id="chap">Компания</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 34</span>
+  <span class="count" id="count">1 / 43</span>
   <div class="arrows">
     <button id="prev" aria-label="Предыдущий слайд">‹</button>
     <button id="next" aria-label="Следующий слайд">›</button>
@@ -1203,7 +1293,8 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       el.dataset.v = raw;
       var m = raw.match(/[\d  ]+(?:[.,]\d+)?/);
       if (!m) return;
-      var txt = m[0], target = parseFloat(txt.replace(/[  ]/g, '').replace(',', '.'));
+      // хвостовой пробел в совпадении съедал отбивку перед знаком: «30 000 ₽» → «30 000₽»
+      var txt = m[0].replace(/[\s ]+$/, ''), target = parseFloat(txt.replace(/[  ]/g, '').replace(',', '.'));
       if (!isFinite(target) || target === 0) return;
       var dec = (txt.indexOf(',') !== -1) ? 1 : 0;
       var t0 = 0, dur = 900;
@@ -1358,9 +1449,53 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   });
   trShow('grant');
 
+  /* ── экраны платформы и «Нексис»: переключатели вкладок ──────────────── */
+  var PV = {
+    cab: { img: 'img/ui-cabinet.webp', t: 'Главная ученика',
+      d: 'Этап, срок и задачи на сегодня. Ученик видит, что делать прямо сейчас, а не весь список дел на год.' },
+    diag: { img: 'img/ui-diag.webp', t: 'Диагностика',
+      d: 'Шансы в цифрах: полный грант, частичный, без гранта. Видно, какой параметр проседает — это и есть материал для разговора с семьей.' },
+    learn: { img: 'img/ui-learn.webp', t: 'Обучение',
+      d: 'Курсы и тренажеры в одном месте: подготовка к CSCA, интенсив Duolingo, живой китайский и занятия с преподавателем.' },
+    parent: { img: 'img/ui-parent.webp', t: 'Кабинет родителя',
+      d: 'Отдельный вход и отдельные права: родитель видит этап ребенка, задачи семьи и сроки, а финансы открыты только ему.' }
+  };
+  var pvsw = document.getElementById('pvsw');
+  function pvShow(id) {
+    var v = PV[id]; if (!v) return;
+    var im = document.getElementById('pvImg');
+    im.src = v.img; im.alt = v.t;
+    document.getElementById('pvT').textContent = v.t;
+    document.getElementById('pvD').textContent = v.d;
+  }
+  pvsw.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(pvsw.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    pvShow(b.getAttribute('data-p'));
+  });
+  pvShow('cab');
+
+  var NX = [
+    { t: '15 вопросов', d: 'Про то, что человеку интересно и как он хочет жить. Правильных ответов нет, есть только его собственные.' },
+    { t: '10 минут с телефона', d: 'Проходится за перемену. Регистрация бесплатная, оплаты на входе нет.' },
+    { t: 'Результат сразу', d: 'Профессии, которые человеку подходят, и объяснение, почему именно они. Это же объяснение потом звучит на диагностике.' },
+    { t: 'Что дальше', d: 'Из профессии вырастает направление, из направления — вузы и гранты. Контакт попадает в CRM, и дальше с семьей разговариваем мы.' }
+  ];
+  var nxsw = document.getElementById('nxsw');
+  function nxShow(n) {
+    document.getElementById('nxT').textContent = NX[n].t;
+    document.getElementById('nxD').textContent = NX[n].d;
+  }
+  nxsw.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    [].forEach.call(nxsw.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    nxShow(+b.getAttribute('data-n'));
+  });
+  nxShow(0);
+
   /* ── снимки системы открываются во весь экран ────────────────────────── */
   var lbx = document.getElementById('lbx'), lbxImg = document.getElementById('lbxImg');
-  [].forEach.call(document.querySelectorAll('.shots figure img'), function (im) {
+  [].forEach.call(document.querySelectorAll('.shots figure img, .pv-pic img'), function (im) {
     im.parentNode.addEventListener('click', function () {
       lbxImg.src = im.getAttribute('src');
       lbxImg.alt = im.getAttribute('alt') || '';
