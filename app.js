@@ -22359,6 +22359,94 @@
     return '<div class="grid" style="margin-bottom:16px">' + dayCard + funCard + '</div>';
   }
 
+  /* ── Посетители страницы: цифра из Метрики, внесенная руками ───────────────
+     Верхнюю ступень лестницы наша база не знает: счетчик стоит на стороне Яндекса,
+     ключом он к CRM не подключен. Пока это так, цифру переписывает человек из отчета
+     «Конверсии». Строка одна на запуск и правится целиком — Метрика отдает
+     накопительное число с начала запуска, и сложение недельных записей посчитало бы
+     одних и тех же людей дважды. */
+  function launchTrafficSpan(t) {
+    var d = function (v) { return v ? v.split('-').reverse().slice(0, 2).join('.') : ''; };
+    if (t.period_from && t.period_to) return d(t.period_from) + '–' + d(t.period_to);
+    if (t.period_from) return 'с ' + d(t.period_from);
+    if (t.period_to) return 'по ' + d(t.period_to);
+    return '';
+  }
+
+  function launchTrafficCard(cur) {
+    var t = cur.traffic;
+    var val = function (v) { return v ? ' value="' + esc(String(v)) + '"' : ''; };
+    var span = t ? launchTrafficSpan(t) : '';
+    var was = t
+      ? '<div class="lt-was"><span>В воронке стоит <b class="num">' +
+          fmtMoney(t.visitors || t.visits) + '</b> ' +
+          (t.visitors ? 'посетителей' : 'визитов') +
+          (span ? ' · ' + esc(span) : '') +
+          (t.created_by ? ' · внес ' + esc(t.created_by) : '') + '</span>' +
+        '<button class="bp ghost sm" id="lt-clear">Убрать цифру</button></div>'
+      : '';
+    return '<div class="card" style="padding:22px 26px;margin-top:16px">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">Посетители страницы</div>' +
+      '<div class="s">из отчета «Конверсии» Яндекс.Метрики. Повторный ввод правит цифру, ' +
+      'а не складывается с прошлой</div></div></div>' +
+      '<div class="lt-form">' +
+        '<label class="al-f"><span class="al-l">Период с</span>' +
+          '<input id="lt-from" class="al-in" type="date"' + val(t && t.period_from) + '></label>' +
+        '<label class="al-f"><span class="al-l">по</span>' +
+          '<input id="lt-to" class="al-in" type="date"' + val(t && t.period_to) + '></label>' +
+        '<label class="al-f"><span class="al-l">Визиты</span>' +
+          '<input id="lt-visits" class="al-in num" type="number" min="0" placeholder="0"' +
+          val(t && t.visits) + '></label>' +
+        '<label class="al-f"><span class="al-l">Посетители</span>' +
+          '<input id="lt-visitors" class="al-in num" type="number" min="0" placeholder="0"' +
+          val(t && t.visitors) + '></label>' +
+        '<label class="al-f"><span class="al-l">Заметка</span>' +
+          '<input id="lt-note" class="al-in" maxlength="500" placeholder="за какой отчет"' +
+          val(t && t.note) + '></label>' +
+        '<button class="bp" id="lt-add">' + ic('plus', 14) + 'Внести</button>' +
+      '</div>' + was + '</div>';
+  }
+
+  function launchTrafficBind(cur) {
+    var add = el('lt-add');
+    if (add) add.addEventListener('click', function () {
+      var body = {
+        launch_slug: cur.slug,
+        period_from: (el('lt-from') || {}).value || '',
+        period_to: (el('lt-to') || {}).value || '',
+        visits: parseInt((el('lt-visits') || {}).value || '0', 10) || 0,
+        visitors: parseInt((el('lt-visitors') || {}).value || '0', 10) || 0,
+        note: ((el('lt-note') || {}).value || '').trim(),
+      };
+      if (!body.visits && !body.visitors) { showToast('Впиши визиты или посетителей'); return; }
+      add.disabled = true;
+      api('/admin/api/marketing/launch/traffic', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function () {
+        state._mkLaunch = null;            // воронка пересчитается на свежих цифрах
+        showToast('Цифра встала в воронку');
+        renderView();
+      }).catch(function (e) {
+        add.disabled = false;
+        /* 422 объясняет, что именно не так (период задом наперед, людей больше
+           заходов) — показываем ответ сервера, а не общее «не сохранилось». */
+        showToast(e && e.body && typeof e.body.detail === 'string'
+          ? e.body.detail : 'Не сохранилось — проверь поля и сеть');
+      });
+    });
+    var clear = el('lt-clear');
+    if (clear) clear.addEventListener('click', function () {
+      if (!window.confirm('Убрать внесенную цифру посетителей?')) return;
+      api('/admin/api/marketing/launch/traffic/' + encodeURIComponent(cur.slug),
+        { method: 'DELETE' }).then(function () {
+        state._mkLaunch = null;
+        renderView();
+      }).catch(function () { showToast('Не удалилось — проверь сеть'); });
+    });
+  }
+
   function renderMkLaunch(view) {
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
     if (state._mkLaunch === 'none') {
@@ -22389,9 +22477,19 @@
     /* лестница: полосы мерим от самой широкой настоящей ступени — кликов или
        регистраций. От одних регистраций 12 кликов рисовались бы той же полосой,
        что 200 регистраций, и шкала врала бы. */
-    var base = Math.max(reg.total, clicksN) || 1;
+    var tr = cur.traffic;
+    var seen = tr ? (tr.visitors || tr.visits || 0) : 0;
+    var base = Math.max(reg.total, clicksN, seen) || 1;
+    var trSmall = tr
+      ? ['Метрика', launchTrafficSpan(tr),
+         tr.visitors && tr.visits ? 'визитов ' + fmtMoney(tr.visits) : ''
+        ].filter(Boolean).join(' · ')
+      : 'знает только Метрика';
     var ladder =
-      ladRow('Посетители страницы', 'знает только Метрика', '—', null, convMut('нет данных')) +
+      (seen
+        ? ladRow('Посетители страницы', trSmall, seen, pct(seen, base),
+            conv('конверсия ' + pct(reg.total, seen) + '%'))
+        : ladRow('Посетители страницы', trSmall, '—', null, convMut('нет данных'))) +
       ladRow('Клики по нашим ссылкам', clicksN ? 'короткие ссылки в постах и письме' : 'коды заведены, ждут раздачи',
         clicksN || 0, pct(clicksN, base), clicksN ? '' : convMut('ждет раздачи')) +
       ladRow('Зарегистрировались', 'форма на истсайд.рф/intensive', reg.total, pct(reg.total, base), convMut(clicksN ? pct(reg.total, clicksN) + '% от кликов' : 'все')) +
@@ -22479,6 +22577,7 @@
         '<div><div class="t">От показа до оплаты</div><div class="s">' +
           (hasWorst ? 'красным — шаг, где деньги не доходят' : 'путь запуска по ступеням') + '</div></div></div>' +
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      launchTrafficCard(cur) +
       '<div class="grid" style="margin-top:16px">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Диагностический тест</div><div class="s">все, кто запускал тест ' +
@@ -22498,12 +22597,13 @@
         '<div class="card sp12" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Чего в этих цифрах нет</div><div class="s">чтобы не считать страницу полной картиной</div></div></div>' +
           '<div style="border-top:1px solid var(--line)">' +
-            /* Раньше здесь стояло «Метрика сюда не подключена». С появлением плитки
-               «Страницу видели» это перестало быть правдой — но только про страницу
-               интенсива: страницу теста считает отдельный счётчик, и её мы пока не
-               показываем. Пишем ровно то, что есть, иначе список «чего нет» сам
-               становится местом, где написана неправда. */
-            (cur.pages
+            /* Раньше здесь стояло «Метрика сюда не подключена». С появлением цифры
+               посетителей это перестало быть правдой — но только про страницу
+               интенсива: считать её можно и Метрикой (cur.pages), и цифрой, внесённой
+               руками (seen). Страницу теста считает отдельный счётчик, и её мы пока не
+               показываем — про неё и пишем. Ни одной цифры нет — говорим как было.
+               Список «чего нет» сам не должен становиться местом с неправдой. */
+            ((cur.pages || seen)
               ? '<div class="mkd-gap"><div><b>Посетители страницы теста</b><small>заходы на истсайд.рф/diag считает отдельный счётчик Метрики, на экран он пока не выведен</small></div><span class="sev n-wait">не в цифрах</span></div>'
               : '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сейчас она недоступна</small></div><span class="sev n-wait">не в цифрах</span></div>') +
             '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
@@ -22555,6 +22655,7 @@
       });
     });
     launchPeriodBind(view);
+    launchTrafficBind(cur);
     launchDaysBind(view);
   }
 
