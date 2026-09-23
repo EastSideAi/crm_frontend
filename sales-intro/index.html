@@ -398,6 +398,11 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .part{background:rgba(255,255,255,.9); padding:13px 16px}
 .part i{display:block; font-style:normal; font-size:13px; color:var(--soft)}
 .part b{display:block; margin-top:5px; font-size:18px; font-weight:660; letter-spacing:-.02em}
+.part.hi{background:var(--blue)}
+.part.hi i{color:rgba(255,255,255,.82)}
+.part.hi b{color:#fff; font-size:22px}
+.goal{margin-top:14px; font-size:15px; line-height:1.5; color:var(--soft)}
+.goal b{color:var(--blue-d); font-weight:700}
 
 /* экраны продукта с переключателем: на встрече показывают не текст, а систему */
 .pv{margin-top:clamp(14px,2.4vh,24px)}
@@ -1136,11 +1141,14 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
       <div class="calc-out">
         <div class="total"><b id="total">—</b><span>за месяц до налогов</span></div>
         <div class="parts">
+          <div class="part hi"><i>Продаж в месяц</i><b id="pDeals">—</b></div>
           <div class="part"><i>Смены</i><b id="pShift">—</b></div>
           <div class="part"><i>Проценты с продаж</i><b id="pDeal">—</b></div>
           <div class="part"><i>Диагностики</i><b id="pDiag">—</b></div>
         </div>
       </div>
+      <p class="goal rise">Чтобы выйти на 100 000 ₽ в месяц при этих настройках, нужно
+        <b id="goalDeals">—</b> и примерно <b id="goalDiags">—</b>.</p>
     </div>
   </section>
 
@@ -1149,12 +1157,13 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <div class="rise">
       <span class="kicker">Выплата</span>
       <h2>Когда приходят деньги</h2>
+      <p class="lead">Деньги приходят дважды в месяц: десятого и двадцатого.</p>
     </div>
     <div class="steps rise">
-      <div class="step"><span class="n">1</span><div><h3>С 1 по 3 число система собирает расчет</h3><p>Смены, диагностики и проценты за прошлый месяц считаются автоматически.</p></div></div>
-      <div class="step"><span class="n">2</span><div><h3>С 3 по 5 вы проверяете</h3><p>Видите свой расчет и можете оспорить любую строку.</p></div></div>
-      <div class="step"><span class="n">3</span><div><h3>До 10 числа выплата</h3><p>Рассрочка у семьи: ваш процент идет частями вслед за ее платежами.</p></div></div>
+      <div class="step"><span class="n">10</span><div><h3>Вторая часть оклада и проценты с продаж</h3><p>Сюда же идут KPI за прошлый период: смены, диагностики и закрытые сделки.</p></div></div>
+      <div class="step"><span class="n">20</span><div><h3>Первая часть оклада и проценты с продаж</h3><p>Считаются продажи, которые закрылись до этой даты.</p></div></div>
     </div>
+    <p class="note rise">Если семья платит в рассрочку, ваш процент идет <b>частями вслед за ее платежами</b>, а не ждет последнего взноса.</p>
   </section>
 
   <!-- 40 · кроме денег -->
@@ -1622,6 +1631,12 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   // продажах — арифметика, в которую отдел не верит (замечание Виталия 23.09.2026).
   var st = { shifts: 40, kq: 1, diags: 20, rate: 500, conv: 4, role: 3.2, tariff: 159000 };
   var rub = function (n) { return Math.round(n).toLocaleString('ru-RU') + ' ₽'; };
+  // «1 продажа, 2 продажи, 5 продаж»: без этого строка цели читается как робот
+  function plural(n, one, few, many) {
+    var a = Math.abs(n) % 100, b = a % 10;
+    var word = (a > 10 && a < 20) ? many : b === 1 ? one : (b > 1 && b < 5) ? few : many;
+    return n + ' ' + word;
+  }
 
   function calc() {
     var deals = Math.round(st.diags / st.conv);
@@ -1636,6 +1651,16 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     document.getElementById('kqV').textContent = st.kq.toFixed(1).replace('.', ',');
     document.getElementById('diagsV').textContent = st.diags;
     document.getElementById('dealsV').textContent = deals;
+    document.getElementById('pDeals').textContent = deals;
+
+    // Сколько нужно, чтобы выйти на 100 000 ₽ в месяц. Считаем от диагностик:
+    // доход = смены + диагностики * ставка + (диагностики / конверсия) * тариф * доля.
+    // Отсюда нужное число диагностик, а продажи из него по той же конверсии.
+    var perDiag = st.rate + st.tariff * st.role / 100 / st.conv;
+    var needDiag = Math.ceil(Math.max(0, 100000 - shift) / perDiag);
+    var needDeals = Math.ceil(needDiag / st.conv);
+    document.getElementById('goalDeals').textContent = plural(needDeals, 'продажа', 'продажи', 'продаж');
+    document.getElementById('goalDiags').textContent = plural(needDiag, 'диагностика', 'диагностики', 'диагностик');
   }
   [['shifts', 1], ['kq', 0], ['diags', 1]].forEach(function (p) {
     var el = document.getElementById(p[0]);
