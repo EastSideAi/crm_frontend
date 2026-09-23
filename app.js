@@ -22307,6 +22307,32 @@
     return 'с ' + a[2] + '.' + a[1] + ' по ' + b[2] + '.' + b[1];
   }
 
+  /* Сколько человек вообще смотрело эфир. Ступени пути считают только тех, кто
+     оставил контакты, — это правильный счёт для воронки, но на вопрос «сколько
+     людей было в зале» он отвечает неверно: до 23.09.2026 зритель без регистрации
+     не считался вовсе. Здесь два числа рядом, а не сумма: тем, кого узнали, можно
+     позвонить, остальным — нет, и слипшаяся цифра это скрыла бы. */
+  function launchViewers(cur) {
+    var v = cur && cur.viewers;
+    if (!v || !v.anon) return '';
+    var rows = [
+      ['viewers', 'Смотрели эфир', 'открыли страницу и смотрели'],
+      ['watch10', '10 минут и больше', ''],
+      ['watch30', '30 минут и больше', ''],
+      ['watch60', 'Час и больше', 'досидели до продающей части'],
+    ].map(function (r) {
+      var known = (v.known && v.known[r[0]]) || 0, anon = v.anon[r[0]] || 0;
+      var sub = 'узнали ' + known + ' · без регистрации ' + anon;
+      return flatRow(r[1], r[2] ? r[2] + ' · ' + sub : sub, known + anon);
+    }).join('');
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Сколько человек смотрело</div>' +
+        '<div class="s">все зрители страницы эфира' +
+        (state._mkLaunchDay ? ' за выбранный вечер' : '') +
+        ' · кого не узнали, тому не позвонить, но в зале он был</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
+  }
+
   function launchCharts(cur) {
     var days = cur.by_day || [];
     var withData = days.filter(function (d) { return d.registered || d.paid; });
@@ -22447,6 +22473,7 @@
         '</div></div>' + launchDays(cur) + '</div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">От показа до оплаты</div><div class="s">' +
