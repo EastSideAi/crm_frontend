@@ -7871,6 +7871,102 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .ap-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Контрольные точки тьютора (секция «Точки» в карточке) ──────────────────
+   Пять точек = пять денег. Якорь экрана один — сводка сверху; сами точки
+   тихие, закрытая уходит в фон и перестает звать к действию. Чек-лист
+   набран строками без рамок: рамка вокруг каждой строки превращает список
+   в панель управления, а это обычный список дел. */
+.cp-board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px; margin-top: 16px; background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden; }
+.cp-tile { background: var(--card); padding: 14px 16px; }
+.cp-tile__l { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-tile__v { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.03em; }
+.cp-tile__s { margin-top: 3px; font-size: 12px; color: var(--ink-2); }
+
+.cp-card { margin-top: 12px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-xl); padding: 16px 18px; }
+.cp-card.done { background: #FCFCFD; border-color: var(--line-2); }
+.cp-h { display: flex; align-items: flex-start; gap: 12px; }
+.cp-n { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 9px;
+  background: var(--blue-tint); color: var(--blue); font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; }
+.cp-card.done .cp-n { background: var(--green-soft); color: var(--green-ink); }
+.cp-hb { flex: 1 1 auto; min-width: 0; }
+.cp-t { font-size: 16px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); }
+.cp-s { margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+.cp-sum { flex: 0 0 auto; font-size: 15px; font-weight: 700; color: var(--ink); }
+
+.cp-line { margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.cp-line .cp-late { margin-left: 8px; padding: 3px 8px; border-radius: var(--r-pill);
+  background: var(--red-soft); color: var(--red-ink); font-weight: 600; font-size: 11.5px; }
+.cp-dim { color: var(--ink-3); }
+.cp-line .cp-dim { margin-left: 8px; }
+
+.cp-plan { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 10px 12px;
+  margin-top: 12px; align-items: end; }
+/* дата стоит одна, пока ее не двигали: вторая колонка остается пустой, но подпись
+   про коридор срока под ней растягивается на всю ширину и читается строкой */
+.cp-plan:not(.moved) { grid-template-columns: 170px minmax(0, 1fr); }
+.cp-plan label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-plan input[type="date"], .cp-plan input[type="text"], .cp-plan label input:not([type="checkbox"]) {
+  display: block; width: 100%; margin-top: 5px; padding: 8px 11px; font: inherit;
+  font-size: 13px; color: var(--ink); background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 10px; }
+.cp-plan input:focus { outline: none; border-color: var(--blue); }
+.cp-plan .cp-ext { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px;
+  text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12.5px;
+  color: var(--ink-2); cursor: pointer; }
+.cp-plan .cp-ext input { margin: 0; }
+.cp-due { grid-column: 1 / -1; font-size: 12px; color: var(--ink-3); }
+
+.cp-res { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.cp-res span { font-size: 12px; color: var(--ink-2); }
+.cp-res select { flex: 1 1 auto; padding: 8px 11px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--card); border: 1px solid var(--line-2);
+  border-radius: 10px; }
+
+.cp-items { margin-top: 12px; }
+.cp-item { display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  text-align: left; padding: 8px 2px; background: none; border: 0;
+  border-bottom: 1px solid var(--line); cursor: pointer; }
+.cp-item:last-child { border-bottom: 0; }
+.cp-item:disabled { cursor: default; }
+.cp-box { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; border-radius: 6px;
+  border: 1.5px solid var(--line-2); display: flex; align-items: center;
+  justify-content: center; color: #fff; transition: .15s; }
+.cp-item:hover:not(:disabled) .cp-box { border-color: var(--blue); }
+.cp-item.on .cp-box { background: var(--green); border-color: var(--green); }
+.cp-item__t { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--ink); }
+.cp-item.on .cp-item__t { color: var(--ink-2); }
+.cp-item__w { flex: 0 0 auto; font-size: 11.5px; color: var(--ink-3); }
+
+.cp-foot { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 14px; }
+.cp-left, .cp-paid { font-size: 12.5px; color: var(--ink-2); }
+.cp-paid { font-weight: 600; color: var(--green-ink); }
+.cp-log { margin-top: 10px; padding: 8px 11px; border-radius: 10px;
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; }
+
+.cp-pend { margin-top: 18px; padding: 14px 16px; border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg); }
+.cp-pend__h { font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cp-pend__r { display: flex; align-items: baseline; gap: 8px; margin-top: 8px;
+  font-size: 13px; color: var(--ink); }
+.cp-pend__r span { font-size: 11.5px; color: var(--ink-3); }
+.cp-pend__r i { font-style: normal; color: var(--ink-2); font-size: 12.5px; }
+.cp-note { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+
+@media (max-width: 720px) {
+  .cp-board { grid-template-columns: 1fr; }
+  .cp-plan { grid-template-columns: 1fr; }
+  .cp-pend__r { flex-wrap: wrap; }
+}
+
 /* ── Академия тьютора ───────────────────────────────────────────────────────
    Обучающие курсы с аттестацией (renderAcademy в app.js). Как и «Обучение
    сотрудника» (.gd-*), это единственная зона CRM, где плотность уступает
