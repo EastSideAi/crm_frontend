@@ -21704,9 +21704,17 @@
      нуля, который читается как провал. */
   function launchPlate(s, i, worstKey) {
     var wait = s.state !== 'live';
-    var val = (s.people == null) ? '—' : fmtMoney(s.people);
+    /* wide — ступень «по всему запуску» (тест, канал): крупным числом все, кто сделал
+       шаг, а не только записавшиеся на интенсив. Связать прошедших тест с формой нечем,
+       и честный счёт записавшихся давал здесь ноль, который дважды прочитали как
+       «аналитика не посчитала людей». Процентов у такой плашки нет — бэкенд их гасит,
+       сравнивать «всех по запуску» с «записавшимися» значит сравнивать разных людей. */
+    var wide = s.wide != null;
+    var val = wide ? fmtMoney(s.wide) : ((s.people == null) ? '—' : fmtMoney(s.people));
     var conv = '';
-    if (!wait && s.of_prev != null && i > 0) {
+    if (wide) {
+      conv = 'по всему запуску · нажмите, чтобы увидеть людей';
+    } else if (!wait && s.of_prev != null && i > 0) {
       conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
       if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
     } else if (!wait && i === 0) {
@@ -22283,7 +22291,12 @@
      которых ещё не было. Ответвление рядом со ступенью сбивало бы чтение «сверху
      вниз всё меньше». */
   function launchFunnelChart(path) {
-    var steps = path.filter(function (s) { return !s.branch && s.state === 'live' && s.people != null; });
+    /* Ступени «по всему запуску» (wide) в воронку не берём: воронка — путь ОДНОЙ
+       группы людей, а у этих плашек крупное число про всех по запуску. Столбик 39
+       после 42 записавшихся читался бы как конверсия, которой никто не мерил. */
+    var steps = path.filter(function (s) {
+      return !s.branch && !s.wide && s.state === 'live' && s.people != null;
+    });
     if (steps.length < 3) return '';
     var max = Math.max(1, steps[0].people);
     return '<div class="lfun">' + steps.map(function (s) {
@@ -22465,7 +22478,8 @@
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
           /* подсказка про клик тут не украшение: без неё поимённый список никто не
              найдёт, а он и есть ответ на «цифру вижу, проверить не могу» */
-          'каждая ступень считает людей из числа зарегистрировавшихся · ' +
+          'ступени считают записавшихся на интенсив, кроме теста и канала — там все, ' +
+          'кто сделал шаг, по всему запуску · ' +
           'нажмите на ступень, чтобы увидеть этих людей поимённо' +
           (state._mkLaunchDay
             ? ' · ступени просмотра — только за выбранный вечер, остальные за весь запуск'
@@ -22522,7 +22536,16 @@
       var openIt = function () {
         var key = n.getAttribute('data-lstep');
         var st = (cur.path || []).filter(function (x) { return x.key === key; })[0];
-        if (st) launchPeopleOpen(cur.slug, st, cur.title, n);
+        if (!st) return;
+        /* Плашка «по всему запуску» открывает список блока — тот самый, из которого
+           посчитано её крупное число. Список записавшихся тут был бы пустым и снова
+           спорил бы с цифрой на плашке. */
+        if (st.wide_block) {
+          launchBlockOpen(cur.slug, st.wide_block.block, st.wide_block.value || '',
+            st.title, cur.title, st.wide, n);
+          return;
+        }
+        launchPeopleOpen(cur.slug, st, cur.title, n);
       };
       n.addEventListener('click', openIt);
       n.addEventListener('keydown', function (e) {
