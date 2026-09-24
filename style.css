@@ -355,6 +355,11 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.amber { background: var(--amber); }
 .stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
   white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Кегль значения — по длине текста (класс ставит svFit в app.js). Крупный рассчитан
+   на короткое число; «19 320 ₽» и «Сегодня» в нём вылезали за свою колонку и наезжали
+   на соседнюю плитку при шести плитках на ширине 1280. */
+.stat .sv.tight { font-size: 31px; }
+.stat .sv.word { font-size: 26px; letter-spacing: -.02em; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
