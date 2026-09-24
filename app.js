@@ -32745,6 +32745,22 @@
       '<option value=""' + (cur ? '' : ' selected') + '>Без категории</option>' + extra + opts + '</select>';
   }
 
+  /* Статус документа глазами семьи. Значения — те же, что в client_docs.status:
+     кабинет читает их напрямую (client_views._DOC_STATUS_MAP), второй словарь здесь
+     завести нельзя, разъедется. */
+  var DOC_ST = [
+    { k: 'received',  t: 'на проверке' },
+    { k: 'accepted',  t: 'принят' },
+    { k: 'needs_fix', t: 'нужна замена' },
+  ];
+  function docStSelect(current) {
+    var cur = (current || 'received').trim().toLowerCase();
+    if (cur === 'in_review') cur = 'received';
+    return '<select class="doc-kind doc-st">' + DOC_ST.map(function (o) {
+      return '<option value="' + o.k + '"' + (o.k === cur ? ' selected' : '') + '>' + o.t + '</option>';
+    }).join('') + '</select>';
+  }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
@@ -32760,8 +32776,15 @@
             // Категория правится прямо в строке: именно она закрывает пункт пакета в
             // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
             docKindSelect('doc-kind', '', dc.kind) +
+            // Статус правится там же, где видно файл: до этого поменять его из CRM
+            // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
+            docStSelect(dc.status) +
             (m ? '<span class="doc-mt">' + m + '</span>' : '') +
-          '</div></div>' +
+          '</div>' +
+          // Причина разворота — ровно тот текст, который семья читает в кабинете
+          '<div class="doc-why"' + (dc.review_note ? '' : ' hidden') + '>' +
+            esc(dc.review_note || '') + '</div>' +
+        '</div>' +
         '<div class="doc-act">' +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
             ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
@@ -34164,6 +34187,35 @@
           showToast(sel.value ? 'Категория: ' + sel.value : 'Категория снята');
           refreshDetail(id);
         }, function () { sel.disabled = false; showToast('Категория не сохранилась'); });
+      });
+    });
+    /* Статус документа. «Нужна замена» без причины бэкенд не примет (422), и это
+       правильно: семья видит только статус, и без текста ей непонятно, что делать.
+       Спрашиваем ровно как причину блокировки исполнителя — тем же prompt. */
+    Array.prototype.forEach.call(host.querySelectorAll('.doc-row .doc-st'), function (sel) {
+      var was = sel.value;
+      sel.addEventListener('change', function () {
+        var row = sel.closest('.doc-row');
+        var did = row && row.getAttribute('data-did');
+        if (!did) return;
+        var why = row.querySelector('.doc-why');
+        var body = { status: sel.value };
+        if (sel.value === 'needs_fix') {
+          var prev = why ? why.textContent.trim() : '';
+          var txt = window.prompt('Что не так с документом? Этот текст семья увидит в кабинете.', prev);
+          if (!txt || !txt.trim()) { sel.value = was; return; }
+          body.review_note = txt.trim();
+        }
+        sel.disabled = true;
+        apiSend('/admin/api/docs/' + did, 'PATCH', body, function (r) {
+          sel.disabled = false;
+          was = sel.value;
+          var note = (r && r.doc && r.doc.review_note) || '';
+          if (why) { why.textContent = note; why.hidden = !note; }
+          showToast(sel.value === 'needs_fix' ? 'Вернули семье с причиной'
+            : sel.value === 'accepted' ? 'Документ принят' : 'Статус: на проверке');
+          refreshDetail(id);
+        }, function () { sel.disabled = false; sel.value = was; showToast('Статус не сохранился'); });
       });
     });
     var linkAdd = el('m-link-add'), linkIn = el('m-link');
