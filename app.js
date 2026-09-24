@@ -22426,6 +22426,37 @@
       '<div class="brk" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
+  /* Деньги запуска. Вера 24.09.2026: «тут денег нету, нужна плашка с деньгами —
+     на какую сумму счета и какая сумма оплаты». Участие в интенсиве и продукты
+     держим порознь: 690 рублей за вечер и сопровождение — разные деньги, и в
+     сумме они прячут друг друга. Невыкупленный счёт считаем по цене оффера,
+     оплаченный — по тому, что реально пришло. */
+  function launchMoney(cur) {
+    var pay = cur && cur.payment;
+    if (!pay || pay.invoiced_rub == null || !pay.product) return '';
+    var pr = pay.product;
+    var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0);
+    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0);
+    var wait = Math.max(0, billed - got);
+    var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid);
+    var money = function (n) { return fmtMoney(n) + ' ₽'; };
+    var rows =
+      flatRow('Выставлено счетов',
+        'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0),
+        money(billed)) +
+      flatRow('Оплачено',
+        'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0),
+        money(got)) +
+      flatRow('Ждут оплаты',
+        waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
+        money(wait));
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Деньги запуска</div>' +
+      '<div class="s">участие в интенсиве и продукты порознь · ' +
+      'счёт без оплаты считаем по цене оффера</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
+  }
+
   function launchCharts(cur) {
     var days = cur.by_day || [];
     var withData = days.filter(function (d) { return d.registered || d.paid; });
@@ -22550,6 +22581,9 @@
     var all = state._mkLaunch.launches;
     var cur = all[Math.min(state._mkLaunchIdx || 0, all.length - 1)];
     var reg = cur.registrations, pay = cur.payment, ch = cur.channels || {};
+    /* Счета за продукты приходят от бэкенда отдельным блоком; старый ответ без него
+       не должен ронять экран — тогда просто нули. */
+    var prod = pay.product || { invoiced: 0, paid: 0, paid_rub: 0, invoiced_rub: 0 };
     var tg = ch.tg || {};
     var clicksN = (cur.clicks || []).reduce(function (n, c) { return n + c.n; }, 0);
     var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
@@ -22557,8 +22591,18 @@
     var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
 
     var hasWorst = pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5;
-    var chSmall = 'тг ' + (tg.members || 0) +
-      ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
+    /* Люди в закрытых каналах: считает сервер (in_channel) — поимённый состав трёх
+       площадок без ботов. Снимки счётчиков (ch.vk/ch.max) остаются запасным путём
+       для ответа со старого бэкенда: там другое число, в нём и служебные аккаунты. */
+    var inCh = cur.in_channel || null;
+    var chTotal = inCh ? inCh.total : (tg.members || 0);
+    var chSmall = inCh
+      ? ['tg', 'vk', 'max'].map(function (k) {
+          var v = inCh[k];
+          return ({ tg: 'тг ', vk: 'вк ', max: 'макс ' })[k] + (v ? v.live : '—');
+        }).join(' · ') + (inCh.gone ? ' · вышло ' + inCh.gone : '')
+      : 'тг ' + (tg.members || 0) +
+        ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
     var days = cur.days_to_event;
     var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
 
@@ -22591,15 +22635,24 @@
         reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
       ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
         reg.vip, pct(reg.vip, base), conv(pct(reg.vip, base) + '% регистраций')) +
-      ladRow('Получили счет на 690', pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+      ladRow('Получили счет на участие', '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
         pay.invoiced, pct(pay.invoiced, base), conv(reg.vip && pay.invoiced >= reg.vip ? 'все, кто выбрал' : pct(pay.invoiced, reg.vip || base) + '% выбравших')) +
-      ladRow('Оплатили 690', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+      ladRow('Оплатили участие', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
         pay.paid, pct(pay.paid, base) || 2,
         conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
           (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
         hasWorst ? 'worst' : '') +
-      ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
-        pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
+      /* Продукт — всё, что человек этого запуска купил сверх участия: сопровождение,
+         языковые пакеты. Отдельными ступенями, потому что это другие деньги и
+         другое решение семьи. */
+      ladRow('Получили счет на продукт', 'сопровождение и пакеты занятий',
+        prod.invoiced || '—', prod.invoiced ? pct(prod.invoiced, base) : null,
+        prod.invoiced ? conv(pct(prod.invoiced, reg.total || base) + '% от реги') : convMut('счетов пока нет')) +
+      ladRow('Оплатили продукт', prod.paid_rub ? fmtMoney(prod.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+        prod.paid || '—', prod.paid ? pct(prod.paid, base) || 2 : null,
+        prod.paid ? conv(pct(prod.paid, prod.invoiced || base) + '% со счета') : convMut('ждем')) +
+      ladRow('Вступили в закрытые каналы', chSmall, chTotal,
+        pct(chTotal, base), conv(pct(chTotal, base) + '% от реги')) +
       ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
         reg.viewers || '—', reg.viewers ? pct(reg.viewers, base) : null,
         reg.viewers ? conv(pct(reg.viewers, base) + '% от реги') : convMut(days > 0 ? 'еще не было' : 'нет данных')) +
@@ -22623,19 +22676,18 @@
        Снимок подписчиков площадки остаётся подписью — это ДРУГОЕ число, в нём сидят
        и служебные аккаунты, и сама команда, и смешивать их в одной цифре нельзя.
        Площадка, состав которой ещё не снимали, показывает прочерк, а не ноль. */
-    var inCh = cur.in_channel || {};
     var chLine = function (v, snap) {
       var was = snap ? 'у площадки ' + snap.members + ' на ' + snap.day.split('-').reverse().slice(0, 2).join('.') : '';
       if (!v) return was ? 'состав не снимали · ' + was : 'состав не снимали';
       return (v.gone ? 'вышло ' + v.gone : 'без ушедших') + (was ? ' · ' + was : '');
     };
     var chRows =
-      flatRow('Телеграм', chLine(inCh.tg, null), inCh.tg ? inCh.tg.live : (tg.members || 0),
+      flatRow('Телеграм', chLine(inCh && inCh.tg, null), inCh && inCh.tg ? inCh.tg.live : (tg.members || 0),
         { block: 'channel', value: 'member' }) +
-      flatRow('ВКонтакте', chLine(inCh.vk, ch.vk), inCh.vk ? inCh.vk.live : '—',
-        inCh.vk ? { block: 'channel', value: 'member' } : null) +
-      flatRow('MAX', chLine(inCh.max, ch.max), inCh.max ? inCh.max.live : '—',
-        inCh.max ? { block: 'channel', value: 'member' } : null);
+      flatRow('ВКонтакте', chLine(inCh && inCh.vk, ch.vk), inCh && inCh.vk ? inCh.vk.live : '—',
+        inCh && inCh.vk ? { block: 'channel', value: 'member' } : null) +
+      flatRow('MAX', chLine(inCh && inCh.max, ch.max), inCh && inCh.max ? inCh.max.live : '—',
+        inCh && inCh.max ? { block: 'channel', value: 'member' } : null);
 
     var clickRows = (cur.clicks || []).map(function (c) {
       return flatRow(c.title || c.code, c.code, c.n);
@@ -22657,23 +22709,26 @@
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
-        { label: 'Счет на 690', value: pay.invoiced,
-          sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
-          sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
+           это не сопровождение. Плитка держит участие, продукты живут ступенями. */
+        { label: 'Счет на участие', value: pay.invoiced,
+          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
+          sub: prod.paid_rub
+            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
         /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
            без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
            Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
-        { label: 'В закрытых каналах',
-          value: cur.in_channel ? cur.in_channel.total : (tg.members || 0),
-          sub: cur.in_channel
+        { label: 'В закрытых каналах', value: chTotal,
+          sub: inCh
             ? ['tg', 'vk', 'max'].map(function (k) {
-                var v = cur.in_channel[k];
+                var v = inCh[k];
                 return v ? ({ tg: 'телеграм ', vk: 'ВК ', max: 'МАКС ' })[k] + v.live : '';
               }).filter(Boolean).join(' · ') +
               /* Сколько ушло — вторая цифра, о которой просила Ольга: канал, из
                  которого уходят, и канал, в который не приходят, — разные беды. */
-              (cur.in_channel.gone ? ' · вышло ' + cur.in_channel.gone : '')
+              (inCh.gone ? ' · вышло ' + inCh.gone : '')
             : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет') },
         /* Где мы относительно эфира, считает сервер (поле stage): у интенсива два
            вечера и час начала, а команда сидит в разных поясах — по часам браузера
@@ -22699,6 +22754,7 @@
         '</div></div>' + launchDays(cur) + '</div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchMoney(cur) +
       launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
