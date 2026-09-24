@@ -22394,7 +22394,36 @@
         '<div class="s">все зрители страницы эфира' +
         (state._mkLaunchDay ? ' за выбранный вечер' : '') +
         ' · кого не узнали, тому не позвонить, но в зале он был</div></div></div>' +
-      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
+      launchRecViews(cur);
+  }
+
+  /* Запись смотрят после эфира, и в живых цифрах её быть не должно: запись первого
+     дня открывают в вечер второго, и одной цифрой «смотрели 24 сентября» эти два
+     разных человека слипаются. Считаем по дню ТОГО эфира, чью запись смотрели,
+     поэтому переключатель дней наверху работает и здесь. */
+  function launchRecViews(cur) {
+    var v = cur && cur.recording;
+    if (!v || !v.known || !v.anon) return '';
+    var total = (v.known.viewers || 0) + (v.anon.viewers || 0);
+    var body = total
+      ? [
+          ['viewers', 'Смотрели запись', 'открыли запись и смотрели'],
+          ['watch10', '10 минут и больше', ''],
+          ['watch30', '30 минут и больше', ''],
+          ['watch60', 'Час и больше', 'досмотрели до продающей части'],
+        ].map(function (r) {
+          var known = v.known[r[0]] || 0, anon = v.anon[r[0]] || 0;
+          var sub = 'узнали ' + known + ' · без регистрации ' + anon;
+          return flatRow(r[1], r[2] ? r[2] + ' · ' + sub : sub, known + anon);
+        }).join('')
+      : '<div class="empty">Запись этого вечера пока никто не смотрел.</div>';
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Сколько человек смотрело запись</div>' +
+        '<div class="s">' +
+        (state._mkLaunchDay ? 'запись выбранного вечера' : 'записи обоих вечеров') +
+        ' · живой эфир сюда не входит</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
   function launchCharts(cur) {
