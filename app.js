@@ -55,6 +55,7 @@
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
+    unSeg: 'run', _un: null,      // декомпозиция трафика: сегмент и модель (localStorage)
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -105,7 +106,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'taskPrio', 'attSeg', 'meetView'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -115,7 +116,7 @@
       localStorage.setItem(UI_LS, JSON.stringify({
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
-        mkTab: state.mkTab, mkDays: state.mkDays, taskPrio: state.taskPrio || '',
+        mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
         attSeg: state.attSeg || '', meetView: state.meetView || '',
       }));
     } catch (e) {}
@@ -2643,13 +2644,13 @@
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
       var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
-                    ['spend', 'Расход'], ['links', 'Ссылки и сценарии']];
+                    ['spend', 'Расход'], ['unit', 'Декомпозиция'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
-        (state.mkTab === 'launch' ? '' :
+        (state.mkTab === 'launch' || state.mkTab === 'unit' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
         }).join('') + '</div>');
@@ -22460,6 +22461,390 @@
     });
   }
 
+  /* ── Декомпозиция холодного трафика: разговор с продюсерами ──────────────
+     Задача Виталия 22.09.2026: показать подрядчикам по трафику их собственную
+     воронку в деньгах — что делает когорта, которую они привели, сколько съел
+     трафик, сколько остается им и сколько нам. И увидеть год целиком, а не один
+     запуск: смысл договора в том, чтобы они работали с когортой дальше, а не
+     «настроили фреймворк запуска и разошлись».
+
+     Цифры НЕ хранятся на сервере: это прикидка под переговоры, а не факт. Модель
+     живет в localStorage браузера того, кто крутит, и не мешает чужим прикидкам.
+     Факт по запускам лежит рядом, на вкладке «Запуски». */
+  var UN_KEY = 'es_unit_traffic_v1';
+  var UN_DEF = {
+    budget: 300000,   // бюджет на трафик за запуск
+    cpl: 300,         // цена регистрации
+    toDiag: 18,       // % регистраций, дошедших до диагностики
+    conv: 25,         // % диагностик, закрытых в договор
+    check: 349990,    // средний чек: Плюс и Премиум пополам (Павел 24.09.2026)
+    share: 20,        // доля продюсеров
+    scheme: 'net',    // net — доля с выручки за вычетом трафика; gross — с выручки
+    cost: 35,         // наши расходы на клиента, % от чека (себестоимость, проценты, налоги)
+    warm2: 30,        // дожим: сколько продаж добавляет второй месяц, % от первых
+    warm3: 15,        // и третий
+    runs: 12,         // запусков в год
+    growth: 0         // насколько растет бюджет каждого следующего запуска, %
+  };
+  var UN_SEGS = [{ id: 'run', label: 'Запуск' }, { id: 'year', label: 'Год' }, { id: 'deal', label: 'Условия' }];
+  /* Продюсеров ведем на старшие тарифы: холодный трафик приводит семью, которой
+     нужен полный цикл (решение Павла 24.09.2026). Стандарт в пресетах не нужен. */
+  var UN_CHECKS = [['Стандарт Плюс', 299990], ['Пополам', 349990], ['Премиум', 399990]];
+
+  function unModel() {
+    if (state._un) return state._un;
+    var m = {};
+    Object.keys(UN_DEF).forEach(function (k) { m[k] = UN_DEF[k]; });
+    try {
+      var raw = JSON.parse(localStorage.getItem(UN_KEY) || '{}');
+      Object.keys(UN_DEF).forEach(function (k) { if (raw[k] != null) m[k] = raw[k]; });
+    } catch (e) {}
+    state._un = m;
+    return m;
+  }
+  function unSave() { try { localStorage.setItem(UN_KEY, JSON.stringify(state._un || {})); } catch (e) {} }
+  function unNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  function unRub(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
+
+  /* Одна когорта: люди, которых привел бюджет одного запуска. Дожим — те же люди,
+     купившие во второй и третий месяц: за них продюсеры и отвечают, когда берутся
+     утеплять когорту. Клиент платит сразу целиком (решение Виталия), рассрочку в
+     эту модель не закладываем. */
+  function unCalc(m, budget) {
+    var b = budget == null ? unNum(m.budget) : budget;
+    var leads = unNum(m.cpl) > 0 ? Math.floor(b / unNum(m.cpl)) : 0;
+    var diags = Math.round(leads * unNum(m.toDiag) / 100);
+    var first = Math.round(diags * unNum(m.conv) / 100);
+    var w2 = Math.round(first * unNum(m.warm2) / 100);
+    var w3 = Math.round(first * unNum(m.warm3) / 100);
+    var check = unNum(m.check);
+    function money(sales) {
+      var rev = sales * check;
+      var base = m.scheme === 'gross' ? rev : Math.max(0, rev - b);
+      var prod = Math.round(base * unNum(m.share) / 100);
+      var cost = Math.round(rev * unNum(m.cost) / 100);
+      var ours = rev - b - prod - cost;
+      return { sales: sales, rev: rev, base: base, prod: prod, cost: cost, ours: ours };
+    }
+    return {
+      budget: b, leads: leads, diags: diags,
+      first: money(first), all: money(first + w2 + w3),
+      w2: w2, w3: w3,
+      cac: first ? Math.round(b / first) : 0,
+      diagCost: diags ? Math.round(b / diags) : 0,
+      romi: b ? Math.round((first * check - b) / b * 100) : 0
+    };
+  }
+  function unYear(m) {
+    var rows = [], t = { budget: 0, sales: 0, rev: 0, prod: 0, cost: 0, ours: 0 };
+    var runs = Math.max(1, Math.min(24, Math.round(unNum(m.runs))));
+    var b = unNum(m.budget), g = unNum(m.growth);
+    for (var i = 0; i < runs; i++) {
+      var r = unCalc(m, Math.round(b));
+      rows.push({ n: i + 1, budget: r.budget, a: r.all });
+      t.budget += r.budget; t.sales += r.all.sales; t.rev += r.all.rev;
+      t.prod += r.all.prod; t.cost += r.all.cost; t.ours += r.all.ours;
+      b = b * (1 + g / 100);
+    }
+    return { rows: rows, t: t };
+  }
+
+  function unField(id, label, hint, attrs) {
+    var m = unModel();
+    return '<label class="al-f un-f"><span class="al-l">' + esc(label) + '</span>' +
+      '<input class="al-in sm num" type="number" data-un="' + id + '" value="' + unNum(m[id]) + '" ' +
+      (attrs || 'min="0" step="1"') + '>' +
+      (hint ? '<span class="un-h">' + esc(hint) + '</span>' : '') + '</label>';
+  }
+  function unInputs() {
+    var m = unModel();
+    return '<div class="card">' +
+      '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">Вводные запуска</div>' +
+        '<div class="s">крутим цифры прямо на встрече: все ниже пересчитывается сразу</div></div>' +
+        '<button class="bp ghost sm" id="un-reset" type="button">Сбросить</button></div>' +
+      '<div class="un-form">' +
+        unField('budget', 'Бюджет на трафик, ₽', 'на один запуск', 'min="0" step="10000"') +
+        unField('cpl', 'Цена регистрации, ₽', 'сколько стоит один лид') +
+        unField('toDiag', 'Регистрация → диагностика, %', 'дошли до встречи', 'min="0" max="100" step="1"') +
+        unField('conv', 'Диагностика → договор, %', '25% это один из четырех', 'min="0" max="100" step="1"') +
+        unField('check', 'Средний чек, ₽', 'цена договора со скидкой', 'min="0" step="1000"') +
+        unField('cost', 'Наши расходы на клиента, %', 'себестоимость, проценты продаж, налоги', 'min="0" max="100" step="1"') +
+        unField('share', 'Доля продюсеров, %', 'от базы по схеме ниже', 'min="0" max="100" step="1"') +
+        unField('warm2', 'Дожим, второй месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
+        unField('warm3', 'Дожим, третий месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
+      '</div>' +
+      '<div class="un-row">' +
+        '<span class="un-lbl">Средний чек по тарифу</span>' +
+        '<div class="dperiod un-seg">' + UN_CHECKS.map(function (c) {
+          return '<button type="button" data-uncheck="' + c[1] + '"' +
+            (unNum(m.check) === c[1] ? ' class="on"' : '') + '>' + esc(c[0]) + '</button>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<div class="un-row">' +
+        '<span class="un-lbl">С чего считаем долю продюсеров</span>' +
+        '<div class="dperiod un-seg">' +
+          '<button type="button" data-unscheme="net"' + (m.scheme !== 'gross' ? ' class="on"' : '') + '>С выручки за вычетом трафика</button>' +
+          '<button type="button" data-unscheme="gross"' + (m.scheme === 'gross' ? ' class="on"' : '') + '>Со всей выручки, трафик наш</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="po-note">Цифр прошлого запуска по холодному трафику у нас пока нет, ' +
+        'поэтому конверсии здесь — гипотеза, а не факт: их и надо обсудить с продюсерами. ' +
+        'Обе схемы дележа дают разные деньги на одной и той же когорте, переключите и ' +
+        'покажите разницу. Клиент платит сразу целиком: рассрочку в модель не закладываем.</div>' +
+      '</div>';
+  }
+  function unFunnelCard() {
+    var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
+    return '<div class="card">' +
+      '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
+        '<div><div class="t">Воронка одной когорты</div>' +
+        '<div class="s">от бюджета до договора, по вводным выше</div></div></div>' +
+      '<div id="un-ladder"></div></div>';
+  }
+  function unLadder(r, m) {
+    var base = Math.max(r.leads, 1);
+    var pct = function (n) { return Math.round(n / base * 100); };
+    return ladRow('Бюджет на трафик', 'деньги, которые продюсеры заводят в рекламу', unRub(r.budget), null, '') +
+      ladRow('Регистрации', 'по ' + unRub(unNum(m.cpl)) + ' за человека', fmtMoney(r.leads), 100,
+        '<span class="lad-conv num">' + unRub(unNum(m.cpl)) + ' за лид</span>') +
+      ladRow('Дошли до диагностики', 'встреча с нашим менеджером', fmtMoney(r.diags), pct(r.diags),
+        '<span class="lad-conv num">' + unNum(m.toDiag) + '% регистраций</span>') +
+      ladRow('Договоры в первый месяц', 'оплата сразу целиком', fmtMoney(r.first.sales), Math.max(pct(r.first.sales), 2),
+        '<span class="lad-conv num">' + unNum(m.conv) + '% диагностик</span>') +
+      ladRow('Дожим когорты', 'второй и третий месяц: те же люди, которых утеплили',
+        '+' + fmtMoney(r.w2 + r.w3), Math.max(pct(r.w2 + r.w3), 2),
+        '<span class="lad-conv num">всего ' + fmtMoney(r.all.sales) + '</span>');
+  }
+  function unMoneyCard() {
+    return '<div class="card">' +
+      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+        '<div><div class="t">Деньги когорты</div>' +
+        '<div class="s">слева первый месяц, справа когорта целиком, вместе с дожимом</div></div>' +
+        '<button class="bp ghost sm" id="un-copy" type="button">' + ic('copy', 13) + 'Скопировать расклад</button></div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ">' +
+        '<thead><tr><th class="po-rl">Статья</th><th>Первый месяц</th><th>Когорта целиком</th></tr></thead>' +
+        '<tbody>' +
+          unMoneyRow('Договоров', 'sales', '') +
+          unMoneyRow('Выручка когорты', 'rev', 'po-r-price') +
+          unMoneyRow('Расход на трафик', 'budget', '') +
+          unMoneyRow('База для доли продюсеров', 'base', '') +
+          unMoneyRow('Продюсерам', 'prod', 'po-r-sum') +
+          unMoneyRow('Наши расходы на клиентов', 'cost', '') +
+          unMoneyRow('Остается компании', 'ours', 'po-r-big') +
+        '</tbody></table></div>' +
+      '<div class="un-metrics" id="un-metrics"></div>' +
+      '</div>';
+  }
+  function unMoneyRow(label, key, cls) {
+    return '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="po-rl">' + esc(label) + '</td>' +
+      '<td class="num" data-unv="first:' + key + '"></td>' +
+      '<td class="num" data-unv="all:' + key + '"></td></tr>';
+  }
+  function unYearCard() {
+    var m = unModel();
+    return '<div class="card">' +
+      '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">Год запусков</div>' +
+        '<div class="s">каждая строка — своя когорта со своим дожимом</div></div></div>' +
+      '<div class="un-form un-form2">' +
+        unField('runs', 'Запусков за год', 'обычно один в месяц', 'min="1" max="24" step="1"') +
+        unField('growth', 'Рост бюджета к запуску, %', 'ноль — бюджет не растет', 'min="0" max="100" step="5"') +
+      '</div>' +
+      '<div class="po-tblwrap"><table class="po-tbl econ un-ytbl">' +
+        '<thead><tr><th class="po-rl">Запуск</th><th>Трафик</th><th>Договоров</th>' +
+        '<th>Выручка</th><th>Продюсерам</th><th>Компании</th></tr></thead>' +
+        '<tbody id="un-ybody"></tbody></table></div>' +
+      '<div class="po-note">Год считается по тем же вводным, что и один запуск. ' +
+        'Смысл строки за строкой: когорта не заканчивается в день эфира, и работа с ней — ' +
+        'это и есть то, за что продюсеры получают свою долю весь год.</div>' +
+      '</div>';
+  }
+  function unDealCard() {
+    return '<div class="card">' +
+      '<div class="sec-head"><span class="ic">' + ic('handshake', 14) + '</span>' +
+        '<div><div class="t">Что предлагаем продюсерам</div>' +
+        '<div class="s">то же, что в расчете, только словами — можно читать с экрана</div></div></div>' +
+      '<div class="un-deal" id="un-deal"></div></div>';
+  }
+  function unDealText(r, m) {
+    var scheme = m.scheme === 'gross'
+      ? 'Доля считается со всей выручки когорты, расход на трафик остается на нас.'
+      : 'Доля считается с выручки когорты за вычетом того, что потрачено на трафик.';
+    var items = [
+      ['Когорта', 'Люди, которых привел их трафик за один запуск. Дальше эта когорта закреплена за ними: ' +
+        'кто купил во второй и третий месяц, считается там же.'],
+      ['Доля', unNum(m.share) + '% с когорты. ' + scheme],
+      ['Оплата клиента', 'Считаем, что клиент платит сразу целиком. Если пойдем в рассрочку, долю будем отдавать частями вслед за платежами семьи.'],
+      ['Их работа', 'Трафик, прогрев и утепление когорты, дожим тех, кто не купил сразу, стандарты запуска.'],
+      ['Наша работа', 'Диагностика, продажа, договор и все сопровождение семьи. Продукт и деньги клиента ведем мы.'],
+      ['Горизонт', 'Год, а не один запуск: годовой план по когортам нужен, чтобы обе стороны считали деньги вдолгую.']
+    ];
+    var calc = 'На вводных этого экрана: бюджет ' + unRub(r.budget) + ' дает ' + fmtMoney(r.leads) +
+      ' регистраций, ' + fmtMoney(r.diags) + ' диагностик и ' + fmtMoney(r.first.sales) +
+      ' договоров в первый месяц. С дожимом когорта дает ' + fmtMoney(r.all.sales) + ' договоров и ' +
+      unRub(r.all.rev) + ' выручки. Продюсерам с нее ' + unRub(r.all.prod) + ', компании остается ' +
+      unRub(r.all.ours) + ' после трафика, доли и расходов на клиентов.';
+    return items.map(function (it) {
+      return '<div class="un-di"><div class="un-dt">' + esc(it[0]) + '</div><div class="un-dd">' + esc(it[1]) + '</div></div>';
+    }).join('') + '<div class="po-note">' + esc(calc) + '</div>';
+  }
+  function unCopyText(r, m) {
+    var L = [];
+    L.push('Декомпозиция холодного трафика, один запуск');
+    L.push('');
+    L.push('Бюджет на трафик: ' + unRub(r.budget));
+    L.push('Регистрации: ' + fmtMoney(r.leads) + ' по ' + unRub(unNum(m.cpl)));
+    L.push('Диагностики: ' + fmtMoney(r.diags) + ' (' + unNum(m.toDiag) + '% регистраций)');
+    L.push('Договоры в первый месяц: ' + fmtMoney(r.first.sales) + ' (' + unNum(m.conv) + '% диагностик)');
+    L.push('С дожимом за три месяца: ' + fmtMoney(r.all.sales));
+    L.push('');
+    L.push('Выручка когорты: ' + unRub(r.all.rev));
+    L.push('Расход на трафик: ' + unRub(r.budget));
+    L.push('Продюсерам ' + unNum(m.share) + '%: ' + unRub(r.all.prod));
+    L.push('Наши расходы на клиентов: ' + unRub(r.all.cost));
+    L.push('Остается компании: ' + unRub(r.all.ours));
+    L.push('');
+    L.push('Стоимость договора по трафику: ' + unRub(r.cac));
+    L.push('Средний чек: ' + unRub(unNum(m.check)));
+    return L.join('\n');
+  }
+  function renderMkUnit(view) {
+    if (!UN_SEGS.some(function (s) { return s.id === state.unSeg; })) state.unSeg = 'run';
+    var m = unModel();
+    var top = '<div class="card po-econtop">' +
+      '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
+        '<div><div class="t">Декомпозиция холодного трафика</div>' +
+        '<div class="s">когорта одного запуска: что она приносит и как делится</div></div></div>' +
+      '<div class="pay-board po-board3">' +
+        '<div class="pay-cell"><div class="pc-l">Выручка когорты</div>' +
+          '<div class="pc-v num" data-unv="all:rev"></div>' +
+          '<div class="pc-s num" data-unt="sales"></div></div>' +
+        '<div class="pay-cell"><div class="pc-l">Продюсерам</div>' +
+          '<div class="pc-v num" data-unv="all:prod"></div>' +
+          '<div class="pc-s num" data-unt="share"></div></div>' +
+        '<div class="pay-cell lead"><div class="pc-l">Остается компании</div>' +
+          '<div class="pc-v num" data-unv="all:ours"></div>' +
+          '<div class="pc-s num" data-unt="ours"></div></div>' +
+      '</div>' +
+      '<div class="po-tabs po-econsegs"><div class="dperiod">' +
+        UN_SEGS.map(function (sg) {
+          return '<button type="button" data-unseg="' + sg.id + '"' +
+            (state.unSeg === sg.id ? ' class="on"' : '') + '>' + esc(sg.label) + '</button>';
+        }).join('') +
+      '</div></div></div>';
+    var body = state.unSeg === 'year' ? unYearCard()
+      : state.unSeg === 'deal' ? unDealCard()
+      : unInputs() + unFunnelCard() + unMoneyCard();
+    view.innerHTML = top + body;
+    unWire(view);
+    unPaint(view);
+  }
+  function unPaint(view) {
+    var m = unModel(), r = unCalc(m);
+    function put(sel, html) {
+      Array.prototype.forEach.call(view.querySelectorAll(sel), function (n) { n.innerHTML = html; });
+    }
+    ['first', 'all'].forEach(function (side) {
+      var v = r[side];
+      put('[data-unv="' + side + ':sales"]', fmtMoney(v.sales));
+      put('[data-unv="' + side + ':rev"]', unRub(v.rev));
+      put('[data-unv="' + side + ':budget"]', '− ' + unRub(r.budget));
+      put('[data-unv="' + side + ':base"]', unRub(v.base));
+      put('[data-unv="' + side + ':prod"]', '− ' + unRub(v.prod));
+      put('[data-unv="' + side + ':cost"]', '− ' + unRub(v.cost));
+      put('[data-unv="' + side + ':ours"]', unRub(v.ours));
+    });
+    put('[data-unt="sales"]', fmtMoney(r.all.sales) + ' договоров с дожимом');
+    put('[data-unt="share"]', unNum(m.share) + '% ' + (m.scheme === 'gross' ? 'со всей выручки' : 'за вычетом трафика'));
+    put('[data-unt="ours"]', 'после трафика, доли и расходов');
+    var lad = view.querySelector('#un-ladder');
+    if (lad) lad.innerHTML = unLadder(r, m);
+    var met = view.querySelector('#un-metrics');
+    if (met) {
+      met.innerHTML = [
+        ['Договор стоит по трафику', unRub(r.cac)],
+        ['Диагностика стоит', unRub(r.diagCost)],
+        ['Возврат на трафик', (r.romi > 0 ? '+' : '') + r.romi + '%'],
+        ['Трафик в выручке', (r.all.rev ? Math.round(r.budget / r.all.rev * 100) : 0) + '%']
+      ].map(function (x) {
+        return '<div class="un-m"><div class="un-ml">' + esc(x[0]) + '</div>' +
+          '<div class="un-mv num">' + esc(x[1]) + '</div></div>';
+      }).join('');
+    }
+    var yb = view.querySelector('#un-ybody');
+    if (yb) {
+      var y = unYear(m);
+      yb.innerHTML = y.rows.map(function (row) {
+        return '<tr><td class="po-rl">Запуск ' + row.n + '</td>' +
+          '<td class="num">' + unRub(row.budget) + '</td>' +
+          '<td class="num">' + fmtMoney(row.a.sales) + '</td>' +
+          '<td class="num">' + unRub(row.a.rev) + '</td>' +
+          '<td class="num">' + unRub(row.a.prod) + '</td>' +
+          '<td class="num">' + unRub(row.a.ours) + '</td></tr>';
+      }).join('') +
+        '<tr class="po-r-big"><td class="po-rl">За год</td>' +
+        '<td class="num">' + unRub(y.t.budget) + '</td>' +
+        '<td class="num">' + fmtMoney(y.t.sales) + '</td>' +
+        '<td class="num">' + unRub(y.t.rev) + '</td>' +
+        '<td class="num">' + unRub(y.t.prod) + '</td>' +
+        '<td class="num">' + unRub(y.t.ours) + '</td></tr>';
+    }
+    var deal = view.querySelector('#un-deal');
+    if (deal) deal.innerHTML = unDealText(r, m);
+  }
+  function unWire(view) {
+    var m = unModel();
+    Array.prototype.forEach.call(view.querySelectorAll('[data-un]'), function (inp) {
+      inp.addEventListener('input', function () {
+        m[inp.getAttribute('data-un')] = unNum(inp.value);
+        unSave();
+        /* перерисовываем только цифры: полный ререндер выбивал бы курсор из поля,
+           а на встрече цифры крутят непрерывно */
+        unPaint(view);
+        unSyncSegs(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uncheck]'), function (b) {
+      b.addEventListener('click', function () {
+        m.check = unNum(b.getAttribute('data-uncheck')); unSave();
+        var inp = view.querySelector('[data-un="check"]'); if (inp) inp.value = m.check;
+        unPaint(view); unSyncSegs(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-unscheme]'), function (b) {
+      b.addEventListener('click', function () {
+        m.scheme = b.getAttribute('data-unscheme'); unSave(); unPaint(view); unSyncSegs(view);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-unseg]'), function (b) {
+      b.addEventListener('click', function () {
+        state.unSeg = b.getAttribute('data-unseg'); saveUi(); renderView();
+      });
+    });
+    var reset = view.querySelector('#un-reset');
+    if (reset) reset.addEventListener('click', function () {
+      state._un = null;
+      try { localStorage.removeItem(UN_KEY); } catch (e) {}
+      renderView();
+    });
+    var copy = view.querySelector('#un-copy');
+    if (copy) copy.addEventListener('click', function () {
+      copyText(unCopyText(unCalc(unModel()), unModel()), copy);
+    });
+  }
+  /* Кнопки-сегменты сами себя не подсветят: их состояние зависит от модели,
+     а модель меняется из полей рядом. */
+  function unSyncSegs(view) {
+    var m = unModel();
+    Array.prototype.forEach.call(view.querySelectorAll('[data-uncheck]'), function (b) {
+      b.className = unNum(b.getAttribute('data-uncheck')) === unNum(m.check) ? 'on' : '';
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-unscheme]'), function (b) {
+      b.className = b.getAttribute('data-unscheme') === (m.scheme === 'gross' ? 'gross' : 'net') ? 'on' : '';
+    });
+  }
+
   function renderMkLaunch(view) {
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
     if (state._mkLaunch === 'none') {
@@ -22689,6 +23074,7 @@
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
     if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
+    if (state.mkTab === 'unit') { renderMkUnit(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
     /* Воронка курса и воронки бота — разные источники, и падение одного не имеет
        права стирать другой: раньше пустой ответ маркетинга гасил весь экран. */
