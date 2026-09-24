@@ -22,7 +22,24 @@
      (Риана, 21.08.2026). Поэтому на отказ соединения — не на ответ сервера с ошибкой,
      а именно на отказ — пробуем второй адрес и, если он ответил, запоминаем его для
      этого устройства. Ручной перенастройки от человека это не требует. */
+  /* Токен сотрудника уходит ЗАГОЛОВКОМ, а не в адресе. Раньше он ехал параметром
+     k= в каждом запросе и целиком оседал в логах сервера: у кого доступ к логам, у
+     того и ключ от CRM (находка 24.09.2026). Подставляем здесь, в единственной двери
+     наружу, — тогда ни один вызов не может забыть. Бэкенд принимает оба способа,
+     пока живы открытые вкладки со старой версией. */
+  function withToken(opts) {
+    var key = getKey();
+    if (!key) return opts;
+    var out = {};
+    for (var p in (opts || {})) if (Object.prototype.hasOwnProperty.call(opts, p)) out[p] = opts[p];
+    var h = {};
+    for (var q in (out.headers || {})) if (Object.prototype.hasOwnProperty.call(out.headers, q)) h[q] = out.headers[q];
+    if (!h['X-CRM-Token']) h['X-CRM-Token'] = key;
+    out.headers = h;
+    return out;
+  }
   function xfetch(path, opts) {
+    opts = withToken(opts);
     return fetch(API + path, opts).catch(function (err) {
       var alt = API === API_RU ? API_INT : API_RU;
       if (window.EASTSIDE_API_BASE || alt === API) throw err;
@@ -644,8 +661,7 @@
   /* ── api ──────────────────────────────────────────────── */
   function api(path, opts) {
     opts = opts || {};
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
+    return xfetch(path, opts).then(function (r) {
       /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
          на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
          отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
@@ -5288,6 +5304,11 @@
     }).catch(function () { AR_TUTORS = []; if (cb) cb(); });
   }
 
+  /* Единственное место, где ключ остается в адресе: это href, по которому браузер
+     идет сам (скачать файл, открыть в новой вкладке), а свой заголовок к такому
+     переходу не приложить. В логах сервера ключ при этом замаскирован фильтром
+     _MaskSecrets. Если понадобится убрать и отсюда — нужна одноразовая ссылка на
+     скачивание, это отдельная задача. */
   function docHref(docId) {
     return API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey());
   }
@@ -5560,8 +5581,7 @@
   /* Запрос с человеческим текстом ошибки. Бэкенд отвечает {"detail": "..."} — там
      фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
   function czSend(path, method, body) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -15119,8 +15139,7 @@
   /* Свой запрос вместо общего api(): первый же ответ тут бывает 409 с человеческой
      фразой («учетка не связана с карточкой»), и показать надо именно ее. */
   function mwGet(path) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch('/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
+    return xfetch('/admin/api/my/cz' + path)
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.ok) return j;
@@ -20832,8 +20851,7 @@
     });
   }
   function mkRequest(path, method, body) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -22610,7 +22628,8 @@
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
           /* подсказка про клик тут не украшение: без неё поимённый список никто не
              найдёт, а он и есть ответ на «цифру вижу, проверить не могу» */
-          'ступени считают записавшихся на интенсив, кроме теста и канала — там все, ' +
+          'ступени считают записавшихся на интенсив и оставивших контакты в чате эфира, ' +
+          'кроме теста и канала — там все, ' +
           'кто сделал шаг, по всему запуску · ' +
           'нажмите на ступень, чтобы увидеть этих людей поимённо' +
           (state._mkLaunchDay
@@ -27367,7 +27386,7 @@
      api() отдаёт только код, а причина здесь и есть главное. */
   function delMsg(convId, mid, done) {
     var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
-    xfetch(path + '?k=' + encodeURIComponent(getKey()), { method: 'DELETE' })
+    xfetch(path, { method: 'DELETE' })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (!r.ok) throw new Error(String((j && j.detail) || 'не удалось убрать сообщение'));
@@ -27405,7 +27424,7 @@
 
   function editMsg(convId, mid, text, done) {
     var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
-    xfetch(path + '?k=' + encodeURIComponent(getKey()), {
+    xfetch(path, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text })
     })
@@ -28776,7 +28795,7 @@
   var RM_DOC_LINK_CACHE = {};
   function resolveDocLink(docId, cb) {
     if (RM_DOC_LINK_CACHE[docId]) { cb(RM_DOC_LINK_CACHE[docId]); return; }
-    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download')
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -28797,7 +28816,7 @@
   function openDoc(docId) {
     var w = window.open('', '_blank');
     if (w) try { w.opener = null; } catch (e) {}
-    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download')
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -34435,7 +34454,7 @@
       if (les) body.lessons = les;
       schBtn.disabled = true;
       out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
-      xfetch('/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+      xfetch('/api/school/invoices/link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
@@ -35780,8 +35799,10 @@
   }
   function boot() {
     if (!getKey()) { renderLogin(); return; }
-    // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
-    xfetch('/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
+    // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет:
+    // getKey() снимает его с адреса и кладет в localStorage, а дальше он ездит
+    // заголовком X-CRM-Token — см. xfetch)
+    xfetch('/admin/api/me').then(function (r) {
       if (!r.ok) throw new Error(String(r.status));
       return r.json();
     }).then(function (me) {
