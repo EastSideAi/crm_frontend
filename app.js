@@ -22426,6 +22426,37 @@
       '<div class="brk" style="border-top:1px solid var(--line)">' + body + '</div></div>';
   }
 
+  /* Деньги запуска. Вера 24.09.2026: «тут денег нету, нужна плашка с деньгами —
+     на какую сумму счета и какая сумма оплаты». Участие в интенсиве и продукты
+     держим порознь: 690 рублей за вечер и сопровождение — разные деньги, и в
+     сумме они прячут друг друга. Невыкупленный счёт считаем по цене оффера,
+     оплаченный — по тому, что реально пришло. */
+  function launchMoney(cur) {
+    var pay = cur && cur.payment;
+    if (!pay || pay.invoiced_rub == null || !pay.product) return '';
+    var pr = pay.product;
+    var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0);
+    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0);
+    var wait = Math.max(0, billed - got);
+    var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid);
+    var money = function (n) { return fmtMoney(n) + ' ₽'; };
+    var rows =
+      flatRow('Выставлено счетов',
+        'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0),
+        money(billed)) +
+      flatRow('Оплачено',
+        'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0),
+        money(got)) +
+      flatRow('Ждут оплаты',
+        waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
+        money(wait));
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Деньги запуска</div>' +
+      '<div class="s">участие в интенсиве и продукты порознь · ' +
+      'счёт без оплаты считаем по цене оффера</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
+  }
+
   function launchCharts(cur) {
     var days = cur.by_day || [];
     var withData = days.filter(function (d) { return d.registered || d.paid; });
@@ -22550,6 +22581,9 @@
     var all = state._mkLaunch.launches;
     var cur = all[Math.min(state._mkLaunchIdx || 0, all.length - 1)];
     var reg = cur.registrations, pay = cur.payment, ch = cur.channels || {};
+    /* Счета за продукты приходят от бэкенда отдельным блоком; старый ответ без него
+       не должен ронять экран — тогда просто нули. */
+    var prod = pay.product || { invoiced: 0, paid: 0, paid_rub: 0, invoiced_rub: 0 };
     var tg = ch.tg || {};
     var clicksN = (cur.clicks || []).reduce(function (n, c) { return n + c.n; }, 0);
     var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
@@ -22591,13 +22625,22 @@
         reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
       ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
         reg.vip, pct(reg.vip, base), conv(pct(reg.vip, base) + '% регистраций')) +
-      ladRow('Получили счет на 690', pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+      ladRow('Получили счет на участие', '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
         pay.invoiced, pct(pay.invoiced, base), conv(reg.vip && pay.invoiced >= reg.vip ? 'все, кто выбрал' : pct(pay.invoiced, reg.vip || base) + '% выбравших')) +
-      ladRow('Оплатили 690', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+      ladRow('Оплатили участие', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
         pay.paid, pct(pay.paid, base) || 2,
         conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
           (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
         hasWorst ? 'worst' : '') +
+      /* Продукт — всё, что человек этого запуска купил сверх участия: сопровождение,
+         языковые пакеты. Отдельными ступенями, потому что это другие деньги и
+         другое решение семьи. */
+      ladRow('Получили счет на продукт', 'сопровождение и пакеты занятий',
+        prod.invoiced || '—', prod.invoiced ? pct(prod.invoiced, base) : null,
+        prod.invoiced ? conv(pct(prod.invoiced, reg.total || base) + '% от реги') : convMut('счетов пока нет')) +
+      ladRow('Оплатили продукт', prod.paid_rub ? fmtMoney(prod.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+        prod.paid || '—', prod.paid ? pct(prod.paid, base) || 2 : null,
+        prod.paid ? conv(pct(prod.paid, prod.invoiced || base) + '% со счета') : convMut('ждем')) +
       ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
         pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
       ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
@@ -22644,10 +22687,12 @@
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
-        { label: 'Счет на 690', value: pay.invoiced,
-          sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
-          sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        { label: 'Счет на участие', value: pay.invoiced,
+          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' ₽',
+          sub: prod.paid_rub
+            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
@@ -22667,6 +22712,7 @@
         '</div></div>' + launchDays(cur) + '</div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchMoney(cur) +
       launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
