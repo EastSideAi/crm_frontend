@@ -422,6 +422,11 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
 .pv-txt h3{font-size:clamp(17px,1.5vw,20px)}
 .pv-txt p{margin-top:9px; font-size:14.5px; line-height:1.55; color:var(--soft)}
 .dark .pv-txt p{color:rgba(255,255,255,.84)}
+/* тонкая полоса под снимком: показывает, сколько осталось до следующего кадра */
+.pv-pic{position:relative}
+.dg-bar{position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(12,30,66,.14)}
+.dg-bar b{display:block; height:100%; width:0; background:var(--blue)}
+.dg-bar.off{opacity:0}
 @media (max-width:900px){.pv-box{grid-template-columns:1fr} .pv-pic{aspect-ratio:16/11}}
 
 /* снимок системы во весь экран: на встрече в него будут тыкать */
@@ -964,7 +969,30 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 29 · семья покупает не один продукт -->
+  <!-- 29 · путь диагностики: кадры идут сами, как ролик -->
+  <section class="slide tint" data-chap="Продукт">
+    <div class="rise">
+      <span class="kicker">Диагностика</span>
+      <h2>Как семья проходит диагностику</h2>
+      <p class="lead">Шесть экранов идут сами. Нажмите любой шаг, чтобы остановить и разобрать его, снимок открывается во весь экран.</p>
+    </div>
+    <div class="pv rise">
+      <div class="pv-sw" id="dgsw">
+        <button type="button" data-d="0" aria-pressed="true">1 · Анкета</button>
+        <button type="button" data-d="1" aria-pressed="false">2 · Вопросы</button>
+        <button type="button" data-d="2" aria-pressed="false">3 · Расчет</button>
+        <button type="button" data-d="3" aria-pressed="false">4 · Профиль</button>
+        <button type="button" data-d="4" aria-pressed="false">5 · Шансы</button>
+        <button type="button" data-d="5" aria-pressed="false">6 · Маршрут</button>
+      </div>
+      <div class="pv-box">
+        <figure class="pv-pic"><img id="dgImg" src="img/dg-1.webp" alt="Первый вопрос анкеты на платформе"><i class="dg-bar" aria-hidden="true"><b id="dgBar"></b></i></figure>
+        <div class="pv-txt"><h3 id="dgT">Анкета</h3><p id="dgD"></p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 30 · семья покупает не один продукт -->
   <section class="slide dark" data-chap="Продукт">
     <div class="rise">
       <span class="kicker">Ценность клиента</span>
@@ -979,7 +1007,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note">Одна такая семья принесла больше миллиона за два года. Поэтому пришедшего за бесплатным тестом ведут так же, как пришедшего за Премиумом.</p>
   </section>
 
-  <!-- 30 · главный показатель -->
+  <!-- 31 · главный показатель -->
   <section class="slide" data-chap="Работа">
     <div class="rise hold">
       <span class="kicker">Как работаем</span>
@@ -988,7 +1016,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 31 · конверсии -->
+  <!-- 32 · конверсии -->
   <section class="slide dark" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Воронка</span>
@@ -1001,7 +1029,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note">Обе считаются в CRM по каждому менеджеру и за отдел целиком. Свои цифры сезона поставим после первых смен, чтобы сравнивать себя с собой, а не со средним по рынку.</p>
   </section>
 
-  <!-- 32 · первая линия -->
+  <!-- 33 · первая линия -->
   <section class="slide tint" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Первая линия</span>
@@ -1013,7 +1041,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 33 · вторая линия -->
+  <!-- 34 · вторая линия -->
   <section class="slide" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Вторая линия</span>
@@ -1025,7 +1053,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 34 · стандарты 1 -->
+  <!-- 35 · стандарты 1 -->
   <section class="slide tint" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Стандарты</span>
@@ -1038,7 +1066,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 35 · стандарты 2 -->
+  <!-- 36 · стандарты 2 -->
   <section class="slide" data-chap="Работа">
     <div class="rise">
       <span class="kicker">Стандарты</span>
@@ -1051,7 +1079,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 36 · сколько стоит один клиент -->
+  <!-- 37 · сколько стоит один клиент -->
   <section class="slide tint" data-chap="Деньги">
     <div class="rise">
       <span class="kicker">Деньги</span>
@@ -1066,7 +1094,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note">Отсюда правило, которое звучит скучно, но стоит денег: сервис после подписания это не вежливость. Семья, которую бросили сразу после оплаты, второй раз не платит и никого не приводит.</p>
   </section>
 
-  <!-- 37 · деньги: три источника -->
+  <!-- 38 · деньги: три источника -->
   <section class="slide dark" data-chap="Деньги">
     <div class="rise hold">
       <span class="kicker">Деньги</span>
@@ -1079,7 +1107,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 38 · калькулятор -->
+  <!-- 39 · калькулятор -->
   <section class="slide" data-chap="Деньги">
     <div class="rise">
       <span class="kicker">Посчитайте свой месяц</span>
@@ -1152,7 +1180,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 39 · когда приходят деньги -->
+  <!-- 40 · когда приходят деньги -->
   <section class="slide tint" data-chap="Деньги">
     <div class="rise">
       <span class="kicker">Выплата</span>
@@ -1166,7 +1194,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     <p class="note rise">Если семья платит в рассрочку, ваш процент идет <b>частями вслед за ее платежами</b>, а не ждет последнего взноса.</p>
   </section>
 
-  <!-- 40 · кроме денег -->
+  <!-- 41 · кроме денег -->
   <section class="slide dark" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Зачем здесь работать</span>
@@ -1192,7 +1220,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 41 · путь лианы -->
+  <!-- 42 · путь лианы -->
   <section class="slide tint" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Как это выглядит на практике</span>
@@ -1207,7 +1235,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 42 · обучение -->
+  <!-- 43 · обучение -->
   <section class="slide" data-chap="Дальше">
     <div class="rise">
       <span class="kicker">Обучение</span>
@@ -1221,7 +1249,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     </div>
   </section>
 
-  <!-- 43 · что дальше -->
+  <!-- 44 · что дальше -->
   <section class="slide dark" data-chap="Дальше">
     <div class="rise hold">
       <span class="kicker">Что дальше</span>
@@ -1246,7 +1274,7 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   <span class="brand">ИСТСАЙД.РФ</span>
   <span class="chap" id="chap">Компания</span>
   <div class="dots" id="dots" role="tablist" aria-label="Слайды"></div>
-  <span class="count" id="count">1 / 43</span>
+  <span class="count" id="count">1 / 44</span>
   <div class="arrows">
     <button id="full" aria-label="Во весь экран" title="Во весь экран (F)">
       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
@@ -1298,6 +1326,8 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
     // дорога меряется по своей кривой: пока слайд скрыт, длина пути нулевая
     if (slides[i].querySelector('#road')) roadLay();
     countUp(slides[i]);
+    // ролик диагностики крутится только пока его слайд на экране
+    if (slides[i].querySelector('#dgsw')) { dgShow(0); dgPlay(); } else { dgStop(); }
     history.replaceState(null, '', '#' + (i + 1));
   }
   // счет чисел: цифра набирается при входе на слайд, единицы и знаки остаются
@@ -1533,6 +1563,59 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   });
   nxShow(0);
 
+  /* ── путь диагностики: кадры сменяются сами, как ролик ───────────────
+     Просили «прям гифку»: гифка из шести экранов платформы весила бы мегабайты
+     и была бы мыльной. Тут те же кадры webp сменяются по таймеру — картинка
+     резкая, а на встрече можно остановиться на любом шаге и разобрать его. */
+  var DG = [
+    { img: 'img/dg-1.webp', t: 'Анкета из 11 вопросов',
+      d: 'Цель, класс, направление, языки, сроки. Занимает до пяти минут и проходится с телефона.' },
+    { img: 'img/dg-2.webp', t: 'Вопросы простые',
+      d: 'Средний балл, сильные предметы, уровень английского и китайского. Семья отвечает сама, ничего выпытывать не нужно.' },
+    { img: 'img/dg-3.webp', t: 'Система считает профиль',
+      d: 'Ответы сравниваются с требованиями вузов и условиями грантов. Занимает меньше минуты.' },
+    { img: 'img/dg-4.webp', t: 'Профиль разобран',
+      d: 'Средний балл, языки и портфолио в процентах. Сразу видно, что тянет вниз — это и есть материал для разговора.' },
+    { img: 'img/dg-5.webp', t: 'Шансы в цифрах',
+      d: 'Полный грант, частичный, без гранта. Отсюда начинается консультация: не «мы поможем», а конкретные числа.' },
+    { img: 'img/dg-6.webp', t: 'Маршрут до зачисления',
+      d: 'Семь этапов со сроками, от знакомства до переезда. Семья видит весь путь целиком, а не обещание.' }
+  ];
+  var dgsw = document.getElementById('dgsw'), dgIdx = 0, dgTimer = null, dgRaf = null;
+  var dgBar = document.getElementById('dgBar'), DG_STEP = 3200;
+  function dgShow(n) {
+    dgIdx = (n + DG.length) % DG.length;
+    var v = DG[dgIdx], im = document.getElementById('dgImg');
+    im.src = v.img; im.alt = v.t;
+    document.getElementById('dgT').textContent = v.t;
+    document.getElementById('dgD').textContent = v.d;
+    [].forEach.call(dgsw.querySelectorAll('button'), function (b, k) {
+      b.setAttribute('aria-pressed', String(k === dgIdx));
+    });
+  }
+  function dgStop() {
+    clearTimeout(dgTimer); dgTimer = null;
+    cancelAnimationFrame(dgRaf); dgRaf = null;
+    dgBar.parentNode.classList.add('off');
+  }
+  function dgPlay() {
+    dgStop();
+    dgBar.parentNode.classList.remove('off');
+    var t0 = performance.now();
+    (function tick(ts) {
+      var k = Math.min(1, (ts - t0) / DG_STEP);
+      dgBar.style.width = (k * 100) + '%';
+      if (k < 1) dgRaf = requestAnimationFrame(tick);
+    })(t0);
+    dgTimer = setTimeout(function () { dgShow(dgIdx + 1); dgPlay(); }, DG_STEP);
+  }
+  dgsw.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    dgStop();                       // показывают конкретный шаг — ролик больше не крутим
+    dgShow(+b.getAttribute('data-d'));
+  });
+  dgShow(0);
+
   /* ── снимки системы открываются во весь экран ────────────────────────── */
   var lbx = document.getElementById('lbx'), lbxImg = document.getElementById('lbxImg');
   [].forEach.call(document.querySelectorAll('.shots figure img, .pv-pic img'), function (im) {
@@ -1680,6 +1763,8 @@ h2{font-size:clamp(26px,3.6vw,46px); line-height:1.07}
   var start = parseInt((location.hash || '').replace('#', ''), 10);
   if (start > 1 && start <= slides.length) { slides[0].classList.remove('on'); i = start - 1; slides[i].classList.add('on'); }
   draw();
+  // если презентацию открыли сразу на слайде с роликом диагностики
+  if (slides[i].querySelector('#dgsw')) dgPlay(); else dgStop();
 })();
 </script>
 </body>
