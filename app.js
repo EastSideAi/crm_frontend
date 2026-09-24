@@ -55,6 +55,7 @@
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
+    _mkLaunchTimer: null,         // тихое обновление цифр запуска раз в минуту
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -21667,12 +21668,44 @@
   function fetchMkLaunch() {
     api('/admin/api/marketing/launch' + mkLaunchQS()).then(function (r) {
       state._mkLaunch = (r && r.launches && r.launches.length) ? r : 'none';
-      if (state.page === 'marketing') renderView();
+      mkLaunchRedraw();
     }).catch(function (e) {
       if (e.message === '403') return;
       state._mkLaunch = 'none';
-      if (state.page === 'marketing') renderView();
+      mkLaunchRedraw();
     });
+  }
+
+  /* Перерисовка возвращает экран на то же место: обновление идёт само, раз в
+     минуту, и прыжок наверх посреди чтения выглядел бы как поломка. Прокрутка
+     живёт не у окна, а у колонки .main — у документа её вообще нет. */
+  function mkLaunchRedraw() {
+    if (state.page !== 'marketing') return;
+    var box = document.querySelector('.main');
+    var y = box ? box.scrollTop : (window.scrollY || 0);
+    renderView();
+    if (!y) return;
+    var back = document.querySelector('.main');
+    if (back) back.scrollTop = y;
+    else { try { window.scrollTo(0, y); } catch (e) {} }
+  }
+
+  /* В день эфира цифры меняются на глазах, а экран сам себя не обновлял — чтобы
+     увидеть новое, приходилось жать F5 (Вера, 23.09.2026). Раз в минуту тихо
+     перезапрашиваем. Молчим, когда вкладка не на виду (браузер всё равно
+     притормаживает таймеры) и когда поверх открыт список людей: он бы закрылся
+     прямо посреди чтения. */
+  function launchAutoStop() {
+    if (state._mkLaunchTimer) { clearInterval(state._mkLaunchTimer); state._mkLaunchTimer = null; }
+  }
+
+  function launchAutoStart() {
+    launchAutoStop();
+    state._mkLaunchTimer = setInterval(function () {
+      if (state.page !== 'marketing' || state.mkTab !== 'launch') { launchAutoStop(); return; }
+      if (state._lpPeople || document.hidden) return;
+      fetchMkLaunch();
+    }, 60000);
   }
 
   function ladRow(name, small, n, track, right, cls) {
@@ -22461,6 +22494,7 @@
   }
 
   function renderMkLaunch(view) {
+    launchAutoStart();
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
     if (state._mkLaunch === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры запуска — проверь сеть или доступ.</div></div>';
