@@ -22716,9 +22716,9 @@
   var UN_KEY = 'es_unit_traffic_v1';
   var UN_DEF = {
     budget: 300000,   // бюджет на трафик за запуск
-    cpl: 300,         // цена регистрации
-    toDiag: 18,       // % регистраций, дошедших до диагностики
-    conv: 25,         // % диагностик, закрытых в договор
+    cpl: 500,         // цена регистрации
+    toDiag: 8,        // % регистраций, дошедших до диагностики
+    conv: 15,         // % диагностик, закрытых в договор
     check: 349990,    // средний чек: Плюс и Премиум пополам (Павел 24.09.2026)
     share: 20,        // доля продюсеров
     scheme: 'net',    // net — доля с выручки за вычетом трафика; gross — с выручки
@@ -22774,7 +22774,10 @@
       w2: w2, w3: w3,
       cac: first ? Math.round(b / first) : 0,
       diagCost: diags ? Math.round(b / diags) : 0,
-      romi: b ? Math.round((first * check - b) / b * 100) : 0
+      /* «сколько выручки на рубль трафика» вместо процента возврата: процент в
+         несколько сотен выглядит как ошибка, а «рубль трафика дал 8 рублей» читается
+         сразу и не обещает, что это прибыль */
+      x: b ? Math.round((first + w2 + w3) * check / b * 10) / 10 : 0
     };
   }
   function unYear(m) {
@@ -22809,7 +22812,7 @@
         unField('budget', 'Бюджет на трафик, ₽', 'на один запуск', 'min="0" step="10000"') +
         unField('cpl', 'Цена регистрации, ₽', 'сколько стоит один лид') +
         unField('toDiag', 'Регистрация → диагностика, %', 'дошли до встречи', 'min="0" max="100" step="1"') +
-        unField('conv', 'Диагностика → договор, %', '25% это один из четырех', 'min="0" max="100" step="1"') +
+        unField('conv', 'Диагностика → договор, %', 'холодная аудитория закрывается хуже теплой', 'min="0" max="100" step="1"') +
         unField('check', 'Средний чек, ₽', 'цена договора со скидкой', 'min="0" step="1000"') +
         unField('cost', 'Наши расходы на клиента, %', 'себестоимость, проценты продаж, налоги', 'min="0" max="100" step="1"') +
         unField('share', 'Доля продюсеров, %', 'от базы по схеме ниже', 'min="0" max="100" step="1"') +
@@ -22847,7 +22850,8 @@
   function unLadder(r, m) {
     var base = Math.max(r.leads, 1);
     var pct = function (n) { return Math.round(n / base * 100); };
-    return ladRow('Бюджет на трафик', 'деньги, которые продюсеры заводят в рекламу', unRub(r.budget), null, '') +
+    return ladRow('Бюджет на трафик', 'деньги, которые продюсеры заводят в рекламу',
+        fmtMoney(r.budget), null, '<span class="lad-conv num">рублей в рекламу</span>') +
       ladRow('Регистрации', 'по ' + unRub(unNum(m.cpl)) + ' за человека', fmtMoney(r.leads), 100,
         '<span class="lad-conv num">' + unRub(unNum(m.cpl)) + ' за лид</span>') +
       ladRow('Дошли до диагностики', 'встреча с нашим менеджером', fmtMoney(r.diags), pct(r.diags),
@@ -22895,7 +22899,7 @@
       '</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ un-ytbl">' +
         '<thead><tr><th class="po-rl">Запуск</th><th>Трафик</th><th>Договоров</th>' +
-        '<th>Выручка</th><th>Продюсерам</th><th>Компании</th></tr></thead>' +
+        '<th>Выручка</th><th>Продюсерам</th><th>Компании</th><th>Компании всего</th></tr></thead>' +
         '<tbody id="un-ybody"></tbody></table></div>' +
       '<div class="po-note">Год считается по тем же вводным, что и один запуск. ' +
         'Смысл строки за строкой: когорта не заканчивается в день эфира, и работа с ней — ' +
@@ -22963,10 +22967,10 @@
           '<div class="pc-v num" data-unv="all:rev"></div>' +
           '<div class="pc-s num" data-unt="sales"></div></div>' +
         '<div class="pay-cell"><div class="pc-l">Продюсерам</div>' +
-          '<div class="pc-v num" data-unv="all:prod"></div>' +
+          '<div class="pc-v num" data-untop="prod"></div>' +
           '<div class="pc-s num" data-unt="share"></div></div>' +
         '<div class="pay-cell lead"><div class="pc-l">Остается компании</div>' +
-          '<div class="pc-v num" data-unv="all:ours"></div>' +
+          '<div class="pc-v num" data-untop="ours"></div>' +
           '<div class="pc-s num" data-unt="ours"></div></div>' +
       '</div>' +
       '<div class="po-tabs po-econsegs"><div class="dperiod">' +
@@ -22997,6 +23001,8 @@
       put('[data-unv="' + side + ':cost"]', '− ' + unRub(v.cost));
       put('[data-unv="' + side + ':ours"]', unRub(v.ours));
     });
+    put('[data-untop="prod"]', unRub(r.all.prod));
+    put('[data-untop="ours"]', unRub(r.all.ours));
     put('[data-unt="sales"]', fmtMoney(r.all.sales) + ' договоров с дожимом');
     put('[data-unt="share"]', unNum(m.share) + '% ' + (m.scheme === 'gross' ? 'со всей выручки' : 'за вычетом трафика'));
     put('[data-unt="ours"]', 'после трафика, доли и расходов');
@@ -23007,7 +23013,7 @@
       met.innerHTML = [
         ['Договор стоит по трафику', unRub(r.cac)],
         ['Диагностика стоит', unRub(r.diagCost)],
-        ['Возврат на трафик', (r.romi > 0 ? '+' : '') + r.romi + '%'],
+        ['Рубль трафика дал выручки', String(r.x).replace('.', ',') + ' ₽'],
         ['Трафик в выручке', (r.all.rev ? Math.round(r.budget / r.all.rev * 100) : 0) + '%']
       ].map(function (x) {
         return '<div class="un-m"><div class="un-ml">' + esc(x[0]) + '</div>' +
@@ -23017,20 +23023,24 @@
     var yb = view.querySelector('#un-ybody');
     if (yb) {
       var y = unYear(m);
+      var run = 0;
       yb.innerHTML = y.rows.map(function (row) {
+        run += row.a.ours;   // накопительно: ради этой колонки и затевается годовой план
         return '<tr><td class="po-rl">Запуск ' + row.n + '</td>' +
           '<td class="num">' + unRub(row.budget) + '</td>' +
           '<td class="num">' + fmtMoney(row.a.sales) + '</td>' +
           '<td class="num">' + unRub(row.a.rev) + '</td>' +
           '<td class="num">' + unRub(row.a.prod) + '</td>' +
-          '<td class="num">' + unRub(row.a.ours) + '</td></tr>';
+          '<td class="num">' + unRub(row.a.ours) + '</td>' +
+          '<td class="num un-cum">' + unRub(run) + '</td></tr>';
       }).join('') +
         '<tr class="po-r-big"><td class="po-rl">За год</td>' +
         '<td class="num">' + unRub(y.t.budget) + '</td>' +
         '<td class="num">' + fmtMoney(y.t.sales) + '</td>' +
         '<td class="num">' + unRub(y.t.rev) + '</td>' +
         '<td class="num">' + unRub(y.t.prod) + '</td>' +
-        '<td class="num">' + unRub(y.t.ours) + '</td></tr>';
+        '<td class="num">' + unRub(y.t.ours) + '</td>' +
+        '<td class="num un-cum">' + unRub(y.t.ours) + '</td></tr>';
     }
     var deal = view.querySelector('#un-deal');
     if (deal) deal.innerHTML = unDealText(r, m);

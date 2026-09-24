@@ -9902,3 +9902,5 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .un-di { grid-template-columns: 1fr; gap: 4px; }
   .un-row { align-items: flex-start; flex-direction: column; gap: 8px; }
 }
+/* накопительный столбец года: он и есть довод «работаем вдолгую», поэтому выделен */
+.un-cum { color: var(--blue-d); font-weight: 650; }
