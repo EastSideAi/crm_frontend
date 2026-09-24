@@ -14588,15 +14588,36 @@
     // читалась мусором (арт-директор 07.09.2026).
     return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) + '</span>';
   }
-  function repRow(r) {
+  // Чип сверки согласованного листа и назначенных заданий. «Сходится» — задания
+  // раскладывают ровно согласованную сумму; расхождение — их надо доразложить или, наоборот,
+  // перебор. Основанием выплаты остается задание, это только контроль (созвон 24.09.2026).
+  function repRec(r) {
+    if (!r.agreed_set) return '';
+    if (r.reconcile === 'match') return '<span class="rep-rec ok">сходится</span>';
+    var abs = repMoney(Math.abs(r.diff));
+    // diff = назначено − согласовано: меньше нуля — заданий не хватает на сумму листа.
+    var word = r.diff < 0 ? 'не хватает ' : 'перебор ';
+    return '<span class="rep-rec off">' + word + abs + '</span>';
+  }
+  function repRow(r, monthly) {
     // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
     // у имени, а не отдельной колонкой, чтобы таблица не разрослась.
     var due = r.due > 0
       ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
     var flag = r.blocked ? '<span class="rep-block">заблокирован</span>' : '';
-    return '<div class="trow rep-grid rep-row" data-repc="' + esc(r.contractor_id) + '">' +
+    // Согласованная сумма расчетного листа — только при выбранном месяце: за все время
+    // ее нет. Ячейка кликается и открывает согласование, поэтому это кнопка, а не строка.
+    var agreed = monthly
+      ? '<button class="rep-num rep-agree' + (r.agreed_set ? '' : ' unset') +
+          '" data-l="Согласовано" data-repagree="' + esc(r.contractor_id) + '">' +
+          (r.agreed_set ? repMoney(r.agreed) : 'задать') + '</button>'
+      : '';
+    return '<div class="trow rep-grid' + (monthly ? ' rep-grid6' : '') +
+        ' rep-row" data-repc="' + esc(r.contractor_id) + '">' +
       '<span class="rep-name">' + esc(r.full_name) +
-        (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') + flag + due + '</span>' +
+        (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') +
+        flag + repRec(r) + due + '</span>' +
+      agreed +
       repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
       '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
         repMoney(r.left) + '</span>' +
@@ -14611,6 +14632,7 @@
   function renderCzReport(view) {
     if (REP.data === null) { view.innerHTML = dashSkeleton(); repLoad(); return; }
     var d = REP.data; var t = d.total || {};
+    var monthly = !!REP.month;
     var rows = (d.rows || []).slice().sort(function (a, b) { return b.plan - a.plan; });
     var chips = repMonths().map(function (m) {
       return '<button class="qchip' + (REP.month === m[0] ? ' on' : '') +
@@ -14620,9 +14642,16 @@
       ? '<div class="empty">' + esc(REP.err) + '</div>'
       : (!rows.length
         ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
-        : rows.map(repRow).join(''));
+        : rows.map(function (r) { return repRow(r, monthly); }).join(''));
+    // Согласовано — контрольная сумма расчетного листа за месяц; за все время ее нет,
+    // поэтому и тайл, и колонка появляются только с выбранным месяцем.
+    var agreedTile = monthly ? repTile('Согласовано', t.agreed) : '';
+    var hint = monthly
+      ? 'Согласовано — сумма расчетного листа за месяц. Назначено — задания, которые ее раскладывают: они должны с ней сходиться. Нажмите на «Согласовано», чтобы задать сумму, на строку — открыть исполнителя.'
+      : 'План — назначенная работа, факт — подписанные акты и проведенные выплаты. Выберите месяц, чтобы согласовать суммы расчетного листа. Нажмите на строку, чтобы открыть карточку исполнителя.';
     view.innerHTML =
       '<div class="mo-stats">' +
+        agreedTile +
         repTile('Назначено', t.plan) +
         repTile('Принято актами', t.acts) +
         repTile('Выплачено', t.paid) +
@@ -14630,11 +14659,12 @@
       '</div>' +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
-          '<span class="list-hint">План — назначенная работа, факт — подписанные акты и проведенные выплаты. Нажмите на строку, чтобы открыть карточку исполнителя.</span>' +
+          '<span class="list-hint">' + hint + '</span>' +
         '</div>' +
         '<div class="list-quick">' + chips + '</div>' +
-        '<div class="trow rep-grid thead">' +
+        '<div class="trow rep-grid' + (monthly ? ' rep-grid6' : '') + ' thead">' +
           '<span class="th">Исполнитель</span>' +
+          (monthly ? '<span class="th r">Согласовано</span>' : '') +
           '<span class="th r">Назначено</span><span class="th r">Акты</span>' +
           '<span class="th r">Выплачено</span><span class="th r">Остаток</span>' +
         '</div>' + body +
@@ -14644,9 +14674,44 @@
         REP.month = b.getAttribute('data-repm'); REP.data = null; renderView();
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-repc]'), function (r) {
-      r.addEventListener('click', function () { openCz(r.getAttribute('data-repc')); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repagree]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var cid = b.getAttribute('data-repagree');
+        openRepAgree(rows.filter(function (x) { return x.contractor_id === cid; })[0]);
+      });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repc]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('button')) return;
+        openCz(r.getAttribute('data-repc'));
+      });
+    });
+  }
+  /* Согласование суммы расчетного листа за месяц. Это ориентир, не платеж: деньги двигает
+     подписанный акт и реестр выплат. Пустое поле снимает согласование. */
+  function openRepAgree(r) {
+    if (!r || !REP.month) return;
+    var mon = (repMonths().filter(function (m) { return m[0] === REP.month; })[0] || [])[1] || REP.month;
+    openSheet('Согласовать сумму',
+      esc(r.full_name) + ' · ' + mon + '. Сумма к выплате за месяц по расчетному листу. ' +
+        'Задания раскладывают ее на услуги, и они должны с ней сходиться. Деньги проводятся ' +
+        'по подписанному акту, а не отсюда.', [
+      ['amount', 'line', 'Сумма, ₽', r.agreed_set ? String(Math.round(r.agreed)) : ''],
+      ['note', 'text', 'Заметка (необязательно)', ''],
+    ], function (vals, close) {
+      var raw = (vals.amount || '').replace(/\s/g, '').replace(',', '.');
+      if (raw && !/^\d+(\.\d+)?$/.test(raw)) return 'Сумма — только число';
+      czSend('/admin/api/contractor-reports/settlement', 'PUT', {
+        contractor_id: r.contractor_id, period: REP.month,
+        amount: raw === '' ? null : Number(raw),
+        note: vals.note.trim() || undefined,
+      }).then(function () {
+        close(); REP.data = null; renderView();
+        showToast(raw === '' ? 'Согласование снято' : 'Сумма согласована');
+      }).catch(function (e) { el('sh-err').textContent = e.message; });
+      return '';
+    }, null, 'Расчетный лист', 'Согласовать');
   }
 
   function renderCzPay(view) {
