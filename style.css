@@ -4041,6 +4041,10 @@ button.tr-crumb:hover { color: var(--blue); }
 .list-body > .tsk-band:first-child { border-top: 0; padding-top: 10px; }
 .tsk-band-t { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--ink-2); }
+/* Имя человека в полосе секции («Застряло» группирует просрочку по людям).
+   Капс и разрядка — для названий категорий («НИЧЬИ»), а имя в капсе читается
+   как окрик, и разговор про просрочку так начинать не стоит. */
+.tsk-band-t.name { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--ink-1); }
 .tsk-band-h { font-size: 11.5px; color: var(--ink-3); }
 .tsk-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
 
