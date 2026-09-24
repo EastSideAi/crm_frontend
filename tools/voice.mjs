@@ -16,7 +16,7 @@
 
    Движок — edge-tts (нейронные голоса Microsoft, ключа не требуют):
    pip install --user edge-tts, бинарь ложится в ~/.local/bin/edge-tts. */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import { dirname, join } from 'path';
@@ -142,6 +142,16 @@ const TTS_TIMEOUT_MS = 90000;             // зависший поток не д
 
 function sleep(sec) { execFileSync('sleep', [String(sec)]); }
 
+// ffmpeg в песочнице есть не всегда (21.09.2026 его снесли вместе с образом), а
+// edge-tts и без него отдает готовый mp3 — просто на 48 кбит/с вместо наших 32.
+// Без этой проверки прогон падал на каждом экране и уходил в отступление по
+// 20/45/90/180 секунд, то есть выглядел как «сервис не отдает звук», хотя звук
+// приходил. Нет ffmpeg — берем поток как есть и говорим об этом один раз.
+const HAS_FFMPEG = (() => {
+  try { execFileSync('ffmpeg', ['-version'], { stdio: 'pipe' }); return true; }
+  catch { console.log('ffmpeg не найден: складываю звук как есть, 48 кбит/с вместо 32'); return false; }
+})();
+
 function say(text, path) {
   for (let i = 0; ; i++) {
     try {
@@ -149,9 +159,13 @@ function say(text, path) {
         '--text', text, '--write-media', path + '.raw'], { stdio: 'pipe', timeout: TTS_TIMEOUT_MS });
       // Движок отдает 48 кбит/с. Речи хватает 32: на курс это минус треть
       // веса и репозитория, и того, что грузит тьютор с телефона.
-      execFileSync('ffmpeg', ['-v', 'quiet', '-y', '-threads', '2', '-i', path + '.raw',
-        '-ac', '1', '-ar', '24000', '-b:a', '32k', path], { stdio: 'pipe' });
-      unlinkSync(path + '.raw');
+      if (HAS_FFMPEG) {
+        execFileSync('ffmpeg', ['-v', 'quiet', '-y', '-threads', '2', '-i', path + '.raw',
+          '-ac', '1', '-ar', '24000', '-b:a', '32k', path], { stdio: 'pipe' });
+        unlinkSync(path + '.raw');
+      } else {
+        renameSync(path + '.raw', path);
+      }
       sleep(PAUSE_SEC);
       return true;
     } catch (e) {
