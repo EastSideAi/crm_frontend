@@ -53,9 +53,14 @@ a { color: inherit; text-decoration: none; }
 /* С ЧЕТВЕРТЫМ пространством («Моя работа») четыре слова в одну строку уже не влезают в
    колонку 248px, поэтому строк может быть две: перенос честнее сжатого до нечитаемости
    шрифта и вечного «Самозан…». */
-.spaces { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; margin: 0 0 16px;
-  border-radius: 11px; background: var(--fill); }
-.spaces button { flex: 0 1 auto; min-width: 0; padding: 7px 7px; border-radius: 8px; text-align: center;
+/* Перенос по содержимому давал рваную плашку: «Клиенты» и «Самозанятые» в первой
+   строке, «Финансы» огрызком во второй (Павел 24.09.2026, три пространства). Сетка в
+   две колонки держит кнопки одного размера, а нечетная последняя занимает строку
+   целиком — плашка остается плашкой при двух, трех и четырех пространствах. */
+.spaces { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px;
+  padding: 4px; margin: 0 0 16px; border-radius: 11px; background: var(--fill); }
+.spaces button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.spaces button { min-width: 0; padding: 7px 6px; border-radius: 8px; text-align: center;
   font: 600 11px 'Manrope', sans-serif; color: var(--ink-3); transition: .15s;
   letter-spacing: -.01em; line-height: 1.25; white-space: nowrap; position: relative; }
 .spaces button:hover { color: var(--ink); }
@@ -9872,3 +9877,78 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .csw-acts { flex-direction: column; }
   .csw-acts .bp { width: 100%; }
 }
+
+/* ── Декомпозиция холодного трафика (Маркетинг → Декомпозиция) ──────────────
+   Экран-переговорка: слева вводные, ниже воронка и деньги когорты. Верстается
+   теми же кирпичами, что экономика портала (.po-tbl, .pay-board, .lad-row), свои
+   классы только там, где нужна сетка полей и плитки метрик. */
+/* вводные разложены группами: девять полей одной лентой на ноутбуке ужимались до
+   178px, подписи уезжали в две строки и ряд переставал читаться как ряд */
+/* ровно две колонки: auto-fit на мониторе от 1700px разворачивал группы в 3+1 и
+   возвращал тот самый одинокий ряд, ради которого раскладку и переделывали */
+.un-groups { display: grid; gap: 26px 30px; margin-top: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1120px) { .un-groups { grid-template-columns: 1fr; } }
+.un-grp { min-width: 0; }
+.un-gt { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 10px; }
+.un-form { display: grid; gap: 12px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); align-items: start; }
+.un-form2 { margin-top: 16px; }
+.un-form2 { grid-template-columns: repeat(auto-fit, minmax(200px, 240px)); }
+/* подпись под полем держит одну строку высоты, иначе соседние поля в группе
+   встают на разной высоте и сетка выглядит сломанной */
+.un-h { min-height: 16px; }
+.un-f { min-width: 0; }
+.un-h { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
+.un-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.un-lbl { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
+/* доля продюсеров стоит в одной строке со схемой дележа: это одна мысль, и в сетке
+   вводных она оставляла бы дыру рядом с соседней группой */
+.un-inp { width: 74px; text-align: center; }
+/* второй клик по «Сбросить» подтверждает: цвет предупреждает, что дальше стирание */
+.bp.ghost.warn { color: var(--red-ink); border-color: var(--red-soft); background: var(--red-soft); }
+.un-share { margin-top: 18px; }
+.un-seg { margin: 0; }
+.un-metrics { display: grid; gap: 10px; margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.un-m { background: var(--fill); border-radius: 12px; padding: 12px 14px; }
+.un-ml { font-size: 11.5px; color: var(--ink-2); }
+.un-mv { font-size: 17px; font-weight: 700; letter-spacing: -.02em; margin-top: 5px; }
+/* строка «Запуск N» в годовой таблице уже, чем статья в экономике: в ней два слова */
+.un-ytbl .po-rl { width: 128px; }
+.un-deal { display: grid; gap: 2px; margin-top: 4px; }
+.un-di { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 16px;
+  padding: 13px 0; border-top: 1px solid var(--line); }
+.un-di:first-child { border-top: 0; }
+.un-dt { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.un-dd { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+@media (max-width: 720px) {
+  .un-di { grid-template-columns: 1fr; gap: 4px; }
+  .un-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+  /* на телефоне два поля в группе ужимаются до 150px, и длинная подпись уходит в
+     две строки только у одного из них: ряд снова «пляшет». Одна колонка честнее */
+  .un-form { grid-template-columns: 1fr; }
+  /* переключатели шире экрана: даем им уехать вбок, как тарифам в портале, а не
+     ломаем набор на две строки */
+  .un-seg { max-width: 100%; overflow-x: auto; }
+  .un-seg::-webkit-scrollbar { height: 0; }
+  .un-seg button { flex: none; }
+  .un-share .un-inp { width: 88px; }
+}
+/* накопительный столбец года: он и есть довод «работаем вдолгую», поэтому выделен */
+.un-cum { color: var(--blue-d); font-weight: 650; }
+/* откуда взялся процент расходов: строка стоит сразу под полями, чтобы на встрече
+   не пришлось объяснять голосом, что это цифра из экономики, а не прикидка */
+/* мера строки: на широком мониторе объяснение растягивалось на 1250px, и глазу
+   было некуда возвращаться в конце строки */
+.un-costnote { padding: 12px 14px; border-radius: 12px; background: var(--fill);
+  margin-top: 18px; max-width: 880px; }
+.un-groups ~ .po-note, .un-wnote { max-width: 880px; }
+/* у строки без шкалы серый рельс читается как «ноль» рядом с суммой */
+.lad-row.lad-norail .lad-track { background: none; }
+.un-cnt { font-size: 13px; font-weight: 650; color: var(--ink); }
+.un-cns { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; margin-top: 5px; }
+.un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
+  color: var(--blue); cursor: pointer; }
+.un-costnote .lnk:hover { text-decoration: underline; }
