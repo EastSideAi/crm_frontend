@@ -22,7 +22,24 @@
      (Риана, 21.08.2026). Поэтому на отказ соединения — не на ответ сервера с ошибкой,
      а именно на отказ — пробуем второй адрес и, если он ответил, запоминаем его для
      этого устройства. Ручной перенастройки от человека это не требует. */
+  /* Токен сотрудника уходит ЗАГОЛОВКОМ, а не в адресе. Раньше он ехал параметром
+     k= в каждом запросе и целиком оседал в логах сервера: у кого доступ к логам, у
+     того и ключ от CRM (находка 24.09.2026). Подставляем здесь, в единственной двери
+     наружу, — тогда ни один вызов не может забыть. Бэкенд принимает оба способа,
+     пока живы открытые вкладки со старой версией. */
+  function withToken(opts) {
+    var key = getKey();
+    if (!key) return opts;
+    var out = {};
+    for (var p in (opts || {})) if (Object.prototype.hasOwnProperty.call(opts, p)) out[p] = opts[p];
+    var h = {};
+    for (var q in (out.headers || {})) if (Object.prototype.hasOwnProperty.call(out.headers, q)) h[q] = out.headers[q];
+    if (!h['X-CRM-Token']) h['X-CRM-Token'] = key;
+    out.headers = h;
+    return out;
+  }
   function xfetch(path, opts) {
+    opts = withToken(opts);
     return fetch(API + path, opts).catch(function (err) {
       var alt = API === API_RU ? API_INT : API_RU;
       if (window.EASTSIDE_API_BASE || alt === API) throw err;
@@ -55,6 +72,7 @@
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
+    _mkLaunchTimer: null,         // тихое обновление цифр запуска раз в минуту
     finPeriod: '', finance: null, finLoading: false,
     dialogs: {}, dialogAi: {}, dialogSeen: {}, inboxCh: '',
     inboxMode: 'bot',   // 'bot' — переписки из бота, 'threads' — обсуждения по задачам (одна страница, тумблер сверху)
@@ -93,6 +111,8 @@
     myweek: null, teamWeek: null, weekShift: 0, teamWho: null,
     // фокус недели: цели, у которых есть шаги в этой неделе (лист руководителя)
     focus: null,
+    // застрявшее: просроченное и ничье (лист руководителя, см. renderStuck)
+    stuck: null,
     // задачи по ученику для его карточки: { session_id: [задачи] | 'none' }
     cardTasks: {},
     cardCalls: {},
@@ -643,8 +663,7 @@
   /* ── api ──────────────────────────────────────────────── */
   function api(path, opts) {
     opts = opts || {};
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), opts).then(function (r) {
+    return xfetch(path, opts).then(function (r) {
       /* 403 бывает двух видов, и путать их нельзя: «токен не годится» — это выход
          на экран входа, а «этой роли сюда нельзя» (detail «no access: ...») — просто
          отказ в действии. Раньше второй случай стирал ключ и выбрасывал человека из
@@ -2185,6 +2204,10 @@
     // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
     // одного человека, а этот вопрос про всю компанию (и cap другой).
     { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
+    // «Застряло» — второй управленческий взгляд, обратный фокусу: не «куда целимся»,
+    // а «что гниет». Отдельным пунктом, а не блоком в фокусе: на одном экране два
+    // разных вопроса делят внимание, и проигрывают оба.
+    { id: 'stuck', label: 'Застряло', icon: 'alert', cap: 'tasks_all' },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
@@ -2812,6 +2835,19 @@
         '<div class="verdict"><span class="vspark">' + ic('target', 13) + '</span><span>' + fphr + '</span></div></div>' +
         wkNav(fw ? fw.label : '');
     }
+    if (state.page === 'stuck') {
+      var sk = state.stuck && state.stuck !== 'none' ? state.stuck.tasks || [] : null;
+      var skn = sk ? sk.filter(function (t) { return !t.assignee_id; }).length : 0;
+      var skl = sk ? sk.length - skn : 0;
+      var sphr = !sk ? 'Собираю…'
+        : !sk.length ? 'Ничего не застряло: у всех задач есть исполнитель и срок не вышел.'
+        : skn ? '<b>' + skn + ' ' + plural(skn, 'задача лежит', 'задачи лежат', 'задач лежат') +
+                ' без исполнителя.</b> Начни с них: просроченную хотя бы кто-то ведет, ничью — никто.'
+        : '<b>' + skl + ' ' + plural(skl, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
+          '.</b> Ниже по людям — с кем разговаривать.';
+      html = '<div><h2>Застряло</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('alert', 13) + '</span><span>' + sphr + '</span></div></div>';
+    }
     if (state.page === 'prospects') {
       var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
       html = '<div><h2>Лиды</h2>' +
@@ -3276,6 +3312,7 @@
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
     else if (state.page === 'focus') renderFocus(view);
+    else if (state.page === 'stuck') renderStuck(view);
     else if (state.page === 'news') renderNews(view);
     else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
@@ -5287,6 +5324,11 @@
     }).catch(function () { AR_TUTORS = []; if (cb) cb(); });
   }
 
+  /* Единственное место, где ключ остается в адресе: это href, по которому браузер
+     идет сам (скачать файл, открыть в новой вкладке), а свой заголовок к такому
+     переходу не приложить. В логах сервера ключ при этом замаскирован фильтром
+     _MaskSecrets. Если понадобится убрать и отсюда — нужна одноразовая ссылка на
+     скачивание, это отдельная задача. */
   function docHref(docId) {
     return API + '/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey());
   }
@@ -5559,8 +5601,7 @@
   /* Запрос с человеческим текстом ошибки. Бэкенд отвечает {"detail": "..."} — там
      фраза для оператора («Этот ИНН уже заведен: Иванов»), а не код; показываем ее. */
   function czSend(path, method, body) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -5690,7 +5731,7 @@
     var row = btn.closest ? btn.closest('.trow') : null;
     if (row) row.classList.add('done');
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'done' }, function () {
-      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       setTimeout(renderView, 420);
     }, function () {
@@ -5708,7 +5749,7 @@
     var id = +b.getAttribute('data-submit');
     b.disabled = true;
     apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: 'review' }, function () {
-      state.tasks = null; state.myweek = null; state.myboard = null; state.teamWeek = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.teamWeek = null; state.mymonth = null;
       loadTaskSummary();
       showToast('Сдана на проверку');
       renderView();
@@ -5720,7 +5761,7 @@
     btn.disabled = true;
     apiSend('/admin/api/tasks/' + id, 'PATCH',
             { due_at: new Date(isoDay(0) + 'T23:59:59').toISOString() }, function () {
-      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null;
       renderView();
       showToast('Перенес на сегодня');
     }, function () { btn.disabled = false; showToast('Не перенеслось — проверь сеть'); });
@@ -5985,7 +6026,7 @@
   /* Сбросить все, что зависит от выбранной недели. */
   function wkReload() {
     state.myweek = null; state.myboard = null; state.teamWeek = null; state.tasks = null; state.mymonth = null; state.pulse = null;
-    state.focus = null;
+    state.focus = null; state.stuck = null;
     loadTaskSummary();
     renderHead(); renderView();
   }
@@ -6150,6 +6191,115 @@
     });
   }
 
+  /* ── Застряло: просроченное и ничье ─────────────────────────────────────────
+     Заведено 24.09.2026 по просьбе Веры после разбора задач прода: 550 задач
+     ждали, 249 из них просрочены, а 183 не назначены никому вообще — в общем
+     списке это не видно.
+
+     Зеркало «Фокуса недели»: тот отвечает на «куда целимся», этот — на «что
+     гниет». Два блока, и порядок в них не случайный. Сначала ничьи: у
+     просроченной есть хотя бы человек, который о ней знает, а у ничьей нет
+     никого — ее не двигает никто и она не всплывет ни на чьем экране. Дальше
+     просроченные, сгруппированные по людям: разговор про просрочку — это
+     разговор с человеком, а не со списком из двухсот строк. */
+  function loadStuck(cb) {
+    state.tasksLoading = true;
+    api('/admin/api/tasks?view=stuck&scope=all&limit=500').then(function (r) {
+      state.tasksLoading = false;
+      state.stuck = { tasks: (r && r.tasks) || [] };
+      state.taskMe = r ? r.me : state.taskMe;
+      if (cb) cb(); else if (state.page === 'stuck') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.tasksLoading = false;
+      state.stuck = 'none';
+      if (state.page === 'stuck') renderView();
+    });
+  }
+
+  /* На сколько дней просрочена. Отрицательных не бывает: сюда приходит только
+     просроченное, но день считаем от полуночи, чтобы «вчера» было 1, а не 0.9. */
+  function stuckDays(t) {
+    if (!t.due_at) return 0;
+    var d = new Date(t.due_at), now = new Date();
+    return Math.max(0, Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000));
+  }
+
+  function renderStuck(view) {
+    if (state.stuck === null) { view.innerHTML = dashSkeleton(); loadStuck(); return; }
+    if (state.stuck === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить. Обнови страницу.</div></div>';
+      return;
+    }
+    var all = state.stuck.tasks || [];
+    var nobody = all.filter(function (t) { return !t.assignee_id; });
+    var late = all.filter(function (t) { return t.assignee_id && t.overdue; });
+    var worst = late.reduce(function (m, t) { return Math.max(m, stuckDays(t)); }, 0);
+
+    var bar = statBar([
+      { label: 'Без исполнителя', value: nobody.length, sub: nobody.length ? 'не делает никто' : 'все разобраны' },
+      { label: 'Просрочено', value: late.length, sub: late.length ? 'срок вышел' : 'просрочки нет' },
+      { label: 'Людей с просрочкой', value: (function () {
+          var seen = {}, n = 0;
+          late.forEach(function (t) { if (!seen[t.assignee_id]) { seen[t.assignee_id] = 1; n++; } });
+          return n;
+        }()), sub: 'есть о чем поговорить' },
+      { label: 'Дольше всех', value: worst, sub: worst ? plural(worst, 'день', 'дня', 'дней') + ' без движения' : '' },
+    ]);
+
+    /* who показываем только у ничьих: там он и есть сообщение («без исполнителя»).
+       В блоке человека имя стоит в заголовке, и повторять его в каждой строке
+       значит трижды сказать одно и то же. */
+    var rows = function (list, who) {
+      return '<div class="fw-rows">' + list.map(function (t) {
+        return dyRow(t, { who: !!who, noWho: !who, boss: true, due: true });
+      }).join('') + '</div>';
+    };
+
+    var nobodyBlock = nobody.length
+      ? '<div class="card fw">' +
+          '<div class="tsk-band"><span class="tsk-band-t">Ничьи</span>' +
+            '<span class="tsk-band-h">задачу завели и не назначили — ее не делает никто</span>' +
+            '<span class="tsk-band-n num">' + nobody.length + '</span></div>' +
+          rows(nobody.slice().sort(function (a, b) {
+            return (a.due_at || '9999').localeCompare(b.due_at || '9999');
+          }), true) +
+        '</div>'
+      : '';
+
+    var byWho = {};
+    late.forEach(function (t) { (byWho[t.assignee_id] = byWho[t.assignee_id] || []).push(t); });
+    var people = Object.keys(byWho).map(function (id) {
+      return { name: (byWho[id][0] || {}).assignee_name || 'Без имени', list: byWho[id] };
+    }).sort(function (a, b) { return b.list.length - a.list.length; });
+
+    var lateBlock = people.length
+      ? people.map(function (p) {
+          var deep = p.list.reduce(function (m, t) { return Math.max(m, stuckDays(t)); }, 0);
+          return '<div class="card fw">' +
+            '<div class="tsk-band"><span class="tsk-band-t name">' + esc(p.name) + '</span>' +
+              '<span class="tsk-band-h">' + (deep ? 'самая старая ждет ' + deep + ' ' +
+                plural(deep, 'день', 'дня', 'дней') : 'срок вышел сегодня') + '</span>' +
+              '<span class="tsk-band-n num">' + p.list.length + '</span></div>' +
+            rows(p.list.slice().sort(function (a, b) {
+              return (a.due_at || '').localeCompare(b.due_at || '');
+            })) +
+          '</div>';
+        }).join('')
+      : '';
+
+    view.innerHTML = bar + nobodyBlock + lateBlock +
+      (all.length ? '' : '<div class="card"><div class="empty">Ничего не застряло: ' +
+        'у всех задач есть исполнитель и срок не вышел.</div></div>');
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
+      row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-goalid')); });
+    });
+  }
+
   /* Строка задачи в неделе. Колонки: задача, день, статус. Исполнителя нет —
      неделя всегда одного человека. Перенос помечен рядом с названием: второй
      перенос подряд — амбер, это «застряла», а не «не успел». */
@@ -6292,7 +6442,9 @@
           dyAv(x.name) + '<b>' + esc(x.name) + '</b></span>';
       }).join('');
     };
-    if (t.assignee_name && (opts.who || opts.accept || t.assignee_id !== me)) {
+    // noWho — там, где имя уже стоит заголовком секции («Застряло» группирует
+    // просрочку по людям): иначе оно повторяется в каждой строке блока.
+    if (t.assignee_name && !opts.noWho && (opts.who || opts.accept || t.assignee_id !== me)) {
       meta.push(names(ex.length ? 'исполнители' : 'исполнитель', [{ name: t.assignee_name }].concat(ex)));
     } else if (t.assignee_id && ex.length) {
       meta.push(names('вместе с', ex));
@@ -8278,7 +8430,7 @@
     list.forEach(function (t) { byId[t.id] = t; });
     var dragging = null;
     var after = function () {
-      state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+      state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null;
       loadTaskSummary();
       renderView();
     };
@@ -9327,7 +9479,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null;
+        state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null;
         state.boardGoal = '';
         saveUi(); renderHead(); renderView();
       });
@@ -10416,7 +10568,7 @@
           var ok = el('tk-eok'); ok.disabled = true;
           apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
             showToast('Сохранено');
-            state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+            state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null;
             api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
             if (state.page === 'tasks') renderView();
           }, function (code, e) {
@@ -10545,7 +10697,7 @@
           wB.parentNode.replaceChild(box, wB);
           var save = function (patch, ok, then) {
             apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
-              state.tasks = null; state.myweek = null; state.myboard = null;
+              state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null;
               showToast(ok);
               if (then) then();
             }, function () { showToast('Не получилось поменять роли'); });
@@ -15118,8 +15270,7 @@
   /* Свой запрос вместо общего api(): первый же ответ тут бывает 409 с человеческой
      фразой («учетка не связана с карточкой»), и показать надо именно ее. */
   function mwGet(path) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch('/admin/api/my/cz' + path + sep + 'k=' + encodeURIComponent(getKey()))
+    return xfetch('/admin/api/my/cz' + path)
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (r.ok) return j;
@@ -20831,8 +20982,7 @@
     });
   }
   function mkRequest(path, method, body) {
-    var sep = path.indexOf('?') === -1 ? '?' : '&';
-    return xfetch(path + sep + 'k=' + encodeURIComponent(getKey()), {
+    return xfetch(path, {
       method: method,
       headers: { 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined,
@@ -21667,12 +21817,44 @@
   function fetchMkLaunch() {
     api('/admin/api/marketing/launch' + mkLaunchQS()).then(function (r) {
       state._mkLaunch = (r && r.launches && r.launches.length) ? r : 'none';
-      if (state.page === 'marketing') renderView();
+      mkLaunchRedraw();
     }).catch(function (e) {
       if (e.message === '403') return;
       state._mkLaunch = 'none';
-      if (state.page === 'marketing') renderView();
+      mkLaunchRedraw();
     });
+  }
+
+  /* Перерисовка возвращает экран на то же место: обновление идёт само, раз в
+     минуту, и прыжок наверх посреди чтения выглядел бы как поломка. Прокрутка
+     живёт не у окна, а у колонки .main — у документа её вообще нет. */
+  function mkLaunchRedraw() {
+    if (state.page !== 'marketing') return;
+    var box = document.querySelector('.main');
+    var y = box ? box.scrollTop : (window.scrollY || 0);
+    renderView();
+    if (!y) return;
+    var back = document.querySelector('.main');
+    if (back) back.scrollTop = y;
+    else { try { window.scrollTo(0, y); } catch (e) {} }
+  }
+
+  /* В день эфира цифры меняются на глазах, а экран сам себя не обновлял — чтобы
+     увидеть новое, приходилось жать F5 (Вера, 23.09.2026). Раз в минуту тихо
+     перезапрашиваем. Молчим, когда вкладка не на виду (браузер всё равно
+     притормаживает таймеры) и когда поверх открыт список людей: он бы закрылся
+     прямо посреди чтения. */
+  function launchAutoStop() {
+    if (state._mkLaunchTimer) { clearInterval(state._mkLaunchTimer); state._mkLaunchTimer = null; }
+  }
+
+  function launchAutoStart() {
+    launchAutoStop();
+    state._mkLaunchTimer = setInterval(function () {
+      if (state.page !== 'marketing' || state.mkTab !== 'launch') { launchAutoStop(); return; }
+      if (state._lpPeople || document.hidden) return;
+      fetchMkLaunch();
+    }, 60000);
   }
 
   function ladRow(name, small, n, track, right, cls) {
@@ -22343,6 +22525,66 @@
         '<div class="s">все зрители страницы эфира' +
         (state._mkLaunchDay ? ' за выбранный вечер' : '') +
         ' · кого не узнали, тому не позвонить, но в зале он был</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>' +
+      launchRecViews(cur);
+  }
+
+  /* Запись смотрят после эфира, и в живых цифрах её быть не должно: запись первого
+     дня открывают в вечер второго, и одной цифрой «смотрели 24 сентября» эти два
+     разных человека слипаются. Считаем по дню ТОГО эфира, чью запись смотрели,
+     поэтому переключатель дней наверху работает и здесь. */
+  function launchRecViews(cur) {
+    var v = cur && cur.recording;
+    if (!v || !v.known || !v.anon) return '';
+    var total = (v.known.viewers || 0) + (v.anon.viewers || 0);
+    var body = total
+      ? [
+          ['viewers', 'Смотрели запись', 'открыли запись и смотрели'],
+          ['watch10', '10 минут и больше', ''],
+          ['watch30', '30 минут и больше', ''],
+          ['watch60', 'Час и больше', 'досмотрели до продающей части'],
+        ].map(function (r) {
+          var known = v.known[r[0]] || 0, anon = v.anon[r[0]] || 0;
+          var sub = 'узнали ' + known + ' · без регистрации ' + anon;
+          return flatRow(r[1], r[2] ? r[2] + ' · ' + sub : sub, known + anon);
+        }).join('')
+      : '<div class="empty">Запись этого вечера пока никто не смотрел.</div>';
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Сколько человек смотрело запись</div>' +
+        '<div class="s">' +
+        (state._mkLaunchDay ? 'запись выбранного вечера' : 'записи обоих вечеров') +
+        ' · живой эфир сюда не входит</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + body + '</div></div>';
+  }
+
+  /* Деньги запуска. Вера 24.09.2026: «тут денег нету, нужна плашка с деньгами —
+     на какую сумму счета и какая сумма оплаты». Участие в интенсиве и продукты
+     держим порознь: 690 рублей за вечер и сопровождение — разные деньги, и в
+     сумме они прячут друг друга. Невыкупленный счёт считаем по цене оффера,
+     оплаченный — по тому, что реально пришло. */
+  function launchMoney(cur) {
+    var pay = cur && cur.payment;
+    if (!pay || pay.invoiced_rub == null || !pay.product) return '';
+    var pr = pay.product;
+    var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0);
+    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0);
+    var wait = Math.max(0, billed - got);
+    var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid);
+    var money = function (n) { return fmtMoney(n) + ' ₽'; };
+    var rows =
+      flatRow('Выставлено счетов',
+        'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0),
+        money(billed)) +
+      flatRow('Оплачено',
+        'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0),
+        money(got)) +
+      flatRow('Ждут оплаты',
+        waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',
+        money(wait));
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Деньги запуска</div>' +
+      '<div class="s">участие в интенсиве и продукты порознь · ' +
+      'счёт без оплаты считаем по цене оффера</div></div></div>' +
       '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
@@ -22461,6 +22703,7 @@
   }
 
   function renderMkLaunch(view) {
+    launchAutoStart();
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
     if (state._mkLaunch === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры запуска — проверь сеть или доступ.</div></div>';
@@ -22469,6 +22712,9 @@
     var all = state._mkLaunch.launches;
     var cur = all[Math.min(state._mkLaunchIdx || 0, all.length - 1)];
     var reg = cur.registrations, pay = cur.payment, ch = cur.channels || {};
+    /* Счета за продукты приходят от бэкенда отдельным блоком; старый ответ без него
+       не должен ронять экран — тогда просто нули. */
+    var prod = pay.product || { invoiced: 0, paid: 0, paid_rub: 0, invoiced_rub: 0 };
     var tg = ch.tg || {};
     var clicksN = (cur.clicks || []).reduce(function (n, c) { return n + c.n; }, 0);
     var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
@@ -22510,13 +22756,22 @@
         reg.free, pct(reg.free, base), conv(pct(reg.free, base) + '% регистраций')) +
       ladRow('Выбрали расширенный', '690 рублей, 12 месяцев доступа',
         reg.vip, pct(reg.vip, base), conv(pct(reg.vip, base) + '% регистраций')) +
-      ladRow('Получили счет на 690', pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
+      ladRow('Получили счет на участие', '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты',
         pay.invoiced, pct(pay.invoiced, base), conv(reg.vip && pay.invoiced >= reg.vip ? 'все, кто выбрал' : pct(pay.invoiced, reg.vip || base) + '% выбравших')) +
-      ladRow('Оплатили 690', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+      ladRow('Оплатили участие', pay.paid_rub ? fmtMoney(pay.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
         pay.paid, pct(pay.paid, base) || 2,
         conv(pct(pay.paid, pay.invoiced || base) + '% со счета') +
           (pay.invoiced - pay.paid > 0 ? '<span class="lad-drop num">− ' + (pay.invoiced - pay.paid) + ' здесь</span>' : ''),
         hasWorst ? 'worst' : '') +
+      /* Продукт — всё, что человек этого запуска купил сверх участия: сопровождение,
+         языковые пакеты. Отдельными ступенями, потому что это другие деньги и
+         другое решение семьи. */
+      ladRow('Получили счет на продукт', 'сопровождение и пакеты занятий',
+        prod.invoiced || '—', prod.invoiced ? pct(prod.invoiced, base) : null,
+        prod.invoiced ? conv(pct(prod.invoiced, reg.total || base) + '% от реги') : convMut('счетов пока нет')) +
+      ladRow('Оплатили продукт', prod.paid_rub ? fmtMoney(prod.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
+        prod.paid || '—', prod.paid ? pct(prod.paid, base) || 2 : null,
+        prod.paid ? conv(pct(prod.paid, prod.invoiced || base) + '% со счета') : convMut('ждем')) +
       ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
         pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
       ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
@@ -22563,10 +22818,12 @@
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
-        { label: 'Счет на 690', value: pay.invoiced,
-          sub: pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney(pay.paid_rub) + ' ₽',
-          sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
+        { label: 'Счет на участие', value: pay.invoiced,
+          sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
+        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' ₽',
+          sub: prod.paid_rub
+            ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
+            : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
         { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
@@ -22576,7 +22833,8 @@
         '<div><div class="t">Путь человека по запуску</div><div class="s">' +
           /* подсказка про клик тут не украшение: без неё поимённый список никто не
              найдёт, а он и есть ответ на «цифру вижу, проверить не могу» */
-          'ступени считают записавшихся на интенсив, кроме теста и канала — там все, ' +
+          'ступени считают записавшихся на интенсив и оставивших контакты в чате эфира, ' +
+          'кроме теста и канала — там все, ' +
           'кто сделал шаг, по всему запуску · ' +
           'нажмите на ступень, чтобы увидеть этих людей поимённо' +
           (state._mkLaunchDay
@@ -22585,6 +22843,7 @@
         '</div></div>' + launchDays(cur) + '</div>' +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
+      launchMoney(cur) +
       launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
@@ -27333,7 +27592,7 @@
      api() отдаёт только код, а причина здесь и есть главное. */
   function delMsg(convId, mid, done) {
     var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
-    xfetch(path + '?k=' + encodeURIComponent(getKey()), { method: 'DELETE' })
+    xfetch(path, { method: 'DELETE' })
       .then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (!r.ok) throw new Error(String((j && j.detail) || 'не удалось убрать сообщение'));
@@ -27371,7 +27630,7 @@
 
   function editMsg(convId, mid, text, done) {
     var path = '/admin/api/bot/conversations/' + convId + '/messages/' + mid;
-    xfetch(path + '?k=' + encodeURIComponent(getKey()), {
+    xfetch(path, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text })
     })
@@ -28742,7 +29001,7 @@
   var RM_DOC_LINK_CACHE = {};
   function resolveDocLink(docId, cb) {
     if (RM_DOC_LINK_CACHE[docId]) { cb(RM_DOC_LINK_CACHE[docId]); return; }
-    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download')
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -28763,7 +29022,7 @@
   function openDoc(docId) {
     var w = window.open('', '_blank');
     if (w) try { w.opener = null; } catch (e) {}
-    xfetch('/admin/api/docs/' + docId + '/download?k=' + encodeURIComponent(getKey()))
+    xfetch('/admin/api/docs/' + docId + '/download')
       .then(function (r) {
         var ct = r.headers.get('content-type') || '';
         if (ct.indexOf('application/json') !== -1) return r.json().then(function (d) { return d.link || null; });
@@ -33984,6 +34243,18 @@
         canceled:  { label: 'отменён', sev: 'rejected' },
       };
       var ordOpen = {};   // какие заказы раскрыты (id → true), переживает перерисовку
+      var noteEdit = {};  // у каких взносов открыто поле комментария (oid:no → true)
+      var saveNote = function (oid, no, note) {
+        apiSend('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/note',
+          'POST', { note: note }, function () {
+            delete noteEdit[oid + ':' + no];
+            showToast('Комментарий сохранён');
+            loadOrders();
+          }, function (code) {
+            if (code === 403) return showToast('Комментарий к взносу правит сотрудник с доступом к финансам');
+            showToast('Не получилось — проверь сеть');
+          });
+      };
       var markInst = function (oid, no, paid) {
         api('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/paid', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -34035,12 +34306,28 @@
             } else if (i.linked) {
               act = '<span class="oi-lock">' + (i.status === 'paid' ? 'оплачен картой' : 'оплата через кассу') + '</span>';
             }
-            return '<div class="oi-row">' +
+            var nk = o.id + ':' + i.no;
+            var noteHtml;
+            if (noteEdit[nk]) {
+              noteHtml = '<div class="oi-note-ed">' +
+                '<input class="oi-note-i" data-nk="' + nk + '" value="' + esc(i.note || '') +
+                  '" placeholder="за что эта сумма или срок" maxlength="200">' +
+                '<button class="oi-mark" data-notesave="' + nk + '">сохранить</button>' +
+                '<button class="oi-mark off" data-notecancel="' + nk + '">отмена</button>' +
+                '</div>';
+            } else if (i.note) {
+              noteHtml = '<div class="oi-note"><span class="oi-note-t">' + esc(i.note) + '</span>' +
+                '<button class="oi-note-b" data-noteedit="' + nk + '">изменить</button></div>';
+            } else {
+              noteHtml = '<div class="oi-note"><button class="oi-note-b add" data-noteedit="' + nk + '">+ комментарий</button></div>';
+            }
+            return '<div class="oi-item">' +
+              '<div class="oi-row">' +
               '<span class="oi-n">взнос ' + i.no + '</span>' +
               '<span class="oi-d">' + d + '</span>' +
               '<span class="oi-a num">' + fmtMoney(i.amount) + ' ₽</span>' +
               '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
-              act + '</div>';
+              act + '</div>' + noteHtml + '</div>';
           }).join('');
           return head + linkBox + '<div class="oi-box">' +
             '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
@@ -34085,11 +34372,44 @@
           });
         });
         // отметка взноса
-        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark'), function (b) {
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark[data-oid]'), function (b) {
           b.addEventListener('click', function (e) {
             e.stopPropagation();
             markInst(b.getAttribute('data-oid'), b.getAttribute('data-no'), b.getAttribute('data-p') === '1');
           });
+        });
+        // комментарий к взносу: открыть поле / отмена / сохранить
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-noteedit]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            noteEdit[b.getAttribute('data-noteedit')] = true; renderOrders(orders);
+          });
+        });
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-notecancel]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            delete noteEdit[b.getAttribute('data-notecancel')]; renderOrders(orders);
+          });
+        });
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-notesave]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var nk = b.getAttribute('data-notesave');
+            var inp = ordList.querySelector('.oi-note-i[data-nk="' + nk + '"]');
+            var parts = nk.split(':');
+            saveNote(parts[0], parts[1], inp ? inp.value : '');
+          });
+        });
+        // Enter в поле комментария = сохранить
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-note-i'), function (inp) {
+          inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              var parts = inp.getAttribute('data-nk').split(':');
+              saveNote(parts[0], parts[1], inp.value);
+            }
+          });
+          inp.addEventListener('click', function (e) { e.stopPropagation(); });
         });
       };
       var loadOrders = function () {
@@ -34401,7 +34721,7 @@
       if (les) body.lessons = les;
       schBtn.disabled = true;
       out.innerHTML = '<div class="field-empty">Выставляю счет…</div>';
-      xfetch('/api/school/invoices/link?k=' + encodeURIComponent(getKey()), {
+      xfetch('/api/school/invoices/link', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; });
@@ -35746,8 +36066,10 @@
   }
   function boot() {
     if (!getKey()) { renderLogin(); return; }
-    // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет)
-    xfetch('/admin/api/me?k=' + encodeURIComponent(getKey())).then(function (r) {
+    // Резолвим роль по ключу/токену (?k= из телеграм-ссылки тоже сюда попадет:
+    // getKey() снимает его с адреса и кладет в localStorage, а дальше он ездит
+    // заголовком X-CRM-Token — см. xfetch)
+    xfetch('/admin/api/me').then(function (r) {
       if (!r.ok) throw new Error(String(r.status));
       return r.json();
     }).then(function (me) {
