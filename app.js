@@ -22621,7 +22621,13 @@
           sub: pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
         { label: 'В закрытом канале', value: tg.members || 0,
           sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
-        { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
+        /* Где мы относительно эфира, считает сервер (поле stage): у интенсива два
+           вечера и час начала, а команда сидит в разных поясах — по часам браузера
+           у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
+           ответ без stage приедет с непромоученного бэкенда. */
+        (cur.stage
+          ? { label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub }
+          : { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') }),
       ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
