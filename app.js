@@ -34243,6 +34243,18 @@
         canceled:  { label: 'отменён', sev: 'rejected' },
       };
       var ordOpen = {};   // какие заказы раскрыты (id → true), переживает перерисовку
+      var noteEdit = {};  // у каких взносов открыто поле комментария (oid:no → true)
+      var saveNote = function (oid, no, note) {
+        apiSend('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/note',
+          'POST', { note: note }, function () {
+            delete noteEdit[oid + ':' + no];
+            showToast('Комментарий сохранён');
+            loadOrders();
+          }, function (code) {
+            if (code === 403) return showToast('Комментарий к взносу правит сотрудник с доступом к финансам');
+            showToast('Не получилось — проверь сеть');
+          });
+      };
       var markInst = function (oid, no, paid) {
         api('/admin/api/leads/' + id + '/orders/' + oid + '/installments/' + no + '/paid', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -34294,12 +34306,28 @@
             } else if (i.linked) {
               act = '<span class="oi-lock">' + (i.status === 'paid' ? 'оплачен картой' : 'оплата через кассу') + '</span>';
             }
-            return '<div class="oi-row">' +
+            var nk = o.id + ':' + i.no;
+            var noteHtml;
+            if (noteEdit[nk]) {
+              noteHtml = '<div class="oi-note-ed">' +
+                '<input class="oi-note-i" data-nk="' + nk + '" value="' + esc(i.note || '') +
+                  '" placeholder="за что эта сумма или срок" maxlength="200">' +
+                '<button class="oi-mark" data-notesave="' + nk + '">сохранить</button>' +
+                '<button class="oi-mark off" data-notecancel="' + nk + '">отмена</button>' +
+                '</div>';
+            } else if (i.note) {
+              noteHtml = '<div class="oi-note"><span class="oi-note-t">' + esc(i.note) + '</span>' +
+                '<button class="oi-note-b" data-noteedit="' + nk + '">изменить</button></div>';
+            } else {
+              noteHtml = '<div class="oi-note"><button class="oi-note-b add" data-noteedit="' + nk + '">+ комментарий</button></div>';
+            }
+            return '<div class="oi-item">' +
+              '<div class="oi-row">' +
               '<span class="oi-n">взнос ' + i.no + '</span>' +
               '<span class="oi-d">' + d + '</span>' +
               '<span class="oi-a num">' + fmtMoney(i.amount) + ' ₽</span>' +
               '<span class="sev s-' + s.sev + ' oi-st">' + s.label + '</span>' +
-              act + '</div>';
+              act + '</div>' + noteHtml + '</div>';
           }).join('');
           return head + linkBox + '<div class="oi-box">' +
             '<div class="oi-hint">Пришёл платёж мимо кассы — по ссылке из панели ЮKassa или переводом? Отметьте взнос оплаченным, и он уйдёт из дебиторки.</div>' +
@@ -34344,11 +34372,44 @@
           });
         });
         // отметка взноса
-        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark'), function (b) {
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-mark[data-oid]'), function (b) {
           b.addEventListener('click', function (e) {
             e.stopPropagation();
             markInst(b.getAttribute('data-oid'), b.getAttribute('data-no'), b.getAttribute('data-p') === '1');
           });
+        });
+        // комментарий к взносу: открыть поле / отмена / сохранить
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-noteedit]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            noteEdit[b.getAttribute('data-noteedit')] = true; renderOrders(orders);
+          });
+        });
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-notecancel]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            delete noteEdit[b.getAttribute('data-notecancel')]; renderOrders(orders);
+          });
+        });
+        Array.prototype.forEach.call(ordList.querySelectorAll('[data-notesave]'), function (b) {
+          b.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var nk = b.getAttribute('data-notesave');
+            var inp = ordList.querySelector('.oi-note-i[data-nk="' + nk + '"]');
+            var parts = nk.split(':');
+            saveNote(parts[0], parts[1], inp ? inp.value : '');
+          });
+        });
+        // Enter в поле комментария = сохранить
+        Array.prototype.forEach.call(ordList.querySelectorAll('.oi-note-i'), function (inp) {
+          inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              var parts = inp.getAttribute('data-nk').split(':');
+              saveNote(parts[0], parts[1], inp.value);
+            }
+          });
+          inp.addEventListener('click', function (e) { e.stopPropagation(); });
         });
       };
       var loadOrders = function () {
