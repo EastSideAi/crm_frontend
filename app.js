@@ -22722,7 +22722,8 @@
     check: 349990,    // средний чек: Плюс и Премиум пополам (Павел 24.09.2026)
     share: 20,        // доля продюсеров
     scheme: 'net',    // net — доля с выручки за вычетом трафика; gross — с выручки
-    cost: 35,         // наши расходы на клиента, % от чека (себестоимость, проценты, налоги)
+    cost: 35,         // запасная прикидка расходов на клиента: настоящую берем из экономики продукта
+    costManual: 0,    // 1 — процент расходов поправили руками, автоподстановку не делаем
     warm2: 30,        // дожим: сколько продаж добавляет второй месяц, % от первых
     warm3: 15,        // и третий
     runs: 12,         // запусков в год
@@ -22747,6 +22748,75 @@
   function unSave() { try { localStorage.setItem(UN_KEY, JSON.stringify(state._un || {})); } catch (e) {} }
   function unNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
   function unRub(n) { return fmtMoney(Math.round(n || 0)) + ' ₽'; }
+
+  /* Расходы на клиента берем не с потолка, а из экономики продукта «Грант»:
+     структура статей лежит в content/portal.json, суммы — в базе (эта же цифра
+     стоит на вкладке «Портал → Экономика»). Зашить ее в app.js нельзя: файл
+     раздается по прямой ссылке без входа, а себестоимость внутренняя. Поэтому
+     здесь либо живая цифра из базы, либо честная пометка, что это прикидка. */
+  function unEconFacts() {
+    var p = portalProduct('grant');
+    var api = state._poEconApi;
+    if (!p || !p.economics || !api || api === 'none' || api === 'denied') return null;
+    var saved = api.grant;
+    if (!saved || !saved.data) return null;
+    var ec = p.economics, d = saved.data;
+    var rate = 0, parts = [];
+    (ec.rates || []).forEach(function (r) {
+      var v = unNum((d.rates || {})[r.id]);
+      rate += v;
+      if (v) parts.push({ label: r.label || r.id, pct: v });
+    });
+    function fixOf(tid) {
+      return (ec.costs || []).reduce(function (sum, c) {
+        return sum + unNum(((d.costs || {})[c.id] || {})[tid]);
+      }, 0);
+    }
+    var plus = fixOf('plus'), prem = fixOf('prem');
+    if (!plus && !prem && !rate) return null;
+    return { rate: rate, parts: parts, plus: plus, prem: prem,
+      when: saved.updated_at, by: saved.updated_by };
+  }
+  /* Скидка режет выручку, а себестоимость договора остается прежней, поэтому
+     процент считаем от текущего чека, а не берем готовым. Между Плюсом и
+     Премиумом идем линейно: «Пополам» тогда честно дает середину. */
+  function unCostPct(check) {
+    var f = unEconFacts();
+    if (!f || !check) return null;
+    var lo = 299990, hi = 399990;
+    var t = Math.max(0, Math.min(1, (check - lo) / (hi - lo)));
+    var fix = f.plus + (f.prem - f.plus) * t;
+    return Math.round((fix / check * 100 + f.rate) * 10) / 10;
+  }
+  function unPct(n) { return String(Math.round(n * 10) / 10).replace('.', ',') + '%'; }
+  function unCostLine() {
+    var m = unModel(), f = unEconFacts(), pct = unCostPct(unNum(m.check));
+    if (pct == null) {
+      return 'Экономику продукта подтянуть не удалось, поэтому расходы здесь — прикидка. ' +
+        'Настоящая цифра лежит в разделе «Портал», вкладка «Экономика», и нужен доступ к деньгам.';
+    }
+    /* в перечислении нужен короткий ярлык: в экономике у строки бывает пояснение
+       через запятую, и оно рвет список на середине фразы */
+    var parts = f.parts.map(function (p) { return p.label.split(',')[0] + ' ' + unPct(p.pct); }).join(', ');
+    var txt = 'По экономике продукта при этом чеке расходы на клиента ' + unPct(pct) + '. ' +
+      'Проценты от чека: ' + parts + '. Остальное считается суммами на клиента: тьютор, нотариус, ' +
+      'медсправка, виза, встреча, резерв, ИИ и оплата за проведенную диагностику. ' +
+      'Оклады команды сюда не входят: они платятся каждый месяц независимо от запуска.';
+    if (f.when) txt += ' Цифры из экономики, правка от ' + fmtWhen(f.when) + '.';
+    return txt;
+  }
+  /* Пока процент не трогали руками, он едет за чеком сам: переключил тариф —
+     поехала и себестоимость. Поправили руками — больше не лезем. */
+  function unSyncCost(view) {
+    var m = unModel();
+    if (m.costManual) return;
+    var pct = unCostPct(unNum(m.check));
+    if (pct == null || Math.abs(unNum(m.cost) - pct) < 0.05) return;
+    m.cost = pct;
+    unSave();
+    var inp = view.querySelector('[data-un="cost"]');
+    if (inp && document.activeElement !== inp) inp.value = pct;
+  }
 
   /* Одна когорта: люди, которых привел бюджет одного запуска. Дожим — те же люди,
      купившие во второй и третий месяц: за них продюсеры и отвечают, когда берутся
@@ -22814,7 +22884,7 @@
         unField('toDiag', 'Регистрация → диагностика, %', 'дошли до встречи', 'min="0" max="100" step="1"') +
         unField('conv', 'Диагностика → договор, %', 'холодная аудитория закрывается хуже теплой', 'min="0" max="100" step="1"') +
         unField('check', 'Средний чек, ₽', 'цена договора со скидкой', 'min="0" step="1000"') +
-        unField('cost', 'Наши расходы на клиента, %', 'себестоимость, проценты продаж, налоги', 'min="0" max="100" step="1"') +
+        unField('cost', 'Наши расходы на клиента, %', 'из экономики продукта, без окладов', 'min="0" max="100" step="0.1"') +
         unField('share', 'Доля продюсеров, %', 'от базы по схеме ниже', 'min="0" max="100" step="1"') +
         unField('warm2', 'Дожим, второй месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
         unField('warm3', 'Дожим, третий месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
@@ -22833,6 +22903,7 @@
           '<button type="button" data-unscheme="gross"' + (m.scheme === 'gross' ? ' class="on"' : '') + '>Со всей выручки, трафик наш</button>' +
         '</div>' +
       '</div>' +
+      '<div class="po-note un-costnote" id="un-costnote"></div>' +
       '<div class="po-note">Цифр прошлого запуска по холодному трафику у нас пока нет, ' +
         'поэтому конверсии здесь — гипотеза, а не факт: их и надо обсудить с продюсерами. ' +
         'Обе схемы дележа дают разные деньги на одной и той же когорте, переключите и ' +
@@ -22880,6 +22951,9 @@
           unMoneyRow('Остается компании', 'ours', 'po-r-big') +
         '</tbody></table></div>' +
       '<div class="un-metrics" id="un-metrics"></div>' +
+      '<div class="po-note">«Остается компании» — это деньги до постоянных расходов: ' +
+        'оклады, сервисы и подписки платятся каждый месяц независимо от того, был запуск или нет, ' +
+        'и живут в экономике продукта. Здесь мы смотрим только то, что приносит и забирает сам трафик.</div>' +
       '</div>';
   }
   function unMoneyRow(label, key, cls) {
@@ -22948,7 +23022,7 @@
     L.push('Выручка когорты: ' + unRub(r.all.rev));
     L.push('Расход на трафик: ' + unRub(r.budget));
     L.push('Продюсерам ' + unNum(m.share) + '%: ' + unRub(r.all.prod));
-    L.push('Наши расходы на клиентов: ' + unRub(r.all.cost));
+    L.push('Наши расходы на клиентов: ' + unRub(r.all.cost) + ' (' + unPct(unNum(m.cost)) + ' от чека, без окладов)');
     L.push('Остается компании: ' + unRub(r.all.ours));
     L.push('');
     L.push('Стоимость договора по трафику: ' + unRub(r.cac));
@@ -22957,6 +23031,10 @@
   }
   function renderMkUnit(view) {
     if (!UN_SEGS.some(function (s) { return s.id === state.unSeg; })) state.unSeg = 'run';
+    /* экономика продукта нужна для расходов на клиента: структура из портала,
+       суммы из базы. Обе загрузки одноразовые и молча дорисуют цифру, когда придут */
+    if (!state._portal) fetchPortal();
+    if (!state._poEconApi && can('finance')) econLoad();
     var m = unModel();
     var top = '<div class="card po-econtop">' +
       '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
@@ -22987,7 +23065,9 @@
     unPaint(view);
   }
   function unPaint(view) {
-    var m = unModel(), r = unCalc(m);
+    var m = unModel();
+    unSyncCost(view);
+    var r = unCalc(m);
     function put(sel, html) {
       Array.prototype.forEach.call(view.querySelectorAll(sel), function (n) { n.innerHTML = html; });
     }
@@ -23042,6 +23122,16 @@
         '<td class="num">' + unRub(y.t.ours) + '</td>' +
         '<td class="num un-cum">' + unRub(y.t.ours) + '</td></tr>';
     }
+    var note = view.querySelector('#un-costnote');
+    if (note) {
+      var back = m.costManual && unCostPct(unNum(m.check)) != null
+        ? ' <button type="button" class="lnk" id="un-costback">вернуть цифру из экономики</button>' : '';
+      note.innerHTML = esc(unCostLine()) + back;
+      var bb = note.querySelector('#un-costback');
+      if (bb) bb.addEventListener('click', function () {
+        m.costManual = 0; unSave(); unPaint(view);
+      });
+    }
     var deal = view.querySelector('#un-deal');
     if (deal) deal.innerHTML = unDealText(r, m);
   }
@@ -23049,7 +23139,9 @@
     var m = unModel();
     Array.prototype.forEach.call(view.querySelectorAll('[data-un]'), function (inp) {
       inp.addEventListener('input', function () {
-        m[inp.getAttribute('data-un')] = unNum(inp.value);
+        var key = inp.getAttribute('data-un');
+        m[key] = unNum(inp.value);
+        if (key === 'cost') m.costManual = 1;   // руками поправили — автоподстановку выключаем
         unSave();
         /* перерисовываем только цифры: полный ререндер выбивал бы курсор из поля,
            а на встрече цифры крутят непрерывно */
@@ -24359,6 +24451,8 @@
   }
   function portalArrived() {
     if (state.page === 'portal' || state.page === 'roadmap') renderView();
+    // декомпозиция трафика берет из портала структуру расходов на клиента
+    if (state.page === 'marketing' && state.mkTab === 'unit') renderView();
     if (state.drawerId) renderDrawer(true);
   }
   function portalProduct(id) {
@@ -25241,6 +25335,7 @@
     }).finally(function () {
       state._poEconLoading = false;
       if (state.page === 'portal' && state.portalTab === 'econ') renderView();
+      if (state.page === 'marketing' && state.mkTab === 'unit') renderView();
     });
   }
   /* рабочая копия цифр продукта: то, что человек видит и правит на экране */

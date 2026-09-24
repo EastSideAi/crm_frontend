@@ -9904,3 +9904,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 /* накопительный столбец года: он и есть довод «работаем вдолгую», поэтому выделен */
 .un-cum { color: var(--blue-d); font-weight: 650; }
+/* откуда взялся процент расходов: строка стоит сразу под полями, чтобы на встрече
+   не пришлось объяснять голосом, что это цифра из экономики, а не прикидка */
+.un-costnote { padding: 12px 14px; border-radius: 12px; background: var(--fill); margin-top: 16px; }
+.un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
+  color: var(--blue); cursor: pointer; }
+.un-costnote .lnk:hover { text-decoration: underline; }
