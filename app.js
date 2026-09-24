@@ -22789,21 +22789,25 @@
     return Math.round((fix / check * 100 + f.rate) * 10) / 10;
   }
   function unPct(n) { return String(Math.round(n * 10) / 10).replace('.', ',') + '%'; }
+  /* Объяснение процента идет двумя ярусами: сверху вывод одной строкой, под ним
+     состав тише. Одним серым абзацем это читалось как простыня, а вопрос «откуда
+     цифра» задают ровно один раз в начале встречи. */
   function unCostLine() {
     var m = unModel(), f = unEconFacts(), pct = unCostPct(unNum(m.check));
     if (pct == null) {
-      return 'Экономику продукта подтянуть не удалось, поэтому расходы здесь — прикидка. ' +
-        'Настоящая цифра лежит в разделе «Портал», вкладка «Экономика», и нужен доступ к деньгам.';
+      return { top: 'Расходы на клиента здесь — прикидка, а не факт.',
+        sub: 'Настоящая цифра лежит в разделе «Портал», вкладка «Экономика», и нужен доступ к деньгам.' };
     }
     /* в перечислении нужен короткий ярлык: в экономике у строки бывает пояснение
        через запятую, и оно рвет список на середине фразы */
     var parts = f.parts.map(function (p) { return p.label.split(',')[0] + ' ' + unPct(p.pct); }).join(', ');
-    var txt = 'По экономике продукта при этом чеке расходы на клиента ' + unPct(pct) + '. ' +
-      'Проценты от чека: ' + parts + '. Остальное считается суммами на клиента: тьютор, нотариус, ' +
-      'медсправка, виза, встреча, резерв, ИИ и оплата за проведенную диагностику. ' +
-      'Оклады команды сюда не входят: они платятся каждый месяц независимо от запуска.';
-    if (f.when) txt += ' Цифры из экономики, правка от ' + fmtWhen(f.when) + '.';
-    return txt;
+    return {
+      top: 'Расходы на клиента ' + unPct(pct) + ' при чеке ' + unRub(unNum(m.check)) +
+        ': посчитано по экономике продукта' + (f.when ? ', правка от ' + fmtWhen(f.when) : '') + '.',
+      sub: 'Проценты от чека: ' + parts + '. Остальное считается суммами на клиента: тьютор, ' +
+        'нотариус, медсправка, виза, встреча, резерв, ИИ и оплата за проведенную диагностику. ' +
+        'Оклады команды сюда не входят: они платятся каждый месяц независимо от запуска.'
+    };
   }
   /* Пока процент не трогали руками, он едет за чеком сам: переключил тариф —
      поехала и себестоимость. Поправили руками — больше не лезем. */
@@ -22871,6 +22875,10 @@
       (attrs || 'min="0" step="1"') + '>' +
       (hint ? '<span class="un-h">' + esc(hint) + '</span>' : '') + '</label>';
   }
+  function unGroup(title, fields) {
+    return '<div class="un-grp"><div class="un-gt">' + esc(title) + '</div>' +
+      '<div class="un-form">' + fields + '</div></div>';
+  }
   function unInputs() {
     var m = unModel();
     return '<div class="card">' +
@@ -22878,16 +22886,19 @@
         '<div><div class="t">Вводные запуска</div>' +
         '<div class="s">крутим цифры прямо на встрече: все ниже пересчитывается сразу</div></div>' +
         '<button class="bp ghost sm" id="un-reset" type="button">Сбросить</button></div>' +
-      '<div class="un-form">' +
-        unField('budget', 'Бюджет на трафик, ₽', 'на один запуск', 'min="0" step="10000"') +
-        unField('cpl', 'Цена регистрации, ₽', 'сколько стоит один лид') +
-        unField('toDiag', 'Регистрация → диагностика, %', 'дошли до встречи', 'min="0" max="100" step="1"') +
-        unField('conv', 'Диагностика → договор, %', 'холодная аудитория закрывается хуже теплой', 'min="0" max="100" step="1"') +
-        unField('check', 'Средний чек, ₽', 'цена договора со скидкой', 'min="0" step="1000"') +
-        unField('cost', 'Наши расходы на клиента, %', 'из экономики продукта, без окладов', 'min="0" max="100" step="0.1"') +
-        unField('share', 'Доля продюсеров, %', 'от базы по схеме ниже', 'min="0" max="100" step="1"') +
-        unField('warm2', 'Дожим, второй месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
-        unField('warm3', 'Дожим, третий месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
+      /* поля разложены по смыслу, а не одной лентой из девяти штук: девятью
+         колонками подряд подписи переносились в две строки и ряд «плясал»
+         (Павел 24.09.2026). Группы отвечают на разные вопросы встречи: сколько
+         заводим, как течет воронка, как делим деньги, что дает дожим */
+      '<div class="un-groups">' +
+        unGroup('Трафик', unField('budget', 'Бюджет на трафик, ₽', 'на один запуск', 'min="0" step="10000"') +
+          unField('cpl', 'Цена регистрации, ₽', 'сколько стоит лид')) +
+        unGroup('Воронка', unField('toDiag', 'Регистрация → диагностика, %', 'дошли до встречи', 'min="0" max="100" step="1"') +
+          unField('conv', 'Диагностика → договор, %', 'холодные закрываются хуже', 'min="0" max="100" step="1"')) +
+        unGroup('Деньги', unField('check', 'Средний чек, ₽', 'цена договора со скидкой', 'min="0" step="1000"') +
+          unField('cost', 'Наши расходы, %', 'из экономики, без окладов', 'min="0" max="100" step="0.1"')) +
+        unGroup('Дожим когорты', unField('warm2', 'Второй месяц, %', 'от первых продаж', 'min="0" max="200" step="5"') +
+          unField('warm3', 'Третий месяц, %', 'от первых продаж', 'min="0" max="200" step="5"')) +
       '</div>' +
       '<div class="un-row">' +
         '<span class="un-lbl">Средний чек по тарифу</span>' +
@@ -22896,11 +22907,13 @@
             (unNum(m.check) === c[1] ? ' class="on"' : '') + '>' + esc(c[0]) + '</button>';
         }).join('') + '</div>' +
       '</div>' +
-      '<div class="un-row">' +
-        '<span class="un-lbl">С чего считаем долю продюсеров</span>' +
+      '<div class="un-row un-share">' +
+        '<span class="un-lbl">Продюсерам</span>' +
+        '<input class="al-in sm num un-inp" type="number" data-un="share" value="' + unNum(m.share) + '" min="0" max="100" step="1">' +
+        '<span class="un-lbl">% от</span>' +
         '<div class="dperiod un-seg">' +
-          '<button type="button" data-unscheme="net"' + (m.scheme !== 'gross' ? ' class="on"' : '') + '>С выручки за вычетом трафика</button>' +
-          '<button type="button" data-unscheme="gross"' + (m.scheme === 'gross' ? ' class="on"' : '') + '>Со всей выручки, трафик наш</button>' +
+          '<button type="button" data-unscheme="net"' + (m.scheme !== 'gross' ? ' class="on"' : '') + '>выручки за вычетом трафика</button>' +
+          '<button type="button" data-unscheme="gross"' + (m.scheme === 'gross' ? ' class="on"' : '') + '>всей выручки, трафик наш</button>' +
         '</div>' +
       '</div>' +
       '<div class="po-note un-costnote" id="un-costnote"></div>' +
@@ -22916,13 +22929,15 @@
       '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Воронка одной когорты</div>' +
         '<div class="s">от бюджета до договора, по вводным выше</div></div></div>' +
-      '<div id="un-ladder"></div></div>';
+      '<div id="un-ladder" class="lad-static"></div></div>';
   }
   function unLadder(r, m) {
     var base = Math.max(r.leads, 1);
     var pct = function (n) { return Math.round(n / base * 100); };
+    /* у бюджета шкалы нет: доли от него считаются ниже. Пустой серый рельс рядом с
+       суммой читается как «ноль», поэтому строка идет без него (lad-norail) */
     return ladRow('Бюджет на трафик', 'деньги, которые продюсеры заводят в рекламу',
-        fmtMoney(r.budget), null, '<span class="lad-conv num">рублей в рекламу</span>') +
+        fmtMoney(r.budget), null, '<span class="lad-conv num">рублей в рекламу</span>', 'lad-norail') +
       ladRow('Регистрации', 'по ' + unRub(unNum(m.cpl)) + ' за человека', fmtMoney(r.leads), 100,
         '<span class="lad-conv num">' + unRub(unNum(m.cpl)) + ' за лид</span>') +
       ladRow('Дошли до диагностики', 'встреча с нашим менеджером', fmtMoney(r.diags), pct(r.diags),
@@ -22951,7 +22966,7 @@
           unMoneyRow('Остается компании', 'ours', 'po-r-big') +
         '</tbody></table></div>' +
       '<div class="un-metrics" id="un-metrics"></div>' +
-      '<div class="po-note">«Остается компании» — это деньги до постоянных расходов: ' +
+      '<div class="po-note un-wnote">«Остается компании» это деньги до постоянных расходов: ' +
         'оклады, сервисы и подписки платятся каждый месяц независимо от того, был запуск или нет, ' +
         'и живут в экономике продукта. Здесь мы смотрим только то, что приносит и забирает сам трафик.</div>' +
       '</div>';
@@ -22975,7 +22990,7 @@
         '<thead><tr><th class="po-rl">Запуск</th><th>Трафик</th><th>Договоров</th>' +
         '<th>Выручка</th><th>Продюсерам</th><th>Компании</th><th>Компании всего</th></tr></thead>' +
         '<tbody id="un-ybody"></tbody></table></div>' +
-      '<div class="po-note">Год считается по тем же вводным, что и один запуск. ' +
+      '<div class="po-note un-wnote">Год считается по тем же вводным, что и один запуск. ' +
         'Смысл строки за строкой: когорта не заканчивается в день эфира, и работа с ней — ' +
         'это и есть то, за что продюсеры получают свою долю весь год.</div>' +
       '</div>';
@@ -23126,7 +23141,9 @@
     if (note) {
       var back = m.costManual && unCostPct(unNum(m.check)) != null
         ? ' <button type="button" class="lnk" id="un-costback">вернуть цифру из экономики</button>' : '';
-      note.innerHTML = esc(unCostLine()) + back;
+      var cl = unCostLine();
+      note.innerHTML = '<div class="un-cnt">' + esc(cl.top) + back + '</div>' +
+        '<div class="un-cns">' + esc(cl.sub) + '</div>';
       var bb = note.querySelector('#un-costback');
       if (bb) bb.addEventListener('click', function () {
         m.costManual = 0; unSave(); unPaint(view);
@@ -23138,6 +23155,9 @@
   function unWire(view) {
     var m = unModel();
     Array.prototype.forEach.call(view.querySelectorAll('[data-un]'), function (inp) {
+      /* поле в фокусе меняется колесом мыши: на встрече крутят страницу, а молча
+         уезжает цифра и весь расклад под ней */
+      inp.addEventListener('wheel', function () { if (document.activeElement === inp) inp.blur(); }, { passive: true });
       inp.addEventListener('input', function () {
         var key = inp.getAttribute('data-un');
         m[key] = unNum(inp.value);
@@ -23166,8 +23186,19 @@
         state.unSeg = b.getAttribute('data-unseg'); saveUi(); renderView();
       });
     });
-    var reset = view.querySelector('#un-reset');
+    /* сброс в два шага: кнопка стоит в шапке карточки, а стирает вводные, которые
+       набрали вместе с продюсерами на встрече — вернуть их неоткуда */
+    var reset = view.querySelector('#un-reset'), resetArm = null;
     if (reset) reset.addEventListener('click', function () {
+      if (!resetArm) {
+        reset.textContent = 'Точно сбросить?';
+        reset.classList.add('warn');
+        resetArm = setTimeout(function () {
+          resetArm = null; reset.textContent = 'Сбросить'; reset.classList.remove('warn');
+        }, 4000);
+        return;
+      }
+      clearTimeout(resetArm); resetArm = null;
       state._un = null;
       try { localStorage.removeItem(UN_KEY); } catch (e) {}
       renderView();
