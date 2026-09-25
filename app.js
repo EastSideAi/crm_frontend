@@ -3255,7 +3255,7 @@
           'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
           'сравнивает план с тем, что уже пришло.';
       } else if (state.page === 'fincalendar') {
-        ph = 'Денежная позиция: ожидаемый приход из плана выручки против плановых выплат ' +
+        ph = 'Плановая позиция: ожидаемый приход из плана выручки против плановых выплат ' +
           'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
           'часть уйдет по обязательствам.';
       } else {
@@ -16678,7 +16678,7 @@
     // Загрузчик сам перерисует «Ведомость», когда ответ придет.
     if (!FIN.pnlp) finLoadPnlPeriod();
     var t = (FIN.pnlp && FIN.pnlp !== 'none' && FIN.pnlp.totals) ? FIN.pnlp.totals : null;
-    /* «Денежная позиция периода» тянет плановые выплаты из календаря лениво, как EBITDA:
+    /* «Плановая позиция периода» тянет плановые выплаты из календаря лениво, как EBITDA:
        остаток ВТБ минус плановые выплаты — тот же расчёт, что «После нагрузки» в
        Платёжном календаре, но прямо на Ведомости (Роман 25.09: не ходить в отдельный
        раздел). Загрузчик сам перерисует экран, когда ответ придёт. */
@@ -16821,37 +16821,42 @@
         : '') +
     '</div>';
 
-    /* «Денежная позиция периода» (Роман 25.09.2026): насколько уходим в минус после
-       плановых выплат, прямо на Ведомости. «На ВТБ сейчас» — живой остаток БЕЗ плановых
-       (то, что человек видит без нагрузки), ниже вычитаем плановые выплаты периода и
-       прибавляем ожидаемый приход из плана выручки. Цифры — из календаря (тот же
-       расчёт), поэтому своей формулы денег тут не заводим. */
+    /* «Плановая позиция периода» (Роман 25.09.2026): та же вёрстка, что «Каскад
+       ведомости» (.fin-casc, строки .fc-row), и стоит справа от него. Считает,
+       насколько уходим в минус после плановых выплат. «На ВТБ сейчас» — живой остаток
+       БЕЗ плановых, ниже ожидаемый приход из плана выручки и плановые выплаты периода.
+       Цифры из календаря (тот же расчёт), своей формулы денег не заводим. */
     var vtbLive = vtb ? vtb.live : (cash.flow || 0);
     var calIn = cal && cal.income ? (cal.income.total || 0) : 0;
     var calOut = cal && cal.outflow ? (cal.outflow.total || 0) : 0;
     var afterPlan = cal ? vtbLive + cal.net : vtbLive;
-    var planCard = '<div class="card fin-block">' +
+    var posRows = [{ cls: 'in', name: 'На ВТБ сейчас',
+                     why: 'живой остаток без плановых выплат', v: vtbLive }];
+    if (calIn) posRows.push({ cls: 'in', name: 'Ждем прихода',
+                     why: 'из плана выручки', v: calIn });
+    posRows.push({ cls: 'out', name: 'Плановые выплаты периода',
+                   why: 'плановые строки ведомости: расходы, фонды, кредиты', v: -calOut });
+    posRows.push({ cls: 'total', name: 'После плановых выплат',
+                   why: afterPlan < 0 ? 'уходим в минус на ' + finRub(-afterPlan)
+                                      : 'если план сойдется, столько останется', v: afterPlan });
+    var planCard = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
-        '<div><div class="t">Денежная позиция периода</div>' +
+        '<div><div class="t">Плановая позиция периода</div>' +
         '<div class="s">остаток на счете сейчас и после плановых выплат</div></div></div>' +
       (cal
-        ? '<div class="fin-kv">' +
-            '<div class="fkv"><span>На ВТБ сейчас</span><b class="num">' + finRub(vtbLive) + '</b></div>' +
-            (calIn ? '<div class="fkv"><span>Ждем прихода (план выручки)</span><b class="num">' +
-              finRub(calIn) + '</b></div>' : '') +
-            '<div class="fkv"><span>Плановые выплаты периода</span><b class="num">' +
-              finRub(-calOut) + '</b></div>' +
-            '<div class="fkv total"><span>После плановых выплат</span>' +
-              '<b class="num' + (afterPlan < 0 ? ' neg' : '') + '">' + finRub(afterPlan) + '</b></div>' +
-          '</div>' +
-          (afterPlan < 0
-            ? '<div class="fin-note">' + ic('alert', 13) + 'Уходим в минус на ' +
-              finRub(-afterPlan) + ': плановых выплат больше, чем есть на счете с ожидаемым приходом' +
-              (calIn ? '' : '. План выручки пуст — если ждете поступлений, впишите их в «План выручки», минус уменьшится') +
-              '.</div>'
-            : '<div class="fin-note calm">' + ic('check', 13) +
-              'Плановые выплаты покрываются: после них на счете ' + finRub(afterPlan) + '.</div>')
-        : '<div class="fin-note calm">Считаю плановые платежи…</div>') +
+        ? '<div class="fc-rows">' + posRows.map(function (r) {
+            return '<div class="fc-row ' + r.cls + '">' +
+              '<div class="fc-l"><span class="fc-name">' + esc(r.name) + '</span>' +
+                (r.why ? '<span class="fc-why">' + esc(r.why) + '</span>' : '') + '</div>' +
+              '<div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' +
+                finRub(r.v) + '</div></div>';
+          }).join('') + '</div>' +
+          (afterPlan < 0 && !calIn
+            ? '<div class="fin-note">' + ic('alert', 13) +
+              'План выручки пуст — если ждете поступлений, впишите их в «План выручки», минус уменьшится.</div>'
+            : '')
+        : '<div class="fc-rows"><div class="fc-row"><div class="fc-l">' +
+          '<span class="fc-name">Считаю плановые платежи…</span></div></div></div>') +
     '</div>';
 
     /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
@@ -16953,11 +16958,11 @@
         : '') +
     '</div>';
 
-    // «Денежная позиция периода» — в самом верху (Роман 25.09): первое, что видно,
-    // насколько уходим в минус после плановых выплат.
-    view.innerHTML = planCard + bar + head + '<div class="grid">' +
+    // «Плановая позиция периода» — справа от каскада (Роман 25.09): верхом правой
+    // колонки, вёрсткой повторяет каскад слева.
+    view.innerHTML = bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + taxCard +
+      '<div class="sp5">' + planCard + fundsCard + cashCard + ebitdaCard + taxCard +
         finAccountsCard(s, editable) + warn +
       '</div></div>';
 
