@@ -1671,6 +1671,14 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .doc-why { margin-top: 5px; font-size: 12px; line-height: 1.45; color: #8A5A15;
   background: rgba(224, 146, 47, .09); border-radius: 8px; padding: 6px 9px; }
 .doc-why[hidden] { display: none; }
+/* Строки, вписанные семьей руками (телефон и адрес в Китае). Файла у них нет, и
+   строкой документа они быть не могут — но спрашиваются в том же пакете, поэтому
+   стоят над архивом плотным блоком, без иконок и кнопок: тут нечего открывать. */
+.doc-flds { margin-bottom: 12px; border: 1px solid var(--line-2); border-radius: 11px; overflow: hidden; }
+.doc-fld { display: flex; gap: 12px; padding: 8px 11px; font-size: 12.5px; }
+.doc-fld + .doc-fld { border-top: 1px solid var(--line-2); }
+.doc-fld-l { flex: 0 0 40%; color: var(--ink-2); font-weight: 600; }
+.doc-fld-v { flex: 1 1 auto; min-width: 0; color: var(--ink-1); word-break: break-word; }
 .doc-by { color: var(--ink-2); font-weight: 600; }
 .doc-by-own { color: var(--ink-3); font-weight: 500; }
 .doc-act { display: flex; gap: 6px; flex: none; }
