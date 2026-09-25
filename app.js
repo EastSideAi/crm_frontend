@@ -31298,6 +31298,15 @@
               (tf.id === (crm.overrides || {}).tariff ? ' selected' : '') + '>' + esc(tf.name) + '</option>';
           }).join('') +
         '</select></label>' +
+      /* Направление поступления. От него зависит, какой пакет документов семья
+         видит у себя в кабинете (backend doc_checklist): магистранту незачем
+         транскрипт за 10 класс, а тому, кто едет в бакалавриат после языкового
+         года, нужны китайские справки. Пока не выбрано, семья видит общий пакет.
+         Список направлений приезжает с бэкенда, поэтому опции проставляются
+         после загрузки (wireQual), а не здесь. */
+      '<label class="ql-f"><span class="ql-l">Направление</span>' +
+        '<select class="tm-sel" data-track="1"><option value="">не выбрано</option></select>' +
+      '</label>' +
     '</div>';
 
     var marks = q.sql || {};
@@ -32726,7 +32735,7 @@
   /* Категории документов из пакета семьи (backend GET /admin/api/docs/kinds).
      Держим одну копию на сессию: список меняется правкой чек-листа на бэкенде, и
      хардкодить его здесь нельзя — разъедется на первой же правке. */
-  var DOC_KINDS = null, DOC_KINDS_BUSY = false;
+  var DOC_KINDS = null, DOC_KINDS_BUSY = false, DOC_TRACKS = [];
   function loadDocKinds(cb) {
     if (DOC_KINDS) { if (cb) cb(DOC_KINDS); return; }
     if (DOC_KINDS_BUSY) return;
@@ -32734,6 +32743,9 @@
     api('/admin/api/docs/kinds').then(function (r) {
       DOC_KINDS_BUSY = false;
       DOC_KINDS = (r && r.kinds) || [];
+      /* Направления приезжают той же ручкой: их состав живет рядом с чек-листом
+         на бэкенде, и своя копия названий здесь разъехалась бы с ним. */
+      DOC_TRACKS = (r && r.tracks) || [];
       if (cb) cb(DOC_KINDS);
     }).catch(function () { DOC_KINDS_BUSY = false; });
   }
@@ -32801,8 +32813,17 @@
           '<button class="icobtn del" data-deldoc="' + dc.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
         '</div></div>';
     }).join('');
+    /* Строки, которые семья ВПИСЫВАЕТ, а не грузит файлом (телефон и адрес в
+       Китае). Файла у них нет, поэтому в списке документов их не будет никогда, а
+       менеджеру они нужны там же: это часть того же пакета. Пустые не показываем —
+       «не заполнено» видно по отсутствию строки, а пустая плашка только шумит. */
+    var fields = ((ctx.d && ctx.d.doc_fields) || []).map(function (f) {
+      return '<div class="doc-fld"><span class="doc-fld-l">' + esc(f.name) + '</span>' +
+        '<span class="doc-fld-v">' + esc(f.value) + '</span></div>';
+    }).join('');
     return '<div class="m-ctitle">Документы</div>' +
       '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до 12 МБ или ссылка.</div>' +
+      (fields ? '<div class="doc-flds">' + fields + '</div>' : '') +
       (docs.length ? '<div>' + rows + '</div>' : '') +
       // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
       // кабинете, и семья видит «ждет вас» поверх уже загруженного документа
@@ -33829,6 +33850,23 @@
         patch(id, { overrides: { tariff: tarSel.value } });
         state._mapAt = 0;   // карта считает по тарифам — пусть перечитает при заходе
       });
+      // направление: опции приезжают с бэкенда, поэтому заполняем после загрузки
+      var trSel = qlHost.querySelector('select[data-track]');
+      if (trSel) {
+        var cur = (crm.overrides || {}).track || '';
+        var fill = function () {
+          trSel.innerHTML = '<option value="">не выбрано</option>' +
+            DOC_TRACKS.map(function (t) {
+              return '<option value="' + esc(t.key) + '"' +
+                (t.key === cur ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+            }).join('');
+        };
+        fill();
+        loadDocKinds(fill);
+        trSel.addEventListener('change', function () {
+          patch(id, { overrides: { track: trSel.value } });
+        });
+      }
     }
 
     // ── АНГЛИЙСКИЙ: разбор попытки, баллы за письмо и речь, доступ ──
