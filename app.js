@@ -12871,7 +12871,16 @@
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
           czField('connected_at', 'Дата подключения', c.connected_at, '', 'date') +
+          czField('payroll_name', 'Имя в расчётном листе', c.payroll_name,
+                  'Как записан в листе финмодели') +
         '</div>' +
+          /* Мостик лист → самозанятые: в расчётном листе (раздел «Финансы») человек
+             записан свободным именем, в карточке — по ИНН. Свяжем их один раз, и сумма
+             из листа за ведомость сама встанет в «Согласовано» в отчётах. Пусто —
+             сумму ставят руками (так и остаётся у тех, кто в листах не сидит). */
+          '<div class="cz-src">Имя в листе связывает человека с расчётным листом ' +
+            'в «Финансах»: сумма из листа сама подтянется в «Согласовано». Оставьте ' +
+            'пустым, если суммы этого человека в листе нет.</div>' +
           /* Должность — не ярлык для списка: от нее зависит перечень услуг в
              Приложении № 1 к договору этого человека (у ассистента и монтажера они
              разные). Пишем словами каталога услуг, чтобы не завести второй справочник
@@ -14737,6 +14746,52 @@
       }).catch(function (e) { el('sh-err').textContent = e.message; });
       return '';
     }, null, 'Расчетный лист', 'Согласовать');
+    // Подтяг из расчётного листа финмодели: связан человек именем — показываем его сумму
+    // по ведомостям месяца (аванс/остаток) с кнопкой «подставить». Лист — единственный
+    // источник, сумма растёт по мере закрытия ведомостей, gap-раскладка добирает разницу.
+    rpLoadPayroll(r);
+  }
+  function rpLoadPayroll(r) {
+    var q = '?contractor_id=' + encodeURIComponent(r.contractor_id) +
+            '&period=' + encodeURIComponent(REP.month);
+    czSend('/admin/api/contractor-reports/settlement/payroll' + q, 'GET')
+      .then(function (d) { rpPayrollBlock(r, d); })
+      // Нет доступа к ведомости (403) — просто без подтяга, сумму ставят руками.
+      .catch(function () {});
+  }
+  function rpPayrollBlock(r, d) {
+    var body = document.querySelector('.al-ov .al-body');
+    var amount = el('sh-amount');
+    if (!body || !amount) return;
+    var block = document.createElement('div');
+    block.className = 'rp-pay';
+    if (!d || !d.linked) {
+      block.innerHTML = '<div class="rp-pay-hint">Свяжите имя в расчётном листе в карточке ' +
+        'человека — и сумма из листа будет подтягиваться сюда сама.</div>';
+      body.insertBefore(block, body.firstChild);
+      return;
+    }
+    var periods = (d.periods || []).filter(function (p) { return Number(p.amount) > 0; });
+    var total = Number(d.total) || 0;
+    if (!periods.length) {
+      block.innerHTML = '<div class="rp-pay-hint">В расчётном листе за этот месяц у ' +
+        esc(d.payroll_name) + ' пока пусто.</div>';
+      body.insertBefore(block, body.firstChild);
+      return;
+    }
+    block.innerHTML =
+      '<div class="rp-pay-h">Из расчётного листа · ' + esc(d.payroll_name) + '</div>' +
+      periods.map(function (p) {
+        return '<div class="rp-pay-row"><span>' + esc(p.name || 'ведомость') + '</span>' +
+          '<span class="num">' + repMoney(p.amount) + '</span></div>';
+      }).join('') +
+      '<div class="rp-pay-foot"><span>Итого за месяц <b>' + repMoney(total) + '</b></span>' +
+        '<button class="rp-pay-take" type="button">Подставить</button></div>';
+    body.insertBefore(block, body.firstChild);
+    block.querySelector('.rp-pay-take').addEventListener('click', function () {
+      amount.value = String(Math.round(total));
+      amount.focus();
+    });
   }
 
   /* Автораскладка: согласованную сумму раскладываем на услуги каталога (услуга ×
