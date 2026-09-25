@@ -3255,7 +3255,7 @@
           'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
           'сравнивает план с тем, что уже пришло.';
       } else if (state.page === 'fincalendar') {
-        ph = 'Хватит ли денег: ожидаемый приход из плана выручки против плановых выплат ' +
+        ph = 'Денежная позиция: ожидаемый приход из плана выручки против плановых выплат ' +
           'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
           'часть уйдет по обязательствам.';
       } else {
@@ -16678,6 +16678,12 @@
     // Загрузчик сам перерисует «Ведомость», когда ответ придет.
     if (!FIN.pnlp) finLoadPnlPeriod();
     var t = (FIN.pnlp && FIN.pnlp !== 'none' && FIN.pnlp.totals) ? FIN.pnlp.totals : null;
+    /* «Денежная позиция периода» тянет плановые выплаты из календаря лениво, как EBITDA:
+       остаток ВТБ минус плановые выплаты — тот же расчёт, что «После нагрузки» в
+       Платёжном календаре, но прямо на Ведомости (Роман 25.09: не ходить в отдельный
+       раздел). Загрузчик сам перерисует экран, когда ответ придёт. */
+    if (!FIN.calendar) finLoadCalendar();
+    var cal = (FIN.calendar && FIN.calendar !== 'none') ? FIN.calendar : null;
     var funds = (s.rules || []).filter(function (r) {
       return r.account_id !== 'shortterm' && r.account_id !== 'flex';
     });
@@ -16718,7 +16724,7 @@
       rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount, rule: r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: 'факт из расчетных листов: зарплаты, сервисы, реклама',
+                why: 'факт из расчетных листов: мотивация, сервисы, реклама',
                 v: -c.direct });
     rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: c.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
@@ -16813,6 +16819,39 @@
           '. Разница ' + finRub(Math.abs(cashGap)) + ' — деньги, что лежат на счете, ' +
           'но уже обещаны фондам, плюс остаток с прошлых периодов.</div>'
         : '') +
+    '</div>';
+
+    /* «Денежная позиция периода» (Роман 25.09.2026): насколько уходим в минус после
+       плановых выплат, прямо на Ведомости. «На ВТБ сейчас» — живой остаток БЕЗ плановых
+       (то, что человек видит без нагрузки), ниже вычитаем плановые выплаты периода и
+       прибавляем ожидаемый приход из плана выручки. Цифры — из календаря (тот же
+       расчёт), поэтому своей формулы денег тут не заводим. */
+    var vtbLive = vtb ? vtb.live : (cash.flow || 0);
+    var calIn = cal && cal.income ? (cal.income.total || 0) : 0;
+    var calOut = cal && cal.outflow ? (cal.outflow.total || 0) : 0;
+    var afterPlan = cal ? vtbLive + cal.net : vtbLive;
+    var planCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
+        '<div><div class="t">Денежная позиция периода</div>' +
+        '<div class="s">остаток на счете сейчас и после плановых выплат</div></div></div>' +
+      (cal
+        ? '<div class="fin-kv">' +
+            '<div class="fkv"><span>На ВТБ сейчас</span><b class="num">' + finRub(vtbLive) + '</b></div>' +
+            (calIn ? '<div class="fkv"><span>Ждем прихода (план выручки)</span><b class="num">' +
+              finRub(calIn) + '</b></div>' : '') +
+            '<div class="fkv"><span>Плановые выплаты периода</span><b class="num">' +
+              finRub(-calOut) + '</b></div>' +
+            '<div class="fkv total"><span>После плановых выплат</span>' +
+              '<b class="num' + (afterPlan < 0 ? ' neg' : '') + '">' + finRub(afterPlan) + '</b></div>' +
+          '</div>' +
+          (afterPlan < 0
+            ? '<div class="fin-note">' + ic('alert', 13) + 'Уходим в минус на ' +
+              finRub(-afterPlan) + ': плановых выплат больше, чем есть на счете с ожидаемым приходом' +
+              (calIn ? '' : '. План выручки пуст — если ждете поступлений, впишите их в «План выручки», минус уменьшится') +
+              '.</div>'
+            : '<div class="fin-note calm">' + ic('check', 13) +
+              'Плановые выплаты покрываются: после них на счете ' + finRub(afterPlan) + '.</div>')
+        : '<div class="fin-note calm">Считаю плановые платежи…</div>') +
     '</div>';
 
     /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
@@ -16914,7 +16953,9 @@
         : '') +
     '</div>';
 
-    view.innerHTML = bar + head + '<div class="grid">' +
+    // «Денежная позиция периода» — в самом верху (Роман 25.09): первое, что видно,
+    // насколько уходим в минус после плановых выплат.
+    view.innerHTML = planCard + bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
       '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + taxCard +
         finAccountsCard(s, editable) + warn +
@@ -17645,7 +17686,7 @@
      (правило владельца от 11.08.2026, зеркало FORM_CAPS в routers/fin.py). */
   var FIN_FORMS = [
     ['доход', 'Доходы', 'что пришло на расчетный счет', 'finmodel_edit'],
-    ['прямой', 'Прямые расходы', 'зарплаты и сервисы с расчетного счета', 'finmodel_edit'],
+    ['прямой', 'Прямые расходы', 'мотивация и сервисы с расчетного счета', 'finmodel_edit'],
     ['лист-продаж', 'Лист продаж', 'процент менеджеру с продажи',
      'finmodel_edit|finmodel_sales'],
     ['лист-маркетинга', 'Лист маркетинга', 'реклама с фонда маркетинга',
@@ -18344,7 +18385,7 @@
             }).join('') + '</select>')
         : f(form === 'лист-маркетинга' ? 'Статья' : 'За что',
             '<input id="fl-item" class="al-in" maxlength="200" value="' + v(s.item) +
-            '" placeholder="' + (form === 'лист-маркетинга' ? 'Лидогенерация' : 'зарплата, подписка') + '">');
+            '" placeholder="' + (form === 'лист-маркетинга' ? 'Лидогенерация' : 'мотивация, подписка') + '">');
       body =
         '<div class="al-row">' +
           f(whoLabel, '<input id="fl-who" class="al-in" maxlength="200" value="' +
@@ -19745,8 +19786,8 @@
     var outW = Math.max(outflow > 0 ? 3 : 0, Math.round(outflow / scale * 100));
     var ok = net >= 0;
     return '<div class="card fbal">' +
-      '<div class="fbal-head"><div><div class="t">Хватает ли на период</div>' +
-        '<div class="s">ожидаемый приход против плановых выплат</div></div>' +
+      '<div class="fbal-head"><div><div class="t">Приход против плановых выплат</div>' +
+        '<div class="s">ожидаемый приход периода и плановые выплаты</div></div>' +
         '<div class="fbal-net num ' + (ok ? 'ok' : 'bad') + '">' +
           (ok ? '+' : '') + finRub(net) +
           '<span>' + (ok ? 'остается' : 'не хватает') + '</span></div></div>' +
@@ -25929,7 +25970,7 @@
         ts.map(function (t) { return '<td class="num" data-ec="fundtot:' + esc(t.id) + '"></td>'; }).join('') +
         '<td class="num" data-ec="fundtotyear"></td></tr>' +
       '<tr class="po-r-sum"><td class="po-rl">Остается на рабочем счете' +
-        '<span class="po-hint">из него платим зарплаты и сервисы, а что не потратили — дивиденды</span></td>' +
+        '<span class="po-hint">из него платим мотивацию и сервисы, а что не потратили — дивиденды</span></td>' +
         '<td class="num" data-ec="workpct"></td>' +
         ts.map(function (t) { return '<td class="num" data-ec="work:' + esc(t.id) + '"></td>'; }).join('') +
         '<td class="num" data-ec="workyear"></td></tr>';
@@ -26159,7 +26200,7 @@
           c.textContent = left < 0
             ? 'Доли дают ' + y.share + ' процентов, это больше ста: откладывать нечего, деньги уже кончились.'
             : 'Доли дают ' + y.share + ' процентов, на рабочем счете остается ' + left +
-              '. Из них платим зарплаты и сервисы, остальное — дивиденды.';
+              '. Из них платим мотивацию и сервисы, остальное — дивиденды.';
           c.className = left < 0 ? 'po-neg' : '';
           return;
         }
