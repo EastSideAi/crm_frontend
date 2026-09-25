@@ -364,6 +364,15 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  /* Адрес для href, который пришел снаружи (документ-ссылка от семьи, ссылка на чат).
+     esc() спасает от выхода из атрибута, но `javascript:…` проходит целиком и по клику
+     выполняется в origin CRM — а тут в браузере лежит ключ доступа сотрудника. Поэтому
+     кроме http(s) не пускаем ничего; бэкенд режет то же самое на записи, это второй
+     рубеж для строк, которые легли в базу раньше. */
+  function safeHref(u) {
+    var v = String(u == null ? '' : u).trim();
+    return /^https?:\/\//i.test(v) ? v : '';
+  }
   /* Ссылка в человеческом виде. Боевые домены записаны в punycode
      (xn--80aikf2bag.xn--p1ai) — так их хранит бэкенд, и менеджер видел в карточке
      набор символов, который стыдно отправить клиенту (замечание Веры 05.09.2026).
@@ -20158,7 +20167,7 @@
   /* ── Команда и роли (Super Admin) ── */
   /* Короткая подпись темы для чипа в строке: полную («документы и гранты») отдает сервер,
      она уходит в title. В строке нужна одна ширина на всех, иначе колонка едет. */
-  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи' };
+  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи', teachers: 'Преподаватели' };
   function tmTopicChips(u) {
     var mine = u.notify_topics || [];
     return '<span class="tm-tp" data-uid="' + u.id + '">' +
@@ -33291,6 +33300,22 @@
       '<option value=""' + (cur ? '' : ' selected') + '>Без категории</option>' + extra + opts + '</select>';
   }
 
+  /* Статус документа глазами семьи. Значения — те же, что в client_docs.status:
+     кабинет читает их напрямую (client_views._DOC_STATUS_MAP), второй словарь здесь
+     завести нельзя, разъедется. */
+  var DOC_ST = [
+    { k: 'received',  t: 'на проверке' },
+    { k: 'accepted',  t: 'принят' },
+    { k: 'needs_fix', t: 'нужна замена' },
+  ];
+  function docStSelect(current) {
+    var cur = (current || 'received').trim().toLowerCase();
+    if (cur === 'in_review') cur = 'received';
+    return '<select class="doc-kind doc-st">' + DOC_ST.map(function (o) {
+      return '<option value="' + o.k + '"' + (o.k === cur ? ' selected' : '') + '>' + o.t + '</option>';
+    }).join('') + '</select>';
+  }
+
   function buildDocsSection(ctx) {
     var docs = (ctx.d && ctx.d.docs) || [];
     var rows = docs.map(function (dc) {
@@ -33306,11 +33331,18 @@
             // Категория правится прямо в строке: именно она закрывает пункт пакета в
             // кабинете семьи, и поймать чужую ошибку проще там, где файл видно.
             docKindSelect('doc-kind', '', dc.kind) +
+            // Статус правится там же, где видно файл: до этого поменять его из CRM
+            // было нельзя вовсе, и «нужна замена» стояло только у меня в базе.
+            docStSelect(dc.status) +
             (m ? '<span class="doc-mt">' + m + '</span>' : '') +
-          '</div></div>' +
+          '</div>' +
+          // Причина разворота — ровно тот текст, который семья читает в кабинете
+          '<div class="doc-why"' + (dc.review_note ? '' : ' hidden') + '>' +
+            esc(dc.review_note || '') + '</div>' +
+        '</div>' +
         '<div class="doc-act">' +
           '<a class="icobtn"' + (dc.link ? ' target="_blank" rel="noopener"' : ' data-docdl="' + dc.id + '"') +
-            ' href="' + esc(href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
+            ' href="' + esc(dc.link ? safeHref(href) : href) + '" title="' + (dc.link ? 'Открыть' : 'Скачать') + '">' +
             ic(dc.link ? 'ext' : 'dl', 14) + '</a>' +
           '<button class="icobtn del" data-deldoc="' + dc.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
         '</div></div>';
@@ -34710,6 +34742,35 @@
           showToast(sel.value ? 'Категория: ' + sel.value : 'Категория снята');
           refreshDetail(id);
         }, function () { sel.disabled = false; showToast('Категория не сохранилась'); });
+      });
+    });
+    /* Статус документа. «Нужна замена» без причины бэкенд не примет (422), и это
+       правильно: семья видит только статус, и без текста ей непонятно, что делать.
+       Спрашиваем ровно как причину блокировки исполнителя — тем же prompt. */
+    Array.prototype.forEach.call(host.querySelectorAll('.doc-row .doc-st'), function (sel) {
+      var was = sel.value;
+      sel.addEventListener('change', function () {
+        var row = sel.closest('.doc-row');
+        var did = row && row.getAttribute('data-did');
+        if (!did) return;
+        var why = row.querySelector('.doc-why');
+        var body = { status: sel.value };
+        if (sel.value === 'needs_fix') {
+          var prev = why ? why.textContent.trim() : '';
+          var txt = window.prompt('Что не так с документом? Этот текст семья увидит в кабинете.', prev);
+          if (!txt || !txt.trim()) { sel.value = was; return; }
+          body.review_note = txt.trim();
+        }
+        sel.disabled = true;
+        apiSend('/admin/api/docs/' + did, 'PATCH', body, function (r) {
+          sel.disabled = false;
+          was = sel.value;
+          var note = (r && r.doc && r.doc.review_note) || '';
+          if (why) { why.textContent = note; why.hidden = !note; }
+          showToast(sel.value === 'needs_fix' ? 'Вернули семье с причиной'
+            : sel.value === 'accepted' ? 'Документ принят' : 'Статус: на проверке');
+          refreshDetail(id);
+        }, function () { sel.disabled = false; sel.value = was; showToast('Статус не сохранился'); });
       });
     });
     var linkAdd = el('m-link-add'), linkIn = el('m-link');
