@@ -14707,7 +14707,7 @@
     if (!r || !REP.month) return;
     var mon = (repMonths().filter(function (m) { return m[0] === REP.month; })[0] || [])[1] || REP.month;
     openSheet('Согласовать сумму',
-      esc(r.full_name) + ' · ' + mon + '. Сумма к выплате за месяц по расчетному листу. ' +
+      r.full_name + ' · ' + mon + '. Сумма к выплате за месяц по расчетному листу. ' +
         'Задания раскладывают ее на услуги, и они должны с ней сходиться. Деньги проводятся ' +
         'по подписанному акту, а не отсюда.', [
       ['amount', 'line', 'Сумма, ₽', r.agreed_set ? String(Math.round(r.agreed)) : ''],
