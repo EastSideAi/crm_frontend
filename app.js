@@ -4152,6 +4152,7 @@
     if (sc.type === 'shot') extra = acShotHTML(sc);
     if (sc.type === 'sign') extra = acSignHTML(sc);
     if (sc.type === 'task') extra = acTaskHTML(sc);
+    if (sc.type === 'video') extra = acVideoHTML(sc);
     if (sc.type === 'stage') extra = acStageHTML(sc);
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
@@ -4191,6 +4192,26 @@
     return '<div class="ac-do">' + (sc.soon ? '<span class="ac-badge">экран в работе</span>' : '') +
       (steps ? '<ul class="ac-rules">' + steps + '</ul>' : '') +
       '<label class="ac-chkline"><input type="checkbox" id="ac-lt"' + (on ? ' checked' : '') + '> ' + esc(sc.chk) + '</label></div>';
+  }
+
+  /* Видеоурок: запись живой встречи. Сам файл мы нигде не держим — экран ведет
+     на запись и говорит, что в ней искать. Указатель тем обязателен: двухчасовую
+     встречу целиком второй раз не смотрит никто, а вернуться к нужному месту
+     человек должен уметь за секунды. Адрес и код лежат в academy-courses.js, а он
+     раздается статикой без входа (§10.7 CLAUDE.md) — класть сюда можно только то,
+     что мы готовы отдать по прямой ссылке. */
+  function acVideoHTML(sc) {
+    var ch = (sc.chapters || []).map(function (c) {
+      return '<li><span class="ac-vch-t">' + esc(c[0]) + '</span><span>' + esc(c[1]) + '</span></li>';
+    }).join('');
+    return '<div class="ac-vid">' +
+      '<a class="ac-vid-go" href="' + esc(sc.url) + '" target="_blank" rel="noopener">' +
+      '<span class="ac-vid-ic">' + ic('play', 22) + '</span>' +
+      '<span class="ac-vid-tx"><b>' + esc(sc.cta || 'Открыть запись') + '</b>' +
+      (sc.dur ? '<i>' + esc(sc.dur) + '</i>' : '') + '</span></a>' +
+      (sc.code ? '<div class="ac-vid-code"><span class="ac-cap">Код доступа</span><b>' + esc(sc.code) + '</b></div>' : '') +
+      (ch ? '<ol class="ac-vid-ch">' + ch + '</ol>' : '') +
+      '</div>' + (sc.note ? acNote(sc.note) : '');
   }
 
   /* Подпись документа. Текста договора и NDA еще нет — экран честно говорит об
