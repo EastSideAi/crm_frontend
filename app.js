@@ -16678,6 +16678,12 @@
     // Загрузчик сам перерисует «Ведомость», когда ответ придет.
     if (!FIN.pnlp) finLoadPnlPeriod();
     var t = (FIN.pnlp && FIN.pnlp !== 'none' && FIN.pnlp.totals) ? FIN.pnlp.totals : null;
+    /* «Хватит ли на период» тянет плановые выплаты из календаря лениво, как EBITDA:
+       остаток ВТБ минус плановые выплаты — тот же расчёт, что «После нагрузки» в
+       Платёжном календаре, но прямо на Ведомости (Роман 25.09: не ходить в отдельный
+       раздел). Загрузчик сам перерисует экран, когда ответ придёт. */
+    if (!FIN.calendar) finLoadCalendar();
+    var cal = (FIN.calendar && FIN.calendar !== 'none') ? FIN.calendar : null;
     var funds = (s.rules || []).filter(function (r) {
       return r.account_id !== 'shortterm' && r.account_id !== 'flex';
     });
@@ -16815,6 +16821,39 @@
         : '') +
     '</div>';
 
+    /* «Хватит ли на период» (Роман 25.09.2026): насколько уходим в минус после
+       плановых выплат, прямо на Ведомости. «На ВТБ сейчас» — живой остаток БЕЗ плановых
+       (то, что человек видит без нагрузки), ниже вычитаем плановые выплаты периода и
+       прибавляем ожидаемый приход из плана выручки. Цифры — из календаря (тот же
+       расчёт), поэтому своей формулы денег тут не заводим. */
+    var vtbLive = vtb ? vtb.live : (cash.flow || 0);
+    var calIn = cal && cal.income ? (cal.income.total || 0) : 0;
+    var calOut = cal && cal.outflow ? (cal.outflow.total || 0) : 0;
+    var afterPlan = cal ? vtbLive + cal.net : vtbLive;
+    var planCard = '<div class="card fin-block">' +
+      '<div class="sec-head"><span class="ic">' + ic('cal', 14) + '</span>' +
+        '<div><div class="t">Хватит ли на период</div>' +
+        '<div class="s">остаток на счете сейчас и что будет после плановых выплат</div></div></div>' +
+      (cal
+        ? '<div class="fin-kv">' +
+            '<div class="fkv"><span>На ВТБ сейчас</span><b class="num">' + finRub(vtbLive) + '</b></div>' +
+            (calIn ? '<div class="fkv"><span>Ждем прихода (план выручки)</span><b class="num">' +
+              finRub(calIn) + '</b></div>' : '') +
+            '<div class="fkv"><span>Плановые выплаты периода</span><b class="num">' +
+              finRub(-calOut) + '</b></div>' +
+            '<div class="fkv total"><span>После плановых выплат</span>' +
+              '<b class="num' + (afterPlan < 0 ? ' neg' : '') + '">' + finRub(afterPlan) + '</b></div>' +
+          '</div>' +
+          (afterPlan < 0
+            ? '<div class="fin-note">' + ic('alert', 13) + 'Уходим в минус на ' +
+              finRub(-afterPlan) + ': плановых выплат больше, чем есть на счете с ожидаемым приходом' +
+              (calIn ? '' : '. План выручки пуст — если ждете поступлений, впишите их в «План выручки», минус уменьшится') +
+              '.</div>'
+            : '<div class="fin-note calm">' + ic('check', 13) +
+              'Плановые выплаты покрываются: после них на счете ' + finRub(afterPlan) + '.</div>')
+        : '<div class="fin-note calm">Считаю плановые платежи…</div>') +
+    '</div>';
+
     /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
        прибыль до процентов и налогов — тот же результат, к которому ведет мост в
        «Итогах». Считает P&L (`pnl_totals`), без него блок не рисуем: две методики
@@ -16916,7 +16955,7 @@
 
     view.innerHTML = bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + taxCard +
+      '<div class="sp5">' + fundsCard + cashCard + planCard + ebitdaCard + taxCard +
         finAccountsCard(s, editable) + warn +
       '</div></div>';
 

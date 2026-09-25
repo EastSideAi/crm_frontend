@@ -6250,6 +6250,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fc-row.total .fc-name { font-size: 15px; font-weight: 700; }
 .fc-row.total .fc-v { font-size: 32px; font-weight: 800; letter-spacing: -.04em; }
 .fc-v.neg { color: var(--red-ink); }
+.fkv b.neg { color: var(--red-ink); }
 
 .fin-block { padding: 20px 24px 22px; }
 .fin-block + .fin-block, .fin-casc + .fin-block { margin-top: 16px; }
