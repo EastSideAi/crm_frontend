@@ -5922,7 +5922,14 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mo-stat.rep-accent b { color: var(--blue-d); }
 
 .rep-grid { grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, .9fr)); }
-.rep-row { cursor: pointer; }
+/* С согласованной суммой колонок пять: сумма листа стоит первой из чисел, у самого имени,
+   рядом с чипом сверки — их читают вместе. */
+.rep-grid.rep-grid6 { grid-template-columns: minmax(0, 1.5fr) repeat(5, minmax(0, .82fr)); }
+/* Строка растет под содержимое: у имени бывают чипы (должность, сверка, к выплате), и на
+   узкой колонке они переносятся в несколько строк — фиксированные 58px их обрезали бы и
+   наезжали на соседа. */
+.rep-row { cursor: pointer; height: auto; min-height: 58px;
+  padding-top: 9px; padding-bottom: 9px; }
 .rep-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0;
   font-weight: 600; color: var(--ink); }
 .rep-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
@@ -5935,6 +5942,62 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-variant-numeric: tabular-nums; }
 .rep-left { font-weight: 700; }
 .rep-left.hot { color: var(--blue-d); }
+/* Согласованная сумма — не просто число, а кнопка: клик открывает согласование. Держим
+   вид числа, но подчеркнутым пунктиром — чтобы читалось «сюда можно нажать». */
+.rep-agree { border: 0; background: none; padding: 0; cursor: pointer; font-weight: 600;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
+  text-decoration-color: var(--line-2); }
+.rep-agree:hover { color: var(--blue-d); text-decoration-color: currentColor; }
+.rep-agree.unset { color: var(--ink-3); font-weight: 500; }
+/* Чип сверки листа с заданиями: сходится — спокойный зеленый, расхождение — амбер, как
+   «к выплате». Не красный: это рабочий ориентир, а не ошибка данных. */
+.rep-rec { font-size: 11.5px; border-radius: var(--r-pill); padding: 2px 9px;
+  white-space: nowrap; }
+.rep-rec.ok { color: var(--green-ink); background: var(--green-soft); }
+.rep-rec.off { color: var(--amber-ink); background: var(--amber-soft); }
+/* «Разложить» — тихое действие рядом со сверкой: раскладывает сумму листа на услуги. */
+.rep-brk { font-size: 11.5px; border: 0; background: var(--blue-tint); color: var(--blue-d);
+  border-radius: var(--r-pill); padding: 2px 10px; cursor: pointer; white-space: nowrap;
+  font-weight: 600; }
+.rep-brk:hover { background: var(--blue); color: #fff; }
+
+/* ── автораскладка суммы на услуги ── */
+.rb-card { max-width: 560px; }
+.rb-row { display: grid; grid-template-columns: 1fr 74px 92px 26px; align-items: center;
+  gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.rb-row:first-child { padding-top: 0; }
+.rb-svc-t b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.rb-svc-t span { font-size: 11.5px; color: var(--ink-3); }
+.rb-qty { width: 74px; text-align: center; padding: 7px 8px; }
+.rb-line { text-align: right; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rb-del { border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 4px;
+  display: inline-flex; border-radius: var(--r-pill); }
+.rb-del:hover { color: var(--red-ink); background: var(--red-soft); }
+.rb-empty { font-size: 13px; color: var(--ink-3); padding: 4px 0 2px; }
+.rb-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 4px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rb-rec { font-size: 12px; border-radius: var(--r-pill); padding: 3px 11px; font-weight: 600;
+  white-space: nowrap; }
+.rb-rec.ok { color: var(--green-ink); background: var(--green-soft); }
+.rb-rec.under { color: var(--amber-ink); background: var(--amber-soft); }
+.rb-rec.over { color: var(--red-ink); background: var(--red-soft); }
+
+/* ── подтяг суммы из расчётного листа (в листе согласования) ── */
+.rp-pay { background: var(--blue-tint); border-radius: var(--r-lg); padding: 11px 13px;
+  margin-bottom: 14px; }
+.rp-pay-h { font-size: 11.5px; font-weight: 700; color: var(--blue-d); margin-bottom: 8px; }
+.rp-pay-row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; color: var(--ink-2); padding: 3px 0; font-variant-numeric: tabular-nums; }
+.rp-pay-row .num { font-weight: 600; color: var(--ink); }
+.rp-pay-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--navy-soft);
+  font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rp-pay-foot b { color: var(--ink); font-weight: 700; }
+.rp-pay-take { font-size: 12px; font-weight: 600; border: 0; background: var(--blue);
+  color: #fff; border-radius: var(--r-pill); padding: 5px 14px; cursor: pointer; white-space: nowrap; }
+.rp-pay-take:hover { background: var(--blue-d); }
+.rp-pay-hint { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
