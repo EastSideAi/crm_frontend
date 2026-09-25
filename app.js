@@ -16953,9 +16953,11 @@
         : '') +
     '</div>';
 
-    view.innerHTML = bar + head + '<div class="grid">' +
+    // «Денежная позиция периода» — в самом верху (Роман 25.09): первое, что видно,
+    // насколько уходим в минус после плановых выплат.
+    view.innerHTML = planCard + bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
-      '<div class="sp5">' + fundsCard + cashCard + planCard + ebitdaCard + taxCard +
+      '<div class="sp5">' + fundsCard + cashCard + ebitdaCard + taxCard +
         finAccountsCard(s, editable) + warn +
       '</div></div>';
 
