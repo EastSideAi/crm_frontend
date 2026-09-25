@@ -1666,6 +1666,11 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* Кто загрузил — первое, что спрашивают о файле в общей семейной карточке, поэтому
    строка начинается с автора и он на ступень темнее остальной меты. Свои файлы
    («Мы») не выделяем: интересно, что принесла семья. */
+/* Причина разворота — тот же текст, что читает семья в кабинете. Амбра, а не
+   красный: это не авария, а просьба переделать. */
+.doc-why { margin-top: 5px; font-size: 12px; line-height: 1.45; color: #8A5A15;
+  background: rgba(224, 146, 47, .09); border-radius: 8px; padding: 6px 9px; }
+.doc-why[hidden] { display: none; }
 .doc-by { color: var(--ink-2); font-weight: 600; }
 .doc-by-own { color: var(--ink-3); font-weight: 500; }
 .doc-act { display: flex; gap: 6px; flex: none; }
