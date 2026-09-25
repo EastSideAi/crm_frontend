@@ -1,7 +1,11 @@
 /* Каркас урока: чипсы разделов, вкладки, вписывание холста 1920x1080 в кадр,
    навигация и живые расчеты на слайдах. Все цифры считаются формулами прямо
    в браузере, чтобы на встрече можно было подвигать ползунок, а не спорить. */
-var RATE = 25783, CONS = 6000, SALE = 9600, OLD = 33000, YMAX = 1900000;
+/* WORK — часть ставки за работу, ее двигает только вовлеченность.
+   RESAVG — средний результат вместе с премией за вуз А по реальной смеси грантов
+   этого года (коэффициент 0,79 и премия примерно у четверти). */
+var WORK = 20000, RESAVG = 8700, CONS = 6000, SALE = 9600, OLD = 33000, YMAX = 1900000;
+function perBase(k){ return Math.round(WORK * k) + RESAVG; }
 var fmt = function(v){ return Math.round(v).toLocaleString('ru-RU').replace(/ /g,' '); };
 var fk = function(v){ return v.toFixed(2).replace('.', ','); };
 
@@ -152,7 +156,7 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
   var mets = document.getElementById('mets');
   if (!mets) return;
   function kOf(score){
-    return score >= 90 ? 1 : score >= 80 ? 0.95 : score >= 70 ? 0.9 : score >= 55 ? 0.8 : 0.7;
+    return score >= 90 ? 1 : score >= 75 ? 0.95 : score >= 60 ? 0.9 : 0.8;
   }
   function recalc(){
     var score = 0;
@@ -162,7 +166,7 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
     var k = kOf(score);
     document.getElementById('engScore').textContent = Math.round(score);
     document.getElementById('engK').textContent = fk(k);
-    document.getElementById('engMoney').textContent = fmt(30000 * k);
+    document.getElementById('engMoney').textContent = fmt(WORK * k + 10000);
   }
   [].forEach.call(mets.querySelectorAll('input'), function(x){ x.addEventListener('input', recalc); });
   recalc();
@@ -170,19 +174,18 @@ var fk = function(v){ return v.toFixed(2).replace('.', ','); };
 
 /* ---------- лестница ---------- */
 var LAD = [
-  ['Полное покрытие, вуз уровня А', 1], ['Полное покрытие, вуз Б или С', 0.9],
-  ['Покрыто обучение, без стипендии', 0.85], ['Скидка от 50 до 99 процентов', 0.7],
-  ['Скидка до 50 процентов', 0.5], ['Целились в грант, ушел на платное', 0.25],
-  ['Не поступил никуда', 0]
+  ['Грант на обучение, вуз уровня А', 1, 3000], ['Грант на обучение, вуз Б или С', 1, 0],
+  ['Скидка от 50 до 99 процентов', 0.75, 0], ['Скидка до 50 процентов', 0.5, 0],
+  ['Целились в грант, поехал на платное', 0.4, 0], ['Не поступил никуда', 0, 0]
 ];
 var dvol = 1;
 function drawLadder(){
   var ladder = document.getElementById('ladder');
   if (!ladder) return;
   ladder.innerHTML = LAD.map(function(r, n){
-    var v = (15000 + 15000 * r[1]) * dvol;
+    var v = WORK * dvol + 10000 * r[1] + r[2];
     return '<div class="lrow' + (n === 0 ? ' top' : '') + '"><div class="lab">' + r[0] +
-      '</div><div class="trk"><i data-w="' + (v / 30000 * 100) + '"></i></div><div class="val">' +
+      '</div><div class="trk"><i data-w="' + (v / 33000 * 100) + '"></i></div><div class="val">' +
       fmt(v) + '</div></div>';
   }).join('');
   requestAnimationFrame(function(){
@@ -203,16 +206,16 @@ function drawLadder(){
 })();
 
 /* ---------- график роста ----------
-   Средняя ставка при полной вовлеченности 25 783 (реальная смесь грантов этого
-   года), две консультации по 3 000, процент с договора Плюс 3,2% = 9 600.
-   Старые условия: 33 000 за ученика, и все. */
+   Ставка = 20 000 за работу x вовлеченность + 8 700 средний результат с премией
+   (реальная смесь грантов этого года), две консультации по 3 000, процент с
+   договора Плюс 3,2% = 9 600. Старые условия: 33 000 за ученика, и все. */
 var X = function(n){ return 70 + n / 45 * 910; }, Y = function(v){ return 440 - v / YMAX * 410; };
 function drawChart(){
   var svg = document.getElementById('svg');
   if (!svg) return;
   var k = (+document.getElementById('chK').value) / 100;
   var n = +document.getElementById('chN').value;
-  var per = Math.round(RATE * k) + CONS + (chSale ? SALE : 0);
+  var per = perBase(k) + CONS + (chSale ? SALE : 0);
   var pNew = '', pOld = '', area = 'M70,440 ';
   for (var t = 0; t <= 45; t++){
     pNew += (t ? ' L' : 'M') + X(t).toFixed(1) + ',' + Y(per * t).toFixed(1);
@@ -273,7 +276,7 @@ var chSale = 1;
   });
   function calc(){
     var N = +n.value, K = (+k.value) / 100;
-    var base = Math.round(RATE * K) * N, cons = CONS * N, pct = sale ? SALE * N : 0;
+    var base = perBase(K) * N, cons = CONS * N, pct = sale ? SALE * N : 0;
     var total = base + cons + pct;
     document.getElementById('cNlab').textContent = N;
     document.getElementById('cKlab').textContent = fk(K);
@@ -286,5 +289,77 @@ var chSale = 1;
       '<li><span>Разница со старыми условиями</span><b>' + (total - OLD * N >= 0 ? '+' : '') + fmt(total - OLD * N) + '</b></li>';
   }
   n.addEventListener('input', calc); k.addEventListener('input', calc);
+  calc();
+})();
+
+/* ---------- разбор коэффициента ----------
+   Считает ровно то же, что слайды: 20 000 за работу двигает вовлеченность,
+   10 000 за результат двигает сила гранта, премия 3 000 идет сверху ставки.
+   Правило «не ваша зона» поднимает силу гранта до 0,75, если она была ниже. */
+(function(){
+  var box = document.getElementById('coef');
+  if (!box) return;
+  var METS = [
+    ['co1', 'точки в срок'], ['co2', 'скорость ответа'],
+    ['co3', 'оценка семьи'], ['co4', 'работа с агентом']
+  ];
+  var seg = document.getElementById('coSeg');
+  var res = 1;
+
+  function kOf(score){
+    return score >= 90 ? 1 : score >= 75 ? 0.95 : score >= 60 ? 0.9 : 0.8;
+  }
+
+  function calc(){
+    var score = 0, worst = null;
+    METS.forEach(function(m){
+      var el = document.getElementById(m[0]), w = +el.dataset.w, v = +el.value;
+      document.getElementById(m[0] + 'lab').textContent = v + '%';
+      score += w * v / 100;
+      var lost = w * (100 - v) / 100;
+      if (lost > 0 && (!worst || lost > worst[1])) worst = [m[1], lost];
+    });
+    var k = kOf(score);
+    document.getElementById('coScoreLine').textContent =
+      Math.round(score) + ' баллов из ста, вовлеченность ' + fk(k);
+
+    var out = document.getElementById('coOut').checked;
+    var r = out ? Math.max(res, 0.75) : res;
+    var prem = document.getElementById('coA').checked && r === 1 ? 3000 : 0;
+    var work = Math.round(WORK * k), result = Math.round(10000 * r);
+    var total = work + result + prem;
+
+    document.getElementById('coTotal').textContent = fmt(total) + ' ₽';
+    document.getElementById('coBrk').innerHTML =
+      '<li><span>За работу: 20 000 × ' + fk(k) + '</span><b>' + fmt(work) + '</b></li>' +
+      '<li><span>За результат: 10 000 × ' + fk(r) + '</span><b>' + fmt(result) + '</b></li>' +
+      (prem ? '<li><span>Премия за вуз уровня А</span><b>3 000</b></li>' : '') +
+      '<li><span>' + (total >= 33000 ? 'Потолок взят целиком' : 'Недобрано до потолка 33 000') +
+      '</span><b>' + (total >= 33000 ? '—' : fmt(33000 - total)) + '</b></li>';
+
+    var hint = document.getElementById('coHint');
+    if (out && res < 0.75) {
+      hint.textContent = 'Правило «не ваша зона» подняло силу гранта с ' + fk(res) +
+        ' до 0,75. Это ' + fmt(7500 - 10000 * res) + ' ₽, которые вы бы потеряли за чужое решение.';
+    } else if (worst) {
+      hint.textContent = 'Сильнее всего просела метрика «' + worst[0] + '», минус ' +
+        Math.round(worst[1]) + ' баллов. Вернуть ее в сто процентов стоит ' +
+        fmt(Math.round(WORK * kOf(score + worst[1])) - work) + ' ₽ на этом ученике.';
+    } else {
+      hint.textContent = 'Все четыре метрики в сто процентов: вовлеченность 1,00, и вся ваша ' +
+        'часть ставки выплачена целиком. Ниже этой строки коэффициент не опускает ничего, ' +
+        'что решаете не вы.';
+    }
+  }
+
+  [].forEach.call(seg.children, function(b){
+    b.addEventListener('click', function(){
+      [].forEach.call(seg.children, function(x){ x.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', 'true'); res = +b.dataset.r; calc();
+    });
+  });
+  METS.forEach(function(m){ document.getElementById(m[0]).addEventListener('input', calc); });
+  document.getElementById('coA').addEventListener('change', calc);
+  document.getElementById('coOut').addEventListener('change', calc);
   calc();
 })();

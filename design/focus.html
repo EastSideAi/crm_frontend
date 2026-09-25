@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ИстСайд CRM — Фокус недели</title>
+<!-- Фокус недели (лист руководителя). Когда берем: раздел «Фокус недели» — цели, у которых есть шаги, взятые в текущую неделю. Классы: .fw .fw-h .fw-n .fw-hm .fw-t .fw-sub .fw-nobody .fw-prog .fw-why .fw-rows .fw-day-wrap .fw-day .fw-loose. Живой код: style.css «ФОКУС НЕДЕЛИ». Правила: своих рецептов строки, статуса и прогресса раздел не заводит — строка задачи это общая .dy-row (dyRow с who/boss/noGoal), прогресс .tsk-prog, полоса «Вне фокусов» .tsk-band, метрики .statbar. Свое здесь только оправа: номер фокуса, шапка цели, строка «зачем» из первой строки описания цели и колонка дня слева от строки. Красное на экране одно — просрочка (день слева краснеет вместе со строкой). -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background:#E5E7EC; padding:0; }
+  .sc-wrap { max-width:1120px; margin:0 auto; padding:38px 26px 90px; }
+  .sc-h1 { font-size:26px; font-weight:700; letter-spacing:-.03em; color:#11151F; }
+  .sc-sub { margin-top:8px; font-size:14px; color:#697086; max-width:74ch; line-height:1.55; }
+  .sc-sec { margin-top:38px; }
+  .sc-lab { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#A6ABB8; margin-bottom:13px; }
+  .sc-note { font-size:12.5px; color:#697086; margin-top:12px; line-height:1.55; }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+
+  <div class="sc-top">
+    <div class="sc-h1">Фокус недели</div>
+    <div class="sc-sub">Лист руководителя: во что компания целится на этой неделе и что из этого уже сделано. Фокус — не сущность в базе, а цель, у которой есть шаги, взятые в текущую неделю. Поэтому лист не ведут руками: собрали неделю — фокус появился, закрыли шаг — он позеленел.</div>
+  </div>
+
+  <!-- ── ПОЛОСА МЕТРИК ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.statbar — те же четыре цифры, что у дашборда</div>
+    <div class="card statbar">
+      <button class="stat"><div class="sl">Фокусов</div><div class="sv num">4</div><div class="sd"><span class="smut">целей в работе</span></div></button>
+      <button class="stat"><div class="sl">Задач в неделе</div><div class="sv num">30</div><div class="sd"><span class="smut">у всей команды</span></div></button>
+      <button class="stat"><div class="sl">Закрыто</div><div class="sv num">7</div><div class="sd"><span class="smut">23% недели</span></div></button>
+      <button class="stat"><div class="sl">Горит</div><div class="sv num">2</div><div class="sd"><span class="smut">просрочено</span></div></button>
+    </div>
+  </div>
+
+  <!-- ── КАРТОЧКА ФОКУСА ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.fw — цель, ее «зачем» и шаги этой недели</div>
+
+    <div class="card fw">
+      <div class="fw-h">
+        <span class="fw-n num">1</span>
+        <div class="fw-hm">
+          <button class="fw-t">Диагносты готовы вести диагностики к запуску 16 сентября</button>
+          <div class="fw-sub"><span>Продажи</span><span>ведет Лиана Эванс</span><span>1 из 4 на этой неделе</span></div>
+        </div>
+        <div class="fw-prog">
+          <div class="tsk-prog"><span class="tsk-prog-b"><i style="width:25%"></i></span><span class="tsk-prog-n num">1 из 4</span></div><span class="fw-plab">вся цель</span>
+        </div>
+      </div>
+      <div class="fw-why">Приоритет 1 из 4. Ключевое на неделе: диагносты должны начать проводить диагностики сами, иначе поток встреч упирается в один календарь.</div>
+      <div class="fw-rows">
+
+        <div class="fw-day-wrap">
+          <span class="fw-day">вт 8</span>
+          <div class="trow dy-row has-meta">
+            <div class="dy-t">
+              <button class="tsk-chk"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></button>
+              <div class="dy-main">
+                <span class="dy-ttl"><span class="tsk-imp" title="Важная"><svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path d="M11 1L4 11h4l-1 8 7-10h-4z"/></svg></span>Декомпозировать план обучения отдела продаж к запуску</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Павел Дьяков</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"><span class="tsk-due">до вт</span></div>
+          </div>
+        </div>
+
+        <div class="fw-day-wrap">
+          <span class="fw-day">ср 9</span>
+          <div class="trow dy-row closed has-meta">
+            <div class="dy-t">
+              <span class="tsk-chk done"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></span>
+              <div class="dy-main">
+                <span class="dy-ttl">Блок 1 обучения: продукт и матчасть, устный зачет</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Лиана Эванс</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"></div>
+          </div>
+        </div>
+
+        <div class="fw-day-wrap">
+          <span class="fw-day over">чт 10</span>
+          <div class="trow dy-row r-crit has-meta">
+            <div class="dy-t">
+              <button class="tsk-chk"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></button>
+              <div class="dy-main">
+                <span class="dy-ttl">Блок 2 обучения: ролевки по трем сценариям родителя</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Лиана Эванс</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"><span class="tsk-due due-over">2 дня</span></div>
+          </div>
+        </div>
+
+        <div class="fw-day-wrap">
+          <span class="fw-day">сб 12</span>
+          <div class="trow dy-row has-meta">
+            <div class="dy-t">
+              <button class="tsk-chk"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></button>
+              <div class="dy-main">
+                <span class="dy-ttl">Живые диагностики под запись и разбор по чек-листу</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Лиана Эванс</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"><span class="tsk-due">до сб</span><span class="sev st-doing">в работе</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card fw">
+      <div class="fw-h">
+        <span class="fw-n num">2</span>
+        <div class="fw-hm">
+          <button class="fw-t">Готовность к запуску 16 сентября</button>
+          <div class="fw-sub"><span>Маркетинг</span><span class="fw-nobody">без ответственного</span><span>0 из 6 на этой неделе</span></div>
+        </div>
+        <div class="fw-prog">
+          <div class="tsk-prog"><span class="tsk-prog-b"><i style="width:0%"></i></span><span class="tsk-prog-n num">0 из 7</span></div><span class="fw-plab">вся цель</span>
+        </div>
+      </div>
+      <div class="fw-why">Приоритет 3 из 4. Подготовить все к запуску: разобрать аудит по пунктам, назначить ответственного за квалификацию лидов, проверить, как это выглядит на дашбордах.</div>
+      <div class="fw-rows">
+        <div class="fw-day-wrap">
+          <span class="fw-day">пт 11</span>
+          <div class="trow dy-row has-meta">
+            <div class="dy-t">
+              <button class="tsk-chk"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></button>
+              <div class="dy-main">
+                <span class="dy-ttl">Прогнать воронки руками во всех каналах и починить найденное</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Екатерина</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"><span class="tsk-due">до пт</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sc-note">Номер фокуса — порядок из описания цели («Приоритет 2 из 4…»). Его нет — цель встает ниже, по объему работы в неделе. Отдельного поля под приоритет в базе нет намеренно: он живет неделю, а колонка — вечно.</div>
+  </div>
+
+  <!-- ── ВНЕ ФОКУСОВ ── -->
+  <div class="sc-sec">
+    <div class="sc-lab">.fw-loose — недельные задачи без цели</div>
+    <div class="card fw fw-loose">
+      <div class="tsk-band"><span class="tsk-band-t">Вне фокусов</span><span class="tsk-band-h">задачи недели, не привязанные к цели</span><span class="tsk-band-n num">12</span></div>
+      <div class="fw-rows">
+        <div class="fw-day-wrap">
+          <span class="fw-day">пн 7</span>
+          <div class="trow dy-row has-meta">
+            <div class="dy-t">
+              <button class="tsk-chk"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5l4 4 8-9"/></svg></button>
+              <div class="dy-main">
+                <span class="dy-ttl">Передать конспект консультации тьютору-диагносту</span>
+                <div class="dy-meta"><span class="dy-m"><i class="dy-k">исполнитель</i><b>Вера Большакова</b></span></div>
+              </div>
+            </div>
+            <div class="dy-r"><span class="tsk-due">до пн</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sc-note">Блок внизу и всегда последний: это остаток, а не фокус. Если он длиннее самих фокусов — неделя собрана мимо целей, и это первое, что должен увидеть руководитель.</div>
+  </div>
+
+</div>
+</body>
+</html>

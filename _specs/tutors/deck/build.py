@@ -25,6 +25,7 @@ html = f"""<!doctype html>
 
 <div class="tabs" role="tablist">
   <button class="tab" id="tab-slides" role="tab" aria-selected="true" aria-controls="view-slides">Слайды</button>
+  <button class="tab" id="tab-coef" role="tab" aria-selected="false" aria-controls="view-coef">Разбор коэффициента</button>
   <button class="tab" id="tab-calc" role="tab" aria-selected="false" aria-controls="view-calc">Калькулятор года</button>
 </div>
 
@@ -53,6 +54,51 @@ html = f"""<!doctype html>
   </div>
 </div>
 
+<div class="view" id="view-coef" role="tabpanel" aria-labelledby="tab-coef" hidden>
+  <div class="wide">
+    <h2>Разбор коэффициента: что на что влияет</h2>
+    <p class="lead">Слева то, что вы делаете сами, справа то, чем кончился год у ученика.
+    Подвигайте ползунки и посмотрите, сколько рублей стоит каждая строка. Ставка бакалавриата
+    складывается из 20 000 за работу и 10 000 за результат, плюс премия 3 000, если ученик
+    поступил на грант в один из двух приоритетных вузов.</p>
+    <div class="coef" id="coef">
+      <div class="cstack">
+        <div class="calcbox">
+          <h3>Ваша зона: вовлеченность</h3>
+          <div class="crow"><label>Контрольные точки в срок, вес 40 <b id="co1lab">100%</b></label>
+            <input type="range" id="co1" data-w="40" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Скорость ответа семье, вес 30 <b id="co2lab">100%</b></label>
+            <input type="range" id="co2" data-w="30" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Оценка семьи, вес 20 <b id="co3lab">100%</b></label>
+            <input type="range" id="co3" data-w="20" min="0" max="100" step="5" value="100"></div>
+          <div class="crow"><label>Работа с агентом, вес 10 <b id="co4lab">100%</b></label>
+            <input type="range" id="co4" data-w="10" min="0" max="100" step="5" value="100"></div>
+          <p class="muted-note" id="coScoreLine">100 баллов из ста, вовлеченность 1,00</p>
+        </div>
+        <div class="calcbox">
+          <h3>Общая зона: чем кончился год</h3>
+          <div class="seg" id="coSeg">
+            <button class="opt" data-r="1" aria-pressed="true">грант на обучение</button>
+            <button class="opt" data-r="0.75" aria-pressed="false">скидка 50—99%</button>
+            <button class="opt" data-r="0.5" aria-pressed="false">скидка до 50%</button>
+            <button class="opt" data-r="0.4" aria-pressed="false">поехал на платное</button>
+            <button class="opt" data-r="0" aria-pressed="false">не поступил</button>
+          </div>
+          <div class="crow"><label class="chk"><input type="checkbox" id="coA" checked> поступил в вуз уровня А, премия 3 000</label></div>
+          <div class="crow"><label class="chk"><input type="checkbox" id="coOut"> сорвалось не по вашей вине, флаг подняли за два месяца</label></div>
+        </div>
+      </div>
+      <div class="calcbox">
+        <h3>Выходит за одного ученика</h3>
+        <div><div class="total" id="coTotal">33 000 ₽</div>
+          <div class="total-cap">бакалавриат, потолок 33 000</div></div>
+        <ul class="brk" id="coBrk"></ul>
+        <p class="warn" id="coHint"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="view" id="view-calc" role="tabpanel" aria-labelledby="tab-calc" hidden>
   <div class="wide">
     <h2>Посчитайте свой сезон</h2>
@@ -65,7 +111,7 @@ html = f"""<!doctype html>
         <div class="crow"><label>Учеников за сезон <b id="cNlab">20</b></label>
           <input type="range" id="cN" min="5" max="45" step="1" value="20"></div>
         <div class="crow"><label>Вовлеченность <b id="cKlab">0,90</b></label>
-          <input type="range" id="cK" min="70" max="100" step="5" value="90"></div>
+          <input type="range" id="cK" min="80" max="100" step="5" value="90"></div>
         <div class="seg" id="cSeg">
           <button class="opt" data-s="1" aria-pressed="true">продаю сам</button>
           <button class="opt" data-s="0" aria-pressed="false">только веду</button>
@@ -73,7 +119,7 @@ html = f"""<!doctype html>
       </div>
       <div class="calcbox">
         <h3>Выходит за сезон</h3>
-        <div><div class="total" id="cTotal">776 100 ₽</div>
+        <div><div class="total" id="cTotal">846 000 ₽</div>
           <div class="total-cap" id="cMonth"></div></div>
         <ul class="brk" id="cBrk"></ul>
       </div>

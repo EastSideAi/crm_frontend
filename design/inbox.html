@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ИстСайд CRM — Инбокс</title>
-<!-- Инбокс. Когда берем: страницы «Диалоги» (омниканальный TG/VK/WA-чат) и «Обсуждения» (треды по задачам). Классы: .tg/.tg-list/.tg-row/.tg-ava, .tg-chat/.tg-thread/.tg-bub, .tg-hint, .handoff-banner/.ib-banner, .tg-compose, .ibsw, .th-*. Живой код: style.css:1918 (каркас+чат), 1489 (обсуждения+тумблер), 2069 (баннер хэндоффа). Правила: цвета ролей фиксированы — белый входящий/синий бот/navy менеджер; канал всегда виден (точка на аватаре + --c); кто отвечает — всегда явно (хинт-полоса ai/mgr); новые чат-поверхности строим из .tg-*-рецептов. -->
+<!-- Инбокс. Когда берем: страницы «Диалоги» (омниканальный TG/VK/WA-чат) и «Обсуждения» (треды по задачам). Классы: .tg/.tg-list/.tg-row/.tg-ava, .tg-chat/.tg-thread/.tg-bub, .tg-img/.tg-msg.pic, .tg-hint, .handoff-banner/.ib-banner, .tg-compose, .ibsw, .th-*. Живой код: style.css:1918 (каркас+чат), 1489 (обсуждения+тумблер), 2069 (баннер хэндоффа). Правила: цвета ролей фиксированы — белый входящий/синий бот/navy менеджер; канал всегда виден (точка на аватаре + --c); кто отвечает — всегда явно (хинт-полоса ai/mgr); новые чат-поверхности строим из .tg-*-рецептов. -->
 <link rel="stylesheet" href="../style.css" />
 <style>
   body { background:#E5E7EC; padding:40px 0 90px; }
@@ -89,6 +89,9 @@
           <div class="tg-msg in"><div class="tg-bub">Здравствуйте! Дочь хочет в медицинский в Китае. С чего начать?<span class="tg-mt">14:02</span></div></div>
           <div class="tg-msg out ai"><div class="tg-bub">Здравствуйте! Начинаем с бесплатной диагностики — она покажет реальные шансы и что подтянуть. Займет 10 минут.<span class="tg-mt">14:03</span></div><div class="tg-by">Бот</div></div>
           <div class="tg-msg in"><div class="tg-bub">А сколько по времени займет язык?<span class="tg-mt">14:20</span></div></div>
+          <!-- Присланный снимок: пузыря нет, время чипом поверх кадра. Ниже — не загрузившееся вложение. -->
+          <div class="tg-msg in pic"><div class="tg-bub pic"><div class="tg-atts"><a class="tg-img" href="#" title="Открыть во весь экран"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='210'%3E%3Crect width='320' height='210' fill='%23E9ECF4'/%3E%3Crect x='26' y='24' width='268' height='162' rx='8' fill='%23fff'/%3E%3Crect x='46' y='44' width='120' height='14' rx='4' fill='%232F6BFF'/%3E%3Crect x='46' y='74' width='200' height='10' rx='4' fill='%23D6DCE8'/%3E%3Crect x='46' y='94' width='170' height='10' rx='4' fill='%23D6DCE8'/%3E%3Crect x='46' y='142' width='90' height='22' rx='6' fill='%23FF5C5C'/%3E%3C/svg%3E" alt="вложение из переписки"></a></div><span class="tg-mt num">14:21</span></div></div>
+          <div class="tg-msg in"><div class="tg-bub"><div class="tg-atts"><a class="tg-img gone" href="#"><img src="" alt=""></a></div><span class="tg-mt">14:21</span></div></div>
           <div class="tg-msg out mgr"><div class="tg-bub">Марина, при старте с нуля до уровня подачи — около 8 месяцев интенсива. Расскажу подробнее на созвоне.<span class="tg-mt">14:24</span></div><div class="tg-by">Анна · тьютор</div></div>
           <div class="tg-msg out mgr undelivered"><div class="tg-bub">Удобно завтра в 18:00?<span class="tg-mt">14:25</span></div><div class="tg-by warn">Не доставлено</div></div>
         </div>

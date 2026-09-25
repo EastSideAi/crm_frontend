@@ -154,6 +154,20 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .tbl .n + td,.tbl th.n + th{padding-left:44px}
 .tbl tr.hi td{color:#FFFFFF;font-weight:600}
 .tbl tr:last-child td{border-bottom:none}
+/* таблица «метрика — что считает система — ваше действие — когда видно»:
+   колонки текстовые и без заданной ширины наезжают друг на друга */
+.tbl.four{font-size:27px;table-layout:fixed}
+.tbl.four th,.tbl.four td{padding-right:40px;vertical-align:top}
+.tbl.four td{font-size:27px}
+.tbl.four th:last-child,.tbl.four td:last-child{padding-right:0}
+.tbl.four col.c1{width:17%}.tbl.four col.c2{width:30%}
+.tbl.four col.c3{width:33%}.tbl.four col.c4{width:20%}
+/* календарь выплат: своя раскладка, деньги узкой колонкой */
+.tbl.pay col.c1{width:20%}.tbl.pay col.c2{width:40%}
+.tbl.pay col.c3{width:16%}.tbl.pay col.c4{width:24%}
+.tbl .dim{color:#5C6E93;font-size:23px}
+.tbl.pay td{font-size:25px;padding-top:15px;padding-bottom:15px}
+.tbl.pay th{padding-bottom:15px}
 
 /* число-герой */
 .nums{display:flex;align-items:flex-end;gap:56px;margin-top:8px}
@@ -179,7 +193,7 @@ body{background:var(--ground);color:var(--ink);min-height:100vh;
 .pt-x{font-size:30px;color:#5C6E93;text-align:right;transition:transform .25s}
 .pt.open .pt-x{transform:rotate(45deg)}
 .pt-b{max-height:0;overflow:hidden;transition:max-height .32s ease}
-.pt.open .pt-b{max-height:300px}
+.pt.open .pt-b{max-height:380px}
 .pt-b ul{padding:0 0 26px 144px}
 .pt-b li{list-style:none;font-size:27px;color:#8FA1C4;padding:7px 0;display:flex;gap:14px}
 .pt-b li::before{content:'✓';color:#2B8FFF}
@@ -196,8 +210,10 @@ input[type=range]{-webkit-appearance:none;appearance:none;height:7px;border-radi
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;
   border-radius:50%;background:#2B8FFF;border:0;box-shadow:0 0 0 6px rgba(43,143,255,.14)}
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#2B8FFF;border:0}
-.met[data-w="25"] .sl{width:100%}.met[data-w="20"] .sl{width:80%}
-.met[data-w="15"] .sl{width:60%}.met[data-w="10"] .sl{width:40%}
+/* ширина ползунка показывает вес метрики: 40 — во всю колонку, 10 — четверть */
+.met[data-w="40"] .sl{width:100%}.met[data-w="30"] .sl{width:75%}
+.met[data-w="20"] .sl{width:50%}.met[data-w="10"] .sl{width:28%}
+.met-do{font-size:23px;color:#6C7E9F;line-height:1.35;margin-top:13px;letter-spacing:-.005em}
 .out3{display:flex;gap:90px;align-items:baseline;margin-top:52px}
 .out3 .v{font-size:110px;font-weight:700;letter-spacing:-.045em;line-height:1;
   font-variant-numeric:tabular-nums}
@@ -333,6 +349,33 @@ svg .dlab{fill:#FFFFFF;font-size:28px;font-weight:600;font-family:'Inter Display
 .total{font-size:52px;font-weight:700;letter-spacing:-.04em;color:#F5C84C;line-height:1;
   font-variant-numeric:tabular-nums}
 .total-cap{font-size:14px;color:var(--dim);margin-top:8px}
-.calc .brk li{font-size:15px;padding:11px 0;color:var(--muted)}
-.calc .brk li b{font-size:15px}
+.calc .brk li,.coef .brk li{font-size:15px;padding:11px 0;color:var(--muted)}
+.calc .brk li b,.coef .brk li b{font-size:15px}
 @media (max-width:820px){.calc{grid-template-columns:1fr}}
+
+/* карта денег: что в зоне тьютора, что общее, что сверху */
+.mmap{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;margin-top:52px}
+.mmap .c{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.045);
+  border-radius:28px;padding:40px 36px 42px;display:flex;flex-direction:column}
+.mmap .c.own{border-color:rgba(43,143,255,.42);background:rgba(43,143,255,.10)}
+.mmap .c.up{border-color:rgba(245,200,76,.30);background:rgba(245,200,76,.06)}
+.mmap .v{font-size:92px;font-weight:700;letter-spacing:-.05em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.mmap .c.up .v{color:#F5C84C}
+.mmap .t{font-size:31px;font-weight:600;letter-spacing:-.018em;margin:24px 0 14px}
+.mmap .d{font-size:26px;line-height:1.4;color:#9FB0D0;letter-spacing:-.005em}
+.mmap .tag{margin-top:auto;padding-top:28px;font-size:23px;color:#5C6E93}
+
+/* разбор коэффициента */
+.coef{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start}
+.cstack{display:flex;flex-direction:column;gap:34px}
+.crow label.chk{justify-content:flex-start;gap:12px;align-items:center;margin-bottom:0;
+  cursor:pointer;line-height:1.4}
+.crow label.chk input{accent-color:var(--sapphire);width:17px;height:17px;flex:none}
+.coef .seg{flex-wrap:wrap}
+@media (max-width:820px){.coef{grid-template-columns:1fr}}
+
+/* обязательный пункт чек-листа: сказать семье. Выделен, потому что именно
+   его раньше не делали, а брошенность у семьи берется отсюда */
+.pt-b li.say{color:#E6ECF7}
+.pt-b li.say::before{color:#F5C84C}
