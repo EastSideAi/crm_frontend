@@ -14759,6 +14759,13 @@
     });
     var services = d.services || [];
     var agreed = Number(d.agreed) || 0;
+    var assigned = Number(d.assigned) || 0;
+    // Раскладываем ОСТАТОК: согласовано минус уже назначенное заданиями. Существующие
+    // задания уже часть суммы, второй раз их не раскладываем.
+    var gap = d.gap != null ? Number(d.gap) : agreed;
+    var subDone = assigned > 0
+      ? '. Уже назначено ' + repMoney(assigned) + ', осталось разложить ' + repMoney(gap)
+      : '. Согласовано ' + repMoney(agreed);
     var ov = document.createElement('div');
     ov.className = 'al-ov over';
     ov.innerHTML =
@@ -14768,7 +14775,7 @@
           '<div class="al-title">Разложить сумму на услуги</div></div>' +
           '<button class="al-x" id="rb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">' + esc(r.full_name) + '. Согласовано ' + repMoney(agreed) +
+        '<div class="al-sub">' + esc(r.full_name) + subDone +
           '. Собери услуга × количество так, чтобы сошлось. Из строк заведутся задания, ' +
           'дальше приемка, акт и чек.</div>' +
         '<div class="al-body">' +
@@ -14826,12 +14833,12 @@
     }
     function paintSum() {
       var alloc = items.reduce(function (s, it) { return s + it.price * it.qty; }, 0);
-      var rem = Math.round((agreed - alloc) * 100) / 100;
+      var rem = Math.round((gap - alloc) * 100) / 100;
       var cls = rem === 0 ? 'ok' : (rem > 0 ? 'under' : 'over');
       var word = rem === 0 ? 'сходится'
         : (rem > 0 ? 'осталось разложить ' + repMoney(rem) : 'перебор ' + repMoney(-rem));
       ov.querySelector('#rb-sum').innerHTML =
-        '<span>Разложено ' + repMoney(alloc) + ' из ' + repMoney(agreed) + '</span>' +
+        '<span>Разложено ' + repMoney(alloc) + ' из ' + repMoney(gap) + '</span>' +
         '<span class="rb-rec ' + cls + '">' + word + '</span>';
     }
     paintItems(); paintSum();
