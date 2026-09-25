@@ -17195,20 +17195,27 @@
      услуги идут строкой «не отнесено» и не размазываются по программам — иначе экран
      нарисует уверенную картинку из воздуха. */
   function renderFinFund(view) {
-    /* Ошибку показываем только свою. Экран фонда не зависит от периода, и падение
-       соседнего запроса не повод прятать цифры, которые загрузились. */
+    /* Ошибку показываем только свою: падение соседнего запроса не повод прятать
+       цифры фонда, которые загрузились. Экран привязан к выбранной ведомости —
+       finLoadFund шлёт период, finStale отбрасывает устаревший ответ. */
     if (!FIN.fund) { view.innerHTML = dashSkeleton(); finLoadFund(); return; }
     if (FIN.fund === 'none') return finErrView(view);
     var f = FIN.fund, t = f.totals, offs = f.offerings || [], pers = f.periods || [];
     var noOff = null, named = [];
     offs.forEach(function (o) { if (o.id) named.push(o); else noOff = o; });
 
+    /* Сводка сверху — за ВЫБРАННУЮ ведомость (решение Романа 25.09): сколько в этом
+       периоде отложили в фонд, потратили с него и что осталось на конец. Цифры берём
+       из строки этого периода в «По ведомостям» (v_fund_balances), а не из накопления
+       за всё время — старые периоды не должны читаться как текущий. */
+    var selId = f.period && f.period.id, sel = null;
+    pers.forEach(function (p) { if (p.id === selId) sel = p; });
+    var pAdded = sel ? sel.added : 0, pSpent = sel ? sel.spent : 0,
+        pBal = sel ? sel.next : (t ? t.balance : 0);
     var bar = statBar([
-      { label: 'Отложено всего', value: finRub(t.added), sub: 'по правилу ведомости' },
-      { label: 'Потрачено с фонда', value: finRub(t.spent), sub: 'факт, все ведомости' },
-      { label: 'Остаток', value: finRub(t.balance), sub: 'уедет в следующий период' },
-      { label: 'Ведомостей', value: String(t.periods),
-        sub: t.periods < 2 ? 'период всего один' : 'учтено в расчете' },
+      { label: 'Отложено за период', value: finRub(pAdded), sub: 'в этой ведомости' },
+      { label: 'Потрачено за период', value: finRub(pSpent), sub: 'в этой ведомости' },
+      { label: 'Остаток', value: finRub(pBal), sub: 'на конец ведомости' },
     ]);
 
     var maxInc = 0;
