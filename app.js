@@ -16471,11 +16471,16 @@
     });
   }
   function finLoadFund() {
+    // Список трат фонда идёт за выбранный период (finQ добавляет id ведомости),
+    // поэтому фонд грузим после периодов и отбрасываем ответ про чужой период.
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadFund(); });
     finBusy('fund', function (done) {
-      api('/admin/api/fin/fund?account_id=' + encodeURIComponent(FIN.fundId)).then(function (r) {
-        FIN.fund = r; FIN.err = '';
-        if (curSpace() === 'fin') renderAll();
-      }).catch(function (e) { finFail(e, 'fund'); }).then(done);
+      api('/admin/api/fin/fund' + finQ('account_id=' + encodeURIComponent(FIN.fundId)))
+        .then(function (r) {
+          if (finStale(r)) return;
+          FIN.fund = r; FIN.err = '';
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'fund'); }).then(done);
     });
   }
   function finSetFund(id) {
@@ -17243,12 +17248,15 @@
     var isContractors = FIN.fundId === 'contractors';
     var openP = (f.periods || []).filter(function (x) { return x.open; })[0];
     var canPay = can('finmodel_edit') && (!isContractors || !!openP);
+    // Список трат — за выбранную ведомость (её имя есть в ответе), а не за всё время.
+    var fper = f.period && f.period.name ? f.period.name : '';
     var opsCard = '<div class="card fin-block">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">' + (isContractors ? 'Выплаты подрядчикам' : 'Расходы фонда') +
+          (fper ? ' · ' + esc(fper) : '') +
           '</div><div class="s">' + (isContractors
-            ? 'выплата с реквизитами и чеком/актом, сразу расход фонда в ведомости'
-            : 'каждая копейка, ушедшая с фонда, новое сверху') + '</div></div>' +
+            ? 'выплаты этой ведомости, с реквизитами и чеком/актом'
+            : 'траты этой ведомости, новое сверху') + '</div></div>' +
         (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
@@ -17269,8 +17277,8 @@
               '<div class="fl-v num">' + finRub(o.amount) + '</div></div>';
           }).join('') + '</div>'
         : '<div class="empty">' + (isContractors
-            ? 'Выплат подрядчикам с этого фонда пока не было. Нажмите «Добавить выплату».'
-            : 'С этого фонда пока ничего не платили.') + '</div>') +
+            ? 'В этой ведомости выплат подрядчикам с фонда не было. Нажмите «Добавить выплату».'
+            : 'В этой ведомости с фонда ничего не платили.') + '</div>') +
       '</div>';
 
     /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
