@@ -5947,6 +5947,33 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   white-space: nowrap; }
 .rep-rec.ok { color: var(--green-ink); background: var(--green-soft); }
 .rep-rec.off { color: var(--amber-ink); background: var(--amber-soft); }
+/* «Разложить» — тихое действие рядом со сверкой: раскладывает сумму листа на услуги. */
+.rep-brk { font-size: 11.5px; border: 0; background: var(--blue-tint); color: var(--blue-d);
+  border-radius: var(--r-pill); padding: 2px 10px; cursor: pointer; white-space: nowrap;
+  font-weight: 600; }
+.rep-brk:hover { background: var(--blue); color: #fff; }
+
+/* ── автораскладка суммы на услуги ── */
+.rb-card { max-width: 560px; }
+.rb-row { display: grid; grid-template-columns: 1fr 74px 92px 26px; align-items: center;
+  gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.rb-row:first-child { padding-top: 0; }
+.rb-svc-t b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.rb-svc-t span { font-size: 11.5px; color: var(--ink-3); }
+.rb-qty { width: 74px; text-align: center; padding: 7px 8px; }
+.rb-line { text-align: right; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rb-del { border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 4px;
+  display: inline-flex; border-radius: var(--r-pill); }
+.rb-del:hover { color: var(--red-ink); background: var(--red-soft); }
+.rb-empty { font-size: 13px; color: var(--ink-3); padding: 4px 0 2px; }
+.rb-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 4px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rb-rec { font-size: 12px; border-radius: var(--r-pill); padding: 3px 11px; font-weight: 600;
+  white-space: nowrap; }
+.rb-rec.ok { color: var(--green-ink); background: var(--green-soft); }
+.rb-rec.under { color: var(--amber-ink); background: var(--amber-soft); }
+.rb-rec.over { color: var(--red-ink); background: var(--red-soft); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой

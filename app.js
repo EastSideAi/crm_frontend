@@ -14618,6 +14618,11 @@
     var due = r.due > 0
       ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
     var flag = r.blocked ? '<span class="rep-block">заблокирован</span>' : '';
+    // Разложить согласованную сумму на услуги каталога — рядом со сверкой. Появляется
+    // только когда сумма задана: раскладывать нечего, пока листа нет.
+    var brk = (monthly && r.agreed_set)
+      ? '<button class="rep-brk" data-repbrk="' + esc(r.contractor_id) + '">разложить</button>'
+      : '';
     // Согласованная сумма расчетного листа — только при выбранном месяце: за все время
     // ее нет. Ячейка кликается и открывает согласование, поэтому это кнопка, а не строка.
     var agreed = monthly
@@ -14629,7 +14634,7 @@
         ' rep-row" data-repc="' + esc(r.contractor_id) + '">' +
       '<span class="rep-name">' + esc(r.full_name) +
         (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') +
-        flag + repRec(r) + due + '</span>' +
+        flag + repRec(r) + due + brk + '</span>' +
       agreed +
       repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
       '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
@@ -14694,6 +14699,13 @@
         openRepAgree(rows.filter(function (x) { return x.contractor_id === cid; })[0]);
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-repbrk]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var cid = b.getAttribute('data-repbrk');
+        openRepBreakdown(rows.filter(function (x) { return x.contractor_id === cid; })[0]);
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-repc]'), function (r) {
       r.addEventListener('click', function (e) {
         if (e.target.closest('button')) return;
@@ -14725,6 +14737,131 @@
       }).catch(function (e) { el('sh-err').textContent = e.message; });
       return '';
     }, null, 'Расчетный лист', 'Согласовать');
+  }
+
+  /* Автораскладка: согласованную сумму раскладываем на услуги каталога (услуга ×
+     количество), правим состав, заводим задания. Основанием выплаты остается задание,
+     поэтому это не платеж и не акт — быстрый способ завести задания под сумму листа. */
+  function openRepBreakdown(r) {
+    if (!r || !REP.month) return;
+    var q = '?contractor_id=' + encodeURIComponent(r.contractor_id) +
+            '&period=' + encodeURIComponent(REP.month);
+    czSend('/admin/api/contractor-reports/settlement/breakdown' + q, 'GET')
+      .then(function (d) { rbOpen(r, d); })
+      .catch(function (e) { showToast(e.message || 'Не удалось собрать раскладку'); });
+  }
+  function rbOpen(r, d) {
+    if (document.querySelector('.al-ov')) return;
+    var mon = (repMonths().filter(function (m) { return m[0] === REP.month; })[0] || [])[1] || REP.month;
+    var items = (d.items || []).map(function (it) {
+      return { code: it.code || null, title: it.title, unit: it.unit || 'шт',
+               price: Number(it.price) || 0, qty: Number(it.qty) || 1 };
+    });
+    var services = d.services || [];
+    var agreed = Number(d.agreed) || 0;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over';
+    ov.innerHTML =
+      '<div class="al-card rb-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head"><div>' +
+          '<div class="al-eyebrow">Расчетный лист · ' + esc(mon) + '</div>' +
+          '<div class="al-title">Разложить сумму на услуги</div></div>' +
+          '<button class="al-x" id="rb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">' + esc(r.full_name) + '. Согласовано ' + repMoney(agreed) +
+          '. Собери услуга × количество так, чтобы сошлось. Из строк заведутся задания, ' +
+          'дальше приемка, акт и чек.</div>' +
+        '<div class="al-body">' +
+          '<div id="rb-items"></div>' +
+          '<div class="rb-add"><select id="rb-svc" class="al-in">' +
+            '<option value="">Добавить услугу из каталога…</option>' +
+            services.map(function (s, i) {
+              return '<option value="' + i + '">' + esc(s.title) + ' · ' +
+                repMoney(s.price) + ' за ' + esc(s.unit) + '</option>';
+            }).join('') +
+          '</select></div>' +
+          '<div class="rb-sum" id="rb-sum"></div>' +
+          '<div class="ct-err" id="rb-err"></div>' +
+        '</div>' +
+        '<div class="al-foot"><button class="al-cancel" id="rb-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="rb-ok">Создать задания</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    function close() {
+      ov.classList.remove('show');
+      setTimeout(function () { ov.remove(); }, 150);
+    }
+    function paintItems() {
+      var box = ov.querySelector('#rb-items');
+      box.innerHTML = items.length
+        ? items.map(function (it, i) {
+            return '<div class="rb-row">' +
+              '<div class="rb-svc-t"><b>' + esc(it.title) + '</b>' +
+                '<span>' + repMoney(it.price) + ' за ' + esc(it.unit) + '</span></div>' +
+              '<input class="al-in rb-qty" type="text" inputmode="numeric" value="' +
+                esc(String(it.qty)) + '" data-i="' + i + '" aria-label="Количество">' +
+              '<span class="rb-line" data-line="' + i + '">' +
+                repMoney(it.price * it.qty) + '</span>' +
+              '<button class="rb-del" data-del="' + i + '" title="Убрать">' +
+                ic('x', 14) + '</button>' +
+            '</div>';
+          }).join('')
+        : '<div class="rb-empty">Пока пусто. Добавьте услугу из каталога ниже.</div>';
+      Array.prototype.forEach.call(box.querySelectorAll('.rb-qty'), function (inp) {
+        inp.addEventListener('input', function () {
+          var i = +inp.getAttribute('data-i');
+          var v = (inp.value || '').replace(/[^\d.]/g, '');
+          items[i].qty = v === '' ? 0 : Number(v);
+          var ln = box.querySelector('[data-line="' + i + '"]');
+          if (ln) ln.textContent = repMoney(items[i].price * items[i].qty);
+          paintSum();
+        });
+      });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-del]'), function (b) {
+        b.addEventListener('click', function () {
+          items.splice(+b.getAttribute('data-del'), 1); paintItems(); paintSum();
+        });
+      });
+    }
+    function paintSum() {
+      var alloc = items.reduce(function (s, it) { return s + it.price * it.qty; }, 0);
+      var rem = Math.round((agreed - alloc) * 100) / 100;
+      var cls = rem === 0 ? 'ok' : (rem > 0 ? 'under' : 'over');
+      var word = rem === 0 ? 'сходится'
+        : (rem > 0 ? 'осталось разложить ' + repMoney(rem) : 'перебор ' + repMoney(-rem));
+      ov.querySelector('#rb-sum').innerHTML =
+        '<span>Разложено ' + repMoney(alloc) + ' из ' + repMoney(agreed) + '</span>' +
+        '<span class="rb-rec ' + cls + '">' + word + '</span>';
+    }
+    paintItems(); paintSum();
+    ov.querySelector('#rb-svc').addEventListener('change', function () {
+      if (this.value === '') return;
+      var s = services[+this.value];
+      items.push({ code: s.code || null, title: s.title, unit: s.unit || 'шт',
+                   price: Number(s.price) || 0, qty: 1 });
+      this.value = ''; paintItems(); paintSum();
+    });
+    ov.querySelector('#rb-x').addEventListener('click', close);
+    ov.querySelector('#rb-cancel').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    ov.querySelector('#rb-ok').addEventListener('click', function () {
+      var clean = items.filter(function (it) { return it.qty > 0; });
+      if (!clean.length) {
+        ov.querySelector('#rb-err').textContent = 'Добавьте хотя бы одну услугу с количеством';
+        return;
+      }
+      czSend('/admin/api/contractor-reports/settlement/apply-breakdown', 'POST', {
+        contractor_id: r.contractor_id, period: REP.month,
+        items: clean.map(function (it) {
+          return { service_code: it.code || undefined, service_title: it.title,
+                   unit: it.unit, price: it.price, qty: it.qty };
+        }),
+      }).then(function (res) {
+        close(); REP.data = null; renderView();
+        showToast('Заведено заданий: ' + res.created + ' на ' + repMoney(res.amount));
+      }).catch(function (e) { ov.querySelector('#rb-err').textContent = e.message; });
+    });
   }
 
   function renderCzPay(view) {
