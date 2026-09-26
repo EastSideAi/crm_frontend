@@ -4203,24 +4203,75 @@
       '<label class="ac-chkline"><input type="checkbox" id="ac-lt"' + (on ? ' checked' : '') + '> ' + esc(sc.chk) + '</label></div>';
   }
 
-  /* Видеоурок: запись живой встречи. Сам файл мы нигде не держим — экран ведет
-     на запись и говорит, что в ней искать. Указатель тем обязателен: двухчасовую
-     встречу целиком второй раз не смотрит никто, а вернуться к нужному месту
-     человек должен уметь за секунды. Адрес и код лежат в academy-courses.js, а он
-     раздается статикой без входа (§10.7 CLAUDE.md) — класть сюда можно только то,
-     что мы готовы отдать по прямой ссылке. */
+  /* Видеоурок: запись живой встречи играет прямо в уроке.
+
+     Ссылку в облако видеосвязи с кодом доступа пробовали и убрали (Павел
+     26.09.2026): код расходится по рукам, ссылка протухает, а человек уходит со
+     страницы урока и не возвращается. Файл лежит НЕ в репозитории — гитхаб не
+     берет больше 100 МБ, а статика CRM раздается без входа (§10.7 CLAUDE.md), и
+     на записи названы наши ставки и проценты. Он живет на нашем сервере
+     (/academy-video/<курс>/<файл>), отдает его Caddy, а право посмотреть дает
+     бэкенд по ключу CRM — та же механика, что у записей курса китайского и
+     занятий CSCA (eastside-backend/docs/csca-video.md).
+
+     Источник ставится не сразу: сперва меняем ключ на cookie (video-session), и
+     только потом браузер идет за файлом. Иначе первый же запрос улетит без
+     cookie, получит 403 и плеер покажет «видео недоступно» на ровном месте.
+
+     Указатель тем обязателен и кликабелен: двухчасовую встречу целиком второй раз
+     не смотрит никто, человек приходит за куском. */
   function acVideoHTML(sc) {
     var ch = (sc.chapters || []).map(function (c) {
-      return '<li><span class="ac-vch-t">' + esc(c[0]) + '</span><span>' + esc(c[1]) + '</span></li>';
+      return '<li><button type="button" class="ac-vch" data-t="' + acSecs(c[0]) + '">' +
+        '<span class="ac-vch-t">' + esc(c[0]) + '</span><span>' + esc(c[1]) + '</span></button></li>';
     }).join('');
     return '<div class="ac-vid">' +
-      '<a class="ac-vid-go" href="' + esc(sc.url) + '" target="_blank" rel="noopener">' +
-      '<span class="ac-vid-ic">' + ic('play', 22) + '</span>' +
-      '<span class="ac-vid-tx"><b>' + esc(sc.cta || 'Открыть запись') + '</b>' +
-      (sc.dur ? '<i>' + esc(sc.dur) + '</i>' : '') + '</span></a>' +
-      (sc.code ? '<div class="ac-vid-code"><span class="ac-cap">Код доступа</span><b>' + esc(sc.code) + '</b></div>' : '') +
+      '<div class="ac-vid-box"><video id="ac-vid-el" class="ac-vid-el" controls playsinline ' +
+      'preload="metadata"' + (sc.poster ? ' poster="' + esc(sc.poster) + '"' : '') + '></video>' +
+      '<div class="ac-vid-wait" id="ac-vid-wait">Открываем запись…</div></div>' +
+      (sc.dur ? '<div class="ac-vid-meta">' + esc(sc.dur) + '</div>' : '') +
       (ch ? '<ol class="ac-vid-ch">' + ch + '</ol>' : '') +
-      '</div>' + (sc.note ? acNote(sc.note) : '');
+      '</div>' +
+      (sc.deck ? '<a class="ac-vid-deck" href="' + esc(sc.deck.url) + '" target="_blank" rel="noopener">' +
+        ic('doc', 16) + '<span><b>' + esc(sc.deck.t) + '</b>' +
+        (sc.deck.sub ? '<i>' + esc(sc.deck.sub) + '</i>' : '') + '</span>' + ic('ext', 14) + '</a>' : '') +
+      (sc.note ? acNote(sc.note) : '');
+  }
+
+  // «1:06:07» и «06:49» — в секунды. Главы пишут людям, а перематывает машина.
+  function acSecs(t) {
+    var p = String(t || '').split(':').map(function (x) { return parseInt(x, 10) || 0; });
+    while (p.length < 3) p.unshift(0);
+    return p[0] * 3600 + p[1] * 60 + p[2];
+  }
+
+  /* Запуск плеера. Сперва cookie, потом источник: credentials обязательны —
+     cookie ставит ответ чужого домена (api.истсайд.рф), и без них браузер ее
+     молча выбросит. Ключ в адрес файла не кладем: строка запроса целиком уходит
+     в логи веб-сервера, а ключ CRM — это доступ ко всей CRM. */
+  function acVideoBind(sc) {
+    var v = el('ac-vid-el'), wait = el('ac-vid-wait');
+    if (!v || !sc.file) return;
+    var src = API + '/academy-video/' + acC().id + '/' + sc.file;
+    xfetch('/admin/api/academy/video-session?course=' + encodeURIComponent(acC().id),
+      { method: 'POST', credentials: 'include' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        v.src = src;
+        if (wait) wait.hidden = true;
+      })
+      .catch(function () {
+        if (wait) wait.textContent = 'Запись не открылась. Обновите страницу, а если не помогло — скажите руководителю.';
+      });
+    var box = v.closest('.ac-vid');
+    if (box) box.addEventListener('click', function (e) {
+      var b = e.target.closest('.ac-vch'); if (!b) return;
+      var t = parseInt(b.getAttribute('data-t'), 10) || 0;
+      if (!v.src) return;
+      v.currentTime = t;
+      v.play().catch(function () { /* браузер ждет нажатия по самому плееру */ });
+      try { v.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) { v.scrollIntoView(); }
+    });
   }
 
   /* Подпись документа. Текста договора и NDA еще нет — экран честно говорит об
@@ -4510,6 +4561,7 @@
       var chk = el('ac-lt');
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
+    if (sc.type === 'video') acVideoBind(sc);
     if (sc.type === 'chklist') acBindChk(sc);
     if (sc.type === 'calc') acBindCalc();
     if (sc.type === 'scalc') acBindSal();
