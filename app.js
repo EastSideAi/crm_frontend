@@ -18294,6 +18294,19 @@
     return (iso >= p.starts_on && iso <= p.ends_on) ? iso : p.starts_on;
   }
 
+  /* Самозанятые для выбора в листе продукта: id + имя (без ИНН и реквизитов). Раньше лист
+     сцеплялся с человеком по совпадению имени — опечатка или тезка рвали связь молча. Теперь
+     выбор из списка кладет id карточки, и сумма подтягивается в «Согласовано» по нему. Кэш на
+     сессию: список меняется редко, а форму листа открывают часто. */
+  var FIN_PAYEES = null;
+  function finPayees() {
+    if (FIN_PAYEES) return Promise.resolve(FIN_PAYEES);
+    return czSend('/admin/api/fin/payees', 'GET').then(function (r) {
+      FIN_PAYEES = (r && r.payees) || [];
+      return FIN_PAYEES;
+    }).catch(function () { return []; });
+  }
+
   /* Форма строки. Одна на все шесть видов: поля разные, но жизнь у них одна —
      открыть, поправить, сохранить или удалить. opts задает форму и предвыбор раздела,
      когда открываем не из экрана листов: прямой расход из блока, выплату со страницы
@@ -18304,6 +18317,9 @@
     var form = opts.form || FIN.form, isNew = !line;
     var preSec = opts.section ||
       (form === 'фонд' ? '' : FIN_SECTIONS[0]);
+    // Связь строки листа продукта с карточкой самозанятого: id, если человека выбрали из
+    // списка. Живет здесь, а не в DOM: hidden-поле легко разошлось бы с показанным именем.
+    var pickedCid = (line && line.contractor_id) || '';
     var s = line || { date: finTodayInPeriod(), status: 'факт', counterparty: '', item: '',
                       comment: '', amount: '', included: true, payout_to: '',
                       section: preSec,
@@ -18397,10 +18413,20 @@
         : f(form === 'лист-маркетинга' ? 'Статья' : 'За что',
             '<input id="fl-item" class="al-in" maxlength="200" value="' + v(s.item) +
             '" placeholder="' + (form === 'лист-маркетинга' ? 'Лидогенерация' : 'мотивация, подписка') + '">');
+      // Лист продукта: «Сотрудник» — это выбор самозанятого из списка (связь по карточке),
+      // но со свободным вводом: не всякий в листе продукта самозанятый (оклад приходит из
+      // табеля школы). Остальные формы — обычное текстовое поле получателя.
+      var whoInner = form === 'лист-продукта'
+        ? '<div class="flp">' +
+            '<input id="fl-who" class="al-in" maxlength="200" autocomplete="off" value="' +
+              v(s.counterparty) + '" placeholder="имя самозанятого или свободно">' +
+            '<div class="flp-menu" id="fl-who-menu" hidden></div>' +
+            '<div class="flp-hint" id="fl-who-hint"></div>' +
+          '</div>'
+        : '<input id="fl-who" class="al-in" maxlength="200" value="' + v(s.counterparty) + '">';
       body =
         '<div class="al-row">' +
-          f(whoLabel, '<input id="fl-who" class="al-in" maxlength="200" value="' +
-            v(s.counterparty) + '">') +
+          f(whoLabel, whoInner) +
           f('Сумма, ₽ <i>*</i>', '<input id="fl-sum" class="al-in" type="number" min="0" ' +
             'step="0.01" value="' + num(s.amount) + '">') +
         '</div>' +
@@ -18479,6 +18505,54 @@
       recalc();
     }
 
+    // Лист продукта: автоподбор самозанятого. Выбрал из списка — храним id карточки;
+    // печатает свободно — id снимается, сумма пойдет по имени, как раньше.
+    if (form === 'лист-продукта') {
+      var whoIn = el('fl-who'), menu = el('fl-who-menu'), hint = el('fl-who-hint');
+      var payees = [];
+      var norm = function (x) { return (x || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+      var setHint = function () {
+        hint.textContent = pickedCid ? 'связано с карточкой самозанятого'
+          : (whoIn.value.trim() ? 'не из списка — сумма подтянется по имени' : '');
+        hint.className = 'flp-hint' + (pickedCid ? ' on' : '');
+      };
+      var hideMenu = function () { menu.hidden = true; menu.innerHTML = ''; };
+      var showMenu = function () {
+        var q = norm(whoIn.value);
+        var list = payees.filter(function (p) {
+          return !q || norm(p.name).indexOf(q) >= 0 ||
+            (p.payroll_name && norm(p.payroll_name).indexOf(q) >= 0);
+        }).slice(0, 8);
+        if (!list.length) { hideMenu(); return; }
+        menu.innerHTML = list.map(function (p) {
+          return '<button type="button" class="flp-opt" data-cid="' + esc(p.id) +
+            '" data-nm="' + esc(p.name) + '">' + esc(p.name) +
+            (p.payroll_name ? '<span class="flp-alt">в листе: ' + esc(p.payroll_name) +
+              '</span>' : '') + '</button>';
+        }).join('');
+        menu.hidden = false;
+      };
+      finPayees().then(function (ps) { payees = ps; setHint(); });
+      whoIn.addEventListener('focus', showMenu);
+      whoIn.addEventListener('input', function () {
+        // Ручная правка = отвязка, пока снова не выберут из списка. Точное совпадение с
+        // именем самозанятого связываем сразу — человек мог набрать имя целиком.
+        var exact = payees.filter(function (p) { return norm(p.name) === norm(whoIn.value); })[0];
+        pickedCid = exact ? exact.id : '';
+        showMenu(); setHint();
+      });
+      menu.addEventListener('mousedown', function (e) {
+        var b = e.target.closest && e.target.closest('.flp-opt');
+        if (!b) return;
+        e.preventDefault();  // не даем инпуту потерять фокус до того, как проставим значение
+        whoIn.value = b.getAttribute('data-nm');
+        pickedCid = b.getAttribute('data-cid');
+        hideMenu(); setHint();
+      });
+      whoIn.addEventListener('blur', function () { setTimeout(hideMenu, 120); });
+      setHint();
+    }
+
     var val = function (id) { var e = el(id); return e ? e.value.trim() : ''; };
     el('fl-ok').addEventListener('click', function () {
       if (FIN.lineBusy) return;
@@ -18510,6 +18584,8 @@
         if (form === 'фонд' && !payload.section) {
           err.textContent = 'Выберите фонд, с которого платим'; return;
         }
+        // Лист продукта: связь с карточкой самозанятого (null — если выбор сняли/свободный ввод).
+        if (form === 'лист-продукта') payload.contractor_id = pickedCid || null;
       }
       var sum = Number(form === 'лист-продаж' ? payload.sale_amount : payload.amount);
       if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
