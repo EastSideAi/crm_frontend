@@ -4230,12 +4230,18 @@
       'preload="metadata"' + (sc.poster ? ' poster="' + esc(sc.poster) + '"' : '') + '></video>' +
       '<div class="ac-vid-wait" id="ac-vid-wait">Открываем запись…</div></div>' +
       (sc.dur ? '<div class="ac-vid-meta">' + esc(sc.dur) + '</div>' : '') +
-      (ch ? '<ol class="ac-vid-ch">' + ch + '</ol>' : '') +
+      (ch ? '<ol class="ac-vid-ch' + (acHasHours(sc) ? ' hrs' : '') + '">' + ch + '</ol>' : '') +
       '</div>' +
       (sc.deck ? '<a class="ac-vid-deck" href="' + esc(sc.deck.url) + '" target="_blank" rel="noopener">' +
         ic('doc', 16) + '<span><b>' + esc(sc.deck.t) + '</b>' +
         (sc.deck.sub ? '<i>' + esc(sc.deck.sub) + '</i>' : '') + '</span>' + ic('ext', 14) + '</a>' : '') +
       (sc.note ? acNote(sc.note) : '');
+  }
+
+  // Колонка времени шире, когда в записи есть часы: «1:08:46» не влезает в 54px
+  // и сдвигает название темы — список из двадцати строк от этого читается рвано.
+  function acHasHours(sc) {
+    return (sc.chapters || []).some(function (c) { return String(c[0]).split(':').length > 2; });
   }
 
   // «1:06:07» и «06:49» — в секунды. Главы пишут людям, а перематывает машина.

@@ -8453,6 +8453,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-vch:hover { background: var(--ac-blue-tint); }
 .academy .ac-vch-t { flex: none; min-width: 54px; font-weight: 700; color: var(--ac-blue-d);
   font-variant-numeric: tabular-nums; }
+.academy .ac-vid-ch.hrs .ac-vch-t { min-width: 68px; }
 .academy .ac-vid-deck { display: flex; align-items: center; gap: 12px; margin-top: 14px;
   padding: 13px 16px; border-radius: var(--ac-r-md); background: var(--ac-fill);
   color: inherit; text-decoration: none; transition: background .15s var(--ac-ease); }
