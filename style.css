@@ -5566,6 +5566,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* подпись под чужими данными: кто их внес и почему мы их не правим */
 .cz-src { font-size: 12px; color: var(--ink-3); margin-top: 10px; line-height: 1.5; }
 
+/* «Имя в расчётном листе» — редкое переопределение (в листе имя записано иначе, чем ФИО).
+   Прячем в необязательный разворот, чтобы для большинства людей поля вообще не было видно. */
+.cz-alt { margin-top: 12px; }
+.cz-alt > summary { font-size: 12px; color: var(--ink-2); cursor: pointer;
+  list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.cz-alt > summary::-webkit-details-marker { display: none; }
+.cz-alt > summary::before { content: '+'; color: var(--ink-3); font-weight: 600; }
+.cz-alt[open] > summary::before { content: '–'; }
+.cz-alt > summary:hover { color: var(--blue); }
+.cz-alt-b { margin-top: 10px; }
+
 /* история смены счета: тихий журнал под реквизитами — не «еще одна секция», а сноска
    к ним, поэтому без капс-заголовка секции и на сером поле */
 .cz-pay-h { margin-top: 14px; padding: 12px 14px; background: var(--fill); border-radius: 12px; }
