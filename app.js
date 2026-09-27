@@ -4257,6 +4257,8 @@
     return '<figure class="ac-ill"><img src="' + esc(AC_ILL_DIR + sc.img + '.webp') + '" alt="" loading="lazy"></figure>';
   }
 
+  var AC_CUR = /[₽%]|юан/i;
+
   function acScreenHTML(sc) {
     var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
     var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>' + acIll(sc);
@@ -4271,8 +4273,9 @@
     if (sc.type === 'check') extra = '<ul class="ac-rules good">' + sc.items.map(function (it) { return '<li><span class="ac-mk">✓</span><div>' + esc(it) + '</div></li>'; }).join('') + '</ul>';
     if (sc.type === 'quote') extra = '<div class="ac-quote">' + esc(sc.quote.text) + '<span class="ac-who ac-cap">' + esc(sc.quote.who) + '</span></div>' + (sc.note ? acNote(sc.note) : '');
     // Рубль дописывается сам, но не к строке, где единица уже своя: «3,2% суммы»,
-    // «750 ₽ × качество». Иначе в уроке денег выходит «30 000 ₽ ₽».
-    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { var v = String(r[1]); return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(/[₽%]/.test(v) ? v : v + ' ₽') + '</span></li>'; }).join('') + '</ul>' +
+    // «750 ₽ × качество», «2 500 юаней» в уроке про гранты. Иначе выходит
+    // «30 000 ₽ ₽» и «2 500 юаней ₽».
+    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { var v = String(r[1]); return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(AC_CUR.test(v) ? v : v + ' ₽') + '</span></li>'; }).join('') + '</ul>' +
       (sc.note ? acNote(sc.note) : '');
     if (sc.type === 'deduct') {
       extra = '<div class="ac-deduct">' + sc.groups.map(function (g) {
@@ -36365,13 +36368,23 @@
           box.results.map(function (r) {
             return '<option value="' + r.key + '"' + (p.result === r.key ? ' selected' : '') + '>' +
               esc(r.title) + ' — ' + fmtMoney(r.amount) + ' ₽</option>';
-          }).join('') + '</select></div>';
+          }).join('') + '</select>' +
+          /* «Вне зоны тьютора» — исход с условием: 7 500 платятся только при
+             вовремя поднятом флаге риска. Условие проверяет человек, поэтому оно
+             написано рядом с выбором, а не спрятано в схеме. */
+          (p.result === 'outside'
+            ? '<div class="cp-line cp-dim">7 500 ₽ платятся, только если флаг риска подняли письменно не позже чем за два месяца до дедлайна подач. Проверяет тот, кто принимает работу.</div>'
+            : '') + '</div>';
       }
 
       var foot;
       if (p.closedAt) {
         foot = '<div class="cp-foot">' +
-          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽ при коэффициенте ' + ptK(p.kvovl) + '</span>' +
+          /* Точка 4 — результат, коэффициент к ней не применяется (схема 3.3):
+             писать «при коэффициенте 0,8» рядом с полной суммой значит врать. */
+          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽' +
+            (p.byResult ? ' по письму вуза, коэффициент к результату не применяется'
+                        : ' при коэффициенте ' + ptK(p.kvovl)) + '</span>' +
           (can('zaezd_review')
             ? '<button class="bp ghost sm" data-ptreopen="' + p.key + '">Вернуть точку</button>' : '') +
           '</div>';
