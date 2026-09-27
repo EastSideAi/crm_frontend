@@ -3937,6 +3937,10 @@
     b.classList.toggle('on', icon === 'pause');
   }
 
+  // Та же граница, что у медиазапроса Академии в style.css: ниже нее боковая
+  // колонка курса встает сверху, и программу надо складывать.
+  function acNarrow() { return window.innerWidth <= 820; }
+
   function acById(id) { for (var i = 0; i < AC_ALL.length; i++) if (AC_ALL[i].id === id) return AC_ALL[i]; return null; }
   function acC() { return state.ac && state.ac.course; }
   function acLessons() { return acC().lessons; }
@@ -4151,10 +4155,18 @@
     }).join('');
     view.innerHTML =
       '<div class="academy"><div class="ac-wrap">' +
-        '<aside class="ac-route">' +
+        /* На телефоне список уроков свернут: боковая колонка там встает сверху
+           карточкой, и развернутая программа из двадцати трех строк отодвигает
+           сам урок за экран. Поэтому «Программа курса» — настоящая кнопка, а не
+           подпись (Павел 27.09.2026: «кнопка просмотр программы курса не
+           кликается»). Раньше на узком экране список просто прятался совсем, и
+           перейти к другому уроку с телефона было нельзя вовсе. */
+        '<aside class="ac-route' + (acNarrow() ? ' fold' : '') + '" id="ac-route">' +
           '<button class="ac-back-all" id="ac-all">' + ic('go', 13) + 'Все курсы</button>' +
-          '<div class="ac-route-head"><span class="ac-cap">Программа курса</span>' +
-            '<span class="ac-prog" id="ac-prog"></span></div>' +
+          '<button class="ac-route-head" id="ac-fold" type="button" aria-controls="ac-rlist" aria-expanded="' + (acNarrow() ? 'false' : 'true') + '">' +
+            '<span class="ac-cap">Программа курса</span>' +
+            '<span class="ac-prog" id="ac-prog"></span>' +
+            '<span class="ac-fx">' + ic('go', 13) + '</span></button>' +
           '<div class="ac-bar"><i id="ac-bar"></i></div>' +
           '<div class="ac-course-pill">' + ic('award', 13) + esc(A.srv.title) + '</div>' +
           '<div class="ac-rlist" id="ac-rlist"></div>' +
@@ -4185,12 +4197,19 @@
         if (state.page === 'academy') renderAcademy(view);
       }).catch(function () { if (state.page === 'academy') renderAcademy(view); });
     });
+    el('ac-fold').addEventListener('click', function () {
+      var box = el('ac-route'), off = box.classList.toggle('fold');
+      this.setAttribute('aria-expanded', off ? 'false' : 'true');
+    });
     el('ac-rlist').addEventListener('click', function (ev) {
       var row = ev.target.closest('[data-go]'); if (!row) return;
       var go = +row.getAttribute('data-go');
       if (go === acExamI()) { if (!acExamOpen()) return; A.li = acExamI(); A.exStep = 0; acRenderExam(view); return; }
       if (go > acMaxUnlocked()) return;
       A.li = go; A.si = 0; acRender(view);
+      // Выбрал урок на телефоне — программа складывается, иначе сам урок
+      // остается ниже экрана и кажется, что ничего не произошло.
+      if (acNarrow()) { el('ac-route').classList.add('fold'); el('ac-fold').setAttribute('aria-expanded', 'false'); }
     });
     el('ac-back').addEventListener('click', function () {
       if (A.li === acExamI()) { if (A.exStep > 0) { A.exStep--; acRenderExam(view); } return; }

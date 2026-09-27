@@ -8127,7 +8127,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-wrap { display: grid; grid-template-columns: 264px 1fr; gap: 18px; align-items: start; max-width: 1080px; }
 
 .academy .ac-route { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 16px 14px; position: sticky; top: 16px; }
-.academy .ac-route-head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 4px 12px; }
+/* Заголовок программы — кнопка: на телефоне она открывает список уроков, на
+   компьютере сворачивает его, когда мешает. Выглядит как подпись, поэтому
+   рядом стрелка: без нее человек не понимает, что по ней можно нажать. */
+.academy .ac-route-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; margin: 2px 0 12px; padding: 4px; background: none; border: 0; border-radius: var(--ac-r-md);
+  font: inherit; color: inherit; cursor: pointer; text-align: left; transition: .14s var(--ac-ease); }
+.academy .ac-route-head:hover { background: var(--ac-fill); }
+.academy .ac-route-head:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
+.academy .ac-route-head .ac-prog { margin-left: auto; }
+.academy .ac-fx { display: inline-flex; color: var(--ac-ink-3); transform: rotate(90deg);
+  transition: transform .2s var(--ac-ease); }
+.academy .ac-route.fold .ac-fx { transform: rotate(0deg); }
+/* Материалы курса при свернутой программе остаются: это презентация и памятки,
+   за ними человек заходит отдельно от уроков. */
+.academy .ac-route.fold .ac-rlist { display: none; }
+.academy .ac-route.fold .ac-mats { margin-top: 6px; border-top: 0; padding-top: 0; }
 .academy .ac-prog { font-weight: 700; color: var(--ac-blue-d); font-size: 12.5px; }
 .academy .ac-bar { height: 6px; background: var(--ac-fill); border-radius: var(--ac-r-pill); overflow: hidden; margin: 0 4px 14px; }
 .academy .ac-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ac-blue), var(--ac-blue-d)); border-radius: var(--ac-r-pill); transition: width .9s var(--ac-ease); }
@@ -8423,7 +8438,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 820px) {
   .academy .ac-wrap { grid-template-columns: 1fr; gap: 14px; }
   .academy .ac-route { position: static; padding: 13px 12px; }
-  .academy .ac-rlist { display: none; }
   .academy .ac-stage { padding: 22px 18px 18px; min-height: 0; }
   .academy .ac-h { font-size: 23px; }
   .academy .ac-fin .ac-h { font-size: 22px; }
