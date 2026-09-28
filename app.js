@@ -3937,6 +3937,10 @@
     b.classList.toggle('on', icon === 'pause');
   }
 
+  // Та же граница, что у медиазапроса Академии в style.css: ниже нее боковая
+  // колонка курса встает сверху, и программу надо складывать.
+  function acNarrow() { return window.innerWidth <= 820; }
+
   function acById(id) { for (var i = 0; i < AC_ALL.length; i++) if (AC_ALL[i].id === id) return AC_ALL[i]; return null; }
   function acC() { return state.ac && state.ac.course; }
   function acLessons() { return acC().lessons; }
@@ -3995,8 +3999,76 @@
     acCourseView(view);
   }
 
-  /* Витрина: мои курсы. Прогресс по каждому считает сервер — второй счет на
-     фронте разъехался бы с тем, что видит руководитель в «Аттестациях». */
+  /* Витрина: мои курсы деревом по ролям. Прогресс по каждому курсу считает
+     сервер — второй счет на фронте разъехался бы с тем, что видит руководитель
+     в «Аттестациях».
+
+     Дерево, а не плоская сетка (Павел 27.09.2026): у тьютора курсов два, и без
+     группировки «Теплый прием» стоял в одном ряду с курсом продаж как равный
+     сосед — человек не видел, что это его ветка, а что чужая. Роль — ветка,
+     курсы — листья; провода те же, что в дереве продуктов (.po-tree), чтобы в
+     CRM не появилось второе, свое дерево. */
+  /* Иконки у веток не рисуем. Подходящих по смыслу в наборе CRM нет: compass уже
+     значит «обучение по системе», clip — вложение, и одна иконка начала бы
+     значить две разные вещи. Название роли набрано жирным и опознается быстрее
+     любого значка (правка по приемке 27.09.2026). */
+  var AC_BR_LS = 'eastside_crm_ac_br';   // какие ветки человек свернул
+
+  function acBrClosed() {
+    try { var v = JSON.parse(lsGet(AC_BR_LS) || '[]'); return v && v.length ? v : []; } catch (e) { return []; }
+  }
+  function acBrSave(cl) {
+    try { localStorage.setItem(AC_BR_LS, JSON.stringify(cl)); } catch (e) { /* приватный режим */ }
+  }
+
+  /* Порядок веток задан руками, а не алфавитом и не порядком курсов: первыми
+     идут те, где людей больше всего (Павел 27.09.2026). Незнакомая роль
+     становится веткой в конце — курс от этого не пропадет. */
+  var AC_BR_ORDER = ['Тьютор', 'Продажи', 'Администратор'];
+
+  function acBranches(list) {
+    var by = {}, order = [];
+    list.forEach(function (c) {
+      var full = acById(c.id), tag = (full && full.tag) || 'Другое';
+      if (!by[tag]) { by[tag] = { tag: tag, items: [] }; order.push(tag); }
+      by[tag].items.push({ srv: c, full: full });
+    });
+    order.sort(function (a, b) {
+      var ia = AC_BR_ORDER.indexOf(a), ib = AC_BR_ORDER.indexOf(b);
+      if (ia < 0) ia = AC_BR_ORDER.length + order.indexOf(a);
+      if (ib < 0) ib = AC_BR_ORDER.length + order.indexOf(b);
+      return ia - ib;
+    });
+    return order.map(function (t) { return by[t]; });
+  }
+
+  function acHomeCard(it) {
+    var c = it.srv, full = it.full;
+    var pct = c.lessons_total ? Math.round(c.lessons_done / c.lessons_total * 100) : 0;
+    var go = c.passed ? 'Пройден' : (c.lessons_done ? 'Продолжить' : 'Начать');
+    var cls = 'ac-card' + (c.passed ? ' done' : '') + (full ? '' : ' off');
+    /* Роль в карточке больше не пишем — ее держит ветка. На освободившееся
+       место встало то, чего человек ищет глазами: где он в этом курсе. */
+    var mark = c.passed ? '<span class="ac-seal-sm">' + ic('check', 13) + 'допуск открыт</span>'
+      : '<span class="ac-tag' + (c.lessons_done ? '' : ' soft') + '">' + (c.lessons_done ? 'в работе' : 'не начат') + '</span>';
+    /* Карточка — главное действие экрана, поэтому она фокусируется и жмется
+       с клавиатуры. Тег остается div: внутри заголовок h2, а заголовок внутри
+       button невалиден и ломает чтение с экрана. */
+    var att = full ? ' data-course="' + esc(c.id) + '" role="button" tabindex="0"' : '';
+    return '<div class="' + cls + '"' + att + '>' +
+      '<div class="ac-card-l">' +
+        '<div class="ac-card-top">' + mark + '</div>' +
+        '<h2 class="ac-card-h">' + esc(c.title) + '</h2>' +
+        '<p class="ac-card-p">' + esc(c.about || '') + '</p>' +
+      '</div>' +
+      '<div class="ac-card-r">' +
+        '<div class="ac-card-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="ac-card-foot"><span class="ac-cap">' + c.lessons_done + ' из ' + c.lessons_total + ' уроков</span>' +
+          '<span class="ac-card-go">' + (full ? esc(go) : 'скоро') + ic('go', 12) + '</span></div>' +
+      '</div>' +
+    '</div>';
+  }
+
   function acHome(view) {
     var list = state.ac.list;
     if (!list.length) {
@@ -4005,27 +4077,52 @@
         '<p class="ac-p">Обучение открывается по роли. Если курс должен быть, скажите руководителю.</p></div></div>';
       return;
     }
-    var cards = list.map(function (c) {
-      var full = acById(c.id);
-      var pct = c.lessons_total ? Math.round(c.lessons_done / c.lessons_total * 100) : 0;
-      var state_ = c.passed ? 'Пройден' : (c.lessons_done ? 'Продолжить' : 'Начать');
-      var cls = 'ac-card' + (c.passed ? ' done' : '') + (full ? '' : ' off');
-      return '<div class="' + cls + '"' + (full ? ' data-course="' + esc(c.id) + '"' : '') + '>' +
-        '<div class="ac-card-top"><span class="ac-tag">' + esc((full && full.tag) || 'Курс') + '</span>' +
-          (c.passed ? '<span class="ac-seal-sm">' + ic('check', 13) + 'допуск открыт</span>' : '') + '</div>' +
-        '<h2 class="ac-card-h">' + esc(c.title) + '</h2>' +
-        '<p class="ac-card-p">' + esc(c.about || '') + '</p>' +
-        '<div class="ac-card-bar"><i style="width:' + pct + '%"></i></div>' +
-        '<div class="ac-card-foot"><span class="ac-cap">' + c.lessons_done + ' из ' + c.lessons_total + ' уроков</span>' +
-          '<span class="ac-card-go">' + (full ? esc(state_) : 'скоро') + '</span></div>' +
-      '</div>';
+    var closed = acBrClosed();
+    var brs = acBranches(list).map(function (b) {
+      var done = 0, total = 0, passed = 0;
+      b.items.forEach(function (it) {
+        done += it.srv.lessons_done; total += it.srv.lessons_total;
+        if (it.srv.passed) passed++;
+      });
+      var off = closed.indexOf(b.tag) >= 0;
+      var n = b.items.length;
+      var sub = n + ' ' + plural(n, 'курс', 'курса', 'курсов') + ' · ' + done + ' из ' + total + ' уроков';
+      var seal = passed === n
+        ? '<span class="ac-seal-sm">' + ic('check', 13) + 'допуск открыт</span>'
+        : (passed ? '<span class="ac-bpass">' + passed + ' из ' + n + ' пройден' + (passed > 1 ? 'о' : '') + '</span>' : '');
+      return '<section class="ac-branch' + (off ? ' off' : '') + '">' +
+        '<button class="ac-bnode" type="button" data-br="' + esc(b.tag) + '" aria-expanded="' + (off ? 'false' : 'true') + '">' +
+          '<span class="ac-bt"><b>' + esc(b.tag) + '</b><small>' + esc(sub) + '</small></span>' +
+          seal + '<span class="ac-bx">' + ic('go', 14) + '</span>' +
+        '</button>' +
+        '<div class="ac-bkids"><div class="ac-cards">' +
+          b.items.map(acHomeCard).join('') + '</div></div>' +
+      '</section>';
     }).join('');
+
     view.innerHTML = '<div class="academy"><div class="ac-home">' +
       '<div class="ac-home-head"><h1 class="ac-h">Академия</h1>' +
       '<p class="ac-p lead">Курсы вашей роли. Каждый заканчивается аттестацией и допуском к работе.</p></div>' +
-      '<div class="ac-cards">' + cards + '</div></div></div>';
-    view.querySelector('.ac-cards').addEventListener('click', function (ev) {
+      '<div class="ac-tree">' + brs + '</div></div></div>';
+
+    view.querySelector('.ac-tree').addEventListener('click', function (ev) {
+      var node = ev.target.closest('.ac-bnode');
+      if (node) {
+        var tag = node.getAttribute('data-br'), cl = acBrClosed(), k = cl.indexOf(tag);
+        if (k >= 0) cl.splice(k, 1); else cl.push(tag);
+        acBrSave(cl);
+        var sec = node.closest('.ac-branch');
+        sec.classList.toggle('off', k < 0);
+        node.setAttribute('aria-expanded', k < 0 ? 'false' : 'true');
+        return;
+      }
       var card = ev.target.closest('[data-course]'); if (!card) return;
+      acOpen(view, card.getAttribute('data-course'));
+    });
+    view.querySelector('.ac-tree').addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      var card = ev.target.closest('[data-course]'); if (!card) return;
+      ev.preventDefault();
       acOpen(view, card.getAttribute('data-course'));
     });
   }
@@ -4033,7 +4130,7 @@
   function acOpen(view, cid) {
     var c = acById(cid); if (!c) return;
     state.ac.course = c; state.ac.srv = null;
-    state.ac.li = null; state.ac.tv = {}; state.ac.lt = {}; state.ac.cl = {};
+    state.ac.li = null; state.ac.tv = {}; state.ac.lt = {}; state.ac.cl = {}; state.ac.iv = {};
     renderAcademy(view);
   }
 
@@ -4045,7 +4142,7 @@
       // Уже аттестован — открываем сразу экран допуска, а не интро.
       A.exStep = A.srv.passed ? X.iResult : 0;
       A.exAnswers = []; A.pay = A.srv.pay_method || null; A.agreed = !!A.srv.agreement;
-      A.tv = A.tv || {}; A.lt = A.lt || {}; A.cl = A.cl || {};
+      A.tv = A.tv || {}; A.lt = A.lt || {}; A.cl = A.cl || {}; A.iv = A.iv || {};
     }
     /* Третий элемент 'open' — материал не скачивается, а открывается страницей:
        презентация отдела продаж это веб-страница, скачанный html без своей папки
@@ -4058,10 +4155,18 @@
     }).join('');
     view.innerHTML =
       '<div class="academy"><div class="ac-wrap">' +
-        '<aside class="ac-route">' +
+        /* На телефоне список уроков свернут: боковая колонка там встает сверху
+           карточкой, и развернутая программа из двадцати трех строк отодвигает
+           сам урок за экран. Поэтому «Программа курса» — настоящая кнопка, а не
+           подпись (Павел 27.09.2026: «кнопка просмотр программы курса не
+           кликается»). Раньше на узком экране список просто прятался совсем, и
+           перейти к другому уроку с телефона было нельзя вовсе. */
+        '<aside class="ac-route' + (acNarrow() ? ' fold' : '') + '" id="ac-route">' +
           '<button class="ac-back-all" id="ac-all">' + ic('go', 13) + 'Все курсы</button>' +
-          '<div class="ac-route-head"><span class="ac-cap">Программа курса</span>' +
-            '<span class="ac-prog" id="ac-prog"></span></div>' +
+          '<button class="ac-route-head" id="ac-fold" type="button" aria-controls="ac-rlist" aria-expanded="' + (acNarrow() ? 'false' : 'true') + '">' +
+            '<span class="ac-cap">Программа курса</span>' +
+            '<span class="ac-prog" id="ac-prog"></span>' +
+            '<span class="ac-fx">' + ic('go', 13) + '</span></button>' +
           '<div class="ac-bar"><i id="ac-bar"></i></div>' +
           '<div class="ac-course-pill">' + ic('award', 13) + esc(A.srv.title) + '</div>' +
           '<div class="ac-rlist" id="ac-rlist"></div>' +
@@ -4092,12 +4197,19 @@
         if (state.page === 'academy') renderAcademy(view);
       }).catch(function () { if (state.page === 'academy') renderAcademy(view); });
     });
+    el('ac-fold').addEventListener('click', function () {
+      var box = el('ac-route'), off = box.classList.toggle('fold');
+      this.setAttribute('aria-expanded', off ? 'false' : 'true');
+    });
     el('ac-rlist').addEventListener('click', function (ev) {
       var row = ev.target.closest('[data-go]'); if (!row) return;
       var go = +row.getAttribute('data-go');
       if (go === acExamI()) { if (!acExamOpen()) return; A.li = acExamI(); A.exStep = 0; acRenderExam(view); return; }
       if (go > acMaxUnlocked()) return;
       A.li = go; A.si = 0; acRender(view);
+      // Выбрал урок на телефоне — программа складывается, иначе сам урок
+      // остается ниже экрана и кажется, что ничего не произошло.
+      if (acNarrow()) { el('ac-route').classList.add('fold'); el('ac-fold').setAttribute('aria-expanded', 'false'); }
     });
     el('ac-back').addEventListener('click', function () {
       if (A.li === acExamI()) { if (A.exStep > 0) { A.exStep--; acRenderExam(view); } return; }
@@ -4133,9 +4245,21 @@
     el('ac-bar').style.width = Math.round(passed / total * 100) + '%';
   }
 
+  /* Иллюстрация экрана. Не украшение: она держит внимание на длинном тексте и
+     дает картинке места ровно столько, сколько та заслуживает — полосой под
+     заголовком, высотой в 180px, чтобы текст урока оставался главным.
+     Файлы лежат в assets/academy/ill, серия нарисована в одном стиле
+     (светлая, много воздуха, один приглушенный синий). Людей в кадре рисуем
+     мелко и со спины: это иллюстрация, а не фотография наших учеников. */
+  var AC_ILL_DIR = 'assets/academy/ill/';
+  function acIll(sc) {
+    if (!sc.img) return '';
+    return '<figure class="ac-ill"><img src="' + esc(AC_ILL_DIR + sc.img + '.webp') + '" alt="" loading="lazy"></figure>';
+  }
+
   function acScreenHTML(sc) {
     var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
-    var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>';
+    var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>' + acIll(sc);
     var body = (sc.body || []).map(function (p, i) { return '<p class="ac-p' + (i === 0 && sc.type === 'read' ? ' lead' : '') + '">' + esc(p) + '</p>'; }).join('');
     var extra = '';
     if (sc.type === 'read' && sc.note) extra = acNote(sc.note);
@@ -4158,9 +4282,13 @@
           '<div class="ac-dtot"><span>Полный чек-лист</span><span>' + esc(g.rate) + ' ₽</span></div></div>';
       }).join('') + '</div>' + (sc.note ? acNote(sc.note) : '');
     }
+    if (sc.type === 'order') extra = acOrderHTML(sc);
+    if (sc.type === 'match') extra = acMatchHTML(sc);
+    if (sc.type === 'flip') extra = acFlipHTML(sc);
     if (sc.type === 'shot') extra = acShotHTML(sc);
     if (sc.type === 'sign') extra = acSignHTML(sc);
     if (sc.type === 'task') extra = acTaskHTML(sc);
+    if (sc.type === 'video') extra = acVideoHTML(sc);
     if (sc.type === 'stage') extra = acStageHTML(sc);
     if (sc.type === 'tariffs') extra = acTariffsHTML(sc);
     if (sc.type === 'chklist') extra = acChkHTML(sc);
@@ -4190,6 +4318,188 @@
     return body + (pins ? '<ol class="ac-pins">' + pins + '</ol>' : '') + (sc.note ? acNote(sc.note) : '');
   }
 
+  /* ── Тренажеры урока: собрать по порядку, соединить пары, перевернуть карточку ──
+     Читать и кивать — не то же самое, что уметь (Павел 27.09.2026: «в обучении не
+     хватает интерактива»). Тренажер заставляет человека принять решение руками и
+     тут же показывает, верное оно или нет.
+
+     Состояние решенного держим в state.ac.iv по id экрана: человек ходит «назад»
+     и «дальше» по уроку, и собранный порядок не должен рассыпаться на каждом
+     возврате. Проверка — на фронте: это тренажер, а не аттестация, цена ошибки
+     нулевая, и лишний запрос к серверу тут ни к чему.
+
+     Порядок перемешивания фиксированный (acShuffle): случайный давал бы при
+     возврате другую раскладку, и человек решал бы заново то, что уже решил. */
+  function acShuffle(n, seed) {
+    var idx = [], i;
+    for (i = 0; i < n; i++) idx.push(i);
+    // Тасовка Фишера-Йетса с самодельным генератором: одинаковый seed — одинаковый
+    // порядок, разные экраны — разные раскладки.
+    var r = seed || 7;
+    for (i = n - 1; i > 0; i--) {
+      r = (r * 1103515245 + 12345) % 2147483648;
+      var j = r % (i + 1), t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+    }
+    // Совпал с исходным (бывает на двух-трех элементах) — сдвигаем на один.
+    var same = true;
+    for (i = 0; i < n; i++) if (idx[i] !== i) { same = false; break; }
+    if (same && n > 1) idx.push(idx.shift());
+    return idx;
+  }
+
+  function acSeed(id) {
+    var h = 0;
+    for (var i = 0; i < String(id).length; i++) h = (h * 31 + String(id).charCodeAt(i)) % 100000;
+    return h + 1;
+  }
+
+  function acSolved(sc) { return !!(state.ac.iv && state.ac.iv[sc.id]); }
+  function acSolve(sc) {
+    state.ac.iv = state.ac.iv || {};
+    state.ac.iv[sc.id] = true;
+    el('ac-next').disabled = false;
+  }
+
+  /* Собери по порядку. Человек нажимает шаги в той последовательности, в какой
+     они идут в работе; неверный шаг подсвечивается и НЕ сбрасывает собранное —
+     сброс всего за одну ошибку читается как наказание и отбивает желание. */
+  function acOrderHTML(sc) {
+    var done = acSolved(sc);
+    var idx = done ? sc.items.map(function (_, i) { return i; }) : acShuffle(sc.items.length, acSeed(sc.id));
+    var chips = idx.map(function (i) {
+      return '<button type="button" class="ac-ochip' + (done ? ' set' : '') + '" data-i="' + i + '"' + (done ? ' disabled' : '') + '>' +
+        esc(sc.items[i]) + '</button>';
+    }).join('');
+    var slots = sc.items.map(function (t, i) {
+      return '<li class="ac-oslot' + (done ? ' on' : '') + '" data-s="' + i + '"><span class="ac-on">' + (i + 1) + '</span>' +
+        '<span class="ac-ot2">' + (done ? esc(t) : '') + '</span></li>';
+    }).join('');
+    return '<div class="ac-order' + (done ? ' done' : '') + '" data-order="' + esc(sc.id) + '">' +
+      '<div class="ac-otop"><span class="ac-cap">Нажимайте по порядку</span>' +
+        '<button type="button" class="ac-oreset">' + ic('refresh', 12) + 'Заново</button></div>' +
+      '<div class="ac-ochips">' + chips + '</div>' +
+      '<ol class="ac-oslots">' + slots + '</ol>' +
+      '<div class="ac-fb' + (done ? ' ok show' : '') + '" id="ac-fb">' + (done ? sc.ok : '') + '</div>' +
+    '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  function acBindOrder(sc) {
+    var box = el('ac-screen').querySelector('[data-order]'); if (!box) return;
+    var step = acSolved(sc) ? sc.items.length : 0;
+
+    function put(btn, i) {
+      var slot = box.querySelector('.ac-oslot[data-s="' + step + '"]');
+      slot.querySelector('.ac-ot2').textContent = sc.items[i];
+      slot.classList.add('on');
+      btn.classList.add('set'); btn.disabled = true;
+      step++;
+      if (step === sc.items.length) {
+        box.classList.add('done');
+        var fb = box.querySelector('#ac-fb');
+        fb.className = 'ac-fb ok show'; fb.innerHTML = sc.ok || '<b>Верно.</b> Порядок собран.';
+        acSolve(sc);
+      }
+    }
+    box.addEventListener('click', function (ev) {
+      var re = ev.target.closest('.ac-oreset');
+      if (re) {
+        step = 0;
+        Array.prototype.forEach.call(box.querySelectorAll('.ac-ochip'), function (b) { b.classList.remove('set', 'bad'); b.disabled = false; });
+        Array.prototype.forEach.call(box.querySelectorAll('.ac-oslot'), function (l) { l.classList.remove('on'); l.querySelector('.ac-ot2').textContent = ''; });
+        box.classList.remove('done');
+        var fb0 = box.querySelector('#ac-fb'); fb0.className = 'ac-fb'; fb0.innerHTML = '';
+        return;
+      }
+      var b = ev.target.closest('.ac-ochip'); if (!b || b.disabled) return;
+      var i = +b.getAttribute('data-i');
+      if (i === step) { put(b, i); return; }
+      b.classList.add('bad');
+      setTimeout(function () { b.classList.remove('bad'); }, 600);
+    });
+  }
+
+  /* Соедини пары: слева то, что говорит человек, справа — что делаем мы.
+     Сначала нажимается левое, потом правое — на телефоне это работает так же,
+     как на десктопе, в отличие от перетаскивания. */
+  function acMatchHTML(sc) {
+    var done = acSolved(sc);
+    var right = done ? sc.pairs.map(function (_, i) { return i; }) : acShuffle(sc.pairs.length, acSeed(sc.id) + 3);
+    var L = sc.pairs.map(function (p, i) {
+      return '<button type="button" class="ac-mrow' + (done ? ' hit' : '') + '" data-l="' + i + '"' + (done ? ' disabled' : '') + '>' +
+        '<span class="ac-mt">' + esc(p[0]) + '</span></button>';
+    }).join('');
+    var R = right.map(function (i) {
+      return '<button type="button" class="ac-mrow' + (done ? ' hit' : '') + '" data-r="' + i + '"' + (done ? ' disabled' : '') + '>' +
+        '<span class="ac-mt">' + esc(sc.pairs[i][1]) + '</span></button>';
+    }).join('');
+    return '<div class="ac-match' + (done ? ' done' : '') + '" data-match="' + esc(sc.id) + '">' +
+      '<div class="ac-mcols">' +
+        '<div class="ac-mcol"><span class="ac-cap">' + esc(sc.left || 'Говорит человек') + '</span>' + L + '</div>' +
+        '<div class="ac-mcol"><span class="ac-cap">' + esc(sc.right || 'Что делаем') + '</span>' + R + '</div>' +
+      '</div>' +
+      '<div class="ac-fb' + (done ? ' ok show' : '') + '" id="ac-fb">' + (done ? sc.ok : '') + '</div>' +
+    '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  function acBindMatch(sc) {
+    var box = el('ac-screen').querySelector('[data-match]'); if (!box) return;
+    var pick = null, hits = acSolved(sc) ? sc.pairs.length : 0;
+    box.addEventListener('click', function (ev) {
+      var b = ev.target.closest('.ac-mrow'); if (!b || b.disabled) return;
+      if (b.hasAttribute('data-l')) {
+        if (pick) pick.classList.remove('pick');
+        pick = b; b.classList.add('pick');
+        return;
+      }
+      if (!pick) { b.classList.add('bad'); setTimeout(function () { b.classList.remove('bad'); }, 500); return; }
+      var li = pick.getAttribute('data-l'), ri = b.getAttribute('data-r');
+      if (li === ri) {
+        pick.classList.remove('pick'); pick.classList.add('hit'); pick.disabled = true;
+        b.classList.add('hit'); b.disabled = true; pick = null; hits++;
+        if (hits === sc.pairs.length) {
+          box.classList.add('done');
+          /* Собрано — ставим правую колонку в порядок левой: иначе готовые пары
+             остаются вразнобой и человек уносит из тренажера не пары, а цвет. */
+          var col = box.querySelectorAll('.ac-mcol')[1];
+          Array.prototype.slice.call(col.querySelectorAll('[data-r]'))
+            .sort(function (x, y) { return +x.getAttribute('data-r') - +y.getAttribute('data-r'); })
+            .forEach(function (n) { col.appendChild(n); });
+          var fb = box.querySelector('#ac-fb');
+          fb.className = 'ac-fb ok show'; fb.innerHTML = sc.ok || '<b>Готово.</b> Все пары собраны.';
+          acSolve(sc);
+        }
+        return;
+      }
+      b.classList.add('bad'); pick.classList.add('bad');
+      var p = pick;
+      setTimeout(function () { b.classList.remove('bad'); p.classList.remove('bad', 'pick'); }, 550);
+      pick = null;
+    });
+  }
+
+  /* Карточки-перевертыши: вопрос на лице, ответ на обороте. Ничего не проверяют
+     и дальше не держат — это способ повторить термины, а не экзамен. */
+  function acFlipHTML(sc) {
+    var cards = sc.cards.map(function (c, i) {
+      /* Термин повторен на обороте мелкой строкой: перевернув три карточки из
+         шести, человек иначе уже не помнит, где какая (правка по приемке). */
+      return '<button type="button" class="ac-flip" data-f="' + i + '">' +
+        '<span class="ac-fin">' +
+          '<span class="ac-fface"><b>' + esc(c[0]) + '</b></span>' +
+          '<span class="ac-fback"><i>' + esc(c[0]) + '</i>' + esc(c[1]) + '</span>' +
+        '</span></button>';
+    }).join('');
+    return '<div class="ac-flips">' + cards + '</div>' + (sc.note ? acNote(sc.note) : '');
+  }
+
+  function acBindFlip() {
+    var box = el('ac-screen').querySelector('.ac-flips'); if (!box) return;
+    box.addEventListener('click', function (ev) {
+      var c = ev.target.closest('.ac-flip'); if (!c) return;
+      c.classList.toggle('on');
+    });
+  }
+
   /* Задание: действие в системе, а не вопрос. Дальше не пускает, пока не отмечено —
      галочка тут не проверка знаний, а признание «я это сделал». */
   function acTaskHTML(sc) {
@@ -4200,6 +4510,83 @@
     return '<div class="ac-do">' + (sc.soon ? '<span class="ac-badge">экран в работе</span>' : '') +
       (steps ? '<ul class="ac-rules">' + steps + '</ul>' : '') +
       '<label class="ac-chkline"><input type="checkbox" id="ac-lt"' + (on ? ' checked' : '') + '> ' + esc(sc.chk) + '</label></div>';
+  }
+
+  /* Видеоурок: запись живой встречи играет прямо в уроке.
+
+     Ссылку в облако видеосвязи с кодом доступа пробовали и убрали (Павел
+     26.09.2026): код расходится по рукам, ссылка протухает, а человек уходит со
+     страницы урока и не возвращается. Файл лежит НЕ в репозитории — гитхаб не
+     берет больше 100 МБ, а статика CRM раздается без входа (§10.7 CLAUDE.md), и
+     на записи названы наши ставки и проценты. Он живет на нашем сервере
+     (/academy-video/<курс>/<файл>), отдает его Caddy, а право посмотреть дает
+     бэкенд по ключу CRM — та же механика, что у записей курса китайского и
+     занятий CSCA (eastside-backend/docs/csca-video.md).
+
+     Источник ставится не сразу: сперва меняем ключ на cookie (video-session), и
+     только потом браузер идет за файлом. Иначе первый же запрос улетит без
+     cookie, получит 403 и плеер покажет «видео недоступно» на ровном месте.
+
+     Указатель тем обязателен и кликабелен: двухчасовую встречу целиком второй раз
+     не смотрит никто, человек приходит за куском. */
+  function acVideoHTML(sc) {
+    var ch = (sc.chapters || []).map(function (c) {
+      return '<li><button type="button" class="ac-vch" data-t="' + acSecs(c[0]) + '">' +
+        '<span class="ac-vch-t">' + esc(c[0]) + '</span><span>' + esc(c[1]) + '</span></button></li>';
+    }).join('');
+    return '<div class="ac-vid">' +
+      '<div class="ac-vid-box"><video id="ac-vid-el" class="ac-vid-el" controls playsinline ' +
+      'preload="metadata"' + (sc.poster ? ' poster="' + esc(sc.poster) + '"' : '') + '></video>' +
+      '<div class="ac-vid-wait" id="ac-vid-wait">Открываем запись…</div></div>' +
+      (sc.dur ? '<div class="ac-vid-meta">' + esc(sc.dur) + '</div>' : '') +
+      (ch ? '<ol class="ac-vid-ch' + (acHasHours(sc) ? ' hrs' : '') + '">' + ch + '</ol>' : '') +
+      '</div>' +
+      (sc.deck ? '<a class="ac-vid-deck" href="' + esc(sc.deck.url) + '" target="_blank" rel="noopener">' +
+        ic('doc', 16) + '<span><b>' + esc(sc.deck.t) + '</b>' +
+        (sc.deck.sub ? '<i>' + esc(sc.deck.sub) + '</i>' : '') + '</span>' + ic('ext', 14) + '</a>' : '') +
+      (sc.note ? acNote(sc.note) : '');
+  }
+
+  // Колонка времени шире, когда в записи есть часы: «1:08:46» не влезает в 54px
+  // и сдвигает название темы — список из двадцати строк от этого читается рвано.
+  function acHasHours(sc) {
+    return (sc.chapters || []).some(function (c) { return String(c[0]).split(':').length > 2; });
+  }
+
+  // «1:06:07» и «06:49» — в секунды. Главы пишут людям, а перематывает машина.
+  function acSecs(t) {
+    var p = String(t || '').split(':').map(function (x) { return parseInt(x, 10) || 0; });
+    while (p.length < 3) p.unshift(0);
+    return p[0] * 3600 + p[1] * 60 + p[2];
+  }
+
+  /* Запуск плеера. Сперва cookie, потом источник: credentials обязательны —
+     cookie ставит ответ чужого домена (api.истсайд.рф), и без них браузер ее
+     молча выбросит. Ключ в адрес файла не кладем: строка запроса целиком уходит
+     в логи веб-сервера, а ключ CRM — это доступ ко всей CRM. */
+  function acVideoBind(sc) {
+    var v = el('ac-vid-el'), wait = el('ac-vid-wait');
+    if (!v || !sc.file) return;
+    var src = API + '/academy-video/' + acC().id + '/' + sc.file;
+    xfetch('/admin/api/academy/video-session?course=' + encodeURIComponent(acC().id),
+      { method: 'POST', credentials: 'include' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        v.src = src;
+        if (wait) wait.hidden = true;
+      })
+      .catch(function () {
+        if (wait) wait.textContent = 'Запись не открылась. Обновите страницу, а если не помогло — скажите руководителю.';
+      });
+    var box = v.closest('.ac-vid');
+    if (box) box.addEventListener('click', function (e) {
+      var b = e.target.closest('.ac-vch'); if (!b) return;
+      var t = parseInt(b.getAttribute('data-t'), 10) || 0;
+      if (!v.src) return;
+      v.currentTime = t;
+      v.play().catch(function () { /* браузер ждет нажатия по самому плееру */ });
+      try { v.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) { v.scrollIntoView(); }
+    });
   }
 
   /* Подпись документа. Текста договора и NDA еще нет — экран честно говорит об
@@ -4479,16 +4866,22 @@
     L.screens.forEach(function (_, i) { var d = document.createElement('i'); d.className = i === A.si ? 'on' : (i < A.si ? 'past' : ''); dots.appendChild(d); });
     el('ac-back').style.visibility = A.si > 0 ? 'visible' : 'hidden';
     var isQ = sc.type === 'q', isT = sc.type === 'task';
+    // Тренажеры держат «Дальше» до решения — иначе их пролистывают не думая.
+    var isTrain = sc.type === 'order' || sc.type === 'match';
     A.answered = false;
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = acReview() ? false : (isQ || (isT && !A.lt[sc.id]));
+    nx.disabled = acReview() ? false : (isQ || (isT && !A.lt[sc.id]) || (isTrain && !acSolved(sc)));
+    if (sc.type === 'order') acBindOrder(sc);
+    if (sc.type === 'match') acBindMatch(sc);
+    if (sc.type === 'flip') acBindFlip();
     if (isQ) acBindQ(sc);
     if (isT) {
       var chk = el('ac-lt');
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
+    if (sc.type === 'video') acVideoBind(sc);
     if (sc.type === 'chklist') acBindChk(sc);
     if (sc.type === 'calc') acBindCalc();
     if (sc.type === 'scalc') acBindSal();
