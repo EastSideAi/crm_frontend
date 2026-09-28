@@ -18331,6 +18331,22 @@
     };
     var v = function (x) { return esc(x === null || x === undefined ? '' : String(x)); };
     var num = function (x) { return x === '' || x === null || x === undefined ? '' : String(x); };
+    // Поле-получатель, которое связываем с карточкой самозанятого. Везде это «кому платим»
+    // (fl-who), в листе продаж — отдельное поле выплаты (fl-payout), а не «кому продали».
+    // Доход сюда не входит: там плательщик, а не самозанятый. (Роман 28.09.2026.)
+    var PAYEE_FIELD = { 'лист-продукта': 'fl-who', 'лист-маркетинга': 'fl-who',
+      'прямой': 'fl-who', 'лист-краткосрочки': 'fl-who', 'лист-безопасности': 'fl-who',
+      'фонд': 'fl-who', 'лист-продаж': 'fl-payout' };
+    var payeeFieldId = PAYEE_FIELD[form] || '';
+    // Поле с автоподбором самозанятого: обычный инпут плюс выпадашка и подсказка о связи.
+    var payeeInput = function (id, value, ph) {
+      return '<div class="flp">' +
+        '<input id="' + id + '" class="al-in" maxlength="200" autocomplete="off" value="' +
+          value + '" placeholder="' + ph + '">' +
+        '<div class="flp-menu" id="' + id + '-menu" hidden></div>' +
+        '<div class="flp-hint" id="' + id + '-hint"></div>' +
+      '</div>';
+    };
     var body = '';
 
     if (form === 'доход') {
@@ -18368,8 +18384,8 @@
         '</div>' +
         '<div class="fin-note calm" id="fl-calc">Выплата посчитается сама</div>' +
         '<div class="al-row">' +
-          f('Кому выплата <i>*</i>', '<input id="fl-payout" class="al-in" maxlength="200" ' +
-            'value="' + v(s.payout_to) + '" placeholder="менеджер, который продал">') +
+          f('Кому выплата <i>*</i>', payeeInput('fl-payout', v(s.payout_to),
+            'имя менеджера или свободно')) +
           f('Дата', '<input id="fl-date" class="al-in" type="date" value="' + v(s.date) + '">') +
         '</div>' +
         f('Это', '<select id="fl-st" class="al-in">' +
@@ -18391,8 +18407,8 @@
             'step="0.01" value="' + num(s.amount) + '">') +
         '</div>' +
         '<div class="al-row">' +
-          f('Получатель <i>*</i>', '<input id="fl-who" class="al-in" maxlength="200" ' +
-            'value="' + v(s.counterparty) + '" placeholder="кому платим">') +
+          f('Получатель <i>*</i>', payeeInput('fl-who', v(s.counterparty),
+            'имя самозанятого или свободно')) +
           f('За что', '<input id="fl-item" class="al-in" maxlength="200" value="' +
             v(s.item) + '" placeholder="роль или основание">') +
         '</div>' +
@@ -18413,17 +18429,10 @@
         : f(form === 'лист-маркетинга' ? 'Статья' : 'За что',
             '<input id="fl-item" class="al-in" maxlength="200" value="' + v(s.item) +
             '" placeholder="' + (form === 'лист-маркетинга' ? 'Лидогенерация' : 'мотивация, подписка') + '">');
-      // Лист продукта: «Сотрудник» — это выбор самозанятого из списка (связь по карточке),
-      // но со свободным вводом: не всякий в листе продукта самозанятый (оклад приходит из
-      // табеля школы). Остальные формы — обычное текстовое поле получателя.
-      var whoInner = form === 'лист-продукта'
-        ? '<div class="flp">' +
-            '<input id="fl-who" class="al-in" maxlength="200" autocomplete="off" value="' +
-              v(s.counterparty) + '" placeholder="имя самозанятого или свободно">' +
-            '<div class="flp-menu" id="fl-who-menu" hidden></div>' +
-            '<div class="flp-hint" id="fl-who-hint"></div>' +
-          '</div>'
-        : '<input id="fl-who" class="al-in" maxlength="200" value="' + v(s.counterparty) + '">';
+      // «Сотрудник»/«Получатель» — выбор самозанятого из списка (связь по карточке), но со
+      // свободным вводом: не всякий тут самозанятый (оклад приходит из табеля школы, сервис —
+      // это компания). Пикер во всех листах, где платим людям (Роман 28.09.2026).
+      var whoInner = payeeInput('fl-who', v(s.counterparty), 'имя самозанятого или свободно');
       body =
         '<div class="al-row">' +
           f(whoLabel, whoInner) +
@@ -18505,10 +18514,11 @@
       recalc();
     }
 
-    // Лист продукта: автоподбор самозанятого. Выбрал из списка — храним id карточки;
+    // Автоподбор самозанятого в поле-получателе. Выбрал из списка — храним id карточки;
     // печатает свободно — id снимается, сумма пойдет по имени, как раньше.
-    if (form === 'лист-продукта') {
-      var whoIn = el('fl-who'), menu = el('fl-who-menu'), hint = el('fl-who-hint');
+    if (payeeFieldId) {
+      var whoIn = el(payeeFieldId), menu = el(payeeFieldId + '-menu'),
+          hint = el(payeeFieldId + '-hint');
       var payees = [];
       var norm = function (x) { return (x || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
       var setHint = function () {
@@ -18584,9 +18594,10 @@
         if (form === 'фонд' && !payload.section) {
           err.textContent = 'Выберите фонд, с которого платим'; return;
         }
-        // Лист продукта: связь с карточкой самозанятого (null — если выбор сняли/свободный ввод).
-        if (form === 'лист-продукта') payload.contractor_id = pickedCid || null;
       }
+      // Связь строки с карточкой самозанятого (null — если выбор сняли/свободный ввод).
+      // Для всех форм, где платим человеку; в доходе поля-получателя нет.
+      if (payeeFieldId) payload.contractor_id = pickedCid || null;
       var sum = Number(form === 'лист-продаж' ? payload.sale_amount : payload.amount);
       if (!(sum > 0)) { err.textContent = 'Впишите сумму больше нуля'; return; }
 
