@@ -123,10 +123,12 @@
     // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
     portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
+    // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
+    ptSeg: 'my', ptOpen: null, ptDay: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -2241,6 +2243,14 @@
     // администратору (cap academy_review) — контроль допуска к работе.
     { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review' },
     // Заезды тьютора: чек-лист заезда и приёмка администратором, от неё зависит оплата.
+    // «Сопровождение» — работа тьютора по контрольным точкам: у каждого ученика
+    // пять точек с чек-листами, и из закрытых складывается выплата. Отдельным
+    // пунктом, а не вкладкой «Заездов»: заезд это последняя точка пути, а тут
+    // весь путь и деньги за него (Павел 28.09.2026).
+    // Право `clients`, а не `zaezdy`: раздел показывает учеников и их чек-листы, и
+    // ручка доски закрыта тем же правом. У преподавателя `zaezdy` есть, а клиентов
+    // нет — он увидел бы пункт меню, который отвечает ему отказом.
+    { id: 'points', label: 'Сопровождение', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
@@ -3342,6 +3352,7 @@
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
     else if (state.page === 'attestations') return renderAttestations(view);
+    else if (state.page === 'points') return renderPointsBoard(view);
     else if (state.page === 'zaezdy') return renderArrivals(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -36314,6 +36325,340 @@
   }
 
   function ptK(k) { return String(k.toFixed ? k.toFixed(2) : k).replace('.', ','); }
+
+  /* ── Раздел «Сопровождение»: ученики, их точки и деньги ──────────────────────
+     Павел 28.09.2026: «тьютор должен видеть что ему нужно делать 1 2 3 4 5 по
+     чек листам по каждому ученику, все прозрачно, сделал = получил выплату», и
+     отдельно — руководителю: «когда какой тьютор какую сумму получит за какой
+     закрытый чек лист».
+
+     До этого экрана чек-листы жили только внутри карточки одного ученика: чтобы
+     понять, что делать сегодня, тьютор открывал двадцать карточек по очереди, а
+     свод по деньгам не собирался нигде. Здесь три вида на одни и те же данные:
+     «Мои ученики» отвечает на «что делать», «Все ученики» — на «кто отстает»,
+     «Выплаты» — на «кому сколько и за что».
+
+     Считает все сервер (routers/tutor_points.py): и суммы, и коэффициент, и в
+     какую выплату попадет закрытая точка. Фронт только рисует — второй копии
+     правила отсечки 10/20 числа в браузере нет намеренно. */
+  var PB = { my: null, all: null, pay: null, busy: false };
+
+  var PB_SEGS = [
+    { id: 'my', label: 'Мои ученики' },
+    { id: 'all', label: 'Все ученики', cap: 'zaezd_review' },
+    { id: 'pay', label: 'Выплаты', cap: 'zaezd_review' },
+  ];
+
+  function pbSeg() {
+    var s = state.ptSeg || 'my';
+    var found = PB_SEGS.filter(function (g) { return g.id === s; })[0];
+    return (found && (!found.cap || can(found.cap))) ? s : 'my';
+  }
+
+  function pbLoad(force) {
+    var seg = pbSeg();
+    var key = seg === 'pay' ? 'pay' : seg;
+    if (PB[key] && !force) return;
+    if (PB.busy) return;
+    PB.busy = true;
+    var url = seg === 'pay'
+      ? '/admin/api/tutor-payouts' + (state.ptDay ? '?day=' + state.ptDay : '')
+      : '/admin/api/tutor-points/board?scope=' + seg;
+    api(url).then(function (r) {
+      PB[key] = r; PB.busy = false;
+      if (state.page === 'points') renderView();
+    }).catch(function () {
+      PB[key] = { failed: true }; PB.busy = false;
+      if (state.page === 'points') renderView();
+    });
+  }
+
+  function pbTabs() {
+    return '<div class="po-tabs pb-tabs"><div class="dperiod">' +
+      PB_SEGS.filter(function (g) { return !g.cap || can(g.cap); }).map(function (g) {
+        return '<button type="button" data-pbseg="' + g.id + '"' +
+          (pbSeg() === g.id ? ' class="on"' : '') + '>' + esc(g.label) + '</button>';
+      }).join('') + '</div></div>';
+  }
+
+  /* Полоса из пяти точек: закрытые залиты, текущая обведена. Она же навигация —
+     клик открывает любую точку, даже давно закрытую (посмотреть, что отметили). */
+  function pbRail(st, openKey) {
+    return '<div class="pb-rail">' + st.points.map(function (p, i) {
+      var cls = 'pb-dot' + (p.closedAt ? ' done' : '') + (p.key === openKey ? ' on' : '');
+      return '<button type="button" class="' + cls + '" data-pbpt="' + esc(st.sessionId) + ':' + p.key + '"' +
+        ' title="' + esc(p.title) + '">' + (i + 1) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function pbChecklist(st, p) {
+    var items = p.items.map(function (it) {
+      return '<button class="cp-item' + (it.done ? ' on' : '') + '"' + (p.closedAt ? ' disabled' : '') +
+        ' data-pbitem="' + esc(st.sessionId) + ':' + p.key + ':' + esc(it.key) + '"' +
+        ' data-done="' + (it.done ? '1' : '') + '">' +
+        '<span class="cp-box">' + (it.done ? ic('check', 12) : '') + '</span>' +
+        '<span class="cp-item__t">' + esc(it.title) + '</span>' +
+        (it.done && it.by ? '<span class="cp-item__w">' + esc(it.by) + '</span>' : '') +
+        '</button>';
+    }).join('');
+    return '<div class="cp-items">' + items + '</div>';
+  }
+
+  function pbPaid(st) {
+    /* Дни выплат, которые руководитель уже отметил проведенными по этому тьютору.
+       Нужны ровно для одной строки на экране: закрытая точка должна в какой-то
+       момент сказать «выплачено», иначе обещание «сделал — получил» остается
+       обещанием. */
+    var box = PB[pbSeg()] || {};
+    var map = box.paid || {};
+    return map[String(st.ownerId)] || [];
+  }
+
+  function pbPoint(st, p, n, paidDays) {
+    var money = fmtMoney(p.amount) + ' ₽';
+    var head = '<div class="pb-pth"><b>Точка ' + n + '. ' + esc(p.title) + '</b>' +
+      '<span class="pb-amt num">' + money + '</span></div>' +
+      '<div class="pb-about">' + esc(p.about) + '</div>';
+
+    var line;
+    if (p.closedAt) {
+      var paid = p.payDay && (paidDays || []).indexOf(p.payDay) >= 0;
+      line = '<div class="pb-line ok">' + ic('check', 13) + '<span>Закрыта ' + fmtDay(p.closedAt) +
+        (p.closedBy ? ', ' + esc(p.closedBy) : '') + '. ' +
+        (paid ? 'Выплачено ' + fmtDay(p.payDay)
+              : p.payDay ? 'Идет в выплату ' + fmtDay(p.payDay) : 'Попадет в ближайшую выплату') + '</span>' +
+        (p.lateDays ? '<span class="cp-late">просрочка ' + p.lateDays + ' дн.</span>' : '') + '</div>';
+    } else if (p.byResult) {
+      line = '<div class="pb-line">Срок назначает вуз. Сумма зависит от письма: выберите результат в карточке ученика.</div>';
+    } else {
+      line = '<div class="pb-line">' +
+        '<label class="pb-date">Плановая дата' +
+          '<input type="date" data-pbplan="' + esc(st.sessionId) + ':' + p.key + '" value="' + esc(p.planDate || '') + '"></label>' +
+        (p.due ? '<span class="pb-due">по схеме: ' + esc(p.due) + '</span>' : '') +
+        (p.planDate ? '<span class="pb-dim">перенос и причина — в карточке ученика</span>' : '') +
+        '</div>';
+    }
+
+    var foot = p.closedAt ? ''
+      : p.left
+        ? '<div class="pb-foot"><span class="pb-left">осталось отметить: ' + p.left + '</span></div>'
+        : '<div class="pb-foot"><button class="bp sm" data-pbclose="' + esc(st.sessionId) + ':' + p.key + '">' +
+            'Закрыть точку и начислить ' + money + '</button></div>';
+
+    return '<div class="pb-pt">' + head + line + pbChecklist(st, p) + foot + '</div>';
+  }
+
+  function pbStudent(st) {
+    var openKey = (state.ptOpen && state.ptOpen.indexOf(st.sessionId + ':') === 0)
+      ? state.ptOpen.split(':')[1] : (st.next && st.next.key);
+    var p = st.points.filter(function (x) { return x.key === openKey; })[0] || st.points[0];
+    var n = st.points.indexOf(p) + 1;
+    var done = st.points.filter(function (x) { return x.closedAt; }).length;
+    var who = st.ownerName ? '<span class="pb-who">ведет ' + esc(st.ownerName) + '</span>' : '';
+
+    return '<div class="card pb-stu">' +
+      '<div class="pb-head">' +
+        '<div class="pb-nm"><button class="pb-open" data-pblead="' + esc(st.sessionId) + '">' + esc(st.name) + '</button>' +
+          (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
+          (pbSeg() === 'all' ? who : '') + '</div>' +
+        pbRail(st, p.key) +
+        '<div class="pb-sum"><b class="num">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+          '<span>' + done + ' из 5 закрыто</span></div>' +
+      '</div>' +
+      pbPoint(st, p, n, pbPaid(st)) +
+      '</div>';
+  }
+
+  function renderPointsBoard(view) {
+    var seg = pbSeg();
+    if (seg === 'pay') return renderPayouts(view);
+    var box = PB[seg];
+    if (!box) { pbLoad(); view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Собираем учеников…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Не загрузилось — похоже, отвалилась сеть. Обнови страницу.</div></div>';
+      return;
+    }
+    var pay = box.payout || {};
+    var head = '<div class="card pb-top">' +
+      '<div class="pb-topm"><span class="pb-cap">Ближайшая выплата</span>' +
+        '<b class="num">' + fmtMoney(pay.amount) + ' ₽</b>' +
+        '<span class="pb-when">' + (pay.date ? fmtDay(pay.date) : '') + '</span></div>' +
+      '<div class="pb-topd">Идут закрытые точки с ' + (pay.from ? fmtDay(pay.from) : '') +
+        ' по ' + (pay.to ? fmtDay(pay.to) : '') + '. Выплаты два раза в месяц, 10 и 20 числа: ' +
+        'закрыли точку — она сразу встала в ближайшую из них.</div>' +
+      '</div>';
+
+    var list = box.students.length
+      ? box.students.map(pbStudent).join('')
+      : '<div class="card"><div class="empty">' +
+        (seg === 'my'
+          ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
+          : 'Учеников с заведенными точками пока нет.') + '</div></div>';
+
+    view.innerHTML = pbTabs() + head + list;
+    pbWire(view);
+  }
+
+  function renderPayouts(view) {
+    var box = PB.pay;
+    if (!box) { pbLoad(); view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Считаем выплату…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Не загрузилось — обнови страницу.</div></div>';
+      return;
+    }
+    // Сколько еще не отмечено выплаченным. Это и есть остаток работы руководителя
+    // в этом дне: суммы посчитаны, осталось провести платежи и отметить.
+    var left = box.total - (box.paidTotal || 0);
+    var payAll = left > 0
+      ? '<button class="bp sm" data-pbpay="all">Отметить все выплаченным</button>'
+      : box.total > 0 ? '<span class="pb-done">' + ic('check', 13) + ' Все выплачено</span>' : '';
+
+    var head = '<div class="card pb-top">' +
+      '<div class="pb-nav">' +
+        '<button class="bp ghost sm" data-pbday="' + esc(box.prev) + '">Прошлая выплата</button>' +
+        '<div class="pb-topm"><span class="pb-cap">Выплата ' + fmtDay(box.day) + '</span>' +
+          '<b class="num">' + fmtMoney(box.total) + ' ₽</b>' +
+          (box.paidTotal ? '<span class="pb-when">выплачено ' + fmtMoney(box.paidTotal) + ' ₽' +
+            (left > 0 ? ', осталось ' + fmtMoney(left) + ' ₽' : '') + '</span>' : '') +
+        '</div>' +
+        '<button class="bp ghost sm" data-pbday="' + esc(box.next) + '">Следующая выплата</button>' +
+      '</div>' +
+      '<div class="pb-topd">В нее идут точки, закрытые с ' + fmtDay(box.from) + ' по ' + fmtDay(box.to) +
+        '. Сумма складывается из закрытых точек, руками ее никто не вводит.</div>' +
+      (payAll ? '<div class="pb-acts">' + payAll + '</div>' : '') +
+      '</div>';
+
+    var tutors = box.tutors.length ? box.tutors.map(function (t) {
+      var rows = t.rows.map(function (r) {
+        return '<div class="pb-row">' +
+          '<button class="pb-open" data-pblead="' + esc(r.sessionId) + '">' + esc(r.client) + '</button>' +
+          '<span class="pb-rt">' + esc(r.title) + (r.result ? ' · ' + esc(r.result) : '') + '</span>' +
+          '<span class="pb-rd">' + fmtDay(r.closedDay) + '</span>' +
+          '<span class="pb-ra num">' + fmtMoney(r.amount) + ' ₽</span>' +
+          '</div>';
+      }).join('');
+      // Отметка о платеже: либо кнопка, либо след с датой и именем того, кто отметил.
+      // Снять отметку можно, но только с причиной — деньги человека, а «мы это уже
+      // платили» и «отметили по ошибке» должны различаться в системе.
+      var act = t.paid
+        ? '<div class="pb-paidline">' + ic('check', 13) +
+            '<span>Выплачено ' + fmtDay(t.paid.at) + (t.paid.by ? ', отметил ' + esc(t.paid.by) : '') + '</span>' +
+            '<button class="lnk" data-pbunpay="' + t.id + '">снять отметку</button></div>'
+        : t.id
+          ? '<div class="pb-paidline"><button class="bp ghost sm" data-pbpay="' + t.id + '">Выплачено</button></div>'
+          : '<div class="pb-paidline pb-dim">Ответственный за клиента не назначен — отметить выплату некому</div>';
+
+      return '<div class="card pb-tut' + (t.paid ? ' is-paid' : '') + '">' +
+        '<div class="pb-tuth"><b>' + esc(t.name) + '</b>' +
+          '<span class="pb-tutn">' + t.rows.length + ' ' + plural(t.rows.length, 'точка', 'точки', 'точек') + '</span>' +
+          '<b class="pb-tuta num">' + fmtMoney(t.total) + ' ₽</b></div>' +
+        rows + act + '</div>';
+    }).join('') : '<div class="card"><div class="empty">В этот период не закрыто ни одной точки. Платить не за что — это и есть ответ.</div></div>';
+
+    var pend = box.pending.length
+      ? '<div class="card pb-pend"><div class="sec-head"><h3>Не закрыто, а планировали</h3></div>' +
+        box.pending.map(function (r) {
+          return '<div class="pb-row">' +
+            '<button class="pb-open" data-pblead="' + esc(r.sessionId) + '">' + esc(r.client) + '</button>' +
+            '<span class="pb-rt">' + esc(r.title) + '</span>' +
+            '<span class="pb-rd">план ' + fmtDay(r.planDate) + '</span>' +
+            '<span class="pb-ra pb-dim">' + esc(r.tutor) + '</span>' +
+            '</div>';
+        }).join('') +
+        '<div class="pb-topd">Эти точки стояли в плане на тот же период и не закрылись. В выплату они не идут, ' +
+        'и разговор с тьютором нужен именно по ним.</div></div>'
+      : '';
+
+    view.innerHTML = pbTabs() + head + tutors + pend;
+    pbWire(view);
+  }
+
+  function pbWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbseg]'), function (b) {
+      b.addEventListener('click', function () {
+        state.ptSeg = b.getAttribute('data-pbseg'); state.ptOpen = null; saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbday]'), function (b) {
+      b.addEventListener('click', function () {
+        state.ptDay = b.getAttribute('data-pbday'); PB.pay = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbpt]'), function (b) {
+      b.addEventListener('click', function () { state.ptOpen = b.getAttribute('data-pbpt'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pblead]'), function (b) {
+      // Открываем карточку прямо тут: секция «Точки» в ней — то же самое крупным
+      // планом, с переносом даты и причиной, а сюда человек возвращается закрытием.
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-pblead')); });
+    });
+
+    function send(sid, path, body, bad) {
+      var method = body.__method || 'PUT';
+      delete body.__method;
+      api('/admin/api/leads/' + sid + '/points' + path, {
+        method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function () { PB[pbSeg()] = null; PTS[sid] = null; pbLoad(true); })
+        .catch(function (e) {
+          showToast(e && e.status === 422 ? (bad || 'Так нельзя') :
+            e && e.status === 409 ? 'Точка уже закрыта' : 'Не сохранилось, попробуй еще раз');
+        });
+    }
+
+    function payDo(path, body, ok) {
+      api('/admin/api/tutor-payouts/' + path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (r) {
+        PB.pay = r; PB.my = null; PB.all = null;
+        showToast(ok); renderView();
+      }).catch(function (e) {
+        showToast(e && e.status === 409 ? 'Эта выплата уже отмечена' :
+          e && e.status === 422 ? 'Не хватает данных' : 'Не сохранилось, попробуй еще раз');
+      });
+    }
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbpay]'), function (b) {
+      b.addEventListener('click', function () {
+        var who = b.getAttribute('data-pbpay');
+        var box = PB.pay || {};
+        var msg = who === 'all'
+          ? 'Отметить всю выплату ' + fmtDay(box.day) + ' проведенной?'
+          : 'Отметить выплату проведенной?';
+        if (!confirm(msg + ' Суммы зафиксируются на сегодня.')) return;
+        payDo('pay', { day: box.day, ownerId: who === 'all' ? null : Number(who) }, 'Отметил выплаченным');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbunpay]'), function (b) {
+      b.addEventListener('click', function () {
+        var why = prompt('Почему снимаем отметку о выплате? Причина останется в системе.');
+        if (!why || !why.trim()) return;
+        payDo('unpay', { day: (PB.pay || {}).day, ownerId: Number(b.getAttribute('data-pbunpay')),
+                         reason: why.trim() }, 'Отметка снята');
+      });
+    });
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbitem]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-pbitem').split(':');
+        send(a[0], '/' + a[1] + '/item', { __method: 'POST', key: a[2], done: !b.getAttribute('data-done') });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbplan]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var a = inp.getAttribute('data-pbplan').split(':');
+        send(a[0], '/' + a[1] + '/plan', { plan_date: inp.value || null },
+          'Дату уже ставили — перенос с причиной делается в карточке ученика');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbclose]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Закрыть точку? Коэффициент и сумма зафиксируются на сегодня, обратно точка сама не откроется.')) return;
+        var a = b.getAttribute('data-pbclose').split(':');
+        send(a[0], '/' + a[1] + '/close', { __method: 'POST' }, 'Сначала отметьте весь чек-лист');
+      });
+    });
+  }
 
   function buildPointsSection(ctx) {
     var id = ctx.id;
