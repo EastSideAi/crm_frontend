@@ -95,7 +95,7 @@
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {},
+    myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
     // Встречи — одна сетка в двух видах: 'slots' (часы на дни, как в расписании)
@@ -7560,7 +7560,7 @@
         (d.can_edit_all ? '<button class="bp ghost sm sc-meetnew" id="sc-meet">' + ic('plus', 14) + 'Планерка</button>' : '') +
         // Отдельной сетки зумов больше нет, поэтому «создать ссылку» живет здесь.
         // Это единственный акцент экрана: остальное в шапке тихое.
-        (can('tasks_all') ? '<button class="bp sm" id="sc-zoomnew">' + ic('plus', 14) + 'Зум</button>' : '') +
+        (can('tasks_all') ? '<button class="bp' + (meetOn() ? ' ghost' : '') + ' sm" id="sc-zoomnew">' + ic('plus', 14) + 'Зум</button>' : '') +
         '</div>' : '') +
       '</div>';
 
@@ -8577,6 +8577,10 @@
     // Журнал записей встреч — не вид сетки, а список того, что уже прошло:
     // он живет под сеткой в обоих видах.
     if (can('tasks')) {
+      var rooms = document.createElement('div');
+      rooms.id = 'mt-rooms';
+      view.appendChild(rooms);
+      renderMeetRooms(rooms);
       var log = document.createElement('div');
       log.id = 'mt-log';
       view.appendChild(log);
@@ -8811,6 +8815,119 @@
         state.schedDayOff = Math.round((d - now) / 86400000);
         saveUi(); renderView();
       });
+    });
+  }
+
+  /* ── Своя комната: встреча на нашем сервере вместо Зума ───────────────────
+     Павел 28.09.2026: «устал от зума и фатона». Комната живет здесь, во
+     «Встречах», рядом с расписанием и журналом записей: человек заходит сюда,
+     чтобы созвониться, а не в «Цели».
+
+     Кнопки нет, пока сервер комнат не поднят (флаг configured у ручки). Иначе
+     она висела бы у всей команды и на каждое нажатие отвечала «не настроено».
+     Вместо нее одна честная строка: чего ждем.
+
+     Три состояния данных разведены намеренно: не загрузили (скелетон), сеть
+     отвалилась ('none' — так и говорим, с кнопкой «Повторить») и ответ пришел.
+     Свалить сбой сети в «сервера еще нет» нельзя: команда прочтет это как факт
+     о компании и просто не станет заводить встречу. */
+  var MEET_ON_LS = 'eastside_meet_on';   // последнее известное «комната включена»
+  var MEET_FRESH_MS = 60000;             // через минуту список считаем несвежим
+  function meetOn() {
+    var d = state.meetRooms;
+    if (d && d !== 'none' && d !== 'loading') return !!d.configured;
+    // До ответа верим прошлому заходу: иначе «Зум» в шапке на каждом открытии
+    // вкладки успевает мигнуть синим и перекраситься, а единственный акцент
+    // экрана скакать не должен.
+    return lsGet(MEET_ON_LS) === '1';
+  }
+  function loadMeetRooms() {
+    state.meetRooms = state.meetRooms && state.meetRooms.rooms ? state.meetRooms : 'loading';
+    state.meetRoomsAt = Date.now();
+    api('/admin/api/meet/rooms?limit=12').then(function (r) {
+      state.meetRooms = r && r.rooms ? r : { rooms: [], configured: false };
+      state.meetRoomsAt = Date.now();
+      try { localStorage.setItem(MEET_ON_LS, r && r.configured ? '1' : '0'); } catch (e) {}
+      if (state.page === 'tasks') renderView();
+    }).catch(function () {
+      state.meetRooms = 'none';
+      if (state.page === 'tasks') renderView();
+    });
+  }
+  function meetRoomsSkeleton() {
+    var row = '<div class="sk-row mr-sk">' +
+      '<span class="shim sk-cell w60"></span>' +
+      '<span class="shim sk-cell w40"></span>' +
+      '<span class="shim sk-cell pill"></span></div>';
+    return '<div class="sk-list">' + row + row + '</div>';
+  }
+  function meetRoomRow(r) {
+    var live = r.status === 'live';
+    var over = r.status === 'done' || r.status === 'failed';
+    // Одна семья чипов на весь блок: «ждет» и «прошла» значат
+    // противоположное (в одну войти можно, второй на сервере уже нет), поэтому
+    // и выглядят по-разному, а не двумя одинаковыми серыми пилюлями.
+    var chip = live ? '<span class="sev mr-live">идет</span>'
+      : over ? '<span class="sev mr-over">прошла</span>'
+      : '<span class="sev mr-wait">ждет</span>';
+    var who = r.created_by_name ? esc(r.created_by_name) : '';
+    var ppl = over && r.people
+      ? r.people + ' ' + plural(r.people, 'участник', 'участника', 'участников') : '';
+    var sub = [who, ppl].filter(Boolean).join(' · ');
+    // Закончившуюся встречу открывать некуда: комнаты на сервере уже нет.
+    var go = over ? ''
+      : '<a class="qchip mr-go' + (live ? ' on' : '') + '" href="' + esc(r.url) + '" ' +
+        'target="_blank" rel="noopener">' + ic('go', 12) + 'Войти</a>';
+    var copy = over ? ''
+      : '<button class="qchip mr-copy" data-mcopy="' + esc(r.url) + '" title="Скопировать ссылку">' +
+        ic('copy', 13) + '</button>';
+    return '<div class="trow mt-row mr-row">' +
+      '<div class="mt-when num">' + fmtTime(r.created_at) + '</div>' +
+      '<div class="mt-main"><div class="mr-title">' + esc(r.title || 'Встреча') + '</div>' +
+        (sub ? '<div class="mt-sub">' + sub + '</div>' : '') + '</div>' +
+      '<div class="mt-right">' + chip + go + copy + '</div>' +
+    '</div>';
+  }
+  function renderMeetRooms(view) {
+    var d = state.meetRooms;
+    if (d === null) { loadMeetRooms(); d = state.meetRooms; }
+    // Статус живет недолго: «идет» через час означает встречу, которой уже нет.
+    // Перечитываем молча, старый список на экране при этом остается.
+    else if (d && d.rooms && Date.now() - (state.meetRoomsAt || 0) > MEET_FRESH_MS) loadMeetRooms();
+    var loading = d === 'loading' || d === null;
+    var failed = d === 'none';
+    var on = meetOn();
+    var rooms = (d && d.rooms) || [];
+    // Идущие сверху: если встреча уже началась, человек открыл эту вкладку,
+    // чтобы в нее войти, а не чтобы посмотреть позавчерашнюю.
+    rooms = rooms.slice().sort(function (a, b) {
+      return (b.status === 'live' ? 1 : 0) - (a.status === 'live' ? 1 : 0);
+    }).slice(0, 8);
+    var body;
+    if (loading) body = meetRoomsSkeleton();
+    else if (failed) body = '<div class="empty">Не удалось загрузить встречи.' +
+      ' <button class="qchip mr-retry" id="mr-again">Повторить</button></div>';
+    else if (rooms.length) body = rooms.map(meetRoomRow).join('');
+    else if (on) body = '<div class="empty">Своих встреч еще не было. Заведи комнату ' +
+      'и кинь ссылку в чат: гость войдет из браузера, ставить ничего не надо.</div>';
+    else body = '<div class="mr-off">Своя комната встанет на отдельном сервере. ' +
+      'Пока встречи ведем в Зуме.</div>';
+    // Кнопку прячем только когда ТОЧНО знаем, что комната не включена: на сбое
+    // сети и на первой отрисовке человек не должен терять способ созвониться.
+    var btn = on || failed || loading;
+    view.innerHTML = '<div class="card listcard mr-card">' +
+      '<div class="list-tools">' +
+        '<span class="mr-lbl">Своя комната</span>' +
+        (btn ? '<span class="mr-note">гость входит по ссылке из браузера, ставить ничего не надо</span>' : '') +
+        (btn ? '<button class="bp sm" id="mr-new">' + ic('plus', 14) + 'Новая встреча</button>' : '') +
+      '</div>' +
+      '<div class="list-body">' + body + '</div></div>';
+    if (el('mr-new')) el('mr-new').addEventListener('click', openMeetRoom);
+    if (el('mr-again')) el('mr-again').addEventListener('click', function () {
+      state.meetRooms = null; renderView();
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mcopy]'), function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-mcopy'), b); });
     });
   }
 
@@ -11836,6 +11953,99 @@
       });
      });
     });
+  }
+
+  /* ── Своя встреча: комната вместо Зума ───────────────────────────────────
+     Павел 28.09.2026: «устал от зума и фатона». Комната своя, живет на нашем
+     сервере, гость заходит по ссылке из браузера без регистрации. Здесь только
+     заведение встречи и ссылка — все остальное происходит на самой странице
+     комнаты (backend web/meet.html). Запись, расшифровка и черновик задач
+     приходят потом в тот же «Импорт встречи», что и сейчас. */
+  function openMeetRoom() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Встречи</div><div class="al-title">Своя встреча</div></div>' +
+          '<button class="al-x" id="mr-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заведу комнату и дам ссылку. Гости заходят из браузера, ' +
+          'ставить ничего не надо. Запись и черновик задач придут сюда же после встречи.</div>' +
+        '<div class="al-body" id="mr-body">' +
+          '<label class="al-f"><span class="al-l">Название</span>' +
+            '<input id="mr-title" class="al-in" type="text" maxlength="120" ' +
+              'placeholder="Планерка команды"></label>' +
+          '<div class="al-ai-note" id="mr-note"></div>' +
+        '</div>' +
+        '<div class="al-foot" id="mr-foot">' +
+          '<button class="al-cancel" id="mr-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="mr-go">' + ic('plus', 14) + 'Создать</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('mr-x').addEventListener('click', close);
+    el('mr-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var note = el('mr-note');
+    var show = function (t, ask) {
+      note.className = 'al-ai-note' + (ask ? ' ask' : '');
+      note.textContent = t || '';
+    };
+    setTimeout(function () { var t = el('mr-title'); if (t) t.focus(); }, 60);
+    el('mr-title').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') el('mr-go').click();
+    });
+
+    el('mr-go').addEventListener('click', function () {
+      var go = this;
+      var title = (el('mr-title').value || '').trim();
+      if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
+      go.disabled = true; go.classList.add('loading');
+      apiSend('/admin/api/meet/rooms', 'POST', { title: title, kind: 'team' },
+        function (r) { ready(r); },
+        function (code, e) {
+          go.disabled = false; go.classList.remove('loading');
+          var why = e && e.body && e.body.detail;
+          show(code === 503
+            ? (why || 'Своя комната еще не включена, идет настройка сервера')
+            : 'Не получилось завести встречу, попробуй еще раз', true);
+        });
+    });
+
+    // Готово: показываем ссылку и одну кнопку. Человеку сейчас нужно только
+    // скопировать ее в чат, поэтому поля ввода убираем совсем.
+    function ready(r) {
+      // Список комнат под расписанием перечитываем: новая встреча должна быть
+      // там же, где человек ее потом ищет, а не только в этом окне.
+      loadMeetRooms();
+      el('mr-body').innerHTML =
+        '<label class="al-f"><span class="al-l">Ссылка на встречу</span>' +
+          '<input id="mr-link" class="al-in" type="text" readonly value="' + esc(humanUrl(r.url)) + '"></label>' +
+        '<div class="al-ai-note">Открывается в браузере, на телефоне тоже. ' +
+          'Кто получил ссылку, тот войдет, поэтому не выкладывай ее публично.</div>';
+      el('mr-foot').innerHTML =
+        '<button class="al-cancel" id="mr-done">Закрыть</button>' +
+        '<button class="bp al-save" id="mr-copy">' + ic('copy', 14) + 'Скопировать</button>';
+      el('mr-done').addEventListener('click', close);
+      el('mr-copy').addEventListener('click', function () {
+        el('mr-link').select();
+        copyText(r.url, this);
+      });
+      el('mr-link').focus();
+    }
   }
 
   /* ── Импорт встречи: протокол → задачи ───────────────────────────────────
