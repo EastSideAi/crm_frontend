@@ -1,0 +1,33 @@
+/* Общий стиль юридических бланков EastSide. Печать A4, черный текст, без
+   украшений: документ читает не дизайнер, а человек перед подписью и суд после. */
+@page { size: A4; margin: 18mm 16mm 16mm; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 400 10.5px/1.5 'Inter', system-ui, sans-serif; color: #10162B; }
+h1 { font-size: 15px; font-weight: 700; text-align: center; margin: 0 0 4px;
+     letter-spacing: -.01em; text-transform: uppercase; }
+.city { display: flex; justify-content: space-between; color: #10162B; margin: 14px 0 16px; }
+h2 { break-after: avoid; font-size: 12px; font-weight: 700; margin: 16px 0 6px; }
+h3 { break-after: avoid; font-size: 11px; font-weight: 700; margin: 12px 0 5px; }
+p { margin: 0 0 6px; text-align: justify; }
+ul { margin: 0 0 6px; padding-left: 14px; list-style: none; }
+li { margin-bottom: 3px; position: relative; }
+li::before { content: '\2014'; position: absolute; left: -14px; color: #6B7590; }
+.sub { color: #6B7590; font-size: 9.5px; text-align: center; margin-bottom: 2px; }
+.note { background: #F2F5FD; border-radius: 6px; padding: 8px 10px; margin: 8px 0 10px;
+        font-size: 9.5px; color: #2A3252; text-align: left; }
+.note b { color: #10162B; }
+table { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 10px;
+        break-inside: avoid; }
+th { text-align: left; font-weight: 600; font-size: 8.5px; letter-spacing: .04em;
+     text-transform: uppercase; color: #8A93AC; padding: 0 12px 5px 0; }
+td { padding: 6px 12px 6px 0; border-top: 1px solid #E6E9F2; vertical-align: top; }
+th:last-child, td:last-child { padding-right: 0; }
+.sig { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; margin-top: 14px;
+       break-inside: avoid; font-size: 10px; }
+.sig .h { font-weight: 700; font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
+          color: #8A93AC; margin-bottom: 6px; }
+.line { margin-top: 18px; }
+.break { break-before: page; }
+.chk { font-size: 11px; }
+.foot { margin-top: 20px; padding-top: 8px; border-top: 1px solid #E6E9F2;
+        color: #8A93AC; font-size: 8.5px; display: flex; justify-content: space-between; }
