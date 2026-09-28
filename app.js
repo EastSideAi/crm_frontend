@@ -3001,18 +3001,10 @@
         '</span></div></div>' +
         (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
     }
-    if (state.page === 'workshops' || (state.page === 'academy' && acTabNow() === 'ws')) {
-      var wsl = (state.ws && state.ws.items) || [];
-      var wsLeft = wsl.filter(function (x) { return !x.seen; }).length;
-      html = '<div><h2>Воркшопы</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('play', 13) + '</span><span>' +
-        (wsl.length
-          ? (wsLeft ? 'Не смотрели: <b>' + wsLeft + '</b> из ' + wsl.length + '. ' : 'Все ' + wsl.length + ' посмотрены. ') +
-            'Записи, материалы и домашка. Смотреть можно в любом порядке.'
-          : 'Записи воркшопов команды с материалами и домашкой.') +
-        '</span></div></div>' +
-        (state.ws && state.ws.can_edit ? '<button class="bp sm" id="ws-new">' + ic('plus', 14) + 'Добавить</button>' : '');
-    }
+    /* У воркшопов своей шапки нет: это курс, и он занимает экран целиком, как
+       любой другой курс Академии. Сколько занятий пройдено — в колонке
+       программы, кнопка «Занятие» для руководителя там же. Вторая шапка сверху
+       повторяла бы и то, и другое. */
     if (state.page === 'analytics') {
       html = '<div><h2>Аналитика бота</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('bolt', 13) + '</span><span>' +
@@ -3292,8 +3284,6 @@
     if (gs) gs.addEventListener('click', guideExit);
     var nw = el('nw-new');
     if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
-    var wn = el('ws-new');
-    if (wn) wn.addEventListener('click', function () { openWsForm(null); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
@@ -4034,14 +4024,9 @@
   function renderAcademy(view) {
     if (acTabNow() === 'ws') {
       /* Открытый курс — это уже не витрина: вкладки Академии тут не рисуем, как и
-         в обычном курсе, а даем один путь назад. Иначе на экране одновременно
-         стоят шапка «Воркшопы» и вкладка «Курсы», и непонятно, где ты. */
-      view.innerHTML = '<div class="academy ac-wsback"><button class="ac-back-all" id="ac-ws-back">' +
-        ic('go', 13) + 'Все курсы</button></div><div id="ac-ws"></div>';
-      var back = view.querySelector('#ac-ws-back');
-      back.addEventListener('click', function () {
-        state.acTab = 'courses'; saveUi(); renderHead(); renderView();
-      });
+         в обычном курсе. Путь назад («Все курсы») живет в колонке программы, там
+         же, где он стоит в любом другом курсе. */
+      view.innerHTML = '<div id="ac-ws"></div>';
       return renderWorkshops(document.getElementById('ac-ws'));
     }
     if (acTabNow() === 'att' && (!state.ac || !state.ac.course)) {
@@ -4740,7 +4725,10 @@
     var tar = (sc.tar || []).map(function (t) {
       return '<li class="ac-tar ' + esc(t[0]) + '"><span class="ac-tar-n">' + esc(t[1]) + '</span><span>' + esc(t[2]) + '</span></li>';
     }).join('');
-    return '<div class="ac-stage">' +
+    /* Класс .ac-stg, а не .ac-stage: последним занята сцена курса, и второе
+       правило с тем же именем добавляло ей отступ сверху — колонка программы и
+       карточка занятия начинались с разных линий (приемка 28.09.2026). */
+    return '<div class="ac-stg">' +
       (meta.length ? '<div class="ac-smetas">' + meta.join('') + '</div>' : '') +
       (cols ? '<div class="ac-scols">' + cols + '</div>' : '') +
       (tar ? '<div class="ac-tars"><div class="ac-scol-h ac-cap">Чем отличаются тарифы</div><ul>' + tar + '</ul></div>' : '') +
@@ -8097,102 +8085,196 @@
     return null;
   }
 
+  /* Воркшопы — курс Академии, а не список записей (правка Павла 28.09.2026: «пока
+     вижу, что ты просто перенес как было раньше, а что сделал по оформлению?»).
+     Слева программа занятиями, справа одно занятие целиком: место под запись,
+     под ним домашка и материалы. Классы те же, что у курсов Академии (.ac-*):
+     второй вид урока в CRM означал бы второй дизайн обучения. */
+  function wsList() {
+    /* В курсе занятия идут от первого к последнему, хотя сервер отдает их от
+       свежего к старому: библиотеке нужен сверху последний воркшоп, курсу —
+       занятие 1. Сортируем копию, ответ сервера не трогаем. */
+    return ((state.ws && state.ws.items) || []).slice().sort(function (a, b) {
+      return (a.num || 0) - (b.num || 0) || a.id - b.id;
+    });
+  }
+  /* Какое занятие открыто. По умолчанию первое непросмотренное — человек
+     возвращается в курс, чтобы продолжить, а не чтобы пересмотреть начало. */
+  function wsCur(items) {
+    if (state.wsI != null && items[state.wsI]) return state.wsI;
+    for (var k = 0; k < items.length; k++) if (!items[k].seen) return k;
+    return 0;
+  }
+  function wsOpen(n, view) {
+    state.wsI = n; renderHead(); renderWorkshops(view);
+    // На телефоне программа складывается сама: иначе выбранное занятие остается
+    // ниже экрана, и кажется, что нажатие ничего не сделало (как в курсе).
+    if (acNarrow()) { var r = el('ws-route'); if (r) r.classList.add('fold'); }
+  }
+
   function renderWorkshops(view) {
     if (!view) return;
     if (!state.ws) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return wsLoad(function () { var m = wsMount(); if (m) { renderHead(); renderWorkshops(m); } });
     }
-    var w = state.ws, items = w.items || [];
-    if (w.none) {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить воркшопы. Обнови страницу.</div></div>';
-      return;
-    }
-    if (!items.length) {
-      view.innerHTML = '<div class="card"><div class="empty">' +
-        (w.can_edit ? 'Воркшопов пока нет. Первый добавь кнопкой «Добавить» сверху: название, ссылка на запись и домашка.'
-                    : 'Воркшопов пока нет. Как проведем первый, запись появится здесь.') + '</div></div>';
-      return;
-    }
-    var body = items.map(function (it) {
-      var meta = [it.held_at ? wsDate(it.held_at) : '', it.host ? 'вел(а) ' + it.host : ''].filter(Boolean).join(' · ');
-      var mats = (it.materials || []).map(function (m) {
-        return '<a class="ws-mat" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('doc', 13) + esc(m.title) + '</a>';
-      }).join('');
-      return '<article class="ws-item' + (it.seen ? ' done' : '') + (it.archived ? ' arch' : '') + '" data-ws="' + it.id + '">' +
-        '<div class="ws-n num">' + (it.num || '—') + '</div>' +
-        '<div class="ws-main">' +
-          '<div class="ws-top">' +
-            '<h3 class="ws-title">' + esc(it.title) + '</h3>' +
-            (w.can_edit ? '<button class="icobtn ws-edit" data-wse="' + it.id + '" title="Поправить">' + ic('pen', 14) + '</button>' : '') +
-          '</div>' +
-          (meta ? '<div class="ws-meta">' + esc(meta) + (it.archived ? '<span class="sev">в архиве</span>' : '') + '</div>' : '') +
-          (it.about ? '<p class="ws-about">' + esc(it.about) + '</p>' : '') +
-          /* Запись стоит сразу под описанием: за ней сюда и приходят, а домашку
-             читают уже после просмотра. */
-          (it.video_file
-            ? '<div class="ws-vid"><video class="ws-vid-el" data-wsvid="' + esc(it.video_file) + '" controls playsinline preload="metadata"></video>' +
-              '<div class="ws-vid-wait">Открываем запись…</div></div>'
-            : '') +
-          (it.homework ? '<div class="ws-hw"><span class="ws-hw-l">Домашка</span>' + esc(it.homework) + '</div>' : '') +
-          (mats ? '<div class="ws-mats">' + mats + '</div>' : '') +
-          '<div class="ws-act">' +
-            (it.video_file ? ''
-              : it.record_url
-              ? '<a class="bp sm ws-play" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' + ic('play', 14) + 'Смотреть запись</a>'
-              : '<span class="ws-norec">Записи нет</span>') +
-            '<button class="qchip ws-seen' + (it.seen ? ' on' : '') + '" data-wss="' + it.id + '">' +
-              ic(it.seen ? 'check' : 'eye', 13) + '<span>' + (it.seen ? 'Посмотрел' : 'Отметить, что посмотрел') + '</span></button>' +
-            (w.can_edit && it.seen_n ? '<span class="ws-cnt num" title="сколько человек отметили">' + it.seen_n + '</span>' : '') +
-          '</div>' +
-        '</div>' +
-      '</article>';
+    var w = state.ws, items = wsList(), inAc = state.page === 'academy';
+    var i = wsCur(items), it = items[i] || null;
+    var done = items.filter(function (x) { return x.seen; }).length;
+
+    var rows = items.map(function (x, n) {
+      return '<div class="ac-r' + (n === i ? ' active' : '') + (x.seen ? ' done' : '') + '" data-wsgo="' + n + '">' +
+        '<span class="ac-num">' + (x.seen ? ic('check', 12) : (n + 1)) + '</span>' +
+        '<span class="ac-tl">' + esc(x.title) + '</span>' +
+        (x.archived ? '<span class="ac-lk wsc-arch">в архиве</span>' : '') + '</div>';
     }).join('');
-    view.innerHTML = '<div class="card ws">' + body + '</div>';
-    /* Запись играет прямо в занятии. Файл лежит у нас на сервере, отдает его Caddy,
-       а право смотреть дает cookie: ключ CRM в адресе видео попал бы в логи целиком
-       (та же механика, что у записей курса продаж, docs/academy-video.md). */
-    var vids = view.querySelectorAll('[data-wsvid]');
-    if (vids.length) {
-      xfetch('/admin/api/academy/video-session?course=workshops',
-        { method: 'POST', credentials: 'include' })
-        .then(function (r) {
-          if (!r.ok) throw new Error(String(r.status));
-          Array.prototype.forEach.call(vids, function (v) {
-            v.src = API + '/academy-video/workshops/' + v.getAttribute('data-wsvid');
-            var w = v.parentNode.querySelector('.ws-vid-wait');
-            if (w) w.hidden = true;
-          });
-        })
-        .catch(function () {
-          Array.prototype.forEach.call(view.querySelectorAll('.ws-vid-wait'), function (w) {
-            w.textContent = 'Запись не открылась. Обновите страницу, а если не помогло — скажите руководителю.';
-          });
-        });
+
+    var stage;
+    if (w.none) {
+      stage = '<div class="ac-screen"><h1 class="ac-h">Занятия не загрузились</h1>' +
+        '<p class="ac-p">Обнови страницу. Если не помогло — скажи руководителю.</p></div>';
+    } else if (!it) {
+      stage = '<div class="ac-screen"><h1 class="ac-h">Занятий пока нет</h1><p class="ac-p">' +
+        (w.can_edit
+          ? 'Первое добавь кнопкой «Занятие» слева: название, дата, запись и домашка.'
+          : 'Как проведем первый воркшоп, запись появится здесь.') + '</p></div>';
+    } else {
+      stage = wsLessonHTML(it, i, items.length, w);
     }
 
-    Array.prototype.forEach.call(view.querySelectorAll('[data-wse]'), function (b) {
-      b.addEventListener('click', function () {
-        var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-wse'); })[0];
-        if (it) openWsForm(it);
-      });
+    view.innerHTML =
+      '<div class="academy"><div class="ac-wrap">' +
+        '<aside class="ac-route' + (acNarrow() ? ' fold' : '') + '" id="ws-route">' +
+          (inAc ? '<button class="ac-back-all" id="ws-all">' + ic('go', 13) + 'Все курсы</button>' : '') +
+          '<button class="ac-route-head" id="ws-fold" type="button" aria-controls="ws-rlist" aria-expanded="' + (acNarrow() ? 'false' : 'true') + '">' +
+            '<span class="ac-cap">Программа курса</span>' +
+            '<span class="ac-fx">' + ic('go', 13) + '</span></button>' +
+          '<div class="ac-bar"><i style="width:' + (items.length ? Math.round(done / items.length * 100) : 0) + '%"></i></div>' +
+          /* Словами, а не «1 / 3»: та же запись внизу экрана значит номер
+             открытого занятия, и две одинаковые дроби на одном экране читались
+             как одно и то же (приемка 28.09.2026). */
+          '<div class="wsc-prog">' + (items.length ? 'Посмотрено ' + done + ' из ' + items.length : 'Занятий пока нет') + '</div>' +
+          '<div class="ac-course-pill">' + ic('play', 13) + 'Воркшопы от разработчиков</div>' +
+          '<div class="ac-rlist" id="ws-rlist">' + rows + '</div>' +
+          (w.can_edit ? '<button class="wsc-add" id="ws-add" type="button">' + ic('plus', 13) + 'Занятие</button>' : '') +
+        '</aside>' +
+        '<section class="ac-stage">' + stage + '</section>' +
+      '</div></div>';
+
+    var all = el('ws-all');
+    if (all) all.addEventListener('click', function () {
+      state.acTab = 'courses'; saveUi(); renderHead(); renderView();
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-wss]'), function (b) {
-      b.addEventListener('click', function () {
-        var id = b.getAttribute('data-wss');
-        var it = items.filter(function (x) { return String(x.id) === id; })[0];
-        if (!it) return;
-        var next = !it.seen;
-        it.seen = next;                      // рисуем сразу: отметка себе, спорить не с чем
-        it.seen_n = Math.max(0, (it.seen_n || 0) + (next ? 1 : -1));
-        renderHead(); renderWorkshops(view);
-        apiSend('/admin/api/workshops/' + id + '/seen', 'POST', { seen: next }, null, function () {
-          it.seen = !next; showToast('Не сохранилось — проверь сеть'); renderHead(); renderWorkshops(view);
-        });
-      });
+    el('ws-fold').addEventListener('click', function () {
+      var off = el('ws-route').classList.toggle('fold');
+      this.setAttribute('aria-expanded', off ? 'false' : 'true');
+    });
+    el('ws-rlist').addEventListener('click', function (ev) {
+      var row = ev.target.closest('[data-wsgo]'); if (!row) return;
+      wsOpen(+row.getAttribute('data-wsgo'), view);
+    });
+    var add = el('ws-add');
+    if (add) add.addEventListener('click', function () { openWsForm(null); });
+    if (it) wsWireLesson(it, i, items.length, view);
+  }
+
+  /* Одно занятие. Порядок такой же, как в видеоуроке Академии: сперва запись,
+     потом о чем она, потом домашка и материалы — за записью сюда и приходят. */
+  function wsLessonHTML(it, i, total, w) {
+    var meta = ['Занятие ' + (i + 1), it.held_at ? wsDate(it.held_at) : '', it.host ? 'вел(а) ' + it.host : '']
+      .filter(Boolean).join(' · ');
+    var mats = (it.materials || []).map(function (m) {
+      return '<a class="ac-mat" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('doc', 14) + esc(m.title) + '</a>';
+    }).join('');
+    /* Место под запись стоит ВСЕГДА, даже когда файла еще нет (вопрос Павла
+       28.09.2026: «где место для записи?»). Пустая рамка говорит, что с записью,
+       и занятие не выглядит потерянным. */
+    var vid = it.video_file
+      ? '<div class="ac-vid"><div class="ac-vid-box">' +
+          '<video id="ws-vid" class="ac-vid-el" data-wsvid="' + esc(it.video_file) + '" controls playsinline preload="metadata"></video>' +
+          '<div class="ac-vid-wait" id="ws-vid-wait">Открываем запись…</div></div></div>'
+      : '<div class="ac-vid"><div class="ac-vid-box wsc-norec"><div class="wsc-norec-in">' +
+          ic('play', 26) +
+          (it.record_url
+            ? '<b>Запись пока в облаке</b><span>К нам на сервер ее еще не перенесли — открывается по ссылке.</span>' +
+              '<a class="wsc-norec-a" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">Смотреть запись' + ic('ext', 13) + '</a>'
+            : '<b>Записи еще нет</b><span>Занятие прошло, запись выложим сюда. Материалы и домашка ниже.</span>') +
+        '</div></div></div>';
+    var hasNext = i + 1 < total, inAc = state.page === 'academy';
+    /* На последнем просмотренном занятии кнопка ведет к курсам: пустое место
+       справа читается как оборванный курс (приемка 28.09.2026). */
+    var nextLab = !it.seen ? 'Посмотрел' : (hasNext ? 'Следующее занятие' : 'Все курсы');
+    var nextOn = !it.seen || hasNext || inAc;
+    return '<div class="ac-stage-top wsc-top"><span class="ac-cap">' + esc(meta) +
+        (it.archived ? ' · в архиве' : '') + '</span>' +
+        '<div class="ac-top-r">' +
+          (it.seen ? '<button class="wsc-seen" id="ws-seen" type="button" title="Снять отметку">' +
+            ic('check', 13) + 'Посмотрено</button>' : '') +
+          (w.can_edit ? '<button class="icobtn" id="ws-edit" title="Поправить занятие">' + ic('pen', 14) + '</button>' : '') +
+        '</div></div>' +
+      '<div class="ac-screen">' +
+        '<h1 class="ac-h">' + esc(it.title) + '</h1>' +
+        vid +
+        (it.about ? '<p class="ac-p lead">' + esc(it.about) + '</p>' : '') +
+        (it.homework ? '<div class="wsc-hw"><span class="ac-cap">Домашка</span><p>' + esc(it.homework) + '</p></div>' : '') +
+        (mats ? '<div class="wsc-mats"><span class="ac-cap">Материалы занятия</span>' + mats + '</div>' : '') +
+      '</div>' +
+      '<div class="ac-foot">' +
+        '<button class="ac-btn ghost" id="ws-prev"' + (i ? '' : ' style="visibility:hidden;"') + '>Назад</button>' +
+        '<span class="ac-step-lab">Занятие ' + (i + 1) + ' из ' + total + '</span>' +
+        '<button class="ac-btn pri" id="ws-next"' + (nextOn ? '' : ' style="visibility:hidden;"') + '>' + nextLab + '</button>' +
+      '</div>';
+  }
+
+  function wsWireLesson(it, i, total, view) {
+    var ed = el('ws-edit');
+    if (ed) ed.addEventListener('click', function () { openWsForm(it); });
+    var prev = el('ws-prev');
+    if (prev) prev.addEventListener('click', function () { if (i) wsOpen(i - 1, view); });
+    var seenChip = el('ws-seen');
+    if (seenChip) seenChip.addEventListener('click', function () { wsSeen(it, false, view); });
+    var next = el('ws-next');
+    if (next) next.addEventListener('click', function () {
+      // Не отмечено — кнопка и есть отметка «посмотрел», дальше переводит сама.
+      if (!it.seen) return wsSeen(it, true, view, i + 1 < total ? i + 1 : null);
+      if (i + 1 < total) return wsOpen(i + 1, view);
+      state.acTab = 'courses'; saveUi(); renderHead(); renderView();
+    });
+    wsPlayer(view);
+  }
+
+  /* Отметка «посмотрел» — закладка человека для себя, спорить не с чем: рисуем
+     сразу, а сеть догоняет. Не сохранилось — возвращаем как было. */
+  function wsSeen(it, next, view, goTo) {
+    it.seen = next;
+    it.seen_n = Math.max(0, (it.seen_n || 0) + (next ? 1 : -1));
+    if (goTo != null) state.wsI = goTo;
+    renderHead(); renderWorkshops(view);
+    apiSend('/admin/api/workshops/' + it.id + '/seen', 'POST', { seen: next }, null, function () {
+      it.seen = !next; showToast('Не сохранилось — проверь сеть');
+      renderHead(); renderWorkshops(view);
     });
   }
-  /* Форма воркшопа. Материалы — строки «название + ссылка»: файлы у нас лежат в
+
+  /* Запись играет прямо в занятии. Файл лежит у нас на сервере, отдает его Caddy,
+     а право смотреть дает cookie: ключ CRM в адресе видео попал бы в логи целиком
+     (та же механика, что у записей курса продаж, docs/academy-video.md). */
+  function wsPlayer(view) {
+    var v = el('ws-vid'), wait = el('ws-vid-wait');
+    if (!v) return;
+    xfetch('/admin/api/academy/video-session?course=workshops',
+      { method: 'POST', credentials: 'include' })
+      .then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        v.src = API + '/academy-video/workshops/' + v.getAttribute('data-wsvid');
+        if (wait) wait.hidden = true;
+      })
+      .catch(function () {
+        if (wait) wait.textContent = 'Запись не открылась. Обнови страницу, а если не помогло — скажи руководителю.';
+      });
+  }
+
+  /* Форма занятия. Материалы — строки «название + ссылка»: файлы у нас лежат в
      гугл-диске и ноушене, тащить их в CRM ради списка ссылок незачем. */
   function openWsForm(it) {
     if (document.querySelector('.al-ov.ws-ov')) return;
@@ -8210,7 +8292,7 @@
     ov.innerHTML =
       '<div class="al-card ws-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Воркшопы</div><div class="al-title">' + (it ? 'Поправить воркшоп' : 'Новый воркшоп') + '</div></div>' +
+          '<div><div class="al-eyebrow">Воркшопы</div><div class="al-title">' + (it ? 'Поправить занятие' : 'Новое занятие') + '</div></div>' +
           '<button class="al-x" id="ws-x">' + ic('x', 14) + '</button></div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
@@ -8245,7 +8327,13 @@
           '<button class="bp al-save" id="ws-save">Сохранить</button>' +
         '</div></div>';
     document.body.appendChild(ov);
-    function close() { ov.remove(); }
+    // Без этого модалка висит в DOM прозрачной: .al-ov открывается классом
+    // show, и форма занятия единственная в файле его не ставила — окно
+    // «Новое занятие» не показывалось вовсе (поймано приемкой 28.09.2026).
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    function close() { document.removeEventListener('keydown', onKey); ov.remove(); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    document.addEventListener('keydown', onKey);
     function readMats() {
       return Array.prototype.map.call(ov.querySelectorAll('.ws-mrow'), function (row) {
         return { title: row.querySelector('.ws-mt').value.trim(), url: row.querySelector('.ws-mu').value.trim() };
