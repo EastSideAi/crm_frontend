@@ -8200,6 +8200,23 @@
               '<a class="wsc-norec-a" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">Смотреть запись' + ic('ext', 13) + '</a>'
             : '<b>Записи еще нет</b><span>Занятие прошло, запись выложим сюда. Материалы и домашка ниже.</span>') +
         '</div></div></div>';
+    /* Ссылка на Фатон живет рядом с плеером, а не в материалах (Павел 28.09.2026):
+       там лежит та же встреча с расшифровкой по ролям, и человек ищет ее глазами
+       там же, где запись. Когда файла у нас нет, ссылка уже стоит внутри рамки —
+       второй раз ее не показываем. */
+    if (it.video_file && it.record_url) {
+      vid += '<a class="wsc-src" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' +
+        ic('ext', 13) + 'Та же встреча в Фатоне: расшифровка по ролям и поиск по словам</a>';
+    }
+    /* Конспект сворачивается: это пересказ часа, и в развернутом виде он отодвигает
+       домашку за край экрана. Открыт по умолчанию — свернутый текст не читают. */
+    var notes = it.notes
+      ? '<details class="wsc-notes" open><summary><span class="ac-cap">Конспект занятия</span></summary>' +
+          it.notes.split(/\n{2,}/).map(function (para) {
+            return '<p>' + esc(para).replace(/\n/g, '<br>') + '</p>';
+          }).join('') +
+        '</details>'
+      : '';
     var hasNext = i + 1 < total, inAc = state.page === 'academy';
     /* На последнем просмотренном занятии кнопка ведет к курсам: пустое место
        справа читается как оборванный курс (приемка 28.09.2026). */
@@ -8216,6 +8233,7 @@
         '<h1 class="ac-h">' + esc(it.title) + '</h1>' +
         vid +
         (it.about ? '<p class="ac-p lead">' + esc(it.about) + '</p>' : '') +
+        notes +
         (it.homework ? '<div class="wsc-hw"><span class="ac-cap">Домашка</span><p>' + esc(it.homework) + '</p></div>' : '') +
         (mats ? '<div class="wsc-mats"><span class="ac-cap">Материалы занятия</span>' + mats + '</div>' : '') +
       '</div>' +
@@ -8305,8 +8323,9 @@
             '<label class="al-f"><span class="al-l">Кто вел</span>' +
               '<input id="ws-host" class="al-in" type="text" maxlength="120" placeholder="Имя" value="' + esc(it ? it.host : '') + '"></label>' +
           '</div>' +
-          '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
-            '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://" value="' + esc(it ? it.record_url : '') + '"></label>' +
+          '<label class="al-f"><span class="al-l">Ссылка на встречу в Фатоне</span>' +
+            '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://fathom.video/..." value="' + esc(it ? it.record_url : '') + '">' +
+            '<span class="al-hint">Там же расшифровка по ролям. Ссылка стоит под записью, а пока файла нет — вместо нее.</span></label>' +
           /* Файл записи на нашем сервере. Если он есть, занятие играет его в плеере,
              а ссылка выше остается запасной. Файл кладет разработчик в
              /opt/eastside/academy-video/workshops/ — руками отсюда не загрузить. */
@@ -8315,6 +8334,9 @@
             '<span class="al-hint">Имя файла, который лежит в папке записей на сервере. Пусто — занятие откроется по ссылке выше.</span></label>' +
           '<label class="al-f"><span class="al-l">О чем</span>' +
             '<textarea id="ws-about" class="al-in al-ta" rows="3" maxlength="2000" placeholder="Пара предложений: что разбирали и кому это пригодится">' + esc(it ? it.about : '') + '</textarea></label>' +
+          '<label class="al-f"><span class="al-l">Конспект</span>' +
+            '<textarea id="ws-notes" class="al-in al-ta" rows="8" maxlength="12000" placeholder="Пересказ занятия по шагам: о чем говорили и к чему пришли. Пустая строка делит абзацы">' + esc(it && it.notes ? it.notes : '') + '</textarea>' +
+            '<span class="al-hint">Его читают вместо того, чтобы пересматривать час записи.</span></label>' +
           '<label class="al-f"><span class="al-l">Домашка</span>' +
             '<textarea id="ws-hw" class="al-in al-ta" rows="3" maxlength="4000" placeholder="Что сделать после просмотра. Если домашки нет — оставь пустым">' + esc(it ? it.homework : '') + '</textarea></label>' +
           '<div class="al-f"><span class="al-l">Материалы</span>' +
@@ -8376,6 +8398,7 @@
         title: title,
         about: ov.querySelector('#ws-about').value.trim(),
         homework: ov.querySelector('#ws-hw').value.trim(),
+        notes: ov.querySelector('#ws-notes').value.trim(),
         host: ov.querySelector('#ws-host').value.trim(),
         record_url: ov.querySelector('#ws-rec').value.trim(),
         video_file: ov.querySelector('#ws-file').value.trim(),

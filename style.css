@@ -9941,6 +9941,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy a.wsc-norec-a:hover { background: rgba(255, 255, 255, .24); }
 .academy a.wsc-norec-a svg { color: #fff; margin: 0; }
 
+/* Ссылка на встречу в Фатоне — тихая строка под рамкой записи: полезная, но не
+   спорящая с плеером за внимание. */
+.academy a.wsc-src { display: inline-flex; align-items: center; gap: 7px; margin: 10px 0 18px;
+  font-size: 13px; font-weight: 600; color: var(--ac-ink-2); text-decoration: none; }
+.academy a.wsc-src:hover { color: var(--ac-blue-d); }
+.academy a.wsc-src svg { color: var(--ac-ink-3); }
+.academy a.wsc-src:hover svg { color: var(--ac-blue-d); }
+
+/* Конспект. Сворачивается, поэтому строка-заголовок кликабельна целиком, а
+   стрелка показывает состояние. */
+.academy .wsc-notes { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--ac-line); }
+.academy .wsc-notes > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 7px; }
+.academy .wsc-notes > summary::-webkit-details-marker { display: none; }
+.academy .wsc-notes > summary::after { content: ''; width: 7px; height: 7px; border-right: 1.6px solid var(--ac-ink-3);
+  border-bottom: 1.6px solid var(--ac-ink-3); transform: rotate(45deg) translateY(-2px); transition: transform .16s var(--ac-ease); }
+.academy .wsc-notes[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+.academy .wsc-notes > summary:hover .ac-cap { color: var(--ac-ink-2); }
+.academy .wsc-notes > summary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47,107,255,.14); border-radius: var(--ac-r-md); }
+.academy .wsc-notes p { margin: 12px 0 0; font-size: 14.5px; line-height: 1.65; color: #333843; }
+
 .academy .wsc-hw { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 16px 18px; margin: 18px 0 0; }
 .academy .wsc-hw p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: #333843; white-space: pre-wrap; }
 .academy .wsc-mats { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--ac-line);
