@@ -10228,7 +10228,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pf-dtx { font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 7px; text-align: right; }
 
 .pf-tbl { border-top: 1px solid var(--line); }
-.pf-row { display: grid; grid-template-columns: 210px 112px minmax(90px, 1fr) 108px 150px;
+/* Колонка плана держит «65 000 000 ₽» одной строкой: на 112px сумма ломалась
+   пополам и строка вырастала вдвое. */
+.pf-row { display: grid; grid-template-columns: 200px 148px minmax(90px, 1fr) 108px 150px;
   gap: 16px; align-items: center; padding: 0 24px; height: 66px;
   border-bottom: 1px solid var(--line); }
 .pf-row:last-child { border-bottom: none; }
@@ -10237,7 +10239,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* План правится на месте: кнопка превращается в .ed-input, третьего рецепта поля нет. */
 .pf-set { font: 600 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
   border: 1px solid transparent; border-radius: 10px; padding: 8px 12px; cursor: pointer;
-  transition: .14s; font-variant-numeric: tabular-nums; }
+  transition: .14s; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pf-set:hover { background: #fff; border-color: var(--line-2); color: var(--blue); }
 .pf-set.none { color: var(--ink-3); font-weight: 500; }
 .pf-in { width: 104px; padding: 8px 11px; }
