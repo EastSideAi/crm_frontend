@@ -8530,6 +8530,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-card.done .ac-card-go { color: var(--ac-green-ink); }
 .academy .ac-empty { text-align: center; max-width: 440px; margin: 60px auto; color: var(--ac-ink-3); }
 .academy .ac-empty svg { color: var(--ac-line-2); margin-bottom: 14px; }
+/* Возврат из воркшопов: тот же элемент, что в открытом курсе, но он тут один
+   на весь экран, поэтому прижат к левому краю колонки. */
+.ac-wsback { padding-bottom: 4px; }
 .academy .ac-back-all { display: flex; align-items: center; gap: 7px; background: none; border: 0; padding: 4px 4px 12px;
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ac-ink-2); cursor: pointer; transition: .14s; }
 .academy .ac-back-all:hover { color: var(--ac-blue-d); }
@@ -8855,6 +8858,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-frac.full { color: var(--green-ink); }
 .att-ok { display: inline-flex; color: var(--green); }
 .att-no { color: var(--ink-3); }
+/* «Сейчас на» — где человек стоит в курсе. Номер урока приглушен, название нет:
+   вопрос руководителя звучит как «на чем он застрял», а не «какой это номер». */
+.att-stage { min-width: 200px; color: var(--ink-2); }
+.att-now b { color: var(--ink-3); font-weight: 600; margin-right: 4px; }
+/* Имя и название курса в одну строку: с колонкой «Сейчас на» таблица стала шире,
+   и перенос имени растягивал строку втрое. Узкому экрану остается прокрутка
+   таблицы, она тут была с самого начала. */
+.att-name { white-space: nowrap; }
+.att-pay { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.att-course { max-width: 240px; white-space: normal; }
 .att-pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .att-pill.green { background: var(--green-soft); color: var(--green-ink); }
 .att-pill.gray { background: var(--fill); color: var(--ink-2); }

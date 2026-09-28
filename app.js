@@ -128,7 +128,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -139,7 +139,7 @@
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
-        attSeg: state.attSeg || '', meetView: state.meetView || '',
+        attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
       }));
     } catch (e) {}
   }
@@ -2241,7 +2241,11 @@
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
     // Аттестации: сводка по всем тьюторам, кто сдал курс Академии. Руководителю и
     // администратору (cap academy_review) — контроль допуска к работе.
-    { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review' },
+    /* Своего пункта у аттестаций больше нет (Павел 28.09.2026): «в академию нужно
+       перенести раздел аттестации и кто какой курс прошел». Экран стал вкладкой
+       Академии, а строка тут осталась скрытой — по ней живут старые ссылки
+       вида #page/attestations и проверка прав. */
+    { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review', hidden: true },
     // Заезды тьютора: чек-лист заезда и приёмка администратором, от неё зависит оплата.
     // «Сопровождение» — работа тьютора по контрольным точкам: у каждого ученика
     // пять точек с чек-листами, и из закрытых складывается выплата. Отдельным
@@ -2274,7 +2278,10 @@
     // Видят все (cap dash есть у каждой роли), заводит руководитель (cap team).
     // Не вкладка «Академии»: та — курс с аттестацией и допуском к работе, а тут
     // записи встреч, которые смотрят по желанию и в любом порядке.
-    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash' },
+    /* Воркшопы переехали в Академию курсом (Павел 28.09.2026): «раздел воркшопы
+       от разработчиков — это отдельный курс в академии». Строка осталась
+       скрытой ради старых ссылок #page/workshops, они ведут в Академию. */
+    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash', hidden: true },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2994,7 +3001,7 @@
         '</span></div></div>' +
         (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
     }
-    if (state.page === 'workshops') {
+    if (state.page === 'workshops' || (state.page === 'academy' && acTabNow() === 'ws')) {
       var wsl = (state.ws && state.ws.items) || [];
       var wsLeft = wsl.filter(function (x) { return !x.seen; }).length;
       html = '<div><h2>Воркшопы</h2>' +
@@ -3990,7 +3997,58 @@
     }).catch(function () { if (cb) cb(null); });
   }
 
+  /* Вкладки Академии. «Кто прошел» — тот самый экран аттестаций, переехавший
+     сюда 28.09.2026 по просьбе Павла: «в академию нужно перенести раздел
+     аттестации и кто какой курс прошел и где на каком этапе, этот раздел только
+     для руководителей и старших доступен кто контролирует». Права не менялись —
+     вкладка показывается по тому же cap `academy_review`, что закрывал раздел. */
+  function acTabNow() {
+    if (state.acTab === 'ws') return 'ws';
+    return (state.acTab === 'att' && can('academy_review')) ? 'att' : 'courses';
+  }
+
+  function acTabs() {
+    if (!can('academy_review')) return '';
+    var t = acTabNow();
+    return '<div class="po-tabs ac-tabs"><div class="dperiod">' +
+      '<button type="button" data-actab="courses"' + (t === 'courses' ? ' class="on"' : '') + '>Курсы</button>' +
+      '<button type="button" data-actab="att"' + (t === 'att' && state.attSeg !== 'access' ? ' class="on"' : '') + '>Кто прошел</button>' +
+      '<button type="button" data-actab="access"' + (t === 'att' && state.attSeg === 'access' ? ' class="on"' : '') + '>Кому открыт</button>' +
+      '</div></div>';
+  }
+
+  function acTabsBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-actab]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-actab');
+        // «Кому открыт» — тот же экран, второй срез: держим его вкладкой верхнего
+        // уровня, а не сегментом внутри, чтобы навигация была одна, а не две.
+        state.acTab = t === 'courses' ? 'courses' : 'att';
+        state.attSeg = t === 'access' ? 'access' : 'done';
+        if (state.acTab === 'courses' && state.ac) state.ac.course = null;
+        saveUi(); renderView();
+      });
+    });
+  }
+
   function renderAcademy(view) {
+    if (acTabNow() === 'ws') {
+      /* Открытый курс — это уже не витрина: вкладки Академии тут не рисуем, как и
+         в обычном курсе, а даем один путь назад. Иначе на экране одновременно
+         стоят шапка «Воркшопы» и вкладка «Курсы», и непонятно, где ты. */
+      view.innerHTML = '<div class="academy ac-wsback"><button class="ac-back-all" id="ac-ws-back">' +
+        ic('go', 13) + 'Все курсы</button></div><div id="ac-ws"></div>';
+      var back = view.querySelector('#ac-ws-back');
+      back.addEventListener('click', function () {
+        state.acTab = 'courses'; saveUi(); renderHead(); renderView();
+      });
+      return renderWorkshops(document.getElementById('ac-ws'));
+    }
+    if (acTabNow() === 'att' && (!state.ac || !state.ac.course)) {
+      view.innerHTML = acTabs() + '<div id="ac-att"></div>';
+      acTabsBind(view);
+      return renderAttestations(document.getElementById('ac-att'));
+    }
     if (!state.ac || !state.ac.list) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return api('/admin/api/academy/courses').then(function (r) {
@@ -4083,9 +4141,10 @@
   function acHome(view) {
     var list = state.ac.list;
     if (!list.length) {
-      view.innerHTML = '<div class="academy"><div class="ac-empty">' + ic('award', 32) +
+      view.innerHTML = acTabs() + '<div class="academy"><div class="ac-empty">' + ic('award', 32) +
         '<h1 class="ac-h">Курсов для вашей роли пока нет</h1>' +
         '<p class="ac-p">Обучение открывается по роли. Если курс должен быть, скажите руководителю.</p></div></div>';
+      acTabsBind(view);
       return;
     }
     var closed = acBrClosed();
@@ -4111,10 +4170,47 @@
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="academy"><div class="ac-home">' +
+    /* Воркшопы — пятый курс на витрине, но содержание у него не в коде, а в базе
+       (Павел заводит занятие кнопкой, без выкатки). Поэтому карточка собирается
+       здесь руками и ведет не в плеер уроков, а на свой экран. */
+    var wsl = (state.ws && state.ws.items) || [];
+    var wsSeen = wsl.filter(function (x) { return x.seen; }).length;
+    var wsCard = '<section class="ac-branch"><button class="ac-bnode" type="button" data-br="Команда" aria-expanded="true">' +
+        '<span class="ac-bt"><b>Команда</b><small>обучение от разработчиков, смотреть можно в любом порядке</small></span>' +
+        '<span class="ac-bx">' + ic('go', 14) + '</span></button>' +
+      '<div class="ac-bkids"><div class="ac-cards">' +
+        '<div class="ac-card" data-acws role="button" tabindex="0">' +
+          '<div class="ac-card-l">' +
+            '<div class="ac-card-top"><span class="ac-tag' + (wsSeen ? '' : ' soft') + '">' +
+              (!wsl.length ? 'записей пока нет'
+                : wsSeen >= wsl.length ? 'все посмотрены'
+                : wsSeen ? 'в работе' : 'не смотрели') + '</span></div>' +
+            '<h2 class="ac-card-h">Воркшопы от разработчиков</h2>' +
+            '<p class="ac-card-p">Записи встреч с разбором: как устроены агенты, песочница и наши инструменты. С материалами и домашкой.</p>' +
+          '</div>' +
+          '<div class="ac-card-r">' +
+            '<div class="ac-card-bar"><i style="width:' + (wsl.length ? Math.round(wsSeen / wsl.length * 100) : 0) + '%"></i></div>' +
+            '<div class="ac-card-foot"><span class="ac-cap">' + wsSeen + ' из ' + wsl.length + ' посмотрено</span>' +
+              '<span class="ac-card-go">Открыть' + ic('go', 12) + '</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div></div></section>';
+
+    view.innerHTML = acTabs() + '<div class="academy"><div class="ac-home">' +
       '<div class="ac-home-head"><h1 class="ac-h">Академия</h1>' +
       '<p class="ac-p lead">Курсы вашей роли. Каждый заканчивается аттестацией и допуском к работе.</p></div>' +
-      '<div class="ac-tree">' + brs + '</div></div></div>';
+      '<div class="ac-tree">' + brs + wsCard + '</div></div></div>';
+    acTabsBind(view);
+    var wsGo = view.querySelector('[data-acws]');
+    if (wsGo) {
+      wsGo.addEventListener('click', function () { state.acTab = 'ws'; saveUi(); renderHead(); renderView(); });
+      wsGo.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wsGo.click(); }
+      });
+    }
+    // Счетчик на карточке берем из той же ручки, что и сам экран: без загрузки
+    // он показывал бы «0 из 0» до первого открытия воркшопов.
+    if (!state.ws) wsLoad(function () { if (state.page === 'academy' && acTabNow() === 'courses') renderView(); });
 
     view.querySelector('.ac-tree').addEventListener('click', function (ev) {
       var node = ev.target.closest('.ac-bnode');
@@ -5193,10 +5289,20 @@
   function attPay(m) { return m === 'alipay' ? 'Alipay' : m === 'rub' ? 'Рубли' : '—'; }
   function attYes(v) { return v ? '<span class="att-ok">' + ic('check', 13) + '</span>' : '<span class="att-no">—</span>'; }
 
+  /* Экран аттестаций живет в двух местах: внутри Академии вкладкой «Кто прошел»
+     (основное место с 28.09.2026) и по старой ссылке #page/attestations. Куда
+     рисовать — решает одна функция: иначе отложенный ответ сервера приходил бы
+     в контейнер, которого на экране уже нет. */
+  function attMount() {
+    if (state.page === 'attestations') return document.getElementById('view');
+    if (state.page === 'academy' && acTabNow() === 'att') return document.getElementById('ac-att');
+    return null;
+  }
+
   function renderAttestations(view) {
     if (state.att == null) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
-      return attLoad(function () { if (state.page === 'attestations') attDraw(view); });
+      return attLoad(function () { var m = attMount(); if (m) attDraw(m); });
     }
     attDraw(view);
   }
@@ -5210,6 +5316,14 @@
     var exam = (r.exam_score == null) ? '<span class="att-no">—</span>'
       : '<span class="att-frac' + (r.exam_score >= (r.exam_total || 0) ? ' full' : '') + '">' +
         r.exam_score + '/' + r.exam_total + '</span>';
+    // Где человек стоит сейчас. Номер урока дает сервер, название берем из
+    // содержания курса на фронте: второй копии списка уроков на сервере нет.
+    var full = acById(r.course);
+    var li = (full && r.now_id && full.lessonIds) ? full.lessonIds.indexOf(r.now_id) : -1;
+    var nowLesson = li >= 0 && full.lessons[li] ? full.lessons[li].t : null;
+    var now = r.passed ? '<span class="att-no">курс пройден</span>'
+      : nowLesson ? '<span class="att-now"><b>' + r.now_n + '.</b> ' + esc(nowLesson) + '</span>'
+      : '<span class="att-no">еще не начал</span>';
     var status = r.passed
       ? '<span class="att-pill green">Допущен</span>' +
         (r.passed_at ? '<span class="att-when">' + arDate(r.passed_at) + '</span>' : '') +
@@ -5218,12 +5332,12 @@
     return '<tr>' +
       '<td>' + who + '</td>' +
       '<td class="att-course">' + esc(r.course_title) + '</td>' +
+      '<td class="att-stage">' + now + '</td>' +
       '<td class="att-c">' + lessons + '</td>' +
       '<td class="att-c">' + exam + '</td>' +
       '<td class="att-c">' + attYes(r.practice_sent) + '</td>' +
       '<td class="att-c">' + attYes(r.agreement) + '</td>' +
-      '<td>' + attPay(r.pay_method) + '</td>' +
-      '<td>' + status + '</td>' +
+      '<td>' + status + (attPay(r.pay_method) !== '—' ? '<span class="att-pay">' + attPay(r.pay_method) + '</span>' : '') + '</td>' +
     '</tr>';
   }
 
@@ -5350,12 +5464,14 @@
     var rows = (state.att && state.att.rows) || [];
     var passed = rows.filter(function (r) { return r.passed; }).length;
     var seg = state.attSeg === 'access' ? 'access' : 'done';
+    var inAc = state.page === 'academy';
     var head = '<div class="att-head"><div class="att-h">' +
-      (seg === 'access' ? 'Доступ к курсам' : 'Аттестации тьюторов') + '</div>' +
-      '<div class="att-seg">' +
-        '<button class="att-sg' + (seg === 'done' ? ' on' : '') + '" data-seg="done">Сдачи</button>' +
-        '<button class="att-sg' + (seg === 'access' ? ' on' : '') + '" data-seg="access">Доступ</button>' +
-      '</div>' +
+      (seg === 'access' ? 'Кому какой курс открыт' : 'Кто какой курс прошел') + '</div>' +
+      (inAc ? '' :
+        '<div class="att-seg">' +
+          '<button class="att-sg' + (seg === 'done' ? ' on' : '') + '" data-seg="done">Сдачи</button>' +
+          '<button class="att-sg' + (seg === 'access' ? ' on' : '') + '" data-seg="access">Доступ</button>' +
+        '</div>') +
       '<div class="att-sp"></div>' +
       '<button class="att-refresh" id="att-refresh">' + ic('refresh', 14) + 'Обновить</button></div>';
     if (seg === 'access') {
@@ -5364,7 +5480,7 @@
           '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div>' +
           '<div class="loaddot"></div></div></div>';
         attSegBind(view);
-        return accLoad(function () { if (state.page === 'attestations') attDraw(view); });
+        return accLoad(function () { var m = attMount(); if (m) attDraw(m); });
       }
       view.innerHTML = '<div class="att">' + head + accDraw(view) + '</div>';
       attSegBind(view);
@@ -5381,8 +5497,8 @@
         '<div>Пока никто не начал курс Академии. Тьютор пройдёт аттестацию и появится здесь.</div></div>';
     } else {
       body = '<div class="att-tablewrap"><table class="att-table"><thead><tr>' +
-        '<th>Тьютор</th><th>Курс</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
-        '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Оплата</th><th>Статус</th>' +
+        '<th>Человек</th><th>Курс</th><th>Сейчас на</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
+        '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Статус</th>' +
         '</tr></thead><tbody>' + rows.map(attRow).join('') + '</tbody></table></div>';
     }
     view.innerHTML = '<div class="att">' + head + sum + body + '</div>';
@@ -7971,10 +8087,21 @@
     var p = String(iso).split('-');
     return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso;
   }
+  /* Куда рисовать воркшопы: внутри Академии (вкладка «Воркшопы», основное место
+     с 28.09.2026) или на своей странице по старой ссылке. Та же развилка, что у
+     аттестаций, и по той же причине: ответ сервера приходит позже, чем человек
+     успевает уйти на другую вкладку. */
+  function wsMount() {
+    if (state.page === 'workshops') return document.getElementById('view');
+    if (state.page === 'academy' && acTabNow() === 'ws') return document.getElementById('ac-ws');
+    return null;
+  }
+
   function renderWorkshops(view) {
+    if (!view) return;
     if (!state.ws) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
-      return wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderWorkshops(view); } });
+      return wsLoad(function () { var m = wsMount(); if (m) { renderHead(); renderWorkshops(m); } });
     }
     var w = state.ws, items = w.items || [];
     if (w.none) {
@@ -8115,7 +8242,7 @@
     if (del) del.addEventListener('click', function () {
       apiSend('/admin/api/workshops/' + it.id, 'DELETE', null, function () {
         close(); showToast('Убрал в архив');
-        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+        state.ws = null; wsLoad(function () { if (wsMount()) { renderHead(); renderView(); } });
       });
     });
     ov.querySelector('#ws-save').addEventListener('click', function () {
@@ -8135,7 +8262,7 @@
       var path = it ? '/admin/api/workshops/' + it.id : '/admin/api/workshops';
       apiSend(path, it ? 'PATCH' : 'POST', payload, function () {
         close(); showToast('Сохранил');
-        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+        state.ws = null; wsLoad(function () { if (wsMount()) { renderHead(); renderView(); } });
       }, function (code, e) {
         showToast((e && e.body && e.body.detail) || (code === 403 ? 'Это может только руководитель' : 'Не сохранилось'));
       });
@@ -37689,8 +37816,20 @@
     var raw = hashPageId(), i = raw.indexOf('/');
     return i === -1 ? [raw, ''] : [raw.slice(0, i), raw.slice(i + 1)];
   }
+  /* #page/attestations — ссылка из старых сообщений и инструкций. Экран переехал
+     в Академию, поэтому ведем человека туда же, а не на отдельную страницу. */
+  function acRedirect(pg, seg) {
+    if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
+    // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
+    // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.
+    if (pg === 'workshops' && can('academy')) { state.acTab = 'ws'; return ['academy', '']; }
+    if (pg === 'academy' && seg === 'att' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
+    if (pg === 'academy' && seg === 'courses') { state.acTab = 'courses'; return ['academy', '']; }
+    return [pg, seg];
+  }
+
   function openPageFromHash() {
-    var parts = hashPageParts(), pg = parts[0], seg = parts[1];
+    var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
     if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
     var moved = pg === 'tasks' && applyTaskSeg(seg);
     setPage(pg);
@@ -37723,7 +37862,7 @@
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
-    var hp = hashPageParts();
+    var hp = acRedirect(hashPageParts()[0], hashPageParts()[1]);
     for (var i = 0; hp[0] && i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyTaskSeg(hp[1]); break; }
     }
