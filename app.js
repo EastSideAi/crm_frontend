@@ -8128,10 +8128,17 @@
           '</div>' +
           (meta ? '<div class="ws-meta">' + esc(meta) + (it.archived ? '<span class="sev">в архиве</span>' : '') + '</div>' : '') +
           (it.about ? '<p class="ws-about">' + esc(it.about) + '</p>' : '') +
+          /* Запись стоит сразу под описанием: за ней сюда и приходят, а домашку
+             читают уже после просмотра. */
+          (it.video_file
+            ? '<div class="ws-vid"><video class="ws-vid-el" data-wsvid="' + esc(it.video_file) + '" controls playsinline preload="metadata"></video>' +
+              '<div class="ws-vid-wait">Открываем запись…</div></div>'
+            : '') +
           (it.homework ? '<div class="ws-hw"><span class="ws-hw-l">Домашка</span>' + esc(it.homework) + '</div>' : '') +
           (mats ? '<div class="ws-mats">' + mats + '</div>' : '') +
           '<div class="ws-act">' +
-            (it.record_url
+            (it.video_file ? ''
+              : it.record_url
               ? '<a class="bp sm ws-play" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' + ic('play', 14) + 'Смотреть запись</a>'
               : '<span class="ws-norec">Записи нет</span>') +
             '<button class="qchip ws-seen' + (it.seen ? ' on' : '') + '" data-wss="' + it.id + '">' +
@@ -8142,6 +8149,28 @@
       '</article>';
     }).join('');
     view.innerHTML = '<div class="card ws">' + body + '</div>';
+    /* Запись играет прямо в занятии. Файл лежит у нас на сервере, отдает его Caddy,
+       а право смотреть дает cookie: ключ CRM в адресе видео попал бы в логи целиком
+       (та же механика, что у записей курса продаж, docs/academy-video.md). */
+    var vids = view.querySelectorAll('[data-wsvid]');
+    if (vids.length) {
+      xfetch('/admin/api/academy/video-session?course=workshops',
+        { method: 'POST', credentials: 'include' })
+        .then(function (r) {
+          if (!r.ok) throw new Error(String(r.status));
+          Array.prototype.forEach.call(vids, function (v) {
+            v.src = API + '/academy-video/workshops/' + v.getAttribute('data-wsvid');
+            var w = v.parentNode.querySelector('.ws-vid-wait');
+            if (w) w.hidden = true;
+          });
+        })
+        .catch(function () {
+          Array.prototype.forEach.call(view.querySelectorAll('.ws-vid-wait'), function (w) {
+            w.textContent = 'Запись не открылась. Обновите страницу, а если не помогло — скажите руководителю.';
+          });
+        });
+    }
+
     Array.prototype.forEach.call(view.querySelectorAll('[data-wse]'), function (b) {
       b.addEventListener('click', function () {
         var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-wse'); })[0];
@@ -8196,6 +8225,12 @@
           '</div>' +
           '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
             '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://" value="' + esc(it ? it.record_url : '') + '"></label>' +
+          /* Файл записи на нашем сервере. Если он есть, занятие играет его в плеере,
+             а ссылка выше остается запасной. Файл кладет разработчик в
+             /opt/eastside/academy-video/workshops/ — руками отсюда не загрузить. */
+          '<label class="al-f"><span class="al-l">Файл записи на сервере</span>' +
+            '<input id="ws-file" class="al-in" type="text" maxlength="120" placeholder="workshop-1-2026-09-16.mp4" value="' + esc(it && it.video_file ? it.video_file : '') + '">' +
+            '<span class="al-hint">Имя файла, который лежит в папке записей на сервере. Пусто — занятие откроется по ссылке выше.</span></label>' +
           '<label class="al-f"><span class="al-l">О чем</span>' +
             '<textarea id="ws-about" class="al-in al-ta" rows="3" maxlength="2000" placeholder="Пара предложений: что разбирали и кому это пригодится">' + esc(it ? it.about : '') + '</textarea></label>' +
           '<label class="al-f"><span class="al-l">Домашка</span>' +
@@ -8255,6 +8290,7 @@
         homework: ov.querySelector('#ws-hw').value.trim(),
         host: ov.querySelector('#ws-host').value.trim(),
         record_url: ov.querySelector('#ws-rec').value.trim(),
+        video_file: ov.querySelector('#ws-file').value.trim(),
         held_at: ov.querySelector('#ws-date').value || null,
         materials: readMats(),
       };
