@@ -8616,6 +8616,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-doc-soon { background: var(--ac-amber-soft); color: var(--ac-amber-ink); border-radius: var(--ac-r-md);
   padding: 13px 15px; font-size: 13.5px; line-height: 1.45; margin-bottom: 14px; }
 .academy .ac-doc-soon b { color: inherit; }
+/* Ссылка на сам текст документа. Якорь карточки: человек должен прочитать то,
+   что подписывает, а не пересказ в курсе. */
+.academy .ac-doc-file { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  padding: 10px 14px; border-radius: var(--ac-r-md); background: var(--ac-blue-tint);
+  color: var(--ac-blue-d); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+.academy .ac-doc-file:hover { text-decoration: underline; }
+.academy .ac-doc-file svg { flex: none; }
 
 /* ── Этап пути ученика ───────────────────────────────────────────────────────
    Один экран отвечает на четыре вопроса: когда, кто что делает, чем отличаются
