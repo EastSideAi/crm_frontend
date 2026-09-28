@@ -8530,6 +8530,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-card.done .ac-card-go { color: var(--ac-green-ink); }
 .academy .ac-empty { text-align: center; max-width: 440px; margin: 60px auto; color: var(--ac-ink-3); }
 .academy .ac-empty svg { color: var(--ac-line-2); margin-bottom: 14px; }
+/* Возврат из воркшопов: тот же элемент, что в открытом курсе, но он тут один
+   на весь экран, поэтому прижат к левому краю колонки. */
+.ac-wsback { padding-bottom: 4px; }
 .academy .ac-back-all { display: flex; align-items: center; gap: 7px; background: none; border: 0; padding: 4px 4px 12px;
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ac-ink-2); cursor: pointer; transition: .14s; }
 .academy .ac-back-all:hover { color: var(--ac-blue-d); }
@@ -8616,6 +8619,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-doc-soon { background: var(--ac-amber-soft); color: var(--ac-amber-ink); border-radius: var(--ac-r-md);
   padding: 13px 15px; font-size: 13.5px; line-height: 1.45; margin-bottom: 14px; }
 .academy .ac-doc-soon b { color: inherit; }
+/* Ссылка на сам текст документа. Якорь карточки: человек должен прочитать то,
+   что подписывает, а не пересказ в курсе. */
+.academy .ac-doc-file { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  padding: 10px 14px; border-radius: var(--ac-r-md); background: var(--ac-blue-tint);
+  color: var(--ac-blue-d); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+.academy .ac-doc-file:hover { text-decoration: underline; }
+.academy .ac-doc-file svg { flex: none; }
 
 /* ── Этап пути ученика ───────────────────────────────────────────────────────
    Один экран отвечает на четыре вопроса: когда, кто что делает, чем отличаются
@@ -8848,6 +8858,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-frac.full { color: var(--green-ink); }
 .att-ok { display: inline-flex; color: var(--green); }
 .att-no { color: var(--ink-3); }
+/* «Сейчас на» — где человек стоит в курсе. Номер урока приглушен, название нет:
+   вопрос руководителя звучит как «на чем он застрял», а не «какой это номер». */
+.att-stage { min-width: 200px; color: var(--ink-2); }
+.att-now b { color: var(--ink-3); font-weight: 600; margin-right: 4px; }
+/* Имя и название курса в одну строку: с колонкой «Сейчас на» таблица стала шире,
+   и перенос имени растягивал строку втрое. Узкому экрану остается прокрутка
+   таблицы, она тут была с самого начала. */
+.att-name { white-space: nowrap; }
+.att-pay { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.att-course { max-width: 240px; white-space: normal; }
 .att-pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .att-pill.green { background: var(--green-soft); color: var(--green-ink); }
 .att-pill.gray { background: var(--fill); color: var(--ink-2); }
@@ -9866,6 +9886,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border: 1px solid var(--line-2); border-radius: 9px; background: #fff;
   font-size: 12.5px; color: var(--ink-2); text-decoration: none; transition: .15s; }
 .ws-mat:hover { border-color: var(--blue); color: var(--blue); }
+/* Запись играет прямо в занятии: ссылка в чужое облако живет своей жизнью —
+   код расходится по рукам, а запись у владельца аккаунта протухает. */
+.ws-vid { position: relative; margin-top: 12px; border-radius: 12px; overflow: hidden;
+  background: #0B0D12; }
+.ws-vid-el { display: block; width: 100%; max-height: 460px; background: #0B0D12; }
+.ws-vid-wait { position: absolute; inset: 0; display: grid; place-items: center;
+  padding: 16px; text-align: center; color: #fff; font-size: 13px; background: #0B0D12; }
+.ws-vid-wait[hidden] { display: none; }
+
 .ws-act { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ws-play { text-decoration: none; }
 /* Просмотренное тише: строка остается на месте (к записи возвращаются), но
@@ -10206,3 +10235,109 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
   color: var(--blue); cursor: pointer; }
 .un-costnote .lnk:hover { text-decoration: underline; }
+
+/* ── Раздел «Сопровождение» (points): ученики, точки, выплаты ──────────────────
+   Якорь экрана — чек-лист текущей точки: он отвечает на «что делать дальше».
+   Деньги и полоса точек стоят тише: суммы человек уже знает, ему нужен шаг.
+   Чек-лист переиспользует рецепт карточки клиента (.cp-item), второго вида
+   галочек в системе заводить нельзя. */
+.pb-tabs { margin-bottom: 14px; }
+.pb-top { padding: 16px 18px; }
+.pb-topm { display: flex; align-items: baseline; gap: 12px; }
+.pb-cap { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); }
+.pb-topm b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+.pb-when { font-size: 13px; color: var(--ink-2); }
+.pb-topd { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); max-width: 760px; }
+.pb-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pb-nav .pb-topm { flex: 1 1 auto; justify-content: center; }
+
+.pb-stu { padding: 0; margin-top: 12px; }
+.pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pb-nm { flex: 1 1 220px; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pb-open { background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  font-weight: 700; font-size: 15px; color: var(--ink); text-align: left; }
+.pb-open:hover { color: var(--blue); }
+.pb-tar, .pb-who { font-size: 12px; color: var(--ink-3); }
+.pb-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.pb-sum b { font-size: 16px; font-weight: 700; }
+.pb-sum span { font-size: 11.5px; color: var(--ink-3); }
+
+/* Полоса точек — и состояние, и навигация: закрытые залиты, открытая обведена. */
+.pb-rail { flex: 0 0 auto; display: flex; gap: 6px; }
+.pb-dot { width: 28px; height: 28px; border-radius: 9px; border: 1.5px solid var(--line-2);
+  background: #fff; color: var(--ink-3); font: 600 12.5px/1 inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: .15s; }
+.pb-dot:hover { border-color: var(--blue); color: var(--blue); }
+.pb-dot.done { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
+.pb-dot.on { border-color: var(--blue); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.pb-dot.done.on { color: var(--green-ink); box-shadow: inset 0 0 0 1px var(--blue); }
+
+.pb-pt { padding: 14px 18px 16px; }
+.pb-pth { display: flex; align-items: baseline; gap: 12px; }
+.pb-pth b { font-size: 14.5px; }
+.pb-amt { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.pb-about { margin-top: 4px; font-size: 12.5px; color: var(--ink-2); }
+.pb-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+  font-size: 12.5px; color: var(--ink-2); }
+.pb-line.ok { color: var(--green-ink); }
+.pb-line.ok svg { flex: none; }
+.pb-date { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.pb-date input { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 8px;
+  font: inherit; font-size: 12.5px; color: var(--ink); }
+.pb-due, .pb-dim { color: var(--ink-3); }
+.pb-foot { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+.pb-left { font-size: 12.5px; color: var(--ink-3); }
+
+/* Реестр выплат: строка — одна закрытая точка, свод собирается из строк. */
+.pb-tut { margin-top: 12px; padding: 0; }
+.pb-tuth { display: flex; align-items: baseline; gap: 12px; padding: 13px 18px;
+  border-bottom: 1px solid var(--line); }
+.pb-tuth b { font-size: 15px; }
+.pb-tutn { font-size: 12px; color: var(--ink-3); }
+.pb-tuta { margin-left: auto; font-size: 16px; }
+.pb-row { display: flex; align-items: baseline; gap: 12px; padding: 10px 18px;
+  border-bottom: 1px solid var(--line); font-size: 13px; }
+.pb-row:last-child { border-bottom: 0; }
+.pb-rt { flex: 1 1 auto; min-width: 0; color: var(--ink-2); }
+.pb-rd { flex: 0 0 auto; font-size: 12px; color: var(--ink-3); }
+.pb-ra { flex: 0 0 96px; text-align: right; font-weight: 600; }
+/* Отметка о платеже. Она внизу карточки тьютора намеренно: сначала видно, за что
+   деньги, и только потом — кнопка, которая закрывает день. */
+.pb-paidline { display: flex; align-items: center; gap: 10px; padding: 11px 18px;
+  font-size: 12.5px; color: var(--green-ink); }
+.pb-paidline svg { flex: none; }
+.pb-paidline .lnk { margin-left: auto; border: 0; background: 0; padding: 0; font: inherit;
+  font-size: 12px; color: var(--ink-3); cursor: pointer; }
+.pb-paidline .lnk:hover { color: var(--red-ink); }
+.pb-tut.is-paid .pb-tuth { background: var(--green-soft); border-bottom-color: transparent; }
+.pb-tut.is-paid .pb-tuta { color: var(--green-ink); }
+.pb-acts { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+.pb-done { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+  color: var(--green-ink); }
+
+/* В «не закрыто» последняя колонка — имя тьютора, а не сумма: 96px под фамилию
+   мало, она ломается на две строки. */
+.pb-pend .pb-ra { flex: 0 0 auto; min-width: 140px; font-weight: 500; }
+
+.pb-pend { margin-top: 16px; }
+.pb-pend .pb-topd { padding: 0 18px 14px; }
+.pb-pend .sec-head { padding: 13px 18px 0; }
+
+@media (max-width: 820px) {
+  .pb-head { gap: 10px; }
+  .pb-rail { order: 3; width: 100%; }
+  .pb-sum { align-items: flex-start; }
+  .pb-row { flex-wrap: wrap; row-gap: 2px; }
+  .pb-ra { flex: 1 0 auto; text-align: left; }
+  /* На телефоне подпись, сумма и дата встают лесенкой: в строку они не влезают,
+     и рубль уезжал на второй ряд отдельно от числа. */
+  .pb-topm { flex-wrap: wrap; row-gap: 2px; }
+  .pb-topm b { font-size: 23px; }
+  .pb-cap { flex: 1 0 100%; }
+  .pb-nav { gap: 10px; }
+  .pb-nav .pb-topm { flex: 1 0 100%; order: -1; justify-content: flex-start; }
+  .pb-nav .bp { flex: 1 1 40%; padding-left: 8px; padding-right: 8px; }
+  .pb-pend .pb-ra { min-width: 0; }
+}

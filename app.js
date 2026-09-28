@@ -123,10 +123,12 @@
     // этапы флагмана: выбранный тариф ('all' — сравнение), раскрытый этап, способ оплаты
     portalTariff: 'plus', portalStage: null, portalPay: 'offer',
     showBlank: false, // показывать ли пустые заходы (см. isBlankVisit) — по умолчанию свернуты
+    // раздел «Сопровождение»: вкладка (my | all | pay), раскрытый ученик, дата выплаты
+    ptSeg: 'my', ptOpen: null, ptDay: '',
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -137,7 +139,7 @@
         page: state.page, seg: state.seg, taskSeg: state.taskSeg, viewMode: state.viewMode, filters: state.filters,
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
-        attSeg: state.attSeg || '', meetView: state.meetView || '',
+        attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
       }));
     } catch (e) {}
   }
@@ -2239,8 +2241,20 @@
     { id: 'academy', label: 'Академия', icon: 'award', cap: 'academy' },
     // Аттестации: сводка по всем тьюторам, кто сдал курс Академии. Руководителю и
     // администратору (cap academy_review) — контроль допуска к работе.
-    { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review' },
+    /* Своего пункта у аттестаций больше нет (Павел 28.09.2026): «в академию нужно
+       перенести раздел аттестации и кто какой курс прошел». Экран стал вкладкой
+       Академии, а строка тут осталась скрытой — по ней живут старые ссылки
+       вида #page/attestations и проверка прав. */
+    { id: 'attestations', label: 'Аттестации', icon: 'task', cap: 'academy_review', hidden: true },
     // Заезды тьютора: чек-лист заезда и приёмка администратором, от неё зависит оплата.
+    // «Сопровождение» — работа тьютора по контрольным точкам: у каждого ученика
+    // пять точек с чек-листами, и из закрытых складывается выплата. Отдельным
+    // пунктом, а не вкладкой «Заездов»: заезд это последняя точка пути, а тут
+    // весь путь и деньги за него (Павел 28.09.2026).
+    // Право `clients`, а не `zaezdy`: раздел показывает учеников и их чек-листы, и
+    // ручка доски закрыта тем же правом. У преподавателя `zaezdy` есть, а клиентов
+    // нет — он увидел бы пункт меню, который отвечает ему отказом.
+    { id: 'points', label: 'Сопровождение', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
@@ -2264,7 +2278,10 @@
     // Видят все (cap dash есть у каждой роли), заводит руководитель (cap team).
     // Не вкладка «Академии»: та — курс с аттестацией и допуском к работе, а тут
     // записи встреч, которые смотрят по желанию и в любом порядке.
-    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash' },
+    /* Воркшопы переехали в Академию курсом (Павел 28.09.2026): «раздел воркшопы
+       от разработчиков — это отдельный курс в академии». Строка осталась
+       скрытой ради старых ссылок #page/workshops, они ведут в Академию. */
+    { id: 'workshops', label: 'Воркшопы', icon: 'play', cap: 'dash', hidden: true },
     /* Кабинет исполнителя внутри CRM: у Консоли это отдельные пункты меню, и у нас
        тоже — «Задания» и «Акты» это разные сущности с разной логикой, вкладками их
        мешать нельзя (решение владельца от 2026-08-11). Живут они СВОИМ пространством
@@ -2984,7 +3001,7 @@
         '</span></div></div>' +
         (state.news && state.news.editor ? '<button class="bp sm" id="nw-new">' + ic('plus', 14) + 'Написать</button>' : '');
     }
-    if (state.page === 'workshops') {
+    if (state.page === 'workshops' || (state.page === 'academy' && acTabNow() === 'ws')) {
       var wsl = (state.ws && state.ws.items) || [];
       var wsLeft = wsl.filter(function (x) { return !x.seen; }).length;
       html = '<div><h2>Воркшопы</h2>' +
@@ -3342,6 +3359,7 @@
     else if (state.page === 'students') renderStudents(view);
     else if (state.page === 'academy') return renderAcademy(view);
     else if (state.page === 'attestations') return renderAttestations(view);
+    else if (state.page === 'points') return renderPointsBoard(view);
     else if (state.page === 'zaezdy') return renderArrivals(view);
     else if (mwOn()) { mwLoadCounts(); mwView(view); }
     else if (state.page === 'contractors') renderContractors(view);
@@ -3979,7 +3997,58 @@
     }).catch(function () { if (cb) cb(null); });
   }
 
+  /* Вкладки Академии. «Кто прошел» — тот самый экран аттестаций, переехавший
+     сюда 28.09.2026 по просьбе Павла: «в академию нужно перенести раздел
+     аттестации и кто какой курс прошел и где на каком этапе, этот раздел только
+     для руководителей и старших доступен кто контролирует». Права не менялись —
+     вкладка показывается по тому же cap `academy_review`, что закрывал раздел. */
+  function acTabNow() {
+    if (state.acTab === 'ws') return 'ws';
+    return (state.acTab === 'att' && can('academy_review')) ? 'att' : 'courses';
+  }
+
+  function acTabs() {
+    if (!can('academy_review')) return '';
+    var t = acTabNow();
+    return '<div class="po-tabs ac-tabs"><div class="dperiod">' +
+      '<button type="button" data-actab="courses"' + (t === 'courses' ? ' class="on"' : '') + '>Курсы</button>' +
+      '<button type="button" data-actab="att"' + (t === 'att' && state.attSeg !== 'access' ? ' class="on"' : '') + '>Кто прошел</button>' +
+      '<button type="button" data-actab="access"' + (t === 'att' && state.attSeg === 'access' ? ' class="on"' : '') + '>Кому открыт</button>' +
+      '</div></div>';
+  }
+
+  function acTabsBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-actab]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-actab');
+        // «Кому открыт» — тот же экран, второй срез: держим его вкладкой верхнего
+        // уровня, а не сегментом внутри, чтобы навигация была одна, а не две.
+        state.acTab = t === 'courses' ? 'courses' : 'att';
+        state.attSeg = t === 'access' ? 'access' : 'done';
+        if (state.acTab === 'courses' && state.ac) state.ac.course = null;
+        saveUi(); renderView();
+      });
+    });
+  }
+
   function renderAcademy(view) {
+    if (acTabNow() === 'ws') {
+      /* Открытый курс — это уже не витрина: вкладки Академии тут не рисуем, как и
+         в обычном курсе, а даем один путь назад. Иначе на экране одновременно
+         стоят шапка «Воркшопы» и вкладка «Курсы», и непонятно, где ты. */
+      view.innerHTML = '<div class="academy ac-wsback"><button class="ac-back-all" id="ac-ws-back">' +
+        ic('go', 13) + 'Все курсы</button></div><div id="ac-ws"></div>';
+      var back = view.querySelector('#ac-ws-back');
+      back.addEventListener('click', function () {
+        state.acTab = 'courses'; saveUi(); renderHead(); renderView();
+      });
+      return renderWorkshops(document.getElementById('ac-ws'));
+    }
+    if (acTabNow() === 'att' && (!state.ac || !state.ac.course)) {
+      view.innerHTML = acTabs() + '<div id="ac-att"></div>';
+      acTabsBind(view);
+      return renderAttestations(document.getElementById('ac-att'));
+    }
     if (!state.ac || !state.ac.list) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
       return api('/admin/api/academy/courses').then(function (r) {
@@ -4072,9 +4141,10 @@
   function acHome(view) {
     var list = state.ac.list;
     if (!list.length) {
-      view.innerHTML = '<div class="academy"><div class="ac-empty">' + ic('award', 32) +
+      view.innerHTML = acTabs() + '<div class="academy"><div class="ac-empty">' + ic('award', 32) +
         '<h1 class="ac-h">Курсов для вашей роли пока нет</h1>' +
         '<p class="ac-p">Обучение открывается по роли. Если курс должен быть, скажите руководителю.</p></div></div>';
+      acTabsBind(view);
       return;
     }
     var closed = acBrClosed();
@@ -4100,10 +4170,47 @@
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="academy"><div class="ac-home">' +
+    /* Воркшопы — пятый курс на витрине, но содержание у него не в коде, а в базе
+       (Павел заводит занятие кнопкой, без выкатки). Поэтому карточка собирается
+       здесь руками и ведет не в плеер уроков, а на свой экран. */
+    var wsl = (state.ws && state.ws.items) || [];
+    var wsSeen = wsl.filter(function (x) { return x.seen; }).length;
+    var wsCard = '<section class="ac-branch"><button class="ac-bnode" type="button" data-br="Команда" aria-expanded="true">' +
+        '<span class="ac-bt"><b>Команда</b><small>обучение от разработчиков, смотреть можно в любом порядке</small></span>' +
+        '<span class="ac-bx">' + ic('go', 14) + '</span></button>' +
+      '<div class="ac-bkids"><div class="ac-cards">' +
+        '<div class="ac-card" data-acws role="button" tabindex="0">' +
+          '<div class="ac-card-l">' +
+            '<div class="ac-card-top"><span class="ac-tag' + (wsSeen ? '' : ' soft') + '">' +
+              (!wsl.length ? 'записей пока нет'
+                : wsSeen >= wsl.length ? 'все посмотрены'
+                : wsSeen ? 'в работе' : 'не смотрели') + '</span></div>' +
+            '<h2 class="ac-card-h">Воркшопы от разработчиков</h2>' +
+            '<p class="ac-card-p">Записи встреч с разбором: как устроены агенты, песочница и наши инструменты. С материалами и домашкой.</p>' +
+          '</div>' +
+          '<div class="ac-card-r">' +
+            '<div class="ac-card-bar"><i style="width:' + (wsl.length ? Math.round(wsSeen / wsl.length * 100) : 0) + '%"></i></div>' +
+            '<div class="ac-card-foot"><span class="ac-cap">' + wsSeen + ' из ' + wsl.length + ' посмотрено</span>' +
+              '<span class="ac-card-go">Открыть' + ic('go', 12) + '</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div></div></section>';
+
+    view.innerHTML = acTabs() + '<div class="academy"><div class="ac-home">' +
       '<div class="ac-home-head"><h1 class="ac-h">Академия</h1>' +
       '<p class="ac-p lead">Курсы вашей роли. Каждый заканчивается аттестацией и допуском к работе.</p></div>' +
-      '<div class="ac-tree">' + brs + '</div></div></div>';
+      '<div class="ac-tree">' + brs + wsCard + '</div></div></div>';
+    acTabsBind(view);
+    var wsGo = view.querySelector('[data-acws]');
+    if (wsGo) {
+      wsGo.addEventListener('click', function () { state.acTab = 'ws'; saveUi(); renderHead(); renderView(); });
+      wsGo.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); wsGo.click(); }
+      });
+    }
+    // Счетчик на карточке берем из той же ручки, что и сам экран: без загрузки
+    // он показывал бы «0 из 0» до первого открытия воркшопов.
+    if (!state.ws) wsLoad(function () { if (state.page === 'academy' && acTabNow() === 'courses') renderView(); });
 
     view.querySelector('.ac-tree').addEventListener('click', function (ev) {
       var node = ev.target.closest('.ac-bnode');
@@ -4257,6 +4364,8 @@
     return '<figure class="ac-ill"><img src="' + esc(AC_ILL_DIR + sc.img + '.webp') + '" alt="" loading="lazy"></figure>';
   }
 
+  var AC_CUR = /[₽%]|юан/i;
+
   function acScreenHTML(sc) {
     var eye = sc.eye ? '<div class="ac-eyebrow ac-cap">' + esc(sc.eye) + '</div>' : '';
     var h = '<h1 class="ac-h">' + esc(sc.h) + '</h1>' + acIll(sc);
@@ -4271,8 +4380,9 @@
     if (sc.type === 'check') extra = '<ul class="ac-rules good">' + sc.items.map(function (it) { return '<li><span class="ac-mk">✓</span><div>' + esc(it) + '</div></li>'; }).join('') + '</ul>';
     if (sc.type === 'quote') extra = '<div class="ac-quote">' + esc(sc.quote.text) + '<span class="ac-who ac-cap">' + esc(sc.quote.who) + '</span></div>' + (sc.note ? acNote(sc.note) : '');
     // Рубль дописывается сам, но не к строке, где единица уже своя: «3,2% суммы»,
-    // «750 ₽ × качество». Иначе в уроке денег выходит «30 000 ₽ ₽».
-    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { var v = String(r[1]); return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(/[₽%]/.test(v) ? v : v + ' ₽') + '</span></li>'; }).join('') + '</ul>' +
+    // «750 ₽ × качество», «2 500 юаней» в уроке про гранты. Иначе выходит
+    // «30 000 ₽ ₽» и «2 500 юаней ₽».
+    if (sc.type === 'pay') extra = '<ul class="ac-pay">' + sc.rows.map(function (r) { var v = String(r[1]); return '<li><span>' + esc(r[0]) + '</span><span class="ac-amt">' + esc(AC_CUR.test(v) ? v : v + ' ₽') + '</span></li>'; }).join('') + '</ul>' +
       (sc.note ? acNote(sc.note) : '');
     if (sc.type === 'deduct') {
       extra = '<div class="ac-deduct">' + sc.groups.map(function (g) {
@@ -4592,13 +4702,26 @@
   /* Подпись документа. Текста договора и NDA еще нет — экран честно говорит об
      этом и не изображает подписанное. Подпись включится тем же кодом на почту,
      которым исполнители подписывают акты (63-ФЗ, ч. 2 ст. 6 и ст. 9). */
+  /* Экран подписи документа. Три состояния, и путать их нельзя:
+     `soon` — текста еще нет, подписывать нечего;
+     `file` — текст готов и лежит рядом ссылкой, а экран подписи в CRM еще не
+     включен, поэтому кнопка молчит, а способы подписания названы словами
+     (Павел 28.09.2026: «нужно давать выбор, электронной подписью или печатать
+     и прикрепить скан»);
+     ни того, ни другого — подпись работает, кнопка живая. */
   function acSignHTML(sc) {
     return '<div class="ac-doc">' +
       '<div class="ac-doc-head">' + ic('doc', 16) + '<span>' + esc(sc.h) + '</span></div>' +
+      (sc.file
+        ? '<a class="ac-doc-file" href="' + esc(sc.file) + '" target="_blank" rel="noopener">' +
+            ic('doc', 14) + '<span>Открыть текст документа</span></a>'
+        : '') +
       (sc.soon
         ? '<div class="ac-doc-soon"><b>Текст документа готовится.</b> Подпись включим, когда документ будет готов — придет уведомление, и вы подпишете кодом из письма. Пока просто прочитайте, о чем он.</div>'
-        : '') +
-      '<button class="ac-btn pri" disabled>' + (sc.soon ? 'Подпись скоро' : 'Подписать') + '</button></div>';
+        : sc.file
+          ? '<div class="ac-doc-soon"><b>Подписать можно двумя способами, на ваш выбор.</b> Кодом из письма в личном кабинете — экран подписи включим и пришлем уведомление. Или распечатать, подписать от руки и приложить скан. Оба способа равны по силе, это записано в договоре.</div>'
+          : '') +
+      '<button class="ac-btn pri" disabled>' + (sc.soon || sc.file ? 'Подпись скоро' : 'Подписать') + '</button></div>';
   }
 
   /* Этап пути ученика. Один экран отвечает на четыре вопроса сразу: когда идет,
@@ -5166,10 +5289,20 @@
   function attPay(m) { return m === 'alipay' ? 'Alipay' : m === 'rub' ? 'Рубли' : '—'; }
   function attYes(v) { return v ? '<span class="att-ok">' + ic('check', 13) + '</span>' : '<span class="att-no">—</span>'; }
 
+  /* Экран аттестаций живет в двух местах: внутри Академии вкладкой «Кто прошел»
+     (основное место с 28.09.2026) и по старой ссылке #page/attestations. Куда
+     рисовать — решает одна функция: иначе отложенный ответ сервера приходил бы
+     в контейнер, которого на экране уже нет. */
+  function attMount() {
+    if (state.page === 'attestations') return document.getElementById('view');
+    if (state.page === 'academy' && acTabNow() === 'att') return document.getElementById('ac-att');
+    return null;
+  }
+
   function renderAttestations(view) {
     if (state.att == null) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
-      return attLoad(function () { if (state.page === 'attestations') attDraw(view); });
+      return attLoad(function () { var m = attMount(); if (m) attDraw(m); });
     }
     attDraw(view);
   }
@@ -5183,6 +5316,14 @@
     var exam = (r.exam_score == null) ? '<span class="att-no">—</span>'
       : '<span class="att-frac' + (r.exam_score >= (r.exam_total || 0) ? ' full' : '') + '">' +
         r.exam_score + '/' + r.exam_total + '</span>';
+    // Где человек стоит сейчас. Номер урока дает сервер, название берем из
+    // содержания курса на фронте: второй копии списка уроков на сервере нет.
+    var full = acById(r.course);
+    var li = (full && r.now_id && full.lessonIds) ? full.lessonIds.indexOf(r.now_id) : -1;
+    var nowLesson = li >= 0 && full.lessons[li] ? full.lessons[li].t : null;
+    var now = r.passed ? '<span class="att-no">курс пройден</span>'
+      : nowLesson ? '<span class="att-now"><b>' + r.now_n + '.</b> ' + esc(nowLesson) + '</span>'
+      : '<span class="att-no">еще не начал</span>';
     var status = r.passed
       ? '<span class="att-pill green">Допущен</span>' +
         (r.passed_at ? '<span class="att-when">' + arDate(r.passed_at) + '</span>' : '') +
@@ -5191,12 +5332,12 @@
     return '<tr>' +
       '<td>' + who + '</td>' +
       '<td class="att-course">' + esc(r.course_title) + '</td>' +
+      '<td class="att-stage">' + now + '</td>' +
       '<td class="att-c">' + lessons + '</td>' +
       '<td class="att-c">' + exam + '</td>' +
       '<td class="att-c">' + attYes(r.practice_sent) + '</td>' +
       '<td class="att-c">' + attYes(r.agreement) + '</td>' +
-      '<td>' + attPay(r.pay_method) + '</td>' +
-      '<td>' + status + '</td>' +
+      '<td>' + status + (attPay(r.pay_method) !== '—' ? '<span class="att-pay">' + attPay(r.pay_method) + '</span>' : '') + '</td>' +
     '</tr>';
   }
 
@@ -5323,12 +5464,14 @@
     var rows = (state.att && state.att.rows) || [];
     var passed = rows.filter(function (r) { return r.passed; }).length;
     var seg = state.attSeg === 'access' ? 'access' : 'done';
+    var inAc = state.page === 'academy';
     var head = '<div class="att-head"><div class="att-h">' +
-      (seg === 'access' ? 'Доступ к курсам' : 'Аттестации тьюторов') + '</div>' +
-      '<div class="att-seg">' +
-        '<button class="att-sg' + (seg === 'done' ? ' on' : '') + '" data-seg="done">Сдачи</button>' +
-        '<button class="att-sg' + (seg === 'access' ? ' on' : '') + '" data-seg="access">Доступ</button>' +
-      '</div>' +
+      (seg === 'access' ? 'Кому какой курс открыт' : 'Кто какой курс прошел') + '</div>' +
+      (inAc ? '' :
+        '<div class="att-seg">' +
+          '<button class="att-sg' + (seg === 'done' ? ' on' : '') + '" data-seg="done">Сдачи</button>' +
+          '<button class="att-sg' + (seg === 'access' ? ' on' : '') + '" data-seg="access">Доступ</button>' +
+        '</div>') +
       '<div class="att-sp"></div>' +
       '<button class="att-refresh" id="att-refresh">' + ic('refresh', 14) + 'Обновить</button></div>';
     if (seg === 'access') {
@@ -5337,7 +5480,7 @@
           '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div>' +
           '<div class="loaddot"></div></div></div>';
         attSegBind(view);
-        return accLoad(function () { if (state.page === 'attestations') attDraw(view); });
+        return accLoad(function () { var m = attMount(); if (m) attDraw(m); });
       }
       view.innerHTML = '<div class="att">' + head + accDraw(view) + '</div>';
       attSegBind(view);
@@ -5354,8 +5497,8 @@
         '<div>Пока никто не начал курс Академии. Тьютор пройдёт аттестацию и появится здесь.</div></div>';
     } else {
       body = '<div class="att-tablewrap"><table class="att-table"><thead><tr>' +
-        '<th>Тьютор</th><th>Курс</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
-        '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Оплата</th><th>Статус</th>' +
+        '<th>Человек</th><th>Курс</th><th>Сейчас на</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
+        '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Статус</th>' +
         '</tr></thead><tbody>' + rows.map(attRow).join('') + '</tbody></table></div>';
     }
     view.innerHTML = '<div class="att">' + head + sum + body + '</div>';
@@ -7944,10 +8087,21 @@
     var p = String(iso).split('-');
     return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : iso;
   }
+  /* Куда рисовать воркшопы: внутри Академии (вкладка «Воркшопы», основное место
+     с 28.09.2026) или на своей странице по старой ссылке. Та же развилка, что у
+     аттестаций, и по той же причине: ответ сервера приходит позже, чем человек
+     успевает уйти на другую вкладку. */
+  function wsMount() {
+    if (state.page === 'workshops') return document.getElementById('view');
+    if (state.page === 'academy' && acTabNow() === 'ws') return document.getElementById('ac-ws');
+    return null;
+  }
+
   function renderWorkshops(view) {
+    if (!view) return;
     if (!state.ws) {
       view.innerHTML = '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div>';
-      return wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderWorkshops(view); } });
+      return wsLoad(function () { var m = wsMount(); if (m) { renderHead(); renderWorkshops(m); } });
     }
     var w = state.ws, items = w.items || [];
     if (w.none) {
@@ -7974,10 +8128,17 @@
           '</div>' +
           (meta ? '<div class="ws-meta">' + esc(meta) + (it.archived ? '<span class="sev">в архиве</span>' : '') + '</div>' : '') +
           (it.about ? '<p class="ws-about">' + esc(it.about) + '</p>' : '') +
+          /* Запись стоит сразу под описанием: за ней сюда и приходят, а домашку
+             читают уже после просмотра. */
+          (it.video_file
+            ? '<div class="ws-vid"><video class="ws-vid-el" data-wsvid="' + esc(it.video_file) + '" controls playsinline preload="metadata"></video>' +
+              '<div class="ws-vid-wait">Открываем запись…</div></div>'
+            : '') +
           (it.homework ? '<div class="ws-hw"><span class="ws-hw-l">Домашка</span>' + esc(it.homework) + '</div>' : '') +
           (mats ? '<div class="ws-mats">' + mats + '</div>' : '') +
           '<div class="ws-act">' +
-            (it.record_url
+            (it.video_file ? ''
+              : it.record_url
               ? '<a class="bp sm ws-play" href="' + esc(it.record_url) + '" target="_blank" rel="noopener">' + ic('play', 14) + 'Смотреть запись</a>'
               : '<span class="ws-norec">Записи нет</span>') +
             '<button class="qchip ws-seen' + (it.seen ? ' on' : '') + '" data-wss="' + it.id + '">' +
@@ -7988,6 +8149,28 @@
       '</article>';
     }).join('');
     view.innerHTML = '<div class="card ws">' + body + '</div>';
+    /* Запись играет прямо в занятии. Файл лежит у нас на сервере, отдает его Caddy,
+       а право смотреть дает cookie: ключ CRM в адресе видео попал бы в логи целиком
+       (та же механика, что у записей курса продаж, docs/academy-video.md). */
+    var vids = view.querySelectorAll('[data-wsvid]');
+    if (vids.length) {
+      xfetch('/admin/api/academy/video-session?course=workshops',
+        { method: 'POST', credentials: 'include' })
+        .then(function (r) {
+          if (!r.ok) throw new Error(String(r.status));
+          Array.prototype.forEach.call(vids, function (v) {
+            v.src = API + '/academy-video/workshops/' + v.getAttribute('data-wsvid');
+            var w = v.parentNode.querySelector('.ws-vid-wait');
+            if (w) w.hidden = true;
+          });
+        })
+        .catch(function () {
+          Array.prototype.forEach.call(view.querySelectorAll('.ws-vid-wait'), function (w) {
+            w.textContent = 'Запись не открылась. Обновите страницу, а если не помогло — скажите руководителю.';
+          });
+        });
+    }
+
     Array.prototype.forEach.call(view.querySelectorAll('[data-wse]'), function (b) {
       b.addEventListener('click', function () {
         var it = items.filter(function (x) { return String(x.id) === b.getAttribute('data-wse'); })[0];
@@ -8042,6 +8225,12 @@
           '</div>' +
           '<label class="al-f"><span class="al-l">Ссылка на запись</span>' +
             '<input id="ws-rec" class="al-in" type="url" maxlength="500" placeholder="https://" value="' + esc(it ? it.record_url : '') + '"></label>' +
+          /* Файл записи на нашем сервере. Если он есть, занятие играет его в плеере,
+             а ссылка выше остается запасной. Файл кладет разработчик в
+             /opt/eastside/academy-video/workshops/ — руками отсюда не загрузить. */
+          '<label class="al-f"><span class="al-l">Файл записи на сервере</span>' +
+            '<input id="ws-file" class="al-in" type="text" maxlength="120" placeholder="workshop-1-2026-09-16.mp4" value="' + esc(it && it.video_file ? it.video_file : '') + '">' +
+            '<span class="al-hint">Имя файла, который лежит в папке записей на сервере. Пусто — занятие откроется по ссылке выше.</span></label>' +
           '<label class="al-f"><span class="al-l">О чем</span>' +
             '<textarea id="ws-about" class="al-in al-ta" rows="3" maxlength="2000" placeholder="Пара предложений: что разбирали и кому это пригодится">' + esc(it ? it.about : '') + '</textarea></label>' +
           '<label class="al-f"><span class="al-l">Домашка</span>' +
@@ -8088,7 +8277,7 @@
     if (del) del.addEventListener('click', function () {
       apiSend('/admin/api/workshops/' + it.id, 'DELETE', null, function () {
         close(); showToast('Убрал в архив');
-        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+        state.ws = null; wsLoad(function () { if (wsMount()) { renderHead(); renderView(); } });
       });
     });
     ov.querySelector('#ws-save').addEventListener('click', function () {
@@ -8101,6 +8290,7 @@
         homework: ov.querySelector('#ws-hw').value.trim(),
         host: ov.querySelector('#ws-host').value.trim(),
         record_url: ov.querySelector('#ws-rec').value.trim(),
+        video_file: ov.querySelector('#ws-file').value.trim(),
         held_at: ov.querySelector('#ws-date').value || null,
         materials: readMats(),
       };
@@ -8108,7 +8298,7 @@
       var path = it ? '/admin/api/workshops/' + it.id : '/admin/api/workshops';
       apiSend(path, it ? 'PATCH' : 'POST', payload, function () {
         close(); showToast('Сохранил');
-        state.ws = null; wsLoad(function () { if (state.page === 'workshops') { renderHead(); renderView(); } });
+        state.ws = null; wsLoad(function () { if (wsMount()) { renderHead(); renderView(); } });
       }, function (code, e) {
         showToast((e && e.body && e.body.detail) || (code === 403 ? 'Это может только руководитель' : 'Не сохранилось'));
       });
@@ -36395,6 +36585,340 @@
 
   function ptK(k) { return String(k.toFixed ? k.toFixed(2) : k).replace('.', ','); }
 
+  /* ── Раздел «Сопровождение»: ученики, их точки и деньги ──────────────────────
+     Павел 28.09.2026: «тьютор должен видеть что ему нужно делать 1 2 3 4 5 по
+     чек листам по каждому ученику, все прозрачно, сделал = получил выплату», и
+     отдельно — руководителю: «когда какой тьютор какую сумму получит за какой
+     закрытый чек лист».
+
+     До этого экрана чек-листы жили только внутри карточки одного ученика: чтобы
+     понять, что делать сегодня, тьютор открывал двадцать карточек по очереди, а
+     свод по деньгам не собирался нигде. Здесь три вида на одни и те же данные:
+     «Мои ученики» отвечает на «что делать», «Все ученики» — на «кто отстает»,
+     «Выплаты» — на «кому сколько и за что».
+
+     Считает все сервер (routers/tutor_points.py): и суммы, и коэффициент, и в
+     какую выплату попадет закрытая точка. Фронт только рисует — второй копии
+     правила отсечки 10/20 числа в браузере нет намеренно. */
+  var PB = { my: null, all: null, pay: null, busy: false };
+
+  var PB_SEGS = [
+    { id: 'my', label: 'Мои ученики' },
+    { id: 'all', label: 'Все ученики', cap: 'zaezd_review' },
+    { id: 'pay', label: 'Выплаты', cap: 'zaezd_review' },
+  ];
+
+  function pbSeg() {
+    var s = state.ptSeg || 'my';
+    var found = PB_SEGS.filter(function (g) { return g.id === s; })[0];
+    return (found && (!found.cap || can(found.cap))) ? s : 'my';
+  }
+
+  function pbLoad(force) {
+    var seg = pbSeg();
+    var key = seg === 'pay' ? 'pay' : seg;
+    if (PB[key] && !force) return;
+    if (PB.busy) return;
+    PB.busy = true;
+    var url = seg === 'pay'
+      ? '/admin/api/tutor-payouts' + (state.ptDay ? '?day=' + state.ptDay : '')
+      : '/admin/api/tutor-points/board?scope=' + seg;
+    api(url).then(function (r) {
+      PB[key] = r; PB.busy = false;
+      if (state.page === 'points') renderView();
+    }).catch(function () {
+      PB[key] = { failed: true }; PB.busy = false;
+      if (state.page === 'points') renderView();
+    });
+  }
+
+  function pbTabs() {
+    return '<div class="po-tabs pb-tabs"><div class="dperiod">' +
+      PB_SEGS.filter(function (g) { return !g.cap || can(g.cap); }).map(function (g) {
+        return '<button type="button" data-pbseg="' + g.id + '"' +
+          (pbSeg() === g.id ? ' class="on"' : '') + '>' + esc(g.label) + '</button>';
+      }).join('') + '</div></div>';
+  }
+
+  /* Полоса из пяти точек: закрытые залиты, текущая обведена. Она же навигация —
+     клик открывает любую точку, даже давно закрытую (посмотреть, что отметили). */
+  function pbRail(st, openKey) {
+    return '<div class="pb-rail">' + st.points.map(function (p, i) {
+      var cls = 'pb-dot' + (p.closedAt ? ' done' : '') + (p.key === openKey ? ' on' : '');
+      return '<button type="button" class="' + cls + '" data-pbpt="' + esc(st.sessionId) + ':' + p.key + '"' +
+        ' title="' + esc(p.title) + '">' + (i + 1) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function pbChecklist(st, p) {
+    var items = p.items.map(function (it) {
+      return '<button class="cp-item' + (it.done ? ' on' : '') + '"' + (p.closedAt ? ' disabled' : '') +
+        ' data-pbitem="' + esc(st.sessionId) + ':' + p.key + ':' + esc(it.key) + '"' +
+        ' data-done="' + (it.done ? '1' : '') + '">' +
+        '<span class="cp-box">' + (it.done ? ic('check', 12) : '') + '</span>' +
+        '<span class="cp-item__t">' + esc(it.title) + '</span>' +
+        (it.done && it.by ? '<span class="cp-item__w">' + esc(it.by) + '</span>' : '') +
+        '</button>';
+    }).join('');
+    return '<div class="cp-items">' + items + '</div>';
+  }
+
+  function pbPaid(st) {
+    /* Дни выплат, которые руководитель уже отметил проведенными по этому тьютору.
+       Нужны ровно для одной строки на экране: закрытая точка должна в какой-то
+       момент сказать «выплачено», иначе обещание «сделал — получил» остается
+       обещанием. */
+    var box = PB[pbSeg()] || {};
+    var map = box.paid || {};
+    return map[String(st.ownerId)] || [];
+  }
+
+  function pbPoint(st, p, n, paidDays) {
+    var money = fmtMoney(p.amount) + ' ₽';
+    var head = '<div class="pb-pth"><b>Точка ' + n + '. ' + esc(p.title) + '</b>' +
+      '<span class="pb-amt num">' + money + '</span></div>' +
+      '<div class="pb-about">' + esc(p.about) + '</div>';
+
+    var line;
+    if (p.closedAt) {
+      var paid = p.payDay && (paidDays || []).indexOf(p.payDay) >= 0;
+      line = '<div class="pb-line ok">' + ic('check', 13) + '<span>Закрыта ' + fmtDay(p.closedAt) +
+        (p.closedBy ? ', ' + esc(p.closedBy) : '') + '. ' +
+        (paid ? 'Выплачено ' + fmtDay(p.payDay)
+              : p.payDay ? 'Идет в выплату ' + fmtDay(p.payDay) : 'Попадет в ближайшую выплату') + '</span>' +
+        (p.lateDays ? '<span class="cp-late">просрочка ' + p.lateDays + ' дн.</span>' : '') + '</div>';
+    } else if (p.byResult) {
+      line = '<div class="pb-line">Срок назначает вуз. Сумма зависит от письма: выберите результат в карточке ученика.</div>';
+    } else {
+      line = '<div class="pb-line">' +
+        '<label class="pb-date">Плановая дата' +
+          '<input type="date" data-pbplan="' + esc(st.sessionId) + ':' + p.key + '" value="' + esc(p.planDate || '') + '"></label>' +
+        (p.due ? '<span class="pb-due">по схеме: ' + esc(p.due) + '</span>' : '') +
+        (p.planDate ? '<span class="pb-dim">перенос и причина — в карточке ученика</span>' : '') +
+        '</div>';
+    }
+
+    var foot = p.closedAt ? ''
+      : p.left
+        ? '<div class="pb-foot"><span class="pb-left">осталось отметить: ' + p.left + '</span></div>'
+        : '<div class="pb-foot"><button class="bp sm" data-pbclose="' + esc(st.sessionId) + ':' + p.key + '">' +
+            'Закрыть точку и начислить ' + money + '</button></div>';
+
+    return '<div class="pb-pt">' + head + line + pbChecklist(st, p) + foot + '</div>';
+  }
+
+  function pbStudent(st) {
+    var openKey = (state.ptOpen && state.ptOpen.indexOf(st.sessionId + ':') === 0)
+      ? state.ptOpen.split(':')[1] : (st.next && st.next.key);
+    var p = st.points.filter(function (x) { return x.key === openKey; })[0] || st.points[0];
+    var n = st.points.indexOf(p) + 1;
+    var done = st.points.filter(function (x) { return x.closedAt; }).length;
+    var who = st.ownerName ? '<span class="pb-who">ведет ' + esc(st.ownerName) + '</span>' : '';
+
+    return '<div class="card pb-stu">' +
+      '<div class="pb-head">' +
+        '<div class="pb-nm"><button class="pb-open" data-pblead="' + esc(st.sessionId) + '">' + esc(st.name) + '</button>' +
+          (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
+          (pbSeg() === 'all' ? who : '') + '</div>' +
+        pbRail(st, p.key) +
+        '<div class="pb-sum"><b class="num">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+          '<span>' + done + ' из 5 закрыто</span></div>' +
+      '</div>' +
+      pbPoint(st, p, n, pbPaid(st)) +
+      '</div>';
+  }
+
+  function renderPointsBoard(view) {
+    var seg = pbSeg();
+    if (seg === 'pay') return renderPayouts(view);
+    var box = PB[seg];
+    if (!box) { pbLoad(); view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Собираем учеников…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Не загрузилось — похоже, отвалилась сеть. Обнови страницу.</div></div>';
+      return;
+    }
+    var pay = box.payout || {};
+    var head = '<div class="card pb-top">' +
+      '<div class="pb-topm"><span class="pb-cap">Ближайшая выплата</span>' +
+        '<b class="num">' + fmtMoney(pay.amount) + ' ₽</b>' +
+        '<span class="pb-when">' + (pay.date ? fmtDay(pay.date) : '') + '</span></div>' +
+      '<div class="pb-topd">Идут закрытые точки с ' + (pay.from ? fmtDay(pay.from) : '') +
+        ' по ' + (pay.to ? fmtDay(pay.to) : '') + '. Выплаты два раза в месяц, 10 и 20 числа: ' +
+        'закрыли точку — она сразу встала в ближайшую из них.</div>' +
+      '</div>';
+
+    var list = box.students.length
+      ? box.students.map(pbStudent).join('')
+      : '<div class="card"><div class="empty">' +
+        (seg === 'my'
+          ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
+          : 'Учеников с заведенными точками пока нет.') + '</div></div>';
+
+    view.innerHTML = pbTabs() + head + list;
+    pbWire(view);
+  }
+
+  function renderPayouts(view) {
+    var box = PB.pay;
+    if (!box) { pbLoad(); view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Считаем выплату…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = pbTabs() + '<div class="card"><div class="empty">Не загрузилось — обнови страницу.</div></div>';
+      return;
+    }
+    // Сколько еще не отмечено выплаченным. Это и есть остаток работы руководителя
+    // в этом дне: суммы посчитаны, осталось провести платежи и отметить.
+    var left = box.total - (box.paidTotal || 0);
+    var payAll = left > 0
+      ? '<button class="bp sm" data-pbpay="all">Отметить все выплаченным</button>'
+      : box.total > 0 ? '<span class="pb-done">' + ic('check', 13) + ' Все выплачено</span>' : '';
+
+    var head = '<div class="card pb-top">' +
+      '<div class="pb-nav">' +
+        '<button class="bp ghost sm" data-pbday="' + esc(box.prev) + '">Прошлая выплата</button>' +
+        '<div class="pb-topm"><span class="pb-cap">Выплата ' + fmtDay(box.day) + '</span>' +
+          '<b class="num">' + fmtMoney(box.total) + ' ₽</b>' +
+          (box.paidTotal ? '<span class="pb-when">выплачено ' + fmtMoney(box.paidTotal) + ' ₽' +
+            (left > 0 ? ', осталось ' + fmtMoney(left) + ' ₽' : '') + '</span>' : '') +
+        '</div>' +
+        '<button class="bp ghost sm" data-pbday="' + esc(box.next) + '">Следующая выплата</button>' +
+      '</div>' +
+      '<div class="pb-topd">В нее идут точки, закрытые с ' + fmtDay(box.from) + ' по ' + fmtDay(box.to) +
+        '. Сумма складывается из закрытых точек, руками ее никто не вводит.</div>' +
+      (payAll ? '<div class="pb-acts">' + payAll + '</div>' : '') +
+      '</div>';
+
+    var tutors = box.tutors.length ? box.tutors.map(function (t) {
+      var rows = t.rows.map(function (r) {
+        return '<div class="pb-row">' +
+          '<button class="pb-open" data-pblead="' + esc(r.sessionId) + '">' + esc(r.client) + '</button>' +
+          '<span class="pb-rt">' + esc(r.title) + (r.result ? ' · ' + esc(r.result) : '') + '</span>' +
+          '<span class="pb-rd">' + fmtDay(r.closedDay) + '</span>' +
+          '<span class="pb-ra num">' + fmtMoney(r.amount) + ' ₽</span>' +
+          '</div>';
+      }).join('');
+      // Отметка о платеже: либо кнопка, либо след с датой и именем того, кто отметил.
+      // Снять отметку можно, но только с причиной — деньги человека, а «мы это уже
+      // платили» и «отметили по ошибке» должны различаться в системе.
+      var act = t.paid
+        ? '<div class="pb-paidline">' + ic('check', 13) +
+            '<span>Выплачено ' + fmtDay(t.paid.at) + (t.paid.by ? ', отметил ' + esc(t.paid.by) : '') + '</span>' +
+            '<button class="lnk" data-pbunpay="' + t.id + '">снять отметку</button></div>'
+        : t.id
+          ? '<div class="pb-paidline"><button class="bp ghost sm" data-pbpay="' + t.id + '">Выплачено</button></div>'
+          : '<div class="pb-paidline pb-dim">Ответственный за клиента не назначен — отметить выплату некому</div>';
+
+      return '<div class="card pb-tut' + (t.paid ? ' is-paid' : '') + '">' +
+        '<div class="pb-tuth"><b>' + esc(t.name) + '</b>' +
+          '<span class="pb-tutn">' + t.rows.length + ' ' + plural(t.rows.length, 'точка', 'точки', 'точек') + '</span>' +
+          '<b class="pb-tuta num">' + fmtMoney(t.total) + ' ₽</b></div>' +
+        rows + act + '</div>';
+    }).join('') : '<div class="card"><div class="empty">В этот период не закрыто ни одной точки. Платить не за что — это и есть ответ.</div></div>';
+
+    var pend = box.pending.length
+      ? '<div class="card pb-pend"><div class="sec-head"><h3>Не закрыто, а планировали</h3></div>' +
+        box.pending.map(function (r) {
+          return '<div class="pb-row">' +
+            '<button class="pb-open" data-pblead="' + esc(r.sessionId) + '">' + esc(r.client) + '</button>' +
+            '<span class="pb-rt">' + esc(r.title) + '</span>' +
+            '<span class="pb-rd">план ' + fmtDay(r.planDate) + '</span>' +
+            '<span class="pb-ra pb-dim">' + esc(r.tutor) + '</span>' +
+            '</div>';
+        }).join('') +
+        '<div class="pb-topd">Эти точки стояли в плане на тот же период и не закрылись. В выплату они не идут, ' +
+        'и разговор с тьютором нужен именно по ним.</div></div>'
+      : '';
+
+    view.innerHTML = pbTabs() + head + tutors + pend;
+    pbWire(view);
+  }
+
+  function pbWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbseg]'), function (b) {
+      b.addEventListener('click', function () {
+        state.ptSeg = b.getAttribute('data-pbseg'); state.ptOpen = null; saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbday]'), function (b) {
+      b.addEventListener('click', function () {
+        state.ptDay = b.getAttribute('data-pbday'); PB.pay = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbpt]'), function (b) {
+      b.addEventListener('click', function () { state.ptOpen = b.getAttribute('data-pbpt'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pblead]'), function (b) {
+      // Открываем карточку прямо тут: секция «Точки» в ней — то же самое крупным
+      // планом, с переносом даты и причиной, а сюда человек возвращается закрытием.
+      b.addEventListener('click', function () { openDrawer(b.getAttribute('data-pblead')); });
+    });
+
+    function send(sid, path, body, bad) {
+      var method = body.__method || 'PUT';
+      delete body.__method;
+      api('/admin/api/leads/' + sid + '/points' + path, {
+        method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      }).then(function () { PB[pbSeg()] = null; PTS[sid] = null; pbLoad(true); })
+        .catch(function (e) {
+          showToast(e && e.status === 422 ? (bad || 'Так нельзя') :
+            e && e.status === 409 ? 'Точка уже закрыта' : 'Не сохранилось, попробуй еще раз');
+        });
+    }
+
+    function payDo(path, body, ok) {
+      api('/admin/api/tutor-payouts/' + path, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (r) {
+        PB.pay = r; PB.my = null; PB.all = null;
+        showToast(ok); renderView();
+      }).catch(function (e) {
+        showToast(e && e.status === 409 ? 'Эта выплата уже отмечена' :
+          e && e.status === 422 ? 'Не хватает данных' : 'Не сохранилось, попробуй еще раз');
+      });
+    }
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbpay]'), function (b) {
+      b.addEventListener('click', function () {
+        var who = b.getAttribute('data-pbpay');
+        var box = PB.pay || {};
+        var msg = who === 'all'
+          ? 'Отметить всю выплату ' + fmtDay(box.day) + ' проведенной?'
+          : 'Отметить выплату проведенной?';
+        if (!confirm(msg + ' Суммы зафиксируются на сегодня.')) return;
+        payDo('pay', { day: box.day, ownerId: who === 'all' ? null : Number(who) }, 'Отметил выплаченным');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbunpay]'), function (b) {
+      b.addEventListener('click', function () {
+        var why = prompt('Почему снимаем отметку о выплате? Причина останется в системе.');
+        if (!why || !why.trim()) return;
+        payDo('unpay', { day: (PB.pay || {}).day, ownerId: Number(b.getAttribute('data-pbunpay')),
+                         reason: why.trim() }, 'Отметка снята');
+      });
+    });
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbitem]'), function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-pbitem').split(':');
+        send(a[0], '/' + a[1] + '/item', { __method: 'POST', key: a[2], done: !b.getAttribute('data-done') });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbplan]'), function (inp) {
+      inp.addEventListener('change', function () {
+        var a = inp.getAttribute('data-pbplan').split(':');
+        send(a[0], '/' + a[1] + '/plan', { plan_date: inp.value || null },
+          'Дату уже ставили — перенос с причиной делается в карточке ученика');
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pbclose]'), function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Закрыть точку? Коэффициент и сумма зафиксируются на сегодня, обратно точка сама не откроется.')) return;
+        var a = b.getAttribute('data-pbclose').split(':');
+        send(a[0], '/' + a[1] + '/close', { __method: 'POST' }, 'Сначала отметьте весь чек-лист');
+      });
+    });
+  }
+
   function buildPointsSection(ctx) {
     var id = ctx.id;
     var box = PTS[id];
@@ -36461,13 +36985,23 @@
           box.results.map(function (r) {
             return '<option value="' + r.key + '"' + (p.result === r.key ? ' selected' : '') + '>' +
               esc(r.title) + ' — ' + fmtMoney(r.amount) + ' ₽</option>';
-          }).join('') + '</select></div>';
+          }).join('') + '</select>' +
+          /* «Вне зоны тьютора» — исход с условием: 7 500 платятся только при
+             вовремя поднятом флаге риска. Условие проверяет человек, поэтому оно
+             написано рядом с выбором, а не спрятано в схеме. */
+          (p.result === 'outside'
+            ? '<div class="cp-line cp-dim">7 500 ₽ платятся, только если флаг риска подняли письменно не позже чем за два месяца до дедлайна подач. Проверяет тот, кто принимает работу.</div>'
+            : '') + '</div>';
       }
 
       var foot;
       if (p.closedAt) {
         foot = '<div class="cp-foot">' +
-          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽ при коэффициенте ' + ptK(p.kvovl) + '</span>' +
+          /* Точка 4 — результат, коэффициент к ней не применяется (схема 3.3):
+             писать «при коэффициенте 0,8» рядом с полной суммой значит врать. */
+          '<span class="cp-paid">' + fmtMoney(p.amount) + ' ₽' +
+            (p.byResult ? ' по письму вуза, коэффициент к результату не применяется'
+                        : ' при коэффициенте ' + ptK(p.kvovl)) + '</span>' +
           (can('zaezd_review')
             ? '<button class="bp ghost sm" data-ptreopen="' + p.key + '">Вернуть точку</button>' : '') +
           '</div>';
@@ -37414,8 +37948,20 @@
     var raw = hashPageId(), i = raw.indexOf('/');
     return i === -1 ? [raw, ''] : [raw.slice(0, i), raw.slice(i + 1)];
   }
+  /* #page/attestations — ссылка из старых сообщений и инструкций. Экран переехал
+     в Академию, поэтому ведем человека туда же, а не на отдельную страницу. */
+  function acRedirect(pg, seg) {
+    if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
+    // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
+    // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.
+    if (pg === 'workshops' && can('academy')) { state.acTab = 'ws'; return ['academy', '']; }
+    if (pg === 'academy' && seg === 'att' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
+    if (pg === 'academy' && seg === 'courses') { state.acTab = 'courses'; return ['academy', '']; }
+    return [pg, seg];
+  }
+
   function openPageFromHash() {
-    var parts = hashPageParts(), pg = parts[0], seg = parts[1];
+    var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
     if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
     var moved = pg === 'tasks' && applyTaskSeg(seg);
     setPage(pg);
@@ -37448,7 +37994,7 @@
     // manager не видит страницу «Путь» — если сохранилась, сбрасываем на Обзор
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
-    var hp = hashPageParts();
+    var hp = acRedirect(hashPageParts()[0], hashPageParts()[1]);
     for (var i = 0; hp[0] && i < NAV_ALL.length; i++) {
       if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyTaskSeg(hp[1]); break; }
     }
