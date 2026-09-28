@@ -9672,12 +9672,14 @@
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        '<button class="bp ghost sm gl-meet" id="tsk-room" title="Своя встреча">' + ic('mic', 14) + '<span>Встреча</span></button>' +
         '<button class="bp ghost sm gl-meet" id="tsk-meet" title="Импорт встречи">' + ic('doc', 14) + '<span>Импорт встречи</span></button>' +
       '</div>' +
       (groups.length ? body
         : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
 
     wireDeptChips(view);
+    el('tsk-room').addEventListener('click', openMeetRoom);
     el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
@@ -11238,6 +11240,100 @@
       });
      });
     });
+  }
+
+  /* ── Своя встреча: комната вместо Зума ───────────────────────────────────
+     Павел 28.09.2026: «устал от зума и фатона». Комната своя, живет на нашем
+     сервере, гость заходит по ссылке из браузера без регистрации. Здесь только
+     заведение встречи и ссылка — все остальное происходит на самой странице
+     комнаты (backend web/meet.html). Запись, расшифровка и черновик задач
+     приходят потом в тот же «Импорт встречи», что и сейчас. */
+  function openMeetRoom() {
+    if (document.querySelector('.al-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov';
+    ov.innerHTML =
+      '<div class="al-card" role="dialog" aria-modal="true">' +
+        '<div class="al-head">' +
+          '<div><div class="al-eyebrow">Задачи</div><div class="al-title">Своя встреча</div></div>' +
+          '<button class="al-x" id="mr-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+        '</div>' +
+        '<div class="al-sub">Заведу комнату и дам ссылку. Гости заходят из браузера, ' +
+          'ставить ничего не надо. Запись и черновик задач придут сюда же после встречи.</div>' +
+        '<div class="al-body" id="mr-body">' +
+          '<label class="al-f"><span class="al-l">Название</span>' +
+            '<input id="mr-title" class="al-in" type="text" maxlength="120" ' +
+              'placeholder="Планерка команды"></label>' +
+          '<div class="al-ai-note" id="mr-note"></div>' +
+        '</div>' +
+        '<div class="al-foot" id="mr-foot">' +
+          '<button class="al-cancel" id="mr-cancel">Отмена</button>' +
+          '<button class="bp al-save" id="mr-go">' + ic('mic', 14) + 'Создать</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    var closed = false;
+    var close = function () {
+      if (closed) return; closed = true;
+      ov.classList.remove('show');
+      document.removeEventListener('keydown', onKey);
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
+    };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    el('mr-x').addEventListener('click', close);
+    el('mr-cancel').addEventListener('click', close);
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+
+    var note = el('mr-note');
+    var show = function (t, ask) {
+      note.className = 'al-ai-note' + (ask ? ' ask' : '');
+      note.textContent = t || '';
+    };
+    setTimeout(function () { var t = el('mr-title'); if (t) t.focus(); }, 60);
+    el('mr-title').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') el('mr-go').click();
+    });
+
+    el('mr-go').addEventListener('click', function () {
+      var go = this;
+      var title = (el('mr-title').value || '').trim();
+      if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
+      go.disabled = true; go.classList.add('loading');
+      apiSend('/admin/api/meet/rooms', 'POST', { title: title, kind: 'team' },
+        function (r) { ready(r); },
+        function (code, e) {
+          go.disabled = false; go.classList.remove('loading');
+          var why = e && e.body && e.body.detail;
+          show(code === 503
+            ? (why || 'Своя комната еще не включена, идет настройка сервера')
+            : 'Не получилось завести встречу, попробуй еще раз', true);
+        });
+    });
+
+    // Готово: показываем ссылку и одну кнопку. Человеку сейчас нужно только
+    // скопировать ее в чат, поэтому поля ввода убираем совсем.
+    function ready(r) {
+      el('mr-body').innerHTML =
+        '<div class="al-f"><span class="al-l">Ссылка на встречу</span>' +
+          '<input id="mr-link" class="al-in" type="text" readonly value="' + esc(r.url) + '"></div>' +
+        '<div class="al-ai-note">Открывается в браузере, на телефоне тоже. ' +
+          'Кто получил ссылку, тот войдет, поэтому не выкладывай ее публично.</div>';
+      el('mr-foot').innerHTML =
+        '<button class="al-cancel" id="mr-done">Закрыть</button>' +
+        '<button class="bp al-save" id="mr-copy">' + ic('copy', 14) + 'Скопировать</button>';
+      el('mr-done').addEventListener('click', close);
+      el('mr-copy').addEventListener('click', function () {
+        var i = el('mr-link');
+        i.select(); i.setSelectionRange(0, 999);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        if (navigator.clipboard) navigator.clipboard.writeText(r.url).catch(function () {});
+        showToast(ok || navigator.clipboard ? 'Ссылка скопирована' : 'Скопируй ссылку из поля');
+      });
+      el('mr-link').focus();
+    }
   }
 
   /* ── Импорт встречи: протокол → задачи ───────────────────────────────────
