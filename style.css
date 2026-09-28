@@ -10206,3 +10206,92 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
   color: var(--blue); cursor: pointer; }
 .un-costnote .lnk:hover { text-decoration: underline; }
+
+/* ════ ПЛАН-ФАКТ (раздел planfact) ════
+   Экран отвечает на один вопрос: успеваем ли мы к плану месяца. Главный элемент —
+   не число и не шкала, а РИСКА на шкале: где мы должны быть сегодня. Без нее
+   «сделано 40%» десятого числа читается как провал, а двадцать пятого — как успех.
+   Рецепты общие: строка-лестница (.lad-row), чип по формуле -soft/-ink, шкала с
+   ростом .9s. Своих цветов не заводим. */
+.pf-head { display: grid; grid-template-columns: auto 1fr minmax(160px, 220px);
+  gap: 24px; align-items: center; padding: 18px 24px; }
+.pf-verdict .pf-vt { font-size: 21px; font-weight: 700; letter-spacing: -.03em; }
+.pf-verdict.ok .pf-vt { color: var(--green-ink); }
+.pf-verdict.risk .pf-vt { color: var(--amber-ink); }
+.pf-verdict.miss .pf-vt { color: var(--red-ink); }
+.pf-verdict .pf-vs { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+/* Полоса месяца темная (navy), а полосы метрик синие и семантические: это шкала
+   времени, а не выполнения, и спорить с ними за внимание она не должна. */
+.pf-dtrack { height: 6px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.pf-dtrack span { display: block; height: 100%; border-radius: 4px; background: var(--navy);
+  transition: width .9s var(--ease); }
+.pf-dtx { font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 7px; text-align: right; }
+
+.pf-tbl { border-top: 1px solid var(--line); }
+.pf-row { display: grid; grid-template-columns: 210px 112px minmax(90px, 1fr) 108px 150px;
+  gap: 16px; align-items: center; padding: 0 24px; height: 66px;
+  border-bottom: 1px solid var(--line); }
+.pf-row:last-child { border-bottom: none; }
+.pf-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.pf-nm small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+/* План правится на месте: кнопка превращается в .ed-input, третьего рецепта поля нет. */
+.pf-set { font: 600 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+  border: 1px solid transparent; border-radius: 10px; padding: 8px 12px; cursor: pointer;
+  transition: .14s; font-variant-numeric: tabular-nums; }
+.pf-set:hover { background: #fff; border-color: var(--line-2); color: var(--blue); }
+.pf-set.none { color: var(--ink-3); font-weight: 500; }
+.pf-in { width: 104px; padding: 8px 11px; }
+.pf-track { position: relative; height: 10px; border-radius: 6px; background: var(--fill); }
+.pf-fill { display: block; height: 100%; border-radius: 6px; background: var(--blue);
+  transition: width .9s var(--ease); }
+.pf-fill.ok { background: var(--green); }
+.pf-fill.risk { background: var(--amber); }
+.pf-fill.miss { background: var(--red); }
+.pf-due { position: absolute; top: -5px; width: 2px; height: 20px; border-radius: 2px;
+  background: var(--navy); }
+.pf-noplan { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
+.pf-fact { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
+.pf-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.pf-fc { font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.sev.pf-ok { color: var(--green-ink); background: var(--green-soft); }
+.sev.pf-risk { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.pf-miss { color: var(--red-ink); background: var(--red-soft); }
+.sev.pf-none { color: var(--ink-3); background: var(--fill); }
+
+.pf-ai { padding: 4px 24px 22px; }
+.pf-ai-idle, .pf-ai-wait { font-size: 13px; color: var(--ink-3); line-height: 1.6; max-width: 720px; }
+.pf-ai-sum { font-size: 15px; font-weight: 600; line-height: 1.55; max-width: 760px; }
+.pf-ai-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.pf-ai-c { font-size: 13px; color: var(--ink-2); line-height: 1.6; padding-left: 13px;
+  position: relative; max-width: 760px; }
+.pf-ai-c::before { content: ''; position: absolute; left: 0; top: 8px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--blue); }
+.pf-ai-next { margin-top: 18px; padding: 14px 16px; border-radius: 14px; background: var(--fill);
+  max-width: 760px; }
+.pf-ai-lb { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 9px; }
+.pf-ai-s { font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.6; }
+.pf-ai-s + .pf-ai-s { margin-top: 6px; }
+
+/* Телефон: пять колонок в 390px превращают название в «Нов…», поэтому строка
+   становится карточкой — имя во всю ширину, под ним план и факт, шкала внизу. */
+@media (max-width: 860px) {
+  .pf-head { grid-template-columns: 1fr; gap: 14px; }
+  /* Заголовок секции и кнопка в одной строке на телефоне сжимают друг друга:
+     название разваливается по слогам, а кнопка уезжает за край карточки. */
+  .pf-sec { flex-wrap: wrap; }
+  /* Иконка и заголовок держатся одной строкой: без этого заголовок не влезал
+     рядом с ней и уезжал вниз, а значок оставался висеть сам по себе. */
+  .pf-sec > div { flex: 1 1 140px; min-width: 0; }
+  .pf-sec > .bp { margin-left: 0; width: 100%; }
+  .pf-dtx { text-align: left; }
+  .pf-row { grid-template-columns: 1fr auto; gap: 10px 12px; height: auto;
+    padding: 16px 18px; align-items: start; }
+  .pf-nm { grid-column: 1 / -1; }
+  .pf-plan { grid-column: 1; }
+  .pf-fact { grid-column: 2; text-align: right; }
+  .pf-track, .pf-noplan { grid-column: 1 / -1; }
+  .pf-right { grid-column: 1 / -1; flex-direction: row; justify-content: space-between;
+    align-items: center; }
+  .pf-ai { padding: 4px 18px 20px; }
+}
