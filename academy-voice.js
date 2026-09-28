@@ -146,7 +146,7 @@ window.AC_VOICE = {
   "tutor_support-18-1": "tutor_support-a32db89494a9.mp3",
   "tutor_support-18-2": "tutor_support-9f3e40166fac.mp3",
   "tutor_support-18-3": "tutor_support-d121d7395999.mp3",
-  "tutor_support-18-4": "tutor_support-e73142164f67.mp3",
+  "tutor_support-18-4": "tutor_support-5de477358062.mp3",
   "tutor_support-18-5": "tutor_support-8b521cba539f.mp3",
   "tutor_support-18-6": "tutor_support-0d4bc0b6dee4.mp3",
   "tutor_support-18-7": "tutor_support-d559a34af1ae.mp3",
