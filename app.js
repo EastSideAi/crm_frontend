@@ -8841,6 +8841,30 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mcopy]'), function (b) {
       b.addEventListener('click', function () { copyText(b.getAttribute('data-mcopy'), b); });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('.mr-go'), function (a) {
+      a.addEventListener('click', function (e) { enterMeetRoom(e, a); });
+    });
+  }
+
+  /* Внутренняя встреча пускает только своих, и человек доказывает, кто он,
+     подтверждением в боте задач. Тому, кто уже сидит в CRM, доказывать нечего:
+     забираем пропуск здесь и передаем его комнате в хвосте ссылки после решетки.
+     Хвост не уходит на сервер и не попадает в логи, а страница встречи стирает
+     его из адреса сразу, как прочитает. */
+  function enterMeetRoom(e, a) {
+    var url = a.getAttribute('href');
+    if (!url || e.metaKey || e.ctrlKey || e.shiftKey || e.button > 0) return;
+    e.preventDefault();
+    var tab = window.open('', '_blank');   // открываем СРАЗУ: после await браузер сочтет это попапом
+    api('/admin/api/meet/pass').then(function (r) {
+      var to = url + (r && r.pass
+        ? '#p=' + encodeURIComponent(r.pass) + '&n=' + encodeURIComponent(r.name || '')
+        : '');
+      if (tab) tab.location = to; else location.href = to;
+    }).catch(function () {
+      // Пропуск не дали — пусть человек подтвердит себя в боте на самой странице.
+      if (tab) tab.location = url; else location.href = url;
+    });
   }
 
   function renderMeetLog(view) {
