@@ -9063,7 +9063,10 @@
     var who = r.created_by_name ? esc(r.created_by_name) : '';
     var ppl = over && r.people
       ? r.people + ' ' + plural(r.people, 'участник', 'участника', 'участников') : '';
-    var sub = [who, ppl].filter(Boolean).join(' · ');
+    // Ссылка на встречу с клиентом и есть пропуск, на внутреннюю — нет. Человек
+    // должен видеть это до того, как перешлет ссылку в чат.
+    var open = r.kind && r.kind !== 'team' ? 'вход по ссылке' : '';
+    var sub = [who, ppl, open].filter(Boolean).join(' · ');
     // Закончившуюся встречу открывать некуда: комнаты на сервере уже нет.
     var go = over ? ''
       : '<a class="qchip mr-go' + (live ? ' on' : '') + '" href="' + esc(r.url) + '" ' +
@@ -12185,12 +12188,21 @@
           '<div><div class="al-eyebrow">Встречи</div><div class="al-title">Своя встреча</div></div>' +
           '<button class="al-x" id="mr-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">Заведу комнату и дам ссылку. Гости заходят из браузера, ' +
+        '<div class="al-sub">Заведу комнату и дам ссылку. Заходят из браузера, ' +
           'ставить ничего не надо. Запись и черновик задач придут сюда же после встречи.</div>' +
         '<div class="al-body" id="mr-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="mr-title" class="al-in" type="text" maxlength="120" ' +
               'placeholder="Планерка команды"></label>' +
+          // От этого выбора зависит, кого комната пустит внутрь, поэтому он тут,
+          // а не в настройках: внутреннюю встречу открывает только команда, а на
+          // разговор с семьей человек со стороны заходит по ссылке.
+          '<div class="al-f"><span class="al-l">Кто заходит</span>' +
+            '<div class="due-seg" id="mr-kind">' +
+              '<button type="button" class="on" data-kind="team">Только команда</button>' +
+              '<button type="button" data-kind="sales">Ученик или клиент</button>' +
+            '</div></div>' +
+          '<div class="al-hint" id="mr-kindnote"></div>' +
           '<div class="al-ai-note" id="mr-note"></div>' +
         '</div>' +
         '<div class="al-foot" id="mr-foot">' +
@@ -12218,6 +12230,23 @@
       note.className = 'al-ai-note' + (ask ? ' ask' : '');
       note.textContent = t || '';
     };
+    var kind = 'team';
+    var kindNote = function () {
+      el('mr-kindnote').textContent = kind === 'team'
+        ? 'Войдут только свои: чужой по пересланной ссылке не попадет.'
+        : 'Войдет любой по ссылке — она и есть пропуск. Не пересылайте ее дальше.';
+    };
+    kindNote();
+    Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () {
+        kind = b.getAttribute('data-kind');
+        Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (x) {
+          x.classList.toggle('on', x === b);
+        });
+        kindNote();
+      });
+    });
+
     setTimeout(function () { var t = el('mr-title'); if (t) t.focus(); }, 60);
     el('mr-title').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') el('mr-go').click();
@@ -12228,7 +12257,7 @@
       var title = (el('mr-title').value || '').trim();
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
       go.disabled = true; go.classList.add('loading');
-      apiSend('/admin/api/meet/rooms', 'POST', { title: title, kind: 'team' },
+      apiSend('/admin/api/meet/rooms', 'POST', { title: title, kind: kind },
         function (r) { ready(r); },
         function (code, e) {
           go.disabled = false; go.classList.remove('loading');
