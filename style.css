@@ -9752,14 +9752,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
 .lstep.wait { background: var(--fill); }
 .lstep.wait .ls-v { color: var(--ink-3); }
-/* Единственный отмеченный провал: где ушло больше всего людей в штуках. */
-.lstep.drop { border-color: var(--red); background: var(--red-soft); }
-.lstep.drop .ls-c b { color: var(--red-ink); }
 /* Плашка, за которой есть список людей. Кликабельность должна читаться ДО клика —
    иначе проверить цифру никто не догадается, а ради этого всё и делалось. */
 .lstep-open { cursor: pointer; transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
 .lstep-open:hover { border-color: var(--blue); box-shadow: 0 6px 18px rgba(47,107,255,.10); }
-.lstep-open.drop:hover { border-color: var(--red); box-shadow: 0 6px 18px rgba(229,72,77,.12); }
 .lstep-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Список людей ступени ────────────────────────────────────────────────────
