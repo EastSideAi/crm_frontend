@@ -4234,6 +4234,7 @@
     var c = acById(cid); if (!c) return;
     state.ac.course = c; state.ac.srv = null;
     state.ac.li = null; state.ac.tv = {}; state.ac.lt = {}; state.ac.cl = {}; state.ac.iv = {};
+    state.ac.hw = {};
     renderAcademy(view);
   }
 
@@ -4607,15 +4608,102 @@
   }
 
   /* Задание: действие в системе, а не вопрос. Дальше не пускает, пока не отмечено —
-     галочка тут не проверка знаний, а признание «я это сделал». */
+     галочка тут не проверка знаний, а признание «я это сделал».
+
+     У задания может быть поле для письменного ответа (`ask`). Оно появилось
+     29.09.2026: под домашкой первого урока продаж стояла только галочка «вопросы
+     отправлены в чат отдела», и человек на первом же занятии спросил, кидать ли
+     ответ в общий чат. В общем чате ответ тонет, вернуться к нему нельзя, и
+     руководитель не видит, кто что понял. Есть поле — оно и есть отметка: текст
+     короче минимума дальше не пускает, галочка рядом не нужна. */
+  var AC_HW_MIN = 40;
+
+  function acHwMin(sc) { return (sc.ask && sc.ask.min) || AC_HW_MIN; }
+
+  /* Что показать в поле: черновик этого захода, иначе сданный ответ с сервера. */
+  function acHwText(sc) {
+    var A = state.ac;
+    if (typeof A.lt[sc.id] === 'string') return A.lt[sc.id];
+    var srv = (A.srv && A.srv.homework && A.srv.homework[sc.id]) || null;
+    return srv ? (srv.text || '') : '';
+  }
+
   function acTaskHTML(sc) {
     var steps = (sc.steps || []).map(function (s, i) {
       return '<li><span class="ac-mk">' + (i + 1) + '</span><div>' + esc(s) + '</div></li>';
     }).join('');
-    var on = !!state.ac.lt[sc.id];
+    var tail;
+    if (sc.ask) {
+      var txt = acHwText(sc);
+      tail = '<div class="ac-ans">' +
+        '<div class="ac-ans-h">' + esc(sc.ask.h || 'Ответ на задание') + '</div>' +
+        (sc.ask.p ? '<p class="ac-ans-p">' + esc(sc.ask.p) + '</p>' : '') +
+        '<textarea class="ac-ta ac-ans-ta" id="ac-ans" placeholder="' +
+          esc(sc.ask.ph || 'Пишите прямо здесь') + '">' + esc(txt) + '</textarea>' +
+        '<div class="ac-ans-n" id="ac-ans-n"></div></div>';
+    } else {
+      var on = !!state.ac.lt[sc.id];
+      tail = '<label class="ac-chkline"><input type="checkbox" id="ac-lt"' +
+        (on ? ' checked' : '') + '> ' + esc(sc.chk) + '</label>';
+    }
     return '<div class="ac-do">' + (sc.soon ? '<span class="ac-badge">экран в работе</span>' : '') +
-      (steps ? '<ul class="ac-rules">' + steps + '</ul>' : '') +
-      '<label class="ac-chkline"><input type="checkbox" id="ac-lt"' + (on ? ' checked' : '') + '> ' + esc(sc.chk) + '</label></div>';
+      (steps ? '<ul class="ac-rules">' + steps + '</ul>' : '') + tail + '</div>';
+  }
+
+  /* Задание держит «Дальше»: галочка — пока не отмечена, поле — пока ответ короче
+     минимума. Считаем в одном месте, чтобы экран и кнопка не расходились. */
+  function acTaskBlocked(sc) {
+    if (!sc.ask) return !state.ac.lt[sc.id];
+    return acHwText(sc).trim().length < acHwMin(sc);
+  }
+
+  /* Ответ уезжает на сервер сам: через полторы секунды после того, как человек
+     перестал печатать, и еще раз при уходе с поля. Кнопки «сохранить» тут нет
+     специально — она добавляет шаг, на котором ответ и теряется. */
+  var AC_HW_T = null;
+
+  function acHwSave(sc, done) {
+    var A = state.ac, cid = acC().id, txt = acHwText(sc).trim();
+    A.hw = A.hw || {};
+    if (txt.length < acHwMin(sc)) { if (done) done(); return; }
+    if (A.hw[sc.id] === txt) { if (done) done(); return; }
+    var note = el('ac-ans-n');
+    if (note) { note.textContent = 'Сохраняю…'; note.className = 'ac-ans-n'; }
+    apiSend('/admin/api/academy/homework/' + sc.id + '?course=' + encodeURIComponent(cid),
+      'POST', { text: txt }, function (r) {
+        A.hw[sc.id] = txt;
+        if (r) { A.srv = r; }
+        var n = el('ac-ans-n');
+        if (n) { n.textContent = 'Ответ сохранен, руководитель его видит'; n.className = 'ac-ans-n ok'; }
+        if (done) done();
+      }, function () {
+        var n = el('ac-ans-n');
+        if (n) { n.textContent = 'Не сохранилось, проверьте сеть'; n.className = 'ac-ans-n bad'; }
+        if (done) done();
+      });
+  }
+
+  function acBindHw(sc, nx) {
+    var A = state.ac, ta = el('ac-ans'), note = el('ac-ans-n');
+    A.hw = A.hw || {};
+    var min = acHwMin(sc);
+    var hint = function () {
+      var n = ta.value.trim().length;
+      if (n >= min) return A.hw[sc.id] === ta.value.trim() ? 'Ответ сохранен' : '';
+      return n ? 'Еще ' + (min - n) + ' знаков, и ответ уйдет руководителю' : '';
+    };
+    var upd = function () {
+      A.lt[sc.id] = ta.value;
+      nx.disabled = acReview() ? false : acTaskBlocked(sc);
+      note.textContent = hint(); note.className = 'ac-ans-n';
+    };
+    ta.addEventListener('input', function () {
+      upd();
+      clearTimeout(AC_HW_T);
+      AC_HW_T = setTimeout(function () { acHwSave(sc); }, 1500);
+    });
+    ta.addEventListener('blur', function () { clearTimeout(AC_HW_T); acHwSave(sc); });
+    upd();
   }
 
   /* Видеоурок: запись живой встречи играет прямо в уроке.
@@ -4994,12 +5082,13 @@
     el('ac-steplab').textContent = 'Шаг ' + (A.si + 1) + ' из ' + L.screens.length;
     var nx = el('ac-next');
     nx.textContent = A.si === L.screens.length - 1 ? 'Урок пройден' : 'Дальше';
-    nx.disabled = acReview() ? false : (isQ || (isT && !A.lt[sc.id]) || (isTrain && !acSolved(sc)));
+    nx.disabled = acReview() ? false : (isQ || (isT && acTaskBlocked(sc)) || (isTrain && !acSolved(sc)));
     if (sc.type === 'order') acBindOrder(sc);
     if (sc.type === 'match') acBindMatch(sc);
     if (sc.type === 'flip') acBindFlip();
     if (isQ) acBindQ(sc);
-    if (isT) {
+    if (isT && sc.ask) acBindHw(sc, nx);
+    else if (isT) {
       var chk = el('ac-lt');
       chk.addEventListener('change', function () { A.lt[sc.id] = chk.checked; nx.disabled = !chk.checked; });
     }
@@ -5124,6 +5213,10 @@
     var A = state.ac;
     if (A.li === acExamI()) { acExamNext(view); return; }
     var L = acLessons()[A.li];
+    // Уходим с задания — дописанный ответ отправляем сразу, не дожидаясь паузы:
+    // иначе последние полторы секунды набора остаются только в браузере.
+    var cur = L.screens[A.si];
+    if (cur && cur.type === 'task' && cur.ask) { clearTimeout(AC_HW_T); acHwSave(cur); }
     if (A.si < L.screens.length - 1) { A.si++; acRender(view); return; }
     acLessonDone(view, function () {
       if (A.li + 1 < acLessons().length) { A.li++; A.si = 0; acRender(view); }
@@ -5328,11 +5421,19 @@
         (r.passed_at ? '<span class="att-when">' + arDate(r.passed_at) + '</span>' : '') +
         (r.passes > 1 ? '<span class="att-tries">' + r.passes + ' поп.</span>' : '')
       : '<span class="att-pill gray">В процессе</span>';
+    // Домашка урока: число сданных ответов, клик открывает сами тексты. Без
+    // текстов эта колонка была бы счетчиком ради счетчика — руководителю нужно
+    // прочитать, что человек понял, а не узнать, что он что-то написал.
+    var hw = r.homework_n
+      ? '<button type="button" class="att-hw" data-hu="' + r.user_id +
+        '" data-hc="' + esc(r.course) + '">' + r.homework_n + '</button>'
+      : '<span class="att-no">—</span>';
     return '<tr>' +
       '<td>' + who + '</td>' +
       '<td class="att-course">' + esc(r.course_title) + '</td>' +
       '<td class="att-stage">' + now + '</td>' +
       '<td class="att-c">' + lessons + '</td>' +
+      '<td class="att-c">' + hw + '</td>' +
       '<td class="att-c">' + exam + '</td>' +
       '<td class="att-c">' + attYes(r.practice_sent) + '</td>' +
       '<td class="att-c">' + attYes(r.agreement) + '</td>' +
@@ -5496,14 +5597,69 @@
         '<div>Пока никто не начал курс Академии. Тьютор пройдёт аттестацию и появится здесь.</div></div>';
     } else {
       body = '<div class="att-tablewrap"><table class="att-table"><thead><tr>' +
-        '<th>Человек</th><th>Курс</th><th>Сейчас на</th><th class="att-c">Уроки</th><th class="att-c">Экзамен</th>' +
+        '<th>Человек</th><th>Курс</th><th>Сейчас на</th><th class="att-c">Уроки</th>' +
+        '<th class="att-c">Домашка</th><th class="att-c">Экзамен</th>' +
         '<th class="att-c">Практика</th><th class="att-c">Соглашение</th><th>Статус</th>' +
         '</tr></thead><tbody>' + rows.map(attRow).join('') + '</tbody></table></div>';
     }
     view.innerHTML = '<div class="att">' + head + sum + body + '</div>';
     attSegBind(view);
+    view.addEventListener('click', function (ev) {
+      var b = ev.target.closest('.att-hw'); if (!b) return;
+      attHwOpen(b.getAttribute('data-hu'), b.getAttribute('data-hc'));
+    });
     var rb = view.querySelector('#att-refresh');
     if (rb) rb.onclick = function () { state.att = null; renderAttestations(view); };
+  }
+
+  /* Где было сдано задание. Номер и название урока знает содержание курса на
+     фронте, сервер хранит только id — второй копии списка уроков там нет. */
+  function attHwWhere(courseId, taskId) {
+    var c = acById(courseId);
+    if (!c || !c.lessons) return taskId;
+    for (var i = 0; i < c.lessons.length; i++) {
+      var scs = c.lessons[i].screens || [];
+      for (var j = 0; j < scs.length; j++) {
+        if (scs[j].id === taskId) return 'Урок ' + (i + 1) + ' · ' + c.lessons[i].t;
+      }
+    }
+    return taskId;
+  }
+
+  /* Ответы одного человека по курсу. Текст показываем целиком и как есть: это
+     единственное место, где видно, что человек на самом деле понял. */
+  function attHwOpen(uid, course) {
+    if (document.querySelector('.al-ov.hw-ov')) return;
+    var ov = document.createElement('div');
+    ov.className = 'al-ov over hw-ov';
+    ov.innerHTML = '<div class="al-card hw-card" role="dialog" aria-modal="true">' +
+      '<div class="al-head"><div><div class="al-eyebrow">Домашка</div>' +
+        '<div class="al-title" id="hw-who">Ответы</div></div>' +
+        '<button class="al-x" id="hw-x">' + ic('x', 14) + '</button></div>' +
+      '<div class="al-body" id="hw-body">' +
+        '<div class="loadwrap"><div class="loaddot"></div><div class="loaddot"></div>' +
+        '<div class="loaddot"></div></div></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('show'); });
+    function close() { document.removeEventListener('keydown', onKey); ov.remove(); }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    document.addEventListener('keydown', onKey);
+    ov.querySelector('#hw-x').onclick = close;
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    api('/admin/api/academy/homework?user=' + encodeURIComponent(uid) +
+        '&course=' + encodeURIComponent(course)).then(function (r) {
+      var items = (r && r.items) || [];
+      ov.querySelector('#hw-who').textContent = (r && r.name) || 'Ответы';
+      ov.querySelector('#hw-body').innerHTML = items.length
+        ? items.map(function (it) {
+            return '<div class="hw-item"><div class="hw-where">' + esc(attHwWhere(course, it.id)) +
+              (it.at ? '<span class="hw-at">' + arDate(it.at) + '</span>' : '') + '</div>' +
+              '<div class="hw-text">' + esc(it.text) + '</div></div>';
+          }).join('')
+        : '<div class="att-empty">Ответов пока нет.</div>';
+    }).catch(function () {
+      ov.querySelector('#hw-body').innerHTML = '<div class="att-empty">Не удалось загрузить ответы.</div>';
+    });
   }
 
   function attSegBind(view) {
