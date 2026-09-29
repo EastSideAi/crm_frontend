@@ -23172,7 +23172,10 @@
          того места, которое меня интересует» и «где потеря случилась». */
       var ofBase = mkPct(s.people, base.people);
       conv = s.key === base.key
-        ? 'считаем отсюда'
+        /* У базы своя конверсия не исчезает: она осталась ступенью пути, и если она же
+           отмечена красным, человек должен видеть, сколько людей до неё дошло. */
+        ? 'считаем отсюда' + (i > 0 && s.of_prev != null
+            ? ' · <span class="num">' + s.of_prev + '%</span> от предыдущего' : '')
         : '<b class="num">' + ofBase + '%</b> от «' + esc(base.title) + '»' +
           /* Второе число показываем, только если оно о другом. Для ступени сразу за
              базой «с предыдущего» даёт ровно тот же процент, и повтор читается как
@@ -23180,7 +23183,7 @@
           /* «0% с предыдущего» при живых людях на ступени — это не ноль, это деление
              на пустую ступень выше. Такое число не объясняет ничего, поэтому молчим. */
           (i > 0 && s.of_prev != null && s.of_prev !== ofBase && !(s.of_prev === 0 && s.people)
-            ? ' · <span class="num">' + s.of_prev + '%</span> с предыдущего' : '');
+            ? ' · <span class="num">' + s.of_prev + '%</span> от предыдущего' : '');
     } else if (!wait && s.of_prev != null && i > 0) {
       conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
       if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
@@ -23261,20 +23264,31 @@
   function launchBasePicker(path, base, worst) {
     var opts = path.filter(launchBaseAble);
     var sel = opts.length < 2 ? '' :
-      '<label class="lbase-f"><span class="lbase-l">Считаем от</span>' +
-      '<span class="al-selwrap"><select id="lc-base" class="al-sel">' +
+      '<label class="al-f"><span class="al-l">Считаем от</span>' +
+      '<span class="al-selwrap"><select id="lc-base" class="al-sel sm">' +
         '<option value="">шага к шагу</option>' +
         opts.map(function (s) {
           return '<option value="' + esc(s.key) + '"' +
             (base && base.key === s.key ? ' selected' : '') + '>' + esc(s.title) + '</option>';
         }).join('') +
       '</select></span></label>';
-    /* Подпись объясняет ровно то, что человек видит: выбранную базу или красную
-       плашку. Нечего объяснять — строки нет, пустых подписей на экране не держим. */
-    var note = base
-      ? 'проценты считаются от ступени «' + esc(base.title) + '» · ' +
-        fmtMoney(base.people) + ' чел.'
-      : (worst ? 'красным — ступень, где ушло больше всего людей' : '');
+    /* Подпись объясняет ровно то, что человек видит, и сразу всё: и выбранную базу, и
+       красную плашку. Легенда про красное не имеет права исчезать из-за выбора базы —
+       цвет на экране остаётся, а объяснение пропадало. */
+    var parts = [];
+    if (base) {
+      /* «ступени ниже», а не «проценты»: верх пути пересчёта не имеет, и общая
+         формулировка заставляла читать 90% на второй плашке как долю от базы. */
+      parts.push('ступени ниже считаются от «' + esc(base.title) + '» · ' +
+        fmtMoney(base.people) + ' чел.');
+    } else if (state._lcBase) {
+      /* Выбор был, а ступени за ним нет: чаще всего сменили день, и за этот вечер
+         людей на ней ноль. Молча вернуться к шагам нельзя — человек будет думать,
+         что смотрит на базу. */
+      parts.push('за этот день выбранной ступени нет, считаем шаг за шагом');
+    }
+    if (worst) parts.push('красным — ступень, где ушло больше всего людей');
+    var note = parts.join(' · ');
     if (!sel && !note) return '';
     return '<div class="lbase">' + sel +
       (note ? '<span class="lbase-n">' + note + '</span>' : '') + '</div>';
@@ -24756,6 +24770,11 @@
       el('lc-base').addEventListener('change', function () {
         state._lcBase = this.value || null;
         renderView();
+        /* renderView заменяет узел селекта, и фокус уезжает на body: с клавиатуры
+           пришлось бы обходить страницу заново. Возвращаем его, как это уже сделано
+           в поиске задач. */
+        var again = el('lc-base');
+        if (again) { try { again.focus(); } catch (e) {} }
       });
     }
     /* Плашка ступени → поимённый список людей за этой цифрой. */
