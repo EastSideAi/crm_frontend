@@ -23154,7 +23154,7 @@
      шага (где теряем) и от регистраций (масштаб). Шаг, которого ещё не было или
      которого нет в системе, приглушён и без процентов — пустая плашка честнее
      нуля, который читается как провал. */
-  function launchPlate(s, i, worstKey) {
+  function launchPlate(s, i, worstKey, base) {
     var wait = s.state !== 'live';
     /* wide — ступень «по всему запуску» (тест, канал): крупным числом все, кто сделал
        шаг, а не только записавшиеся на интенсив. Связать прошедших тест с формой нечем,
@@ -23166,6 +23166,15 @@
     var conv = '';
     if (wide) {
       conv = 'по всему запуску · нажмите, чтобы увидеть людей';
+    } else if (!wait && base && s.people != null) {
+      /* Выбрана своя база отсчёта: главный процент — от неё, вторым остаётся шаг к
+         шагу. Два числа рядом отвечают на разные вопросы: «сколько дошло сюда от
+         того места, которое меня интересует» и «где потеря случилась». */
+      conv = s.key === base.key
+        ? 'считаем отсюда'
+        : '<b class="num">' + mkPct(s.people, base.people) + '%</b> от «' + esc(base.title) + '»' +
+          (i > 0 && s.of_prev != null
+            ? ' · <span class="num">' + s.of_prev + '%</span> с предыдущего' : '');
     } else if (!wait && s.of_prev != null && i > 0) {
       conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
       if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
@@ -23195,19 +23204,68 @@
     '</div>';
   }
 
-  /* Где теряем больше всего: самая низкая конверсия к предыдущему шагу среди тех,
-     где уже есть что мерить. Отмечаем ОДИН шаг — иначе красным горит вся страница
-     и перестаёт значить что-либо.
+  /* Где теряем больше всего: шаг, на котором ушло БОЛЬШЕ ВСЕГО ЛЮДЕЙ, а не с худшим
+     процентом. 40% отвала от пяти человек — это два человека и не повод чинить
+     воронку, 20% от трёхсот — шестьдесят. Вера 29.09.2026 попросила ровно это: видеть,
+     где срезается больше всего людей. Порог в пять человек держит подсветку от
+     срабатывания на шуме.
+     Ветки и ступени «по всему запуску» пропускаем: за ними стоят другие люди, разница
+     с соседом там не потеря, а другой счёт.
+     Отмечаем ОДИН шаг — иначе красным горит вся страница и перестаёт значить что-либо.
      Имя с приставкой launch намеренно: worstStep уже занят воронкой сессий (строка ~988),
      и одноимённая функция молча перебила бы её на пяти экранах. */
   function launchWorstStep(path) {
-    var worst = null;
-    path.forEach(function (s, i) {
-      if (i === 0 || s.branch || s.state !== 'live' || s.of_prev == null || !s.people) return;
-      if (s.of_prev >= 50) return;
-      if (!worst || s.of_prev < worst.of_prev) worst = s;
+    var worst = null, most = 4, prev = null;
+    path.forEach(function (s) {
+      if (s.branch || s.wide != null || s.state !== 'live' || s.people == null) return;
+      if (prev != null && prev - s.people > most) { most = prev - s.people; worst = s; }
+      /* Пустую ступень не делаем точкой отсчёта для следующей: ноль на середине пути
+         обычно значит «этой дорогой не ходили» (запись никто не смотрел), а не что
+         дальше идут выжившие из нуля. Иначе следующая ступень выглядела бы ростом
+         из ниоткуда, а обрыв — не там, где он есть. */
+      if (s.people) prev = s.people;
     });
     return worst ? worst.key : null;
+  }
+
+  /* Базой отсчёта может быть не всякая ступень: ветки («из них выбрали тариф») и
+     ступени «по всему запуску» считают других людей, и процент от них ничего не
+     значит. Пустая ступень базой тоже не годится — делить будет не на что. */
+  function launchBaseAble(s) {
+    return !s.branch && s.wide == null && s.state === 'live' && !!s.people;
+  }
+
+  function launchBaseStep(path) {
+    if (!state._lcBase) return null;
+    return path.filter(function (s) {
+      return s.key === state._lcBase && launchBaseAble(s);
+    })[0] || null;
+  }
+
+  /* Переключатель базы. По умолчанию лестница читается шаг за шагом — так она и
+     задумана. Но вопрос «сколько из пришедших на эфир в итоге купили» шагами не
+     отвечается: между ними ещё три ступени. Выбор базы отвечает на него одним
+     действием и не меняет лестницу для тех, кому этот вопрос не нужен. */
+  function launchBasePicker(path, base, worst) {
+    var opts = path.filter(launchBaseAble);
+    var sel = opts.length < 2 ? '' :
+      '<label class="lbase-f"><span class="lbase-l">Считаем от</span>' +
+      '<span class="al-selwrap"><select id="lc-base" class="al-sel">' +
+        '<option value="">шага к шагу</option>' +
+        opts.map(function (s) {
+          return '<option value="' + esc(s.key) + '"' +
+            (base && base.key === s.key ? ' selected' : '') + '>' + esc(s.title) + '</option>';
+        }).join('') +
+      '</select></span></label>';
+    /* Подпись объясняет ровно то, что человек видит: выбранную базу или красную
+       плашку. Нечего объяснять — строки нет, пустых подписей на экране не держим. */
+    var note = base
+      ? 'проценты считаются от ступени «' + esc(base.title) + '» · ' +
+        fmtMoney(base.people) + ' чел.'
+      : (worst ? 'красным — ступень, где ушло больше всего людей' : '');
+    if (!sel && !note) return '';
+    return '<div class="lbase">' + sel +
+      (note ? '<span class="lbase-n">' + note + '</span>' : '') + '</div>';
   }
 
   /* Плитка «Страницу видели» — сколько людей открывало посадочную запуска, по
@@ -23367,9 +23425,11 @@
 
   function launchPlates(path) {
     var worst = launchWorstStep(path);
-    return '<div class="lsteps">' + path.map(function (s, i) {
-      return launchPlate(s, i, worst);
-    }).join('') + '</div>';
+    var base = launchBaseStep(path);
+    return launchBasePicker(path, base, worst) +
+      '<div class="lsteps">' + path.map(function (s, i) {
+        return launchPlate(s, i, worst, base);
+      }).join('') + '</div>';
   }
 
   /* ── Кто эти люди: список за цифрой ступени ────────────────────────────────
@@ -24674,9 +24734,18 @@
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
         if (state._lpPeople) launchPeopleClose();   /* список был про другой запуск */
+        state._lcBase = null;   /* у другого запуска ступени свои, база не переносится */
         renderView();
       });
     });
+    /* Выбор базы отсчёта: перерисовываем ступени, данные уже на руках — за процентами
+       на сервер ходить незачем. */
+    if (el('lc-base')) {
+      el('lc-base').addEventListener('change', function () {
+        state._lcBase = this.value || null;
+        renderView();
+      });
+    }
     /* Плашка ступени → поимённый список людей за этой цифрой. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
       var openIt = function () {
