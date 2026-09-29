@@ -23166,7 +23166,7 @@
     var conv = '';
     if (wide) {
       conv = 'по всему запуску · нажмите, чтобы увидеть людей';
-    } else if (!wait && base && s.people != null) {
+    } else if (!wait && base && s.people != null && i >= base.idx) {
       /* Выбрана своя база отсчёта: главный процент — от неё, вторым остаётся шаг к
          шагу. Два числа рядом отвечают на разные вопросы: «сколько дошло сюда от
          того места, которое меня интересует» и «где потеря случилась». */
@@ -23239,11 +23239,17 @@
     return !s.branch && s.wide == null && s.state === 'live' && !!s.people;
   }
 
+  /* Вместе со ступенью запоминаем её место в пути: ступени ВЫШЕ базы считать от неё
+     нельзя. «974% от Открыли эфир» — арифметически верно и нечитаемо: процент больше
+     ста воспринимается как сбой счёта. Верх пути остаётся как был, шаг за шагом. */
   function launchBaseStep(path) {
     if (!state._lcBase) return null;
-    return path.filter(function (s) {
-      return s.key === state._lcBase && launchBaseAble(s);
-    })[0] || null;
+    var out = null;
+    path.forEach(function (s, i) {
+      if (out || s.key !== state._lcBase || !launchBaseAble(s)) return;
+      out = {key: s.key, title: s.title, people: s.people, idx: i};
+    });
+    return out;
   }
 
   /* Переключатель базы. По умолчанию лестница читается шаг за шагом — так она и
