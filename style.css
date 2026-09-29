@@ -9722,6 +9722,24 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Просьба Ольги: цифры плашками, а не строчками. Ширина колонки фиксируется
    минимумом, а не числом колонок: ступеней в запуске то 12, то 16, и раскладка
    не должна ломаться от добавления шага. */
+/* Переключатель базы отсчёта над ступенями. Стоит тихо: лестница читается и без него,
+   а нужен он тому, кто пришёл с конкретным вопросом «сколько из этих дошло до того».
+   Поле и селект — системные .al-f/.al-l/.al-sel.sm; здесь только раскладка в строку.
+   Отступ вниз заметно больше зазора сетки (12px), иначе строка управления читается
+   как ещё один ряд плашек. */
+.lbase { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 20px; }
+.lbase .al-f { flex-direction: row; align-items: center; gap: 9px; }
+.lbase .al-l { white-space: nowrap; }
+.lbase .al-selwrap { width: auto; }
+.lbase .al-sel { width: auto; min-width: 190px; }
+/* Легенда несёт смысл всей сетки — она не мельче подписи поля и не бледнее цифр. */
+.lbase-n { font-size: 11.5px; color: var(--ink-2); }
+@media (max-width: 560px) {
+  /* На телефоне подпись и селект встают в столбик, а селект тянется на всю ширину:
+     в строку они не влезают, и название ступени обрезалось на середине. */
+  .lbase .al-f { flex: 1 0 100%; flex-direction: column; align-items: stretch; gap: 6px; }
+  .lbase .al-selwrap, .lbase .al-sel { width: 100%; min-width: 0; }
+}
 .lsteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; }
 .lstep { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
          padding: 14px 16px 13px; background: var(--card); }
@@ -9734,14 +9752,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
 .lstep.wait { background: var(--fill); }
 .lstep.wait .ls-v { color: var(--ink-3); }
-/* Единственный отмеченный провал: где теряем больше половины людей. */
-.lstep.drop { border-color: var(--red); background: var(--red-soft); }
-.lstep.drop .ls-c b { color: var(--red-ink); }
 /* Плашка, за которой есть список людей. Кликабельность должна читаться ДО клика —
    иначе проверить цифру никто не догадается, а ради этого всё и делалось. */
 .lstep-open { cursor: pointer; transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
 .lstep-open:hover { border-color: var(--blue); box-shadow: 0 6px 18px rgba(47,107,255,.10); }
-.lstep-open.drop:hover { border-color: var(--red); box-shadow: 0 6px 18px rgba(229,72,77,.12); }
 .lstep-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Список людей ступени ────────────────────────────────────────────────────
