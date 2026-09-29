@@ -72,6 +72,7 @@
     dashPeriod: '', dashFrom: '', dashTo: '',
     pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
+    pfMonth: '', _pf: null, _pfAi: null, // план-факт: выбранный месяц, цифры, разбор
     unSeg: 'run', _un: null,      // декомпозиция трафика: сегмент и модель (localStorage)
     _mkLaunchTimer: null,         // тихое обновление цифр запуска раз в минуту
     finPeriod: '', finance: null, finLoading: false,
@@ -2138,12 +2139,12 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy', 'planfact'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
     admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
@@ -2164,7 +2165,7 @@
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно зарплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2172,7 +2173,7 @@
     // Просмотр-без-правки — второй шаг, там роли и разойдутся. Ведомости нет: процент
     // продюсера от чистой прибыли — отдельный расчётный лист. Зеркало ROLE_CAPS в
     // backend/app/routers/admin.py.
-    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal'] },
+    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
@@ -2219,6 +2220,10 @@
   /* сайдбар: нав + промо. Каждый пункт привязан к cap. */
   var NAV_ALL = [
     { id: 'dash', label: 'Дашборд', icon: 'dash', cap: 'dash' },
+    // «План-факт» — успеваем ли к тому, что задумали на месяц. Рядом с
+    // дашбордом намеренно: тот показывает, что происходит сейчас, этот —
+    // дотянем ли до цели. Cap свой: цели компании ставит руководитель.
+    { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     // «Фокус недели» — управленческий взгляд: во что команда целится на этой
     // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
@@ -3343,6 +3348,7 @@
     else if (state.page === 'team') renderTeam(view);
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
+    else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'broadcasts') renderBroadcasts(view);
     else if (state.page === 'social') renderSocial(view);
@@ -21402,7 +21408,7 @@
   /* ── Команда и роли (Super Admin) ── */
   /* Короткая подпись темы для чипа в строке: полную («документы и гранты») отдает сервер,
      она уходит в title. В строке нужна одна ширина на всех, иначе колонка едет. */
-  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи', teachers: 'Преподаватели' };
+  var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи', teachers: 'Преподаватели', tech: 'Техника' };
   function tmTopicChips(u) {
     var mine = u.notify_topics || [];
     return '<span class="tm-tp" data-uid="' + u.id + '">' +
@@ -22151,6 +22157,9 @@
     { id: 'yt', label: 'YouTube', src: 'youtube' },
     { id: 'tt', label: 'TikTok', src: 'tiktok' },
     { id: 'tgch', label: 'Телеграм-канал', src: 'telegram' },
+    /* MAX: метка max уже приходила в регистрациях, а площадки для неё не было —
+       размещение уезжало в «Другое место» и канал нечем было измерить (29.09.2026). */
+    { id: 'max', label: 'MAX', src: 'max' },
     { id: 'dzen', label: 'Дзен', src: 'dzen' },
     /* ссылка внутри самого бота (кнопка под приветствием и т.п.): свой источник, иначе
        переходы из бота слипаются с «Другое место» и канал нечем измерить */
@@ -22170,13 +22179,17 @@
   var MK_KINDS = [
     { id: 'tg', label: 'В бот · Telegram', short: 'TG' },
     { id: 'vk', label: 'В бот · VK', short: 'VK' },
+    /* MAX появился в выборе 29.09.2026. До этого ссылки на MAX заводили типом «на
+       страницу» без адреса, и человек уезжал на главную вместо воронки — пять таких
+       ссылок нашёл сторож воронок. */
+    { id: 'max', label: 'В бот · MAX', short: 'MAX' },
     // Одна ссылка на оба мессенджера: /go/{код} спрашивает, где человеку удобнее.
     // Нужна там, где ссылку пересылают друг другу — родитель ребенку, например.
     { id: 'both', label: 'В бот · на выбор', short: 'TG+VK' },
     { id: 'page', label: 'На страницу', short: 'WEB' },
   ];
   var MK_KIND_INFO = {
-    tg: MK_KINDS[0], vk: MK_KINDS[1], both: MK_KINDS[2], page: MK_KINDS[3],
+    tg: MK_KINDS[0], vk: MK_KINDS[1], max: MK_KINDS[2], both: MK_KINDS[3], page: MK_KINDS[4],
     wa: { id: 'wa', label: 'В бот · WhatsApp', short: 'WA' },
   };
   /* Метка ссылки → человеческое название. Чего здесь нет, то показывается сырым кодом,
@@ -23153,7 +23166,7 @@
      шага (где теряем) и от регистраций (масштаб). Шаг, которого ещё не было или
      которого нет в системе, приглушён и без процентов — пустая плашка честнее
      нуля, который читается как провал. */
-  function launchPlate(s, i, worstKey) {
+  function launchPlate(s, i, base) {
     var wait = s.state !== 'live';
     /* wide — ступень «по всему запуску» (тест, канал): крупным числом все, кто сделал
        шаг, а не только записавшиеся на интенсив. Связать прошедших тест с формой нечем,
@@ -23165,6 +23178,24 @@
     var conv = '';
     if (wide) {
       conv = 'по всему запуску · нажмите, чтобы увидеть людей';
+    } else if (!wait && base && s.people != null && i >= base.idx) {
+      /* Выбрана своя база отсчёта: главный процент — от неё, вторым остаётся шаг к
+         шагу. Два числа рядом отвечают на разные вопросы: «сколько дошло сюда от
+         того места, которое меня интересует» и «где потеря случилась». */
+      var ofBase = mkPct(s.people, base.people);
+      conv = s.key === base.key
+        /* У базы своя конверсия не исчезает: она осталась ступенью пути, и если она же
+           отмечена красным, человек должен видеть, сколько людей до неё дошло. */
+        ? 'считаем отсюда' + (i > 0 && s.of_prev != null
+            ? ' · <span class="num">' + s.of_prev + '%</span> от предыдущего' : '')
+        : '<b class="num">' + ofBase + '%</b> от «' + esc(base.title) + '»' +
+          /* Второе число показываем, только если оно о другом. Для ступени сразу за
+             базой «с предыдущего» даёт ровно тот же процент, и повтор читается как
+             ошибка счёта. */
+          /* «0% с предыдущего» при живых людях на ступени — это не ноль, это деление
+             на пустую ступень выше. Такое число не объясняет ничего, поэтому молчим. */
+          (i > 0 && s.of_prev != null && s.of_prev !== ofBase && !(s.of_prev === 0 && s.people)
+            ? ' · <span class="num">' + s.of_prev + '%</span> от предыдущего' : '');
     } else if (!wait && s.of_prev != null && i > 0) {
       conv = '<b class="num">' + s.of_prev + '%</b> от предыдущего';
       if (s.of_reg != null) conv += ' · <span class="num">' + s.of_reg + '%</span> от регистраций';
@@ -23180,7 +23211,7 @@
        нечего, поэтому и курсор на ней обычный. */
     var canOpen = !wait && s.people != null;
     return '<div class="lstep' + (wait ? ' wait' : '') +
-      (s.key === worstKey ? ' drop' : '') + (canOpen ? ' lstep-open' : '') + '"' +
+      (canOpen ? ' lstep-open' : '') + '"' +
       (canOpen ? ' data-lstep="' + esc(s.key) + '" role="button" tabindex="0"' +
                  ' title="Показать людей этой ступени"' : '') + '>' +
       /* «из них», а не «ветка»: ответвление от основного пути читается как «из них
@@ -23194,19 +23225,66 @@
     '</div>';
   }
 
-  /* Где теряем больше всего: самая низкая конверсия к предыдущему шагу среди тех,
-     где уже есть что мерить. Отмечаем ОДИН шаг — иначе красным горит вся страница
-     и перестаёт значить что-либо.
-     Имя с приставкой launch намеренно: worstStep уже занят воронкой сессий (строка ~988),
-     и одноимённая функция молча перебила бы её на пяти экранах. */
-  function launchWorstStep(path) {
-    var worst = null;
+  /* Красной подсветки «где обрыв» здесь больше нет. Вера 29.09.2026: «если такая
+     конверсия для прихода на эфир нормальна, наверное, не стоит ее подкрашивать. Мы
+     все-таки должны считать средние значения и расхождение с этими средними значениями
+     на дельту больше, чем подсказывает здравый смысл». Подсветка по потерям в людях на
+     монотонной лестнице всегда показывала один и тот же самый широкий шаг и переставала
+     что-либо значить. Вернётся, когда у ступеней появится норма — среднее по прошлым
+     запускам или цифра, поставленная руками, — и краснеть будет отклонение от неё. */
+
+  /* Базой отсчёта может быть не всякая ступень: ветки («из них выбрали тариф») и
+     ступени «по всему запуску» считают других людей, и процент от них ничего не
+     значит. Пустая ступень базой тоже не годится — делить будет не на что. */
+  function launchBaseAble(s) {
+    return !s.branch && s.wide == null && s.state === 'live' && !!s.people;
+  }
+
+  /* Вместе со ступенью запоминаем её место в пути: ступени ВЫШЕ базы считать от неё
+     нельзя. «974% от Открыли эфир» — арифметически верно и нечитаемо: процент больше
+     ста воспринимается как сбой счёта. Верх пути остаётся как был, шаг за шагом. */
+  function launchBaseStep(path) {
+    if (!state._lcBase) return null;
+    var out = null;
     path.forEach(function (s, i) {
-      if (i === 0 || s.branch || s.state !== 'live' || s.of_prev == null || !s.people) return;
-      if (s.of_prev >= 50) return;
-      if (!worst || s.of_prev < worst.of_prev) worst = s;
+      if (out || s.key !== state._lcBase || !launchBaseAble(s)) return;
+      out = {key: s.key, title: s.title, people: s.people, idx: i};
     });
-    return worst ? worst.key : null;
+    return out;
+  }
+
+  /* Переключатель базы. По умолчанию лестница читается шаг за шагом — так она и
+     задумана. Но вопрос «сколько из пришедших на эфир в итоге купили» шагами не
+     отвечается: между ними ещё три ступени. Выбор базы отвечает на него одним
+     действием и не меняет лестницу для тех, кому этот вопрос не нужен. */
+  function launchBasePicker(path, base) {
+    var opts = path.filter(launchBaseAble);
+    var sel = opts.length < 2 ? '' :
+      '<label class="al-f"><span class="al-l">Считаем от</span>' +
+      '<span class="al-selwrap"><select id="lc-base" class="al-sel sm">' +
+        '<option value="">шага к шагу</option>' +
+        opts.map(function (s) {
+          return '<option value="' + esc(s.key) + '"' +
+            (base && base.key === s.key ? ' selected' : '') + '>' + esc(s.title) + '</option>';
+        }).join('') +
+      '</select></span></label>';
+    /* Подпись объясняет ровно то, что человек видит на сетке сейчас. */
+    var parts = [];
+    if (base) {
+      /* «ступени ниже», а не «проценты»: верх пути пересчёта не имеет, и общая
+         формулировка заставляла читать 90% на второй плашке как долю от базы. */
+      parts.push('ступени ниже считаются от «' + esc(base.title) + '» · ' +
+        fmtMoney(base.people) + ' чел.');
+    } else if (state._lcBase) {
+      /* Выбор был, а ступени за ним нет: чаще всего сменили день, и за этот вечер
+         людей на ней ноль. Молча вернуться к шагам нельзя — человек будет думать,
+         что смотрит на базу. */
+      parts.push('за этот день выбранной ступени нет, считаем шаг за шагом');
+    }
+    var note = parts.join(' · ');
+    if (!sel && !note) return '';
+    return '<div class="lbase">' + sel +
+      (note ? '<span class="lbase-n">' + note + '</span>' : '') + '</div>';
   }
 
   /* Плитка «Страницу видели» — сколько людей открывало посадочную запуска, по
@@ -23365,10 +23443,11 @@
   }
 
   function launchPlates(path) {
-    var worst = launchWorstStep(path);
-    return '<div class="lsteps">' + path.map(function (s, i) {
-      return launchPlate(s, i, worst);
-    }).join('') + '</div>';
+    var base = launchBaseStep(path);
+    return launchBasePicker(path, base) +
+      '<div class="lsteps">' + path.map(function (s, i) {
+        return launchPlate(s, i, base);
+      }).join('') + '</div>';
   }
 
   /* ── Кто эти люди: список за цифрой ступени ────────────────────────────────
@@ -24673,9 +24752,23 @@
       t.addEventListener('click', function () {
         state._mkLaunchIdx = parseInt(t.getAttribute('data-launch'), 10) || 0;
         if (state._lpPeople) launchPeopleClose();   /* список был про другой запуск */
+        state._lcBase = null;   /* у другого запуска ступени свои, база не переносится */
         renderView();
       });
     });
+    /* Выбор базы отсчёта: перерисовываем ступени, данные уже на руках — за процентами
+       на сервер ходить незачем. */
+    if (el('lc-base')) {
+      el('lc-base').addEventListener('change', function () {
+        state._lcBase = this.value || null;
+        renderView();
+        /* renderView заменяет узел селекта, и фокус уезжает на body: с клавиатуры
+           пришлось бы обходить страницу заново. Возвращаем его, как это уже сделано
+           в поиске задач. */
+        var again = el('lc-base');
+        if (again) { try { again.focus(); } catch (e) {} }
+      });
+    }
     /* Плашка ступени → поимённый список людей за этой цифрой. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
       var openIt = function () {
@@ -24789,6 +24882,295 @@
     });
   }
 
+
+
+
+  /* ── ПЛАН-ФАКТ — успеваем ли мы к тому, что задумали на месяц ──────────────
+     Цифры в CRM есть везде, а ответа на этот вопрос не было нигде: воронка
+     показывает поток, финансы — деньги, но «мы в графике или уже нет» видно
+     только после закрытия месяца, когда сделать уже ничего нельзя.
+
+     Главный прием экрана — риска темпа на шкале: где мы ДОЛЖНЫ быть сегодня.
+     Без нее «сделано 40% плана» десятого числа читается как провал, а двадцать
+     пятого — как успех, хотя это одна и та же цифра. Все состояния считает
+     сервер (routers/planfact.py); здесь только раскладка. */
+  var PF_MON = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+                'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+  // Слова состояния свои у расхода: «идем» про расход звучит как похвала темпу
+  // трат, а хвалить тут не за что — у него хорошо это «меньше плана».
+  var PF_ST = { ok: 'идем', risk: 'отстаем', miss: 'не успеваем' };
+  var PF_ST_LOW = { ok: 'в рамках', risk: 'на грани', miss: 'перерасход' };
+
+  function pfMonth() {
+    if (!state.pfMonth) {
+      var d = new Date();
+      state.pfMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    }
+    return state.pfMonth;
+  }
+
+  function pfMonthTitle(m) {
+    var p = String(m || '').split('-');
+    var i = parseInt(p[1], 10) - 1;
+    return (PF_MON[i] || m) + ' ' + p[0];
+  }
+
+  function pfShift(step) {
+    var p = pfMonth().split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1 + step, 1);
+    state.pfMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    state._pf = null; state._pfAi = null;
+    renderView();
+  }
+
+  function fetchPf() {
+    var m = pfMonth();
+    api('/admin/api/planfact?month=' + m).then(function (r) {
+      if (pfMonth() !== m) return;   // пока ходили, переключили месяц
+      state._pf = r || 'none';
+      if (state.page === 'planfact') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (pfMonth() !== m) return;
+      state._pf = 'none';
+      if (state.page === 'planfact') renderView();
+    });
+  }
+
+  function pfNum(n, money) {
+    if (n == null) return '—';
+    return money ? fmtMoney(n) + ' ₽' : fmtMoney(n);
+  }
+
+  function pfRow(r, started) {
+    r.started = started;
+    var money = r.kind === 'money';
+    var words = r.lower_better ? PF_ST_LOW : PF_ST;
+    var plan = r.plan
+      ? '<button class="pf-set" data-pfset="' + esc(r.key) + '">' + pfNum(r.plan, money) + '</button>'
+      : '<button class="pf-set none" data-pfset="' + esc(r.key) + '">поставить</button>';
+
+    var bar;
+    if (r.plan) {
+      // Заливка не уезжает за край шкалы: при 300% плана полоса перестала бы
+      // что-либо показывать, а число рядом и так все говорит.
+      // Пустая шкала остается пустой: синий огрызок у нулевого факта читается как
+      // «чуть-чуть уже есть», хотя цифры нет вовсе.
+      var w = r.pct ? Math.max(2, Math.min(100, r.pct)) : 0;
+      var due = Math.min(100, Math.max(0, Math.round((r.due || 0) / r.plan * 100)));
+      bar = '<div class="pf-track"><span class="pf-fill ' + esc(r.state) + '" style="width:' + w + '%"></span>' +
+        '<span class="pf-due" style="left:' + due + '%" title="где должны быть сегодня"></span></div>';
+    } else {
+      bar = '<div class="pf-noplan">плана на месяц нет</div>';
+    }
+
+    var right;
+    if (r.plan && r.state !== 'none') {
+      right = '<span class="pf-fc">' + (r.pace_pct != null ? r.pace_pct + '% плана' : '') + '</span>' +
+        '<span class="sev pf-' + esc(r.state) + '">' + esc(words[r.state] || '') + '</span>';
+    } else if (r.plan) {
+      // План стоит, а состояния нет: месяц еще не начался или расход не внесен.
+      // Зеленое «в рамках» на пустом кабинете было бы враньем в свою пользу.
+      right = '<span class="pf-fc">' + (r.lower_better && r.started ? 'расход за месяц не внесен'
+        : (r.started ? 'цифр пока нет' : 'месяц еще не начался')) + '</span>';
+    } else {
+      right = '<span class="pf-fc">к концу месяца ' + pfNum(r.forecast, money) + '</span>';
+    }
+
+    return '<div class="pf-row">' +
+      '<div class="pf-nm">' + esc(r.label) +
+        (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') + '</div>' +
+      '<div class="pf-plan">' + plan + '</div>' +
+      bar +
+      '<div class="pf-fact num">' + pfNum(r.fact, money) + '</div>' +
+      '<div class="pf-right">' + right + '</div>' +
+    '</div>';
+  }
+
+  function pfVerdict(d) {
+    var rows = d.rows || [];
+    var planned = rows.filter(function (r) { return r.plan; });
+    if (planned.length && !d.days_passed) {
+      return { t: 'Месяц еще не начался',
+               s: 'план на ' + pfMonthTitle(d.month) + ' поставлен, темп посчитаем с первого дня' };
+    }
+    if (!planned.length) {
+      return { t: 'Плана на месяц нет',
+               s: 'Поставь цифры в строках ниже, и раздел начнет считать темп и прогноз.' };
+    }
+    var miss = planned.filter(function (r) { return r.state === 'miss'; });
+    var risk = planned.filter(function (r) { return r.state === 'risk'; });
+    var names = function (list) {
+      return list.map(function (r) { return r.label.toLowerCase(); }).join(', ');
+    };
+    if (miss.length) return { t: 'Не успеваем', s: 'при текущем темпе мимо плана: ' + names(miss), cls: 'miss' };
+    if (risk.length) return { t: 'Отстаем', s: 'на грани: ' + names(risk), cls: 'risk' };
+    return { t: 'Идем к плану', s: 'все метрики с планом держат темп', cls: 'ok' };
+  }
+
+  function renderPlanFact(view) {
+    if (!state._pf) { view.innerHTML = dashSkeleton(); fetchPf(); return; }
+    if (state._pf === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить план-факт — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._pf;
+    var v = pfVerdict(d);
+    var passed = d.days_passed || 0, total = d.days_total || 30;
+    var dayPct = Math.min(100, Math.round(passed / total * 100));
+
+    // Переключатель месяца — тот же рецепт, что в «Моем месяце» (.brd-nav):
+    // второй способ листать период в одной CRM читался бы как другой продукт.
+    var now = new Date();
+    var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    var head = '<div class="card pf-head">' +
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-pfmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-pfmon="1" title="Следующий месяц">' + ic('go', 15) + '</button>' +
+        (isNow ? '' : '<button class="qchip" data-pfmon="now">Сейчас</button>') +
+      '</div>' +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
+        '<div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div>' +
+      '</div>' +
+      '<div class="pf-days">' +
+        '<div class="pf-dtrack"><span style="width:' + dayPct + '%"></span></div>' +
+        '<div class="pf-dtx">' + (d.current
+          ? 'прошло ' + passed + ' ' + plural(passed, 'день', 'дня', 'дней') + ' из ' + total
+          : 'месяц закрыт, ' + total + ' ' + plural(total, 'день', 'дня', 'дней')) + '</div>' +
+      '</div>' +
+    '</div>';
+
+    var derived = (d.derived || []).map(function (r) {
+      return { label: r.label, value: r.fact == null ? '—' : pfNum(r.fact, true),
+               sub: r.forecast == null ? 'считаем с первой цифрой'
+                  : 'к концу месяца ' + pfNum(r.forecast, true) };
+    });
+
+    var ai = state._pfAi;
+    var aiBody;
+    if (ai === 'wait') aiBody = '<div class="pf-ai-wait">Считаю. Это занимает несколько секунд.</div>';
+    else if (ai === 'none') aiBody = '<div class="empty">Разбор не получился. Попробуй еще раз через минуту.</div>';
+    else if (ai) {
+      aiBody = '<div class="pf-ai-sum">' + esc(ai.summary) + '</div>' +
+        ((ai.causes || []).length
+          ? '<div class="pf-ai-list">' + ai.causes.map(function (c) {
+              return '<div class="pf-ai-c">' + esc(c.text) + '</div>';
+            }).join('') + '</div>' : '') +
+        ((ai.next || []).length
+          ? '<div class="pf-ai-next"><div class="pf-ai-lb">что сделать на неделе</div>' +
+            ai.next.map(function (t) { return '<div class="pf-ai-s">' + esc(t) + '</div>'; }).join('') +
+            '</div>' : '');
+    } else {
+      aiBody = '<div class="pf-ai-idle">Разбор смотрит на месяц целиком: сравнит с прошлым, ' +
+        'разложит лиды и оплаты по источникам и назовет, где рвется цепочка.</div>';
+    }
+
+    view.innerHTML = '<div class="dash">' + head +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head pf-sec" style="padding:20px 24px 16px"><span class="ic">' + ic('target', 14) + '</span>' +
+        '<div><div class="t">Метрики месяца</div>' +
+        '<div class="s">риска на шкале — где должны быть сегодня</div></div>' +
+        '<button class="bp ghost" id="pf-copy">Взять план прошлого месяца</button></div>' +
+        '<div class="pf-tbl">' + (d.rows || []).map(function (r) {
+          return pfRow(r, passed > 0);
+        }).join('') + '</div>' +
+      '</div>' +
+      (derived.length ? statBar(derived, derived.length === 3 ? '' : 'five') : '') +
+      '<div class="card sp12">' +
+        '<div class="sec-head pf-sec" style="padding:20px 24px 16px"><span class="ic">' + ic('bolt', 14) + '</span>' +
+        '<div><div class="t">Разбор месяца</div><div class="s">что отстает и почему</div></div>' +
+        '<button class="bp" id="pf-ai">' + (ai && ai !== 'wait' && ai !== 'none' ? 'Пересчитать' : 'Разобрать') + '</button></div>' +
+        '<div class="pf-ai">' + aiBody + '</div>' +
+      '</div>' +
+    '</div>';
+
+    pfBind(view);
+    animBars(view);
+  }
+
+  function pfSave(metric, value) {
+    api('/admin/api/planfact/plan', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: pfMonth(), metric: metric, target: value }),
+    }).then(function () {
+      state._pf = null;
+      renderView();
+    }).catch(function () { showToast('План не сохранился — проверь сеть'); });
+  }
+
+  function pfBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pfmon]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-pfmon');
+        if (v === 'now') { state.pfMonth = ''; state._pf = null; state._pfAi = null; renderView(); return; }
+        pfShift(parseInt(v, 10));
+      });
+    });
+
+    /* План правится на месте: отдельная форма ради шести чисел — лишний экран. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pfset]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pfset');
+        var was = b.classList.contains('none') ? '' : b.textContent.replace(/[^\d]/g, '');
+        var inp = document.createElement('input');
+        inp.className = 'ed-input pf-in num';
+        inp.value = was;
+        inp.setAttribute('inputmode', 'numeric');
+        inp.setAttribute('placeholder', '0');
+        b.parentNode.replaceChild(inp, b);
+        inp.focus();
+        inp.select();
+        var done = false;
+        var save = function () {
+          if (done) return;
+          done = true;
+          var n = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+          if (isNaN(n)) n = 0;
+          if (String(n) === String(was || 0)) { state._pf = null; renderView(); return; }
+          pfSave(key, n);
+        };
+        inp.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); save(); }
+          // Esc возвращает строку как была: промах по клавише не должен стирать план.
+          if (e.key === 'Escape') { done = true; state._pf = null; renderView(); }
+        });
+        inp.addEventListener('blur', save);
+      });
+    });
+
+    var copy = el('pf-copy');
+    if (copy) copy.addEventListener('click', function () {
+      copy.disabled = true;
+      api('/admin/api/planfact/copy?month=' + pfMonth(), { method: 'POST' })
+        .then(function (r) {
+          showToast(r.copied
+            ? 'Перенес ' + r.copied + ' ' + plural(r.copied, 'строку', 'строки', 'строк') +
+              ' из плана за ' + pfMonthTitle(r.from)
+            : 'В плане за ' + pfMonthTitle(r.from) + ' цифр нет');
+          state._pf = null;
+          renderView();
+        }).catch(function () {
+          copy.disabled = false;
+          showToast('Не получилось перенести — проверь сеть');
+        });
+    });
+
+    var run = el('pf-ai');
+    if (run) run.addEventListener('click', function () {
+      state._pfAi = 'wait';
+      renderView();
+      api('/admin/api/planfact/explain?month=' + pfMonth(), { method: 'POST' })
+        .then(function (r) {
+          state._pfAi = r || 'none';
+          if (state.page === 'planfact') renderView();
+        }).catch(function () {
+          state._pfAi = 'none';
+          if (state.page === 'planfact') renderView();
+        });
+    });
+  }
 
 
   /* ── РАССЫЛКИ — кому писали, что ответила площадка, что человек сделал потом ──
