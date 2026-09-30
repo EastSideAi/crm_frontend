@@ -20517,12 +20517,31 @@
       body = '<div class="plm-load">загружаем план…</div>';
     } else {
       var items = ll.items || [];
+      // Чип «выплачено»: нажал — половина (или прочий расход) становится фактом, ещё раз —
+      // снимает отметку. Нулевую выплату не отмечаем, вместо кнопки тихий прочерк.
+      var payChip = function (id, part, label, amt, paid) {
+        if (!amt) return '<span class="plm-pnil">' + label + ' —</span>';
+        return '<button class="plm-pay' + (paid ? ' paid' : '') +
+          '" data-plmpay="' + part + '" data-plmpid="' + esc(id) +
+          '" data-plmpaid="' + (paid ? '1' : '') + '" title="' +
+          (paid ? 'Снять отметку о выплате' : 'Отметить выплаченным') + '">' +
+          (paid ? ic('check', 11) : '') + label + '</button>';
+      };
       var rowsH = items.map(function (it) {
         // Человек — план разбит на 10-е и 20-е, итого само; прочий расход — одна сумма.
-        var split = it.kind === 'person'
-          ? '<span class="plm-split">10-е ' + finRub(it.pay10 || 0) +
-              ' · 20-е ' + finRub(it.pay20 || 0) + '</span>'
-          : '';
+        // У каждой части свой чип «выплачено»: отмеченная часть уходит из плана в факт.
+        var split;
+        if (it.kind === 'person') {
+          split = '<span class="plm-split">' +
+            payChip(it.id, '10', '10-е ' + finRub(it.pay10 || 0), it.pay10, it.paid10) +
+            payChip(it.id, '20', '20-е ' + finRub(it.pay20 || 0), it.pay20, it.paid20) +
+          '</span>';
+        } else {
+          split = '<span class="plm-split">' +
+            payChip(it.id, 'all', it.paid ? 'выплачено' : 'отметить выплату',
+              it.amount, it.paid) +
+          '</span>';
+        }
         return '<div class="plm-row' + (it.kind === 'person' ? ' person' : '') +
             '" data-plmid="' + esc(it.id) + '">' +
           '<span class="plm-it">' + esc(it.item) +
@@ -20549,8 +20568,8 @@
     return '<div class="card plm-card" data-plmsec="' + esc(section) + '">' +
       '<div class="plm-head"><div>' +
         '<div class="t">План на месяц</div>' +
-        '<div class="s">плановые расходы отдела на месяц. факт подтягивается сам по ' +
-          'датам, план с фактом рядом.</div>' +
+        '<div class="s">плановые расходы отдела на месяц. отметьте выплату — она ' +
+          'станет фактом, план остаётся как цель для сверки.</div>' +
       '</div>' + finMonthNav() + '</div>' + body +
     '</div>';
   }
@@ -20577,9 +20596,19 @@
           });
       });
     });
+    Array.prototype.forEach.call(card.querySelectorAll('[data-plmpay]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var paid = b.getAttribute('data-plmpaid') === '1';
+        finDo('/admin/api/fin/plan-line/pay', 'POST', {
+          id: b.getAttribute('data-plmpid'), section: section,
+          month: finPlanMonth(), part: b.getAttribute('data-plmpay'), paid: !paid,
+        }, paid ? 'Сняли отметку о выплате' : 'Отметили выплату');
+      });
+    });
     Array.prototype.forEach.call(card.querySelectorAll('.plm-row'), function (r) {
       r.addEventListener('click', function (e) {
-        if (e.target.closest('[data-plmdel]')) return;
+        if (e.target.closest('[data-plmdel]') || e.target.closest('[data-plmpay]')) return;
         var id = r.getAttribute('data-plmid');
         var ll = (FIN.planlines || {})[section]; if (!ll) return;
         var items = ll.items || [];

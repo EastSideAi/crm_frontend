@@ -10378,9 +10378,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .plm-empty, .plm-load { padding: 14px 4px; font-size: 13px; color: var(--ink-3);
   border-top: 1px solid var(--line); }
 .plm-add { align-self: flex-start; margin-top: 2px; }
-/* Строка-человек: план на 10-е и 20-е под именем, итого справа считает сервер. */
-.plm-split { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
-  margin-top: 2px; font-feature-settings: 'tnum'; }
+/* Строка-человек: план на 10-е и 20-е под именем чипами «выплачено», итого справа. */
+.plm-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 5px; }
+/* Чип выплаты: не отмечен — тихий контур, отмечен (стал фактом) — зелёный. */
+.plm-pay { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px;
+  font-weight: 600; padding: 2px 9px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2);
+  cursor: pointer; transition: .15s; font-feature-settings: 'tnum'; }
+.plm-pay:hover { border-color: var(--wire); color: var(--ink); }
+.plm-pay.paid { border-color: transparent; background: var(--green-soft);
+  color: var(--green-ink); }
+.plm-pay.paid:hover { background: var(--green-soft); }
+.plm-pnil { font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
 /* Форма плановой строки: переключатель вида прячет лишние поля. */
 .plm-form .plm-kind { align-self: flex-start; margin-bottom: 4px; }
 .plm-form[data-kind="person"] .plm-expense { display: none; }
