@@ -6544,7 +6544,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fin-linkc:hover { border-color: var(--blue); color: var(--blue); }
 /* Отметка о чеке в строке дохода: «пробит» — действие, «не нужен» и «снять» тише.
    Тот же рецепт, что у «+ клиент»: в строке их две, и кричать им обеим нельзя. */
-.fin-rcp { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
+.rcp-l { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+/* У .trow жесткая высота 58px — строке с пометкой о чеке даем расти. */
+.trow.has-rcp { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+.rcp-l .fst { padding: 2px 8px; font-size: 11px; }
+.fin-rcp { border: 0; background: var(--blue-tint); color: var(--blue-d);
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
   cursor: pointer; white-space: nowrap; }
 .fin-rcp:hover { background: var(--blue); color: #fff; }

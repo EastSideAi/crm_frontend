@@ -18647,22 +18647,32 @@
     return m;
   }
 
-  function finReceiptChip(r, canRcp) {
+  /* Строка про чек живет под именем плательщика, а не в колонке статуса: там 150px,
+     и чип со сроком плюс две кнопки налезали на сумму. Под именем места хватает, а
+     читается это как продолжение мысли «кто заплатил и что с этим не так». */
+  function finReceiptLine(r, canRcp) {
     if (!r) return '';
-    // Пробитый и ненужный чек — тихие пометки: работа по ним закончена, кричать не о чем.
+    var chip, acts;
     if (r.state === 'done') {
-      return '<span class="fst ok">чек пробит</span>' +
-        (canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '');
+      // Пробитый и ненужный чек — тихие пометки: работа по ним закончена.
+      chip = '<span class="fst ok">чек пробит</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
+    } else if (r.state === 'skip') {
+      chip = '<span class="fst src" title="' + esc(r.note || '') + '">чек не нужен</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
+    } else {
+      chip = '<span class="fst ' + (r.overdue ? 'bad' : 'wait') + '">' +
+        (r.overdue ? 'просрочен · был до ' : 'чек до ') + esc(finDay(r.due)) + '</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'done', 'пробит', '') +
+                      finRcpBtn(r.id, 'skip', 'не нужен', 'off') : '';
     }
-    if (r.state === 'skip') {
-      return '<span class="fst src" title="' + esc(r.note || '') + '">чек не нужен</span>' +
-        (canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '');
-    }
-    var due = finDate(r.due);
-    return '<span class="fst ' + (r.overdue ? 'bad' : 'wait') + '">' +
-        (r.overdue ? 'чек просрочен · был до ' : 'чек не пробит · до ') + esc(due) + '</span>' +
-      (canRcp ? finRcpBtn(r.id, 'done', 'пробит', '') +
-                finRcpBtn(r.id, 'skip', 'не нужен', 'off') : '');
+    return '<span class="rcp-l">' + chip + acts + '</span>';
+  }
+
+  /* День и месяц без года: срок чека всегда в пределах пары недель, год тут шум. */
+  function finDay(s) {
+    var p = String(s || '').split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] : finDate(s);
   }
 
   function finRcpBtn(id, st, label, mod) {
@@ -18784,17 +18794,20 @@
         ? '<button class="fin-brk" data-fbrk="' + it.id +
           '" title="Разбить сумму на задания самозанятого">разбить</button>'
         : '';
+      // Строка с пометкой о чеке выше обычной: у .trow жесткая высота 58px, и без
+      // модификатора строка чека вылезала на соседнюю (проверено скрином 30.09.2026).
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
+        (RCP[it.id] ? ' has-rcp' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
         '<span class="fo-what">' + nameHtml + linkBtn +
-          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          (sub ? '<i>' + sub + '</i>' : '') +
+          finReceiptLine(RCP[it.id], canRcp) + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
           '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
             esc(it.status) + '</span>' +
           (it.included === false ? '<span class="fst wait">не в доход</span>' : '') +
-          finReceiptChip(RCP[it.id], canRcp) +
           brkBtn +
         '</span>' +
       '</div>';
