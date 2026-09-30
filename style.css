@@ -10192,3 +10192,19 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
   color: var(--blue); cursor: pointer; }
 .un-costnote .lnk:hover { text-decoration: underline; }
+
+/* План отделов: сводка «кто сдал план на период» (renderFinPlans). */
+.pl-list { padding: 6px 8px 10px; }
+.pl-row { display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+  border-radius: var(--r-lg); }
+.pl-row + .pl-row { border-top: 1px solid var(--line); border-radius: 0; }
+.pl-row.wait { background: var(--red-soft); border-color: transparent; }
+.pl-nm { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+.pl-badge { font-size: 11.5px; font-weight: 650; padding: 3px 10px; border-radius: var(--r-pill);
+  letter-spacing: .01em; white-space: nowrap; }
+.pl-badge.ok { color: var(--green-ink); background: var(--green-soft); }
+.pl-badge.no { color: var(--red-ink); background: var(--red-soft); }
+.pl-val { display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; }
+.pl-sum { font-size: 14px; font-weight: 650; color: var(--ink); }
+.pl-sum.muted { color: var(--ink-3); font-weight: 500; }
+.pl-cnt { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }

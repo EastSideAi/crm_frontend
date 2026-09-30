@@ -2301,6 +2301,10 @@
        человека это единственный раздел «Финансов». */
     { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
+    /* Сводка «кто из руководителей сдал план на период». План отдела = плановые строки
+       его расходов в расчетном листе; экран показывает с одного взгляда, где план есть,
+       а где нет. Для того, кто собирает план (владелец, финансист) — cap finmodel. */
+    { id: 'finplans', label: 'План отделов', icon: 'target', cap: 'finmodel', space: 'fin' },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
@@ -3231,6 +3235,10 @@
           'продукт, краткосрочка, безопасность. Каждый вносит свой лист' +
           (per.open ? '' : ' — ведомость закрыта, правка пометит ее как измененную') +
           '. Отчисления в фонды пересчитываются сами после каждой правки.';
+      } else if (state.page === 'finplans') {
+        ph = 'Кто из руководителей сдал план на ведомость <b>' + esc(per.name) + '</b>. ' +
+          'План отдела — плановые строки его расходов в расчетном листе; тут видно с ' +
+          'одного взгляда, где план есть, а где еще ждем.';
       } else if (state.page === 'findirect') {
         ph = 'Расходы с расчетного счета по направлениям за ведомость <b>' + esc(per.name) +
           '</b>. Строки из расчетных листов попадают в свой блок сами — видно, что откуда.';
@@ -3366,6 +3374,7 @@
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplan') renderFinPlan(view);
     else if (state.page === 'fincalendar') renderFinCalendar(view);
     else if (state.page === 'finprograms') renderFinPrograms(view);
@@ -16762,7 +16771,7 @@
     FIN.lines = null; FIN.refs = null; FIN.fund = null; FIN.direct = null;
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
-    FIN.salesSheet = null;
+    FIN.salesSheet = null; FIN.planstatus = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -19645,6 +19654,65 @@
     var pv = el('tx-prev'), nx = el('tx-next');
     if (pv && yPrev) pv.addEventListener('click', go(-1));
     if (nx && yNext) nx.addEventListener('click', go(1));
+    pageAnim(view);
+  }
+
+  /* ── План отделов: кто из руководителей сдал план на период ──────────────────
+     Виталий 30.09.2026: план на месяц собираем с руководителей, и надо видеть с
+     одного взгляда, кто внес, кто нет. Данные — та же ведомость (плановые строки
+     расходов по отделам), второго источника нет. */
+  function finLoadPlanStatus() {
+    if (!FIN.periods) return finLoadPeriods(function () { finLoadPlanStatus(); });
+    finBusy('planstatus', function (done) {
+      api('/admin/api/fin/plan-status' + finQ('')).then(function (r) {
+        if (finStale(r)) return;
+        FIN.planstatus = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'planstatus'); }).then(done);
+    });
+  }
+  function renderFinPlans(view) {
+    if (!FIN.planstatus) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPlanStatus(); return;
+    }
+    if (FIN.planstatus === 'none') return finErrView(view);
+    var p = FIN.planstatus, secs = p.sections || [], per = p.period || {};
+    var planTotal = secs.reduce(function (a, s) { return a + (s.plan || 0); }, 0);
+    var left = p.total - p.submitted;
+    var tiles = [
+      { label: 'Сдали план', value: p.submitted + ' из ' + p.total, sub: 'отделов за период' },
+      { label: 'Заявлено в план', value: finRub(planTotal, 0), sub: 'сумма плановых строк' },
+      { label: 'Ждем', value: String(left), sub: left ? 'еще не внесли план' : 'все сдали' },
+    ];
+    var rows = secs.map(function (s) {
+      var ok = s.submitted;
+      var badge = '<span class="pl-badge ' + (ok ? 'ok' : 'no') + '">' +
+        (ok ? 'сдан' : 'не сдан') + '</span>';
+      var sum = ok
+        ? '<span class="pl-sum num">' + finRub(s.plan) + '</span>' +
+          '<span class="pl-cnt">' + s.plan_count + ' ' +
+            plural(s.plan_count, 'строка', 'строки', 'строк') + '</span>'
+        : '<span class="pl-sum num muted">—</span>';
+      return '<div class="pl-row' + (ok ? '' : ' wait') + '">' +
+        '<span class="pl-nm">' + esc(s.label) + '</span>' +
+        badge +
+        '<span class="pl-val">' + sum + '</span>' +
+      '</div>';
+    }).join('');
+    view.innerHTML = statBar(tiles) +
+      '<div class="card listcard">' +
+        '<div class="list-tools"><div>' +
+          '<div class="t fe-t">План отделов · ' + esc(per.name || '') + '</div>' +
+          '<div class="s fe-s">кто из руководителей внес план расходов на период. ' +
+            'план заносится в расчетном листе своего отдела статусом «план».</div>' +
+        '</div></div>' +
+        '<div class="pl-list">' + rows + '</div>' +
+        '<div class="fin-note">' + ic('alert', 13) +
+          'Отдел «сдал», как только в его листе появилась хотя бы одна плановая строка ' +
+          'за этот период. Ничего отмечать вручную не нужно — сводка читает саму ведомость.' +
+        '</div>' +
+      '</div>';
     pageAnim(view);
   }
 
