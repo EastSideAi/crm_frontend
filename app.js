@@ -17366,6 +17366,23 @@
         }).catch(function (e) { finFail(e, 'lines'); }).then(done);
     });
   }
+  /* Чеки по приходам мимо ЮKassa: по каким чек еще не пробит и до какого числа.
+     Периода в запросе нет намеренно — ручка считает долги по ВСЕМ ведомостям сразу:
+     срок у чека сутки, а период две недели, и долг, доживший до следующего периода,
+     уехал бы с экрана ровно тогда, когда он опаснее всего. */
+  function finLoadReceipts() {
+    finBusy('receipts', function (done) {
+      api('/admin/api/fin/receipts').then(function (r) {
+        FIN.receipts = r;
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function () {
+        /* Долги по чекам — подсказка сбоку, а не сам экран доходов: не смогли
+           посчитать, показываем доходы как раньше, без пометок. */
+        FIN.receipts = 'none';
+      }).then(done);
+    });
+  }
+
   function finLoadDirect() {
     if (!FIN.periods) return finLoadPeriods(function () { finLoadDirect(); });
     finBusy('direct', function (done) {
@@ -17466,6 +17483,7 @@
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
+    FIN.receipts = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -18614,6 +18632,106 @@
 
   // Доходы и расчетные листы — один и тот же список строк, разные наборы форм.
   // Держим их в одной функции, чтобы правка списка не разъезжалась между экранами.
+  /* ── ЧЕКИ ПО ПРИХОДАМ МИМО ЮKASSA (54-ФЗ) ──────────────────────────────────
+     ЮKassa свои платежи фискализирует сама. Переводы, которые родитель делает прямо на
+     расчетный счет, чеком не закрыты, а пробить его надо до конца следующего рабочего
+     дня. Раньше об этом помнил только человек; теперь строка дохода сама говорит, что
+     чека нет и сколько осталось времени. Данные — /admin/api/fin/receipts (FIN.receipts),
+     отметку ставит тот, кто правит ведомость. */
+  function finReceiptMap(page) {
+    var m = {};
+    if (page !== 'finincome') return m;
+    var R = FIN.receipts;
+    if (!R || R === 'none') return m;
+    (R.items || []).forEach(function (i) { m[i.id] = i; });
+    return m;
+  }
+
+  /* Строка про чек живет под именем плательщика, а не в колонке статуса: там 150px,
+     и чип со сроком плюс две кнопки налезали на сумму. Под именем места хватает, а
+     читается это как продолжение мысли «кто заплатил и что с этим не так». */
+  function finReceiptLine(r, canRcp) {
+    if (!r) return '';
+    var chip, acts;
+    if (r.state === 'done') {
+      // Пробитый и ненужный чек — тихие пометки: работа по ним закончена.
+      chip = '<span class="fst ok">чек пробит</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
+    } else if (r.state === 'skip') {
+      chip = '<span class="fst src" title="' + esc(r.note || '') + '">чек не нужен</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
+    } else {
+      chip = '<span class="fst ' + (r.overdue ? 'bad' : 'wait') + '">' +
+        (r.overdue ? 'просрочен · был до ' : 'чек до ') + esc(finDay(r.due)) + '</span>';
+      acts = canRcp ? finRcpBtn(r.id, 'done', 'пробит', '') +
+                      finRcpBtn(r.id, 'skip', 'не нужен', 'off') : '';
+    }
+    return '<span class="rcp-l">' + chip + acts + '</span>';
+  }
+
+  /* День и месяц без года: срок чека всегда в пределах пары недель, год тут шум. */
+  function finDay(s) {
+    var p = String(s || '').split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] : finDate(s);
+  }
+
+  function finRcpBtn(id, st, label, mod) {
+    return '<button class="fin-rcp' + (mod ? ' ' + mod : '') + '" data-rcp="' + esc(id) +
+      '" data-rcpst="' + st + '">' + label + '</button>';
+  }
+
+  /* Полоса над списком: сколько чеков висит и с какого числа. Считает по всем
+     ведомостям, поэтому долг прошлого периода виден и на открытом. */
+  function finReceiptBar(page, items) {
+    if (page !== 'finincome') return '';
+    var R = FIN.receipts;
+    if (!R || R === 'none' || !R.pending) return '';
+    var late = R.overdue || 0;
+    // Полоса считает по всем ведомостям, а чипы и кнопки есть только у строк открытой.
+    // Если часть долгов лежит в других периодах, счетчик иначе не сходится с тем, что
+    // человек видит под ним, и выглядит как ошибка.
+    var here = {};
+    (items || []).forEach(function (i) { here[i.id] = 1; });
+    var other = 0;
+    (R.items || []).forEach(function (i) {
+      if (i.state === 'none' && !here[i.id]) other += 1;
+    });
+    return '<div class="dc-alert' + (late ? '' : ' warn') + '">' +
+      '<span class="ic">' + ic(late ? 'alert' : 'clock', 16) + '</span>' +
+      '<span><b>' + R.pending + '</b> ' +
+        plural(R.pending, 'приход', 'прихода', 'приходов') + ' ждет чека' +
+        (late ? ', из них <b>' + late + '</b> уже просрочено' : '') +
+        (R.oldest ? '. Самый ранний — ' + esc(finDate(R.oldest)) : '') + '. ' +
+        (other ? 'В других ведомостях ' + plural(other, 'лежит', 'лежат', 'лежат') +
+          ' <b>' + other + '</b> — переключите период сверху, чтобы отметить. ' : '') +
+        'Юкасса такие платежи не видит: чек по ним пробиваем сами в Бизнес.Ру, ' +
+        'до конца следующего рабочего дня.' +
+      '</span></div>';
+  }
+
+  function finReceiptMark(id, st, cur) {
+    if (!id) return;
+    var send = function (note) {
+      finDo('/admin/api/fin/receipts/' + encodeURIComponent(id), 'POST',
+        { state: st, note: note || '' },
+        st === 'done' ? 'Отметил: чек пробит'
+          : st === 'skip' ? 'Отметил: чек не нужен' : 'Отметку снял');
+    };
+    // «Не нужен» просим объяснить словами: без причины отметка со временем становится
+    // способом убрать строку с глаз, а не решением по конкретному платежу.
+    if (st === 'skip') {
+      return openSheet('Чек не нужен', (cur && cur.counterparty ? cur.counterparty + ' · ' : '') +
+        (cur ? finRub(cur.amount) : ''),
+        [['why', 'text', 'Почему чека не будет', '']],
+        function (v, close) {
+          var why = (v.why || '').trim();
+          if (!why) return 'Напишите причину — например, платила организация со своего счета';
+          close(); send(why);
+        }, null, 'Чек', 'Отметить');
+    }
+    send('');
+  }
+
   function renderFinIncome(view) { return finLinesScreen(view, 'finincome'); }
   function renderFinEdit(view) { return finLinesScreen(view, 'finedit'); }
 
@@ -18632,7 +18750,11 @@
       view.innerHTML = dashSkeleton(); finLoadLines(); return;
     }
     if (FIN.lines === 'none') return finErrView(view);
+    // Долги по чекам нужны только «Доходам»: расчетные листы это расход, чеков там нет.
+    if (page === 'finincome' && !FIN.receipts) finLoadReceipts();
     var L = FIN.lines, meta = finFormMeta(L.form), items = L.items || [];
+    // RCPS, а не RCP: модульная RCP уже занята чеками самозанятых в «Документах».
+    var RCPS = finReceiptMap(page);
     var fact = 0, plan = 0, factN = 0, biggest = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
@@ -18653,6 +18775,8 @@
     // самозанятого, и только тому, у кого есть и ведомость, и модуль самозанятых: раскладка
     // читает лист (finmodel) и заводит задания (contractors). Так же требует бэкенд.
     var canBreak = (page !== 'finincome') && can('finmodel') && can('contractors');
+    // Отметить чек может тот, кто правит ведомость: это запись в строку дохода.
+    var canRcp = (page === 'finincome') && can('finmodel_edit');
     var rows = items.map(function (it) {
       var sub = [
         // В листе продаж главный человек строки — покупатель, а деньги уходят
@@ -18682,11 +18806,15 @@
         ? '<button class="fin-brk" data-fbrk="' + it.id +
           '" title="Разбить сумму на задания самозанятого">разбить</button>'
         : '';
+      // Строка с пометкой о чеке выше обычной: у .trow жесткая высота 58px, и без
+      // модификатора строка чека вылезала на соседнюю (проверено скрином 30.09.2026).
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
+        (RCPS[it.id] ? ' has-rcp' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
         '<span class="fo-what">' + nameHtml + linkBtn +
-          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+          (sub ? '<i>' + sub + '</i>' : '') +
+          finReceiptLine(RCPS[it.id], canRcp) + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
           '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
@@ -18721,7 +18849,7 @@
     // листе). Только у трех отделов со своим листом; месяц календарный, не период.
     var planSec = (page === 'finedit') ? FIN_SHEET_SEC[FIN.form] : null;
     var planBlockH = planSec ? finPlanBlock(planSec) : '';
-    view.innerHTML = statBar(statTiles) + planBlockH +
+    view.innerHTML = statBar(statTiles) + planBlockH + finReceiptBar(page, items) +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
@@ -18785,6 +18913,14 @@
               finMonthOf(it.date));
           }
         }
+      });
+    });
+    // Отметки о чеке: клик по кнопке не должен открывать правку строки.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcp]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finReceiptMark(n.getAttribute('data-rcp'), n.getAttribute('data-rcpst'),
+          RCPS[n.getAttribute('data-rcp')]);
       });
     });
     if (planSec) finWirePlanBlock(view, planSec);
