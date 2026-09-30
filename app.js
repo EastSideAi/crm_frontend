@@ -18682,17 +18682,28 @@
 
   /* Полоса над списком: сколько чеков висит и с какого числа. Считает по всем
      ведомостям, поэтому долг прошлого периода виден и на открытом. */
-  function finReceiptBar(page) {
+  function finReceiptBar(page, items) {
     if (page !== 'finincome') return '';
     var R = FIN.receipts;
     if (!R || R === 'none' || !R.pending) return '';
     var late = R.overdue || 0;
+    // Полоса считает по всем ведомостям, а чипы и кнопки есть только у строк открытой.
+    // Если часть долгов лежит в других периодах, счетчик иначе не сходится с тем, что
+    // человек видит под ним, и выглядит как ошибка.
+    var here = {};
+    (items || []).forEach(function (i) { here[i.id] = 1; });
+    var other = 0;
+    (R.items || []).forEach(function (i) {
+      if (i.state === 'none' && !here[i.id]) other += 1;
+    });
     return '<div class="dc-alert' + (late ? '' : ' warn') + '">' +
       '<span class="ic">' + ic(late ? 'alert' : 'clock', 16) + '</span>' +
       '<span><b>' + R.pending + '</b> ' +
         plural(R.pending, 'приход', 'прихода', 'приходов') + ' ждет чека' +
         (late ? ', из них <b>' + late + '</b> уже просрочено' : '') +
         (R.oldest ? '. Самый ранний — ' + esc(finDate(R.oldest)) : '') + '. ' +
+        (other ? 'В других ведомостях ' + plural(other, 'лежит', 'лежат', 'лежат') +
+          ' <b>' + other + '</b> — переключите период сверху, чтобы отметить. ' : '') +
         'Юкасса такие платежи не видит: чек по ним пробиваем сами в Бизнес.Ру, ' +
         'до конца следующего рабочего дня.' +
       '</span></div>';
@@ -18742,7 +18753,8 @@
     // Долги по чекам нужны только «Доходам»: расчетные листы это расход, чеков там нет.
     if (page === 'finincome' && !FIN.receipts) finLoadReceipts();
     var L = FIN.lines, meta = finFormMeta(L.form), items = L.items || [];
-    var RCP = finReceiptMap(page);
+    // RCPS, а не RCP: модульная RCP уже занята чеками самозанятых в «Документах».
+    var RCPS = finReceiptMap(page);
     var fact = 0, plan = 0, factN = 0, biggest = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
@@ -18797,12 +18809,12 @@
       // Строка с пометкой о чеке выше обычной: у .trow жесткая высота 58px, и без
       // модификатора строка чека вылезала на соседнюю (проверено скрином 30.09.2026).
       return '<div class="trow fin-grid fe-grid' + (it.included === false ? ' muted' : '') +
-        (RCP[it.id] ? ' has-rcp' : '') +
+        (RCPS[it.id] ? ' has-rcp' : '') +
         '" data-fline="' + it.id + '">' +
         '<span class="num fo-date">' + finDate(it.date) + '</span>' +
         '<span class="fo-what">' + nameHtml + linkBtn +
           (sub ? '<i>' + sub + '</i>' : '') +
-          finReceiptLine(RCP[it.id], canRcp) + '</span>' +
+          finReceiptLine(RCPS[it.id], canRcp) + '</span>' +
         '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
         '<span class="fo-st">' +
           '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
@@ -18837,7 +18849,7 @@
     // листе). Только у трех отделов со своим листом; месяц календарный, не период.
     var planSec = (page === 'finedit') ? FIN_SHEET_SEC[FIN.form] : null;
     var planBlockH = planSec ? finPlanBlock(planSec) : '';
-    view.innerHTML = statBar(statTiles) + planBlockH + finReceiptBar(page) +
+    view.innerHTML = statBar(statTiles) + planBlockH + finReceiptBar(page, items) +
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">' + esc(meta[1]) + '</div>' +
@@ -18908,7 +18920,7 @@
       n.addEventListener('click', function (e) {
         e.stopPropagation();
         finReceiptMark(n.getAttribute('data-rcp'), n.getAttribute('data-rcpst'),
-          RCP[n.getAttribute('data-rcp')]);
+          RCPS[n.getAttribute('data-rcp')]);
       });
     });
     if (planSec) finWirePlanBlock(view, planSec);
