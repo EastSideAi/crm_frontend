@@ -2332,6 +2332,11 @@
        его расходов в расчетном листе; экран показывает с одного взгляда, где план есть,
        а где нет. Для того, кто собирает план (владелец, финансист) — cap finmodel. */
     { id: 'finplans', label: 'План отделов', icon: 'target', cap: 'finmodel', space: 'fin' },
+    /* Ввод плана для отдела без своего расчетного листа (управление, администрирование,
+       сервисы): у них листа в «Расчетных листах» нет, поэтому блок «План на месяц» живет
+       на своем экране. Пункта меню нет — заходят из сводки «План отделов». */
+    { id: 'finplandept', label: 'План отдела', icon: 'target', cap: 'finmodel', space: 'fin',
+      hidden: true },
     { id: 'findirect', label: 'Прямые расходы', icon: 'box', cap: 'finmodel', space: 'fin' },
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
@@ -3187,7 +3192,7 @@
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finmetrics: 'Итоги периода',
-                     finplans: 'План отделов' };
+                     finplans: 'План отделов', finplandept: 'План отдела' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -3236,6 +3241,12 @@
         ph = 'Кто из руководителей внес план расходов на месяц. План отдела — плановые ' +
           'строки его расходов, план и факт стоят рядом. Считается по календарному ' +
           'месяцу, а не по расчетному периоду.';
+      }
+      // План отдела без своего листа — тоже до !per, месяц календарный.
+      else if (state.page === 'finplandept') {
+        ph = 'План расходов отдела на месяц. Человеку — выплата на 10-е и на 20-е, итого ' +
+          'месяца само; прочий расход — одной суммой. Факт подтягивается по датам, стоит ' +
+          'рядом с планом. Считается по календарному месяцу, а не по расчетному периоду.';
       }
       else if (!per) ph = 'Загружаю ведомость…';
       else if (state.page === 'finsheet' && sh) {
@@ -3398,6 +3409,7 @@
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finplans') renderFinPlans(view);
+    else if (state.page === 'finplandept') renderFinPlanDept(view);
     else if (state.page === 'finplan') renderFinPlan(view);
     else if (state.page === 'fincalendar') renderFinCalendar(view);
     else if (state.page === 'finprograms') renderFinPrograms(view);
@@ -20356,6 +20368,13 @@
     'продукт': 'лист-продукта' };
   var FIN_SHEET_SEC = { 'лист-продаж': 'продажи', 'лист-маркетинга': 'маркетинг',
     'лист-продукта': 'продукт' };
+  // Отделы, где платим людям: у строки плана может быть вид «человек» (выплата 10/20).
+  // У сервисов людей нет — там только прочий расход одной суммой (Роман 30.09.2026).
+  var FIN_PLAN_PEOPLE = { 'продажи': 1, 'маркетинг': 1, 'продукт': 1,
+    'администрирование': 1, 'управление': 1 };
+  // Подписи отделов для экрана плана отдела без своего листа.
+  var FIN_DEPT_LABEL = { 'продажи': 'Продажи', 'маркетинг': 'Маркетинг', 'продукт': 'Продукт',
+    'управление': 'Управление', 'администрирование': 'Администрирование', 'сервисы': 'Сервисы' };
   var FIN_MONTHS_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль',
     'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -20412,16 +20431,17 @@
     ];
     var rows = secs.map(function (s) {
       var ok = s.submitted;
-      var badge = '<span class="pl-badge ' + (ok ? 'ok' : (s.has_sheet ? 'no' : 'na')) + '">' +
-        (ok ? 'сдан' : (s.has_sheet ? 'не сдан' : 'нет листа')) + '</span>';
+      var badge = '<span class="pl-badge ' + (ok ? 'ok' : 'no') + '">' +
+        (ok ? 'сдан' : 'не сдан') + '</span>';
       var planCell = ok
         ? '<span class="pl-sum num">' + finRub(s.plan) + '</span>'
         : '<span class="pl-sum num muted">—</span>';
       var factCell = '<span class="pl-fact num' + (s.fact ? '' : ' muted') + '">' +
         (s.fact ? 'факт ' + finRub(s.fact) : 'факт —') + '</span>';
-      var cls = ok ? '' : (s.has_sheet ? ' wait' : ' na');
-      return '<div class="pl-row' + cls + (s.has_sheet ? ' pl-go' : '') +
-          '"' + (s.has_sheet ? ' data-plsec="' + esc(s.key) + '"' : '') + '>' +
+      // Любой отдел кликается: у продаж/маркетинга/продукта план в их листе, у остальных
+      // на своем экране — переход решает finPlanGoSheet, экрану сводки разницы нет.
+      return '<div class="pl-row pl-go' + (ok ? '' : ' wait') +
+          '" data-plsec="' + esc(s.key) + '">' +
         '<span class="pl-nm">' + esc(s.label) + '</span>' +
         badge +
         '<span class="pl-val">' + planCell + factCell + '</span>' +
@@ -20438,8 +20458,8 @@
         '<div class="fin-note">' + ic('alert', 13) +
           'Отдел «сдал», как только в плане на этот месяц есть хотя бы одна строка. ' +
           'Факт подтягивается сам по датам расходов — план и факт стоят рядом. ' +
-          'У управления, администрирования и сервисов своего листа пока нет: план им ' +
-          'заносить некуда, это следующий шаг.' +
+          'В плане строка бывает двух видов: человек — с выплатой на 10-е и на 20-е, ' +
+          'прочий расход — одной суммой.' +
         '</div>' +
       '</div>';
     Array.prototype.forEach.call(view.querySelectorAll('.pl-row[data-plsec]'), function (r) {
@@ -20453,11 +20473,26 @@
     });
     pageAnim(view);
   }
-  // Переход из сводки в лист отдела, чтобы там занести план на месяц.
+  // Переход из сводки к плану отдела. У кого есть расчетный лист (продажи, маркетинг,
+  // продукт) — блок плана стоит сверху его листа. У кого листа нет (управление,
+  // администрирование, сервисы) — свой экран плана, тот же блок без листа под ним.
   function finPlanGoSheet(section) {
     var sh = FIN_SEC_SHEET[section];
-    if (!sh) return;
-    FIN.form = sh; FIN.lines = null; setPage('finedit');
+    if (sh) { FIN.form = sh; FIN.lines = null; setPage('finedit'); return; }
+    FIN.planDept = section; setPage('finplandept');
+  }
+  // Экран плана отдела без своего расчетного листа: только блок «План на месяц».
+  function renderFinPlanDept(view) {
+    var section = FIN.planDept;
+    if (!section) { setPage('finplans'); return; }
+    view.innerHTML =
+      '<div class="sec-head"><button class="bp sm ghost" data-plback>' +
+        ic('back', 13) + 'К плану отделов</button></div>' +
+      finPlanBlock(section);
+    var back = view.querySelector('[data-plback]');
+    if (back) back.addEventListener('click', function () { setPage('finplans'); });
+    finWirePlanBlock(view, section);
+    pageAnim(view);
   }
 
   /* Блок «План на месяц» внутри расчетного листа: плановые строки расхода отдела за
@@ -20483,9 +20518,15 @@
     } else {
       var items = ll.items || [];
       var rowsH = items.map(function (it) {
-        return '<div class="plm-row" data-plmid="' + esc(it.id) + '">' +
+        // Человек — план разбит на 10-е и 20-е, итого само; прочий расход — одна сумма.
+        var split = it.kind === 'person'
+          ? '<span class="plm-split">10-е ' + finRub(it.pay10 || 0) +
+              ' · 20-е ' + finRub(it.pay20 || 0) + '</span>'
+          : '';
+        return '<div class="plm-row' + (it.kind === 'person' ? ' person' : '') +
+            '" data-plmid="' + esc(it.id) + '">' +
           '<span class="plm-it">' + esc(it.item) +
-            (it.comment ? '<i>' + esc(it.comment) + '</i>' : '') + '</span>' +
+            (it.comment ? '<i>' + esc(it.comment) + '</i>' : '') + split + '</span>' +
           '<span class="plm-sum num">' + finRub(it.amount) + '</span>' +
           '<button class="plm-del" data-plmdel="' + esc(it.id) +
             '" title="Убрать строку">' + ic('x', 12) + '</button>' +
@@ -20548,27 +20589,54 @@
       });
     });
   }
-  // Форма плановой строки: на что и сколько. Отдельная от finLineForm — там проценты,
-  // получатели и связка с самозанятыми, плану это не нужно.
+  // Форма плановой строки. Два вида (Роман 30.09.2026): человек — имя и выплата на 10-е
+  // и на 20-е, итого месяца само; прочий расход — статья и одна сумма. У отделов без
+  // людей (сервисы) переключателя нет — только расход. Отдельная от finLineForm: там
+  // проценты, получатели и связка с самозанятыми, плану это не нужно.
   function finPlanLineForm(section, line) {
     if (document.querySelector('.al-ov')) return;
     var m = finPlanMonth(), edit = !!line;
-    var lbl = ((FIN.planlines || {})[section] || {}).label || section;
+    var lbl = ((FIN.planlines || {})[section] || {}).label || FIN_DEPT_LABEL[section] || section;
+    var canPerson = !!FIN_PLAN_PEOPLE[section];
+    var kind = edit ? (line.kind || 'expense') : (canPerson ? 'person' : 'expense');
+    var v = function (x) { return esc(x == null ? '' : String(x)); };
     var ov = document.createElement('div');
     ov.className = 'al-ov';
-    var v = function (x) { return esc(x == null ? '' : String(x)); };
+    var toggle = canPerson
+      ? '<div class="due-seg plm-kind">' +
+          '<button type="button" data-kind="person"' + (kind === 'person' ? ' class="on"' : '') +
+            '>Человек</button>' +
+          '<button type="button" data-kind="expense"' + (kind === 'expense' ? ' class="on"' : '') +
+            '>Прочий расход</button>' +
+        '</div>'
+      : '';
     ov.innerHTML =
-      '<div class="al-card ct-card ct-slim" role="dialog" aria-modal="true">' +
+      '<div class="al-card ct-card ct-slim plm-form" role="dialog" aria-modal="true" ' +
+          'data-kind="' + kind + '">' +
         '<div class="al-head"><div><div class="al-title">' +
-          (edit ? 'Правка строки плана' : 'Строка плана расхода') + '</div>' +
+          (edit ? 'Правка строки плана' : 'Строка плана') + '</div>' +
           '<div class="al-sub">' + esc(lbl) + ' · ' + esc(finMonthLabel(m)) + '</div></div></div>' +
         '<div class="al-body">' +
-          '<label class="al-f"><span class="al-l">На что <i>*</i></span>' +
+          toggle +
+          '<label class="al-f"><span class="al-l plm-l-item">На что <i>*</i></span>' +
             '<input id="plm-it" class="al-in" maxlength="200" value="' + v(edit ? line.item : '') +
-            '" placeholder="например, реклама ВК"></label>' +
-          '<label class="al-f"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
+            '" placeholder="имя или статья"></label>' +
+          // Человек: две выплаты, итого само.
+          '<div class="plm-person">' +
+            '<div class="plm-two">' +
+              '<label class="al-f"><span class="al-l">План на 10-е, ₽</span>' +
+                '<input id="plm-p10" class="al-in" type="number" min="0" step="0.01" value="' +
+                (edit && line.kind === 'person' ? v(line.pay10) : '') + '"></label>' +
+              '<label class="al-f"><span class="al-l">План на 20-е, ₽</span>' +
+                '<input id="plm-p20" class="al-in" type="number" min="0" step="0.01" value="' +
+                (edit && line.kind === 'person' ? v(line.pay20) : '') + '"></label>' +
+            '</div>' +
+            '<div class="plm-total">итого за месяц <b id="plm-tot">' + finRub(0) + '</b></div>' +
+          '</div>' +
+          // Прочий расход: одна сумма.
+          '<label class="al-f plm-expense"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
             '<input id="plm-am" class="al-in" type="number" min="0" step="0.01" value="' +
-            (edit ? line.amount : '') + '"></label>' +
+            (edit && line.kind !== 'person' ? v(line.amount) : '') + '"></label>' +
           '<label class="al-f"><span class="al-l">Комментарий</span>' +
             '<input id="plm-cm" class="al-in" maxlength="500" value="' +
             v(edit ? (line.comment || '') : '') + '"></label>' +
@@ -20578,6 +20646,7 @@
           '</button></div></div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
+    var card = ov.querySelector('.plm-form');
     var close = function () {
       ov.classList.remove('show');
       document.removeEventListener('keydown', onKey);
@@ -20587,16 +20656,43 @@
     document.addEventListener('keydown', onKey);
     el('plm-no').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    var fi = el('plm-it'); if (fi) fi.focus();
+    var num = function (id) { var x = parseFloat((el(id).value || '').trim()); return isNaN(x) ? 0 : x; };
+    var retotal = function () {
+      el('plm-tot').textContent = finRub(num('plm-p10') + num('plm-p20'));
+    };
+    if (canPerson) {
+      Array.prototype.forEach.call(card.querySelectorAll('.plm-kind button'), function (b) {
+        b.addEventListener('click', function () {
+          kind = b.getAttribute('data-kind');
+          card.setAttribute('data-kind', kind);
+          Array.prototype.forEach.call(card.querySelectorAll('.plm-kind button'), function (x) {
+            x.classList.toggle('on', x === b);
+          });
+          el('plm-it').setAttribute('placeholder', kind === 'person' ? 'имя' : 'статья');
+        });
+      });
+    }
+    el('plm-p10').addEventListener('input', retotal);
+    el('plm-p20').addEventListener('input', retotal);
+    retotal();
+    el('plm-it').setAttribute('placeholder', kind === 'person' ? 'имя' : 'статья');
+    el('plm-it').focus();
     el('plm-yes').addEventListener('click', function () {
       var item = (el('plm-it').value || '').trim();
-      var amount = (el('plm-am').value || '').trim();
-      if (!item) { showToast('Напишите, на что план'); return; }
-      if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) {
-        showToast('Укажите сумму'); return;
-      }
-      var payload = { section: section, month: m, item: item, amount: amount,
+      if (!item) { showToast(kind === 'person' ? 'Напишите имя' : 'Напишите, на что план'); return; }
+      var payload = { section: section, month: m, item: item, kind: kind,
         comment: (el('plm-cm').value || '').trim() };
+      if (kind === 'person') {
+        var p10 = num('plm-p10'), p20 = num('plm-p20');
+        if (p10 <= 0 && p20 <= 0) { showToast('Укажите выплату на 10-е или на 20-е'); return; }
+        payload.pay10 = String(p10); payload.pay20 = String(p20);
+      } else {
+        var amount = (el('plm-am').value || '').trim();
+        if (amount === '' || isNaN(parseFloat(amount)) || parseFloat(amount) < 0) {
+          showToast('Укажите сумму'); return;
+        }
+        payload.amount = amount;
+      }
       if (edit) payload.id = line.id;
       close();
       finDo('/admin/api/fin/plan-line', 'POST', payload,

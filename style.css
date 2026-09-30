@@ -10378,6 +10378,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .plm-empty, .plm-load { padding: 14px 4px; font-size: 13px; color: var(--ink-3);
   border-top: 1px solid var(--line); }
 .plm-add { align-self: flex-start; margin-top: 2px; }
+/* Строка-человек: план на 10-е и 20-е под именем, итого справа считает сервер. */
+.plm-split { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  margin-top: 2px; font-feature-settings: 'tnum'; }
+/* Форма плановой строки: переключатель вида прячет лишние поля. */
+.plm-form .plm-kind { align-self: flex-start; margin-bottom: 4px; }
+.plm-form[data-kind="person"] .plm-expense { display: none; }
+.plm-form[data-kind="expense"] .plm-person { display: none; }
+.plm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.plm-total { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.plm-total b { color: var(--ink); font-weight: 700; font-feature-settings: 'tnum'; }
 
 /* ════ ПЛАН-ФАКТ (раздел planfact) ════
    Экран отвечает на один вопрос: успеваем ли мы к плану месяца. Главный элемент —
