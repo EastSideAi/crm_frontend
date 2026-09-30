@@ -20618,7 +20618,7 @@
           '<div class="al-sub">' + esc(lbl) + ' · ' + esc(finMonthLabel(m)) + '</div></div></div>' +
         '<div class="al-body">' +
           toggle +
-          '<label class="al-f"><span class="al-l plm-l-item">На что <i>*</i></span>' +
+          '<label class="al-f"><span class="al-l plm-l-item"></span>' +
             '<input id="plm-it" class="al-in" maxlength="200" value="' + v(edit ? line.item : '') +
             '" placeholder="имя или статья"></label>' +
           // Человек: две выплаты, итого само.
@@ -20660,22 +20660,28 @@
     var retotal = function () {
       el('plm-tot').textContent = finRub(num('plm-p10') + num('plm-p20'));
     };
+    var kindUi = function () {
+      card.setAttribute('data-kind', kind);
+      var it = el('plm-it');
+      it.setAttribute('placeholder', kind === 'person' ? 'имя' : 'статья');
+      card.querySelector('.plm-l-item').innerHTML =
+        (kind === 'person' ? 'Имя' : 'На что') + ' <i>*</i>';
+    };
     if (canPerson) {
       Array.prototype.forEach.call(card.querySelectorAll('.plm-kind button'), function (b) {
         b.addEventListener('click', function () {
           kind = b.getAttribute('data-kind');
-          card.setAttribute('data-kind', kind);
           Array.prototype.forEach.call(card.querySelectorAll('.plm-kind button'), function (x) {
             x.classList.toggle('on', x === b);
           });
-          el('plm-it').setAttribute('placeholder', kind === 'person' ? 'имя' : 'статья');
+          kindUi();
         });
       });
     }
     el('plm-p10').addEventListener('input', retotal);
     el('plm-p20').addEventListener('input', retotal);
     retotal();
-    el('plm-it').setAttribute('placeholder', kind === 'person' ? 'имя' : 'статья');
+    kindUi();
     el('plm-it').focus();
     el('plm-yes').addEventListener('click', function () {
       var item = (el('plm-it').value || '').trim();
