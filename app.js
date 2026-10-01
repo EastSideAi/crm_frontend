@@ -18682,7 +18682,7 @@
       acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
     } else {
       chip = '<span class="fst ' + (r.overdue ? 'bad' : 'wait') + '">' +
-        (r.overdue ? 'чека нет · был до ' : 'чека нет · до ') + esc(finDay(r.due)) + '</span>';
+        (r.overdue ? 'чека нет · просрочен с ' : 'чека нет · до ') + esc(finDay(r.due)) + '</span>';
       acts = canRcp ? '<button class="fin-rcp" data-rcpsend="' + esc(r.id) + '">пробить</button>' +
                       finRcpBtn(r.id, 'skip', 'не нужен', 'off') : '';
     }
@@ -18747,8 +18747,9 @@
         (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет: ' +
         orph.slice(0, 3).map(function (o) {
           return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
-            esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) + '</a>';
-        }).join(', ') + (orph.length > 3 ? ' и еще ' + (orph.length - 3) : '') +
+            esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
+            (o.name ? ', ' + esc(o.name) : '') + '</a>';
+        }).join('; ') + (orph.length > 3 ? ' и еще ' + (orph.length - 3) : '') +
         '. Либо деньги не занесены, либо чек на другую сумму.</span></div>';
     }
     return out;
