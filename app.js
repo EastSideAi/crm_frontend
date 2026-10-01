@@ -19770,13 +19770,13 @@
       FIN.lineBusy = true;
       err.textContent = '';
       czSend('/admin/api/fin/operation', 'POST', payload)
-        .then(function () {
+        .then(function (r) {
           close();
           // Строка меняет каскад и фонды, а не только этот список: сбрасываем все,
           // иначе на соседнем экране останется цифра до правки.
           finForget(true);
           renderAll();
-          showToast(isNew ? 'Строка внесена' : 'Строка поправлена');
+          showToast(finSettleMsg(r, isNew ? 'Строка внесена' : 'Строка поправлена'));
         })
         .catch(function (e) { err.textContent = finLineErr(e); })
         .then(function () { FIN.lineBusy = false; });
@@ -19797,6 +19797,19 @@
         .catch(function (e) { el('fl-err').textContent = finLineErr(e); })
         .then(function () { FIN.lineBusy = false; });
     });
+  }
+
+  // Когда факт по листу привязан к самозанятому, сервер сам проводит выплату по его
+  // готовым заданиям (акт подписан) и отдаёт итог в r.settle. Показываем его человеку:
+  // «оплачено N» и «ждёт акт M» — иначе он не поймёт, что строка листа ещё и заплатила.
+  function finSettleMsg(r, base) {
+    var s = r && r.settle;
+    if (!s) return base;
+    var parts = [];
+    if (s.paid) parts.push('оплачено заданий: ' + s.paid);
+    if (s.pending && s.pending.length) parts.push('не прошло: ' + s.pending.length);
+    if (s.waiting_act) parts.push('ждут акта: ' + s.waiting_act);
+    return parts.length ? base + '. ' + parts.join(', ') : base;
   }
 
   function finLineErr(e) {
