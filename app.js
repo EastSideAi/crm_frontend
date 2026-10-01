@@ -18649,21 +18649,41 @@
 
   /* Строка про чек живет под именем плательщика, а не в колонке статуса: там 150px,
      и чип со сроком плюс две кнопки налезали на сумму. Под именем места хватает, а
-     читается это как продолжение мысли «кто заплатил и что с этим не так». */
+     читается это как продолжение мысли «кто заплатил и что с этим не так».
+
+     Пометка стоит у КАЖДОГО прихода, включая платежи Юкассы (просьба Романа
+     01.10.2026): вопрос «а по этим деньгам чек был?» задается про любую строку, и
+     молчание на половине списка читается как «неизвестно», а не как «все хорошо». */
   function finReceiptLine(r, canRcp) {
     if (!r) return '';
-    var chip, acts;
-    if (r.state === 'done') {
-      // Пробитый и ненужный чек — тихие пометки: работа по ним закончена.
+    var chip, acts = '', link = '';
+    if (r.check && r.check.url) {
+      link = '<a class="fin-rcp off" href="' + esc(r.check.url) + '" target="_blank" ' +
+        'rel="noopener" title="Открыть чек в Бизнес.Ру">чек</a>';
+    }
+    if (r.state === 'yookassa') {
+      // Чужая работа: Юкасса фискализирует свои платежи сама. Пометка тихая, кнопок нет.
+      chip = '<span class="fst src">чек есть · Юкасса</span>';
+    } else if (r.state === 'match') {
+      // Чек нашелся в кассе сам — человек ничего не отмечал. Уверенность разная, и
+      // врать про нее нельзя: переводы у нас почти все по 140 000, и пара, сошедшаяся
+      // только по сумме, это догадка. Совпала фамилия — говорим «чек есть», нет —
+      // «похоже, есть» и зовем проверить по ссылке.
+      chip = r.match === 'amount'
+        ? '<span class="fst wait" title="Сошлись сумма и дата, но имя в чеке другое — ' +
+          'откройте и проверьте">похоже, чек есть</span>'
+        : '<span class="fst ok" title="Нашли чек в Бизнес.Ру">чек есть</span>';
+      acts = link;
+    } else if (r.state === 'done') {
       chip = '<span class="fst ok">чек пробит</span>';
-      acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
+      acts = link + (canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '');
     } else if (r.state === 'skip') {
       chip = '<span class="fst src" title="' + esc(r.note || '') + '">чек не нужен</span>';
       acts = canRcp ? finRcpBtn(r.id, 'none', 'снять', 'off') : '';
     } else {
       chip = '<span class="fst ' + (r.overdue ? 'bad' : 'wait') + '">' +
-        (r.overdue ? 'просрочен · был до ' : 'чек до ') + esc(finDay(r.due)) + '</span>';
-      acts = canRcp ? finRcpBtn(r.id, 'done', 'пробит', '') +
+        (r.overdue ? 'чека нет · был до ' : 'чека нет · до ') + esc(finDay(r.due)) + '</span>';
+      acts = canRcp ? '<button class="fin-rcp" data-rcpsend="' + esc(r.id) + '">пробить</button>' +
                       finRcpBtn(r.id, 'skip', 'не нужен', 'off') : '';
     }
     return '<span class="rcp-l">' + chip + acts + '</span>';
@@ -18685,28 +18705,53 @@
   function finReceiptBar(page, items) {
     if (page !== 'finincome') return '';
     var R = FIN.receipts;
-    if (!R || R === 'none' || !R.pending) return '';
-    var late = R.overdue || 0;
-    // Полоса считает по всем ведомостям, а чипы и кнопки есть только у строк открытой.
-    // Если часть долгов лежит в других периодах, счетчик иначе не сходится с тем, что
-    // человек видит под ним, и выглядит как ошибка.
-    var here = {};
-    (items || []).forEach(function (i) { here[i.id] = 1; });
-    var other = 0;
-    (R.items || []).forEach(function (i) {
-      if (i.state === 'none' && !here[i.id]) other += 1;
-    });
-    return '<div class="dc-alert' + (late ? '' : ' warn') + '">' +
-      '<span class="ic">' + ic(late ? 'alert' : 'clock', 16) + '</span>' +
-      '<span><b>' + R.pending + '</b> ' +
-        plural(R.pending, 'приход', 'прихода', 'приходов') + ' ждет чека' +
-        (late ? ', из них <b>' + late + '</b> уже просрочено' : '') +
-        (R.oldest ? '. Самый ранний — ' + esc(finDate(R.oldest)) : '') + '. ' +
-        (other ? 'В других ведомостях ' + plural(other, 'лежит', 'лежат', 'лежат') +
-          ' <b>' + other + '</b> — переключите период сверху, чтобы отметить. ' : '') +
-        'Юкасса такие платежи не видит: чек по ним пробиваем сами в Бизнес.Ру, ' +
-        'до конца следующего рабочего дня.' +
-      '</span></div>';
+    if (!R || R === 'none') return '';
+    // Касса не ответила — говорим об этом прямо. Молча показать «долгов нет» нельзя:
+    // без кассы мы не знаем, пробит чек или нет, и тишина читалась бы как «все закрыто».
+    if (R.kassa === 'error') {
+      return '<div class="dc-alert warn"><span class="ic">' + ic('alert', 16) + '</span>' +
+        '<span>Бизнес.Ру сейчас не отвечает, поэтому пометки о чеках показаны по памяти ' +
+        'системы. Обновите страницу через пару минут.</span></div>';
+    }
+    var out = '';
+    if (R.pending) {
+      var late = R.overdue || 0;
+      // Полоса считает по всем ведомостям, а чипы и кнопки есть только у строк открытой.
+      // Если часть долгов лежит в других периодах, счетчик иначе не сходится с тем, что
+      // человек видит под ним, и выглядит как ошибка.
+      var here = {};
+      (items || []).forEach(function (i) { here[i.id] = 1; });
+      var other = 0;
+      (R.items || []).forEach(function (i) {
+        if (i.state === 'none' && !here[i.id]) other += 1;
+      });
+      out += '<div class="dc-alert' + (late ? '' : ' warn') + '">' +
+        '<span class="ic">' + ic(late ? 'alert' : 'clock', 16) + '</span>' +
+        '<span><b>' + R.pending + '</b> ' +
+          plural(R.pending, 'приход', 'прихода', 'приходов') + ' без чека' +
+          (late ? ', из них <b>' + late + '</b> уже просрочено' : '') +
+          (R.oldest ? '. Самый ранний — ' + esc(finDate(R.oldest)) : '') + '. ' +
+          (other ? 'В других ведомостях ' + plural(other, 'лежит', 'лежат', 'лежат') +
+            ' <b>' + other + '</b> — переключите период сверху. ' : '') +
+          'Чек по ним пробиваем сами, до конца следующего рабочего дня.' +
+        '</span></div>';
+    }
+    // Обратная сторона сверки: чек в кассе есть, а прихода под него в ведомости нет.
+    // Это либо не занесенные деньги, либо чек не на ту сумму — других способов это
+    // заметить у нас нет вовсе.
+    var orph = R.orphans || [];
+    if (orph.length) {
+      out += '<div class="dc-alert warn"><span class="ic">' + ic('alert', 16) + '</span>' +
+        '<span><b>' + orph.length + '</b> ' + plural(orph.length, 'чек', 'чека', 'чеков') +
+        ' пробит' + (orph.length > 1 ? 'ы' : '') + ' в кассе, а прихода под ' +
+        (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет: ' +
+        orph.slice(0, 3).map(function (o) {
+          return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
+            esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) + '</a>';
+        }).join(', ') + (orph.length > 3 ? ' и еще ' + (orph.length - 3) : '') +
+        '. Либо деньги не занесены, либо чек на другую сумму.</span></div>';
+    }
+    return out;
   }
 
   function finReceiptMark(id, st, cur) {
@@ -18730,6 +18775,40 @@
         }, null, 'Чек', 'Отметить');
     }
     send('');
+  }
+
+  /* Пробить чек. Форму заполняет сервер: он знает сумму, ищет почту родителя по кабинету,
+     анкете и прошлым чекам и подставляет формулировку услуги. Человеку в хорошем случае
+     остается нажать кнопку, в плохом — вписать контакт один раз. */
+  function finRcpSend(id) {
+    if (!id) return;
+    api('/admin/api/fin/receipts/' + encodeURIComponent(id) + '/draft').then(function (dft) {
+      if (!dft.enabled) return showToast('Бизнес.Ру пока не подключен');
+      var sub = (dft.client_name ? dft.client_name + ' · ' : '') + finRub(dft.amount) +
+        ' · ' + finDate(dft.date);
+      openSheet('Пробить чек', sub, [
+        ['to', 'line', 'Куда отправить чек: почта или телефон', dft.contact || ''],
+        ['svc', 'line', 'За что чек — это увидит человек', dft.service_name || ''],
+        ['nm', 'line', 'ФИО покупателя, если нужно в чеке', dft.client_name || ''],
+        ['inn', 'line', 'ИНН покупателя, если нужно в чеке', dft.client_inn || '']
+      ], function (v, close) {
+        var to = (v.to || '').trim();
+        if (!to) return 'Без почты или телефона чек человеку не уйдет';
+        var svc = (v.svc || '').trim();
+        if (!svc) return 'Напишите, за что чек';
+        close();
+        finDo('/admin/api/fin/receipts/' + encodeURIComponent(id) + '/send', 'POST',
+          { contact: to, service_name: svc, client_name: (v.nm || '').trim(),
+            client_inn: (v.inn || '').trim() }, 'Чек отправлен в кассу');
+      }, function (v) {
+        // Живая подсказка под полями: откуда взялся контакт и что с ним будет.
+        var to = (v.to || '').trim();
+        if (!to) return 'Чек уходит человеку электронным: без контакта касса его не примет.';
+        return 'Чек уйдет на ' + esc(to) +
+          (dft.contact_from && to === dft.contact ? ' — нашли в разделе «' +
+            esc(dft.contact_from) + '»' : '') + '. Бумагу не печатаем.';
+      }, 'Чек', 'Пробить');
+    }).catch(function () { showToast('Не удалось открыть форму чека'); });
   }
 
   function renderFinIncome(view) { return finLinesScreen(view, 'finincome'); }
@@ -18922,6 +19001,17 @@
         finReceiptMark(n.getAttribute('data-rcp'), n.getAttribute('data-rcpst'),
           RCPS[n.getAttribute('data-rcp')]);
       });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcpsend]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finRcpSend(n.getAttribute('data-rcpsend'));
+      });
+    });
+    // Ссылка на чек лежит внутри строки, а клик по строке открывает карточку клиента:
+    // без этого человек вместо чека попадал бы в карточку.
+    Array.prototype.forEach.call(view.querySelectorAll('.rcp-l a'), function (n) {
+      n.addEventListener('click', function (e) { e.stopPropagation(); });
     });
     if (planSec) finWirePlanBlock(view, planSec);
     pageAnim(view);

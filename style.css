@@ -6556,6 +6556,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   transition: opacity .12s, color .12s; }
 .trow:hover .fin-rcp.off { opacity: 1; }
 .fin-rcp.off:hover { color: var(--blue); }
+/* Ссылка на сам чек в Бизнес.Ру стоит тем же тихим чипом, что и «снять»: это не
+   действие над строкой, а возможность убедиться своими глазами. */
+a.fin-rcp { text-decoration: none; display: inline-block; }
+a.fin-rcp.off:hover { text-decoration: underline; }
 /* «Разбить» — разложить сумму строки листа на задания самозанятого (в «Финансах»). */
 .fin-brk { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
