@@ -26723,7 +26723,7 @@
   }
   function socialTable(posts) {
     if (!posts || !posts.length) return '';
-    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Подписч', 'Длит', 'Куда вела'];
+    var head = ['', 'Дата', 'Тема', 'Формат', 'Просм', 'Вирал', 'Реакц', 'Комм', 'Реп', 'Клики', 'Сохр', 'Подписч', 'Длит', 'Переходы', 'Куда вела'];
     var rows = posts.slice().reverse().map(function (p) {
       var d = (p.published_at || '').slice(0, 10).split('-').reverse().join('.');
       return '<tr>' +
@@ -26740,6 +26740,7 @@
         '<td class="num">' + (p.saves != null ? snum(p.saves) : '—') + '</td>' +
         '<td class="num">' + (p.new_subscribers != null ? snum(p.new_subscribers) : '—') + '</td>' +
         '<td class="num">' + (p.duration_sec != null ? (Math.floor(p.duration_sec / 60) + ':' + ('0' + (p.duration_sec % 60)).slice(-2)) : '—') + '</td>' +
+        '<td class="num" title="клики по нашей короткой ссылке в посте">' + (p.go_clicks != null ? snum(p.go_clicks) : '—') + '</td>' +
         '<td>' + (p.link_url ? '<a href="' + esc(p.link_url) + '" target="_blank" rel="noopener" class="soc-out">' + esc(linkHost(p.link_url)) + ' ↗</a>' : '—') + '</td>' +
         '</tr>';
     }).join('');
@@ -26764,8 +26765,9 @@
       { label: 'Просмотры', value: snum(k.views), sub: k.posts_count + ' ' + plural(k.posts_count, 'пост', 'поста', 'постов') },
       { label: 'Реакции', value: snum(k.reactions), sub: k.comments + ' комм · ' + k.reposts + ' репостов' },
       { label: 'Подписчики', value: snum(k.subscribers), sub: 'сейчас · ' + (k.subscribers_delta >= 0 ? '+' : '') + k.subscribers_delta + ' ' + periodLabel(q) },
+      { label: 'Переходы по ссылкам', value: k.link_clicks != null ? snum(k.link_clicks) : '—', sub: 'клики по нашим меткам в постах' },
       { label: 'Средний охват', value: k.avg_reach != null ? snum(k.avg_reach) : '—', sub: 'ВК, на пост' },
-    ]);
+    ], 'five');
     var fparts = d.by_format.slice(0, 6);
     var ftotal = fparts.reduce(function (s, f) { return s + f.views; }, 0) || 1;
     var facc = 0;
