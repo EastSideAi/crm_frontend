@@ -18964,10 +18964,11 @@
         ? '<button class="fin-linkc" data-linkid="' + it.id + '" data-linknm="' +
           esc(it.counterparty || '') + '" title="Привязать к карточке клиента">+ клиент</button>'
         : '';
-      // «Разбить» — у строки, связанной с карточкой самозанятого: разложить сумму на задания.
+      // «Подобрать услуги» — у строки, связанной с карточкой самозанятого: собрать из суммы
+      // задания по услугам его должности (не «разбить»: слово про дробление оклада лишнее).
       var brkBtn = (canBreak && it.contractor_id)
         ? '<button class="fin-brk" data-fbrk="' + it.id +
-          '" title="Разбить сумму на задания самозанятого">разбить</button>'
+          '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
         : '';
       // Строка с пометкой о чеке выше обычной: у .trow жесткая высота 58px, и без
       // модификатора строка чека вылезала на соседнюю (проверено скрином 30.09.2026).
@@ -19150,7 +19151,7 @@
       '<div class="al-card rb-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div>' +
           '<div class="al-eyebrow">Расчетный лист · ' + esc(month) + '</div>' +
-          '<div class="al-title">Разбить сумму на задания</div></div>' +
+          '<div class="al-title">Подобрать услуги под сумму</div></div>' +
           '<button class="al-x" id="rb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         '<div class="al-sub">' + esc(name || 'исполнитель') + esc(sub) +
@@ -19231,12 +19232,21 @@
     ov.querySelector('#rb-x').addEventListener('click', close);
     ov.querySelector('#rb-cancel').addEventListener('click', close);
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var rbBusy = false;
     ov.querySelector('#rb-ok').addEventListener('click', function () {
+      // Блокируем кнопку на время запроса: без этого повторное нажатие заводит задания
+      // второй раз (задвоение 01.10.2026). Разблокируем только на ошибке — на успехе окно
+      // закрывается.
+      if (rbBusy) return;
       var clean = items.filter(function (it) { return it.qty > 0; });
       if (!clean.length) {
         ov.querySelector('#rb-err').textContent = 'Добавьте хотя бы одну услугу с количеством';
         return;
       }
+      var btn = ov.querySelector('#rb-ok');
+      rbBusy = true;
+      btn.disabled = true;
+      btn.textContent = 'Заводим…';
       czSend('/admin/api/contractor-reports/settlement/apply-breakdown', 'POST', {
         contractor_id: cid, period: month,
         items: clean.map(function (it) {
@@ -19245,8 +19255,14 @@
         }),
       }).then(function (res) {
         close();
-        showToast('Заведено заданий: ' + res.created + ' на ' + finRub(res.amount));
-      }).catch(function (e) { ov.querySelector('#rb-err').textContent = e.message; });
+        showToast('Заведено заданий: ' + res.created + ' на ' + finRub(res.amount) +
+                  '. Смотрите в Самозанятых');
+      }).catch(function (e) {
+        rbBusy = false;
+        btn.disabled = false;
+        btn.textContent = 'Завести задания';
+        ov.querySelector('#rb-err').textContent = e.message;
+      });
     });
   }
 
