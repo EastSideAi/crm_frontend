@@ -5946,6 +5946,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
   padding: 7px 14px; border-radius: var(--r-pill); }
 .dc-alert .dc-alert-go:hover { filter: brightness(.95); }
+/* Тот же информатор, но срок еще не вышел: это предупреждение, а не авария. */
+.dc-alert.warn { background: var(--amber-soft); color: var(--amber-ink); }
+.dc-alert.warn .ic { color: var(--amber); }
 
 /* ── РИСКИ (этап 9): информатор переквалификации ────────────────────────────
    Обзор — строка списка (.rsk-grid) с уровнем-чипом и флагами; разбор — карточка с
@@ -6560,6 +6563,24 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   cursor: pointer; opacity: .55; transition: opacity .12s, border-color .12s, color .12s; }
 .trow:hover .fin-linkc { opacity: 1; }
 .fin-linkc:hover { border-color: var(--blue); color: var(--blue); }
+/* Отметка о чеке в строке дохода: «пробит» — действие, «не нужен» и «снять» тише.
+   Тот же рецепт, что у «+ клиент»: в строке их две, и кричать им обеим нельзя. */
+.rcp-l { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+/* У .trow жесткая высота 58px — строке с пометкой о чеке даем расти. */
+.trow.has-rcp { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+.rcp-l .fst { padding: 2px 8px; font-size: 11px; }
+.fin-rcp { border: 0; background: var(--blue-tint); color: var(--blue-d);
+  font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
+  cursor: pointer; white-space: nowrap; }
+.fin-rcp:hover { background: var(--blue); color: #fff; }
+.fin-rcp.off { background: transparent; color: var(--ink-2); opacity: .55;
+  transition: opacity .12s, color .12s; }
+.trow:hover .fin-rcp.off { opacity: 1; }
+.fin-rcp.off:hover { color: var(--blue); }
+/* Ссылка на сам чек в Бизнес.Ру стоит тем же тихим чипом, что и «снять»: это не
+   действие над строкой, а возможность убедиться своими глазами. */
+a.fin-rcp { text-decoration: none; display: inline-block; }
+a.fin-rcp.off:hover { text-decoration: underline; }
 /* «Разбить» — разложить сумму строки листа на задания самозанятого (в «Финансах»). */
 .fin-brk { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
@@ -6581,6 +6602,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* Просроченный срок — единственный красный чип в семействе: по 54-ФЗ это уже штраф,
+   и отличать его от «скоро» одним амбером нельзя. */
+.fst.bad { color: var(--red-ink); background: var(--red-soft); }
 /* Чип приложенного документа (выплаты подрядчикам): нейтральная плашка с зелёной
    галочкой. Не залитый зелёный, чтобы не читаться вторым статусом рядом с «факт». */
 .fst.doc { color: var(--ink-2); background: var(--fill); gap: 4px; }
@@ -8659,6 +8683,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-do { position: relative; margin: 16px 0; }
 .academy .ac-do .ac-chkline { margin-top: 14px; padding: 12px 14px; background: var(--ac-fill); border-radius: var(--ac-r-md); }
 
+/* Поле ответа на домашку. Отделено от списка шагов воздухом: сверху задание,
+   снизу место, где на него отвечают, и граница между ними должна быть видна
+   без подписи. */
+.academy .ac-ans { margin-top: 18px; padding: 16px; background: var(--ac-fill); border-radius: var(--ac-r-lg); }
+.academy .ac-ans-h { font-size: 14px; font-weight: 650; color: var(--ac-ink); }
+.academy .ac-ans-p { margin: 6px 0 12px; font-size: 13px; line-height: 1.5; color: var(--ac-ink-2); }
+.academy .ac-ans-ta { min-height: 200px; }
+.academy .ac-ans-n { min-height: 17px; margin-top: 8px; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-ans-n.ok { color: var(--ac-green-ink); }
+.academy .ac-ans-n.bad { color: var(--ac-red); }
+
 /* Подпись документа. Пока текста нет, экран говорит об этом прямо и не
    изображает подписанное. */
 .academy .ac-doc { margin: 16px 0; border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-lg); padding: 18px; }
@@ -8909,6 +8944,16 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-frac.full { color: var(--green-ink); }
 .att-ok { display: inline-flex; color: var(--green); }
 .att-no { color: var(--ink-3); }
+/* Число сданных домашек — кнопка: за ней тексты ответов, и это единственный
+   способ увидеть, что человек понял, а что нет. */
+.att-hw { font: inherit; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--blue);
+  background: none; border: none; padding: 2px 6px; border-radius: 6px; cursor: pointer; transition: background .14s; }
+.att-hw:hover { background: var(--fill); }
+.hw-card { max-width: 720px; }
+.hw-item + .hw-item { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.hw-where { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; }
+.hw-at { font-weight: 400; }
+.hw-text { font-size: 14px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
 /* «Сейчас на» — где человек стоит в курсе. Номер урока приглушен, название нет:
    вопрос руководителя звучит как «на чем он застрял», а не «какой это номер». */
 .att-stage { min-width: 200px; color: var(--ink-2); }
@@ -9570,6 +9615,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    видно. Заполненная плашка рядом должна оставаться главнее. */
 .cab-seat.off { background: transparent; border: 1px dashed var(--line-2); }
 .cab-seat.off .cab-seat-n { color: var(--ink-2); font-weight: 600; }
+/* Человека позвали, но он не вошел: пунктир остается (места в кабинете все еще
+   нет), а подпись с именем позвавшего — то, ради чего плашка тут стоит. */
+.cab-seat.off.sent { border-style: solid; border-color: var(--line); }
+.cab-seat.off.sent .cab-seat-n { color: var(--ink); }
 .cab-seat.fresh { background: var(--green-soft); }
 .cab-seat.fresh .cab-seat-s { color: var(--green-ink); font-weight: 600; }
 .cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
@@ -10319,6 +10368,86 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
   color: var(--blue); cursor: pointer; }
 .un-costnote .lnk:hover { text-decoration: underline; }
+
+/* План отделов: сводка «кто сдал план на период» (renderFinPlans). */
+.pl-list { padding: 6px 8px 10px; }
+.pl-row { display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+  border-radius: var(--r-lg); }
+.pl-row + .pl-row { border-top: 1px solid var(--line); border-radius: 0; }
+.pl-row.wait { background: var(--red-soft); border-color: transparent; }
+.pl-nm { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+.pl-badge { font-size: 11.5px; font-weight: 650; padding: 3px 10px; border-radius: var(--r-pill);
+  letter-spacing: .01em; white-space: nowrap; }
+.pl-badge.ok { color: var(--green-ink); background: var(--green-soft); }
+.pl-badge.no { color: var(--red-ink); background: var(--red-soft); }
+.pl-val { display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; }
+.pl-sum { font-size: 14px; font-weight: 650; color: var(--ink); }
+.pl-sum.muted { color: var(--ink-3); font-weight: 500; }
+.pl-cnt { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+/* Отдел без своего листа — не «не сдал», а «некуда заносить»: тихая метка, не тревога. */
+.pl-badge.na { color: var(--ink-3); background: var(--fill); }
+.pl-fact { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; font-feature-settings: 'tnum'; }
+.pl-fact.muted { color: var(--ink-4, var(--ink-3)); }
+/* Строка сводки, из которой можно провалиться в лист отдела и занести план. */
+.pl-go { cursor: pointer; transition: background .12s var(--ease); }
+.pl-go:hover { background: #FAFBFC; }
+
+/* ── Блок «План на месяц» в расчётном листе + форма плановой строки ── */
+.plm-card { padding: 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
+.plm-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px 16px; flex-wrap: wrap; }
+.plm-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.plm-head .s { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; margin-top: 2px;
+  max-width: 520px; }
+.plm-nav { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.plm-arw { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
+  font-size: 18px; line-height: 1; color: var(--ink-2); background: var(--fill);
+  transition: .12s var(--ease); }
+.plm-arw:hover { color: var(--ink); background: #E9ECF0; }
+.plm-month { min-width: 118px; text-align: center; font-size: 13.5px; font-weight: 650;
+  color: var(--ink); font-feature-settings: 'tnum'; }
+.plm-stats { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--ink-2); }
+.plm-stats b { color: var(--ink); font-weight: 700; font-feature-settings: 'tnum'; }
+.plm-st { padding: 2px 9px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600; }
+.plm-st.ok { color: var(--green-ink); background: var(--green-soft); }
+.plm-st.over { color: var(--red-ink); background: var(--red-soft); }
+.plm-st.na { color: var(--ink-3); background: var(--fill); }
+.plm-row { display: grid; grid-template-columns: 1fr auto 28px; align-items: center; gap: 12px;
+  padding: 10px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.plm-row:hover { background: #FAFBFC; }
+.plm-it { font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.plm-it i { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-style: normal; margin-top: 1px; }
+.plm-sum { font-size: 14px; font-weight: 650; color: var(--ink); font-feature-settings: 'tnum'; }
+.plm-del { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px;
+  color: var(--ink-3); opacity: 0; transition: .12s var(--ease); }
+.plm-row:hover .plm-del { opacity: 1; }
+.plm-del:hover { color: var(--red-ink); background: var(--red-soft); }
+.plm-empty, .plm-load { padding: 14px 4px; font-size: 13px; color: var(--ink-3);
+  border-top: 1px solid var(--line); }
+.plm-add { align-self: flex-start; margin-top: 2px; }
+/* Строка-человек: план на 10-е и 20-е под именем чипами «выплачено», итого справа. */
+.plm-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 5px; }
+/* Чип выплаты: не отмечен — тихий контур, отмечен (стал фактом) — зелёный. */
+.plm-pay { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px;
+  font-weight: 600; padding: 2px 9px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2);
+  cursor: pointer; transition: .15s; font-feature-settings: 'tnum'; }
+.plm-pay:hover { border-color: var(--wire); color: var(--ink); }
+.plm-pay.paid { border-color: transparent; background: var(--green-soft);
+  color: var(--green-ink); }
+.plm-pay.paid:hover { background: var(--green-soft); }
+.plm-pnil { font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+/* Форма плановой строки: переключатель вида прячет лишние поля. */
+.plm-form .plm-kind { align-self: flex-start; margin-bottom: 4px; }
+.plm-form[data-kind="person"] .plm-expense { display: none; }
+.plm-form[data-kind="expense"] .plm-person { display: none; }
+.plm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.plm-total { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.plm-total b { color: var(--ink); font-weight: 700; font-feature-settings: 'tnum'; }
 
 /* ════ ПЛАН-ФАКТ (раздел planfact) ════
    Экран отвечает на один вопрос: успеваем ли мы к плану месяца. Главный элемент —
