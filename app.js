@@ -24667,6 +24667,9 @@
         ctaPeople, pct(ctaPeople, base), ctaPeople ? conv(pct(ctaPeople, c.came || base) + '% из пришедших') : convMut('нажатий пока нет')) +
       ladRow('Записались на разбор', 'выбрали время у тьютора',
         cur.booked, pct(cur.booked, base), cur.booked ? conv(pct(cur.booked, ctaPeople || base) + '% от нажавших') : convMut('записей пока нет')) +
+      ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
+        cur.held || 0, (cur.held || 0) ? pct(cur.held, base) : null,
+        cur.held ? conv(pct(cur.held, cur.booked || base) + '% от записавшихся') : convMut('разговоров пока не было')) +
       ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
         m.people, m.people ? (pct(m.people, base) || 2) : null,
         m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями')) +
@@ -24695,19 +24698,24 @@
         { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) },
         { label: 'Были в комнате', value: c.came,
           sub: cur.anon ? 'и еще ' + cur.anon + ' без регистрации' : pct(c.came, c.reg) + '% от регистраций' },
-        { label: 'Слушали 30 минут', value: c.w30,
-          sub: c.avg_min ? 'в среднем ' + c.avg_min + ' ' + plural(c.avg_min, 'минута', 'минуты', 'минут') : 'эфира еще не было' },
         { label: 'Вопросов в чате', value: c.questions,
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
+        { label: 'Смотрели запись', value: c.rec,
+          sub: c.rec ? pct(c.rec, c.reg) + '% от регистраций' : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked,
           sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
+        /* Запись и состоявшийся разговор — разные цифры: между ними теряется
+           половина, и одним числом эту потерю не увидеть. */
+        { label: 'Были на консультации', value: cur.held || 0,
+          sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
+                          : 'записей пока нет' },
         /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
            в сноске внизу: маленькую цифру через день после эфира иначе прочитают
            как провал, хотя сделки только начались. */
-        { label: 'Оплатили', value: fmtMoney(m.sum) + ' ₽',
-          sub: m.people
-            ? m.people + ' ' + plural(m.people, 'человек', 'человека', 'человек') + ' · средний чек ' + fmtMoney(m.avg)
-            : (m.wait_n ? 'в работе ' + fmtMoney(m.wait_sum) + ' ₽' : 'сделки идут неделями') },
+        { label: 'Оплатили', value: m.people,
+          sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
+        { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
+          sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
       ]) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
