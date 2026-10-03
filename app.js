@@ -4791,7 +4791,13 @@
       { method: 'POST', credentials: 'include' })
       .then(function (r) {
         if (!r.ok) throw new Error(String(r.status));
-        v.src = src;
+        return r.json().catch(function () { return {}; });
+      })
+      .then(function (j) {
+        // Подпись в адресе важнее cookie: Safari с защитой от слежки и часть
+        // мобильных браузеров cookie чужого поддомена молча выбрасывают, и
+        // человек видит черный плеер (поймано у Анастасии 03.10.2026).
+        v.src = (j && j.t) ? src + '?t=' + encodeURIComponent(j.t) : src;
         if (wait) wait.hidden = true;
       })
       .catch(function () {
