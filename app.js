@@ -25488,20 +25488,32 @@
     var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
 
     /* Нажатия кнопок считаем по людям, а не по кликам: один человек, потыкавший
-       три кнопки, — это один заинтересованный, а не три. */
-    var ctaPeople = (cur.cta || []).reduce(function (n, b) { return n > b.n ? n : b.n; }, 0);
-    var base = Math.max(c.reg, c.came, cur.anon) || 1;
+       три кнопки, — это один заинтересованный, а не три. Считает сервер: по
+       плиткам кнопок это не складывается (двое нажали разные кнопки — максимум по
+       кнопкам покажет одного). */
+    var ctaPeople = cur.cta_people != null ? cur.cta_people
+      : (cur.cta || []).reduce(function (n, b) { return n > b.n ? n : b.n; }, 0);
+    /* Зал — это ВСЕ, кто смотрел в день эфира: и по личным ссылкам из писем, и
+       молча по открытой ссылке. Регистрации в окно эфира — отдельное население, а
+       не ступень пути: зритель может прийти из старой базы и не регистрироваться
+       заново, а записавшийся может не прийти. Поэтому путь идёт от «позвали». */
+    var invited = cur.invited || 0;
+    var known = c.known == null ? c.came : c.known;
+    var base = Math.max(invited, c.came, c.reg) || 1;
+    var zalSub = known + ' ' + plural(known, 'человек по личной ссылке', 'человека по личным ссылкам', 'человек по личным ссылкам') +
+      (cur.anon ? ', ' + cur.anon + ' без регистрации' : '');
 
     var ladder =
-      ladRow('Зарегистрировались', 'форма на странице эфира и люди из бота',
-        c.reg, pct(c.reg, base), convMut('все, кого позвали')) +
-      ladRow('Открыли комнату', cur.anon ? 'плюс ' + cur.anon + ' смотрели без регистрации' : 'зашли на страницу в день эфира',
-        c.came, pct(c.came, base), conv(pct(c.came, c.reg) + '% от регистраций')) +
+      (cur.invited ? ladRow('Позвали письмом', 'рассылки эфира в ботах, без наших контрольных копий',
+        invited, 100, convMut('база эфира')) : '') +
+      ladRow('Были в комнате', zalSub,
+        c.came, pct(c.came, base),
+        invited ? conv(pct(c.came, invited) + '% от приглашенных') : convMut('в день эфира')) +
       ladRow('Слушали 10 минут', 'отделяет заглянувшего от зрителя',
         c.w10, pct(c.w10, base), conv(pct(c.w10, c.came || base) + '% из пришедших')) +
       ladRow('Слушали 30 минут', c.avg_min ? 'в среднем смотрели ' + c.avg_min + ' ' + plural(c.avg_min, 'минуту', 'минуты', 'минут') : 'самая теплая часть зала',
         c.w30, pct(c.w30, base), conv(pct(c.w30, c.came || base) + '% из пришедших')) +
-      ladRow('Задали вопрос', c.questions ? c.questions + ' ' + plural(c.questions, 'вопрос', 'вопроса', 'вопросов') + ' всего' : 'в чате эфира',
+      ladRow('Задали вопрос', c.questions ? c.questions + ' ' + plural(c.questions, 'вопрос', 'вопроса', 'вопросов') + ' в чате' : 'в чате эфира',
         c.askers, pct(c.askers, base), c.askers ? conv(pct(c.askers, c.came || base) + '% из пришедших') : convMut('вопросов не было')) +
       ladRow('Нажали кнопку записи', 'кнопки под плеером: телеграм, ВК, MAX',
         ctaPeople, pct(ctaPeople, base), ctaPeople ? conv(pct(ctaPeople, c.came || base) + '% из пришедших') : convMut('нажатий пока нет')) +
@@ -25509,13 +25521,13 @@
         cur.booked, pct(cur.booked, base), cur.booked ? conv(pct(cur.booked, ctaPeople || base) + '% от нажавших') : convMut('записей пока нет')) +
       ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
         cur.held || 0, (cur.held || 0) ? pct(cur.held, base) : null,
-        cur.held ? conv(pct(cur.held, cur.booked || base) + '% от записавшихся') : convMut('разговоров пока не было')) +
+        cur.held ? conv(pct(cur.held, cur.booked || base) + '% от записавшихся') : convMut('разговоров не было')) +
       ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
         m.people, m.people ? (pct(m.people, base) || 2) : null,
         m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями')) +
-      ladRow('Смотрели запись', 'после эфира, по той же ссылке',
+      ladRow('Смотрели запись', cur.anon_rec ? 'включая ' + cur.anon_rec + ' без регистрации' : 'после эфира, по той же ссылке',
         c.rec, c.rec ? pct(c.rec, base) : null,
-        c.rec ? conv(pct(c.rec, c.reg || base) + '% от регистраций') : convMut('записи пока нет'));
+        c.rec ? conv(pct(c.rec, c.came || base) + '% от зала') : convMut('записи пока нет'));
 
     var srcRows = (cur.sources || []).map(function (s) {
       return flatRow(s.src === 'не размечено' ? 'Источник не размечен' : mkSourceName(s.src),
@@ -25535,13 +25547,18 @@
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
-        { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) },
-        { label: 'Были в комнате', value: c.came,
-          sub: cur.anon ? 'и еще ' + cur.anon + ' без регистрации' : pct(c.came, c.reg) + '% от регистраций' },
+        /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
+           жизни другой — сколько людей из базы мы смогли привести. */
+        (cur.invited ? { label: 'Позвали письмом', value: invited,
+                         sub: 'рассылки эфира, живые адреса' }
+                     : { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) }),
+        { label: 'Были в комнате', value: c.came, sub: zalSub },
         { label: 'Вопросов в чате', value: c.questions,
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
         { label: 'Смотрели запись', value: c.rec,
-          sub: c.rec ? pct(c.rec, c.reg) + '% от регистраций' : 'записи пока нет' },
+          sub: c.rec ? (cur.anon_rec ? 'из них ' + cur.anon_rec + ' без регистрации'
+                                     : pct(c.rec, c.came || 1) + '% от зала')
+                     : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked,
           sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
         /* Запись и состоявшийся разговор — разные цифры: между ними теряется
@@ -25563,7 +25580,11 @@
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
-          '<div><div class="t">Откуда пришли</div><div class="s">метка ссылки, по которой человек попал на эфир</div></div></div>' +
+          '<div><div class="t">Новые регистрации</div><div class="s">' +
+            (c.reg ? c.reg + ' ' + plural(c.reg, 'человек заполнил', 'человека заполнили', 'человек заполнили') +
+                     ' форму · ' + esc(efirWindowText(cur.window))
+                   : 'форму на странице эфира в это окно никто не заполнял') +
+          '</div></div></div>' +
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + srcRows + '</div></div>' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Кнопки на странице</div><div class="s">' +
