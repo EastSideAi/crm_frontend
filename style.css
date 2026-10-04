@@ -2562,6 +2562,10 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* за какие темы клиенты приходят вам — справка, не настройка: тише основного блока */
 .np-topics { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 .np-topics b { color: var(--ink); font-weight: 700; }
+/* «уведомления без темы»: тумблер и строка пояснения под ним — отдельный блок, иначе
+   читается как часть справки о темах выше */
+.np-fanrow { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.np-fan { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .np-skel { height: 46px; }
 .np-wait { opacity: .55; pointer-events: none; transition: opacity .15s var(--ease); }
 .al-cancel { height: 42px; padding: 0 16px; border-radius: 11px; font: 600 13.5px 'Manrope', sans-serif;

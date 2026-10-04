@@ -1434,12 +1434,23 @@
         : 'За вами не закреплена ни одна тема — уведомления о клиентах идут другим.') +
         ' Меняет руководитель в разделе «Команда».</div>';
 
+      /* Уведомления, у которых тема не определилась, идут всем — страховка, чтобы
+         горячий клиент не пропал. Кому они заваливают важное, тот их выключает сам
+         (Вера, 04.10.2026: «пишет мне все подряд, теряется важная информация»). */
+      var fan = !st || st.fanout !== false;
+      var fanout = '<div class="np-fan">' +
+        '<button class="ai-toggle' + (fan ? ' on' : '') + '" data-fan="' + (fan ? '0' : '1') + '">' +
+          '<span class="ait-dot"></span>' + (fan ? 'Приходят' : 'Не приходят') + '</button>' +
+        '<div class="np-hint">Клиенты, у которых тема не определилась. Такие уведомления ' +
+        'идут всей команде. Если их много, оставьте только свои темы.</div></div>';
+
       body.innerHTML =
         '<div class="al-f"><span class="al-l">Мессенджер</span>' +
           '<div class="dperiod np-seg">' + NOTIFY_CH.map(function (c) {
             return '<button data-ch="' + c.id + '"' + (c.id === ch ? ' class="on"' : '') + '>' +
               ic(c.icon, 13) + esc(c.label) + '</button>';
-          }).join('') + '</div></div>' + state1 + topics;
+          }).join('') + '</div></div>' + state1 + topics +
+        '<div class="al-f np-fanrow"><span class="al-l">Уведомления без темы</span>' + fanout + '</div>';
 
       Array.prototype.forEach.call(body.querySelectorAll('[data-ch]'), function (b) {
         b.addEventListener('click', function () {
@@ -1456,6 +1467,24 @@
               : 'Уведомления идут в ' + notifyChans(next).map(function (c) {
                   return notifyMeta(c).label;
                 }).join(' и '));
+          }).catch(function () {
+            body.classList.remove('np-wait');
+            showToast('Не удалось сохранить — попробуйте ещё раз');
+          });
+        });
+      });
+      Array.prototype.forEach.call(body.querySelectorAll('[data-fan]'), function (b) {
+        b.addEventListener('click', function () {
+          var on = b.getAttribute('data-fan') === '1';
+          body.classList.add('np-wait');
+          api('/admin/api/me/notify', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fanout: on }),
+          }).then(function (r) {
+            body.classList.remove('np-wait');
+            render(r);
+            showToast(on ? 'Будете получать и клиентов без темы'
+              : 'Теперь только по вашим темам');
           }).catch(function () {
             body.classList.remove('np-wait');
             showToast('Не удалось сохранить — попробуйте ещё раз');
