@@ -4032,7 +4032,18 @@
      У тьютора все как было: урок за уроком, на вопрос надо ответить. */
   function acReview() { return state.role === 'super_admin' || state.role === 'owner'; }
   function acMaxUnlocked() { return acReview() ? acLessons().length - 1 : acFirstOpen(); }
-  function acExamOpen() { return acReview() || acPassedCount() >= acLessons().length; }
+  /* Страницу CRM люди держат открытой сутками, а список уроков приходит вместе с
+     ней. Добавили курсу урок — у человека в старой вкладке его нет, и он доходит
+     до аттестации, которую сервер уже не примет (4 октября 2026, курс продаж).
+     Сервер в ответе называет, сколько уроков в курсе на самом деле: больше, чем
+     знает страница, — значит она устарела и аттестацию держим закрытой. */
+  function acStale() {
+    var srv = state.ac && state.ac.srv;
+    return !!(srv && srv.lessons_total > acLessons().length);
+  }
+  var AC_STALE_MSG = 'Курс обновился: в нем появились новые уроки. Обновите страницу, ' +
+    'чтобы увидеть их, иначе аттестацию не принять.';
+  function acExamOpen() { return acReview() || (acPassedCount() >= acLessons().length && !acStale()); }
 
   /* Индексы шагов аттестации. Состав у курсов разный (у одного две практики и
      выбор оплаты, у другого одна практика и только соглашение), поэтому шаги
@@ -4284,10 +4295,28 @@
     });
   }
 
+  /* Черновик практики аттестации. Ответы на задания живут в памяти вкладки и
+     уходят на сервер одним запросом в самом конце — до 4 октября 2026 перезагрузка
+     или закрытая вкладка стирали написанное целиком (у человека так пропал час
+     работы). Держим копию в браузере: она переживает перезагрузку и чистится,
+     когда аттестация сдана или курс сброшен. */
+  var AC_DRAFT_PREF = 'eastside_ac_draft_';
+  function acDraftLoad(cid) {
+    try { return JSON.parse(localStorage.getItem(AC_DRAFT_PREF + cid) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function acDraftSave(cid, tv) {
+    try { localStorage.setItem(AC_DRAFT_PREF + cid, JSON.stringify(tv || {})); }
+    catch (e) { /* приватный режим */ }
+  }
+  function acDraftClear(cid) {
+    try { localStorage.removeItem(AC_DRAFT_PREF + cid); } catch (e) { /* приватный режим */ }
+  }
+
   function acOpen(view, cid) {
     var c = acById(cid); if (!c) return;
     state.ac.course = c; state.ac.srv = null;
-    state.ac.li = null; state.ac.tv = {}; state.ac.lt = {}; state.ac.cl = {}; state.ac.iv = {};
+    state.ac.li = null; state.ac.tv = acDraftLoad(cid); state.ac.lt = {}; state.ac.cl = {}; state.ac.iv = {};
     state.ac.hw = {};
     renderAcademy(view);
   }
@@ -4362,7 +4391,7 @@
     el('ac-rlist').addEventListener('click', function (ev) {
       var row = ev.target.closest('[data-go]'); if (!row) return;
       var go = +row.getAttribute('data-go');
-      if (go === acExamI()) { if (!acExamOpen()) return; A.li = acExamI(); A.exStep = 0; acRenderExam(view); return; }
+      if (go === acExamI()) { if (!acExamOpen()) { if (acStale()) showToast(AC_STALE_MSG); return; } A.li = acExamI(); A.exStep = 0; acRenderExam(view); return; }
       if (go > acMaxUnlocked()) return;
       A.li = go; A.si = 0; acRender(view);
       // Выбрал урок на телефоне — программа складывается, иначе сам урок
@@ -4377,6 +4406,9 @@
     acVoiceWire();
 
     if (A.li === acExamI()) acRenderExam(view); else acRender(view);
+    // Открытая сутками вкладка: предупреждаем сразу, а не когда человек упрется
+    // в запертую аттестацию.
+    if (acStale() && !acReview()) showToast(AC_STALE_MSG);
   }
 
   function acBuildRoute() {
@@ -5340,7 +5372,7 @@
       scr.innerHTML = head + '<div class="ac-task"><p>' + esc(t.p) + '</p>' +
         '<textarea class="ac-ta" id="ac-ta" placeholder="' + esc(t.ph || '') + '"></textarea></div>';
       var ta = el('ac-ta'); if (A.tv[t.id]) ta.value = A.tv[t.id];
-      var upd = function () { A.tv[t.id] = ta.value; nx.disabled = acReview() ? false : ta.value.trim().length < (t.min || 15); };
+      var upd = function () { A.tv[t.id] = ta.value; acDraftSave(acC().id, A.tv); nx.disabled = acReview() ? false : ta.value.trim().length < (t.min || 15); };
       ta.addEventListener('input', upd); upd();
     } else {
       var on = !!A.tv[t.id];
@@ -5349,7 +5381,7 @@
         (t.tg ? '<a class="ac-tg" href="https://t.me/' + esc(t.tg) + '" target="_blank" rel="noopener">' + ic('send', 15) + 'Открыть чат администратора · @' + esc(t.tg) + '</a>' : '') +
         '</div><label class="ac-chkline"><input type="checkbox" id="ac-tc"' + (on ? ' checked' : '') + '> ' + esc(t.chk) + '</label>';
       var chk = el('ac-tc');
-      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; nx.disabled = acReview() ? false : !chk.checked; });
+      chk.addEventListener('change', function () { A.tv[t.id] = chk.checked; acDraftSave(acC().id, A.tv); nx.disabled = acReview() ? false : !chk.checked; });
       nx.disabled = acReview() ? false : !on;
     }
     el('ac-steplab').textContent = lab;
@@ -5397,6 +5429,40 @@
     acBuildRoute(); acAnim(scr);
   }
 
+  /* Отказ сервера на последнем шаге. До 4 октября 2026 кнопка оставалась в
+     «Отправляю…» навсегда: ошибка уходила в общий обработчик, человек сидел над
+     зависшим экраном и боялся тронуть вкладку, чтобы не потерять написанное.
+     Теперь кнопка возвращается, а причина названа словами на самом экране. */
+  function acFinishWhy(code, e) {
+    var d = String((e && e.body && e.body.detail) || '');
+    if (code === 409 && d.indexOf('урок') !== -1) {
+      return 'В курсе появился новый урок, и без него аттестацию не принять. ' +
+        'Обновите страницу, пройдите его и вернитесь сюда: ответы на задания сохранены.';
+    }
+    if (code === 422) {
+      return 'Аттестация неполная: где-то не заполнено задание или не принято соглашение. ' +
+        'Пройдите шаги назад и проверьте.';
+    }
+    if (code === 409 && d.indexOf('personal') !== -1) {
+      return 'Вы вошли по общему ключу. Зайдите под своим логином и сдайте аттестацию.';
+    }
+    return 'Сервер не принял аттестацию' + (code ? ' (код ' + code + ')' : '') +
+      '. Попробуйте ещё раз, ответы сохранены.';
+  }
+
+  function acExamFail(nx, msg) {
+    nx.disabled = false; nx.textContent = 'Завершить аттестацию';
+    var scr = el('ac-screen');
+    if (scr) {
+      var old = scr.querySelector('.ac-fail'); if (old) old.parentNode.removeChild(old);
+      var box = document.createElement('div');
+      box.className = 'ac-fail';
+      box.innerHTML = acNote({ warn: true, t: esc(msg) });
+      scr.appendChild(box);
+    }
+    showToast(msg);
+  }
+
   function acExamNext(view) {
     var A = state.ac, X = acExIdx(), cid = acC().id;
     var last = X.agree ? X.iAgree : X.N + X.T;
@@ -5408,19 +5474,21 @@
         { score: right, tasks: A.tv || {}, pay_method: A.pay || '', agreement: !!A.agreed },
         function (r) {
           if (r && r.passed) {
+            acDraftClear(cid);
             A.srv = r; A.exStep = X.iResult; renderSide(); acExamResult(view);
             showToast('Аттестация пройдена, допуск открыт');
           } else {
-            nx.disabled = false; nx.textContent = 'Завершить аттестацию';
-            showToast('Не удалось сохранить аттестацию, попробуйте ещё раз');
+            acExamFail(nx, 'Не удалось сохранить аттестацию, попробуйте ещё раз');
           }
-        });
+        },
+        function (code, e) { acExamFail(nx, acFinishWhy(code, e)); });
       return;
     }
     // с экрана результата — пройти заново
     apiSend('/admin/api/academy/reset?course=' + encodeURIComponent(cid), 'POST', null, function (r) {
       if (r) A.srv = r;
       A.exStep = 0; A.exAnswers = []; A.pay = null; A.agreed = false;
+      acDraftClear(cid);
       A.tv = {}; A.lt = {}; A.li = 0; A.si = 0; renderSide();
       acRender(view); showToast('Курс сброшен, можно пройти заново');
     });
