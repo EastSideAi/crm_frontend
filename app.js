@@ -24132,9 +24132,13 @@
     }, 60000);
   }
 
-  function ladRow(name, small, n, track, right, cls) {
-    /* track: null = серой полосы нет (данных не бывает), число 0..100 = ширина */
-    return '<div class="lad-row' + (cls ? ' ' + cls : '') + '">' +
+  function ladRow(name, small, n, track, right, cls, ebl) {
+    /* track: null = серой полосы нет (данных не бывает), число 0..100 = ширина
+       ebl — ключ плашки эфира: строка становится кликабельной и открывает список
+       людей, посчитанных именно ею. */
+    return '<div class="lad-row' + (cls ? ' ' + cls : '') + (ebl ? ' brk-open' : '') + '"' +
+      (ebl ? ' data-ebl="' + esc(ebl) + '" role="button" tabindex="0"' +
+             ' title="Показать этих людей поименно"' : '') + '>' +
       '<div class="lad-nm">' + esc(name) + (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-track">' + (track == null ? '' : '<div class="lad-fill" style="width:' + track + '%"></div>') + '</div>' +
       '<div class="lad-n num">' + n + '</div>' +
@@ -24505,6 +24509,12 @@
 
   function launchPeopleQS(offset) {
     var p = state._lpPeople;
+    if (p.kind === 'efir') {
+      /* У эфира нет периода: он сам и есть период. */
+      return '?' + ['slug=' + encodeURIComponent(p.slug),
+                    'block=' + encodeURIComponent(p.block),
+                    'limit=' + LP_LIMIT, 'offset=' + offset].join('&');
+    }
     if (p.kind === 'block') {
       /* Период сюда НЕ передаём: блоки его не слушаются — они считают весь запуск.
          Обещать в списке фильтр, которого нет в цифре, значит снова их развести. */
@@ -24553,6 +24563,21 @@
     launchPeopleLoad(false);
   }
 
+  /* Список людей за плашкой эфира. Машинерия та же, что у «Запусков»: одно окно,
+     одна таблица, одна пагинация — второй, похожий, но свой список читался бы как
+     другой продукт. */
+  function efirBlockOpen(slug, block, title, efirTitle, node) {
+    state._lpPeople = {
+      kind: 'efir', id: 'efir:' + slug + ':' + block,
+      slug: slug, block: block, value: '', step: '',
+      title: title || 'Люди эфира', plate: 0, launch: efirTitle || '',
+      from: '', to: '',
+      rows: [], total: null, loading: true, error: '', fresh: true,
+      back: node || null,
+    };
+    launchPeopleLoad(false);
+  }
+
   function launchPeopleClose() {
     var back = state._lpPeople && state._lpPeople.back;
     state._lpPeople = null;
@@ -24570,7 +24595,8 @@
     /* Сверяем не ступень, а полный ключ списка: у блоков ступени нет вовсе, и по
        пустой строке ответ на «Телеграм» лёг бы в открытый список «Тест». */
     var who = p.id;
-    var url = (p.kind === 'block') ? '/admin/api/marketing/launch/block'
+    var url = p.kind === 'efir' ? '/admin/api/marketing/efir/people'
+            : (p.kind === 'block') ? '/admin/api/marketing/launch/block'
                                    : '/admin/api/marketing/launch/people';
     launchPeopleModal();
     api(url + launchPeopleQS(offset)).then(function (r) {
@@ -24648,11 +24674,13 @@
          телефон и дата регистрации, у людей из бота — только ник и дата входа.
          Назвать чужой столбец «Контакт» и «Регистрация» значит пообещать данные,
          которых в строке нет. */
-      var bot = p.kind === 'block' && p.block !== 'source';
+      var bot = (p.kind === 'block' && p.block !== 'source') ||
+                (p.kind === 'efir' && p.block === 'invited');
       var cols = bot
         ? ['Человек', 'Ник', 'Откуда пришёл',
-           p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
-        : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
+           p.kind === 'efir' ? 'Письмо' : (p.block === 'channel' ? 'Вступил' : 'Зашёл в тест')]
+        : ['Человек', 'Контакт', 'Откуда пришёл',
+           p.kind === 'efir' ? 'Регистрация' : 'Регистрация'];
       body = '<div class="lp-tbl"><div class="lp-th">' +
         cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(launchPeopleRow).join('') + '</div>';
@@ -24677,13 +24705,18 @@
     var head = '<div class="mk-modal-t"><span>' + esc(p.title) +
         ' · <span class="num">' + fmtMoney(total) + '</span></span></div>' +
       '<div class="mk-modal-s">' + (p.launch ? esc(p.launch) + ' · ' : '') +
-        esc(p.kind === 'block' ? 'весь запуск' : per) + ' · ' +
+        esc(p.kind === 'block' ? 'весь запуск' : (p.kind === 'efir' ? 'весь эфир' : per)) + ' · ' +
         (p.kind === 'block'
           ? (p.block === 'source'
               ? 'это те же люди, что посчитаны в блоке'
               : 'это те же люди, что посчитаны в блоке · ' +
                 'связаны ли они с регистрацией — мы не знаем')
-          : 'это те же люди, что посчитаны на плашке') + '</div>';
+          /* У эфира часть зала безымянная: человек смотрит по открытой ссылке, не
+             оставив ни имени, ни телефона. Говорим об этом прямо в шапке, иначе
+             пустые строки читаются как сбой. */
+          : (p.kind === 'efir'
+              ? 'это те же люди, что посчитаны на плашке · зрители без регистрации идут строкой без имени'
+              : 'это те же люди, что посчитаны на плашке')) + '</div>';
 
     /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
        страницу под затемнением. Запоминаем, где он был, и возвращаем после сборки:
@@ -25672,30 +25705,34 @@
 
     var ladder =
       (cur.invited ? ladRow('Рассылки письма на эфир', 'живые адреса, без наших контрольных копий',
-        invited, 100, convMut('база эфира')) : '') +
+        invited, 100, convMut('база эфира'), '', 'invited') : '') +
       ladRow('Участники эфира', 'живьем или в записи, каждый человек один раз',
         uchastniki, pct(uchastniki, top),
-        invited ? step(uchastniki) : convMut('все, кто видел эфир')) +
-      ladRow('Были в комнате', zalSub, c.came, pct(c.came, top), step(c.came)) +
+        invited ? step(uchastniki) : convMut('все, кто видел эфир'), '', 'people') +
+      ladRow('Были в комнате', zalSub, c.came, pct(c.came, top), step(c.came), '', 'came') +
       ladRow('Слушали 10 минут', 'отделяет заглянувшего от зрителя',
-        c.w10, pct(c.w10, top), step(c.w10)) +
+        c.w10, pct(c.w10, top), step(c.w10), '', 'w10') +
       ladRow('Слушали 30 минут', c.avg_min ? 'в среднем смотрели ' + c.avg_min + ' ' + plural(c.avg_min, 'минуту', 'минуты', 'минут') : 'самая теплая часть зала',
-        c.w30, pct(c.w30, top), step(c.w30)) +
+        c.w30, pct(c.w30, top), step(c.w30), '', 'w30') +
       ladRow('Задали вопрос', c.questions ? c.questions + ' ' + plural(c.questions, 'вопрос', 'вопроса', 'вопросов') + ' в чате' : 'в чате эфира',
-        c.askers, pct(c.askers, top), c.askers ? step(c.askers) : convMut('вопросов не было')) +
+        c.askers, pct(c.askers, top), c.askers ? step(c.askers) : convMut('вопросов не было'),
+        '', c.askers ? 'askers' : '') +
       ladRow('Смотрели запись', cur.anon_rec ? 'включая ' + cur.anon_rec + ' без регистрации' : 'после эфира, по той же ссылке',
         c.rec, c.rec ? pct(c.rec, top) : null,
-        c.rec ? step(c.rec) : convMut('записи пока нет')) +
+        c.rec ? step(c.rec) : convMut('записи пока нет'), '', c.rec ? 'rec' : '') +
       ladRow('Нажали кнопку записи', 'кнопки под плеером: телеграм, ВК, MAX',
-        ctaPeople, pct(ctaPeople, top), ctaPeople ? step(ctaPeople) : convMut('нажатий пока нет')) +
+        ctaPeople, pct(ctaPeople, top), ctaPeople ? step(ctaPeople) : convMut('нажатий пока нет'),
+        '', ctaPeople ? 'cta' : '') +
       ladRow('Записались на разбор', 'выбрали время у тьютора',
-        cur.booked, pct(cur.booked, top), cur.booked ? step(cur.booked) : convMut('записей пока нет')) +
+        cur.booked, pct(cur.booked, top), cur.booked ? step(cur.booked) : convMut('записей пока нет'),
+        '', cur.booked ? 'booked' : '') +
       ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
         cur.held || 0, (cur.held || 0) ? pct(cur.held, top) : null,
-        cur.held ? step(cur.held) : convMut('разговоров не было')) +
+        cur.held ? step(cur.held) : convMut('разговоров не было'), '', cur.held ? 'held' : '') +
       ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
         m.people, m.people ? (pct(m.people, top) || 2) : null,
-        m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями'));
+        m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями'),
+        '', m.people ? 'paid' : '');
 
     var srcRows = (cur.sources || []).map(function (s) {
       return flatRow(s.src === 'не размечено' ? 'Источник не размечен' : mkSourceName(s.src),
@@ -25726,33 +25763,34 @@
         /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
            жизни другой — сколько людей из базы мы смогли привести. */
         (cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
-                         sub: 'живые адреса, без наших копий' }
-                     : { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) }),
+                         sub: 'живые адреса, без наших копий', ebl: 'invited' }
+                     : { label: 'Зарегистрировались', value: c.reg,
+                         sub: efirWindowText(cur.window), ebl: 'reg' }),
         /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
            или в записи. Человек, посмотревший оба раза, считается один раз. */
-        { label: 'Участники эфира', value: uchastniki,
+        { label: 'Участники эфира', value: uchastniki, ebl: 'people',
           sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
                'живьем ' + c.came + ', запись ' + c.rec },
-        { label: 'Были в комнате', value: c.came, sub: zalSub },
-        { label: 'Вопросов в чате', value: c.questions,
+        { label: 'Были в комнате', value: c.came, sub: zalSub, ebl: 'came' },
+        { label: 'Вопросов в чате', value: c.questions, ebl: c.askers ? 'askers' : '',
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
         /* Запись смотрят ДРУГИЕ люди, а не те же, что были в зале, поэтому процент
            здесь от рассылки, а не от зала: «80% от зала» читалось как «почти все
            вернулись», хотя пересечения может не быть вовсе. */
-        { label: 'Смотрели запись', value: c.rec,
+        { label: 'Смотрели запись', value: c.rec, ebl: c.rec ? 'rec' : '',
           sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
-        { label: 'Записались на разбор', value: cur.booked,
+        { label: 'Записались на разбор', value: cur.booked, ebl: cur.booked ? 'booked' : '',
           sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
         /* Запись и состоявшийся разговор — разные цифры: между ними теряется
            половина, и одним числом эту потерю не увидеть. */
-        { label: 'Были на консультации', value: cur.held || 0,
+        { label: 'Были на консультации', value: cur.held || 0, ebl: cur.held ? 'held' : '',
           sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
                           : 'записей пока нет' },
         /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
            в сноске внизу: маленькую цифру через день после эфира иначе прочитают
            как провал, хотя сделки только начались. */
-        { label: 'Оплатили', value: m.people,
+        { label: 'Оплатили', value: m.people, ebl: m.people ? 'paid' : '',
           sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
@@ -25783,6 +25821,23 @@
           '</div></div></div>' +
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + ctaRows + '</div></div>' +
       '</div></div>';
+
+    /* Клик по плашке или ступени открывает тех же людей, что она посчитала. Цифра,
+       которую нельзя развернуть в людей, команду не убеждает — ее перепроверяют в
+       своей табличке и перестают смотреть на экран. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ebl]'), function (n) {
+      var open = function () {
+        var block = n.getAttribute('data-ebl');
+        if (!block) return;
+        var nm = n.querySelector('.sl, .lad-nm');
+        efirBlockOpen(cur.slug, block, nm ? nm.childNodes[0].textContent.trim() : '',
+          cur.title, n);
+      };
+      n.addEventListener('click', open);
+      n.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
 
     Array.prototype.forEach.call(view.querySelectorAll('[data-efir]'), function (t) {
       t.addEventListener('click', function () {
@@ -29745,7 +29800,12 @@
       var foot = s.delta
         ? '<span class="kd ' + (s.deltaCls || '') + '">' + s.delta + '</span>'
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
-      return '<button class="stat' + (s.go ? ' go' : '') + '"' + (s.go ? ' data-go="' + s.go + '"' : '') + '>' +
+      return '<button class="stat' + (s.go || s.ebl ? ' go' : '') + '"' +
+        (s.go ? ' data-go="' + s.go + '"' : '') +
+        /* data-ebl — плашка эфира, за которой стоит поименный список: раздел сам
+           вешает на нее обработчик. Отдельный атрибут, а не data-go: тот уводит на
+           другую страницу, а здесь список открывается поверх. */
+        (s.ebl ? ' data-ebl="' + s.ebl + '" title="Показать этих людей поименно"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
         /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
            и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
