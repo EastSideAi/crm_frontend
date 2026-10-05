@@ -2174,10 +2174,14 @@
   // другой, и чужие ИНН с суммами выплат исполнителю не показываются.
   // 'finmodel_edit' — правка ведомости, отдельно от просмотра: по правилу владельца
   // смотреть может каждый, у кого есть раздел, а править остатки — финансист.
+  // 'cz_pay' — только деньги подрядчиков: реестр к оплате, счет и акт по нему, отметка
+  // «оплачено». Дано бухгалтеру (решение Романа 05.10.2026): платежки делает она, а
+  // счет до этого жил в переписке. Заданий, планов, рисков и анкет исполнителей с их
+  // паспортами это право НЕ открывает, поэтому оно отдельное от 'contractors'.
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact'] },
@@ -2224,7 +2228,7 @@
     assistant:     { label: 'Бизнес-ассистент',       short: 'задачи и финансы',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'portal', 'finance', 'contractors', 'finmodel', 'finmodel_edit'] },
     // Бухгалтеру нужны деньги и свои задачи. Карточки учеников — персональные
     // данные несовершеннолетних, для бухгалтерии они не нужны.
-    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance'] },
+    accountant:    { label: 'Бухгалтер',              short: 'деньги и свои задачи', caps: ['dash', 'tasks', 'finance', 'cz_pay'] },
     // Отвечает только за выплаты подрядчикам (Роман 11.09.2026): вносит выплаты в
     // дашборд, они падают расходом фонда подрядчиков. Всю ведомость не видит. Зеркало
     // ROLE_CAPS в backend/app/routers/admin.py.
@@ -2346,7 +2350,11 @@
     { id: 'contractors', label: 'Исполнители', icon: 'badge', cap: 'contractors', space: 'cz' },
     { id: 'cztasks', label: 'Задания', icon: 'task', cap: 'contractors', space: 'cz' },
     { id: 'czplans', label: 'Планы работ', icon: 'cal', cap: 'contractors', space: 'cz' },
-    { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors', space: 'cz' },
+    // Выплаты открыты двумя дверями: весь модуль (contractors) и только платежи
+    // (cz_pay, бухгалтер). У второго в пространстве самозанятых больше ничего нет —
+    // и список пространств собирается по доступным пунктам, поэтому он увидит ровно
+    // «Выплаты», а не пустое меню из семи заголовков.
+    { id: 'czpay', label: 'Выплаты', icon: 'wallet', cap: 'contractors|cz_pay', space: 'cz' },
     { id: 'czdocs', label: 'Документы', icon: 'doc', cap: 'contractors', space: 'cz' },
     { id: 'czrisks', label: 'Риски', icon: 'shield', cap: 'contractors', space: 'cz' },
     { id: 'czreport', label: 'Отчеты', icon: 'chart', cap: 'contractors', space: 'cz' },
@@ -2546,7 +2554,11 @@
         ? (mwn ? mwn + ' ' + plural(mwn, 'дело', 'дела', 'дел') + ' для вас'
                : 'ваши задания и акты')
         : space === 'cz'
-        ? (CZ.list === null ? 'исполнители' : czn + ' ' + plural(czn, 'исполнитель', 'исполнителя', 'исполнителей'))
+        // У бухгалтера в этом пространстве только платежи: списка исполнителей она не
+        // грузит вовсе, и счетчик «0 исполнителей» был бы неправдой про пустую базу.
+        ? (!can('contractors') ? 'платежи подрядчикам'
+           : CZ.list === null ? 'исполнители'
+           : czn + ' ' + plural(czn, 'исполнитель', 'исполнителя', 'исполнителей'))
         // Преподаватель лидов не грузит вовсе — счетчик у него всегда показывал
         // «0 лидов · обновлено —». Вместо мертвой цифры пишем, кто он в системе.
         : can('clients')
@@ -6428,6 +6440,12 @@
   var CZ_SELF_DOCS = ['pdn', 'esign'];
   var CZ_DOC_ST = [['none', 'Не отправлен'], ['sent', 'Отправлен'], ['signed', 'Подписан']];
   var CZ_SOURCE = { invite: 'Приглашение', import: 'Импорт', migration: 'Миграция', manual: 'Заведен вручную' };
+  /* Вид исполнителя (бэкенд: миграция 218). От него зависит, каких документов система
+     требует: у самозанятого статус НПД и чек «Мой налог», у предпринимателя действующий
+     ИП и счет, у человека вне РФ (у нас это Китай) не существует ни того, ни другого.
+     Пустое значение и историческое `other` читаются как самозанятый — так модуль работал
+     до появления видов. */
+  var CZ_KIND = { self_employed: 'Самозанятый', ip: 'ИП', foreign: 'Вне РФ' };
   /* Свежевыпущенные ссылки на анкету. Полный адрес приходит от сервера РОВНО один раз:
      в базе от него только хэш, подсмотреть его потом нельзя. Держим до перезагрузки
      страницы, чтобы оператор мог скопировать ссылку не только в момент выпуска. */
@@ -13756,9 +13774,14 @@
     var problem = c.problems && c.problems.length
       ? '<span class="cz-prob' + pcls + '">' + esc(c.problems[0]) + more + '</span>'
       : '<span class="cz-fine">ничего, можно ставить задания</span>';
+    /* Вид пишем в строке только у тех, кто НЕ самозанятый: таких единицы, и именно их
+       нельзя путать — у них другие документы и другие ворота к деньгам. Ставить «самозанятый»
+       каждой второй строке значит превратить отметку в фон, который перестают читать. */
+    var kmark = c.kind === 'ip' ? 'ИП' : c.kind === 'foreign' ? 'вне РФ' : '';
     return '<div class="trow cz-grid' + (c.state === 'problem' || c.state === 'blocked' ? ' r-crit' : '') + '" data-cz="' + esc(c.id) + '">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(c.full_name) + '</div>' +
-        '<div class="t-sub">' + esc(czPhone(c.phone) || c.email || 'контакты не указаны') + '</div>' +
+        '<div class="t-sub">' + (kmark ? '<b>' + kmark + '</b> · ' : '') +
+          esc(czPhone(c.phone) || c.email || 'контакты не указаны') + '</div>' +
         // на узком экране колонка «что мешает» не помещается — та же строка уезжает
         // под имя, иначе на телефоне остаются одни многоточия
         '<div class="t-sub cz-mobprob' + pcls + '">' +
@@ -13840,6 +13863,18 @@
       '<input class="al-in" type="' + (type || 'text') + '" data-f="' + f + '" ' +
       'value="' + esc(val == null ? '' : val) + '" ' +
       'placeholder="' + esc(ph || '') + '" autocomplete="off"></label>';
+  }
+  /* Выпадающий список в карточке исполнителя. Собран на тех же классах и том же
+     `data-f`, что и czField, поэтому попадает в общий сбор правок (CZ.dirty) и
+     уезжает тем же PATCH — отдельной ветки сохранения заводить не надо. */
+  function czPick(f, label, val, opts, hint) {
+    return '<label class="al-f"><span class="al-l">' + esc(label) + '</span>' +
+      '<select class="al-in" data-f="' + f + '">' +
+      opts.map(function (o) {
+        return '<option value="' + esc(o[0]) + '"' +
+          (String(val || '') === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+      }).join('') + '</select>' +
+      (hint ? '<span class="al-hint">' + esc(hint) + '</span>' : '') + '</label>';
   }
   /* История смены счета. Первая запись из анкеты — это не «смена», ее не показываем:
      блок должен отвечать на вопрос «счет меняли?», а не повторять то, что уже видно
@@ -13996,8 +14031,17 @@
     '</div>';
 
     /* 3. Налоговый статус — откуда цифра и когда смотрели */
-    var checked = c.npd_checked_at ? fmtWhen(c.npd_checked_at) : 'ни разу';
-    var npdChip = c.npd_status === 'active' ? '<span class="sev cz-ok">Плательщик НПД</span>'
+    var checkedAt = (c.kind === 'ip') ? c.ip_checked_at : c.npd_checked_at;
+    var checked = checkedAt ? fmtWhen(checkedAt) : 'ни разу';
+    var kind = c.kind || 'self_employed';
+    /* У предпринимателя проверяется ЕГРИП, а не реестр самозанятых: это разные реестры, и
+       показывать ему «Статуса нет» значит врать — у действующего ИП статуса НПД и не
+       должно быть. У человека вне РФ проверять нечего вовсе, и блок ему не рисуется. */
+    var npdChip = kind === 'ip'
+      ? (c.ip_status === 'active' ? '<span class="sev cz-ok">ИП действует</span>'
+        : c.ip_status === 'inactive' ? '<span class="sev cz-bad">ИП не действует</span>'
+        : '<span class="sev cz-new">Не проверяли</span>')
+      : c.npd_status === 'active' ? '<span class="sev cz-ok">Плательщик НПД</span>'
       : c.npd_status === 'inactive' ? '<span class="sev cz-bad">Статуса нет</span>'
       : '<span class="sev cz-new">Не проверяли</span>';
     /* История — отдельная секция, а не подзаголовок внутри статуса: капс-микролейбл в
@@ -14108,20 +14152,39 @@
               ? '<span class="dot-sep"></span><span>ИНН ' + esc(c.inn) + '</span>' +
                 '<span class="dot-sep"></span><span>проверен в налоговой: ' + esc(checked) + '</span>'
               : '<span class="dot-sep"></span><span>' +
-                (c.state === 'invited' ? 'ссылка на анкету отправлена' : 'ИНН не указан') + '</span>') +
+                (kind === 'foreign' ? 'вне РФ, российских документов нет'
+                  : c.state === 'invited' ? 'ссылка на анкету отправлена'
+                  : 'ИНН не указан') + '</span>') +
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content" id="cz-content">' +
         readiness +
         (c.submitted_at ? '' : invite) +
-        (c.inn
+        /* Блок налоговой — только тем, кого есть где проверять. У исполнителя вне РФ
+           российских реестров не существует, и пустая секция с вечным «Не проверяли»
+           читалась бы как недоделанная карточка, хотя делать с ней нечего. Ему вместо
+           этого одна строка: кто он и откуда взялся. */
+        (c.inn && kind !== 'foreign'
           ? '<div class="m-sec"><div class="m-sec-h">Статус в налоговой' +
-              '<button class="hr" id="cz-check">Проверить сейчас</button></div>' +
+              /* Кнопка спрашивает реестр САМОЗАНЯТЫХ, поэтому у предпринимателя ее нет:
+                 она записала бы ему в карточку «не является плательщиком НПД» — правду
+                 про чужой реестр, которая про него самого не говорит ничего. Проверка по
+                 ЕГРИП появится отдельной кнопкой, когда будет на чем ее проверить. */
+              (kind === 'ip' ? '' :
+                '<button class="hr" id="cz-check">Проверить сейчас</button>') + '</div>' +
               '<div class="ab">' + czRow2('Сейчас', npdChip) +
-                czRow2('Тип занятости', c.employment === 'other' ? 'Другой' : 'Самозанятый') +
+                czRow2('Вид исполнителя', esc(CZ_KIND[kind] || 'Самозанятый')) +
+                (kind === 'ip' ? czRow2('ОГРНИП', c.ogrnip ? esc(c.ogrnip) : '—') : '') +
                 czRow2('Подключен', c.connected_at ? esc(czDate(c.connected_at)) : '—') +
                 czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
             '</div>' + history
+          : kind === 'foreign'
+          ? '<div class="m-sec"><div class="m-sec-h">Кто это</div><div class="ab">' +
+              czRow2('Вид исполнителя', esc(CZ_KIND.foreign)) +
+              czRow2('Подключен', c.connected_at ? esc(czDate(c.connected_at)) : '—') +
+              czRow2('Источник', esc(CZ_SOURCE[c.source] || c.source || '—')) + '</div>' +
+              '<div class="field-empty">Российских реестров по нему нет: ни статуса ' +
+              'самозанятого, ни ИП. Проверять нечего.</div></div>'
           : '') +
         planBlock +
         money +
@@ -14130,6 +14193,14 @@
            не украшение, а сообщение «это не твое поле». */
         '<div class="m-sec"><div class="m-sec-h">Основное</div><div class="cz-form">' +
           czField('full_name', 'ФИО', c.full_name, 'Как в паспорте') +
+          /* Вид решает, что система будет с человека спрашивать, поэтому поле стоит в
+             «Основном», а не прячется в налоговом блоке: у исполнителя вне РФ этого
+             блока нет вовсе, а вид ему поставить надо. */
+          czPick('employment', 'Вид исполнителя', kind,
+                 [['self_employed', 'Самозанятый'], ['ip', 'ИП'], ['foreign', 'Вне РФ']],
+                 kind === 'foreign' ? 'Российских документов с него не ждем'
+                   : kind === 'ip' ? 'Проверяем ЕГРИП, чек «Мой налог» не нужен'
+                   : 'Проверяем статус НПД и ждем чек «Мой налог»') +
           czField('job', 'Должность', c.job, 'Ассистент, СММ, Видео, Тьюторство') +
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
@@ -14250,13 +14321,17 @@
                          'а задания и акты останутся на месте.')) czLinkUser(id, null);
     });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-f]'), function (inp) {
-      inp.addEventListener('input', function () {
+      function mark() {
         var f = inp.getAttribute('data-f');
         var was = c[f] == null ? '' : String(c[f]);
         if (inp.value === was) delete CZ.dirty[f]; else CZ.dirty[f] = inp.value;
         var save = el('cz-save');
         if (save) save.disabled = !Object.keys(CZ.dirty).length;
-      });
+      }
+      inp.addEventListener('input', mark);
+      // у выпадающего списка на 'input' полагаться нельзя: часть браузеров отдает по
+      // выбору только 'change', и правка молча не попадала бы в сохранение
+      if (inp.tagName === 'SELECT') inp.addEventListener('change', mark);
     });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-doc]'), function (b) {
       b.addEventListener('click', function () {
@@ -14957,6 +15032,48 @@
         '</div>';
     }
 
+    /* Счет от ИП. У предпринимателя это основание платежа: банку нужен номер и дата
+       ДО денег, и без счета выплата не пройдет (бэкенд, миграция 219). Блок рисуется
+       только тому, с кого счет спрашивается — сервер говорит это полем `invoice_needed`;
+       у самозанятого основание платежа акт, у исполнителя вне РФ счета не бывает.
+       Пустой блок со словами «счета нет» стоит намеренно: оператор должен видеть, что
+       деньги ждут бумагу, а не догадываться. */
+    var INV = t.invoice;
+    var invBlock = '';
+    if (t.invoice_needed) {
+      var invUrl = INV && INV.has_file
+        ? API + '/admin/api/contractor-invoices/' + encodeURIComponent(INV.id) +
+          '/file?k=' + encodeURIComponent(getKey())
+        : '';
+      invBlock =
+        '<div class="m-sec"><div class="m-sec-h">Счет от ИП</div>' +
+          (INV
+            ? '<div class="ct-act">' +
+                '<div class="ct-act-h"><b>Счет № ' + esc(INV.number) + '</b>' +
+                  '<span class="ct-chip ' + (INV.by_contractor ? 'ct-paid' : 'ct-wait') + '">' +
+                    (INV.by_contractor ? 'прислал исполнитель' : 'приложили мы') + '</span></div>' +
+                '<div class="ct-act-m">от ' + esc(czDate(INV.issued_on)) + ' · <b>' +
+                  ctMoney(INV.amount) + ' ₽</b>' +
+                  (INV.author ? ' · ' + esc(INV.author) : '') + '</div>' +
+                '<div class="ct-acts">' +
+                  (invUrl
+                    ? '<a class="bp sm ghost" href="' + invUrl + '" target="_blank" ' +
+                      'rel="noopener">Открыть счет</a>'
+                    : '<span class="cz-fine">Файл не приложен</span>') +
+                  '<button class="bp sm ghost" id="ct-inv-ed">Исправить</button>' +
+                  (t.status === 'paid' ? '' :
+                    '<button class="bp sm ghost" id="ct-inv-x">Погасить</button>') +
+                '</div>' +
+              '</div>'
+            : '<div class="ct-act"><div class="field-empty">Счета еще нет. Банку нужно ' +
+                'основание платежа, поэтому без счета выплата не пройдет. Исполнителю ' +
+                'ушла просьба прислать его в кабинете; если прислал в переписку — ' +
+                'приложите сами.</div>' +
+                '<div class="ct-acts"><button class="bp sm" id="ct-inv-add">' +
+                  'Приложить счет</button></div></div>') +
+        '</div>';
+    }
+
     /* Выплата. «Оплачено» без ответа на вопрос «когда и по какой платежке» — половина
        сведений: спрашивают об этом ровно тогда, когда деньги ищут в банковской выписке. */
     var P = t.payout;
@@ -15032,7 +15149,7 @@
           '</div></div>' +
       '</div>' +
       '<div class="m-body"><div class="m-content">' +
-        money + acts + payBlock + actBlock +
+        money + acts + payBlock + actBlock + invBlock +
         '<div class="m-sec"><div class="m-sec-h">Условия</div><div class="ab">' + facts + '</div></div>' +
         blocks + files +
         (t.cancel_reason
@@ -15048,6 +15165,15 @@
     if (fix) fix.addEventListener('click', function () { openCtFix(t); });
     var sign = el('ct-sign');
     if (sign) sign.addEventListener('click', function () { ctSignAct(t.id, A.id); });
+    var invAdd = el('ct-inv-add');
+    if (invAdd) invAdd.addEventListener('click', function () { openCtInvoice(t, null); });
+    var invEd = el('ct-inv-ed');
+    if (invEd) invEd.addEventListener('click', function () { openCtInvoice(t, INV); });
+    var invX = el('ct-inv-x');
+    if (invX) invX.addEventListener('click', function () {
+      var why = window.prompt('Почему гасим счет? Причина останется в задании.');
+      if (why && why.trim()) ctInvoiceCancel(t.id, INV.id, why.trim());
+    });
     Array.prototype.forEach.call(modal.querySelectorAll('[data-cta]'), function (b) {
       b.addEventListener('click', function () {
         var to = b.getAttribute('data-cta');
@@ -15145,6 +15271,59 @@
       return 'К оплате: <b>' + ctMoney(s) + ' ₽</b>' +
         (s === Math.round(planSum) ? '' : ' · по плану ' + ctMoney(planSum) + ' ₽');
     });
+  }
+
+  /* Счет от ИП: принимаем номер, дату, сумму и сам документ. Форма одна на «приложить»
+     и «исправить» — исправленный счет заменяет прежний, потому что два живых счета на
+     одно задание это второй платеж за одни деньги (бэкенд не даст завести второй).
+     Сумму подставляем из акта: платят ровно то, что подписано, и расхождение видно
+     сразу под полями, а не на воротах выплаты. */
+  function openCtInvoice(t, inv) {
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
+    var today = new Date().toISOString().slice(0, 10);
+    openSheet(inv ? 'Исправить счет' : 'Счет от ИП',
+      'Номер и дату берем из самого счета: по ним бухгалтер сделает платежку, и по ним ' +
+      'же потом искать платеж в выписке.', [
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+    ], function (v, close) {
+      var num = (v.num || '').trim();
+      var sum = Number(v.sum);
+      if (!num) return 'Укажите номер счета';
+      if (!v.date) return 'Укажите дату счета';
+      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num, issued_on: v.date, amount: sum };
+      if (v.file) {
+        body.file_name = v.file.name;
+        body.file_mime = v.file.mime;
+        body.file_data = v.file.data;
+      }
+      czSend('/admin/api/contractor-tasks/' + t.id + '/invoice', 'POST', body)
+        .then(function () { return api('/admin/api/contractor-tasks/' + t.id); })
+        .then(function (fresh) {
+          close();
+          ctPut(fresh); renderCtCard();
+          showToast(inv ? 'Счет исправлен' : 'Счет приложен');
+        })
+        .catch(function (e) { el('sh-err').textContent = e.message; });
+      return null;
+    }, function (v) {
+      // расхождение с актом показываем под полями: на воротах выплаты оно станет
+      // отказом, и узнать о нем лучше сейчас
+      var s = Math.round(Number(v.sum || 0) * 100) / 100;
+      if (due === null) return '';
+      return s === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽. Платить будем по акту';
+    }, 'Самозанятые', inv ? 'Сохранить' : 'Приложить');
+  }
+
+  function ctInvoiceCancel(tid, iid, why) {
+    czSend('/admin/api/contractor-invoices/' + iid + '/cancel', 'POST', { reason: why })
+      .then(function () { return api('/admin/api/contractor-tasks/' + tid); })
+      .then(function (fresh) { ctPut(fresh); renderCtCard(); showToast('Счет погашен'); })
+      .catch(function (e) { showToast(e.message); });
   }
 
   /* Создание задания. Исполнителей берем из уже загруженного справочника: ставить
@@ -15680,7 +15859,13 @@
       '<span class="py-task"><span class="ct-no">№' + r.task_number + '</span>' +
         esc(r.title) +
         (r.act ? '<span class="py-act">Акт № ' + r.act.number + ' от ' +
-          esc(czDate(r.act.act_date)) + '</span>' : '') + '</span>' +
+          esc(czDate(r.act.act_date)) + '</span>' : '') +
+        /* Счет от ИП показан рядом с актом: у предпринимателя это основание платежа, и
+           бухгалтер делает платежку по его номеру. Строка появляется только там, где
+           счет есть; его отсутствие уже названо причиной в колонке проверок, и писать
+           об этом дважды незачем. */
+        (r.invoice ? '<span class="py-act">Счет № ' + esc(r.invoice.number) + ' от ' +
+          esc(czDate(r.invoice.issued_on)) + '</span>' : '') + '</span>' +
       '<span class="py-sum"><b>' + ctMoney(r.amount) + ' ₽</b>' +
         (c.pay_account ? '<span class="py-acc num">' + esc(c.pay_account) + '</span>' : '') +
         '</span>' +
@@ -17138,6 +17323,46 @@
       .then(function () { MW.busy = false; });
   }
 
+  /* Счет от исполнителя-ИП: он присылает его сам. Форма та же, что у оператора, и
+     ручка та же с точностью до двери (`/admin/api/my/cz/...`): правила приема счета
+     живут на сервере в одном месте, иначе две двери начнут проверять разное. */
+  function openMwInvoice(t, inv) {
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
+    var today = new Date().toISOString().slice(0, 10);
+    openSheet(inv ? 'Исправить счет' : 'Счет на оплату',
+      'Номер и дату берем из вашего счета — по ним пройдет платеж.', [
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+    ], function (v, close) {
+      var num = (v.num || '').trim();
+      var sum = Number(v.sum);
+      if (!num) return 'Укажите номер счета';
+      if (!v.date) return 'Укажите дату счета';
+      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num, issued_on: v.date, amount: sum };
+      if (v.file) {
+        body.file_name = v.file.name;
+        body.file_mime = v.file.mime;
+        body.file_data = v.file.data;
+      }
+      mwSend('/tasks/' + t.id + '/invoice', 'POST', body)
+        .then(function () {
+          close(); MW.detail = {}; mwStale(); mwDone();
+          if (MW.openId) mwOpen(MW.openId);
+          showToast('Счет отправлен');
+        })
+        .catch(function (e) { el('sh-err').textContent = e.message; });
+      return null;
+    }, function (v) {
+      var sm = Math.round(Number(v.sum || 0) * 100) / 100;
+      if (due === null) return '';
+      return sm === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽';
+    }, 'Моя работа', inv ? 'Сохранить' : 'Отправить');
+  }
+
   function renderMwCard() {
     var modal = el('modal');
     var id = MW.openId;
@@ -17178,6 +17403,28 @@
           '</div>' +
         '</div>' +
       '</div>';
+    }
+
+    /* Счет. Это путь предпринимателя: выплата идет по его счету, и пока счета нет,
+       деньги стоят. Блок показывается только тому, с кого счет спрашивается — решает
+       это сервер полем `invoice_needed`. Самозанятому вместо счета нужен чек после
+       выплаты, и у него этого блока нет вовсе. */
+    var MI = t.invoice;
+    var mwInv = '';
+    if (t.invoice_needed) {
+      mwInv = '<div class="m-sec"><div class="m-sec-h">Счет</div><div class="ct-act">' +
+        (MI
+          ? '<div class="ct-act-h"><b>Счет № ' + esc(MI.number) + '</b>' +
+              '<span class="ct-chip ct-paid">принят</span></div>' +
+            '<div class="ct-act-m">от ' + esc(czDate(MI.issued_on)) + ' · <b>' +
+              ctMoney(MI.amount) + ' ₽</b></div>' +
+            '<div class="ct-acts"><button class="bp sm ghost" id="mw-inv">' +
+              'Исправить счет</button></div>'
+          : '<div class="field-empty">Пришлите счет на эту сумму: номер, дату и файл. ' +
+              'Без него бухгалтерия не сможет сделать платежку.</div>' +
+            '<div class="ct-acts"><button class="bp sm" id="mw-inv">' +
+              'Прислать счет</button></div>') +
+        '</div></div>';
     }
 
     /* Порядок блоков — как в карточке задания у Консоли (ориентир владельца): сверху
@@ -17264,13 +17511,15 @@
           '<div class="mw-t1"><span class="mw-t-k">Срок</span>' +
             '<b>' + esc(mwTerm(t)) + '</b></div>' +
         '</div>' +
-        doing + where + extra + actBlock + files +
+        doing + where + extra + actBlock + mwInv + files +
         '<div class="m-sec"><div class="m-sec-h">История</div>' +
           '<div class="ct-hist">' + (ev || '<span class="cz-fine">Пока пусто</span>') + '</div></div>' +
         (acts ? '<div class="ct-acts mw-do">' + acts + '</div>' : '') +
       '</div></div>';
 
     el('mw-x').addEventListener('click', mwClose);
+    var mwi = el('mw-inv');
+    if (mwi) mwi.addEventListener('click', function () { openMwInvoice(t, MI); });
     var add = el('mw-add'), inp = el('mw-file');
     if (add && inp) {
       add.addEventListener('click', function () { inp.click(); });
@@ -17308,6 +17557,12 @@
             return '<label class="al-f"><span class="al-l">' + esc(f[2]) + '</span>' +
               (f[1] === 'text'
                 ? '<textarea id="sh-' + f[0] + '" class="al-in al-ta" rows="2" maxlength="1000"></textarea>'
+                : f[1] === 'file'
+                // Файл читаем в браузере и отправляем строкой в JSON — тем же способом,
+                // что вложения задач и чеки: второго приемника multipart ради одного
+                // документа в бэкенде нет.
+                ? '<input id="sh-' + f[0] + '" class="al-in" type="file" ' +
+                    'accept=".pdf,.png,.jpg,.jpeg,.webp">'
                 : '<input id="sh-' + f[0] + '" class="al-in" type="' +
                     (f[1] === 'line' ? 'text' : f[1]) + '" value="' + esc(f[3]) + '">') +
               '</label>';
@@ -17323,9 +17578,41 @@
     fields.forEach(function (f) { if (f[1] === 'text') el('sh-' + f[0]).value = f[3] || ''; });
     var vals = function () {
       var v = {};
-      fields.forEach(function (f) { v[f[0]] = el('sh-' + f[0]).value; });
+      fields.forEach(function (f) {
+        var inp = el('sh-' + f[0]);
+        // У поля с файлом значение это не строка адреса, а прочитанные байты: их
+        // кладет обработчик change ниже, пока человек дочитывает форму.
+        v[f[0]] = f[1] === 'file' ? (inp._f || null) : inp.value;
+      });
       return v;
     };
+    fields.forEach(function (f) {
+      if (f[1] !== 'file') return;
+      var inp = el('sh-' + f[0]);
+      inp.addEventListener('change', function () {
+        var file = inp.files && inp.files[0];
+        inp._f = null;
+        if (!file) return;
+        if (file.size > 8 * 1024 * 1024) {
+          el('sh-err').textContent = 'Файл больше 8 МБ — пришлите ссылку на облако';
+          inp.value = '';
+          return;
+        }
+        el('sh-err').textContent = '';
+        inp._busy = true;
+        var rd = new FileReader();
+        rd.onload = function () {
+          inp._busy = false;
+          inp._f = { name: file.name, mime: file.type || 'application/octet-stream',
+                     data: String(rd.result || '') };
+        };
+        rd.onerror = function () {
+          inp._busy = false;
+          el('sh-err').textContent = 'Файл не прочитался, выберите другой';
+        };
+        rd.readAsDataURL(file);
+      });
+    });
     if (live) {
       var upd = function () { el('sh-live').innerHTML = live(vals()); };
       fields.forEach(function (f) { el('sh-' + f[0]).addEventListener('input', upd); });
@@ -31031,7 +31318,10 @@
       return { id: c.user_id, api: true, channel: c.channel, name: c.name,
         anon: !c.username && !c.full_name,
         last_text: (c.last_text || '').replace(/<[^>]+>/g, ''), last_role: c.last_role, last_at: c.last_at,
-        unread: c.unread, ai_on: c.ai_enabled, handoff: c.handoff_requested, taken_by: c.taken_by, msgs: c.msgs };
+        unread: c.unread, ai_on: c.ai_enabled, handoff: c.handoff_requested, taken_by: c.taken_by, msgs: c.msgs,
+        /* Наш исполнитель, а не клиент: бот наружу один, и подрядчик пишет в него же,
+           что школьник. Пометку считает сервер по телеграм-id карточки исполнителя. */
+        cz: c.contractor || null };
     });
   }
 
@@ -31550,7 +31840,9 @@
           '<span class="tg-tm num">' + fmtWhen(c.last_at) + '</span></span>' +
           '<span class="tg-r2"><span class="tg-pv">' + esc((c.last_text || '').replace(/<[^>]+>/g, '').slice(0, 60)) + '</span>' +
           (c.unread ? '<span class="tg-badge' + (c.handoff ? ' wait' : '') + '"></span>' : '') + '</span>' +
-          '<span class="tg-r3">' + st + '</span></span>' +
+          '<span class="tg-r3">' +
+            (c.cz ? '<span class="tg-tag cz">' + ic('badge', 10) + 'подрядчик</span>' : '') +
+            st + '</span></span>' +
       '</button>';
     }
     var rows = list.length ? list.map(rowHtml).join('') : '<div class="tg-empty-list">Ничего не найдено</div>';
@@ -31620,7 +31912,27 @@
       state.convLead[uid] = { error: true };   // не нашли из-за сети — кнопки лучше не показывать
     }).then(function () { convCardPaint(uid); });
   }
+  /* Пометка исполнителя по номеру диалога — из того же списка, что рисует инбокс:
+     второй запрос за тем же фактом не нужен. */
+  function convCz(uid) {
+    var l = (state.bot.list || []);
+    for (var i = 0; i < l.length; i++) {
+      if (String(l[i].user_id) === String(uid)) return l[i].contractor || null;
+    }
+    var m = state.bot.msgs[uid];
+    return (m && m.contractor) || null;
+  }
   function convCardHtml(uid) {
+    /* Подрядчику карточку клиента не заводим: это наш исполнитель, и его дело — в
+       «Самозанятых». Кнопка «Завести карточку» на таком диалоге и есть та путаница,
+       из-за которой пометка вообще появилась. */
+    var cz = convCz(uid);
+    if (cz) {
+      return can('contractors')
+        ? '<button class="tg-cact cz" data-czcard="' + esc(cz.id) + '" ' +
+          'title="Открыть карточку исполнителя">' + ic('badge', 14) + 'Исполнитель</button>'
+        : '<span class="tg-cact off cz">' + ic('badge', 14) + 'Исполнитель</span>';
+    }
     var d = state.convLead[uid];
     if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Карточка</span>';
     if (d.error) return '';
@@ -31651,6 +31963,10 @@
                 '_blank', 'noopener');
   }
   function wireConvCard(host, uid) {
+    var cz = host.querySelector('[data-czcard]');
+    if (cz) cz.addEventListener('click', function () {
+      openCz(cz.getAttribute('data-czcard'));
+    });
     var open = host.querySelector('[data-card]');
     if (open) open.addEventListener('click', function () {
       openLeadTab(open.getAttribute('data-card'));
@@ -31856,6 +32172,7 @@
     }
     inboxMarkSeen(c);
     var aiOn = c.ai_on !== false;  // источник правды — ai_enabled; taken_by = просто «кто вёл»
+    var CZC = c.cz || convCz(c.id);
     var msgs = convoMessages(c);
     if (msgs === null) {
       // скелетон ВСЕЙ панели чата (шип-заголовок + пузыри), пока грузятся сообщения —
@@ -31894,6 +32211,10 @@
         '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
           '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
       '</div>' +
+      (CZC ? '<div class="tg-czb">' + ic('badge', 14) +
+        '<div><b>Это наш исполнитель, не клиент</b><span>' + esc(CZC.name || '') +
+        ' пишет в тот же бот, что семьи. Задания, акты и выплаты по нему — в ' +
+        '«Самозанятых».</span></div></div>' : '') +
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
