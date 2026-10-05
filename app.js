@@ -20727,6 +20727,19 @@
     if (p.length !== 2) return m || '';
     return (FIN_MONTHS_NOM[(+p[1]) - 1] || '') + ' ' + p[0];
   }
+  // День из ГГГГ-ММ-ДД как ДД.ММ — месяц и так виден в шапке блока плана.
+  function finDayShort(iso) {
+    var p = String(iso).slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] : String(iso);
+  }
+  // Последний день месяца ГГГГ-ММ как ГГГГ-ММ-ДД — потолок для поля даты расхода.
+  function finMonthLast(m) {
+    var p = (m || '').split('-');
+    if (p.length !== 2) return '';
+    var d = new Date((+p[0]), (+p[1]), 0);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) +
+      '-' + ('0' + d.getDate()).slice(-2);
+  }
   function finMonthShift(delta) {
     var p = finPlanMonth().split('-');
     var d = new Date((+p[0]), (+p[1]) - 1 + delta, 1);
@@ -20881,9 +20894,13 @@
               it.amount, it.paid) +
           '</span>';
         }
+        // У прочего расхода показываем день, на который он запланирован (Рома 05.10.2026);
+        // у человека дата бессмысленна — его план стоит на 1-м, а платится 10-го и 20-го.
+        var when = (it.kind !== 'person' && it.date)
+          ? '<span class="plm-when">' + esc(finDayShort(it.date)) + '</span>' : '';
         return '<div class="plm-row' + (it.kind === 'person' ? ' person' : '') +
             '" data-plmid="' + esc(it.id) + '">' +
-          '<span class="plm-it">' + esc(it.item) +
+          '<span class="plm-it">' + esc(it.item) + when +
             (it.comment ? '<i>' + esc(it.comment) + '</i>' : '') + split + '</span>' +
           '<span class="plm-sum num">' + finRub(it.amount) + '</span>' +
           '<button class="plm-del" data-plmdel="' + esc(it.id) +
@@ -21001,10 +21018,17 @@
             '</div>' +
             '<div class="plm-total">итого за месяц <b id="plm-tot">' + finRub(0) + '</b></div>' +
           '</div>' +
-          // Прочий расход: одна сумма.
-          '<label class="al-f plm-expense"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
-            '<input id="plm-am" class="al-in" type="number" min="0" step="0.01" value="' +
-            (edit && line.kind !== 'person' ? v(line.amount) : '') + '"></label>' +
+          // Прочий расход: сумма и день, на который его планируют (Рома 05.10.2026).
+          '<div class="plm-expense plm-two">' +
+            '<label class="al-f"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
+              '<input id="plm-am" class="al-in" type="number" min="0" step="0.01" value="' +
+              (edit && line.kind !== 'person' ? v(line.amount) : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Когда</span>' +
+              '<input id="plm-dt" class="al-in" type="date" min="' + v(m + '-01') +
+              '" max="' + v(finMonthLast(m)) + '" value="' +
+              ((edit && line.kind !== 'person' && line.date) ? v(line.date) : v(m + '-01')) +
+              '"></label>' +
+          '</div>' +
           '<label class="al-f"><span class="al-l">Комментарий</span>' +
             '<input id="plm-cm" class="al-in" maxlength="500" value="' +
             v(edit ? (line.comment || '') : '') + '"></label>' +
@@ -21066,6 +21090,8 @@
           showToast('Укажите сумму'); return;
         }
         payload.amount = amount;
+        var dt = (el('plm-dt').value || '').trim();
+        if (dt) payload.date = dt;
       }
       if (edit) payload.id = line.id;
       close();

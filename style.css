@@ -10398,6 +10398,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .plm-it { font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
 .plm-it i { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
   font-style: normal; margin-top: 1px; }
+.plm-when { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 600;
+  color: var(--ink-3); background: var(--line-soft, #F1F3F5); padding: 1px 7px;
+  border-radius: 999px; font-feature-settings: 'tnum'; vertical-align: 1px; }
 .plm-sum { font-size: 14px; font-weight: 650; color: var(--ink); font-feature-settings: 'tnum'; }
 .plm-del { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px;
   color: var(--ink-3); opacity: 0; transition: .12s var(--ease); }
