@@ -9623,6 +9623,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    нет), а подпись с именем позвавшего — то, ради чего плашка тут стоит. */
 .cab-seat.off.sent { border-style: solid; border-color: var(--line); }
 .cab-seat.off.sent .cab-seat-n { color: var(--ink); }
+/* Позвать — действие внутри пустого места, а не кнопка над блоком: у каждого
+   места свой человек, и «позвать» без уточнения кого читается двусмысленно. */
+.cab-call { margin-top: 9px; width: 100%; padding: 7px 10px; border-radius: 10px;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  transition: .15s; }
+.cab-call:hover { background: var(--blue-tint); color: var(--blue); }
+.cab-call:disabled { opacity: .5; cursor: default; }
+/* Предупреждение стоит НАД текстом приглашения: код одноразовый, и прочитать
+   это нужно до того, как рука потянется проверить ссылку. */
+.inv-warn { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: var(--r-lg); background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+.inv-warn svg { flex: none; margin-top: 1px; }
+.inv-msg { white-space: pre-wrap; word-break: break-word; max-height: 44vh; overflow: auto;
+  padding: 12px 14px; border-radius: var(--r-lg); background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); }
 .cab-seat.fresh { background: var(--green-soft); }
 .cab-seat.fresh .cab-seat-s { color: var(--green-ink); font-weight: 600; }
 .cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
