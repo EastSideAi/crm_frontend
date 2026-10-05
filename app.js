@@ -25551,36 +25551,48 @@
        не ступень пути: зритель может прийти из старой базы и не регистрироваться
        заново, а записавшийся может не прийти. Поэтому путь идёт от «позвали». */
     var invited = cur.invited || 0;
+    /* Участники считаются на сервере по людям, а не сложением зала и записи: тот,
+       кто был живьем и потом пересмотрел, иначе стал бы двумя. */
+    var uchastniki = c.people == null ? c.came : c.people;
     var known = c.known == null ? c.came : c.known;
-    var base = Math.max(invited, c.came, c.reg) || 1;
+    var base = Math.max(invited, uchastniki, c.came, c.reg) || 1;
     var zalSub = known + ' ' + plural(known, 'человек по личной ссылке', 'человека по личным ссылкам', 'человек по личным ссылкам') +
       (cur.anon ? ', ' + cur.anon + ' без регистрации' : '');
 
+    /* Конверсия у каждой ступени считается от ПЕРВОГО числа — от рассылки, а где
+       ее нет, от участников (просьба Ольги 05.10.2026). Проценты «из пришедших» и
+       «от нажавших» читались как успех там, где его нет: 80% из пришедших выглядят
+       прекрасно, пока не вспомнишь, что пришли десять из ста восьмидесяти. */
+    var top = invited || uchastniki || c.reg || 1;
+    var topWord = invited ? '% от рассылки' : '% от участников';
+    var step = function (n) { return conv(pct(n, top) + topWord); };
+
     var ladder =
-      (cur.invited ? ladRow('Позвали письмом', 'рассылки эфира в ботах, без наших контрольных копий',
+      (cur.invited ? ladRow('Рассылки письма на эфир', 'живые адреса, без наших контрольных копий',
         invited, 100, convMut('база эфира')) : '') +
-      ladRow('Были в комнате', zalSub,
-        c.came, pct(c.came, base),
-        invited ? conv(pct(c.came, invited) + '% от приглашенных') : convMut('в день эфира')) +
+      ladRow('Участники эфира', 'живьем или в записи, каждый человек один раз',
+        uchastniki, pct(uchastniki, top),
+        invited ? step(uchastniki) : convMut('все, кто видел эфир')) +
+      ladRow('Были в комнате', zalSub, c.came, pct(c.came, top), step(c.came)) +
       ladRow('Слушали 10 минут', 'отделяет заглянувшего от зрителя',
-        c.w10, pct(c.w10, base), conv(pct(c.w10, c.came || base) + '% из пришедших')) +
+        c.w10, pct(c.w10, top), step(c.w10)) +
       ladRow('Слушали 30 минут', c.avg_min ? 'в среднем смотрели ' + c.avg_min + ' ' + plural(c.avg_min, 'минуту', 'минуты', 'минут') : 'самая теплая часть зала',
-        c.w30, pct(c.w30, base), conv(pct(c.w30, c.came || base) + '% из пришедших')) +
+        c.w30, pct(c.w30, top), step(c.w30)) +
       ladRow('Задали вопрос', c.questions ? c.questions + ' ' + plural(c.questions, 'вопрос', 'вопроса', 'вопросов') + ' в чате' : 'в чате эфира',
-        c.askers, pct(c.askers, base), c.askers ? conv(pct(c.askers, c.came || base) + '% из пришедших') : convMut('вопросов не было')) +
-      ladRow('Нажали кнопку записи', 'кнопки под плеером: телеграм, ВК, MAX',
-        ctaPeople, pct(ctaPeople, base), ctaPeople ? conv(pct(ctaPeople, c.came || base) + '% из пришедших') : convMut('нажатий пока нет')) +
-      ladRow('Записались на разбор', 'выбрали время у тьютора',
-        cur.booked, pct(cur.booked, base), cur.booked ? conv(pct(cur.booked, ctaPeople || base) + '% от нажавших') : convMut('записей пока нет')) +
-      ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
-        cur.held || 0, (cur.held || 0) ? pct(cur.held, base) : null,
-        cur.held ? conv(pct(cur.held, cur.booked || base) + '% от записавшихся') : convMut('разговоров не было')) +
-      ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
-        m.people, m.people ? (pct(m.people, base) || 2) : null,
-        m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями')) +
+        c.askers, pct(c.askers, top), c.askers ? step(c.askers) : convMut('вопросов не было')) +
       ladRow('Смотрели запись', cur.anon_rec ? 'включая ' + cur.anon_rec + ' без регистрации' : 'после эфира, по той же ссылке',
-        c.rec, c.rec ? pct(c.rec, base) : null,
-        c.rec ? conv(pct(c.rec, c.came || base) + '% от зала') : convMut('записи пока нет'));
+        c.rec, c.rec ? pct(c.rec, top) : null,
+        c.rec ? step(c.rec) : convMut('записи пока нет')) +
+      ladRow('Нажали кнопку записи', 'кнопки под плеером: телеграм, ВК, MAX',
+        ctaPeople, pct(ctaPeople, top), ctaPeople ? step(ctaPeople) : convMut('нажатий пока нет')) +
+      ladRow('Записались на разбор', 'выбрали время у тьютора',
+        cur.booked, pct(cur.booked, top), cur.booked ? step(cur.booked) : convMut('записей пока нет')) +
+      ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
+        cur.held || 0, (cur.held || 0) ? pct(cur.held, top) : null,
+        cur.held ? step(cur.held) : convMut('разговоров не было')) +
+      ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
+        m.people, m.people ? (pct(m.people, top) || 2) : null,
+        m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями'));
 
     var srcRows = (cur.sources || []).map(function (s) {
       return flatRow(s.src === 'не размечено' ? 'Источник не размечен' : mkSourceName(s.src),
@@ -25593,6 +25605,14 @@
       return flatRow(b.title, 'код кнопки ' + b.kind, b.n);
     }).join('') || '<div class="empty">Кнопки пока никто не нажимал.</div>';
 
+    /* Соцсети считаются КЛИКАМИ по ссылкам, которые публиковала СММ. Человек из
+       соцсети заходит в комнату анонимно, метки на нём нет, и сказать, кто из этих
+       кликов досидел до конца, нечем — поэтому карточка честно про переходы. */
+    var socialAll = (cur.social || []).reduce(function (n, r) { return n + r.n; }, 0);
+    var socialRows = (cur.social || []).map(function (r) {
+      return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
+    }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
+
     var tabs = all.map(function (e, i) {
       return '<a class="tab' + (i === idx ? ' on' : '') + '" data-efir="' + i + '">' + esc(e.title) + '</a>';
     }).join('');
@@ -25602,15 +25622,22 @@
       statBar([
         /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
            жизни другой — сколько людей из базы мы смогли привести. */
-        (cur.invited ? { label: 'Позвали письмом', value: invited,
-                         sub: 'рассылки эфира, живые адреса' }
+        (cur.invited ? { label: 'Рассылки письма на эфир', value: invited,
+                         sub: 'живые адреса, без наших копий' }
                      : { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) }),
+        /* Участники — главная цифра эфира: сколько людей его вообще увидели, живьем
+           или в записи. Человек, посмотревший оба раза, считается один раз. */
+        { label: 'Участники эфира', value: uchastniki,
+          sub: (invited ? pct(uchastniki, invited) + '% от рассылки · ' : '') +
+               'живьем ' + c.came + ', запись ' + c.rec },
         { label: 'Были в комнате', value: c.came, sub: zalSub },
         { label: 'Вопросов в чате', value: c.questions,
           sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
+        /* Запись смотрят ДРУГИЕ люди, а не те же, что были в зале, поэтому процент
+           здесь от рассылки, а не от зала: «80% от зала» читалось как «почти все
+           вернулись», хотя пересечения может не быть вовсе. */
         { label: 'Смотрели запись', value: c.rec,
-          sub: c.rec ? (cur.anon_rec ? 'из них ' + cur.anon_rec + ' без регистрации'
-                                     : pct(c.rec, c.came || 1) + '% от зала')
+          sub: c.rec ? pct(c.rec, top) + topWord + (cur.anon_rec ? ', из них ' + cur.anon_rec + ' без регистрации' : '')
                      : 'записи пока нет' },
         { label: 'Записались на разбор', value: cur.booked,
           sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
@@ -25626,20 +25653,27 @@
           sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
         { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
           sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
-      ]) +
+      ], 'five') +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
         '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
           esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
         '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
       '<div class="grid">' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div class="card sp4" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Пришли из соцсетей</div><div class="s">' +
+            (socialAll ? socialAll + ' ' + plural(socialAll, 'переход', 'перехода', 'переходов') +
+                         ' по ссылкам СММ · кто из них досидел, не видно: в комнату заходят без метки'
+                       : 'ссылки для соцсетей заводятся в CRM, по одной на канал') +
+          '</div></div></div>' +
+          '<div class="lad-static" style="border-top:1px solid var(--line)">' + socialRows + '</div></div>' +
+        '<div class="card sp4" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Новые регистрации</div><div class="s">' +
             (c.reg ? c.reg + ' ' + plural(c.reg, 'человек заполнил', 'человека заполнили', 'человек заполнили') +
                      ' форму · ' + esc(efirWindowText(cur.window))
                    : 'форму на странице эфира в это окно никто не заполнял') +
           '</div></div></div>' +
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + srcRows + '</div></div>' +
-        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div class="card sp4" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Кнопки на странице</div><div class="s">' +
             (m.wait_n ? 'в работе ' + m.wait_n + ' ' + plural(m.wait_n, 'счет', 'счета', 'счетов') +
               ' на ' + fmtMoney(m.wait_sum) + ' ₽' : 'сколько человек нажало каждую') +
