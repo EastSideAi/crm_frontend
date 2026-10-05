@@ -32003,6 +32003,9 @@
     return l.name || l.student_id;
   }
   function convSchoolHtml(uid) {
+    // Исполнителю ученика не привязывают: он не семья, и бот не будет говорить с ним
+    // про занятия и оплату уроков. Та же причина, что у карточки клиента выше.
+    if (convCz(uid)) return '';
     var d = state.convSchool[uid];
     if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Ученик</span>';
     if (d.error) return '';
