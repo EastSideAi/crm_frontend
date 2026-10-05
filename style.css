@@ -364,6 +364,11 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.amber { background: var(--amber); }
 .stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
   white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Кегль значения — по длине текста (класс ставит svFit в app.js). Крупный рассчитан
+   на короткое число; «19 320 ₽» и «Сегодня» в нём вылезали за свою колонку и наезжали
+   на соседнюю плитку при шести плитках на ширине 1280. */
+.stat .sv.tight { font-size: 31px; }
+.stat .sv.word { font-size: 26px; letter-spacing: -.02em; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -903,6 +908,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .lad-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 6px; transition: width .9s var(--ease); }
 .lad-row.worst .lad-fill { background: var(--coral); }
 .lad-n { font-size: 15px; font-weight: 600; text-align: right; }
+/* Разбивка цели Метрики по площадкам в одной строке: «13 ТГ · 11 MAX · 9 ВК».
+   Подпись мельче и тише самого числа — иначе площадка спорит с цифрой за внимание,
+   а читают здесь числа. На узкой карточке пары переносятся на вторую строку:
+   обрезанный хвост «6 ТГ · 6 MA…» хуже двух строк. */
+.lad-n .gn { display: inline-flex; flex-wrap: wrap; justify-content: flex-end;
+  align-items: baseline; gap: 2px 12px; }
+.lad-n .gn-p { white-space: nowrap; }
+.lad-n .gn-l { font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  margin-left: 3px; letter-spacing: 0; }
 .lad-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .lad-conv { font-size: 12.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
 .lad-drop { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
@@ -2562,6 +2576,10 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* за какие темы клиенты приходят вам — справка, не настройка: тише основного блока */
 .np-topics { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 .np-topics b { color: var(--ink); font-weight: 700; }
+/* «уведомления без темы»: тумблер и строка пояснения под ним — отдельный блок, иначе
+   читается как часть справки о темах выше */
+.np-fanrow { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.np-fan { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .np-skel { height: 46px; }
 .np-wait { opacity: .55; pointer-events: none; transition: opacity .15s var(--ease); }
 .al-cancel { height: 42px; padding: 0 16px; border-radius: 11px; font: 600 13.5px 'Manrope', sans-serif;
@@ -4582,6 +4600,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
+  /* Парные карточки на телефоне тоже во всю ширину. Без этого правила они
+     оставались в половину экрана: заголовок «Со спасибо в закрытый канал» вставал
+     в четыре строки, а числа с подписями обрезались по краю карточки. */
+  .sp6 { grid-column: 1 / span 12; }
   .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
   .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
@@ -4618,6 +4640,9 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   /* В подарках число — главное, проценты вторичны: возвращаем его.
      В «Пути» наоборот, поэтому правило точечное. */
   .lad-row.gf-flat .lad-n { display: block; text-align: right; }
+  /* Разбивка цели по площадкам занимает столько, сколько ей нужно: в 46px
+     подписи «бесплатно» и «за 690» не влезали и уезжали за край карточки. */
+  .lad-row.gf-flat.gm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
@@ -9598,10 +9623,63 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    нет), а подпись с именем позвавшего — то, ради чего плашка тут стоит. */
 .cab-seat.off.sent { border-style: solid; border-color: var(--line); }
 .cab-seat.off.sent .cab-seat-n { color: var(--ink); }
+/* Позвать — действие внутри пустого места, а не кнопка над блоком: у каждого
+   места свой человек, и «позвать» без уточнения кого читается двусмысленно. */
+.cab-call { margin-top: 9px; width: 100%; padding: 7px 10px; border-radius: 10px;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  transition: .15s; }
+.cab-call:hover { background: var(--blue-tint); color: var(--blue); }
+.cab-call:disabled { opacity: .5; cursor: default; }
+/* Предупреждение стоит НАД текстом приглашения: код одноразовый, и прочитать
+   это нужно до того, как рука потянется проверить ссылку. */
+.inv-warn { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: var(--r-lg); background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+.inv-warn svg { flex: none; margin-top: 1px; }
+.inv-msg { white-space: pre-wrap; word-break: break-word; max-height: 44vh; overflow: auto;
+  padding: 12px 14px; border-radius: var(--r-lg); background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); }
 .cab-seat.fresh { background: var(--green-soft); }
 .cab-seat.fresh .cab-seat-s { color: var(--green-ink); font-weight: 600; }
 .cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
   background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+
+/* Умеет ли кабинет написать человеку. Это второй вопрос после «заходил ли»,
+   и раньше ответа на него в карточке не было: бот писал Агате Белой, а кабинет
+   предлагал ей подключить бота (05.10.2026). Подключенный бот — норма и потому
+   тих; молчит строка только про тех, кому мы написать не можем. */
+.cab-seat-b { margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.cab-seat-b.on { color: var(--green-ink); }
+.cab-seat-b.off { color: var(--amber-ink); }
+
+/* Переписка: один чат — одна строка. Связанный уходит в фон (вопрос закрыт),
+   несвязанный держит действие — именно он и есть повод открыть этот блок. */
+.cab-chats { display: flex; flex-direction: column; gap: 8px; }
+/* Несвязанный чат держит действие, поэтому он светлый и в рамке — как пустое
+   место в кабинете. Амбру тут не ставим: три тревожных плашки подряд перестают
+   быть тревогой, а дело тут не в беде, а в несделанной работе. */
+.cab-chat { padding: 10px 12px; border-radius: var(--r-lg);
+  background: var(--card); border: 1px solid var(--line-2); }
+.cab-chat.on { background: var(--fill); border-color: transparent; }
+.cab-chat-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cab-chat-c { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cab-chat-n { font-size: 13px; font-weight: 650; color: var(--ink); letter-spacing: -.01em; }
+.cab-chat-t { font-size: 12.5px; color: var(--ink-2); }
+.cab-chat-s { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.cab-chat-a { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
+.cab-chat-a .cab-call { margin-top: 0; width: auto; padding: 6px 12px; background: var(--fill); }
+.cab-chat-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  color: var(--green-ink); }
+.cab-chat-q { flex: 1; min-width: 120px; font-size: 12px; color: var(--ink-2); }
+.cab-chat-sel { padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); font: 600 12px 'Manrope', sans-serif; color: var(--ink); }
+/* На телефоне действие уходит под строку и занимает ширину целиком: кнопка в
+   конце длинной фразы там сжимается и промахивается мимо пальца. */
+@media (max-width: 520px) {
+  .cab-chat-a { flex-direction: column; align-items: stretch; gap: 8px; }
+  .cab-chat-a .cab-call, .cab-chat-sel { width: 100%; }
+}
 
 .cab-h { margin: 18px 0 8px; font-size: 12px; font-weight: 700; color: var(--ink-2);
   letter-spacing: -.01em; }
