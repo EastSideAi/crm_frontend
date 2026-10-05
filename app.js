@@ -2744,13 +2744,14 @@
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
       var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
+                    ['efir', 'Эфиры'],
                     ['spend', 'Расход'], ['unit', 'Декомпозиция'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
-        (state.mkTab === 'launch' || state.mkTab === 'unit' ? '' :
+        (state.mkTab === 'launch' || state.mkTab === 'unit' || state.mkTab === 'efir' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
         }).join('') + '</div>');
@@ -2759,6 +2760,7 @@
           state.mkTab = t.getAttribute('data-mktab');
           if (state.mkTab === 'spend') state._mkSpend = null;
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
+          if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -24153,6 +24155,54 @@
       '<div class="lad-n num">' + n + '</div></div>';
   }
 
+  /* Что люди делали на наших страницах — цели Яндекс Метрики.
+
+     До сих пор экран знал только «сколько видело посадочную», а нажал ли кто-то
+     кнопку и дошёл ли до формы, смотрели руками в чужом кабинете (задача Ольги
+     29.09.2026). Теперь цифры приезжают сами вместе с экраном.
+
+     Части группы стоят ОТДЕЛЬНЫМИ строками и нигде не складываются: «ушёл в
+     телеграм» и «ушёл в макс» мог сделать один человек, и сумма была бы больше
+     правды. Нет данных — карточки нет вовсе: ноль здесь читался бы как «никто
+     ничего не нажимал», хотя на деле это «Метрика не ответила». */
+  /* Строка карточки Метрики. Отдельная от flatRow из-за второй колонки: там не одно
+     число, а разбивка с подписями, и на телефоне фиксированные 46px её обрезали. */
+  function goalRow(name, sub, n) {
+    return '<div class="lad-row gf-flat gm-row"><div class="lad-nm">' + esc(name) +
+      (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
+      '<div class="lad-n num">' + n + '</div></div>';
+  }
+
+  function launchGoalRows(goals) {
+    return (goals || []).map(function (g) {
+      /* Части группы стоят в одной строке через точку, каждая со своей подписью:
+         три строки подряд с одинаковым началом «Со спасибо в закрытый канал · …»
+         читаются как список опечаток, а не как разбивка по площадкам. */
+      var n = '<span class="gn">' + (g.parts || []).map(function (p) {
+        return '<span class="gn-p">' + fmtMoney(p.users) +
+          (p.label ? '<i class="gn-l">' + esc(p.label) + '</i>' : '') + '</span>';
+      }).join('') + '</span>';
+      return goalRow(g.title, '', n);
+    }).join('');
+  }
+
+  function launchPageCard(p, title, note) {
+    if (!p || !p.users) return '';
+    var rows = goalRow('Видели страницу', p.path || '', fmtMoney(p.users)) +
+               launchGoalRows(p.goals);
+    return '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+      '<div><div class="t">' + esc(title) + '</div><div class="s">' + esc(note) +
+      (p.since ? ' · с ' + esc(fmtDay(p.since)) : '') + '</div></div></div>' +
+      '<div class="brk">' + rows + '</div></div>';
+  }
+
+  function launchSiteCards(cur) {
+    return launchPageCard(cur.pages, 'Что делали на лендинге',
+                          'цели Яндекс Метрики, люди, а не клики') +
+           launchPageCard(cur.test_page, 'Что делали на странице теста',
+                          'свой счётчик Метрики');
+  }
+
   /* Плашка одной ступени пути. Показывает ЛЮДЕЙ и две конверсии: от предыдущего
      шага (где теряем) и от регистраций (масштаб). Шаг, которого ещё не было или
      которого нет в системе, приглушён и без процентов — пустая плашка честнее
@@ -25558,6 +25608,156 @@
     });
   }
 
+  /* ── Эфиры: отдельный экран, потому что эфир меряется не как запуск ───────
+     У запуска есть продукт и цена, у эфира — одно событие: позвали, пришли,
+     посмотрели, записались. Своего имени в базе у каждого эфира нет (регистрации
+     лежат под общим слагом страницы), поэтому эфир очерчен окном времени: от
+     начала регистрации до следующего мероприятия. Окно считает сервер, здесь его
+     только подписываем — цифра без названных границ в отчёте бесполезна. */
+  function fetchMkEfir() {
+    api('/admin/api/marketing/efir').then(function (r) {
+      state._mkEfir = (r && r.efiry && r.efiry.length) ? r : 'none';
+      if (state.page === 'marketing' && state.mkTab === 'efir') renderView();
+    }).catch(function () {
+      state._mkEfir = 'none';
+      if (state.page === 'marketing' && state.mkTab === 'efir') renderView();
+    });
+  }
+
+  function efirWindowText(w) {
+    var d = function (iso) { return iso.split('-').reverse().slice(0, 2).join('.'); };
+    return 'считаем с ' + d(w.from) + (w.to ? ' по ' + d(w.to) : ' по сегодня');
+  }
+
+  function renderMkEfir(view) {
+    if (!state._mkEfir) { view.innerHTML = dashSkeleton(); fetchMkEfir(); return; }
+    if (state._mkEfir === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить цифры эфиров — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var all = state._mkEfir.efiry;
+    var idx = Math.min(state._mkEfirIdx == null ? all.length - 1 : state._mkEfirIdx, all.length - 1);
+    var cur = all[idx];
+    var c = cur.counts, m = cur.money;
+    var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
+    var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
+    var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
+
+    /* Нажатия кнопок считаем по людям, а не по кликам: один человек, потыкавший
+       три кнопки, — это один заинтересованный, а не три. Считает сервер: по
+       плиткам кнопок это не складывается (двое нажали разные кнопки — максимум по
+       кнопкам покажет одного). */
+    var ctaPeople = cur.cta_people != null ? cur.cta_people
+      : (cur.cta || []).reduce(function (n, b) { return n > b.n ? n : b.n; }, 0);
+    /* Зал — это ВСЕ, кто смотрел в день эфира: и по личным ссылкам из писем, и
+       молча по открытой ссылке. Регистрации в окно эфира — отдельное население, а
+       не ступень пути: зритель может прийти из старой базы и не регистрироваться
+       заново, а записавшийся может не прийти. Поэтому путь идёт от «позвали». */
+    var invited = cur.invited || 0;
+    var known = c.known == null ? c.came : c.known;
+    var base = Math.max(invited, c.came, c.reg) || 1;
+    var zalSub = known + ' ' + plural(known, 'человек по личной ссылке', 'человека по личным ссылкам', 'человек по личным ссылкам') +
+      (cur.anon ? ', ' + cur.anon + ' без регистрации' : '');
+
+    var ladder =
+      (cur.invited ? ladRow('Позвали письмом', 'рассылки эфира в ботах, без наших контрольных копий',
+        invited, 100, convMut('база эфира')) : '') +
+      ladRow('Были в комнате', zalSub,
+        c.came, pct(c.came, base),
+        invited ? conv(pct(c.came, invited) + '% от приглашенных') : convMut('в день эфира')) +
+      ladRow('Слушали 10 минут', 'отделяет заглянувшего от зрителя',
+        c.w10, pct(c.w10, base), conv(pct(c.w10, c.came || base) + '% из пришедших')) +
+      ladRow('Слушали 30 минут', c.avg_min ? 'в среднем смотрели ' + c.avg_min + ' ' + plural(c.avg_min, 'минуту', 'минуты', 'минут') : 'самая теплая часть зала',
+        c.w30, pct(c.w30, base), conv(pct(c.w30, c.came || base) + '% из пришедших')) +
+      ladRow('Задали вопрос', c.questions ? c.questions + ' ' + plural(c.questions, 'вопрос', 'вопроса', 'вопросов') + ' в чате' : 'в чате эфира',
+        c.askers, pct(c.askers, base), c.askers ? conv(pct(c.askers, c.came || base) + '% из пришедших') : convMut('вопросов не было')) +
+      ladRow('Нажали кнопку записи', 'кнопки под плеером: телеграм, ВК, MAX',
+        ctaPeople, pct(ctaPeople, base), ctaPeople ? conv(pct(ctaPeople, c.came || base) + '% из пришедших') : convMut('нажатий пока нет')) +
+      ladRow('Записались на разбор', 'выбрали время у тьютора',
+        cur.booked, pct(cur.booked, base), cur.booked ? conv(pct(cur.booked, ctaPeople || base) + '% от нажавших') : convMut('записей пока нет')) +
+      ladRow('Были на консультации', 'разговор состоялся, а не только бронь',
+        cur.held || 0, (cur.held || 0) ? pct(cur.held, base) : null,
+        cur.held ? conv(pct(cur.held, cur.booked || base) + '% от записавшихся') : convMut('разговоров не было')) +
+      ladRow('Оплатили', m.sum ? fmtMoney(m.sum) + ' ₽ выручки' : 'оплат пока нет',
+        m.people, m.people ? (pct(m.people, base) || 2) : null,
+        m.people ? conv('средний чек ' + fmtMoney(m.avg) + ' ₽') : convMut('сделки идут неделями')) +
+      ladRow('Смотрели запись', cur.anon_rec ? 'включая ' + cur.anon_rec + ' без регистрации' : 'после эфира, по той же ссылке',
+        c.rec, c.rec ? pct(c.rec, base) : null,
+        c.rec ? conv(pct(c.rec, c.came || base) + '% от зала') : convMut('записи пока нет'));
+
+    var srcRows = (cur.sources || []).map(function (s) {
+      return flatRow(s.src === 'не размечено' ? 'Источник не размечен' : mkSourceName(s.src),
+        s.src === 'не размечено' ? 'ссылка ушла в мир без метки'
+          : 'метка ' + s.src + ' · досмотрели ' + s.watched,
+        s.n);
+    }).join('') || '<div class="empty">Регистраций в этом окне пока нет.</div>';
+
+    var ctaRows = (cur.cta || []).map(function (b) {
+      return flatRow(b.title, 'код кнопки ' + b.kind, b.n);
+    }).join('') || '<div class="empty">Кнопки пока никто не нажимал.</div>';
+
+    var tabs = all.map(function (e, i) {
+      return '<a class="tab' + (i === idx ? ' on' : '') + '" data-efir="' + i + '">' + esc(e.title) + '</a>';
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      statBar([
+        /* «Позвали» — верх пути: без него зал читается как провал, хотя вопрос в
+           жизни другой — сколько людей из базы мы смогли привести. */
+        (cur.invited ? { label: 'Позвали письмом', value: invited,
+                         sub: 'рассылки эфира, живые адреса' }
+                     : { label: 'Зарегистрировались', value: c.reg, sub: efirWindowText(cur.window) }),
+        { label: 'Были в комнате', value: c.came, sub: zalSub },
+        { label: 'Вопросов в чате', value: c.questions,
+          sub: c.askers ? 'от ' + c.askers + ' ' + plural(c.askers, 'человека', 'человек', 'человек') : 'вопросов не было' },
+        { label: 'Смотрели запись', value: c.rec,
+          sub: c.rec ? (cur.anon_rec ? 'из них ' + cur.anon_rec + ' без регистрации'
+                                     : pct(c.rec, c.came || 1) + '% от зала')
+                     : 'записи пока нет' },
+        { label: 'Записались на разбор', value: cur.booked,
+          sub: ctaPeople ? 'кнопку нажали ' + ctaPeople : 'кнопку пока не нажимали' },
+        /* Запись и состоявшийся разговор — разные цифры: между ними теряется
+           половина, и одним числом эту потерю не увидеть. */
+        { label: 'Были на консультации', value: cur.held || 0,
+          sub: cur.booked ? 'из ' + cur.booked + ' ' + plural(cur.booked, 'записавшегося', 'записавшихся', 'записавшихся')
+                          : 'записей пока нет' },
+        /* Деньги эфира растут неделями. Подпись про это стоит на самой плитке, а не
+           в сноске внизу: маленькую цифру через день после эфира иначе прочитают
+           как провал, хотя сделки только начались. */
+        { label: 'Оплатили', value: m.people,
+          sub: m.people ? 'средний чек ' + fmtMoney(m.avg) + ' ₽' : 'сделки идут неделями' },
+        { label: 'Выручка', value: fmtMoney(m.sum) + ' ₽',
+          sub: m.wait_n ? 'в работе еще ' + fmtMoney(m.wait_sum) + ' ₽' : 'деньги приходят неделями' },
+      ]) +
+      '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div><div class="t">Путь человека по эфиру</div><div class="s">от анонса до оплаты · ' +
+          esc(efirWindowText(cur.window)) + ', дальше цифры принадлежат следующему мероприятию</div></div></div>' +
+        '<div class="lad-static" style="border-top:1px solid var(--line)">' + ladder + '</div></div>' +
+      '<div class="grid">' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Новые регистрации</div><div class="s">' +
+            (c.reg ? c.reg + ' ' + plural(c.reg, 'человек заполнил', 'человека заполнили', 'человек заполнили') +
+                     ' форму · ' + esc(efirWindowText(cur.window))
+                   : 'форму на странице эфира в это окно никто не заполнял') +
+          '</div></div></div>' +
+          '<div class="lad-static" style="border-top:1px solid var(--line)">' + srcRows + '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Кнопки на странице</div><div class="s">' +
+            (m.wait_n ? 'в работе ' + m.wait_n + ' ' + plural(m.wait_n, 'счет', 'счета', 'счетов') +
+              ' на ' + fmtMoney(m.wait_sum) + ' ₽' : 'сколько человек нажало каждую') +
+          '</div></div></div>' +
+          '<div class="lad-static" style="border-top:1px solid var(--line)">' + ctaRows + '</div></div>' +
+      '</div></div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-efir]'), function (t) {
+      t.addEventListener('click', function () {
+        state._mkEfirIdx = parseInt(t.getAttribute('data-efir'), 10);
+        renderView();
+      });
+    });
+  }
+
   function renderMkLaunch(view) {
     launchAutoStart();
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
@@ -25578,8 +25778,18 @@
     var convMut = function (txt) { return '<span class="lad-conv">' + esc(txt) + '</span>'; };
 
     var hasWorst = pay.invoiced > 0 && pay.paid / pay.invoiced < 0.5;
-    var chSmall = 'тг ' + (tg.members || 0) +
-      ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
+    /* Люди в закрытых каналах: считает сервер (in_channel) — поимённый состав трёх
+       площадок без ботов. Снимки счётчиков (ch.vk/ch.max) остаются запасным путём
+       для ответа со старого бэкенда: там другое число, в нём и служебные аккаунты. */
+    var inCh = cur.in_channel || null;
+    var chTotal = inCh ? inCh.total : (tg.members || 0);
+    var chSmall = inCh
+      ? ['tg', 'vk', 'max'].map(function (k) {
+          var v = inCh[k];
+          return ({ tg: 'тг ', vk: 'вк ', max: 'макс ' })[k] + (v ? v.live : '—');
+        }).join(' · ') + (inCh.gone ? ' · вышло ' + inCh.gone : '')
+      : 'тг ' + (tg.members || 0) +
+        ' · вк ' + (ch.vk ? ch.vk.members : '—') + ' · макс ' + (ch.max ? ch.max.members : '—');
     var days = cur.days_to_event;
     var daysVal = days > 0 ? days : (days > -2 ? 'идет' : 'прошел');
 
@@ -25628,8 +25838,8 @@
       ladRow('Оплатили продукт', prod.paid_rub ? fmtMoney(prod.paid_rub) + ' ₽ выручки' : 'оплат пока нет',
         prod.paid || '—', prod.paid ? pct(prod.paid, base) || 2 : null,
         prod.paid ? conv(pct(prod.paid, prod.invoiced || base) + '% со счета') : convMut('ждем')) +
-      ladRow('Вступили в закрытые каналы', chSmall, tg.members || 0,
-        pct(tg.members || 0, base), conv(pct(tg.members || 0, base) + '% от реги')) +
+      ladRow('Вступили в закрытые каналы', chSmall, chTotal,
+        pct(chTotal, base), conv(pct(chTotal, base) + '% от реги')) +
       ladRow('Смотрели эфир', cur.event_date.split('-').reverse().slice(0, 2).join('.') + ', страница эфира',
         reg.viewers || '—', reg.viewers ? pct(reg.viewers, base) : null,
         reg.viewers ? conv(pct(reg.viewers, base) + '% от реги') : convMut(days > 0 ? 'еще не было' : 'нет данных')) +
@@ -25649,10 +25859,22 @@
 
     /* ВК и MAX кликом не разворачиваются намеренно: это снимки счётчика площадки,
        а не список людей — их подписчиков мы поимённо не знаем и делать вид не будем. */
+    /* Люди в закрытых каналах: считает сервер (in_channel), уже без ботов и своих.
+       Снимок подписчиков площадки остаётся подписью — это ДРУГОЕ число, в нём сидят
+       и служебные аккаунты, и сама команда, и смешивать их в одной цифре нельзя.
+       Площадка, состав которой ещё не снимали, показывает прочерк, а не ноль. */
+    var chLine = function (v, snap) {
+      var was = snap ? 'у площадки ' + snap.members + ' на ' + snap.day.split('-').reverse().slice(0, 2).join('.') : '';
+      if (!v) return was ? 'состав не снимали · ' + was : 'состав не снимали';
+      return (v.gone ? 'вышло ' + v.gone : 'без ушедших') + (was ? ' · ' + was : '');
+    };
     var chRows =
-      flatRow('Телеграм', 'вступили ' + ((tg.members || 0) + (tg.gone || 0)) + (tg.gone ? ' · вышло ' + tg.gone : ''), tg.members || 0, { block: 'channel', value: 'member' }) +
-      flatRow('ВКонтакте', ch.vk ? 'подписчиков на ' + ch.vk.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.vk ? ch.vk.members : '—') +
-      flatRow('MAX', ch.max ? 'подписчиков на ' + ch.max.day.split('-').reverse().slice(0, 2).join('.') : 'вступления не считаются', ch.max ? ch.max.members : '—');
+      flatRow('Телеграм', chLine(inCh && inCh.tg, null), inCh && inCh.tg ? inCh.tg.live : (tg.members || 0),
+        { block: 'channel', value: 'member' }) +
+      flatRow('ВКонтакте', chLine(inCh && inCh.vk, ch.vk), inCh && inCh.vk ? inCh.vk.live : '—',
+        inCh && inCh.vk ? { block: 'channel', value: 'member' } : null) +
+      flatRow('MAX', chLine(inCh && inCh.max, ch.max), inCh && inCh.max ? inCh.max.live : '—',
+        inCh && inCh.max ? { block: 'channel', value: 'member' } : null);
 
     var clickRows = (cur.clicks || []).map(function (c) {
       return flatRow(c.title || c.code, c.code, c.n);
@@ -25674,15 +25896,35 @@
           sub: (regInPeriod == null || regInPeriod === reg.total)
             ? 'бесплатно ' + reg.free + ' · платно ' + reg.vip
             : 'за выбранный период · всего за запуск ' + reg.total },
+        /* Счёт за участие и счёт по продукту — разные деньги: 690 рублей за вечер
+           это не сопровождение. Плитка держит участие, продукты живут ступенями. */
         { label: 'Счет на участие', value: pay.invoiced,
           sub: '690 рублей · ' + pay.attempts + ' ' + plural(pay.attempts, 'попытка', 'попытки', 'попыток') + ' оплаты' },
-        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' ₽',
+        { label: 'Оплачено', value: fmtMoney((pay.paid_rub || 0) + (prod.paid_rub || 0)) + ' \u20bd',
           sub: prod.paid_rub
             ? 'участие ' + fmtMoney(pay.paid_rub) + ' · продукты ' + fmtMoney(prod.paid_rub)
             : pay.paid + ' из ' + (pay.invoiced || 0) + ' человек' },
-        { label: 'В закрытом канале', value: tg.members || 0,
-          sub: tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет' },
-        { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') },
+        /* Каналов три. Плитка показывает людей во всех, а подпись — откуда они;
+           без неё «29» читается как телеграм, и цифра спорит с блоком ниже.
+           Без in_channel (старый бэкенд) остаётся прежний телеграмный счёт. */
+        { label: 'В закрытых каналах', value: chTotal,
+          sub: inCh
+            ? ['tg', 'vk', 'max'].map(function (k) {
+                var v = inCh[k];
+                return v ? ({ tg: 'телеграм ', vk: 'ВК ', max: 'МАКС ' })[k] + v.live : '';
+              }).filter(Boolean).join(' · ') +
+              /* Сколько ушло — вторая цифра, о которой просила Ольга: канал, из
+                 которого уходят, и канал, в который не приходят, — разные беды. */
+              (inCh.gone ? ' · вышло ' + inCh.gone : '')
+            : (tg.gone ? 'вышел ' + tg.gone : 'телеграм, живой счет') },
+        /* Где мы относительно эфира, считает сервер (поле stage): у интенсива два
+           вечера и час начала, а команда сидит в разных поясах — по часам браузера
+           у двоих вышло бы разное «идет». Старый расчёт по дням оставлен запасным:
+           ответ без stage приедет с непромоученного бэкенда. */
+        (cur.stage
+          ? { label: 'Эфир', value: cur.stage.title, sub: cur.stage.sub,
+              word: !/^\d+$/.test(String(cur.stage.title)) }
+          : { label: 'До эфира', value: daysVal, sub: days > 0 ? plural(days, 'день', 'дня', 'дней') : cur.event_date.split('-').reverse().join('.') }),
       ].concat(launchSeenTile(cur, reg)), cur.pages ? 'six' : 'five') +
       launchPeriod() +
       '<div class="card" style="overflow:hidden;margin-bottom:16px"><div class="sec-head pad wrap">' +
@@ -25712,6 +25954,7 @@
           '<div><div class="t">Диагностический тест</div><div class="s">все, кто запускал тест ' +
             '· нажмите на строку, чтобы увидеть их поимённо</div></div></div>' +
           '<div class="brk">' + diagRows + '</div></div>' +
+        launchSiteCards(cur) +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
           '<div><div class="t">Откуда пришли на регистрацию</div><div class="s">по меткам ссылок ' +
             '· нажмите на метку, чтобы увидеть этих людей</div></div></div>' +
@@ -25732,8 +25975,8 @@
                руками (seen). Страницу теста считает отдельный счётчик, и её мы пока не
                показываем — про неё и пишем. Ни одной цифры нет — говорим как было.
                Список «чего нет» сам не должен становиться местом с неправдой. */
-            ((cur.pages || seen)
-              ? '<div class="mkd-gap"><div><b>Посетители страницы теста</b><small>заходы на истсайд.рф/diag считает отдельный счётчик Метрики, на экран он пока не выведен</small></div><span class="sev n-wait">не в цифрах</span></div>'
+            ((cur.pages || cur.test_page || seen)
+              ? ''
               : '<div class="mkd-gap"><div><b>Посетители страниц</b><small>сколько людей видело истсайд.рф/intensive и /diag, знает только Яндекс.Метрика — сейчас она недоступна</small></div><span class="sev n-wait">не в цифрах</span></div>') +
             '<div class="mkd-gap"><div><b>Охваты и просмотры постов</b><small>статистика площадок не подключена — здесь видно только переходы по нашим меткам</small></div><span class="sev n-wait">не в цифрах</span></div>' +
           '</div></div>' +
@@ -25817,6 +26060,7 @@
     if (state._lpPeople && state.mkTab !== 'launch') launchPeopleClose();
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
     if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
+    if (state.mkTab === 'efir') { renderMkEfir(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state.mkTab === 'unit') { renderMkUnit(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
@@ -29453,6 +29697,15 @@
 
   /* ── ОБЗОР ────────────────────────────────────────────── */
   /* спокойная метрика-полоса вместо кричащих плиток */
+  /* Класс кегля для значения плитки: чем длиннее текст, тем мельче. Слово мельче
+     числа той же длины — у букв ширина больше, чем у табличных цифр. */
+  function svFit(s) {
+    var plain = String(s.value == null ? '' : s.value).replace(/<[^>]*>/g, '').trim();
+    var word = s.word != null ? s.word : /[А-Яа-яA-Za-z]{3,}/.test(plain);
+    if (word || plain.length >= 10) return ' word';
+    return plain.length >= 7 ? ' tight' : '';
+  }
+
   function statBar(items, cls) {
     return '<div class="card statbar' + (cls ? ' ' + cls : '') + '">' + items.map(function (s) {
       var foot = s.delta
@@ -29460,7 +29713,11 @@
         : (s.sub ? '<span class="smut">' + s.sub + '</span>' : '');
       return '<button class="stat' + (s.go ? ' go' : '') + '"' + (s.go ? ' data-go="' + s.go + '"' : '') + '>' +
         '<div class="sl">' + s.label + '</div>' +
-        '<div class="sv num">' + s.value + '</div>' +
+        /* Кегль плитки рассчитан на короткое число. Длинное значение («19 320 ₽»)
+           и значение словом («Сегодня») в него не влезают и наезжают на соседнюю
+           плитку — поймано на шести плитках запуска при ширине 1280 (24.09.2026).
+           Поэтому кегль выбирается по длине: считаем текст без разметки. */
+        '<div class="sv num' + svFit(s) + '">' + s.value + '</div>' +
         '<div class="sd">' + foot + '</div>' +
       '</button>';
     }).join('') + '</div>';
@@ -34272,6 +34529,10 @@
         (booking.slot ? '<div class="r"><span class="k">Слот</span><span class="v">' + esc(booking.slot) + '</span></div>' : '') +
         '<div class="r"><span class="k">Оставлена</span><span class="v">' + fmtWhen(booking.at || base.created_at) + '</span></div>' +
         (booking.channel ? '<div class="r"><span class="k">Канал</span><span class="v">' + esc(booking.channel) + '</span></div>' : '') +
+        /* Что человек выбрал и написал в форме лендинга: до звонка это важнее слота,
+           по нему видно, с чем человек пришел и какой тариф уже смотрел. */
+        (booking.plan ? '<div class="r"><span class="k">Интересует</span><span class="v">' + esc(booking.plan) + '</span></div>' : '') +
+        (booking.comment ? '<div class="r"><span class="k">Написал</span><span class="v">' + esc(booking.comment) + '</span></div>' : '') +
       '</div></div>';
     }
     return html;
