@@ -115,8 +115,22 @@
       <button class="tg-cact"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка<span class="tg-cw">по нику</span></button>
       <button class="tg-cact new"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>
       <span class="tg-cact off"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/></svg>Карточка</span>
+      <button class="tg-cact cz"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/></svg><span class="tg-cl">Исполнитель</span><span class="tg-cls">Исполнитель</span></button>
+      <span class="tg-cact cz quiet" aria-disabled="true"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/></svg><span class="tg-cl">Исполнитель</span><span class="tg-cls">Исполнитель</span></span>
     </div>
     <p class="sc-note">Тихая таблетка рядом с тумблером бота: якорь экрана — переписка. Открывает карточку в НОВОЙ вкладке, диалог остается на месте. Связки в базе нет, сшивает бэкенд: сшито по нику — говорим об этом пометкой <code>.tg-cw</code>. Карточки нет вовсе (боту пишет кто угодно) — та же кнопка ее заводит, <code>.new</code>. Четвертое состояние — пока грузится связка, <code>.off</code>.</p>
+
+    <div class="sc-lab" style="margin-top:22px">ДИАЛОГ ИСПОЛНИТЕЛЯ · .tg-tag.cz · .tg-czb · .tg-cact.cz</div>
+    <div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span class="tg-tag cz"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/></svg>исполнитель</span>
+        <span class="tg-tag ai">Бот</span>
+      </div>
+      <div class="tg-czb" style="margin:14px 0 0"><svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2.5" y="4.5" width="15" height="11.5" rx="2.5"/><circle cx="7" cy="9" r="1.7"/><path d="M4.4 13.4c.3-1.3 1.3-2 2.6-2s2.3.7 2.6 2"/><path d="M12.2 8.6h3.3M12.2 11.6h2.3"/></svg>
+        <div><b>Это наш исполнитель, не клиент</b><span>Рельскова Анна Сергеевна пишет в тот же бот, что и семьи. Задания, акты и выплаты — в разделе «Самозанятые».</span></div>
+      </div>
+    </div>
+    <p class="sc-note">Бот наружу у нас один: подрядчик пишет туда же, куда школьники, и в инбоксе его переписка лежит вперемешку с семьями. Пометку считает сервер по телеграм-id карточки исполнителя, по нику не сводим. Полоса тихая, на <code>--fill</code>, а не амберная как <code>.handoff-banner</code>: человек говорит не с тем, беды не случилось — амбер остается за тем, что требует действия. Кнопка «Завести карточку» на таком диалоге не показывается вовсе, вместо нее <code>.tg-cact.cz</code> в его дело; без права на модуль — та же плашка с <code>.quiet</code> (читаемая подпись, а не приглушенный <code>.off</code>: им помечена загрузка).</p>
 
     <p class="sc-note">Фон ленты <code>#F3F5F8</code> — единственный «не белый» фон контента в CRM. Пузыри: входящий белый с тонкой тенью, бот синий, менеджер navy, недоставленный — красная инсет-рамка. Разделитель дней <code>.tg-day</code>, подпись автора <code>.tg-by</code>.</p>
   </section>

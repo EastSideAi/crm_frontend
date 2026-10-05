@@ -31841,7 +31841,7 @@
           '<span class="tg-r2"><span class="tg-pv">' + esc((c.last_text || '').replace(/<[^>]+>/g, '').slice(0, 60)) + '</span>' +
           (c.unread ? '<span class="tg-badge' + (c.handoff ? ' wait' : '') + '"></span>' : '') + '</span>' +
           '<span class="tg-r3">' +
-            (c.cz ? '<span class="tg-tag cz">' + ic('badge', 10) + 'подрядчик</span>' : '') +
+            (c.cz ? '<span class="tg-tag cz">' + ic('badge', 10) + 'исполнитель</span>' : '') +
             st + '</span></span>' +
       '</button>';
     }
@@ -31928,10 +31928,16 @@
        из-за которой пометка вообще появилась. */
     var cz = convCz(uid);
     if (cz) {
+      var czLabel = ic('badge', 14) + '<span class="tg-cl">Исполнитель</span>' +
+        '<span class="tg-cls">Исполнитель</span>';
+      // Без права на модуль это подпись, а не кнопка, но подпись ЧИТАЕМАЯ: класс
+      // `.off` тут не годится вовсе — им помечена «Карточка», пока она грузится, и
+      // приглушенная плашка читалась бы как подвисший скелетон. А таких ролей
+      // большинство тех, кто сидит в инбоксе.
       return can('contractors')
         ? '<button class="tg-cact cz" data-czcard="' + esc(cz.id) + '" ' +
-          'title="Открыть карточку исполнителя">' + ic('badge', 14) + 'Исполнитель</button>'
-        : '<span class="tg-cact off cz">' + ic('badge', 14) + 'Исполнитель</span>';
+          'title="Открыть карточку исполнителя">' + czLabel + '</button>'
+        : '<span class="tg-cact cz quiet" aria-disabled="true">' + czLabel + '</span>';
     }
     var d = state.convLead[uid];
     if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Карточка</span>';
@@ -32216,8 +32222,8 @@
       '</div>' +
       (CZC ? '<div class="tg-czb">' + ic('badge', 14) +
         '<div><b>Это наш исполнитель, не клиент</b><span>' + esc(CZC.name || '') +
-        ' пишет в тот же бот, что семьи. Задания, акты и выплаты по нему — в ' +
-        '«Самозанятых».</span></div></div>' : '') +
+        ' пишет в тот же бот, что и семьи. Задания, акты и выплаты — в разделе ' +
+        '«Самозанятые».</span></div></div>' : '') +
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +

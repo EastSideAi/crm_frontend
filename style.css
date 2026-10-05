@@ -4550,6 +4550,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .tg-tag.cz { color: var(--ink-2); background: var(--fill); }
 .tg-cact.cz { color: var(--ink-2); }
 .tg-cact.cz:hover { color: var(--ink); }
+/* Без права на модуль «Исполнитель» — подпись, а не кнопка. Нажать нельзя, но читать
+   можно: `.off` с его opacity .45 помечает ЗАГРУЗКУ «Карточки», и постоянная плашка в
+   том же виде читалась бы как подвисший скелетон. */
+.tg-cact.quiet { pointer-events: none; }
 
 /* действия в баре диалога */
 .dlg-acts { display: flex; align-items: center; gap: 8px; }
@@ -4713,8 +4717,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .tg-chead .ai-toggle { padding: 8px 10px; gap: 0; font-size: 0; }
   /* «Ученик» на телефоне остается со словом, как «Завести карточку»: у «Карточки»
      иконка говорит сама за себя, а точка привязки — нет. */
-  .tg-cact:not(.new):not(.sch) { padding: 8px 10px; gap: 0; font-size: 0; }
-  .tg-cact.sch { padding: 8px 11px; gap: 6px; font-size: 12.5px; }
+  .tg-cact:not(.new):not(.sch):not(.cz) { padding: 8px 10px; gap: 0; font-size: 0; }
+  /* «Исполнитель» со словом по той же причине, что «Ученик»: иконка нового значения
+     не объясняет, а рядом стоит такая же по размеру иконка карточки. */
+  .tg-cact.sch, .tg-cact.cz { padding: 8px 11px; gap: 6px; font-size: 12.5px; }
   .tg-cact .tg-cl { display: none; }
   .tg-cact .tg-cls { display: inline; }
   .tg-cact svg { width: 15px; height: 15px; }
