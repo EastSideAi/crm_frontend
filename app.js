@@ -205,6 +205,8 @@
     hsk_contact: 'оставил телефон после теста HSK',
     cabinet_entered: 'первый вход в кабинет',
     cabinet_invite_sent: 'отправили приглашение в кабинет',
+    cabinet_invite_issued: 'выпустили приглашение в кабинет',
+    cabinet_invite_shown: 'взяли ссылку приглашения',
   };
   /* подпись события: словарь + уточнения из payload (одна на все ленты) */
   function evText(e) {
@@ -238,6 +240,9 @@
     /* канал важнее роли: по нему видно, дошло ли вообще. Письмо уходит само,
        остальное пишет человек руками. */
     if (e.type === 'cabinet_invite_sent') label += p.channel === 'email' ? ' письмом' : '';
+    if (e.type === 'cabinet_invite_issued' || e.type === 'cabinet_invite_shown') {
+      label += (p.relation === 'parent' ? ': родитель' : ': ученик') + (p.by ? ' · ' + p.by : '');
+    }
     if (e.type === 'lead_name_bot' && p.name) label += ': ' + p.name;
     if (e.type === 'geo' && p.city) label += ': ' + p.city;
     if (e.type === 'csca_access') {
