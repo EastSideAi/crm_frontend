@@ -31684,24 +31684,32 @@
     ['other', 'Другое'],
   ];
 
-  /* Ближайшие четыре волны от сегодня. Зашитый список годов через год врет, поэтому
-     считаем от даты: до марта ближайшая волна весенняя, до сентября — осенняя. */
+  /* Наборы внутри года: весна, сентябрь и декабрь. Декабрьский появился
+     05.10.2026 (Мария) — часть вузов добирает группу к зимнему семестру. */
+  var QL_WAVE_MONTHS = [[3, 'весна '], [9, 'сентябрь '], [12, 'декабрь ']];
+
+  /* Ближайшие шесть волн от сегодня. Зашитый список годов через год врет, поэтому
+     считаем от даты: прошедшие в этом году наборы пропускаем. */
   function qlWaves() {
     var now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;
-    var yy = y, mm = 3;
-    if (m > 3) { mm = 9; }
-    if (m > 9) { mm = 3; yy = y + 1; }
     var out = [];
-    for (var i = 0; i < 4; i++) {
-      out.push([yy + (mm === 3 ? '-03' : '-09'), (mm === 3 ? 'весна ' : 'сентябрь ') + yy]);
-      if (mm === 3) mm = 9; else { mm = 3; yy++; }
+    for (var yy = y; out.length < 6; yy++) {
+      for (var i = 0; i < QL_WAVE_MONTHS.length && out.length < 6; i++) {
+        var mo = QL_WAVE_MONTHS[i][0];
+        if (yy === y && mo < m) continue;
+        out.push([yy + '-' + (mo < 10 ? '0' + mo : mo), QL_WAVE_MONTHS[i][1] + yy]);
+      }
     }
     return out;
   }
   function qlWaveLabel(code) {
     if (code === 'later') return 'позже';
-    if (!/^20\d{2}-(03|09)$/.test(code || '')) return '';
-    return (code.slice(5) === '03' ? 'весна ' : 'сентябрь ') + code.slice(0, 4);
+    if (!/^20\d{2}-(03|09|12)$/.test(code || '')) return '';
+    var mo = parseInt(code.slice(5), 10), name = '';
+    for (var i = 0; i < QL_WAVE_MONTHS.length; i++) {
+      if (QL_WAVE_MONTHS[i][0] === mo) name = QL_WAVE_MONTHS[i][1];
+    }
+    return name + code.slice(0, 4);
   }
   function qlSelect(field, value, opts, empty, auto) {
     return '<select class="tm-sel' + (auto ? ' auto' : '') + '" data-qf="' + field + '">' +
