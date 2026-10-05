@@ -364,6 +364,11 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.amber { background: var(--amber); }
 .stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
   white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Кегль значения — по длине текста (класс ставит svFit в app.js). Крупный рассчитан
+   на короткое число; «19 320 ₽» и «Сегодня» в нём вылезали за свою колонку и наезжали
+   на соседнюю плитку при шести плитках на ширине 1280. */
+.stat .sv.tight { font-size: 31px; }
+.stat .sv.word { font-size: 26px; letter-spacing: -.02em; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -903,6 +908,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .lad-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 6px; transition: width .9s var(--ease); }
 .lad-row.worst .lad-fill { background: var(--coral); }
 .lad-n { font-size: 15px; font-weight: 600; text-align: right; }
+/* Разбивка цели Метрики по площадкам в одной строке: «13 ТГ · 11 MAX · 9 ВК».
+   Подпись мельче и тише самого числа — иначе площадка спорит с цифрой за внимание,
+   а читают здесь числа. На узкой карточке пары переносятся на вторую строку:
+   обрезанный хвост «6 ТГ · 6 MA…» хуже двух строк. */
+.lad-n .gn { display: inline-flex; flex-wrap: wrap; justify-content: flex-end;
+  align-items: baseline; gap: 2px 12px; }
+.lad-n .gn-p { white-space: nowrap; }
+.lad-n .gn-l { font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  margin-left: 3px; letter-spacing: 0; }
 .lad-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .lad-conv { font-size: 12.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
 .lad-drop { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
@@ -4586,6 +4600,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
+  /* Парные карточки на телефоне тоже во всю ширину. Без этого правила они
+     оставались в половину экрана: заголовок «Со спасибо в закрытый канал» вставал
+     в четыре строки, а числа с подписями обрезались по краю карточки. */
+  .sp6 { grid-column: 1 / span 12; }
   .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
   .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
@@ -4622,6 +4640,9 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   /* В подарках число — главное, проценты вторичны: возвращаем его.
      В «Пути» наоборот, поэтому правило точечное. */
   .lad-row.gf-flat .lad-n { display: block; text-align: right; }
+  /* Разбивка цели по площадкам занимает столько, сколько ей нужно: в 46px
+     подписи «бесплатно» и «за 690» не влезали и уезжали за край карточки. */
+  .lad-row.gf-flat.gm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
