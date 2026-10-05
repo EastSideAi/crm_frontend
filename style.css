@@ -9644,6 +9644,33 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
   background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
 
+/* Умеет ли кабинет написать человеку. Это второй вопрос после «заходил ли»,
+   и раньше ответа на него в карточке не было: бот писал Агате Белой, а кабинет
+   предлагал ей подключить бота (05.10.2026). Подключенный бот — норма и потому
+   тих; молчит строка только про тех, кому мы написать не можем. */
+.cab-seat-b { margin-top: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); }
+.cab-seat-b.on { color: var(--green-ink); }
+.cab-seat-b.off { color: var(--amber-ink); }
+
+/* Переписка: один чат — одна строка. Связанный уходит в фон (вопрос закрыт),
+   несвязанный держит действие — именно он и есть повод открыть этот блок. */
+.cab-chats { display: flex; flex-direction: column; gap: 8px; }
+.cab-chat { padding: 10px 12px; border-radius: var(--r-lg); background: var(--amber-soft); }
+.cab-chat.on { background: var(--fill); }
+.cab-chat-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cab-chat-c { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.cab-chat-n { font-size: 13px; font-weight: 650; color: var(--ink); letter-spacing: -.01em; }
+.cab-chat-t { font-size: 12.5px; color: var(--ink-2); }
+.cab-chat-s { margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.cab-chat-a { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
+.cab-chat-a .cab-call { margin-top: 0; width: auto; padding: 6px 12px; background: var(--card); }
+.cab-chat-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  color: var(--green-ink); }
+.cab-chat-q { flex: 1; min-width: 120px; font-size: 12px; color: var(--amber-ink); }
+.cab-chat-sel { padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--card); font: 600 12px 'Manrope', sans-serif; color: var(--ink); }
+
 .cab-h { margin: 18px 0 8px; font-size: 12px; font-weight: 700; color: var(--ink-2);
   letter-spacing: -.01em; }
 .cab-h-t { font-weight: 600; color: var(--ink-3); }

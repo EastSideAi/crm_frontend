@@ -34950,6 +34950,19 @@
     var fresh = p.first_seen && (Date.now() - new Date(p.first_seen).getTime()) < 86400000;
     return { text: 'заходил ' + ago(p.last_seen) + ' назад', cold: days > 14, fresh: !!fresh };
   }
+  /* Как называется канал по-человечески. Второй телеграм-бот это тот же
+     телеграм человека, но другая наша дверь — различать их надо, иначе в
+     карточке две одинаковые строки «телеграм» без объяснения. */
+  var CAB_CH = {
+    telegram: 'телеграм', 'telegram:study': 'телеграм, учебный бот',
+    vk: 'вконтакте', max: 'макс', instagram: 'инстаграм',
+  };
+  var CAB_BOT = {
+    on: 'бот подключен',
+    off: 'бот заблокирован — сообщения не доходят',
+    no: 'бот не подключен',
+  };
+
   function buildCabinet(id) {
     var p = state._plat[id];
     var head = '<div class="uz-jh"><span>Кабинет семьи</span><i></i></div>';
@@ -35003,7 +35016,13 @@
             '<div class="cab-seat-r">' + (PLAT_REL[m.relation] || m.relation) + '</div>' +
             '<div class="cab-seat-n">' + esc(m.name || 'без имени') + '</div>' +
             '<div class="cab-seat-s">' + (s.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') +
-            esc(s.text) + '</div></div>';
+            esc(s.text) + '</div>' +
+            /* Умеет ли кабинет написать этому человеку. Стоит рядом с входом
+               намеренно: «заходил в кабинет» и «до него дойдет сообщение» — два
+               разных вопроса, и до 05.10.2026 на второй в карточке ответа не было
+               вовсе. Отсюда и шло «то ли Агата подключила бота, то ли нет». */
+            '<div class="cab-seat-b ' + (m.bot || 'no') + '">' + CAB_BOT[m.bot || 'no'] +
+            '</div></div>';
         }).join('') + missing + '</div>'
       // кабинета нет вовсе — это не «мало активности», это отсутствие доступа, и
       // говорить об этом надо прямо, а не пустым местом. А если семью уже позвали,
@@ -35014,6 +35033,54 @@
             'руках. Звать заново не надо: человек получит вторую приглашалку.'
           : 'Кабинета нет ни у ученика, ни у родителя. Пока семью не завели в ' +
             'платформу, ни задачи, ни тренажеры, ни план до нее не доходят.') + '</div>';
+
+    /* Переписка: кто нам пишет и дошло ли это до кабинета.
+       Чат и кабинет жили в разных таблицах, и система отвечала про одного
+       человека по-разному: бот писал Агате Белой, а кабинет показывал ей
+       «Подключите бота» (поймала Вера 05.10.2026). Теперь оба ответа тут.
+       Связываем не молча: дело одно на маму и ребенка, в телеграм пишет
+       кто-то один, и ошибка отправит напоминания ребенку в мамин чат. Машина
+       предлагает только при точном совпадении, нажимает человек. */
+    var who = {};
+    (p.people || []).forEach(function (m) { who[m.account_id] = m; });
+    var mayLink = can('cabinet_invite') && (p.people || []).length;
+    var chats = (p.chats || []).length
+      ? '<div class="cab-h">Переписка</div><div class="cab-chats">' +
+        p.chats.map(function (c) {
+          var owner = who[c.account_id];
+          var name = owner ? (owner.name || PLAT_REL[owner.relation] || '') : '';
+          var tail;
+          if (c.state === 'linked') {
+            tail = '<span class="cab-chat-ok">' + ic('check', 13) + 'кабинет: ' + esc(name) + '</span>';
+          } else if (c.state === 'guess' && owner) {
+            tail = '<span class="cab-chat-q">похоже, это ' + esc(name) +
+              (c.why ? ' — ' + esc(c.why) : '') + '</span>' +
+              (mayLink ? '<button type="button" class="cab-call" data-botlink="' +
+                esc(c.channel) + '|' + esc(c.id) + '|' + esc(c.account_id) + '">Это он</button>' : '');
+          } else {
+            // Непонятно, чей чат. Показываем выбор из семьи, а не угадываем:
+            // в деле мама и ребенок, и цена ошибки — чужая переписка.
+            tail = '<span class="cab-chat-q">кабинет не связан</span>' +
+              (mayLink ? '<select class="cab-chat-sel" data-botpick="' +
+                esc(c.channel) + '|' + esc(c.id) + '">' +
+                '<option value="">кто это?</option>' +
+                p.people.map(function (m) {
+                  return '<option value="' + esc(m.account_id) + '">' +
+                    esc(m.name || PLAT_REL[m.relation] || m.relation) + '</option>';
+                }).join('') + '</select>' : '');
+          }
+          var sub = [];
+          if (c.messages) sub.push(c.messages + ' ' + plural(c.messages, 'сообщение', 'сообщения', 'сообщений'));
+          if (c.last_at) sub.push(fmtWhen(c.last_at));
+          return '<div class="cab-chat' + (c.state === 'linked' ? ' on' : '') + '">' +
+            '<div class="cab-chat-h"><span class="cab-chat-c">' +
+              esc(CAB_CH[c.channel] || c.channel) + '</span>' +
+              (c.username ? '<span class="cab-chat-n">@' + esc(c.username) + '</span>' : '') +
+              (c.title ? '<span class="cab-chat-t">' + esc(c.title) + '</span>' : '') + '</div>' +
+            (sub.length ? '<div class="cab-chat-s">' + esc(sub.join(' · ')) + '</div>' : '') +
+            '<div class="cab-chat-a">' + tail + '</div></div>';
+        }).join('') + '</div>'
+      : '';
 
     var acts = (p.activity || []).length
       ? '<div class="cab-acts">' + p.activity.map(function (a) {
@@ -35031,7 +35098,7 @@
     }).join('');
     var tname = p.tariff ? mapTariffName(p.tariff) : '';
 
-    return head + seats +
+    return head + seats + chats +
       '<div class="cab-h">Что прошел сам</div>' + acts +
       '<div class="cab-h">Этапы пути' +
         (tname ? ' <span class="cab-h-t">' + esc(tname) + '</span>'
@@ -37282,6 +37349,38 @@
             ? 'Этот человек уже в кабинете — звать некого'
             : 'Не получилось позвать — проверь сеть');
         });
+      });
+    });
+
+    // ── ПЕРЕПИСКА: сказать системе, кто из семьи сидит в этом чате ──
+    // Связываем по нажатию, а не фоном: в деле мама и ребенок, и чужая привязка
+    // отправит напоминания ребенку в мамину переписку.
+    var botLink = function (btn, parts, accId) {
+      if (!accId) return;
+      btn.disabled = true;
+      api('/admin/api/leads/' + id + '/bot-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: accId, channel: parts[0], chat_id: parts[1] }),
+      }).then(function () {
+        showToast('Связали: теперь кабинет пишет в этот чат');
+        delete state._plat[id]; renderDrawer(true);
+      }).catch(function (e) {
+        btn.disabled = false;
+        showToast(e.message === 'HTTP 409'
+          ? 'Не вышло: этим чатом уже входят в другой кабинет'
+          : 'Не получилось связать — проверь сеть');
+      });
+    };
+    Array.prototype.forEach.call(host.querySelectorAll('[data-botlink]'), function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.getAttribute('data-botlink').split('|');
+        botLink(b, parts, parts[2]);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-botpick]'), function (sel) {
+      sel.addEventListener('change', function () {
+        var parts = sel.getAttribute('data-botpick').split('|');
+        if (sel.value) botLink(sel, parts, sel.value);
       });
     });
 
