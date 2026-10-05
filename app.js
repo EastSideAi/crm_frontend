@@ -17557,6 +17557,14 @@
             return '<label class="al-f"><span class="al-l">' + esc(f[2]) + '</span>' +
               (f[1] === 'text'
                 ? '<textarea id="sh-' + f[0] + '" class="al-in al-ta" rows="2" maxlength="1000"></textarea>'
+                : f[1] === 'pick'
+                // Список: значения приходят парами [значение, подпись]. Тот же путь,
+                // что у остальных полей, — чтобы не заводить вторую маленькую форму
+                // ради одного выбора.
+                ? '<select id="sh-' + f[0] + '" class="al-in">' +
+                    (f[3] || []).map(function (o) {
+                      return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>';
+                    }).join('') + '</select>'
                 : f[1] === 'file'
                 // Файл читаем в браузере и отправляем строкой в JSON — тем же способом,
                 // что вложения задач и чеки: второго приемника multipart ради одного
@@ -31942,6 +31950,21 @@
     var d = state.convLead[uid];
     if (!d || d === 'load') return '<span class="tg-cact off">' + ic('card', 14) + 'Карточка</span>';
     if (d.error) return '';
+    /* Карточки клиента нет, а человек может оказаться нашим исполнителем: телеграм к
+       его карточке привязан только у тех, кто ходит во внешний кабинет, а наши
+       преподаватели и тьюторы туда не ходят. Поэтому рядом с «Завести карточку» стоит
+       вторая дверь — отметить руками. Показываем ее только тому, у кого есть модуль:
+       выбирать придется из списка исполнителей. */
+    if (!d.found && can('contractors')) {
+      return (d.can_create
+        ? '<button class="tg-cact new" data-newcard="' + esc(uid) + '" ' +
+          'title="Карточки в «Людях» нет — завести ее из этого диалога">' + ic('plus', 14) +
+          '<span class="tg-cl">Завести карточку</span><span class="tg-cls">Завести</span></button>'
+        : '') +
+        '<button class="tg-cact czmark" data-czmark="' + esc(uid) + '" ' +
+        'title="Это наш исполнитель, а не клиент">' + ic('badge', 14) +
+        '<span class="tg-cl">Это исполнитель</span><span class="tg-cls">Исполнитель</span></button>';
+    }
     if (d.found) {
       return '<button class="tg-cact" data-card="' + esc(d.session_id) + '" ' +
         'title="Открыть карточку клиента в новой вкладке">' + ic('card', 14) + 'Карточка' +
@@ -31968,25 +31991,91 @@
     window.open(location.pathname + location.search + '#lead/' + encodeURIComponent(id),
                 '_blank', 'noopener');
   }
+  /* Отметить диалог исполнителем. Список берем тот же, что в разделе «Исполнители»;
+     если он еще не загружен, тянем его тут же — человек нажал кнопку и ждать не
+     должен. */
+  function openCzMark(uid) {
+    var go = function () {
+      var live = (CZ.list || []).filter(function (c) { return !c.archived; });
+      if (!live.length) {
+        showToast('Исполнителей в списке нет');
+        return;
+      }
+      openSheet('Это наш исполнитель', 'Пометка стоит только в переписке: доступ в ' +
+        'кабинет исполнителя она не открывает.', [
+        // Первым пунктом — пустой: иначе в списке заранее выбран первый по алфавиту,
+        // и быстрый клик по «Отметить» подписывает переписку случайным человеком.
+        ['who', 'pick', 'Кто это', [['', 'Выберите человека']].concat(
+          live.map(function (c) { return [c.id, c.full_name]; }))],
+      ], function (v, close) {
+        if (!v.who) return 'Выберите человека';
+        apiSend('/admin/api/bot/conversations/' + uid + '/contractor', 'POST',
+          { contractor_id: v.who },
+          function (r) {
+            close();
+            // Пометка приезжает в списке диалогов, поэтому перечитываем его целиком:
+            // одна строка в двух местах разъехалась бы.
+            var c = (state.bot.list || []).filter(function (x) {
+              return String(x.user_id) === String(uid);
+            })[0];
+            if (c) c.contractor = (r && r.contractor) || null;
+            delete state.bot.msgs[uid];
+            if (state.page === 'inbox') renderView();
+            showToast('Отметил: ' + ((r && r.contractor && r.contractor.name) || 'исполнитель'));
+          },
+          // Первым аргументом у apiSend идет код, причина — во втором: сервер
+          // объясняет словами, почему пометить нечем (нет id канала, нет человека).
+          function (code, e) {
+            el('sh-err').textContent =
+              (e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+              'Не получилось отметить';
+          });
+        return null;
+      }, null, 'Диалог', 'Отметить');
+    };
+    if (CZ.list) return go();
+    czLoad(function () { go(); });
+  }
+  function czUnmark(uid) {
+    apiSend('/admin/api/bot/conversations/' + uid + '/contractor', 'DELETE', null,
+      function () {
+        var c = (state.bot.list || []).filter(function (x) {
+          return String(x.user_id) === String(uid);
+        })[0];
+        if (c) c.contractor = null;
+        delete state.bot.msgs[uid];
+        if (state.page === 'inbox') renderView();
+        showToast('Пометка снята');
+      },
+      function (code, e) {
+        showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                  'Не получилось снять пометку');
+      });
+  }
+
   function wireConvCard(host, uid) {
     var cz = host.querySelector('[data-czcard]');
     if (cz) cz.addEventListener('click', function () {
       openCz(cz.getAttribute('data-czcard'));
     });
+    var mk = host.querySelector('[data-czmark]');
+    if (mk) mk.addEventListener('click', function () {
+      openCzMark(mk.getAttribute('data-czmark'));
+    });
     var open = host.querySelector('[data-card]');
     if (open) open.addEventListener('click', function () {
       openLeadTab(open.getAttribute('data-card'));
     });
-    var mk = host.querySelector('[data-newcard]');
-    if (mk) mk.addEventListener('click', function () {
-      if (mk.disabled) return;
-      mk.disabled = true; mk.innerHTML = ic('plus', 14) + '<span class="tg-cl">Завожу…</span><span class="tg-cls">Завожу…</span>';
+    var add = host.querySelector('[data-newcard]');
+    if (add) add.addEventListener('click', function () {
+      if (add.disabled) return;
+      add.disabled = true; add.innerHTML = ic('plus', 14) + '<span class="tg-cl">Завожу…</span><span class="tg-cls">Завожу…</span>';
       apiSend('/admin/api/bot/conversations/' + uid + '/lead', 'POST', null, function (r) {
         state.convLead[uid] = null; convLeadLoad(uid);
         loadLeads(true);                          // список «Людей» устарел: там теперь новый человек
         if (r && r.id) openLeadTab(r.id);
         showToast(r && r.created === false ? 'Карточка уже была — открыл ее' : 'Карточка заведена');
-      }, function () { mk.disabled = false; convCardPaint(uid); showToast('Не получилось завести карточку'); });
+      }, function () { add.disabled = false; convCardPaint(uid); showToast('Не получилось завести карточку'); });
     });
   }
 
@@ -32215,15 +32304,25 @@
         '<button class="tg-back" id="tg-back">' + ic('go', 14) + '</button>' +
         '<span class="tg-ava sm" style="--c:' + avaColor(c.id != null ? c.id : c.name) + '">' + esc(initials(c.name)) + '</span>' +
         '<div class="tg-ci"><div class="tg-cn">' + esc(c.name) + '</div><div class="tg-cs">' + chBadge(c.channel) + statusLine + '</div></div>' +
-        '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
-        '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
-        '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
-          '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
+        // Кнопки держим одной группой: их бывает четыре, и на ноутбуке группа целиком
+        // уезжает под имя, а не рвется пополам между двумя строками шапки.
+        '<div class="tg-cacts">' +
+          '<span class="tg-cwrap" id="tg-card">' + convCardHtml(c.id) + '</span>' +
+          '<span class="tg-cwrap" id="tg-school">' + convSchoolHtml(c.id) + '</span>' +
+          '<button class="ai-toggle' + (aiOn ? ' on' : '') + '" id="tg-ai" title="' + (aiOn ? 'Бот отвечает автоматически — нажми, чтобы вести самому' : 'Бот выключен — нажми, чтобы он снова отвечал') + '">' +
+            '<span class="ait-dot"></span>' + (aiOn ? 'Бот отвечает' : 'Бот выключен') + '</button>' +
+        '</div>' +
       '</div>' +
       (CZC ? '<div class="tg-czb">' + ic('badge', 14) +
         '<div><b>Это наш исполнитель, не клиент</b><span>' + esc(CZC.name || '') +
         ' пишет в тот же бот, что и семьи. Задания, акты и выплаты — в разделе ' +
-        '«Самозанятые».</span></div></div>' : '') +
+        '«Самозанятые».</span></div>' +
+        // Снять можно только отметку человека. Автоматическая связь — это факт входа
+        // в кабинет с этого телеграма, и кнопкой его не отменишь.
+        (CZC.manual && can('contractors')
+          ? '<button class="czb-off" id="tg-czoff" title="Пометил не того">отметил не того</button>'
+          : '') +
+        '</div>' : '') +
       (c.handoff ? '<div class="handoff-banner"><span>' + ic('hand', 14) + '</span><div><b>Клиент просит менеджера</b><span>напиши ответ ниже — бот сам замолчит в этом диалоге, и он перейдёт к тебе.</span></div></div>' : '') +
       '<div class="tg-thread" id="tg-thread">' + thread + '</div>' +
       '<div class="tg-hint ' + (aiOn ? 'ai' : 'mgr') + '">' + ic(aiOn ? 'bot' : 'hand', 12) +
@@ -32247,6 +32346,8 @@
     var th = el('tg-thread'); if (th) th.scrollTop = th.scrollHeight;
     var bk = el('tg-back'); if (bk) bk.addEventListener('click', function () { el('tg').classList.remove('show-chat'); });
     var ai = el('tg-ai'); if (ai) ai.addEventListener('click', function () { inboxSetAi(c, !aiOn); });
+    var czoff = el('tg-czoff');
+    if (czoff) czoff.addEventListener('click', function () { czUnmark(c.id); });
     var inp = el('tg-input'), snd = el('tg-send');
     function send() {
       if (!inp) return;
