@@ -34957,10 +34957,14 @@
     telegram: 'телеграм', 'telegram:study': 'телеграм, учебный бот',
     vk: 'вконтакте', max: 'макс', instagram: 'инстаграм',
   };
+  /* Формулировка от НАШЕЙ стороны намеренно. «Бот не подключен» рядом с живой
+     перепиской читается как ошибка системы — именно так и вышло с Агатой Белой:
+     она боту пишет, а кабинет звал подключить бота. Вопрос тут один: дойдет ли
+     до человека наше сообщение. */
   var CAB_BOT = {
-    on: 'бот подключен',
+    on: 'кабинет пишет ему в бота',
     off: 'бот заблокирован — сообщения не доходят',
-    no: 'бот не подключен',
+    no: 'кабинет написать ему не может',
   };
 
   function buildCabinet(id) {
@@ -35051,7 +35055,7 @@
           var name = owner ? (owner.name || PLAT_REL[owner.relation] || '') : '';
           var tail;
           if (c.state === 'linked') {
-            tail = '<span class="cab-chat-ok">' + ic('check', 13) + 'кабинет: ' + esc(name) + '</span>';
+            tail = '<span class="cab-chat-ok">' + ic('check', 13) + 'кабинет пишет сюда: ' + esc(name) + '</span>';
           } else if (c.state === 'guess' && owner) {
             tail = '<span class="cab-chat-q">похоже, это ' + esc(name) +
               (c.why ? ' — ' + esc(c.why) : '') + '</span>' +
