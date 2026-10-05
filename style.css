@@ -9,6 +9,10 @@
   --app: #FFFFFF; --main: #F6F7F9; --card: #FFFFFF;
   --ink: #11151F; --ink-2: #697086; --ink-3: #A6ABB8;
   --line: #EDEEF2; --line-2: #E3E5EB; --fill: #F5F6F9;
+  /* Провод дерева. Темнее обычных разделителей: на 1px светло-серая ветка
+     читается как случайный штрих, а не как связь. Общий для дерева продуктов
+     и дерева ролей в Академии — третья копия значения разъехалась бы. */
+  --wire: #C9CEDA;
   --blue: #2F6BFF; --blue-d: #1E50E6; --navy: #1C2B4A; --blue-tint: #EAF0FF; --navy-soft: #E9ECF4;
   --black: #15161C;
   --green: #18A957; --green-ink: #0E7C3F; --green-soft: #E4F6EC;
@@ -360,6 +364,11 @@ a { color: inherit; text-decoration: none; }
 .stat .sdot.amber { background: var(--amber); }
 .stat .sv { font-size: 38px; font-weight: 700; letter-spacing: -.04em; color: var(--ink); margin-top: 14px; line-height: 1;
   white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Кегль значения — по длине текста (класс ставит svFit в app.js). Крупный рассчитан
+   на короткое число; «19 320 ₽» и «Сегодня» в нём вылезали за свою колонку и наезжали
+   на соседнюю плитку при шести плитках на ширине 1280. */
+.stat .sv.tight { font-size: 31px; }
+.stat .sv.word { font-size: 26px; letter-spacing: -.02em; }
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -899,6 +908,15 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .lad-fill { height: 100%; border-radius: 6px; background: var(--blue); min-width: 6px; transition: width .9s var(--ease); }
 .lad-row.worst .lad-fill { background: var(--coral); }
 .lad-n { font-size: 15px; font-weight: 600; text-align: right; }
+/* Разбивка цели Метрики по площадкам в одной строке: «13 ТГ · 11 MAX · 9 ВК».
+   Подпись мельче и тише самого числа — иначе площадка спорит с цифрой за внимание,
+   а читают здесь числа. На узкой карточке пары переносятся на вторую строку:
+   обрезанный хвост «6 ТГ · 6 MA…» хуже двух строк. */
+.lad-n .gn { display: inline-flex; flex-wrap: wrap; justify-content: flex-end;
+  align-items: baseline; gap: 2px 12px; }
+.lad-n .gn-p { white-space: nowrap; }
+.lad-n .gn-l { font-style: normal; font-size: 11px; font-weight: 600; color: var(--ink-3);
+  margin-left: 3px; letter-spacing: 0; }
 .lad-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
 .lad-conv { font-size: 12.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
 .lad-drop { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700;
@@ -1018,6 +1036,50 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   .mt-day { padding: 12px 16px 4px; }
   .mt-tasks { padding: 2px 16px 12px 16px; }
   .mt-task-who { display: none; }
+}
+
+/* Своя комната (Задачи → Встречи): список комнат на нашем сервере над журналом
+   записей. Рецепта не заводит — берет строку журнала (.mt-row) и чипы статусов,
+   потому что смысл тот же: встреча, кто завел, что с ней. Свое здесь только
+   «идет» и кнопка входа. */
+.mr-card { margin: 18px 0; }
+.mr-lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); }
+.mr-note { font-size: 12.5px; color: var(--ink-3); min-width: 0; }
+.mr-card .bp.sm { margin-left: auto; }
+.mr-row .mr-title { font-size: 14px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-row .mt-right { gap: 7px; }
+/* Состояния комнаты — своя семья из трех членов, по формуле §3.2. Живое
+   держит синий тинт (как «в работе» у задач), «ждет» нейтрально (это норма),
+   «прошла» без заливки: в нее уже не войти, и выглядеть она должна тише, а не
+   так же серо, как ожидающая. */
+.sev.mr-live { background: var(--blue-tint); color: var(--blue-d); }
+.sev.mr-wait { background: var(--fill); color: var(--ink-2); }
+.sev.mr-over { background: transparent; color: var(--ink-3); padding: 6px 0; }
+/* Строка не кликается целиком: работают только контролы справа. Поэтому и
+   курсор, и ховер-полоска общей .trow здесь сняты — рука не должна обещать
+   нажатие, которого нет. */
+.mr-row { cursor: default; }
+.mr-row:hover { background: transparent; }
+.mr-row:hover::before { opacity: 0; }
+.mr-go { text-decoration: none; }
+.mr-row .mr-copy { padding: 7px 9px; }
+.mr-row .mr-copy svg { width: 14px; height: 14px; }
+.mr-retry { margin-left: 6px; }
+/* Комнаты еще нет — это состояние продлится неделями, и пустой карточки в
+   пол-экрана оно не стоит: тихая строка, как у соседней сетки расписания. */
+.mr-off { padding: 14px 24px 16px; font-size: 13px; color: var(--ink-3); }
+/* Скелетон на время загрузки: те же три колонки, что у строки комнаты. */
+.mr-sk { grid-template-columns: minmax(0, 1fr) 90px 96px; height: 58px; }
+/* На телефоне общая .trow прибита к трем колонкам через !important, поэтому
+   своя сетка строки тоже с ним: иначе название комнаты схлопывается до
+   «Планерка 29 с…», а три контрола справа встают столбиком в три этажа. */
+@media (max-width: 760px) {
+  .mr-note { display: none; }
+  .trow.mr-row { grid-template-columns: 46px minmax(0, 1fr) !important; gap: 2px 10px;
+    padding: 12px 14px; }
+  .mr-row .mt-right { grid-column: 2; justify-content: flex-start; margin-top: 8px; }
 }
 
 /* Доска задач (План → Доска): колонки-статусы на рецепте канбана лидов. Карточка
@@ -2424,6 +2486,21 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* подсказка под полем — там, где выбор неочевиден по подписи (направление цели) */
 .al-hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 
+/* Автоподбор самозанятого в листе продукта: поле + выпадающий список под ним.
+   Меню поверх соседей (z-index), тени как у .ord-menu — та же роль всплывающего списка. */
+.flp { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.flp-menu { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; right: 0;
+  max-height: 236px; overflow-y: auto; padding: 5px; border-radius: 11px; background: #fff;
+  border: 1px solid rgba(21,32,59,.1); box-shadow: 0 18px 44px rgba(15,23,42,.16); }
+.flp-menu[hidden] { display: none; }
+.flp-opt { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+  border: 0; background: transparent; cursor: pointer; padding: 8px 10px; border-radius: 8px;
+  font: 600 13px 'Manrope', sans-serif; color: var(--ink); transition: background .12s; }
+.flp-opt:hover { background: var(--blue-tint); }
+.flp-alt { font-size: 11px; font-weight: 500; color: var(--ink-3); }
+.flp-hint { font-size: 11.5px; line-height: 1.4; color: var(--ink-3); }
+.flp-hint.on { color: var(--blue); font-weight: 600; }
+
 /* ── Помощник в форме постановки ────────────────────────────────────────────
    Единственный цветной блок формы: он приглашает начать отсюда, а не с поля
    «что сделать». Остальные поля остаются тихими. */
@@ -2499,6 +2576,10 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 /* за какие темы клиенты приходят вам — справка, не настройка: тише основного блока */
 .np-topics { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
 .np-topics b { color: var(--ink); font-weight: 700; }
+/* «уведомления без темы»: тумблер и строка пояснения под ним — отдельный блок, иначе
+   читается как часть справки о темах выше */
+.np-fanrow { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.np-fan { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .np-skel { height: 46px; }
 .np-wait { opacity: .55; pointer-events: none; transition: opacity .15s var(--ease); }
 .al-cancel { height: 42px; padding: 0 16px; border-radius: 11px; font: 600 13.5px 'Manrope', sans-serif;
@@ -4519,6 +4600,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .sp8, .sp4 { grid-column: 1 / span 12; }
+  /* Парные карточки на телефоне тоже во всю ширину. Без этого правила они
+     оставались в половину экрана: заголовок «Со спасибо в закрытый канал» вставал
+     в четыре строки, а числа с подписями обрезались по краю карточки. */
+  .sp6 { grid-column: 1 / span 12; }
   .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
   .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
   .stat .sv { font-size: 32px; }
@@ -4555,6 +4640,9 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   /* В подарках число — главное, проценты вторичны: возвращаем его.
      В «Пути» наоборот, поэтому правило точечное. */
   .lad-row.gf-flat .lad-n { display: block; text-align: right; }
+  /* Разбивка цели по площадкам занимает столько, сколько ей нужно: в 46px
+     подписи «бесплатно» и «за 690» не влезали и уезжали за край карточки. */
+  .lad-row.gf-flat.gm-row { grid-template-columns: minmax(0, 1fr) auto; }
   .search { width: 100%; }
   .modal { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none;
     border-radius: 0; top: 0; left: 0; transform: none; }
@@ -5566,6 +5654,17 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* подпись под чужими данными: кто их внес и почему мы их не правим */
 .cz-src { font-size: 12px; color: var(--ink-3); margin-top: 10px; line-height: 1.5; }
 
+/* «Имя в расчётном листе» — редкое переопределение (в листе имя записано иначе, чем ФИО).
+   Прячем в необязательный разворот, чтобы для большинства людей поля вообще не было видно. */
+.cz-alt { margin-top: 12px; }
+.cz-alt > summary { font-size: 12px; color: var(--ink-2); cursor: pointer;
+  list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.cz-alt > summary::-webkit-details-marker { display: none; }
+.cz-alt > summary::before { content: '+'; color: var(--ink-3); font-weight: 600; }
+.cz-alt[open] > summary::before { content: '–'; }
+.cz-alt > summary:hover { color: var(--blue); }
+.cz-alt-b { margin-top: 10px; }
+
 /* история смены счета: тихий журнал под реквизитами — не «еще одна секция», а сноска
    к ним, поэтому без капс-заголовка секции и на сером поле */
 .cz-pay-h { margin-top: 14px; padding: 12px 14px; background: var(--fill); border-radius: 12px; }
@@ -5851,6 +5950,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   background: var(--red); color: #fff; font: 600 12px 'Manrope', sans-serif;
   padding: 7px 14px; border-radius: var(--r-pill); }
 .dc-alert .dc-alert-go:hover { filter: brightness(.95); }
+/* Тот же информатор, но срок еще не вышел: это предупреждение, а не авария. */
+.dc-alert.warn { background: var(--amber-soft); color: var(--amber-ink); }
+.dc-alert.warn .ic { color: var(--amber); }
 
 /* ── РИСКИ (этап 9): информатор переквалификации ────────────────────────────
    Обзор — строка списка (.rsk-grid) с уровнем-чипом и флагами; разбор — карточка с
@@ -5922,7 +6024,14 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .mo-stat.rep-accent b { color: var(--blue-d); }
 
 .rep-grid { grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, .9fr)); }
-.rep-row { cursor: pointer; }
+/* С согласованной суммой колонок пять: сумма листа стоит первой из чисел, у самого имени,
+   рядом с чипом сверки — их читают вместе. */
+.rep-grid.rep-grid6 { grid-template-columns: minmax(0, 1.5fr) repeat(5, minmax(0, .82fr)); }
+/* Строка растет под содержимое: у имени бывают чипы (должность, сверка, к выплате), и на
+   узкой колонке они переносятся в несколько строк — фиксированные 58px их обрезали бы и
+   наезжали на соседа. */
+.rep-row { cursor: pointer; height: auto; min-height: 58px;
+  padding-top: 9px; padding-bottom: 9px; }
 .rep-name { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; min-width: 0;
   font-weight: 600; color: var(--ink); }
 .rep-job { font: 700 10.5px 'Manrope', sans-serif; letter-spacing: .06em;
@@ -5935,6 +6044,28 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-variant-numeric: tabular-nums; }
 .rep-left { font-weight: 700; }
 .rep-left.hot { color: var(--blue-d); }
+
+/* ── автораскладка суммы на услуги (окно «Разбить», раздел «Финансы») ── */
+.rb-card { max-width: 560px; }
+.rb-row { display: grid; grid-template-columns: 1fr 74px 92px 26px; align-items: center;
+  gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.rb-row:first-child { padding-top: 0; }
+.rb-svc-t b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.rb-svc-t span { font-size: 11.5px; color: var(--ink-3); }
+.rb-qty { width: 74px; text-align: center; padding: 7px 8px; }
+.rb-line { text-align: right; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rb-del { border: 0; background: none; color: var(--ink-3); cursor: pointer; padding: 4px;
+  display: inline-flex; border-radius: var(--r-pill); }
+.rb-del:hover { color: var(--red-ink); background: var(--red-soft); }
+.rb-empty { font-size: 13px; color: var(--ink-3); padding: 4px 0 2px; }
+.rb-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 4px; font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.rb-rec { font-size: 12px; border-radius: var(--r-pill); padding: 3px 11px; font-weight: 600;
+  white-space: nowrap; }
+.rb-rec.ok { color: var(--green-ink); background: var(--green-soft); }
+.rb-rec.under { color: var(--amber-ink); background: var(--amber-soft); }
+.rb-rec.over { color: var(--red-ink); background: var(--red-soft); }
 
 /* ── карточка задания ── */
 /* Деньги — единственный якорь карточки: с них начинается и ими заканчивается любой
@@ -6187,6 +6318,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fc-row.total .fc-name { font-size: 15px; font-weight: 700; }
 .fc-row.total .fc-v { font-size: 32px; font-weight: 800; letter-spacing: -.04em; }
 .fc-v.neg { color: var(--red-ink); }
+.fkv b.neg { color: var(--red-ink); }
 
 .fin-block { padding: 20px 24px 22px; }
 .fin-block + .fin-block, .fin-casc + .fin-block { margin-top: 16px; }
@@ -6435,6 +6567,29 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   cursor: pointer; opacity: .55; transition: opacity .12s, border-color .12s, color .12s; }
 .trow:hover .fin-linkc { opacity: 1; }
 .fin-linkc:hover { border-color: var(--blue); color: var(--blue); }
+/* Отметка о чеке в строке дохода: «пробит» — действие, «не нужен» и «снять» тише.
+   Тот же рецепт, что у «+ клиент»: в строке их две, и кричать им обеим нельзя. */
+.rcp-l { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+/* У .trow жесткая высота 58px — строке с пометкой о чеке даем расти. */
+.trow.has-rcp { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+.rcp-l .fst { padding: 2px 8px; font-size: 11px; }
+.fin-rcp { border: 0; background: var(--blue-tint); color: var(--blue-d);
+  font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
+  cursor: pointer; white-space: nowrap; }
+.fin-rcp:hover { background: var(--blue); color: #fff; }
+.fin-rcp.off { background: transparent; color: var(--ink-2); opacity: .55;
+  transition: opacity .12s, color .12s; }
+.trow:hover .fin-rcp.off { opacity: 1; }
+.fin-rcp.off:hover { color: var(--blue); }
+/* Ссылка на сам чек в Бизнес.Ру стоит тем же тихим чипом, что и «снять»: это не
+   действие над строкой, а возможность убедиться своими глазами. */
+a.fin-rcp { text-decoration: none; display: inline-block; }
+a.fin-rcp.off:hover { text-decoration: underline; }
+/* «Разбить» — разложить сумму строки листа на задания самозанятого (в «Финансах»). */
+.fin-brk { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
+  font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
+  cursor: pointer; white-space: nowrap; }
+.fin-brk:hover { background: var(--blue); color: #fff; }
 /* Пикер клиента: прокручиваемый список карточек с поиском. */
 .pk-list { margin-top: 10px; max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .pk-row { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%;
@@ -6451,6 +6606,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* Просроченный срок — единственный красный чип в семействе: по 54-ФЗ это уже штраф,
+   и отличать его от «скоро» одним амбером нельзя. */
+.fst.bad { color: var(--red-ink); background: var(--red-soft); }
 /* Чип приложенного документа (выплаты подрядчикам): нейтральная плашка с зелёной
    галочкой. Не залитый зелёный, чтобы не читаться вторым статусом рядом с «факт». */
 .fst.doc { color: var(--ink-2); background: var(--fill); gap: 4px; }
@@ -6960,7 +7118,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .po-stem { height: 34px; display: flex; align-items: center; }
 /* Линии дерева темнее общих разделителей: на 1px светло-серая ветка читается как
    случайный штрих рядом с карточкой, а не как связь между узлами. */
-.po-tree { --po-wire: #C9CEDA; }
+.po-tree { --po-wire: var(--wire); }
 .po-drop::before, .po-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--po-wire); }
 
@@ -8048,7 +8206,23 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-wrap { display: grid; grid-template-columns: 264px 1fr; gap: 18px; align-items: start; max-width: 1080px; }
 
 .academy .ac-route { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl); padding: 16px 14px; position: sticky; top: 16px; }
-.academy .ac-route-head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 4px 12px; }
+/* Заголовок программы — кнопка: на телефоне она открывает список уроков, на
+   компьютере сворачивает его, когда мешает. Выглядит как подпись, поэтому
+   рядом стрелка: без нее человек не понимает, что по ней можно нажать. */
+.academy .ac-route-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; margin: 2px 0 12px; padding: 4px; background: none; border: 0; border-radius: var(--ac-r-md);
+  font: inherit; color: inherit; cursor: pointer; text-align: left; transition: .14s var(--ac-ease); }
+.academy .ac-route-head:hover { background: var(--ac-fill); }
+.academy .ac-route-head:focus-visible { outline: none;
+  box-shadow: inset 0 0 0 1.5px var(--ac-blue), 0 0 0 3px rgba(47,107,255,.12); }
+.academy .ac-route-head .ac-prog { margin-left: auto; }
+.academy .ac-fx { display: inline-flex; color: var(--ac-ink-3); transform: rotate(90deg);
+  transition: transform .2s var(--ac-ease); }
+.academy .ac-route.fold .ac-fx { transform: rotate(0deg); }
+/* Материалы курса при свернутой программе остаются: это презентация и памятки,
+   за ними человек заходит отдельно от уроков. */
+.academy .ac-route.fold .ac-rlist { display: none; }
+.academy .ac-route.fold .ac-mats { margin-top: 6px; border-top: 0; padding-top: 0; }
 .academy .ac-prog { font-weight: 700; color: var(--ac-blue-d); font-size: 12.5px; }
 .academy .ac-bar { height: 6px; background: var(--ac-fill); border-radius: var(--ac-r-pill); overflow: hidden; margin: 0 4px 14px; }
 .academy .ac-bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ac-blue), var(--ac-blue-d)); border-radius: var(--ac-r-pill); transition: width .9s var(--ac-ease); }
@@ -8216,6 +8390,86 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-opt.wrong .ac-key { background: var(--ac-red); color: #fff; }
 .academy .ac-opt.dim { opacity: .5; }
 
+/* Иллюстрация экрана: полоса под заголовком. Кадр обрезается по центру, высота
+   фиксированная — иначе картинки разной пропорции ломают ритм урока. */
+.academy .ac-ill { margin: 0 0 20px; border-radius: var(--ac-r-lg); overflow: hidden;
+  background: var(--ac-fill); border: 1px solid var(--ac-line); }
+.academy .ac-ill img { display: block; width: 100%; height: 180px; object-fit: cover; object-position: center 45%; }
+@media (max-width: 720px) { .academy .ac-ill img { height: 136px; } }
+
+/* ── Тренажеры урока ──────────────────────────────────────────────────────────
+   Собери по порядку, соедини пары, переверни карточку. Рецепты общие с уроком:
+   та же рамка, та же зеленая «верно» и амбер «мимо», никаких новых цветов.
+   Ошибка не красит пол-экрана красным — коротко вздрагивает элемент, который
+   нажали: это тренажер, человек тут и должен ошибаться. */
+.academy .ac-order { margin-top: 18px; }
+.academy .ac-otop { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.academy .ac-oreset { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 2px 4px;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ac-ink-3); cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-oreset:hover { color: var(--ac-blue-d); }
+.academy .ac-oreset svg { width: 12px; height: 12px; }
+.academy .ac-ochips { display: flex; flex-wrap: wrap; gap: 8px; }
+.academy .ac-ochip { background: var(--ac-card); border: 1px solid var(--ac-line-2); border-radius: var(--ac-r-pill);
+  padding: 9px 15px; font: inherit; font-size: 13.5px; color: var(--ac-ink); cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-ochip:hover:not(:disabled) { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .ac-ochip:disabled { cursor: default; }
+.academy .ac-ochip.set { opacity: .32; border-style: dashed; }
+/* Собрано — ряд исходных чипов убираем: он отработал, а пустая серая полоса
+   над готовым ответом читается как недоделка. */
+.academy .ac-order.done .ac-otop, .academy .ac-order.done .ac-ochips { display: none; }
+.academy .ac-ochip.bad { border-color: var(--ac-red); color: var(--ac-red); background: var(--ac-red-soft);
+  animation: ac-shake .4s var(--ac-ease); }
+.academy .ac-oslots { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.academy .ac-oslot { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 14px;
+  border: 1px dashed var(--ac-line-2); border-radius: var(--ac-r-md); background: var(--ac-fill);
+  font-size: 14px; color: var(--ac-ink); transition: .2s var(--ac-ease); }
+.academy .ac-oslot.on { border-style: solid; border-color: var(--ac-line); background: var(--ac-card); }
+.academy .ac-on { width: 22px; height: 22px; flex: none; border-radius: 7px; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700; background: var(--ac-card); color: var(--ac-ink-3); }
+.academy .ac-oslot.on .ac-on { background: var(--ac-blue-tint); color: var(--ac-blue-d); }
+.academy .ac-order.done .ac-oslot.on .ac-on { background: var(--ac-green-soft); color: var(--ac-green-ink); }
+.academy .ac-ot2 { min-width: 0; }
+
+.academy .ac-match { margin-top: 18px; }
+.academy .ac-mcols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.academy .ac-mcol { display: flex; flex-direction: column; gap: 8px; }
+.academy .ac-mcol > .ac-cap { margin-bottom: 2px; }
+.academy .ac-mrow { text-align: left; background: var(--ac-card); border: 1px solid var(--ac-line-2);
+  border-radius: var(--ac-r-md); padding: 12px 14px; font: inherit; font-size: 13.5px; line-height: 1.4;
+  color: var(--ac-ink); cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-mrow:hover:not(:disabled) { border-color: var(--ac-blue); }
+.academy .ac-mrow.pick { border-color: var(--ac-blue); background: var(--ac-blue-tint); }
+.academy .ac-mrow.hit { border-color: transparent; background: var(--ac-green-soft); color: var(--ac-green-ink);
+  cursor: default; }
+.academy .ac-mrow.bad { border-color: var(--ac-red); background: var(--ac-red-soft); animation: ac-shake .4s var(--ac-ease); }
+
+.academy .ac-flips { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 18px; }
+.academy .ac-flip { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; perspective: 900px; height: 138px; }
+.academy .ac-fin { position: relative; display: block; width: 100%; height: 100%;
+  transform-style: preserve-3d; transition: transform .5s var(--ac-ease); }
+.academy .ac-flip.on .ac-fin { transform: rotateY(180deg); }
+.academy .ac-fface, .academy .ac-fback { position: absolute; inset: 0; backface-visibility: hidden;
+  display: flex; flex-direction: column; justify-content: center; gap: 7px; text-align: left;
+  border-radius: var(--ac-r-lg); padding: 16px 18px; }
+.academy .ac-fface { background: var(--ac-blue-tint); border: 1px solid #DCE6FF; }
+.academy .ac-fface b { font-size: 16px; font-weight: 700; letter-spacing: -.01em; color: var(--ac-ink); }
+.academy .ac-fface small { font-size: 11.5px; color: var(--ac-blue-d); }
+.academy .ac-fback { transform: rotateY(180deg); background: var(--ac-card); border: 1px solid var(--ac-line-2);
+  font-size: 13.5px; line-height: 1.45; color: var(--ac-ink-2); overflow: auto; }
+.academy .ac-fback i { font-style: normal; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ac-ink-3); }
+.academy .ac-flip:hover .ac-fface { border-color: #C9D9FF; }
+
+@keyframes ac-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  .academy .ac-ochip.bad, .academy .ac-mrow.bad { animation: none; }
+  .academy .ac-fin { transition: none; }
+}
+@media (max-width: 720px) {
+  .academy .ac-mcols { grid-template-columns: 1fr; gap: 10px; }
+}
+
 .academy .ac-fb { display: none; margin-top: 16px; border-radius: var(--ac-r-lg); padding: 15px 17px; font-size: 14.5px; animation: ac-fade .28s var(--ac-ease); }
 .academy .ac-fb.show { display: block; }
 .academy .ac-fb.ok { background: var(--ac-green-soft); color: #155f38; }
@@ -8259,12 +8513,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-btn.pri:disabled { background: var(--ac-line-2); color: var(--ac-ink-3); cursor: default; }
 .academy .ac-btn.ghost { background: var(--ac-card); border-color: var(--ac-line-2); color: var(--ac-ink-2); }
 .academy .ac-btn.ghost:hover { border-color: var(--ac-ink-3); color: var(--ac-ink); }
-.academy .ac-step-lab { margin-left: auto; color: var(--ac-ink-3); font-weight: 600; font-size: 12.5px; }
+.academy .ac-step-lab { margin-left: auto; color: var(--ac-ink-3); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
 
 @media (max-width: 820px) {
   .academy .ac-wrap { grid-template-columns: 1fr; gap: 14px; }
   .academy .ac-route { position: static; padding: 13px 12px; }
-  .academy .ac-rlist { display: none; }
   .academy .ac-stage { padding: 22px 18px 18px; min-height: 0; }
   .academy .ac-h { font-size: 23px; }
   .academy .ac-fin .ac-h { font-size: 22px; }
@@ -8299,30 +8552,61 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* ── Академия: витрина курсов ────────────────────────────────────────────────
    Курсов стало четыре, и открываются они по роли. Карточка отвечает на три
    вопроса сразу: чей это курс, о чем он и сколько пройдено. */
-.academy .ac-home { max-width: 1080px; }
+.academy .ac-home { max-width: 920px; }
 .academy .ac-home-head { margin: 2px 0 22px; }
 .academy .ac-home-head .ac-h { font-size: 30px; margin-bottom: 8px; }
 .academy .ac-home-head .ac-p { max-width: 52ch; }
-.academy .ac-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; }
-.academy .ac-card { background: var(--ac-card); border: 1px solid var(--ac-line); border-radius: var(--ac-r-xl);
-  padding: 18px 19px 16px; cursor: pointer; display: flex; flex-direction: column;
+/* Дерево ролей. Провода те же, что в дереве продуктов (.po-tree): один
+   рецепт связи на всю CRM. Ветка сворачивается и помнит это по человеку —
+   тьютору незачем каждый день видеть чужой курс продаж. */
+.academy .ac-tree { --ac-wire: var(--wire); display: flex; flex-direction: column; gap: 8px; }
+.academy .ac-bnode { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  background: var(--ac-fill); border: 1px solid transparent; border-radius: var(--ac-r-lg);
+  padding: 11px 14px; font: inherit; color: var(--ac-ink); cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .ac-bnode:hover { background: #FBFBFC; border-color: #CFE0FF; }
+.academy .ac-bt { flex: 1; min-width: 0; }
+.academy .ac-bt b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+.academy .ac-bt small { display: block; margin-top: 2px; font-size: 12px; color: var(--ac-ink-3); }
+.academy .ac-bpass { flex: none; font-size: 12px; font-weight: 600; color: var(--ac-ink-2); }
+.academy .ac-bnode .ac-seal-sm { margin-left: 0; }
+.academy .ac-bx { flex: none; color: var(--ac-ink-3); display: inline-flex; transform: rotate(90deg);
+  transition: transform .2s var(--ac-ease); }
+.academy .ac-branch.off .ac-bx { transform: rotate(0deg); }
+/* Провод ветки идет от первой буквы названия роли, отвод упирается в карточку. */
+.academy .ac-bkids { margin-left: 15px; padding: 10px 0 6px 18px; border-left: 1px solid var(--ac-wire); }
+.academy .ac-branch.off .ac-bkids { display: none; }
+.academy .ac-cards { display: grid; gap: 10px; }
+.academy .ac-card { position: relative; background: var(--ac-card); border: 1px solid var(--ac-line);
+  border-radius: var(--ac-r-lg); padding: 15px 18px; cursor: pointer;
+  display: grid; grid-template-columns: 1fr 208px; align-items: center; gap: 24px;
   transition: .16s var(--ac-ease); }
-.academy .ac-card:hover { border-color: var(--ac-line-2); transform: translateY(-2px); }
+.academy .ac-card::before { content: ''; position: absolute; left: -18px; top: 50%; width: 18px; height: 1px;
+  background: var(--ac-wire); }
+.academy .ac-card:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.academy .ac-card:focus-visible { outline: none; border-color: var(--ac-blue);
+  box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
+.academy .ac-bnode:focus-visible { outline: none; border-color: var(--ac-blue);
+  box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
 .academy .ac-card.off { cursor: default; opacity: .55; }
-.academy .ac-card.off:hover { transform: none; }
-.academy .ac-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.academy .ac-card.off:hover { background: var(--ac-card); border-color: var(--ac-line); }
+.academy .ac-card-l { min-width: 0; }
+.academy .ac-card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
 .academy .ac-tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--ac-blue-d); background: var(--ac-blue-tint); border-radius: var(--ac-r-pill); padding: 4px 10px; }
-.academy .ac-seal-sm { margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+.academy .ac-seal-sm { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
   font-size: 11.5px; font-weight: 700; color: var(--ac-green-ink); }
 .academy .ac-seal-sm svg { width: 13px; height: 13px; }
-.academy .ac-card-h { font-size: 19px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 7px; color: var(--ac-ink); }
-.academy .ac-card-p { font-size: 13.5px; line-height: 1.45; color: var(--ac-ink-2); margin: 0 0 16px; flex: 1; }
-.academy .ac-card-bar { height: 5px; background: var(--ac-fill); border-radius: var(--ac-r-pill); overflow: hidden; margin-bottom: 10px; }
-.academy .ac-card-bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--ac-blue), var(--ac-blue-d)); border-radius: var(--ac-r-pill); transition: width .9s var(--ac-ease); }
+.academy .ac-tag.soft { color: var(--ac-ink-2); background: var(--ac-fill); }
+.academy .ac-card-h { font-size: 17px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 5px; color: var(--ac-ink); }
+.academy .ac-card-p { font-size: 13px; line-height: 1.45; color: var(--ac-ink-2); margin: 0; }
+.academy .ac-card-r { min-width: 0; }
+.academy .ac-card-bar { height: 5px; background: var(--ac-fill); border-radius: var(--ac-r-pill); overflow: hidden; margin-bottom: 9px; }
+.academy .ac-card-bar > i { display: block; height: 100%; background: var(--ac-blue); border-radius: var(--ac-r-pill); transition: width .9s var(--ac-ease); }
 .academy .ac-card.done .ac-card-bar > i { background: var(--ac-green); }
-.academy .ac-card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.academy .ac-card-go { font-size: 13px; font-weight: 700; color: var(--ac-blue-d); }
+.academy .ac-card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; white-space: nowrap; }
+.academy .ac-card-go { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 700; color: var(--ac-blue-d); }
+.academy .ac-card-go svg { width: 12px; height: 12px; transition: transform .14s var(--ac-ease); }
+.academy .ac-card:hover .ac-card-go svg { transform: translateX(2px); }
 .academy .ac-card.done .ac-card-go { color: var(--ac-green-ink); }
 .academy .ac-empty { text-align: center; max-width: 440px; margin: 60px auto; color: var(--ac-ink-3); }
 .academy .ac-empty svg { color: var(--ac-line-2); margin-bottom: 14px; }
@@ -8369,9 +8653,50 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   background: var(--ac-navy); color: #fff; display: grid; place-items: center;
   font-weight: 700; font-size: 11px; margin-top: 1px; }
 
+/* Видеоурок: запись живой встречи. Темная плашка-кнопка — единственный якорь
+   экрана, под ней код доступа и указатель тем: по нему человек возвращается в
+   нужную минуту, а не пересматривает два часа. */
+.academy .ac-vid { margin: 16px 0; }
+.academy .ac-vid-box { position: relative; border-radius: var(--ac-r-lg); overflow: hidden;
+  background: var(--ac-navy); aspect-ratio: 16 / 9; }
+.academy .ac-vid-el { display: block; width: 100%; height: 100%; background: #000; }
+.academy .ac-vid-wait { position: absolute; inset: 0; display: grid; place-items: center;
+  padding: 24px; text-align: center; font-size: 13.5px; line-height: 1.5;
+  color: rgba(255, 255, 255, .72); pointer-events: none; }
+.academy .ac-vid-wait[hidden] { display: none; }
+.academy .ac-vid-meta { margin-top: 8px; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-vid-ch { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 2px; }
+.academy .ac-vch { display: flex; gap: 12px; width: 100%; padding: 7px 10px; border: 0;
+  border-radius: var(--ac-r-md); background: none; font: inherit; font-size: 13.5px;
+  line-height: 1.45; color: #333843; text-align: left; cursor: pointer;
+  transition: background .15s var(--ac-ease); }
+.academy .ac-vch:hover { background: var(--ac-blue-tint); }
+.academy .ac-vch-t { flex: none; min-width: 54px; font-weight: 700; color: var(--ac-blue-d);
+  font-variant-numeric: tabular-nums; }
+.academy .ac-vid-ch.hrs .ac-vch-t { min-width: 68px; }
+.academy .ac-vid-deck { display: flex; align-items: center; gap: 12px; margin-top: 14px;
+  padding: 13px 16px; border-radius: var(--ac-r-md); background: var(--ac-fill);
+  color: inherit; text-decoration: none; transition: background .15s var(--ac-ease); }
+.academy .ac-vid-deck:hover { background: var(--ac-line); }
+.academy .ac-vid-deck > span { display: grid; gap: 1px; margin-right: auto; min-width: 0; }
+.academy .ac-vid-deck b { font-size: 14px; font-weight: 650; }
+.academy .ac-vid-deck i { font-style: normal; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-vid-deck svg { flex: none; color: var(--ac-blue-d); }
+
 /* Задание в уроке: действие в системе, не вопрос. */
 .academy .ac-do { position: relative; margin: 16px 0; }
 .academy .ac-do .ac-chkline { margin-top: 14px; padding: 12px 14px; background: var(--ac-fill); border-radius: var(--ac-r-md); }
+
+/* Поле ответа на домашку. Отделено от списка шагов воздухом: сверху задание,
+   снизу место, где на него отвечают, и граница между ними должна быть видна
+   без подписи. */
+.academy .ac-ans { margin-top: 18px; padding: 16px; background: var(--ac-fill); border-radius: var(--ac-r-lg); }
+.academy .ac-ans-h { font-size: 14px; font-weight: 650; color: var(--ac-ink); }
+.academy .ac-ans-p { margin: 6px 0 12px; font-size: 13px; line-height: 1.5; color: var(--ac-ink-2); }
+.academy .ac-ans-ta { min-height: 200px; }
+.academy .ac-ans-n { min-height: 17px; margin-top: 8px; font-size: 12.5px; color: var(--ac-ink-3); }
+.academy .ac-ans-n.ok { color: var(--ac-green-ink); }
+.academy .ac-ans-n.bad { color: var(--ac-red); }
 
 /* Подпись документа. Пока текста нет, экран говорит об этом прямо и не
    изображает подписанное. */
@@ -8382,11 +8707,20 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .academy .ac-doc-soon { background: var(--ac-amber-soft); color: var(--ac-amber-ink); border-radius: var(--ac-r-md);
   padding: 13px 15px; font-size: 13.5px; line-height: 1.45; margin-bottom: 14px; }
 .academy .ac-doc-soon b { color: inherit; }
+/* Ссылка на сам текст документа. Якорь карточки: человек должен прочитать то,
+   что подписывает, а не пересказ в курсе. */
+.academy .ac-doc-file { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  padding: 10px 14px; border-radius: var(--ac-r-md); background: var(--ac-blue-tint);
+  color: var(--ac-blue-d); font-weight: 600; font-size: 13.5px; text-decoration: none; }
+.academy .ac-doc-file:hover { text-decoration: underline; }
+.academy .ac-doc-file svg { flex: none; }
 
 /* ── Этап пути ученика ───────────────────────────────────────────────────────
    Один экран отвечает на четыре вопроса: когда, кто что делает, чем отличаются
-   тарифы и по какому признаку этап закрыт. Якорь экрана — колонки ролей. */
-.academy .ac-stage { margin: 16px 0; }
+   тарифы и по какому признаку этап закрыт. Якорь экрана — колонки ролей.
+   Класс .ac-stg: имя .ac-stage занято сценой курса выше, и одинаковое имя
+   молча добавляло сцене отступ сверху. */
+.academy .ac-stg { margin: 16px 0; }
 .academy .ac-smetas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .academy .ac-smeta { display: inline-flex; flex-direction: column; gap: 2px; background: var(--ac-fill);
   border-radius: var(--ac-r-md); padding: 8px 13px; font-size: 13px; font-weight: 600; color: var(--ac-ink); }
@@ -8451,6 +8785,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 820px) {
   .academy .ac-cards { grid-template-columns: 1fr; }
   .academy .ac-home-head .ac-h { font-size: 24px; }
+  /* Телефон: карточка курса в одну колонку, провод короче — иначе описание
+     ужимается до трех слов в строке, а прогресс наезжает на текст. */
+  .academy .ac-card { grid-template-columns: 1fr; gap: 14px; padding: 15px 16px; }
+  .academy .ac-bkids { margin-left: 15px; padding-left: 13px; }
+  .academy .ac-card::before { left: -13px; top: 26px; width: 13px; }
+  .academy .ac-bnode { padding: 10px 12px; }
+  .academy .ac-bt small { font-size: 11.5px; }
   .academy .ac-scols, .academy .ac-tcards { grid-template-columns: 1fr; }
   /* Название тарифа в строке отличий на телефоне уезжает своей строкой:
      фиксированная колонка 108px оставляла бы пояснению два слова в строку. */
@@ -8607,6 +8948,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .att-frac.full { color: var(--green-ink); }
 .att-ok { display: inline-flex; color: var(--green); }
 .att-no { color: var(--ink-3); }
+/* Число сданных домашек — кнопка: за ней тексты ответов, и это единственный
+   способ увидеть, что человек понял, а что нет. */
+.att-hw { font: inherit; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--blue);
+  background: none; border: none; padding: 2px 6px; border-radius: 6px; cursor: pointer; transition: background .14s; }
+.att-hw:hover { background: var(--fill); }
+.hw-card { max-width: 720px; }
+.hw-item + .hw-item { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); }
+.hw-where { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; }
+.hw-at { font-weight: 400; }
+.hw-text { font-size: 14px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+/* «Сейчас на» — где человек стоит в курсе. Номер урока приглушен, название нет:
+   вопрос руководителя звучит как «на чем он застрял», а не «какой это номер». */
+.att-stage { min-width: 200px; color: var(--ink-2); }
+.att-now b { color: var(--ink-3); font-weight: 600; margin-right: 4px; }
+/* Имя и название курса в одну строку: с колонкой «Сейчас на» таблица стала шире,
+   и перенос имени растягивал строку втрое. Узкому экрану остается прокрутка
+   таблицы, она тут была с самого начала. */
+.att-name { white-space: nowrap; }
+.att-pay { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.att-course { max-width: 240px; white-space: normal; }
 .att-pill { display: inline-flex; align-items: center; padding: 4px 11px; border-radius: var(--r-pill); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .att-pill.green { background: var(--green-soft); color: var(--green-ink); }
 .att-pill.gray { background: var(--fill); color: var(--ink-2); }
@@ -9258,6 +9619,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    видно. Заполненная плашка рядом должна оставаться главнее. */
 .cab-seat.off { background: transparent; border: 1px dashed var(--line-2); }
 .cab-seat.off .cab-seat-n { color: var(--ink-2); font-weight: 600; }
+/* Человека позвали, но он не вошел: пунктир остается (места в кабинете все еще
+   нет), а подпись с именем позвавшего — то, ради чего плашка тут стоит. */
+.cab-seat.off.sent { border-style: solid; border-color: var(--line); }
+.cab-seat.off.sent .cab-seat-n { color: var(--ink); }
+/* Позвать — действие внутри пустого места, а не кнопка над блоком: у каждого
+   места свой человек, и «позвать» без уточнения кого читается двусмысленно. */
+.cab-call { margin-top: 9px; width: 100%; padding: 7px 10px; border-radius: 10px;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: var(--fill);
+  transition: .15s; }
+.cab-call:hover { background: var(--blue-tint); color: var(--blue); }
+.cab-call:disabled { opacity: .5; cursor: default; }
+/* Предупреждение стоит НАД текстом приглашения: код одноразовый, и прочитать
+   это нужно до того, как рука потянется проверить ссылку. */
+.inv-warn { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: var(--r-lg); background: var(--amber-soft);
+  color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+.inv-warn svg { flex: none; margin-top: 1px; }
+.inv-msg { white-space: pre-wrap; word-break: break-word; max-height: 44vh; overflow: auto;
+  padding: 12px 14px; border-radius: var(--r-lg); background: var(--fill);
+  font-size: 13px; line-height: 1.5; color: var(--ink); }
 .cab-seat.fresh { background: var(--green-soft); }
 .cab-seat.fresh .cab-seat-s { color: var(--green-ink); font-weight: 600; }
 .cab-warn { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-lg);
@@ -9431,6 +9812,24 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Просьба Ольги: цифры плашками, а не строчками. Ширина колонки фиксируется
    минимумом, а не числом колонок: ступеней в запуске то 12, то 16, и раскладка
    не должна ломаться от добавления шага. */
+/* Переключатель базы отсчёта над ступенями. Стоит тихо: лестница читается и без него,
+   а нужен он тому, кто пришёл с конкретным вопросом «сколько из этих дошло до того».
+   Поле и селект — системные .al-f/.al-l/.al-sel.sm; здесь только раскладка в строку.
+   Отступ вниз заметно больше зазора сетки (12px), иначе строка управления читается
+   как ещё один ряд плашек. */
+.lbase { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 20px; }
+.lbase .al-f { flex-direction: row; align-items: center; gap: 9px; }
+.lbase .al-l { white-space: nowrap; }
+.lbase .al-selwrap { width: auto; }
+.lbase .al-sel { width: auto; min-width: 190px; }
+/* Легенда несёт смысл всей сетки — она не мельче подписи поля и не бледнее цифр. */
+.lbase-n { font-size: 11.5px; color: var(--ink-2); }
+@media (max-width: 560px) {
+  /* На телефоне подпись и селект встают в столбик, а селект тянется на всю ширину:
+     в строку они не влезают, и название ступени обрезалось на середине. */
+  .lbase .al-f { flex: 1 0 100%; flex-direction: column; align-items: stretch; gap: 6px; }
+  .lbase .al-selwrap, .lbase .al-sel { width: 100%; min-width: 0; }
+}
 .lsteps { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 12px; }
 .lstep { position: relative; border: 1px solid var(--line); border-radius: var(--r-lg);
          padding: 14px 16px 13px; background: var(--card); }
@@ -9443,14 +9842,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Шаг, которого ещё не было (эфир впереди) или которого нет в системе. */
 .lstep.wait { background: var(--fill); }
 .lstep.wait .ls-v { color: var(--ink-3); }
-/* Единственный отмеченный провал: где теряем больше половины людей. */
-.lstep.drop { border-color: var(--red); background: var(--red-soft); }
-.lstep.drop .ls-c b { color: var(--red-ink); }
 /* Плашка, за которой есть список людей. Кликабельность должна читаться ДО клика —
    иначе проверить цифру никто не догадается, а ради этого всё и делалось. */
 .lstep-open { cursor: pointer; transition: border-color .14s var(--ease), box-shadow .14s var(--ease); }
 .lstep-open:hover { border-color: var(--blue); box-shadow: 0 6px 18px rgba(47,107,255,.10); }
-.lstep-open.drop:hover { border-color: var(--red); box-shadow: 0 6px 18px rgba(229,72,77,.12); }
 .lstep-open:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* ── Список людей ступени ────────────────────────────────────────────────────
@@ -9593,47 +9988,76 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mm-cell.now .mm-cnt { background: #fff; }
 }
 
-/* ── Воркшопы: библиотека обучения команды ──────────────────────────────────
-   Строка = один воркшоп: слева номер (по нему ориентируются в разговоре — «третий
-   воркшоп»), справа содержимое. Просмотренное гасим, а не прячем: библиотеку
-   перечитывают, и запись нужна и после первого раза. */
-.ws { padding: 4px 0; }
-.ws-item { display: flex; gap: 14px; padding: 16px 20px 18px; border-top: 1px solid var(--line); }
-.ws-item:first-child { border-top: 0; }
-.ws-item.done .ws-title, .ws-item.done .ws-n { color: var(--ink-2); }
-.ws-item.arch { opacity: .55; }
-.ws-n {
-  flex: none; width: 30px; height: 30px; border-radius: 10px; margin-top: 1px;
-  background: var(--blue-tint); color: var(--blue);
-  font-size: 13px; font-weight: 700; display: grid; place-items: center;
-}
-.ws-item.done .ws-n { background: var(--fill); }
-.ws-main { flex: 1 1 auto; min-width: 0; }
-.ws-top { display: flex; align-items: flex-start; gap: 10px; }
-.ws-title { margin: 0; font: 700 15.5px/1.3 'Manrope', sans-serif; letter-spacing: -.01em;
-  color: var(--ink); flex: 1 1 auto; min-width: 0; text-wrap: balance; }
-.ws-edit { flex: none; opacity: 0; transition: opacity .15s var(--ease); }
-.ws-item:hover .ws-edit, .ws-edit:focus-visible { opacity: 1; }
-.ws-meta { margin-top: 4px; font-size: 12px; color: var(--ink-3);
-  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.ws-about { margin: 9px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 720px; }
-.ws-hw { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--fill);
-  font-size: 13px; line-height: 1.5; color: var(--ink); max-width: 720px; white-space: pre-wrap; }
-.ws-hw-l { display: block; margin-bottom: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); }
-.ws-mats { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
-.ws-mat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
-  border: 1px solid var(--line-2); border-radius: 9px; background: #fff;
-  font-size: 12.5px; color: var(--ink-2); text-decoration: none; transition: .15s; }
-.ws-mat:hover { border-color: var(--blue); color: var(--blue); }
-.ws-act { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ws-play { text-decoration: none; }
-/* Просмотренное тише: строка остается на месте (к записи возвращаются), но
-   тянуть на себя внимание ей больше незачем. */
-.ws-item.done .ws-play { background: #fff; color: var(--ink-2); border: 1px solid var(--line-2); box-shadow: none; }
-.ws-item.done .ws-play:hover { color: var(--blue); border-color: var(--blue); }
-.ws-norec { font-size: 12.5px; color: var(--ink-3); }
-.ws-seen.on { border-color: var(--blue); color: var(--blue); background: var(--blue-tint); }
-.ws-cnt { margin-left: 2px; font-size: 12px; color: var(--ink-3); }
+/* ── Воркшопы: курс Академии ────────────────────────────────────────────────
+   Экран собран из деталей курса (.academy .ac-*) — колонка программы и сцена
+   занятия. Своего тут ровно три вещи: пустая рамка записи, домашка и материалы
+   занятия. Остальное обязано выглядеть как любой другой курс, иначе в CRM
+   заводится второй дизайн обучения. */
+.academy .wsc-prog { margin: -6px 4px 14px; font-size: 12.5px; font-weight: 600; color: var(--ac-ink-3); }
+/* Шапка занятия на телефоне не переносится: карандаш правки уезжал отдельной
+   строкой между метой и названием и съедал сорок пикселей первого экрана. */
+.academy .ac-stage-top.wsc-top { flex-wrap: nowrap; align-items: flex-start; }
+.academy .wsc-top .ac-cap { min-width: 0; }
+.academy .wsc-top .ac-top-r { flex: none; }
+/* Свернутая программа прячет и кнопку заведения: на телефоне она стояла первым
+   экраном впереди самого занятия. */
+.academy .ac-route.fold .wsc-add { display: none; }
+.academy .wsc-add { display: flex; align-items: center; justify-content: center; gap: 7px;
+  width: calc(100% - 8px); margin: 14px 4px 0; padding: 9px 12px; border: 1px dashed var(--ac-line-2);
+  border-radius: var(--ac-r-md); background: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--ac-ink-2); cursor: pointer; transition: .14s var(--ac-ease); }
+.academy .wsc-add:hover { border-color: var(--ac-blue); color: var(--ac-blue-d); }
+.academy .wsc-add svg { flex: none; }
+/* Отметка «посмотрел» — закладка себе, поэтому она тихая и живет в шапке сцены,
+   а не спорит с записью за внимание. */
+.academy .wsc-seen { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+  border: 0; border-radius: var(--ac-r-pill); background: var(--ac-green-soft);
+  color: var(--ac-green-ink); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.academy .wsc-seen:hover { background: #D9F2E3; }
+.academy .wsc-seen svg { width: 13px; height: 13px; }
+.academy .ac-r .wsc-arch { font-size: 11px; font-weight: 700; color: var(--ac-ink-3); }
+
+/* Место под запись стоит всегда: занятие без плеера читается как потерянное, а
+   не как «запись еще не выложили». */
+.academy .ac-vid-box.wsc-norec { display: grid; place-items: center; padding: 20px; }
+.academy .wsc-norec-in { display: grid; justify-items: center; gap: 6px; max-width: 34ch;
+  text-align: center; color: rgba(255, 255, 255, .72); }
+.academy .wsc-norec-in svg { color: rgba(255, 255, 255, .34); margin-bottom: 4px; }
+.academy .wsc-norec-in b { font-size: 15px; font-weight: 700; color: #fff; }
+.academy .wsc-norec-in span { font-size: 13px; line-height: 1.5; }
+.academy a.wsc-norec-a { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px;
+  padding: 9px 16px; border-radius: var(--ac-r-md); background: rgba(255, 255, 255, .14);
+  color: #fff; font-size: 13.5px; font-weight: 600; text-decoration: none; transition: .14s var(--ac-ease); }
+.academy a.wsc-norec-a:hover { background: rgba(255, 255, 255, .24); }
+.academy a.wsc-norec-a svg { color: #fff; margin: 0; }
+
+/* Ссылка на встречу в Фатоне — тихая строка под рамкой записи: полезная, но не
+   спорящая с плеером за внимание. */
+.academy a.wsc-src { display: inline-flex; align-items: center; gap: 7px; margin: 10px 0 18px;
+  font-size: 13px; font-weight: 600; color: var(--ac-ink-2); text-decoration: none; }
+.academy a.wsc-src:hover { color: var(--ac-blue-d); }
+.academy a.wsc-src svg { color: var(--ac-ink-3); }
+.academy a.wsc-src:hover svg { color: var(--ac-blue-d); }
+
+/* Конспект. Сворачивается, поэтому строка-заголовок кликабельна целиком, а
+   стрелка показывает состояние. */
+.academy .wsc-notes { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--ac-line); }
+.academy .wsc-notes > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 7px; }
+.academy .wsc-notes > summary::-webkit-details-marker { display: none; }
+.academy .wsc-notes > summary::after { content: ''; width: 7px; height: 7px; border-right: 1.6px solid var(--ac-ink-3);
+  border-bottom: 1.6px solid var(--ac-ink-3); transform: rotate(45deg) translateY(-2px); transition: transform .16s var(--ac-ease); }
+.academy .wsc-notes[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+.academy .wsc-notes > summary:hover .ac-cap { color: var(--ac-ink-2); }
+.academy .wsc-notes > summary:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(47,107,255,.14); border-radius: var(--ac-r-md); }
+.academy .wsc-notes p { margin: 12px 0 0; font-size: 14.5px; line-height: 1.65; color: #333843; }
+
+.academy .wsc-hw { background: var(--ac-fill); border-radius: var(--ac-r-lg); padding: 16px 18px; margin: 18px 0 0; }
+.academy .wsc-hw p { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: #333843; white-space: pre-wrap; }
+.academy .wsc-mats { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--ac-line);
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.academy .wsc-mats .ac-cap { margin-bottom: 6px; }
+
+/* Форма занятия: та же модалка, что у остальных экранов CRM. */
 .ws-card { max-width: 640px; }
 .ws-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .ws-row .al-f { flex: 1 1 140px; min-width: 0; }
@@ -9642,7 +10066,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .ws-mrow .ws-mu { flex: 1 1 220px; min-width: 0; }
 .ws-madd { margin-top: 2px; }
 @media (max-width: 720px) {
-  .ws-item { padding: 14px 14px 16px; gap: 10px; }
   .ws-mrow { flex-wrap: wrap; }
   .ws-mrow .ws-mt, .ws-mrow .ws-mu { flex: 1 1 100%; }
 }
@@ -9965,3 +10388,280 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
   color: var(--blue); cursor: pointer; }
 .un-costnote .lnk:hover { text-decoration: underline; }
+
+/* План отделов: сводка «кто сдал план на период» (renderFinPlans). */
+.pl-list { padding: 6px 8px 10px; }
+.pl-row { display: flex; align-items: center; gap: 14px; padding: 13px 16px;
+  border-radius: var(--r-lg); }
+.pl-row + .pl-row { border-top: 1px solid var(--line); border-radius: 0; }
+.pl-row.wait { background: var(--red-soft); border-color: transparent; }
+.pl-nm { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+.pl-badge { font-size: 11.5px; font-weight: 650; padding: 3px 10px; border-radius: var(--r-pill);
+  letter-spacing: .01em; white-space: nowrap; }
+.pl-badge.ok { color: var(--green-ink); background: var(--green-soft); }
+.pl-badge.no { color: var(--red-ink); background: var(--red-soft); }
+.pl-val { display: flex; flex-direction: column; align-items: flex-end; min-width: 96px; }
+.pl-sum { font-size: 14px; font-weight: 650; color: var(--ink); }
+.pl-sum.muted { color: var(--ink-3); font-weight: 500; }
+.pl-cnt { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; }
+/* Отдел без своего листа — не «не сдал», а «некуда заносить»: тихая метка, не тревога. */
+.pl-badge.na { color: var(--ink-3); background: var(--fill); }
+.pl-fact { font-size: 11.5px; color: var(--ink-3); margin-top: 1px; font-feature-settings: 'tnum'; }
+.pl-fact.muted { color: var(--ink-4, var(--ink-3)); }
+/* Строка сводки, из которой можно провалиться в лист отдела и занести план. */
+.pl-go { cursor: pointer; transition: background .12s var(--ease); }
+.pl-go:hover { background: #FAFBFC; }
+
+/* ── Блок «План на месяц» в расчётном листе + форма плановой строки ── */
+.plm-card { padding: 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
+.plm-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px 16px; flex-wrap: wrap; }
+.plm-head .t { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.plm-head .s { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; margin-top: 2px;
+  max-width: 520px; }
+.plm-nav { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.plm-arw { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px;
+  font-size: 18px; line-height: 1; color: var(--ink-2); background: var(--fill);
+  transition: .12s var(--ease); }
+.plm-arw:hover { color: var(--ink); background: #E9ECF0; }
+.plm-month { min-width: 118px; text-align: center; font-size: 13.5px; font-weight: 650;
+  color: var(--ink); font-feature-settings: 'tnum'; }
+.plm-stats { display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--ink-2); }
+.plm-stats b { color: var(--ink); font-weight: 700; font-feature-settings: 'tnum'; }
+.plm-st { padding: 2px 9px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600; }
+.plm-st.ok { color: var(--green-ink); background: var(--green-soft); }
+.plm-st.over { color: var(--red-ink); background: var(--red-soft); }
+.plm-st.na { color: var(--ink-3); background: var(--fill); }
+.plm-row { display: grid; grid-template-columns: 1fr auto 28px; align-items: center; gap: 12px;
+  padding: 10px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.plm-row:hover { background: #FAFBFC; }
+.plm-it { font-size: 13.5px; font-weight: 600; color: var(--ink); min-width: 0; }
+.plm-it i { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-style: normal; margin-top: 1px; }
+.plm-sum { font-size: 14px; font-weight: 650; color: var(--ink); font-feature-settings: 'tnum'; }
+.plm-del { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px;
+  color: var(--ink-3); opacity: 0; transition: .12s var(--ease); }
+.plm-row:hover .plm-del { opacity: 1; }
+.plm-del:hover { color: var(--red-ink); background: var(--red-soft); }
+.plm-empty, .plm-load { padding: 14px 4px; font-size: 13px; color: var(--ink-3);
+  border-top: 1px solid var(--line); }
+.plm-add { align-self: flex-start; margin-top: 2px; }
+/* Строка-человек: план на 10-е и 20-е под именем чипами «выплачено», итого справа. */
+.plm-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 5px; }
+/* Чип выплаты: не отмечен — тихий контур, отмечен (стал фактом) — зелёный. */
+.plm-pay { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px;
+  font-weight: 600; padding: 2px 9px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2);
+  cursor: pointer; transition: .15s; font-feature-settings: 'tnum'; }
+.plm-pay:hover { border-color: var(--wire); color: var(--ink); }
+.plm-pay.paid { border-color: transparent; background: var(--green-soft);
+  color: var(--green-ink); }
+.plm-pay.paid:hover { background: var(--green-soft); }
+.plm-pnil { font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-feature-settings: 'tnum'; }
+/* Форма плановой строки: переключатель вида прячет лишние поля. */
+.plm-form .plm-kind { align-self: flex-start; margin-bottom: 4px; }
+.plm-form[data-kind="person"] .plm-expense { display: none; }
+.plm-form[data-kind="expense"] .plm-person { display: none; }
+.plm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.plm-total { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.plm-total b { color: var(--ink); font-weight: 700; font-feature-settings: 'tnum'; }
+
+/* ════ ПЛАН-ФАКТ (раздел planfact) ════
+   Экран отвечает на один вопрос: успеваем ли мы к плану месяца. Главный элемент —
+   не число и не шкала, а РИСКА на шкале: где мы должны быть сегодня. Без нее
+   «сделано 40%» десятого числа читается как провал, а двадцать пятого — как успех.
+   Рецепты общие: строка-лестница (.lad-row), чип по формуле -soft/-ink, шкала с
+   ростом .9s. Своих цветов не заводим. */
+.pf-head { display: grid; grid-template-columns: auto 1fr minmax(160px, 220px);
+  gap: 24px; align-items: center; padding: 18px 24px; }
+.pf-verdict .pf-vt { font-size: 21px; font-weight: 700; letter-spacing: -.03em; }
+.pf-verdict.ok .pf-vt { color: var(--green-ink); }
+.pf-verdict.risk .pf-vt { color: var(--amber-ink); }
+.pf-verdict.miss .pf-vt { color: var(--red-ink); }
+.pf-verdict .pf-vs { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
+/* Полоса месяца темная (navy), а полосы метрик синие и семантические: это шкала
+   времени, а не выполнения, и спорить с ними за внимание она не должна. */
+.pf-dtrack { height: 6px; border-radius: 4px; background: var(--fill); overflow: hidden; }
+.pf-dtrack span { display: block; height: 100%; border-radius: 4px; background: var(--navy);
+  transition: width .9s var(--ease); }
+.pf-dtx { font-size: 11.5px; color: var(--ink-3); font-weight: 500; margin-top: 7px; text-align: right; }
+
+.pf-tbl { border-top: 1px solid var(--line); }
+/* Колонка плана держит «65 000 000 ₽» одной строкой: на 112px сумма ломалась
+   пополам и строка вырастала вдвое. */
+.pf-row { display: grid; grid-template-columns: 200px 148px minmax(90px, 1fr) 108px 150px;
+  gap: 16px; align-items: center; padding: 0 24px; height: 66px;
+  border-bottom: 1px solid var(--line); }
+.pf-row:last-child { border-bottom: none; }
+.pf-nm { font-size: 14px; font-weight: 600; color: var(--ink); }
+.pf-nm small { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-3); margin-top: 2px; }
+/* План правится на месте: кнопка превращается в .ed-input, третьего рецепта поля нет. */
+.pf-set { font: 600 14px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+  border: 1px solid transparent; border-radius: 10px; padding: 8px 12px; cursor: pointer;
+  transition: .14s; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pf-set:hover { background: #fff; border-color: var(--line-2); color: var(--blue); }
+.pf-set.none { color: var(--ink-3); font-weight: 500; }
+.pf-in { width: 104px; padding: 8px 11px; }
+.pf-track { position: relative; height: 10px; border-radius: 6px; background: var(--fill); }
+.pf-fill { display: block; height: 100%; border-radius: 6px; background: var(--blue);
+  transition: width .9s var(--ease); }
+.pf-fill.ok { background: var(--green); }
+.pf-fill.risk { background: var(--amber); }
+.pf-fill.miss { background: var(--red); }
+.pf-due { position: absolute; top: -5px; width: 2px; height: 20px; border-radius: 2px;
+  background: var(--navy); }
+.pf-noplan { font-size: 12.5px; color: var(--ink-3); font-weight: 500; }
+.pf-fact { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
+.pf-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.pf-fc { font-size: 11.5px; font-weight: 500; color: var(--ink-3); white-space: nowrap; }
+.sev.pf-ok { color: var(--green-ink); background: var(--green-soft); }
+.sev.pf-risk { color: var(--amber-ink); background: var(--amber-soft); }
+.sev.pf-miss { color: var(--red-ink); background: var(--red-soft); }
+.sev.pf-none { color: var(--ink-3); background: var(--fill); }
+
+.pf-ai { padding: 4px 24px 22px; }
+.pf-ai-idle, .pf-ai-wait { font-size: 13px; color: var(--ink-3); line-height: 1.6; max-width: 720px; }
+.pf-ai-sum { font-size: 15px; font-weight: 600; line-height: 1.55; max-width: 760px; }
+.pf-ai-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.pf-ai-c { font-size: 13px; color: var(--ink-2); line-height: 1.6; padding-left: 13px;
+  position: relative; max-width: 760px; }
+.pf-ai-c::before { content: ''; position: absolute; left: 0; top: 8px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--blue); }
+.pf-ai-next { margin-top: 18px; padding: 14px 16px; border-radius: 14px; background: var(--fill);
+  max-width: 760px; }
+.pf-ai-lb { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 9px; }
+.pf-ai-s { font-size: 13px; font-weight: 500; color: var(--ink); line-height: 1.6; }
+.pf-ai-s + .pf-ai-s { margin-top: 6px; }
+
+/* Телефон: пять колонок в 390px превращают название в «Нов…», поэтому строка
+   становится карточкой — имя во всю ширину, под ним план и факт, шкала внизу. */
+@media (max-width: 860px) {
+  .pf-head { grid-template-columns: 1fr; gap: 14px; }
+  /* Заголовок секции и кнопка в одной строке на телефоне сжимают друг друга:
+     название разваливается по слогам, а кнопка уезжает за край карточки. */
+  .pf-sec { flex-wrap: wrap; }
+  /* Иконка и заголовок держатся одной строкой: без этого заголовок не влезал
+     рядом с ней и уезжал вниз, а значок оставался висеть сам по себе. */
+  .pf-sec > div { flex: 1 1 140px; min-width: 0; }
+  .pf-sec > .bp { margin-left: 0; width: 100%; }
+  .pf-dtx { text-align: left; }
+  .pf-row { grid-template-columns: 1fr auto; gap: 10px 12px; height: auto;
+    padding: 16px 18px; align-items: start; }
+  .pf-nm { grid-column: 1 / -1; }
+  .pf-plan { grid-column: 1; }
+  .pf-fact { grid-column: 2; text-align: right; }
+  .pf-track, .pf-noplan { grid-column: 1 / -1; }
+  .pf-right { grid-column: 1 / -1; flex-direction: row; justify-content: space-between;
+    align-items: center; }
+  .pf-ai { padding: 4px 18px 20px; }
+}
+
+/* ── Раздел «Сопровождение» (points): ученики, точки, выплаты ──────────────────
+   Якорь экрана — чек-лист текущей точки: он отвечает на «что делать дальше».
+   Деньги и полоса точек стоят тише: суммы человек уже знает, ему нужен шаг.
+   Чек-лист переиспользует рецепт карточки клиента (.cp-item), второго вида
+   галочек в системе заводить нельзя. */
+.pb-tabs { margin-bottom: 14px; }
+.pb-top { padding: 16px 18px; }
+.pb-topm { display: flex; align-items: baseline; gap: 12px; }
+.pb-cap { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-3); }
+.pb-topm b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+.pb-when { font-size: 13px; color: var(--ink-2); }
+.pb-topd { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); max-width: 760px; }
+.pb-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.pb-nav .pb-topm { flex: 1 1 auto; justify-content: center; }
+
+.pb-stu { padding: 0; margin-top: 12px; }
+.pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pb-nm { flex: 1 1 220px; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pb-open { background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  font-weight: 700; font-size: 15px; color: var(--ink); text-align: left; }
+.pb-open:hover { color: var(--blue); }
+.pb-tar, .pb-who { font-size: 12px; color: var(--ink-3); }
+.pb-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
+.pb-sum b { font-size: 16px; font-weight: 700; }
+.pb-sum span { font-size: 11.5px; color: var(--ink-3); }
+
+/* Полоса точек — и состояние, и навигация: закрытые залиты, открытая обведена. */
+.pb-rail { flex: 0 0 auto; display: flex; gap: 6px; }
+.pb-dot { width: 28px; height: 28px; border-radius: 9px; border: 1.5px solid var(--line-2);
+  background: #fff; color: var(--ink-3); font: 600 12.5px/1 inherit; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: .15s; }
+.pb-dot:hover { border-color: var(--blue); color: var(--blue); }
+.pb-dot.done { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
+.pb-dot.on { border-color: var(--blue); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.pb-dot.done.on { color: var(--green-ink); box-shadow: inset 0 0 0 1px var(--blue); }
+
+.pb-pt { padding: 14px 18px 16px; }
+.pb-pth { display: flex; align-items: baseline; gap: 12px; }
+.pb-pth b { font-size: 14.5px; }
+.pb-amt { margin-left: auto; font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.pb-about { margin-top: 4px; font-size: 12.5px; color: var(--ink-2); }
+.pb-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;
+  font-size: 12.5px; color: var(--ink-2); }
+.pb-line.ok { color: var(--green-ink); }
+.pb-line.ok svg { flex: none; }
+.pb-date { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.pb-date input { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 8px;
+  font: inherit; font-size: 12.5px; color: var(--ink); }
+.pb-due, .pb-dim { color: var(--ink-3); }
+.pb-foot { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+.pb-left { font-size: 12.5px; color: var(--ink-3); }
+
+/* Реестр выплат: строка — одна закрытая точка, свод собирается из строк. */
+.pb-tut { margin-top: 12px; padding: 0; }
+.pb-tuth { display: flex; align-items: baseline; gap: 12px; padding: 13px 18px;
+  border-bottom: 1px solid var(--line); }
+.pb-tuth b { font-size: 15px; }
+.pb-tutn { font-size: 12px; color: var(--ink-3); }
+.pb-tuta { margin-left: auto; font-size: 16px; }
+.pb-row { display: flex; align-items: baseline; gap: 12px; padding: 10px 18px;
+  border-bottom: 1px solid var(--line); font-size: 13px; }
+.pb-row:last-child { border-bottom: 0; }
+.pb-rt { flex: 1 1 auto; min-width: 0; color: var(--ink-2); }
+.pb-rd { flex: 0 0 auto; font-size: 12px; color: var(--ink-3); }
+.pb-ra { flex: 0 0 96px; text-align: right; font-weight: 600; }
+/* Отметка о платеже. Она внизу карточки тьютора намеренно: сначала видно, за что
+   деньги, и только потом — кнопка, которая закрывает день. */
+.pb-paidline { display: flex; align-items: center; gap: 10px; padding: 11px 18px;
+  font-size: 12.5px; color: var(--green-ink); }
+.pb-paidline svg { flex: none; }
+.pb-paidline .lnk { margin-left: auto; border: 0; background: 0; padding: 0; font: inherit;
+  font-size: 12px; color: var(--ink-3); cursor: pointer; }
+.pb-paidline .lnk:hover { color: var(--red-ink); }
+.pb-tut.is-paid .pb-tuth { background: var(--green-soft); border-bottom-color: transparent; }
+.pb-tut.is-paid .pb-tuta { color: var(--green-ink); }
+.pb-acts { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+.pb-done { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+  color: var(--green-ink); }
+
+/* В «не закрыто» последняя колонка — имя тьютора, а не сумма: 96px под фамилию
+   мало, она ломается на две строки. */
+.pb-pend .pb-ra { flex: 0 0 auto; min-width: 140px; font-weight: 500; }
+
+.pb-pend { margin-top: 16px; }
+.pb-pend .pb-topd { padding: 0 18px 14px; }
+.pb-pend .sec-head { padding: 13px 18px 0; }
+
+@media (max-width: 820px) {
+  .pb-head { gap: 10px; }
+  .pb-rail { order: 3; width: 100%; }
+  .pb-sum { align-items: flex-start; }
+  .pb-row { flex-wrap: wrap; row-gap: 2px; }
+  .pb-ra { flex: 1 0 auto; text-align: left; }
+  /* На телефоне подпись, сумма и дата встают лесенкой: в строку они не влезают,
+     и рубль уезжал на второй ряд отдельно от числа. */
+  .pb-topm { flex-wrap: wrap; row-gap: 2px; }
+  .pb-topm b { font-size: 23px; }
+  .pb-cap { flex: 1 0 100%; }
+  .pb-nav { gap: 10px; }
+  .pb-nav .pb-topm { flex: 1 0 100%; order: -1; justify-content: flex-start; }
+  .pb-nav .bp { flex: 1 1 40%; padding-left: 8px; padding-right: 8px; }
+  .pb-pend .pb-ra { min-width: 0; }
+}
