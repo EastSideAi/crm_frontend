@@ -22556,11 +22556,15 @@
       var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
       if (ro) {
         var boss = (state._team || []).filter(function (x) { return String(x.id) === String(u.manager_id); })[0];
+        /* Начальник отдельной строкой, а не хвостом к роли: в строке «Руководитель ·
+           руководитель: Павел» слово повторялось дважды, а на телефоне имя еще и
+           обрезалось многоточием. */
         return '<div class="tm-row ro"><span class="tm-av">' + esc(initials(u.name || '')) + '</span>' +
           '<div class="tm-i"><div class="tm-n">' + esc(u.name || '') +
             (u.active === false ? ' <span class="tm-tag">отключен</span>' : '') + '</div>' +
-            '<div class="tm-l">' + esc(label) +
-              (boss ? ' · руководитель: ' + esc(boss.name || '') : '') + '</div></div></div>';
+            '<div class="tm-l">' + esc(label) + '</div>' +
+            (boss ? '<div class="tm-l sub">подчиняется: ' + esc(boss.name || '') + '</div>' : '') +
+          '</div></div>';
       }
       /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
          Показываем ее настоящую роль и запираем поля: пустой селект «Тьютор» напротив
