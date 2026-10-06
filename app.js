@@ -92,6 +92,9 @@
     planChat: null,   // id лида, у которого открыт чат правок плана
     // задачи команды: список текущего среза, счетчики для бейджа, справочник людей
     tasks: null, taskSeg: 'today', taskQ: '', taskSum: null, taskPeople: null,
+    // EastSide Meeting: журнал встреч, фильтры и раскрытая карточка
+    meetx: null, meetxDept: '', meetxScope: 'all', meetxOpen: null,
+    meetxCard: {}, meetxText: {},
     _map: null, mapSeg: '', mapTariff: '', mapQ: '',
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
@@ -2269,6 +2272,10 @@
     // дотянем ли до цели. Cap свой: цели компании ставит руководитель.
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
+    /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
+       Отдельным пунктом под «Задачами» и открыт всем, у кого есть задачи
+       (Павел 06.10.2026): встречи проводит вся команда, а не руководители. */
+    { id: 'meetx', label: 'EastSide Meeting', short: 'Meeting', icon: 'mic', cap: 'tasks' },
     /* «Фокус недели» и «Застряло» больше не пункты меню: с 06.10.2026 это срезы
        вкладки «Команда» внутри «Задач» (Павел: «перенести фильтрами в задачник и
        убрать из боковой панели»). Оба вопроса управленческие и живут рядом с
@@ -2605,7 +2612,9 @@
       mt.innerHTML = jump + mHead.map(function (it) {
         var bd = mBadge(it);
         return '<button class="mtab' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
-          ic(it.icon) + '<span>' + it.label + '</span>' +
+          // На вкладке помещается одно слово: длинное имя раздела ломает ленту,
+          // поэтому у таких пунктов есть короткая подпись.
+          ic(it.icon) + '<span>' + (it.short || it.label) + '</span>' +
           (bd ? '<span class="bdg num">' + bd + '</span>' : '') + '</button>';
       }).join('') + (mTail.length
         ? '<button class="mtab' + (tailOn ? ' on' : '') + '" data-more="1">' +
@@ -3051,6 +3060,20 @@
               '<span>Обучение по системе</span>' +
               (gleft ? '<i class="gd-btn-n num">' + gleft + '</i>' : '') + '</button>';
     }
+    if (state.page === 'meetx') {
+      var mxl = state.meetx && state.meetx !== 'none' ? (state.meetx.meetings || []) : null;
+      var mxLive = mxl ? mxl.filter(function (m) { return m.state === 'live'; }) : [];
+      var mxNew = mxl ? mxl.filter(function (m) { return m.state === 'new' || m.state === 'failed'; }).length : 0;
+      var mxPhr = !mxl ? 'Собираю встречи команды.'
+        : mxLive.length ? '<b>' + mxLive.length + ' ' + plural(mxLive.length, 'встреча идет', 'встречи идут', 'встреч идет') +
+            ' прямо сейчас.</b> Нажми «Войти» в строке, чтобы присоединиться.'
+        : !mxl.length ? 'Встреч за полтора месяца нет.'
+        : mxNew ? 'Записей без разбора: <b>' + mxNew + '</b>. У остальных есть конспект и договоренности.'
+        : 'Все записи разобраны: конспект, договоренности и задачи на месте.';
+      html = '<div><h2>EastSide Meeting</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('mic', 13) + '</span><span>' + mxPhr + '</span></div></div>' +
+        (meetOn() ? '<button class="bp sm" id="mx-new">' + ic('plus', 14) + '<span>Новая встреча</span></button>' : '');
+    }
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
     }
@@ -3359,6 +3382,10 @@
     if (gs) gs.addEventListener('click', guideExit);
     var nw = el('nw-new');
     if (nw) nw.addEventListener('click', function () { openNewsForm(null); });
+    var mxn = el('mx-new');
+    // Завести комнату — то же окно, что и во «Встречах» задачника: два разных
+    // мастера на одно действие разъехались бы через месяц.
+    if (mxn) mxn.addEventListener('click', function () { openMeetRoom(); });
   }
   /* Выйти из обучения к задачам. Пропуск живет до перезагрузки: человек зашел за
      срочной задачей, а не отказался учиться навсегда. */
@@ -3411,6 +3438,7 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
+    else if (state.page === 'meetx') renderMeetx(view);
     else if (state.page === 'news') renderNews(view);
     else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
@@ -9233,6 +9261,7 @@
       state.meetRoomsAt = Date.now();
       try { localStorage.setItem(MEET_ON_LS, r && r.configured ? '1' : '0'); } catch (e) {}
       if (state.page === 'tasks') renderView();
+      if (state.page === 'meetx') renderHead();
     }).catch(function () {
       state.meetRooms = 'none';
       if (state.page === 'tasks') renderView();
@@ -22578,6 +22607,218 @@
     progress: { cls: 'gd-mid', label: 'учится',   ic: '' },
     none:     { cls: 'gd-no',  label: 'не начал', ic: '' },
   };
+  /* ══ EastSide Meeting ═══════════════════════════════════════════════════════
+     Встречи команды одним списком: наши комнаты, записи зумов и загруженные
+     протоколы. Раздел отвечает на вопросы, ради которых раньше надо было обойти
+     три экрана (Павел 06.10.2026): кто какие встречи провел, по какому
+     направлению, что решили и где расшифровка.
+
+     Строка — одна встреча, карточка с конспектом и договоренностями
+     открывается кликом под строкой, как в «Команде»: два экрана ради одной
+     встречи человек не держит в голове. Расшифровка грузится отдельно и только
+     по кнопке — она весит десятки килобайт и нужна далеко не всегда. */
+  var MX_KIND = {
+    team: 'планерка', sales: 'консультация', client: 'с клиентом',
+    tutor: 'с тьютором', manual: 'протокол', unknown: 'встреча',
+  };
+  var MX_STATE = {
+    live:   { cls: 'mr-live',  label: 'идет сейчас' },
+    ended:  { cls: 'mr-over',  label: 'прошла' },
+    idle:   { cls: 'mr-wait',  label: 'ждет' },
+    draft:  { cls: 'st-block', label: 'черновик' },
+    done:   { cls: 'st-done',  label: 'задачи заведены' },
+    call:   { cls: 'st-done',  label: 'в карточке ученика' },
+    failed: { cls: 'st-return', label: 'не разобралась' },
+    new:    { cls: 'mr-wait',  label: 'без разбора' },
+  };
+
+  function mxQuery() {
+    return '?days=45&scope=' + (state.meetxScope === 'my' ? 'my' : 'all') +
+      (state.meetxDept ? '&dept=' + encodeURIComponent(state.meetxDept) : '');
+  }
+  function loadMeetx() {
+    // Кнопка «Новая встреча» живет по флагу configured из списка комнат: без
+    // него она вернула бы 503 там, где свои встречи еще не включены.
+    if (!state.meetRooms) loadMeetRooms();
+    api('/admin/api/meet/journal' + mxQuery()).then(function (r) {
+      state.meetx = r && r.meetings ? r : { meetings: [], depts: [] };
+      if (state.page === 'meetx') { renderHead(); renderView(); }
+    }).catch(function () {
+      state.meetx = 'none';
+      if (state.page === 'meetx') renderView();
+    });
+  }
+  function mxRow(m) {
+    var st = MX_STATE[m.state] || MX_STATE.ended;
+    var open = state.meetxOpen === m.key;
+    var marks = '<span class="sev ' + st.cls + '">' + st.label + '</span>';
+    if (m.agreements) marks += '<span class="mx-tag">' + ic('check', 11) +
+      m.agreements + ' ' + plural(m.agreements, 'договоренность', 'договоренности', 'договоренностей') + '</span>';
+    if (m.has_text) marks += '<span class="mx-tag">' + ic('mic', 11) + 'расшифровка</span>';
+    if (m.has_notes) marks += '<span class="mx-tag">' + ic('doc', 11) + 'конспект</span>';
+    var sub = [];
+    if (m.by) sub.push(esc(m.by));
+    if (m.dept) sub.push(esc(deptLabel(m.dept)));
+    sub.push(MX_KIND[m.kind] || MX_KIND.unknown);
+    if (m.client_name) sub.push('ученик: ' + esc(m.client_name));
+    if (m.minutes) sub.push(m.minutes + ' мин');
+    if (m.people) sub.push(m.people + ' ' + plural(m.people, 'участник', 'участника', 'участников'));
+    return '<div class="mx-row' + (open ? ' open' : '') + '" data-mx="' + esc(m.key) + '">' +
+        '<div class="mx-when"><span class="mx-day">' + esc(dayLabel(m.at)) + '</span>' +
+          '<span class="mx-time">' + esc(hhmm(m.at)) + '</span></div>' +
+        '<div class="mx-main"><div class="mx-t">' + esc(m.title || 'Встреча') + '</div>' +
+          '<div class="mx-s">' + sub.join(' · ') + '</div></div>' +
+        '<span class="mx-marks">' + marks + '</span>' +
+        (m.url && m.state === 'live'
+          ? '<a class="bp sm mx-join" href="' + esc(m.url) + '" target="_blank" rel="noopener">Войти</a>'
+          : '<span class="mx-go">' + ic('go', 14) + '</span>') +
+      '</div>' + (open ? mxCard(m) : '');
+  }
+  function hhmm(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  function mxCard(m) {
+    var c = state.meetxCard[m.key];
+    if (!c) return '<div class="mx-card"><div class="mx-load">Открываю встречу…</div></div>';
+    if (c === 'none') return '<div class="mx-card"><div class="mx-load">Не удалось открыть встречу.</div></div>';
+    var parts = [];
+    if (c.summary) {
+      parts.push('<div class="mx-h">Конспект</div><div class="mx-sum">' +
+        esc(c.summary).replace(/\n/g, '<br>') + '</div>');
+    }
+    if ((c.goals || []).length) {
+      parts.push('<div class="mx-h">О чем договорились</div>' + c.goals.map(function (g) {
+        return '<div class="mx-goal"><div class="mx-goal-t">' + esc(g.title) + '</div>' +
+          (g.steps || []).map(function (st) {
+            return '<div class="mx-step">' + esc(st) + '</div>';
+          }).join('') + '</div>';
+      }).join(''));
+    }
+    if ((c.tasks || []).length) {
+      parts.push('<div class="mx-h">Уехало в задачник</div>' + c.tasks.map(function (t) {
+        var ts = TASK_ST[t.status] || TASK_ST.wait;
+        return '<button type="button" class="mx-task" data-mxtask="' + t.id + '">' +
+          '<span class="mx-task-t">' + esc(t.title) + '</span>' +
+          (t.assignee_name ? '<span class="mx-task-w">' + esc(t.assignee_name) + '</span>' : '') +
+          '<span class="sev ' + ts.cls + '">' + ts.label + '</span></button>';
+      }).join(''));
+    }
+    var text = state.meetxText[m.key];
+    if (text) {
+      parts.push('<div class="mx-h">Расшифровка</div><div class="mx-text">' +
+        esc(text).replace(/\n/g, '<br>') + '</div>');
+    }
+    var acts = [];
+    if (c.text_chars && !text) {
+      acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
+        ic('mic', 13) + 'Показать расшифровку (' + Math.round(c.text_chars / 1000) + ' тыс. знаков)</button>');
+    }
+    if (c.url) {
+      acts.push('<a class="qchip" href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
+        ic('go', 13) + 'Запись встречи</a>');
+    }
+    if (c.session_id) {
+      acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
+        ic('leads', 13) + 'Карточка ученика</button>');
+    }
+    if (!parts.length) {
+      parts.push('<div class="mx-load">Ни конспекта, ни договоренностей по этой встрече пока нет. ' +
+        'Конспект появляется после разбора записи.</div>');
+    }
+    return '<div class="mx-card">' + parts.join('') +
+      (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
+  }
+  function renderMeetx(view) {
+    if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
+    if (state.meetx === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
+      return;
+    }
+    var d = state.meetx;
+    var list = d.meetings || [];
+    // Чипы направлений и «мои/все» — один ряд: это два среза одного вопроса
+    // «чьи встречи смотрим».
+    var chips = '<div class="wk-top mx-top"><div class="dept-seg pay-seg">' +
+      '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
+      (d.depts || []).map(function (x) {
+        return '<button type="button" class="' + (state.meetxDept === x.id ? 'on' : '') +
+          '" data-mxdept="' + esc(x.id) + '">' + esc(x.label) + '</button>';
+      }).join('') + '</div><span class="wk-spacer"></span>' +
+      (d.can_all ? '<div class="pay-seg plan-seg">' +
+        '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
+        '<button type="button" class="' + (state.meetxScope === 'my' ? 'on' : '') + '" data-mxscope="my">Мои</button>' +
+        '</div>' : '') + '</div>';
+
+    var live = list.filter(function (m) { return m.state === 'live'; });
+    var withText = list.filter(function (m) { return m.has_text; }).length;
+    var agreed = list.reduce(function (a, m) { return a + (m.agreements || 0); }, 0);
+    var bar = statBar([
+      { label: 'Встреч за 45 дней', value: list.length, sub: live.length ? live.length + ' идет сейчас' : 'за полтора месяца' },
+      { label: 'С расшифровкой', value: withText, sub: withText ? 'можно перечитать' : 'записи пока нет' },
+      { label: 'Договоренностей', value: agreed, sub: 'задач из встреч' },
+    ]);
+
+    view.innerHTML = chips + bar +
+      (list.length
+        ? '<div class="card mx-list">' + list.map(mxRow).join('') + '</div>'
+        : '<div class="card"><div class="empty">Встреч за этот срок нет. ' +
+          'Заведи комнату кнопкой «Новая встреча» — записи, конспект и задачи появятся здесь сами.</div></div>');
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxDept = b.getAttribute('data-mxdept');
+        state.meetx = null; state.meetxOpen = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxScope = b.getAttribute('data-mxscope');
+        state.meetx = null; state.meetxOpen = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('a, button')) return;
+        var key = r.getAttribute('data-mx');
+        state.meetxOpen = state.meetxOpen === key ? null : key;
+        renderView();
+        if (state.meetxOpen && !state.meetxCard[key]) {
+          api('/admin/api/meet/journal/' + encodeURIComponent(key)).then(function (c) {
+            state.meetxCard[key] = c || 'none';
+            if (state.page === 'meetx') renderView();
+          }).catch(function () {
+            state.meetxCard[key] = 'none';
+            if (state.page === 'meetx') renderView();
+          });
+        }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-mxtext');
+        b.disabled = true; b.textContent = 'Загружаю…';
+        api('/admin/api/meet/journal/' + encodeURIComponent(key) + '/text').then(function (r) {
+          state.meetxText[key] = (r && r.text) || 'Расшифровки нет.';
+          if (state.page === 'meetx') renderView();
+        }).catch(function () { showToast('Не удалось открыть расшифровку'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtask]'), function (b) {
+      b.addEventListener('click', function () { openTask(+b.getAttribute('data-mxtask')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxlead]'), function (b) {
+      b.addEventListener('click', function () {
+        location.hash = '#page/leads';
+        state.page = 'leads'; renderSide(); renderHead();
+        fetchDetail(b.getAttribute('data-mxlead'));
+        openDrawer(b.getAttribute('data-mxlead'));
+      });
+    });
+  }
+
   function renderTeam(view) {
     if (!state._team) {
       view.innerHTML = dashSkeleton();

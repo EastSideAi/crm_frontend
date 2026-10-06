@@ -10788,3 +10788,69 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pb-nav .bp { flex: 1 1 40%; padding-left: 8px; padding-right: 8px; }
   .pb-pend .pb-ra { min-width: 0; }
 }
+
+/* ════ EASTSIDE MEETING ════
+   Журнал встреч: строка — встреча, карточка с конспектом раскрывается под ней.
+   Время слева отдельной колонкой: список читают сверху вниз по дням, и дата,
+   прижатая к названию, в этом не помогает. */
+/* Ряд фильтров переносится: отделов бывает восемь, и вместе с «вся команда /
+   мои» они не влезают в одну строку даже на большом экране. */
+.mx-top { margin-bottom: 12px; flex-wrap: wrap; row-gap: 8px; }
+.mx-list { padding: 6px 18px 10px; }
+.mx-row { display: flex; align-items: center; gap: 14px; padding: 12px 0;
+  border-top: 1px solid var(--line-2); cursor: pointer; }
+.mx-row:first-child { border-top: none; }
+.mx-row.open { background: var(--fill); border-radius: 12px 12px 0 0;
+  padding-left: 10px; padding-right: 10px; border-top-color: transparent; }
+.mx-when { flex: none; width: 92px; display: flex; flex-direction: column; }
+.mx-day { font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
+.mx-time { font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+.mx-main { flex: 1; min-width: 0; }
+.mx-t { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.mx-s { font-size: 12px; color: var(--ink-3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-marks { flex: none; display: flex; align-items: center; gap: 6px; }
+.mx-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-2); background: var(--fill);
+  border-radius: var(--r-pill); padding: 4px 10px; }
+.mx-row.open .mx-tag { background: var(--card); }
+.mx-tag svg { color: var(--ink-3); }
+.mx-go { flex: none; color: var(--ink-3); transition: transform .18s var(--ease); }
+.mx-row.open .mx-go { transform: rotate(90deg); color: var(--blue); }
+.mx-join { flex: none; }
+/* Карточка встречи: заголовки тихие и мелкие, содержание — обычным кеглем.
+   Внутренние отступы плотнее внешних, блоки разделены воздухом, а не линиями. */
+.mx-card { background: var(--fill); border-radius: 0 0 12px 12px;
+  padding: 4px 14px 16px; margin-bottom: 4px; }
+.mx-h { font-size: 11px; font-weight: 700; color: var(--ink-3); letter-spacing: .03em;
+  text-transform: uppercase; margin: 14px 0 6px; }
+.mx-sum { font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.mx-goal { margin-bottom: 8px; }
+.mx-goal-t { font-size: 13.5px; font-weight: 600; }
+.mx-step { font-size: 13px; color: var(--ink-2); padding-left: 14px; position: relative; }
+.mx-step::before { content: ''; position: absolute; left: 4px; top: 9px;
+  width: 4px; height: 4px; border-radius: 50%; background: var(--wire); }
+.mx-task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: var(--card); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px;
+  transition: .15s var(--ease); }
+.mx-task:hover { background: #fff; box-shadow: inset 0 0 0 1px #DCE7FF; }
+.mx-task-t { flex: 1; min-width: 0; font-size: 13px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-task-w { flex: none; font-size: 12px; color: var(--ink-3); }
+.mx-text { max-height: 420px; overflow-y: auto; font-size: 13px; line-height: 1.6;
+  color: var(--ink-2); background: var(--card); border-radius: 12px; padding: 12px 14px; }
+.mx-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.mx-load { font-size: 13px; color: var(--ink-3); padding: 10px 0; }
+@media (max-width: 760px) {
+  .mx-list { padding: 4px 12px 8px; }
+  /* Отделов до восьми: ряд листается внутри себя, страницу вбок не тянет. */
+  .mx-top .dept-seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .mx-top .dept-seg::-webkit-scrollbar { display: none; }
+  /* Метки уезжали за правый край: на телефоне им своя строка. */
+  .mx-marks { flex: 1 1 100%; min-width: 0; }
+  .mx-row { flex-wrap: wrap; gap: 8px 10px; }
+  .mx-when { width: auto; flex-direction: row; gap: 6px; align-items: baseline; }
+  .mx-main { flex: 1 1 100%; order: 3; }
+  .mx-marks { order: 4; flex-wrap: wrap; }
+  .mx-s { white-space: normal; }
+}
