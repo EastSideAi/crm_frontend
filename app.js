@@ -159,7 +159,7 @@
   var SEGS = {
     queue:    { label: 'В работе',      hint: 'заявки в работе — от горячих к спокойным' },
     all:      { label: 'Пользователи',  hint: 'все, кто был на платформе — это ещё не клиенты' },
-    clients:  { label: 'Клиенты',       hint: 'только те, кто оплатил — действующие клиенты' },
+    clients:  { label: 'Клиенты',       hint: 'оплатившие и те, кого отметили клиентом вручную' },
     rejected: { label: 'Отказы',        hint: 'не сложилось — но контакт остался' },
     archive:  { label: 'Архив',         hint: 'скрытые лиды и тестовые записи — можно вернуть' },
   };
@@ -885,10 +885,16 @@
 
   /* ── производные ──────────────────────────────────────── */
   function inQueue(l) { return (!!l.booking || l.status === 'manual') && ACTIVE_STATUSES.indexOf(l.crm.status) !== -1; }
+  /* Клиент для вкладки «Клиенты» и её счётчика: есть оплата ИЛИ статус «клиент»
+     выставили вручную. Воронка ниже («Стали клиентами») по-прежнему считает только
+     оплату — это метрика конверсии в деньги, а вкладка — рабочий список всех, кого
+     ведём как клиентов, включая перенесённых руками (Павел 06.10.2026; расширяет
+     решение от 05.09 «только оплата»). */
+  function isClient(l) { return !!l.paid || (l.crm && l.crm.status === 'client'); }
   function segBase(seg) {
     return state.leads.filter(function (l) {
       if (seg === 'queue') return inQueue(l);
-      if (seg === 'clients') return !!l.paid;
+      if (seg === 'clients') return isClient(l);
       if (seg === 'rejected') return l.crm.status === 'rejected';
       // Холодные живут в разделе «Лиды» (см. isProspect) — двух списков с одними
       // и теми же людьми быть не должно, иначе непонятно, где с ними работают.
@@ -977,7 +983,7 @@
       c.all++;
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
-      if (!!l.paid) c.clients++;
+      if (isClient(l)) c.clients++;
       if (l.crm.status === 'rejected') c.rejected++;
       if (l.created_at && new Date(l.created_at) > weekAgo) c.week++;
       if (isToday(l.created_at)) c.today++;
@@ -995,7 +1001,7 @@
     base.forEach(function (l) {
       if (inQueue(l)) c.queue++;
       if (l.booking && l.crm.status === 'new') c.hot++;
-      if (!!l.paid) c.clients++;
+      if (isClient(l)) c.clients++;
       if (l.crm.status === 'rejected') c.rejected++;
       if (l.created_at && new Date(l.created_at) > weekAgo) c.week++;
       if (isToday(l.created_at)) c.today++;
