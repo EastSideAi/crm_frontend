@@ -99,6 +99,7 @@
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
+    glMode: 'cards', gantt: null, ganttWeeks: 12,   // «Цели»: карточки или полосы по неделям
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
@@ -132,7 +133,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -144,6 +145,7 @@
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
         attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
+        glMode: state.glMode || 'cards', ganttWeeks: state.ganttWeeks || 12,
       }));
     } catch (e) {}
   }
@@ -10753,7 +10755,7 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-dept]'), function (b) {
       b.addEventListener('click', function () {
         state.taskDept = b.getAttribute('data-dept') || '';
-        state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null;
+        state.tasks = null; state.myweek = null; state.myboard = null; state.stuck = null; state.mymonth = null; state.teamStats = null; state.teamPerson = null; state.gantt = null;
         state.boardGoal = '';
         saveUi(); renderHead(); renderView();
       });
@@ -10822,7 +10824,158 @@
         '<span class="gl-chev">' + ic('go', 14) + '</span>' +
       '</div>' + steps + '</div>';
   }
+  /* ── Полосы целей по неделям («гант») ──────────────────────────────────────
+     Второй взгляд на те же цели: карточки отвечают на вопрос «что мы делаем»,
+     полосы — «когда и что с чем пересекается». Для запуска это главный вопрос:
+     два набора в один месяц ведет один человек, и на карточках это не видно.
+
+     Своих дат у цели нет: начало и конец считает сервер по срокам ее шагов
+     (/admin/api/tasks/gantt). Цель без сроков в полосу не превращается — ей
+     нечего рисовать, она идет отдельным списком «не на сетке». */
+  var GANTT_SPANS = [[6, '6 недель'], [12, '3 месяца'], [26, 'Полгода']];
+  function loadGantt() {
+    var dept = state.taskDept || '';
+    api('/admin/api/tasks/gantt?weeks=' + state.ganttWeeks +
+        (dept ? '&dept=' + encodeURIComponent(dept) : ''))
+      .then(function (r) {
+        state.gantt = (r && r.bars) ? r : 'none';
+        if (state.page === 'tasks' && state.taskSeg === 'goals') renderView();
+      })
+      .catch(function () {
+        state.gantt = 'none';
+        if (state.page === 'tasks' && state.taskSeg === 'goals') renderView();
+      });
+  }
+  function gtDay(iso) { return new Date(iso + 'T00:00:00').getTime(); }
+  function gtPct(ms, start, span) { return Math.max(0, Math.min(100, (ms - start) / span * 100)); }
+  function gtBar(b, start, span) {
+    var from = gtDay(b.from), to = gtDay(b.to) + 86400000;
+    var left = gtPct(from, start, span), right = gtPct(to, start, span);
+    var w = Math.max(1.5, right - left);
+    var pct = b.steps_total ? Math.round(b.steps_done / b.steps_total * 100) : 0;
+    var cls = b.overdue ? ' over' : (pct === 100 ? ' done' : '');
+    var tip = b.title + ': ' + dayLabel(b.from) + ' — ' + dayLabel(b.to) +
+      ', сделано ' + b.steps_done + ' из ' + b.steps_total +
+      (b.overdue ? ', просрочено ' + b.overdue : '');
+    /* Названия внутри полосы нет: оно уже стоит слева, а поверх заливки прогресса
+       текст менял цвет посреди слова и не читался. Полоса говорит «когда» и
+       «сколько сделано», имя говорит колонка. */
+    return '<button type="button" class="gt-bar' + cls + '" data-gid="' + b.id + '" ' +
+        'style="left:' + left.toFixed(2) + '%;width:' + w.toFixed(2) + '%" ' +
+        'title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
+        '<span class="gt-fill" style="width:' + pct + '%"></span>' +
+      '</button>';
+  }
+  function renderGantt(view, head) {
+    if (state.gantt === null) { view.innerHTML = head + dashSkeleton(); wireGanttTop(view); loadGantt(); return; }
+    if (state.gantt === 'none') {
+      view.innerHTML = head + '<div class="card"><div class="empty">Не удалось собрать полосы. Обнови страницу.</div></div>';
+      wireGanttTop(view);
+      return;
+    }
+    var d = state.gantt;
+    var start = gtDay(d.start), end = gtDay(d.end), span = end - start;
+    var weeks = d.weeks;
+    // Подпись у каждой недели читается до двенадцати столбцов; дальше подписываем
+    // через одну, иначе даты налезают друг на друга и не читается ни одна.
+    var step = weeks <= 12 ? 1 : 2;
+    var cols = '';
+    for (var i = 0; i < weeks; i++) {
+      var dt = new Date(start + i * 7 * 86400000);
+      cols += '<span class="gt-col" style="left:' + (i / weeks * 100).toFixed(3) + '%;width:' +
+        (100 / weeks).toFixed(3) + '%">' +
+        (i % step === 0 ? '<i>' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()].slice(0, 3) + '</i>' : '') +
+        '</span>';
+    }
+    var now = Date.now();
+    var nowPct = gtPct(now, start, span).toFixed(2);
+    var onGrid = now >= start && now <= end;
+    var today = onGrid ? '<span class="gt-now" style="left:' + nowPct + '%"></span>' : '';
+    // Подпись «сегодня» только в шапке: в каждой строке она была бы шумом.
+    var todayHead = onGrid
+      ? '<span class="gt-now hd" style="left:' + nowPct + '%"><i>сегодня</i></span>' : '';
+
+    var bars = d.bars || [], undated = d.undated || [];
+    /* Линию «сегодня» рисуем в КАЖДОЙ строке, а не одной сквозной: соседняя
+       строка с подсветкой при наведении закрасила бы сквозную собой. */
+    var rows = bars.map(function (b) {
+      return '<div class="gt-r">' +
+        '<div class="gt-name"><span class="gt-t">' + esc(b.title) + '</span>' +
+          '<span class="gt-w">' + (b.assignee_name ? esc(b.assignee_name) : 'без ответственного') +
+            (b.steps_total ? ' · ' + b.steps_done + '/' + b.steps_total : '') + '</span></div>' +
+        '<div class="gt-track">' + today + gtBar(b, start, span) + '</div>' +
+      '</div>';
+    }).join('');
+
+    var late = '';
+    if (undated.length) {
+      late = '<div class="card gt-late"><div class="tsk-band"><span class="tsk-band-t">Не на сетке</span>' +
+        '<span class="tsk-band-h">у шагов нет сроков, поэтому рисовать нечего — проставь срок хотя бы одному</span>' +
+        '<span class="tsk-band-n num">' + undated.length + '</span></div>' +
+        '<div class="gt-nodate">' + undated.map(function (b) {
+          return '<button type="button" class="gt-nd" data-gid="' + b.id + '">' +
+            '<span class="gt-t">' + esc(b.title) + '</span>' +
+            '<span class="gt-w">' + (b.assignee_name ? esc(b.assignee_name) : 'без ответственного') + '</span>' +
+          '</button>';
+        }).join('') + '</div></div>';
+    }
+
+    view.innerHTML = head +
+      (bars.length
+        ? '<div class="card gt-wrap"><div class="gt-scroll"><div class="gt-grid" style="--gt-w:' + weeks + '">' +
+            '<div class="gt-r gt-head"><div class="gt-name"></div>' +
+              '<div class="gt-track">' + cols + todayHead + '</div></div>' +
+            rows +
+          '</div></div></div>'
+        : '<div class="card"><div class="empty">На этом горизонте целей со сроками нет. ' +
+          'Срок полосы берется из сроков шагов цели — проставь их, и цель появится здесь.</div></div>') +
+      late;
+
+    wireGanttTop(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gid]'), function (b) {
+      b.addEventListener('click', function () { openTask(+b.getAttribute('data-gid')); });
+    });
+  }
+  /* Переключатель вида живет в обоих видах, поэтому и вешается отдельно: из
+     карточек в сроки уходят тем же нажатием, что и обратно. */
+  function wireGlMode(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-glmode]'), function (b) {
+      b.addEventListener('click', function () {
+        state.glMode = b.getAttribute('data-glmode');
+        saveUi(); renderView();
+      });
+    });
+  }
+  function wireGanttTop(view) {
+    wireDeptChips(view);
+    wireGlMode(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gtw]'), function (b) {
+      b.addEventListener('click', function () {
+        state.ganttWeeks = +b.getAttribute('data-gtw');
+        state.gantt = null; saveUi(); renderView();
+      });
+    });
+  }
+  function glModeSeg() {
+    return '<div class="pay-seg plan-seg gl-mode">' +
+      '<button type="button" class="' + (state.glMode === 'time' ? '' : 'on') + '" data-glmode="cards">Карточки</button>' +
+      '<button type="button" class="' + (state.glMode === 'time' ? 'on' : '') + '" data-glmode="time">Сроки</button>' +
+      '</div>';
+  }
+
   function renderGoals(view) {
+    /* Инструменты у обоих видов общие: направление и горизонт — это один и тот
+       же вопрос «на что смотрим», и переставлять их местами при переключении
+       значит каждый раз искать заново. */
+    if (state.glMode === 'time') {
+      var gtTop = '<div class="gl-tools">' + deptChips() + glModeSeg() +
+        '<span class="gl-spacer"></span>' +
+        '<div class="pay-seg plan-seg gt-span">' + GANTT_SPANS.map(function (x) {
+          return '<button type="button" class="' + (state.ganttWeeks === x[0] ? 'on' : '') +
+            '" data-gtw="' + x[0] + '">' + x[1] + '</button>';
+        }).join('') + '</div></div>';
+      return renderGantt(view, gtTop);
+    }
     var q = (state.taskQ || '').toLowerCase().trim();
     var list = (state.tasks || []).filter(function (g) {
       if (!q) return true;
@@ -10856,7 +11009,7 @@
       '</section>';
     }).join('');
 
-    view.innerHTML = '<div class="gl-tools">' + deptChips() +
+    view.innerHTML = '<div class="gl-tools">' + deptChips() + glModeSeg() +
         '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
@@ -10866,6 +11019,7 @@
         : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
 
     wireDeptChips(view);
+    wireGlMode(view);
     el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {

@@ -10933,3 +10933,74 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mx-go { width: 40px; height: 40px; }
   .mx-s { white-space: normal; }
 }
+
+/* ── ПОЛОСЫ ЦЕЛЕЙ ПО НЕДЕЛЯМ («Цели» → «Сроки») ─────────────────────────────
+   Сетка недель — не таблица с рамками: вертикали полупрозрачные, горизонталей
+   нет вовсе. Якорь экрана — сами полосы, все остальное тихое. */
+.gl-spacer { flex: 1; }
+.gt-wrap { padding: 10px 6px 14px; }
+/* Горизонт шире телефона и узкого ноутбука: сетка листается внутри карточки,
+   страницу вбок не тянет. Колонка с названием едет вместе — иначе на середине
+   горизонта непонятно, чья это полоса. */
+.gt-scroll { overflow-x: auto; scrollbar-width: thin; }
+.gt-grid { min-width: 720px; }
+.gt-r { display: grid; grid-template-columns: 216px 1fr; align-items: center; gap: 14px;
+  padding: 5px 10px; border-radius: 10px; }
+.gt-r:hover { background: var(--fill); }
+.gt-head, .gt-head:hover { background: none; padding-bottom: 10px; }
+.gt-name { min-width: 0; }
+.gt-t { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt-w { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gt-track { position: relative; height: 30px; }
+/* Шапка в два яруса: сверху даты недель, под ними метка «сегодня». В один
+   ярус метка накрывала собой дату той недели, на которую пришлась. */
+.gt-head .gt-track { height: 36px; }
+/* Столбец недели: тонкая вертикаль и дата над ней. Дата сидит на левой границе
+   столбца, то есть на понедельнике этой недели. */
+.gt-col { position: absolute; top: 0; bottom: -4px; border-left: 1px solid var(--line); }
+.gt-col i { position: absolute; top: 0; left: 5px; font-style: normal; font-size: 10.5px;
+  font-weight: 600; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gt-r:not(.gt-head) .gt-track::before { content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / var(--gt-w, 12) - 1px),
+    var(--line) calc(100% / var(--gt-w, 12) - 1px), var(--line) calc(100% / var(--gt-w, 12)));
+  opacity: .6; pointer-events: none; }
+/* Сегодня: единственная линия в цвете на экране, по ней читается «мы вот здесь». */
+/* Сегодня: единственная вертикаль в цвете, по ней читается «мы вот здесь».
+   Подпись стоит один раз, в шапке. */
+.gt-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--blue);
+  opacity: .35; z-index: 1; pointer-events: none; border-radius: 2px; }
+.gt-now.hd { opacity: 1; top: 18px; bottom: -4px; }
+.gt-now.hd i { position: absolute; left: 4px; top: -1px;
+  font-style: normal; font-size: 10px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: #fff; background: var(--blue);
+  border-radius: var(--r-pill); padding: 2px 7px; white-space: nowrap; }
+.gt-bar { position: absolute; top: 7px; height: 16px; border-radius: 6px; z-index: 2;
+  background: var(--blue-tint); display: block; overflow: hidden;
+  cursor: pointer; transition: .15s var(--ease); }
+.gt-bar:hover { filter: brightness(.97); }
+.gt-bar:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* Заливка — сделанная часть цели. Она внутри полосы, а не второй полосой рядом:
+   прогресс это свойство цели, а не отдельная сущность. */
+.gt-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blue); opacity: .85; }
+.gt-bar.over { background: var(--amber-soft); }
+.gt-bar.over .gt-fill { background: var(--amber); }
+.gt-bar.done { background: var(--green-soft); }
+.gt-bar.done .gt-fill { background: var(--green); opacity: .7; }
+/* Цели, которым рисовать нечего: без сроков у шагов. Отдельным блоком под сеткой,
+   а не серой полосой в ней — это не «ждет», это «не заполнено». */
+.gt-late { margin-top: 14px; }
+.gt-nodate { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px 14px; }
+.gt-nd { display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  max-width: 260px; padding: 8px 12px; border-radius: 10px; background: var(--fill);
+  cursor: pointer; transition: .15s var(--ease); }
+.gt-nd:hover { background: #ECEEF1; }
+.gt-nd:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.gt-nd .gt-t { max-width: 236px; }
+@media (max-width: 760px) {
+  .gt-wrap { padding: 8px 4px 12px; }
+  .gt-grid { min-width: 620px; }
+  .gt-r { grid-template-columns: 132px 1fr; gap: 10px; padding: 5px 8px; }
+  .gt-nodate { padding: 8px 12px 12px; }
+}
