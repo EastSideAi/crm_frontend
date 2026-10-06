@@ -6142,6 +6142,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-feature-settings: 'tnum'; }
 .ct-act-m { font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
 .ct-act-m b { color: var(--ink); font-weight: 700; }
+/* Объяснение на две-три строки, а не строка реквизитов: ему нужны мера строки и
+   воздух между строками, иначе оно читается как мелкий технический хвост. */
+.ct-act-why { font-size: 13px; line-height: 1.5; color: var(--ink-2); max-width: 62ch; }
 /* Две подписи — две колонки: чья очередь, видно без чтения. */
 .ct-sg { display: flex; gap: 28px; flex-wrap: wrap; width: 100%; }
 .ct-sg1 { display: flex; flex-direction: column; gap: 2px; min-width: 156px; }

@@ -15050,7 +15050,7 @@
           (INV
             ? '<div class="ct-act">' +
                 '<div class="ct-act-h"><b>Счет № ' + esc(INV.number) + '</b>' +
-                  '<span class="ct-chip ' + (INV.by_contractor ? 'ct-paid' : 'ct-wait') + '">' +
+                  '<span class="ct-chip ' + (INV.by_contractor ? 'ct-ok' : 'ct-off') + '">' +
                     (INV.by_contractor ? 'прислал исполнитель' : 'приложили мы') + '</span></div>' +
                 '<div class="ct-act-m">от ' + esc(czDate(INV.issued_on)) + ' · <b>' +
                   ctMoney(INV.amount) + ' ₽</b>' +
@@ -15065,11 +15065,12 @@
                     '<button class="bp sm ghost" id="ct-inv-x">Погасить</button>') +
                 '</div>' +
               '</div>'
-            : '<div class="ct-act"><div class="field-empty">Счета еще нет. Банку нужно ' +
-                'основание платежа, поэтому без счета выплата не пройдет. Исполнителю ' +
-                'ушла просьба прислать его в кабинете; если прислал в переписку — ' +
-                'приложите сами.</div>' +
-                '<div class="ct-acts"><button class="bp sm" id="ct-inv-add">' +
+            : '<div class="ct-act">' +
+                '<div class="ct-act-h"><b>Счета еще нет</b></div>' +
+                '<div class="ct-act-why">Банку нужно основание платежа, поэтому без счета ' +
+                  'выплата не пройдет. Исполнителю ушла просьба прислать его в кабинете; ' +
+                  'если прислал в переписку — приложите сами.</div>' +
+                '<div class="ct-acts"><button class="bp sm ghost" id="ct-inv-add">' +
                   'Приложить счет</button></div></div>') +
         '</div>';
     }
