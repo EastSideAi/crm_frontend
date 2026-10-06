@@ -22555,6 +22555,18 @@
     return 'уведомления в ' + (u.notify_channel === 'max' ? 'Макс'
       : u.notify_channel === 'both' ? 'Телеграм и Макс' : 'Телеграм');
   }
+  /* Подсветка найденного куска имени. Поиск в команде нужен ради одного
+     человека в списке из сорока, и без выделения глаз все равно читает весь
+     список (просьба Павла 06.10.2026). */
+  function tmMark(s, q) {
+    s = String(s || '');
+    q = (q === undefined ? (state._teamQ || '') : q).trim().toLowerCase();
+    if (!q) return esc(s);
+    var i = s.toLowerCase().indexOf(q);
+    if (i === -1) return esc(s);
+    return esc(s.slice(0, i)) + '<mark>' + esc(s.slice(i, i + q.length)) + '</mark>' +
+      esc(s.slice(i + q.length));
+  }
   function tmLine(u) {
     var sub = tmSub(u);
     return '@' + esc(u.login) + (sub ? ' · ' + sub : '');
@@ -22611,56 +22623,146 @@
         }).join('');
     }
     var ro = state._teamRo === true;
-    var rows = state._team.map(function (u) {
-      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
-      if (ro) {
-        var boss = (state._team || []).filter(function (x) { return String(x.id) === String(u.manager_id); })[0];
-        /* Начальник отдельной строкой, а не хвостом к роли: в строке «Руководитель ·
-           руководитель: Павел» слово повторялось дважды, а на телефоне имя еще и
-           обрезалось многоточием. */
-        return '<div class="tm-row ro"><span class="tm-av">' + esc(initials(u.name || '')) + '</span>' +
-          '<div class="tm-i"><div class="tm-n">' + esc(u.name || '') +
-            (u.active === false ? ' <span class="tm-tag">отключен</span>' : '') + '</div>' +
-            '<div class="tm-l">' + esc(label) + '</div>' +
-            (boss ? '<div class="tm-l sub">подчиняется: ' + esc(boss.name || '') + '</div>' : '') +
-          '</div></div>';
-      }
-      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает 403.
-         Показываем ее настоящую роль и запираем поля: пустой селект «Тьютор» напротив
-         супер-админа врал бы о том, кто в системе главный. */
+    /* Строка в дереве — ровно одна строка на человека: имя, роль, метки. Все,
+       что правится, живет в панели под ней и открывается кликом по строке
+       (Павел 06.10.2026: «в этом же окне можно было настраивать кому какие
+       уведомления приходят и какие блоки в CRM доступны»). Раньше селекты, почта
+       и чипы стояли прямо в строке — человек занимал четыре строки экрана, и
+       дерево из сорока людей так не прочитать. */
+    /* Какие разделы CRM открыты человеку. Пока это ровно роль: индивидуальных
+       разрешений поверх роли сервер не хранит, и показывать выключатели, которые
+       ничего не выключают, нельзя. */
+    function tmCaps(u) {
+      var caps = (ROLES[u.role] || {}).caps || [];
+      var names = NAV_ALL.filter(function (n) {
+        if (n.hidden) return false;
+        return String(n.cap || '').split('|').some(function (c) { return caps.indexOf(c) !== -1; });
+      }).map(function (n) { return '<span class="tm-cap">' + esc(n.label) + '</span>'; });
+      return names.length ? names.join('') : '<span class="tm-cap none">разделов нет</span>';
+    }
+    function tmEditor(u, label) {
+      /* Чужую верхнюю учетку не правит тот, кто сам не верхний — бэкенд отвечает
+         403. Показываем ее настоящую роль и запираем поля: пустой селект «Тьютор»
+         напротив супер-админа врал бы о том, кто в системе главный. */
       var lock = (u.role === 'super_admin' || u.role === 'owner') && !iAmTop;
-      var legacy = (u.role === 'owner' || u.role === 'manager') ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
+      var legacy = (u.role === 'owner' || u.role === 'manager')
+        ? '<option value="' + u.role + '" selected>' + label + ' (legacy)</option>' : '';
       var sel = lock
         ? '<select class="tm-sel" disabled title="Верхнюю роль меняет только владелец"><option>' + esc(label) + '</option></select>'
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
-      /* Руководитель (дерево подчинения) и «видит всю команду» — из модели «Команда».
-         Руководитель идёт отдельной строкой под именем, а не в общем ряду: ряд и так
-         плотный (темы, почта, роль), и второй селект в нём выдавливал роль за край.
-         full_team ставит только верхняя роль: это доступ ко всей работе компании. */
-      var mgr = lock ? '' :
-        '<div class="tm-mgrline"><span class="tm-mgrlbl">руководитель</span>' +
-        '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></div>';
-      var chips = '';
-      if (u.is_contractor) chips += '<span class="tm-tag smz">самозанятый</span>';
+      return '<div class="tm-ed">' +
+        '<div class="tm-ed-g">' +
+          '<label class="tm-f"><span>Роль</span>' + sel + '</label>' +
+          (lock ? '' : '<label class="tm-f"><span>Руководитель</span>' +
+            '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></label>') +
+          '<label class="tm-f"><span>Почта для входа</span>' +
+            '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" ' +
+              'autocomplete="off" ' + (lock ? 'disabled ' : '') +
+              'value="' + esc(u.email || '') + '" placeholder="нет почты"></label>' +
+        '</div>' +
+        '<div class="tm-ed-r"><span class="tm-ed-s">Клиенты и заявки</span>' + tmTopicChips(u) + '</div>' +
+        '<div class="tm-ed-r"><span class="tm-ed-s">Бот задач</span>' + tmBotChips(u) + '</div>' +
+        (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s">Задачи команды</span>' +
+          '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') + '" data-uid="' + u.id +
+            '" title="Видит задачи всей команды, а не только своей ветки">' +
+            (u.full_team ? 'вся команда' : 'своя ветка') + '</button></div>' : '') +
+        '<div class="tm-ed-r"><span class="tm-ed-s">Разделы CRM</span>' +
+          '<span class="tm-caps">' + tmCaps(u) + '</span></div>' +
+        '<div class="tm-ed-h">Разделы открывает роль. Нужен человеку лишний раздел — ' +
+          'меняем роль, отдельных галочек по разделам сервер пока не хранит.</div>' +
+      '</div>';
+    }
+    function tmRow(u) {
+      var label = ROLES[u.role] ? ROLES[u.role].label : u.role;
+      var marks = '';
+      if (u.active === false) marks += '<span class="tm-tag">отключен</span>';
+      if (u.is_contractor) marks += '<span class="tm-tag smz">самозанятый</span>';
       // Обучение: подрядчики и партнеры курс не проходят — им метку не рисуем.
-      if (!u.is_contractor && u.role !== 'partner') {
+      if (!ro && !u.is_contractor && u.role !== 'partner') {
         var gm = GUIDE_TAG[u.guide] || GUIDE_TAG.none;
-        chips += '<span class="tm-tag gd ' + gm.cls + '">' +
+        marks += '<span class="tm-tag gd ' + gm.cls + '">' +
           (gm.ic ? ic(gm.ic, 11) : '') + gm.label + '</span>';
       }
-      if (iAmTop) chips += '<button type="button" class="tm-tag ft' + (u.full_team ? ' on' : '') +
-        '" data-uid="' + u.id + '" title="Видит задачи всей команды, а не только своей ветки">' +
-        (u.full_team ? 'вся команда' : 'своя ветка') + '</button>';
-      else if (u.full_team) chips += '<span class="tm-tag ft on">вся команда</span>';
-      return '<div class="tm-row"><span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
-        '<div class="tm-i"><div class="tm-n">' + esc(u.name || u.login) +
-            (chips ? ' <span class="tm-tags">' + chips + '</span>' : '') + '</div>' +
-          '<div class="tm-l">' + tmLine(u) + '</div>' + mgr + '</div>' +
-        '<span class="tm-tps">' + tmTopicChips(u) + tmBotChips(u) + '</span>' +
-        '<input class="tm-mail' + (u.email ? '' : ' none') + '" data-uid="' + u.id + '" type="email" autocomplete="off" ' +
-          (lock ? 'disabled ' : '') + 'value="' + esc(u.email || '') + '" placeholder="почта для входа">' +
-        sel + '</div>';
-    }).join('');
+      if (!ro && u.full_team) marks += '<span class="tm-tag ft on">вся команда</span>';
+      var open = !ro && String(state._teamOpen || '') === String(u.id);
+      // Кто начальник, видно по месту в дереве — в подстрочнике это второй раз
+      // то же самое. Логин и состояние уведомлений нужны только тем, кто правит.
+      var sub = ro ? esc(label) : esc(label) + ' · ' + tmLine(u);
+      return '<div class="tm-row' + (ro ? ' ro' : '') + (open ? ' open' : '') + '"' +
+          (ro ? '' : ' data-open="' + u.id + '"') + '>' +
+          '<span class="tm-av">' + esc(initials(u.name || u.login)) + '</span>' +
+          '<div class="tm-i"><div class="tm-n">' + tmMark(u.name || u.login) +
+            (marks ? ' <span class="tm-tags">' + marks + '</span>' : '') + '</div>' +
+            '<div class="tm-l">' + sub + '</div></div>' +
+          (ro ? '' : '<span class="tm-go">' + ic('go', 14) + '</span>') +
+        '</div>';
+    }
+    /* Панель настроек рисуется ПОД строкой, а не внутри нее: строка лежит во
+       flex-ряду вместе с раскрывашкой ветки, и панель рядом с ней вставала бы
+       второй колонкой поверх дерева. */
+    function tmPanel(u) {
+      if (ro || String(state._teamOpen || '') !== String(u.id)) return '';
+      return tmEditor(u, ROLES[u.role] ? ROLES[u.role].label : u.role);
+    }
+
+    /* ── Дерево подчинения ─────────────────────────────────────────────────────
+       Павел 06.10.2026: «раздел команда можно выстроить в формате орг.структуры
+       дерева, а не списком и обязательно чтобы был поиск, и когда вводишь нужного
+       сотрудника он выделялся». Строим по manager_id: корень — тот, у кого
+       руководитель не проставлен или уехал из списка (отключенного начальника мы
+       из списка не выкидываем, поэтому ветка не рвется). Поиск не прячет
+       найденного в свернутой ветке: совпадение раскрывает всех его начальников,
+       а имя подсвечивается. */
+    var q = (state._teamQ || '').trim().toLowerCase();
+    var byId = {}, kids = {};
+    state._team.forEach(function (u) { byId[u.id] = u; });
+    state._team.forEach(function (u) {
+      var pid = byId[u.manager_id] ? u.manager_id : 0;
+      (kids[pid] = kids[pid] || []).push(u);
+    });
+    // Сначала те, у кого есть подчиненные: дерево читается сверху вниз, и ветки
+    // не перемежаются одиночками.
+    Object.keys(kids).forEach(function (k) {
+      kids[k].sort(function (a, b) {
+        var ka = (kids[a.id] || []).length ? 1 : 0, kb = (kids[b.id] || []).length ? 1 : 0;
+        return (kb - ka) ||
+          String(a.name || a.login).localeCompare(String(b.name || b.login), 'ru');
+      });
+    });
+    function tmHit(u) {
+      if (!q) return false;
+      var lb = ROLES[u.role] ? ROLES[u.role].label : (u.role || '');
+      return (String(u.name || '') + ' ' + String(u.login || '') + ' ' + lb)
+        .toLowerCase().indexOf(q) !== -1;
+    }
+    var keep = {};
+    if (q) {
+      state._team.forEach(function (u) {
+        if (!tmHit(u)) return;
+        var cur = u, guard = 0;
+        while (cur && guard++ < 20) { keep[cur.id] = true; cur = byId[cur.manager_id]; }
+      });
+    }
+    function tmFolded(id) { return !q && !!(state._teamFold && state._teamFold[id]); }
+    function tmNode(u, depth) {
+      var all = kids[u.id] || [];
+      var ch = all.filter(function (c) { return !q || keep[c.id]; });
+      var open = !tmFolded(u.id);
+      var fold = all.length
+        ? '<button type="button" class="tm-fold' + (open ? ' on' : '') + '" data-fold="' + u.id + '" ' +
+            'title="' + (open ? 'Свернуть' : 'Развернуть') + ' ветку">' + ic('go', 13) +
+            '<span class="tm-fold-n num">' + all.length + '</span></button>'
+        : '<span class="tm-fold none"></span>';
+      return '<div class="tm-node' + (tmHit(u) ? ' hit' : '') + '">' +
+        '<div class="tm-node-h">' + fold + tmRow(u) + '</div>' + tmPanel(u) +
+        (open && ch.length
+          ? '<div class="tm-kids">' + ch.map(function (c) { return tmNode(c, depth + 1); }).join('') + '</div>'
+          : '') +
+      '</div>';
+    }
+    var roots = (kids[0] || []).filter(function (u) { return !q || keep[u.id]; });
+    var rows = roots.map(function (u) { return tmNode(u, 0); }).join('');
+    if (!rows && q) rows = '<div class="empty">Никого не нашли. Попробуй другое имя или логин.</div>';
 
     /* Только что заведенный сотрудник: пароль показываем ОДИН раз — в базе лежит
        только его хеш, второй раз взять неоткуда. */
@@ -22729,12 +22831,17 @@
       '</span></div>' : '';
 
     view.innerHTML = '<div class="card" style="padding:24px 26px">' +
-      '<div class="sec-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
+      '<div class="sec-head tm-head"><span class="ic">' + ic('team', 14) + '</span><div><div class="t">Команда и роли</div>' +
       '<div class="s">' + (ro
         ? 'кто работает в компании, с какой ролью и у кого в подчинении'
         : 'роль определяет доступ к разделам, руководитель — кто кого контролирует, темы — уведомления о клиенте') +
       '</div></div>' +
       '<span class="cnt num">' + state._team.length + '</span>' +
+      // Поиск нужен и тем, кто только смотрит: продюсер ищет человека так же.
+      (state._team.length > 5
+        ? '<input class="tm-q" id="tm-q" type="search" autocomplete="off" placeholder="Найти человека" ' +
+          'value="' + esc(state._teamQ || '') + '">'
+        : '') +
       (ro ? '' :
         '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
         '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
@@ -22748,6 +22855,37 @@
           'за кем закреплена тема разговора. Мессенджер каждый выбирает сам: профиль → «Уведомления».</div>' +
         sharedHtml + '</div>') + '</div>';
 
+    /* Перерисовка убивает поле вместе с фокусом, а человек продолжает печатать —
+       возвращаем и курсор, и позицию в конце строки. */
+    if (el('tm-q')) {
+      el('tm-q').addEventListener('input', function () {
+        state._teamQ = this.value;
+        renderView();
+        var again = el('tm-q');
+        if (!again) return;
+        again.focus();
+        try { again.setSelectionRange(again.value.length, again.value.length); } catch (e) { /* search-поле */ }
+      });
+    }
+    /* Клик по строке открывает настройки этого человека и закрывает чужие: две
+       открытые карточки в дереве снова превращают его в простыню. Клик по полю
+       внутри карточки строку не закрывает. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-open]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('select, input, button, a')) return;
+        var id = r.getAttribute('data-open');
+        state._teamOpen = String(state._teamOpen || '') === id ? null : id;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fold]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-fold');
+        state._teamFold = state._teamFold || {};
+        state._teamFold[id] = !state._teamFold[id];
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('.tm-sel'), function (sel) {
       sel.addEventListener('change', function () {
         var u = (state._team || []).filter(function (x) { return String(x.id) === sel.getAttribute('data-uid'); })[0];
