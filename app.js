@@ -2177,33 +2177,33 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'contractors', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
-    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy', 'planfact'] },
-    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
-    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
+    sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy', 'planfact'] },
+    sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
+    senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['cabinet_invite', 'dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
     // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
     // (`inbox_own`, Павел 17.09.2026). Полного инбокса с воронкой продаж и портала
     // у него нет — правило Павла от 2026-08-20: до разбора портала по разделам
     // тьютор видит только то, что относится к его ученикам. Денег (cap finance)
     // нет намеренно — решение владельца. Список диалогов режет сервер, не экран.
-    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own'] },
+    tutor:         { label: 'Тьютор',                 short: 'ведёт учеников',       caps: ['cabinet_invite', 'dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own'] },
     // Тьютор, который вдобавок проводит консультации (Павел 28.09.2026). От тьютора
     // отличается одним `portal`: на консультации показывают продукты и тарифы. Общей
     // воронки входящих нет намеренно — он работает со своими семьями и теми, кого на
     // него закрепили. Зеркало ROLE_CAPS на сервере.
-    tutor_sales:   { label: 'Тьютор и продажи',      short: 'семьи и консультации', caps: ['dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own', 'portal'] },
+    tutor_sales:   { label: 'Тьютор и продажи',      short: 'семьи и консультации', caps: ['cabinet_invite', 'dash', 'tasks', 'clients', 'students', 'academy', 'zaezdy', 'inbox_own', 'portal'] },
     teacher:       { label: 'Преподаватель',          short: 'обучение',             caps: ['dash', 'tasks', 'students', 'portal', 'academy', 'zaezdy'] },
     marketer:      { label: 'Маркетолог',             short: 'трафик и аналитика',   caps: ['dash', 'tasks', 'path', 'analytics', 'marketing', 'portal'] },
     // Решение владельца от 2026-08-22: маркетологи у него в подчинении, данные по
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно зарплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2215,7 +2215,7 @@
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
-    curator:       { label: 'Тьютор (старая роль)',  short: 'устар., без ограничений', caps: ['dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
+    curator:       { label: 'Тьютор (старая роль)',  short: 'устар., без ограничений', caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
     // Бизнес-ассистент ведет задачи за владельца, поэтому видит задачи всех.
     // Финансы, ведомость и самозанятые открыты по решению Романа от 2026-08-21
@@ -2234,7 +2234,7 @@
     expense_clerk:    { label: 'Операционные расходы',  short: 'вносит расходы',       caps: ['dash', 'tasks', 'finmodel_ops'] },
     // legacy-роли (старые аккаунты + admin_key) — маппятся на доступ
     owner:         { label: 'Владелец',               short: 'полный доступ',        caps: CAP_ALL.slice() },
-    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['dash', 'tasks', 'inbox', 'clients', 'portal'] },
+    manager:       { label: 'Менеджер',               short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal'] },
   };
   function roleInfo() { return ROLES[state.role] || ROLES.manager; }
   /* Право «mywork» не ролевое, а личное: оно есть у того, чья учетка связана со своей
@@ -19078,10 +19078,11 @@
         ? '<button class="fin-linkc" data-linkid="' + it.id + '" data-linknm="' +
           esc(it.counterparty || '') + '" title="Привязать к карточке клиента">+ клиент</button>'
         : '';
-      // «Разбить» — у строки, связанной с карточкой самозанятого: разложить сумму на задания.
+      // «Подобрать услуги» — у строки, связанной с карточкой самозанятого: собрать из суммы
+      // задания по услугам его должности (не «разбить»: слово про дробление оклада лишнее).
       var brkBtn = (canBreak && it.contractor_id)
         ? '<button class="fin-brk" data-fbrk="' + it.id +
-          '" title="Разбить сумму на задания самозанятого">разбить</button>'
+          '" title="Подобрать услуги под сумму и завести задания самозанятого">подобрать услуги</button>'
         : '';
       // Строка с пометкой о чеке выше обычной: у .trow жесткая высота 58px, и без
       // модификатора строка чека вылезала на соседнюю (проверено скрином 30.09.2026).
@@ -19264,7 +19265,7 @@
       '<div class="al-card rb-card" role="dialog" aria-modal="true">' +
         '<div class="al-head"><div>' +
           '<div class="al-eyebrow">Расчетный лист · ' + esc(month) + '</div>' +
-          '<div class="al-title">Разбить сумму на задания</div></div>' +
+          '<div class="al-title">Подобрать услуги под сумму</div></div>' +
           '<button class="al-x" id="rb-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         '<div class="al-sub">' + esc(name || 'исполнитель') + esc(sub) +
@@ -19345,12 +19346,21 @@
     ov.querySelector('#rb-x').addEventListener('click', close);
     ov.querySelector('#rb-cancel').addEventListener('click', close);
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var rbBusy = false;
     ov.querySelector('#rb-ok').addEventListener('click', function () {
+      // Блокируем кнопку на время запроса: без этого повторное нажатие заводит задания
+      // второй раз (задвоение 01.10.2026). Разблокируем только на ошибке — на успехе окно
+      // закрывается.
+      if (rbBusy) return;
       var clean = items.filter(function (it) { return it.qty > 0; });
       if (!clean.length) {
         ov.querySelector('#rb-err').textContent = 'Добавьте хотя бы одну услугу с количеством';
         return;
       }
+      var btn = ov.querySelector('#rb-ok');
+      rbBusy = true;
+      btn.disabled = true;
+      btn.textContent = 'Заводим…';
       czSend('/admin/api/contractor-reports/settlement/apply-breakdown', 'POST', {
         contractor_id: cid, period: month,
         items: clean.map(function (it) {
@@ -19359,8 +19369,14 @@
         }),
       }).then(function (res) {
         close();
-        showToast('Заведено заданий: ' + res.created + ' на ' + finRub(res.amount));
-      }).catch(function (e) { ov.querySelector('#rb-err').textContent = e.message; });
+        showToast('Заведено заданий: ' + res.created + ' на ' + finRub(res.amount) +
+                  '. Смотрите в Самозанятых');
+      }).catch(function (e) {
+        rbBusy = false;
+        btn.disabled = false;
+        btn.textContent = 'Завести задания';
+        ov.querySelector('#rb-err').textContent = e.message;
+      });
     });
   }
 
@@ -20825,6 +20841,19 @@
     if (p.length !== 2) return m || '';
     return (FIN_MONTHS_NOM[(+p[1]) - 1] || '') + ' ' + p[0];
   }
+  // День из ГГГГ-ММ-ДД как ДД.ММ — месяц и так виден в шапке блока плана.
+  function finDayShort(iso) {
+    var p = String(iso).slice(0, 10).split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] : String(iso);
+  }
+  // Последний день месяца ГГГГ-ММ как ГГГГ-ММ-ДД — потолок для поля даты расхода.
+  function finMonthLast(m) {
+    var p = (m || '').split('-');
+    if (p.length !== 2) return '';
+    var d = new Date((+p[0]), (+p[1]), 0);
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) +
+      '-' + ('0' + d.getDate()).slice(-2);
+  }
   function finMonthShift(delta) {
     var p = finPlanMonth().split('-');
     var d = new Date((+p[0]), (+p[1]) - 1 + delta, 1);
@@ -20979,9 +21008,13 @@
               it.amount, it.paid) +
           '</span>';
         }
+        // У прочего расхода показываем день, на который он запланирован (Рома 05.10.2026);
+        // у человека дата бессмысленна — его план стоит на 1-м, а платится 10-го и 20-го.
+        var when = (it.kind !== 'person' && it.date)
+          ? '<span class="plm-when">' + esc(finDayShort(it.date)) + '</span>' : '';
         return '<div class="plm-row' + (it.kind === 'person' ? ' person' : '') +
             '" data-plmid="' + esc(it.id) + '">' +
-          '<span class="plm-it">' + esc(it.item) +
+          '<span class="plm-it">' + esc(it.item) + when +
             (it.comment ? '<i>' + esc(it.comment) + '</i>' : '') + split + '</span>' +
           '<span class="plm-sum num">' + finRub(it.amount) + '</span>' +
           '<button class="plm-del" data-plmdel="' + esc(it.id) +
@@ -21099,10 +21132,17 @@
             '</div>' +
             '<div class="plm-total">итого за месяц <b id="plm-tot">' + finRub(0) + '</b></div>' +
           '</div>' +
-          // Прочий расход: одна сумма.
-          '<label class="al-f plm-expense"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
-            '<input id="plm-am" class="al-in" type="number" min="0" step="0.01" value="' +
-            (edit && line.kind !== 'person' ? v(line.amount) : '') + '"></label>' +
+          // Прочий расход: сумма и день, на который его планируют (Рома 05.10.2026).
+          '<div class="plm-expense plm-two">' +
+            '<label class="al-f"><span class="al-l">Сумма, ₽ <i>*</i></span>' +
+              '<input id="plm-am" class="al-in" type="number" min="0" step="0.01" value="' +
+              (edit && line.kind !== 'person' ? v(line.amount) : '') + '"></label>' +
+            '<label class="al-f"><span class="al-l">Когда</span>' +
+              '<input id="plm-dt" class="al-in" type="date" min="' + v(m + '-01') +
+              '" max="' + v(finMonthLast(m)) + '" value="' +
+              ((edit && line.kind !== 'person' && line.date) ? v(line.date) : v(m + '-01')) +
+              '"></label>' +
+          '</div>' +
           '<label class="al-f"><span class="al-l">Комментарий</span>' +
             '<input id="plm-cm" class="al-in" maxlength="500" value="' +
             v(edit ? (line.comment || '') : '') + '"></label>' +
@@ -21164,6 +21204,8 @@
           showToast('Укажите сумму'); return;
         }
         payload.amount = amount;
+        var dt = (el('plm-dt').value || '').trim();
+        if (dt) payload.date = dt;
       }
       if (edit) payload.id = line.id;
       close();
@@ -23207,6 +23249,10 @@
        платформы в отчёте бесполезно: важно, что это рассылка, а не новый трафик. */
     salebot: 'Рассылка по старой базе',
     max: 'MAX', vk_bot: 'Бот ВКонтакте', site: 'Наш сайт', email: 'Письмо',
+    /* Служебная дверь запуска: карточку завёл бот, выдавая человеку личную ссылку
+       на эфир. Метки у неё нет и не будет, но в «источник не размечен» она не идёт —
+       иначе рассылка получит чужую заслугу (ТЗ Олеси 6.4). */
+    bot_link: 'Бот выдал личную ссылку',
   };
 
   function mkUrl(code) {
@@ -24267,7 +24313,11 @@
       /* «из них», а не «ветка»: ответвление от основного пути читается как «из них
          столько-то». Формулировка выбрана владельцем осознанно — это не описка,
          правку уже один раз откатили чужим мержем, возвращать «ветку» не надо. */
-      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' + (s.branch ? 'из них' : (i + 1)) + '</div>' +
+      /* «рядом» — для того, что стоит ВОЗЛЕ регистраций, а не внутри них: вторая
+         дверь запуска (люди из бота) и охват. Подписать их «из них» значило бы
+         сказать, что 289 человек охвата входят в 65 заявок с формы. */
+      '<div class="ls-i' + (s.branch ? ' br' : ' num') + '">' +
+        (s.aside ? 'рядом' : s.branch ? 'из них' : (i + 1)) + '</div>' +
       '<div class="ls-v num">' + val + '</div>' +
       '<div class="ls-t">' + esc(s.title) + '</div>' +
       (s.note ? '<div class="ls-s">' + esc(s.note) + '</div>' : '') +
@@ -25861,9 +25911,11 @@
     }).join('') || '<div class="empty">Тест пока никто не запускал.</div>';
 
     var srcRows = (reg.sources || []).map(function (s) {
+      var note = s.source === 'bot_link'
+        ? 'контактов нет, человек известен боту по мессенджеру'
+        : s.source ? 'метка ' + s.source : 'ссылки раздавались без меток';
       return flatRow(s.source ? mkSourceName(s.source) : 'Источник не размечен',
-        s.source ? 'метка ' + s.source : 'ссылки раздавались без меток', s.n,
-        { block: 'source', value: s.source || '' });
+        note, s.n, { block: 'source', value: s.source || '' });
     }).join('') || '<div class="empty">Регистраций пока нет.</div>';
 
     /* ВК и MAX кликом не разворачиваются намеренно: это снимки счётчика площадки,
@@ -34958,6 +35010,23 @@
     var fresh = p.first_seen && (Date.now() - new Date(p.first_seen).getTime()) < 86400000;
     return { text: 'заходил ' + ago(p.last_seen) + ' назад', cold: days > 14, fresh: !!fresh };
   }
+  /* Как называется канал по-человечески. Второй телеграм-бот это тот же
+     телеграм человека, но другая наша дверь — различать их надо, иначе в
+     карточке две одинаковые строки «телеграм» без объяснения. */
+  var CAB_CH = {
+    telegram: 'телеграм', 'telegram:study': 'телеграм, учебный бот',
+    vk: 'вконтакте', max: 'макс', instagram: 'инстаграм',
+  };
+  /* Формулировка от НАШЕЙ стороны намеренно. «Бот не подключен» рядом с живой
+     перепиской читается как ошибка системы — именно так и вышло с Агатой Белой:
+     она боту пишет, а кабинет звал подключить бота. Вопрос тут один: дойдет ли
+     до человека наше сообщение. */
+  var CAB_BOT = {
+    on: 'кабинет пишет ему в бота',
+    off: 'бот заблокирован — сообщения не доходят',
+    no: 'кабинет написать ему не может',
+  };
+
   function buildCabinet(id) {
     var p = state._plat[id];
     var head = '<div class="uz-jh"><span>Кабинет семьи</span><i></i></div>';
@@ -34993,11 +35062,15 @@
             // имени живого человека, а имя тут и есть главное.
             ? (who ? who + ', ' : 'приглашение выпущено ') + ago(iv.at) + ' назад'
             : 'кабинета нет') + '</div>' +
-          /* Позвать можно прямо отсюда. У уже приглашенного кнопка другая по
-             смыслу: повтор отдаст ТУ ЖЕ ссылку и тот же текст, второй приглашалки
-             человек не получит. */
-          '<button type="button" class="cab-call" data-cabinvite="' + rel + '">' +
-            (iv ? 'Текст и ссылка' : 'Позвать') + '</button>' +
+          /* Позвать можно прямо отсюда, но только тем, кто семью и ведет: ссылка
+             это 30 дней доступа в кабинет ребенка, и право на нее отдельное
+             (cabinet_invite), а не общее «вижу клиентов». У уже приглашенного
+             кнопка другая по смыслу: повтор отдаст ТУ ЖЕ ссылку и тот же текст,
+             второй приглашалки человек не получит. */
+          (can('cabinet_invite')
+            ? '<button type="button" class="cab-call" data-cabinvite="' + rel + '">' +
+                (iv ? 'Текст и ссылка' : 'Позвать') + '</button>'
+            : '') +
           '</div>';
       }).join('');
     var seats = (p.people || []).length
@@ -35007,7 +35080,13 @@
             '<div class="cab-seat-r">' + (PLAT_REL[m.relation] || m.relation) + '</div>' +
             '<div class="cab-seat-n">' + esc(m.name || 'без имени') + '</div>' +
             '<div class="cab-seat-s">' + (s.fresh ? '<i class="map-new"></i><b>впервые</b> · ' : '') +
-            esc(s.text) + '</div></div>';
+            esc(s.text) + '</div>' +
+            /* Умеет ли кабинет написать этому человеку. Стоит рядом с входом
+               намеренно: «заходил в кабинет» и «до него дойдет сообщение» — два
+               разных вопроса, и до 05.10.2026 на второй в карточке ответа не было
+               вовсе. Отсюда и шло «то ли Агата подключила бота, то ли нет». */
+            '<div class="cab-seat-b ' + (m.bot || 'no') + '">' + CAB_BOT[m.bot || 'no'] +
+            '</div></div>';
         }).join('') + missing + '</div>'
       // кабинета нет вовсе — это не «мало активности», это отсутствие доступа, и
       // говорить об этом надо прямо, а не пустым местом. А если семью уже позвали,
@@ -35018,6 +35097,54 @@
             'руках. Звать заново не надо: человек получит вторую приглашалку.'
           : 'Кабинета нет ни у ученика, ни у родителя. Пока семью не завели в ' +
             'платформу, ни задачи, ни тренажеры, ни план до нее не доходят.') + '</div>';
+
+    /* Переписка: кто нам пишет и дошло ли это до кабинета.
+       Чат и кабинет жили в разных таблицах, и система отвечала про одного
+       человека по-разному: бот писал Агате Белой, а кабинет показывал ей
+       «Подключите бота» (поймала Вера 05.10.2026). Теперь оба ответа тут.
+       Связываем не молча: дело одно на маму и ребенка, в телеграм пишет
+       кто-то один, и ошибка отправит напоминания ребенку в мамин чат. Машина
+       предлагает только при точном совпадении, нажимает человек. */
+    var who = {};
+    (p.people || []).forEach(function (m) { who[m.account_id] = m; });
+    var mayLink = can('cabinet_invite') && (p.people || []).length;
+    var chats = (p.chats || []).length
+      ? '<div class="cab-h">Переписка</div><div class="cab-chats">' +
+        p.chats.map(function (c) {
+          var owner = who[c.account_id];
+          var name = owner ? (owner.name || PLAT_REL[owner.relation] || '') : '';
+          var tail;
+          if (c.state === 'linked') {
+            tail = '<span class="cab-chat-ok">' + ic('check', 13) + 'кабинет пишет сюда: ' + esc(name) + '</span>';
+          } else if (c.state === 'guess' && owner) {
+            tail = '<span class="cab-chat-q">похоже, это ' + esc(name) +
+              (c.why ? ' — ' + esc(c.why) : '') + '</span>' +
+              (mayLink ? '<button type="button" class="cab-call" data-botlink="' +
+                esc(c.channel) + '|' + esc(c.id) + '|' + esc(c.account_id) + '">Это он</button>' : '');
+          } else {
+            // Непонятно, чей чат. Показываем выбор из семьи, а не угадываем:
+            // в деле мама и ребенок, и цена ошибки — чужая переписка.
+            tail = '<span class="cab-chat-q">кабинет не связан</span>' +
+              (mayLink ? '<select class="cab-chat-sel" data-botpick="' +
+                esc(c.channel) + '|' + esc(c.id) + '">' +
+                '<option value="">кто это?</option>' +
+                p.people.map(function (m) {
+                  return '<option value="' + esc(m.account_id) + '">' +
+                    esc(m.name || PLAT_REL[m.relation] || m.relation) + '</option>';
+                }).join('') + '</select>' : '');
+          }
+          var sub = [];
+          if (c.messages) sub.push(c.messages + ' ' + plural(c.messages, 'сообщение', 'сообщения', 'сообщений'));
+          if (c.last_at) sub.push(fmtWhen(c.last_at));
+          return '<div class="cab-chat' + (c.state === 'linked' ? ' on' : '') + '">' +
+            '<div class="cab-chat-h"><span class="cab-chat-c">' +
+              esc(CAB_CH[c.channel] || c.channel) + '</span>' +
+              (c.username ? '<span class="cab-chat-n">@' + esc(c.username) + '</span>' : '') +
+              (c.title ? '<span class="cab-chat-t">' + esc(c.title) + '</span>' : '') + '</div>' +
+            (sub.length ? '<div class="cab-chat-s">' + esc(sub.join(' · ')) + '</div>' : '') +
+            '<div class="cab-chat-a">' + tail + '</div></div>';
+        }).join('') + '</div>'
+      : '';
 
     var acts = (p.activity || []).length
       ? '<div class="cab-acts">' + p.activity.map(function (a) {
@@ -35035,7 +35162,7 @@
     }).join('');
     var tname = p.tariff ? mapTariffName(p.tariff) : '';
 
-    return head + seats +
+    return head + seats + chats +
       '<div class="cab-h">Что прошел сам</div>' + acts +
       '<div class="cab-h">Этапы пути' +
         (tname ? ' <span class="cab-h-t">' + esc(tname) + '</span>'
@@ -37286,6 +37413,38 @@
             ? 'Этот человек уже в кабинете — звать некого'
             : 'Не получилось позвать — проверь сеть');
         });
+      });
+    });
+
+    // ── ПЕРЕПИСКА: сказать системе, кто из семьи сидит в этом чате ──
+    // Связываем по нажатию, а не фоном: в деле мама и ребенок, и чужая привязка
+    // отправит напоминания ребенку в мамину переписку.
+    var botLink = function (btn, parts, accId) {
+      if (!accId) return;
+      btn.disabled = true;
+      api('/admin/api/leads/' + id + '/bot-link', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: accId, channel: parts[0], chat_id: parts[1] }),
+      }).then(function () {
+        showToast('Связали: теперь кабинет пишет в этот чат');
+        delete state._plat[id]; renderDrawer(true);
+      }).catch(function (e) {
+        btn.disabled = false;
+        showToast(e.message === 'HTTP 409'
+          ? 'Не вышло: этим чатом уже входят в другой кабинет'
+          : 'Не получилось связать — проверь сеть');
+      });
+    };
+    Array.prototype.forEach.call(host.querySelectorAll('[data-botlink]'), function (b) {
+      b.addEventListener('click', function () {
+        var parts = b.getAttribute('data-botlink').split('|');
+        botLink(b, parts, parts[2]);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-botpick]'), function (sel) {
+      sel.addEventListener('change', function () {
+        var parts = sel.getAttribute('data-botpick').split('|');
+        if (sel.value) botLink(sel, parts, sel.value);
       });
     });
 
