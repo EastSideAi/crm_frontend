@@ -343,6 +343,9 @@ a { color: inherit; text-decoration: none; }
 /* Пятая плитка появляется там, где к четырем счетчикам добавляются деньги (расход на
    рекламу в маркетинге). Отдельным модификатором, а не auto-fit: в остальных местах
    плиток ровно четыре, и «умная» сетка сломала бы их на промежуточных ширинах. */
+/* Три плитки — три колонки. На сетке из четырех они оставляли пустую четверть
+   справа, и шапка читалась как недогруженная. */
+.statbar.three { grid-template-columns: repeat(3, 1fr); }
 .statbar.five { grid-template-columns: repeat(5, 1fr); }
 .statbar.five .stat { padding: 16px 18px; }
 /* Шестая — «страницу видели» из Метрики на экране запусков. Появляется не всегда:
@@ -624,6 +627,7 @@ a { color: inherit; text-decoration: none; }
 /* Строка человека кликабельна: открывает его настройки под собой. Стрелка
    справа — единственный намек, что строка живая; на открытой она повернута. */
 .tm-row[data-open] { cursor: pointer; }
+.tm-row[data-open]:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); border-radius: 12px; }
 .tm-go { flex: none; color: var(--ink-3); transition: transform .18s var(--ease), color .15s; }
 .tm-row[data-open]:hover .tm-go { color: var(--ink-2); }
 .tm-row.open .tm-go { transform: rotate(90deg); color: var(--blue); }
@@ -643,10 +647,16 @@ a { color: inherit; text-decoration: none; }
 .tm-ed-r { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .tm-ed-s { font-size: 11px; font-weight: 600; color: var(--ink-3);
   text-transform: uppercase; letter-spacing: .02em; min-width: 132px; }
-.tm-caps { display: flex; flex-wrap: wrap; gap: 5px; }
-.tm-cap { font-size: 11.5px; font-weight: 600; color: var(--ink-2); background: var(--card);
-  border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 4px 10px; }
+.tm-caps { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+/* Разделы — справка, а не переключатели. Пилюли с рамкой стояли в ряд с чипами
+   уведомлений и звали нажать, хотя нажимать нечего: доступ дает роль. */
+.tm-cap { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
 .tm-cap.none { color: var(--ink-3); }
+/* Карточка лежит на --fill, и группа чипов на --fill в ней растворялась: было
+   не видно, где кончается один набор и начинается другой. */
+.tm-ed .tm-tp { background: var(--card); box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-ed .tm-tp.bot { color: var(--ink-3); }
+.tm-ed .tm-bt-b.on { background: var(--fill); box-shadow: none; }
 .tm-ed-h { font-size: 12px; color: var(--ink-3); }
 .tm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--line-2); }
 .tm-row:first-child { border-top: none; }
@@ -655,7 +665,8 @@ a { color: inherit; text-decoration: none; }
 /* 212px — минимум, на котором рядом с длинным логином помещается «нет мессенджера»:
    строка про тишину не должна обрезаться в многоточие, ради нее подстрочник и существует */
 .tm-i { flex: 1; min-width: 212px; }
-.tm-n { font-size: 14px; font-weight: 600; }
+.tm-n { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tm-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* подстрочник в одну строку: с переносом строки сотрудников разъезжались по высоте
    и список переставал читаться как список */
 .tm-l { font-size: 12px; color: var(--ink-3); margin-top: 1px;
@@ -690,20 +701,17 @@ a { color: inherit; text-decoration: none; }
   padding: 7px 11px; outline: none; cursor: pointer; max-width: 260px; }
 .tm-mgr:hover { border-color: #DCE7FF; }
 .tm-mgr:focus { background: #fff; border-color: var(--blue); }
-/* метки у имени. «самозанятый» — нейтральный факт-ярлык (зелёный тут читался бы как
-   статус-успех). «вся команда» — переключатель (кнопка): точка-индикатор даёт
-   аффорданс тумблера, в состоянии on точка и фон несут акцентный синий */
-.tm-tags { display: inline-flex; gap: 6px; margin-left: 8px; vertical-align: middle; }
+/* метки у имени — только факты, нажимать в них нечего: «самозанятый» нейтрален
+   (зеленый читался бы как статус-успех), «вся команда» несет тихий синий.
+   Переключается это в карточке человека, тем же сегментом, что и остальное. */
+.tm-tags { display: inline-flex; flex: none; gap: 6px; vertical-align: middle; }
 .tm-tag { font: 600 10.5px 'Manrope', sans-serif; letter-spacing: .02em; text-transform: uppercase;
   padding: 2px 8px; border-radius: var(--r-pill); border: 1px solid transparent; line-height: 1.5; }
 .tm-tag.smz { background: var(--fill); color: var(--ink-2); }
-button.tm-tag.ft { cursor: pointer; background: var(--fill); color: var(--ink-3); border-color: var(--line-2);
-  display: inline-flex; align-items: center; gap: 5px; }
-button.tm-tag.ft::before { content: ''; width: 6px; height: 6px; border-radius: 50%;
-  border: 1.5px solid currentColor; box-sizing: border-box; }
-button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
-.tm-tag.ft.on { background: var(--blue-tint); color: var(--blue-d); border-color: transparent; }
-.tm-tag.ft.on::before { background: var(--blue); border-color: var(--blue); }
+/* «отключен» и «вся команда» — факты о человеке, а не заголовок строки. Без
+   заливки капс читался чернее имени и перетягивал строку на себя. */
+.tm-tag.off { background: var(--fill); color: var(--ink-3); }
+.tm-tag.wide { background: var(--blue-tint); color: var(--blue-d); }
 /* Обучение сотрудника: прошел / учится / не начал. Приемки нет — это статус. */
 .tm-tag.gd { display: inline-flex; align-items: center; gap: 4px; }
 .tm-tag.gd svg { width: 11px; height: 11px; }
@@ -720,12 +728,12 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    раскладка команды должна читаться одним взглядом по всему списку, без раскрытия */
 .tm-tp { flex: none; display: inline-flex; gap: 4px; padding: 3px; background: var(--fill);
   border-radius: var(--r-pill); }
-.tm-tp-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: transparent;
+.tm-tp-b, .tm-ft-b { font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); background: transparent;
   border: 0; border-radius: var(--r-pill); padding: 6px 10px; cursor: pointer;
   transition: .15s var(--ease); white-space: nowrap; }
-.tm-tp-b:hover { color: var(--ink); }
-.tm-tp-b.on { background: var(--blue); color: #fff; }
-.tm-tp-b:disabled { opacity: .55; cursor: default; }
+.tm-tp-b:hover, .tm-ft-b:hover { color: var(--ink); }
+.tm-tp-b.on, .tm-ft-b.on { background: var(--blue); color: #fff; }
+.tm-tp-b:disabled, .tm-ft-b:disabled { opacity: .55; cursor: default; }
 /* Две группы чипов (темы клиентов и виды уведомлений бота) идут отдельной строкой под
    именем на всю ширину: в одну строку с почтой и ролью они не влезают, а прятать чипы
    за прокруткой нельзя — раскладка должна читаться одним взглядом. */
@@ -743,9 +751,19 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
   /* Метка обучения переносила имя на третью строку. Это справка руководителю,
      и смотрят ее с компьютера; «отключен» остается — он меняет смысл строки. */
   .tm-node-h .tm-tag.gd { display: none; }
+  /* «самозанятый» — тоже справка для компьютера. С двумя метками в строке имя
+     ужималось в ноль: у отключенного подрядчика от «Вера Садовая» не оставалось
+     ни буквы, одни метки. Имя важнее метки, поэтому метка уходит, а не имя. */
+  .tm-node-h .tm-tag.smz { display: none; }
+  .tm-node-h .tm-nm { min-width: 62px; }
   .tm-fold { padding: 0 2px; }
   /* Шапка на телефоне: заголовок, счетчик и кнопки в первой строке, поиск во
      второй. Длинное пояснение про роли тут только съедает экран. */
+  /* Шесть кнопок в одну капсулу на телефоне не влезают, а прокрутка вбок прячет
+     «Застряло» так, что о нем никто не узнает. Переносим на вторую строку внутри
+     той же капсулы; черта между группами там не нужна — строка и есть граница. */
+  .pay-seg.tm-seg { flex-wrap: wrap; max-width: 100%; }
+  .pay-seg.tm-seg .seg-div { display: none; }
   .tm-head { flex-wrap: wrap; row-gap: 10px; }
   .tm-head .s { display: none; }
   .tm-q { width: 100%; order: 9; }
@@ -813,7 +831,10 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
      margin-left обнуляем: он от блока 1180px, а тут ширина уже полная — иначе «Продажи»
      уезжают за край карточки */
   .tm-tp { order: 2; width: 100%; margin-left: 0; justify-content: space-between; }
-  .tm-tp-b { flex: 1; }
+  .tm-tp-b, .tm-ft-b { flex: 1; }
+  /* В карточке человека ряды идут по порядку сверху вниз, порядок строки
+     сотрудника им не нужен. */
+  .tm-ed .tm-tp { order: 0; }
   .tm-add-g { grid-template-columns: 1fr; }
   .tm-add-a { flex-wrap: wrap; }
   .tm-add-s { width: 100%; margin-right: 0; }
@@ -1859,6 +1880,9 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
 .pay-seg { display: inline-flex; gap: 3px; padding: 4px; border-radius: 11px; background: var(--fill); align-self: flex-start; }
 .pay-seg button { color: var(--ink-2); font: 600 12px 'Manrope', sans-serif; padding: 7px 13px; border-radius: 8px; transition: .15s; }
 .pay-seg button.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
+/* Черта внутри капсулы: слева период, справа управленческий срез. Две отдельные
+   капсулы подряд выглядели как два одинаковых фильтра. */
+.pay-seg .seg-div { width: 1px; align-self: stretch; margin: 4px 5px; background: var(--line-2); flex: none; }
 .pay-seg button[data-v="paid"].on { color: var(--green-ink); }
 .pay-seg button[data-v="refunded"].on { color: var(--red-ink); }
 .pay-seg button[data-v="signed"].on { color: var(--green-ink); }   /* документы исполнителя */
@@ -4686,6 +4710,7 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .sp6 { grid-column: 1 / span 12; }
   .statbar, .statbar.five, .statbar.six { grid-template-columns: repeat(2, 1fr); padding: 6px; gap: 2px; }
   .stat, .statbar.five .stat, .statbar.six .stat { padding: 14px 16px; }
+  .statbar.three { grid-template-columns: repeat(3, 1fr); }
   .stat .sv { font-size: 32px; }
   .stat + .stat::before { display: none; }
   .sg2 { grid-template-columns: 1fr; }
@@ -4812,6 +4837,17 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 @media (max-width: 480px) {
   .statbar, .statbar.five, .statbar.six { grid-template-columns: 1fr; }
   .stat + .stat::before { display: none; }
+  /* Плитки в столбик занимали весь первый экран, и список начинался ниже сгиба.
+     Кладем их в две колонки и убираем сноску: шапка укладывается в две невысокие
+     строки, содержимое видно сразу. Так ведут себя полосы с короткими числами —
+     те, что помечены three или compact; у денег значение в половину ширины
+     переносится, поэтому общее правило остается столбиком. */
+  .statbar.three, .statbar.compact { grid-template-columns: 1fr 1fr; }
+  .statbar.three .stat, .statbar.compact .stat { padding: 11px 14px; }
+  .statbar.three .stat:last-child { grid-column: 1 / -1; }
+  .statbar.three .stat .sl, .statbar.compact .stat .sl { font-size: 11.5px; }
+  .statbar.three .stat .sv, .statbar.compact .stat .sv { font-size: 26px; margin-top: 8px; }
+  .statbar.three .stat .sd, .statbar.compact .stat .sd { display: none; }
   /* Пять плиток одной колонкой — 650px скролла до содержимого, и последняя
      (на «Запусках» это «До эфира») уезжала за экран. Пятая — во всю ширину. */
   .statbar.five, .statbar.six { grid-template-columns: 1fr 1fr; }
@@ -10800,6 +10836,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-row { display: flex; align-items: center; gap: 14px; padding: 12px 0;
   border-top: 1px solid var(--line-2); cursor: pointer; }
 .mx-row:first-child { border-top: none; }
+/* Раскрытие встречи работает и с клавиатуры — фокус виден тем же рецептом, что
+   у остальных кликабельных строк CRM. */
+.mx-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); border-radius: 12px; }
+.mx-row:hover .mx-go { color: var(--ink-2); }
 .mx-row.open { background: var(--fill); border-radius: 12px 12px 0 0;
   padding-left: 10px; padding-right: 10px; border-top-color: transparent; }
 .mx-when { flex: none; width: 92px; display: flex; flex-direction: column; }
