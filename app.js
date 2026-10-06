@@ -100,6 +100,7 @@
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
     glMode: 'cards', gantt: null, ganttWeeks: 12,   // «Цели»: карточки или полосы по неделям
+    mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
     schedWeek: {}, schedOff: 0, schedDayOff: 0, schedView: 'week', schedWho: '', schedEdit: false,
@@ -133,7 +134,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -146,6 +147,7 @@
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
         attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
         glMode: state.glMode || 'cards', ganttWeeks: state.ganttWeeks || 12,
+        mxTab: state.mxTab || 'soon',
       }));
     } catch (e) {}
   }
@@ -3070,13 +3072,15 @@
       var mxNew = mxl ? mxl.filter(function (m) { return m.state === 'new' || m.state === 'failed'; }).length : 0;
       var mxPhr = !mxl ? 'Собираю встречи команды.'
         : mxLive.length ? '<b>' + mxLive.length + ' ' + plural(mxLive.length, 'встреча идет', 'встречи идут', 'встреч идет') +
-            ' прямо сейчас.</b> Нажми «Войти» в строке, чтобы присоединиться.'
+            ' прямо сейчас.</b> Она первой во вкладке «Ближайшие».'
         : !mxl.length ? 'Встреч за полтора месяца нет.'
         : mxNew ? 'Записей без разбора: <b>' + mxNew + '</b>. У остальных есть конспект и договоренности.'
         : 'Все записи разобраны: конспект, договоренности и задачи на месте.';
       html = '<div><h2>EastSide Meeting</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('mic', 13) + '</span><span>' + mxPhr + '</span></div></div>' +
-        (meetOn() ? '<button class="bp sm" id="mx-new">' + ic('plus', 14) + '<span>Новая встреча</span></button>' : '');
+        // Кнопки «начать» и «запланировать» стоят на самом экране, большими
+        // карточками. Третья такая же в шапке — тот же выбор дважды.
+        '';
     }
     if (state.page === 'inbox') {
       html = '';  // инбокс на всю высоту, без шапки
@@ -12588,14 +12592,15 @@
      заведение встречи и ссылка — все остальное происходит на самой странице
      комнаты (backend web/meet.html). Запись, расшифровка и черновик задач
      приходят потом в тот же «Импорт встречи», что и сейчас. */
-  function openMeetRoom() {
+  function openMeetRoom(mode) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
-          '<div><div class="al-eyebrow">Встречи</div><div class="al-title">Своя встреча</div></div>' +
+          '<div><div class="al-eyebrow">EastSide Meeting</div><div class="al-title">' +
+            (mode === 'plan' ? 'Запланировать встречу' : 'Своя встреча') + '</div></div>' +
           '<button class="al-x" id="mr-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
         '<div class="al-sub">Заведу комнату и дам ссылку. Заходят из браузера, ' +
@@ -12613,6 +12618,23 @@
               '<button type="button" data-kind="sales">Ученик или клиент</button>' +
             '</div></div>' +
           '<div class="al-hint" id="mr-kindnote"></div>' +
+          /* Когда. «Сейчас» — обычный случай и стоит первым; «Назначить» достает
+             дату и время, и только тогда появляется смысл звать людей заранее. */
+          '<div class="al-f"><span class="al-l">Когда</span>' +
+            '<div class="due-seg" id="mr-when">' +
+              '<button type="button" class="on" data-when="now">Сейчас</button>' +
+              '<button type="button" data-when="plan">Назначить</button>' +
+            '</div></div>' +
+          '<div class="al-f mr-at" id="mr-at" hidden>' +
+            '<span class="al-l">Дата и время</span>' +
+            '<div class="mr-atrow">' +
+              '<input id="mr-date" class="al-in" type="date">' +
+              '<input id="mr-time" class="al-in" type="time" step="900" value="11:00">' +
+            '</div></div>' +
+          '<div class="al-f"><span class="al-l">Кого позвать</span>' +
+            '<div id="mr-who"></div>' +
+            '<span class="al-hint">Ссылку отправлю им ботом сразу. ' +
+              'Назначенную встречу напомню за сутки и за час.</span></div>' +
           '<div class="al-ai-note" id="mr-note"></div>' +
         '</div>' +
         '<div class="al-foot" id="mr-foot">' +
@@ -12657,6 +12679,38 @@
       });
     });
 
+    var when = mode === 'plan' ? 'plan' : 'now';
+    if (when === 'plan') {
+      Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
+        x.classList.toggle('on', x.getAttribute('data-when') === 'plan');
+      });
+      el('mr-at').hidden = false;
+      var d0 = new Date(Date.now() + 86400000);
+      el('mr-date').value = d0.getFullYear() + '-' +
+        ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
+    }
+    Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (b) {
+      b.addEventListener('click', function () {
+        when = b.getAttribute('data-when');
+        Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
+          x.classList.toggle('on', x === b);
+        });
+        el('mr-at').hidden = when !== 'plan';
+        if (when === 'plan' && !el('mr-date').value) {
+          // По умолчанию завтра: встречу назначают на будущее, и пустое поле
+          // даты человеку приходится заполнять каждый раз одним и тем же.
+          var d = new Date(Date.now() + 86400000);
+          el('mr-date').value = d.getFullYear() + '-' +
+            ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+        }
+      });
+    });
+    var pick = null;
+    loadTaskPeople(function (people) {
+      var box = el('mr-who');
+      if (box) pick = peoplePick(box, [], people, { word: 'участник' });
+    });
+
     setTimeout(function () { var t = el('mr-title'); if (t) t.focus(); }, 60);
     el('mr-title').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') el('mr-go').click();
@@ -12666,15 +12720,22 @@
       var go = this;
       var title = (el('mr-title').value || '').trim();
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
+      var body = { title: title, kind: kind, invite: pick ? pick.get() : [] };
+      if (when === 'plan') {
+        var day = el('mr-date').value, hm = el('mr-time').value;
+        if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
+        body.starts_at = day + 'T' + hm + ':00';
+      }
       go.disabled = true; go.classList.add('loading');
-      apiSend('/admin/api/meet/rooms', 'POST', { title: title, kind: kind },
+      apiSend('/admin/api/meet/rooms', 'POST', body,
         function (r) { ready(r); },
         function (code, e) {
           go.disabled = false; go.classList.remove('loading');
           var why = e && e.body && e.body.detail;
-          show(code === 503
-            ? (why || 'Своя комната еще не включена, идет настройка сервера')
-            : 'Не получилось завести встречу, попробуй еще раз', true);
+          show(code === 400 ? (why || 'Не понял время встречи')
+            : code === 503
+              ? (why || 'Своя комната еще не включена, идет настройка сервера')
+              : 'Не получилось завести встречу, попробуй еще раз', true);
         });
     });
 
@@ -12684,11 +12745,24 @@
       // Список комнат под расписанием перечитываем: новая встреча должна быть
       // там же, где человек ее потом ищет, а не только в этом окне.
       loadMeetRooms();
+      // Раздел встреч перечитываем: назначенная встреча должна появиться в
+      // «Ближайших» сразу, а не после перезагрузки страницы.
+      state.meetx = null;
+      if (state.page === 'meetx') renderView();
+      var told = (r.invited || []).length;
+      var note = r.starts_at
+        ? 'Встреча назначена. ' + (told
+            ? 'Ссылку уже отправил ботом: ' + told + ' ' + plural(told, 'человек', 'человека', 'человек') +
+              '. Напомню всем за сутки и за час.'
+            : 'Напомню о ней за сутки и за час.')
+        : (told
+            ? 'Ссылку уже отправил ботом: ' + told + ' ' + plural(told, 'человек', 'человека', 'человек') + '.'
+            : 'Открывается в браузере, на телефоне тоже. Кто получил ссылку, тот войдет, ' +
+              'поэтому не выкладывай ее публично.');
       el('mr-body').innerHTML =
         '<label class="al-f"><span class="al-l">Ссылка на встречу</span>' +
           '<input id="mr-link" class="al-in" type="text" readonly value="' + esc(humanUrl(r.url)) + '"></label>' +
-        '<div class="al-ai-note">Открывается в браузере, на телефоне тоже. ' +
-          'Кто получил ссылку, тот войдет, поэтому не выкладывай ее публично.</div>';
+        '<div class="al-ai-note">' + esc(note) + '</div>';
       el('mr-foot').innerHTML =
         '<button class="al-cancel" id="mr-done">Закрыть</button>' +
         '<button class="bp al-save" id="mr-copy">' + ic('copy', 14) + 'Скопировать</button>';
@@ -22831,7 +22905,6 @@
   }
   function mxRow(m) {
     var st = MX_STATE[m.state] || MX_STATE.ended;
-    var open = state.meetxOpen === m.key;
     var marks = '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     if (m.agreements) marks += '<span class="mx-tag">' + ic('check', 11) +
       m.agreements + ' ' + plural(m.agreements, 'договоренность', 'договоренности', 'договоренностей') + '</span>';
@@ -22844,10 +22917,10 @@
     if (m.client_name) sub.push('ученик: ' + esc(m.client_name));
     if (m.minutes) sub.push(m.minutes + ' мин');
     if (m.people) sub.push(m.people + ' ' + plural(m.people, 'участник', 'участника', 'участников'));
-    /* Раскрывашка — настоящая кнопка, а не роль на всей строке: у идущей встречи
-       внутри строки лежит ссылка «Войти», и кнопка со ссылкой внутри — ловушка
-       для клавиатуры и озвучки. Мышью по-прежнему работает вся строка. */
-    return '<div class="mx-row' + (open ? ' open' : '') + '" data-mx="' + esc(m.key) + '">' +
+    /* Кнопка «открыть», а не роль на всей строке: у идущей встречи внутри строки
+       лежит ссылка «Войти», и кнопка со ссылкой внутри — ловушка для клавиатуры
+       и озвучки. Мышью по-прежнему работает вся строка. */
+    return '<div class="mx-row" data-mx="' + esc(m.key) + '">' +
         '<div class="mx-when"><span class="mx-day">' + esc(dayLabel(m.at)) + '</span>' +
           '<span class="mx-time">' + esc(hhmm(m.at)) + '</span></div>' +
         '<div class="mx-main"><div class="mx-t">' + esc(m.title || 'Встреча') + '</div>' +
@@ -22856,11 +22929,9 @@
         (m.url && m.state === 'live'
           ? '<a class="bp sm mx-join" href="' + esc(m.url) + '" target="_blank" rel="noopener">Войти</a>'
           : '') +
-        '<button type="button" class="mx-go" data-mxgo="' + esc(m.key) + '" aria-expanded="' +
-          (open ? 'true' : 'false') + '" aria-label="' +
-          (open ? 'Свернуть встречу' : 'Показать встречу') + ': ' + esc(m.title || 'Встреча') + '">' +
-          ic('go', 14) + '</button>' +
-      '</div>' + (open ? mxCard(m) : '');
+        '<button type="button" class="mx-go" data-mxgo="' + esc(m.key) + '" aria-label="' +
+          'Открыть встречу: ' + esc(m.title || 'Встреча') + '">' + ic('go', 14) + '</button>' +
+      '</div>';
   }
   function hhmm(iso) {
     if (!iso) return '';
@@ -22919,90 +22990,135 @@
     return '<div class="mx-card">' + parts.join('') +
       (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
   }
-  function renderMeetx(view) {
-    if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
-    if (state.meetx === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
-      return;
-    }
-    var d = state.meetx;
-    var list = d.meetings || [];
-    // Чипы направлений и «мои/все» — один ряд: это два среза одного вопроса
-    // «чьи встречи смотрим».
-    var chips = '<div class="wk-top mx-top"><div class="dept-seg pay-seg">' +
-      '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
-      (d.depts || []).map(function (x) {
-        return '<button type="button" class="' + (state.meetxDept === x.id ? 'on' : '') +
-          '" data-mxdept="' + esc(x.id) + '">' + esc(x.label) + '</button>';
-      }).join('') + '</div><span class="wk-spacer"></span>' +
-      (d.can_all ? '<div class="pay-seg plan-seg">' +
-        '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
-        '<button type="button" class="' + (state.meetxScope === 'my' ? 'on' : '') + '" data-mxscope="my">Мои</button>' +
-        '</div>' : '') + '</div>';
+  /* ── Раздел EastSide Meeting ───────────────────────────────────────────────
+     Устроен как сервис встреч, а не как список записей: сверху два действия
+     («начать» и «назначить»), под ними две вкладки — что будет и что было.
+     Павел 06.10.2026: «хочу похожий на зум: начать встречу, запланировать
+     встречу, запись встреч, и чтобы я проваливался внутрь этого раздела».
 
-    var live = list.filter(function (m) { return m.state === 'live'; });
-    var withText = list.filter(function (m) { return m.has_text; }).length;
-    var agreed = list.reduce(function (a, m) { return a + (m.agreements || 0); }, 0);
-    var bar = statBar([
-      { label: 'Встреч за 45 дней', value: list.length, sub: live.length ? live.length + ' идет сейчас' : 'за полтора месяца' },
-      { label: 'С расшифровкой', value: withText, sub: withText ? 'можно перечитать' : 'записи пока нет' },
-      { label: 'Договоренностей', value: agreed, sub: 'задач из встреч' },
-    ], 'three');
-
-    view.innerHTML = chips + bar +
-      (list.length
-        ? '<div class="card mx-list">' + list.map(mxRow).join('') + '</div>'
-        : '<div class="card"><div class="empty">Встреч за этот срок нет. ' +
-          'Заведи комнату кнопкой «Новая встреча» — записи, конспект и задачи появятся здесь сами.</div></div>');
-
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
-      b.addEventListener('click', function () {
-        state.meetxDept = b.getAttribute('data-mxdept');
-        state.meetx = null; state.meetxOpen = null; renderView();
-      });
+     Проваливание буквальное: встреча открывается своим экраном с кнопкой
+     «назад», а не раскрывается строкой в списке. Внутри встречи текста на
+     несколько экранов — конспект, договоренности, задачи, расшифровка, — и в
+     раскрытой строке он тонул между соседями. */
+  function mxActions() {
+    if (!meetOn()) return '';
+    return '<div class="mx-top-acts">' +
+      '<button type="button" class="mx-act go" id="mx-start">' +
+        '<span class="mx-act-i">' + ic('mic', 17) + '</span>' +
+        '<span class="mx-act-b"><b>Начать встречу</b>' +
+          '<i>комната откроется сразу</i></span></button>' +
+      '<button type="button" class="mx-act" id="mx-plan">' +
+        '<span class="mx-act-i">' + ic('cal', 17) + '</span>' +
+        '<span class="mx-act-b"><b>Запланировать</b>' +
+          '<i>позову людей и напомню</i></span></button>' +
+    '</div>';
+  }
+  function mxTabs() {
+    var soon = mxSoonList().length;
+    return '<div class="pay-seg plan-seg mx-tabs">' +
+      '<button type="button" class="' + (state.mxTab === 'rec' ? '' : 'on') + '" data-mxtab="soon">' +
+        'Ближайшие' + (soon ? '<i class="mx-tn num">' + soon + '</i>' : '') + '</button>' +
+      '<button type="button" class="' + (state.mxTab === 'rec' ? 'on' : '') + '" data-mxtab="rec">Записи</button>' +
+      '</div>';
+  }
+  /* Что впереди: идущие прямо сейчас и назначенные на будущее. Прошедшие и
+     отмененные сюда не попадают — для них есть «Записи». */
+  function mxSoonList() {
+    var d = state.meetRooms;
+    if (!d || d === 'none' || d === 'loading' || !d.rooms) return [];
+    var now = Date.now();
+    return d.rooms.filter(function (r) {
+      if (r.status === 'cancel' || r.status === 'failed') return false;
+      if (r.status === 'live') return true;
+      if (!r.starts_at) return false;
+      // Полчаса после начала встреча еще «ближайшая»: люди опаздывают, и
+      // пропавшая из списка ссылка выглядит как отмена.
+      return new Date(r.starts_at).getTime() > now - 30 * 60000;
+    }).sort(function (a, b) {
+      return new Date(a.starts_at || 0) - new Date(b.starts_at || 0);
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
-      b.addEventListener('click', function () {
-        state.meetxScope = b.getAttribute('data-mxscope');
-        state.meetx = null; state.meetxOpen = null; renderView();
-      });
-    });
-    /* Фокус возвращаем следующим тиком и после КАЖДОЙ перерисовки: старая кнопка
-       умирает вместе с разметкой, браузер сбрасывает фокус на body уже после
-       обработчика, а когда приезжает карточка встречи, экран перерисовывается
-       второй раз. Без второго возврата Tab начинался бы заново от шапки. */
-    function mxFocus(kb, key) {
-      if (!kb) return;
-      setTimeout(function () {
-        var again = document.querySelector('[data-mxgo="' + key + '"]');
-        if (again) again.focus();
-      }, 0);
+  }
+  function mxSoonRow(r) {
+    var live = r.status === 'live';
+    var guests = r.invited_names || [];
+    var sub = [];
+    if (r.created_by_name) sub.push('завел ' + esc(r.created_by_name));
+    if (guests.length) {
+      sub.push('позваны: ' + esc(guests.slice(0, 3).join(', ')) +
+        (guests.length > 3 ? ' и еще ' + (guests.length - 3) : ''));
+    } else if (!live) {
+      sub.push('никого не позвали');
     }
-    function mxToggle(key, kb) {
-      state.meetxOpen = state.meetxOpen === key ? null : key;
-      renderView();
-      mxFocus(kb, key);
-      if (state.meetxOpen && !state.meetxCard[key]) {
-        api('/admin/api/meet/journal/' + encodeURIComponent(key)).then(function (c) {
-          state.meetxCard[key] = c || 'none';
-          if (state.page === 'meetx') { renderView(); mxFocus(kb, key); }
-        }).catch(function () {
-          state.meetxCard[key] = 'none';
-          if (state.page === 'meetx') { renderView(); mxFocus(kb, key); }
-        });
-      }
+    return '<div class="mx-soon' + (live ? ' live' : '') + '" data-room="' + r.id + '">' +
+      '<div class="mx-when">' +
+        (live ? '<span class="mx-day live">сейчас</span>'
+              : '<span class="mx-day">' + esc(dayLabel(r.starts_at)) + '</span>' +
+                '<span class="mx-time">' + esc(hhmm(r.starts_at)) + '</span>') +
+      '</div>' +
+      '<div class="mx-main"><div class="mx-t">' + esc(r.title || 'Встреча') + '</div>' +
+        '<div class="mx-s">' + sub.join(' · ') + '</div></div>' +
+      // Синей кнопкой — только то, что происходит сейчас. У назначенной встречи
+      // вход тоже открыт, но это не действие дня, и кричать о нем незачем.
+      (live
+        ? '<a class="bp sm mx-join" href="' + esc(r.url) + '" target="_blank" rel="noopener">Войти</a>'
+        : '<a class="qchip mx-join" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+            ic('ext', 13) + 'Открыть</a>') +
+      '<button type="button" class="qchip mx-copy" data-mxlink="' + esc(r.url) + '" ' +
+        'title="Скопировать ссылку">' + ic('copy', 13) + '</button>' +
+      (live ? '' : '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
+    '</div>';
+  }
+  function renderMeetxSoon(view) {
+    var list = mxSoonList();
+    var d = state.meetRooms;
+    if (!d || d === 'loading') { return '<div class="card">' + meetRoomsSkeleton() + '</div>'; }
+    if (!meetOn()) {
+      return '<div class="card"><div class="empty">Свои встречи на этом контуре еще не включены. ' +
+        'Пока их настраивают, пользуйтесь зумом — он на вкладке «Встречи» в задачах.</div></div>';
     }
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxgo]'), function (b) {
-      b.addEventListener('click', function () {
-        mxToggle(b.getAttribute('data-mxgo'), document.activeElement === b);
-      });
+    if (!list.length) {
+      return '<div class="card"><div class="empty">Ничего не назначено. ' +
+        'Нажми «Запланировать» — выберешь время, позовешь людей, а ссылку и напоминания я разошлю сам.</div></div>';
+    }
+    return '<div class="card mx-list">' + list.map(mxSoonRow).join('') + '</div>';
+  }
+  /* Экран одной встречи. Шапка с «назад» — единственный способ вернуться:
+     вкладка раздела под ней уже не нужна, человек внутри одной встречи. */
+  function renderMeetxOne(view, key) {
+    var list = (state.meetx && state.meetx !== 'none' ? state.meetx.meetings : []) || [];
+    var m = list.filter(function (x) { return x.key === key; })[0];
+    if (!m) { state.meetxOpen = null; renderMeetx(view); return; }
+    var st = MX_STATE[m.state] || MX_STATE.ended;
+    var sub = [];
+    if (m.by) sub.push(esc(m.by));
+    if (m.dept) sub.push(esc(deptLabel(m.dept)));
+    sub.push(MX_KIND[m.kind] || MX_KIND.unknown);
+    if (m.minutes) sub.push(m.minutes + ' мин');
+    if (m.people) sub.push(m.people + ' ' + plural(m.people, 'участник', 'участника', 'участников'));
+
+    view.innerHTML =
+      '<div class="mx-one">' +
+        '<button type="button" class="qchip mx-back" id="mx-back">' + ic('go', 13) + 'Все встречи</button>' +
+        '<div class="mx-one-h">' +
+          '<div class="mx-one-t">' + esc(m.title || 'Встреча') +
+            '<span class="sev ' + st.cls + '">' + st.label + '</span></div>' +
+          '<div class="mx-one-s">' + esc(dayLabel(m.at)) + ', ' + esc(hhmm(m.at)) +
+            ' · ' + sub.join(' · ') + '</div>' +
+        '</div>' +
+        (m.url && m.state === 'live'
+          ? '<a class="bp mx-one-go" href="' + esc(m.url) + '" target="_blank" rel="noopener">Войти во встречу</a>'
+          : '') +
+        mxCard(m) +
+      '</div>';
+
+    el('mx-back').addEventListener('click', function () {
+      state.meetxOpen = null; renderView();
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
-      r.addEventListener('click', function (e) {
-        if (e.target.closest('a, button')) return;
-        mxToggle(r.getAttribute('data-mx'), false);
-      });
-    });
+    wireMeetxCard(view, m);
+  }
+  /* Обработчики карточки встречи: расшифровка по кнопке, задача, ученик. Живут
+     отдельно, потому что карточка рисуется и на экране встречи, и в списке. */
+  function wireMeetxCard(view, m) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-mxtext');
@@ -23022,6 +23138,112 @@
         state.page = 'leads'; renderSide(); renderHead();
         fetchDetail(b.getAttribute('data-mxlead'));
         openDrawer(b.getAttribute('data-mxlead'));
+      });
+    });
+  }
+  function renderMeetx(view) {
+    if (state.meetRooms === null || state.meetRooms === undefined) loadMeetRooms();
+    if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
+    if (state.meetx === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
+      return;
+    }
+    if (state.meetxOpen) {
+      // Карточку встречи тянем до отрисовки экрана: внутри нее весь смысл.
+      if (!state.meetxCard[state.meetxOpen]) {
+        var k = state.meetxOpen;
+        api('/admin/api/meet/journal/' + encodeURIComponent(k)).then(function (c) {
+          state.meetxCard[k] = c || 'none';
+          if (state.page === 'meetx') renderView();
+        }).catch(function () {
+          state.meetxCard[k] = 'none';
+          if (state.page === 'meetx') renderView();
+        });
+      }
+      return renderMeetxOne(view, state.meetxOpen);
+    }
+
+    var d = state.meetx;
+    var list = d.meetings || [];
+    var rec = state.mxTab === 'rec';
+    // Чипы направлений и «мои/все» — один ряд: это два среза одного вопроса
+    // «чьи встречи смотрим». В «Ближайших» они не нужны: там три строки.
+    var chips = rec
+      ? '<div class="wk-top mx-top"><div class="dept-seg pay-seg">' +
+        '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
+        (d.depts || []).map(function (x) {
+          return '<button type="button" class="' + (state.meetxDept === x.id ? 'on' : '') +
+            '" data-mxdept="' + esc(x.id) + '">' + esc(x.label) + '</button>';
+        }).join('') + '</div><span class="wk-spacer"></span>' +
+        (d.can_all ? '<div class="pay-seg plan-seg">' +
+          '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
+          '<button type="button" class="' + (state.meetxScope === 'my' ? 'on' : '') + '" data-mxscope="my">Мои</button>' +
+          '</div>' : '') + '</div>'
+      : '';
+
+    var body;
+    if (rec) {
+      var withText = list.filter(function (m) { return m.has_text; }).length;
+      var agreed = list.reduce(function (a, m) { return a + (m.agreements || 0); }, 0);
+      body = statBar([
+        { label: 'Встреч за 45 дней', value: list.length, sub: 'за полтора месяца' },
+        { label: 'С расшифровкой', value: withText, sub: withText ? 'можно перечитать' : 'записи пока нет' },
+        { label: 'Договоренностей', value: agreed, sub: 'задач из встреч' },
+      ], 'three') +
+        (list.length
+          ? '<div class="card mx-list">' + list.map(mxRow).join('') + '</div>'
+          : '<div class="card"><div class="empty">Записей за этот срок нет. ' +
+            'Они появляются сами после встречи: расшифровка, конспект и задачи.</div></div>');
+    } else {
+      body = renderMeetxSoon(view);
+    }
+
+    view.innerHTML = mxActions() + '<div class="wk-top mx-tabrow">' + mxTabs() + '</div>' + chips + body;
+
+    el('mx-start') && el('mx-start').addEventListener('click', function () { openMeetRoom('now'); });
+    el('mx-plan') && el('mx-plan').addEventListener('click', function () { openMeetRoom('plan'); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtab]'), function (b) {
+      b.addEventListener('click', function () {
+        state.mxTab = b.getAttribute('data-mxtab');
+        if (state.mxTab === 'soon' && !state.meetRooms) loadMeetRooms();
+        saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxDept = b.getAttribute('data-mxdept');
+        state.meetx = null; state.meetxOpen = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxScope = b.getAttribute('data-mxscope');
+        state.meetx = null; state.meetxOpen = null; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxlink]'), function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-mxlink'), b); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxcancel]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-mxcancel');
+        b.disabled = true;
+        apiSend('/admin/api/meet/rooms/' + id + '/cancel', 'POST', {}, function (r) {
+          showToast(r && r.told ? 'Встреча отменена, сказал ' + r.told + ' ' +
+            plural(r.told, 'человеку', 'людям', 'людям') : 'Встреча отменена');
+          state.meetRooms = null; loadMeetRooms(); renderView();
+        }, function () { b.disabled = false; showToast('Не получилось отменить'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxgo]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxOpen = b.getAttribute('data-mxgo'); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
+      r.addEventListener('click', function (e) {
+        if (e.target.closest('a, button')) return;
+        state.meetxOpen = r.getAttribute('data-mx'); renderView();
       });
     });
   }
@@ -23119,6 +23341,16 @@
           tmTopicChips(u) + '</div>' +
         '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-bot-' + u.id + '">Бот задач</span>' +
           tmBotChips(u) + '</div>' +
+        (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-sb-' + u.id + '">Песочница</span>' +
+          '<span class="pay-seg sb-seg" data-uid="' + u.id + '" role="group" ' +
+            'aria-labelledby="tm-s-sb-' + u.id + '">' +
+            '<button type="button" class="tm-ft-b' + (u.sandbox ? '' : ' on') + '" data-sb="0" ' +
+              'aria-pressed="' + (u.sandbox ? 'false' : 'true') + '">Нет</button>' +
+            '<button type="button" class="tm-ft-b' + (u.sandbox ? ' on' : '') + '" data-sb="1" ' +
+              'aria-pressed="' + (u.sandbox ? 'true' : 'false') + '">Есть</button>' +
+          '</span>' +
+          '<span class="tm-ed-h sb-h">Свежие задачи этого человека сразу встают в очередь ' +
+            'его агента. Деньги, доступы и переписку с клиентами агент не берет.</span></div>' : '') +
         (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-ft-' + u.id + '">Задачи команды</span>' +
           '<span class="pay-seg ft-seg" data-uid="' + u.id + '" role="group" ' +
             'aria-labelledby="tm-s-ft-' + u.id + '">' +
@@ -23386,6 +23618,40 @@
     });
     /* «Вся команда» — только верхняя роль (кнопка есть лишь у iAmTop). Красим сразу,
        правдой считаем ответ сервера: не сохранилось — возвращаем как было. */
+    /* Песочница у человека: тот же сегмент, что «Задачи команды». Красим сразу,
+       правдой считаем ответ сервера. */
+    Array.prototype.forEach.call(view.querySelectorAll('.sb-seg'), function (seg) {
+      var uid = seg.getAttribute('data-uid');
+      var btns = seg.querySelectorAll('.tm-ft-b');
+      function paint(on) {
+        Array.prototype.forEach.call(btns, function (x) {
+          var mine = (x.getAttribute('data-sb') === '1') === on;
+          x.classList.toggle('on', mine);
+          x.setAttribute('aria-pressed', mine ? 'true' : 'false');
+        });
+      }
+      Array.prototype.forEach.call(btns, function (b) {
+        b.addEventListener('click', function () {
+          var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+          if (!u) return;
+          var next = b.getAttribute('data-sb') === '1';
+          if (next === !!u.sandbox) return;
+          u.sandbox = next;
+          paint(next);
+          Array.prototype.forEach.call(btns, function (x) { x.disabled = true; });
+          apiSend('/admin/api/users/' + uid, 'PATCH', { sandbox: next }, function () {
+            Array.prototype.forEach.call(btns, function (x) { x.disabled = false; });
+            showToast(next
+              ? 'Агент ' + (u.name || u.login) + ' будет брать ее задачи'
+              : 'Задачи ' + (u.name || u.login) + ' агент больше не берет');
+          }, function () {
+            Array.prototype.forEach.call(btns, function (x) { x.disabled = false; });
+            u.sandbox = !next; paint(!next);
+            showToast('Не удалось сохранить — попробуйте еще раз');
+          });
+        });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('.ft-seg'), function (seg) {
       var uid = seg.getAttribute('data-uid');
       /* Своя кнопка, а не .tm-tp-b: по .tm-tp-b ниже висит обработчик тем клиента,
