@@ -3419,9 +3419,11 @@
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
       return;
     }
-    // «Расписание» больше не отдельная страница — это половина вкладки «Встречи».
-    // У кого сохранилась старая страница, тот попадает сразу туда, куда переехало.
-    if (state.page === 'sched') { state.page = 'tasks'; state.taskSeg = 'meet'; }
+    // «Расписание» и вкладка «Встречи» в задачах переехали в EastSide Meeting
+    // (06.10.2026). Старые страницы и закладки ведут туда же, куда раньше.
+    if (state.page === 'sched' || (state.page === 'tasks' && state.taskSeg === 'meet')) {
+      state.page = 'meetx'; state.taskSeg = 'week'; state.mxTab = 'sched';
+    }
     // «Фокус недели» и «Застряло» переехали в срезы вкладки «Команда» (06.10.2026).
     // Старые ссылки из бота и закладки ведут туда же, куда раньше.
     if (state.page === 'focus' || state.page === 'stuck') {
@@ -6518,7 +6520,7 @@
        планирования — неделя; все остальное либо очередь, либо разрез по ученикам,
        целям и людям. Старые «Сегодня», «План», «Все мои», «На приемку», «Готово»,
        «Вся команда», «По людям» слились сюда. */
-    /* Порядок задан Павлом 06.10.2026: План - Цели - Команда - Ученики - Встречи.
+    /* Порядок задан Павлом 06.10.2026: План - Цели - Команда - Ученики.
        Сначала своя работа и куда она ведет, потом команда, потом ученики. */
     week:  { label: 'План',    view: 'myweek',   scope: 'my',  hint: 'мой план: сегодня, неделя, месяц; внизу очередь «Потом»' },
     goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
@@ -6526,13 +6528,10 @@
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям.
     stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
-    // Записи встреч (Fathom и загруженные протоколы) и что с каждой стало: до
-    // 08.09.2026 черновики жили только за ссылкой из бота (Павел: «не могу найти»).
-    // Встречи открыты всем, у кого есть «Задачи»: сюда 16.09.2026 переехал раздел
-    // «Расписание», а он был нужен каждому («кто когда свободен, когда планерка»).
-    // Журнал записей сервер и так режет по правам: кто видит задачи всей команды —
-    // видит все записи, остальные только свои протоколы.
-    meet:  { label: 'Встречи', view: 'meetings', scope: 'all', hint: 'зумы и расписание команды; ниже записи встреч и черновики задач' },
+    // Вкладки «Встречи» здесь больше нет: расписание, зумы и записи уехали
+    // целиком в раздел EastSide Meeting (Павел 06.10.2026: «возьми оформление
+    // зума сюда и перенеси»). Два места про одно и то же мы уже разбирали
+    // 16.09.2026 на слотах и зумах — повторять не стали.
   };
   /* Направления. Держится в паре со списком DEPTS в eastside-backend/app/routers/
      staff_tasks.py — как и роли, справочник продублирован на двух концах: он
@@ -6547,6 +6546,7 @@
     manage:    'Управление',
     finance:   'Финансы',
     edu:       'Сопровождение',
+    teach:     'Преподаватели',
     hr:        'Команда',
     ops:       'Операционка',
   };
@@ -6744,7 +6744,6 @@
     var v = TASK_SEGS[taskSeg()].view;
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
-    if (v === 'meetings') { renderMeetings(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
     if (state.tasks === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить задачи. Обнови страницу.</div></div>';
@@ -7593,8 +7592,8 @@
   function loadMeetLog() {
     api('/admin/api/meetings/log?days=45').then(function (r) {
       state.meetLog = (r && r.meetings) || [];
-      if (state.page === 'tasks') renderView();
-    }).catch(function () { state.meetLog = 'none'; if (state.page === 'tasks') renderView(); });
+      if (onMeetPage()) renderView();
+    }).catch(function () { state.meetLog = 'none'; if (onMeetPage()) renderView(); });
   }
   function meetRow(m) {
     var kind = m.kind === 'client' ? 'консультация' : m.kind === 'team' ? 'рабочая' : m.kind === 'manual' ? 'протокол' : 'встреча';
@@ -7655,8 +7654,8 @@
     var key = lo.toISOString().slice(0, 10);
     state.zoomWeek[key] = 'loading';
     api('/admin/api/zoom/busy?from=' + encodeURIComponent(lo.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (state.page === 'tasks') renderView(); })
-      .catch(function () { state.zoomWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
+      .then(function (r) { state.zoomWeek[key] = (r && r.accounts) || []; if (onMeetPage()) renderView(); })
+      .catch(function () { state.zoomWeek[key] = 'none'; if (onMeetPage()) renderView(); });
   }
   // Окна людей из расписания команды на один день: дневному виду они нужны рядом с
   // зумами, недельной сетке — нет, поэтому грузим только по запросу дня.
@@ -7670,8 +7669,8 @@
     var key = zoomYmd(d), hi = new Date(d.getTime() + 86400000);
     state.zoomWin[key] = 'loading';
     api('/admin/api/zoom/windows?from=' + encodeURIComponent(d.toISOString()) + '&to=' + encodeURIComponent(hi.toISOString()))
-      .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (state.page === 'tasks') renderView(); })
-      .catch(function () { state.zoomWin[key] = 'none'; if (state.page === 'tasks') renderView(); });
+      .then(function (r) { state.zoomWin[key] = r || { enabled: false, slots: [] }; if (onMeetPage()) renderView(); })
+      .catch(function () { state.zoomWin[key] = 'none'; if (onMeetPage()) renderView(); });
   }
   function zoomDay() {
     var d = new Date(); d.setHours(0, 0, 0, 0);
@@ -7697,8 +7696,9 @@
      где отметить свои окна. Здесь та же сетка там, где команда сидит целый день:
      свободные окна, занятые часы, планерки и зумы одним экраном.
 
-     С 16.09.2026 живет половиной вкладки «Встречи» в «Задачах», своего пункта в
-     меню больше нет (Павел: «все расписание нужно перенести во встречи»). Все,
+     С 16.09.2026 живет без своего пункта меню, а с 06.10.2026 — вкладкой
+     «Расписание» в разделе EastSide Meeting (до этого половиной вкладки
+     «Встречи» в «Задачах»; Павел: «возьми оформление зума сюда и перенеси»). Все,
      что стоит в этой сетке, уезжает в общий рабочий гугл-календарь; кнопка
      «В гугл-календарь» в шапке подключает его человеку себе.
 
@@ -7737,8 +7737,8 @@
     var key = zoomYmd(lo), hi = new Date(lo.getTime() + 7 * 86400000);
     state.schedWeek[key] = 'loading';
     api('/admin/api/sched/week?from=' + key + '&to=' + zoomYmd(hi))
-      .then(function (r) { state.schedWeek[key] = r || 'none'; if (state.page === 'tasks') renderView(); })
-      .catch(function () { state.schedWeek[key] = 'none'; if (state.page === 'tasks') renderView(); });
+      .then(function (r) { state.schedWeek[key] = r || 'none'; if (onMeetPage()) renderView(); })
+      .catch(function () { state.schedWeek[key] = 'none'; if (onMeetPage()) renderView(); });
   }
   // Месяц собирается из тех же ручек, что и неделя, поэтому после любой правки
   // его кэш тоже сбрасываем: иначе созданная планерка не появится в клетке дня.
@@ -7823,7 +7823,11 @@
      Порядок один и в неделе, и в дне — сверху то, что уже назначено. */
   function schedAt(d, zooms, day, hour, who, mineOnly) {
     var fit = function (p) { return !who || p === who; };
+    // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
+    // (kind, с 17.09.2026) и справочник тот же, что у зумов.
+    var deptKinds = state.page === 'meetx' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
     var meets = (d.meetings || []).filter(function (m) {
+      if (deptKinds && deptKinds.indexOf(m.kind) === -1) return false;
       return m.date === day && hour >= m.hour && hour < m.hour + m.duration &&
         (!who || (m.people || []).some(function (x) { return x.person === who; }));
     });
@@ -7995,8 +7999,13 @@
 
     // Зумы фильтруются по типу прямо здесь: отдельной сетки зумов со своим
     // фильтром больше нет, а вопрос «покажи только занятия» никуда не делся.
+    /* Фильтр направления из шапки раздела режет зумы по типу встречи: своего
+       поля «направление» у зума нет, а один отдел дает несколько типов (продажи
+       ведут и планерки, и продающие консультации). */
+    var deptKinds = state.page === 'meetx' && state.meetxDept ? mxDeptKinds(state.meetxDept) : null;
     var zooms = schedZooms(lo).filter(function (z) {
-      return !state.zoomKind || z.kind === state.zoomKind;
+      if (state.zoomKind && z.kind !== state.zoomKind) return false;
+      return !deptKinds || deptKinds.indexOf(z.kind) !== -1;
     });
     var people = (d.people || []).slice().sort(function (a, b) { return a.person.localeCompare(b.person, 'ru'); });
     var kindSel = '<label class="al-selwrap sc-kind"><select class="al-sel" id="sc-kind">' +
@@ -8998,6 +9007,10 @@
      часы на дни, как в расписании; «Календарь» — месяц целиком, как в гугл-
      календаре. Он стоит в месте заголовка секции и работает за него. */
   function meetView() { return state.meetView === 'cal' ? 'cal' : 'slots'; }
+  /* Расписание, зумы и журнал записей живут теперь в разделе EastSide Meeting,
+     а не во вкладке задач. Ответы к ним приходят через секунду, и перерисовывать
+     экран можно, только если человек с него не ушел. */
+  function onMeetPage() { return state.page === 'meetx'; }
 
   function meetLens() {
     var at = meetView();
@@ -9006,14 +9019,18 @@
       '<button type="button" class="' + (at === 'cal' ? 'on' : '') + '" data-mlens="cal">Календарь</button></div>';
   }
 
-  function renderMeetings(view) {
+  /* gridOnly — сетка без списков под ней. Во вкладке «Расписание» раздела
+     EastSide Meeting свои встречи и журнал записей лежат в соседних вкладках
+     («Ближайшие» и «Записи»), и повторять их под сеткой значит показать одно и
+     то же дважды на одном экране. */
+  function renderMeetings(view, gridOnly) {
     view.innerHTML = '<div id="mt-pane"></div>';
     var pane = el('mt-pane');
     if (meetView() === 'cal') renderMeetMonth(pane);
     else renderSched(pane);
     // Журнал записей встреч — не вид сетки, а список того, что уже прошло:
     // он живет под сеткой в обоих видах.
-    if (can('tasks')) {
+    if (can('tasks') && !gridOnly) {
       var rooms = document.createElement('div');
       rooms.id = 'mt-rooms';
       view.appendChild(rooms);
@@ -9102,10 +9119,10 @@
       var w = r[2] || r[3] || {};
       state.meetMonthData[key] = { accounts: accs, meetings: meets, gcal: gcal, busy: busy,
         can_edit_all: !!w.can_edit_all, people: w.people || [], staff: w.staff || [] };
-      if (state.page === 'tasks') renderView();
+      if (onMeetPage()) renderView();
     }).catch(function () {
       state.meetMonthData[key] = 'none';
-      if (state.page === 'tasks') renderView();
+      if (onMeetPage()) renderView();
     });
   }
 
@@ -9285,11 +9302,10 @@
       state.meetRooms = r && r.rooms ? r : { rooms: [], configured: false };
       state.meetRoomsAt = Date.now();
       try { localStorage.setItem(MEET_ON_LS, r && r.configured ? '1' : '0'); } catch (e) {}
-      if (state.page === 'tasks') renderView();
-      if (state.page === 'meetx') renderHead();
+      if (onMeetPage()) { renderHead(); renderView(); }
     }).catch(function () {
       state.meetRooms = 'none';
-      if (state.page === 'tasks') renderView();
+      if (onMeetPage()) renderView();
     });
   }
   function meetRoomsSkeleton() {
@@ -12618,6 +12634,16 @@
               '<button type="button" data-kind="sales">Ученик или клиент</button>' +
             '</div></div>' +
           '<div class="al-hint" id="mr-kindnote"></div>' +
+          // Направление нужно, чтобы встреча легла в свой отдел в разделе
+          // «Ближайшие». Не обязательное: у общей планерки отдела нет.
+          '<label class="al-f"><span class="al-l">Направление</span>' +
+            '<span class="al-selwrap"><select id="mr-dept" class="al-sel">' +
+              '<option value="">Без направления</option>' +
+              MX_DEPTS.map(function (d) {
+                return '<option value="' + d + '"' +
+                  (state.meetxDept === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+              }).join('') +
+            '</select></span></label>' +
           /* Когда. «Сейчас» — обычный случай и стоит первым; «Назначить» достает
              дату и время, и только тогда появляется смысл звать людей заранее. */
           '<div class="al-f"><span class="al-l">Когда</span>' +
@@ -12720,7 +12746,8 @@
       var go = this;
       var title = (el('mr-title').value || '').trim();
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
-      var body = { title: title, kind: kind, invite: pick ? pick.get() : [] };
+      var body = { title: title, kind: kind, dept: (el('mr-dept') || {}).value || '',
+                   invite: pick ? pick.get() : [] };
       if (when === 'plan') {
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
@@ -23000,25 +23027,126 @@
      «назад», а не раскрывается строкой в списке. Внутри встречи текста на
      несколько экранов — конспект, договоренности, задачи, расшифровка, — и в
      раскрытой строке он тонул между соседями. */
+  /* Действия стоят на экране ВСЕГДА. Раньше весь блок исчезал, когда свои
+     комнаты на контуре выключены, и раздел выглядел сломанным: заголовок,
+     вкладки и пустота (Павел 06.10.2026, скрин с превью). Если своей комнаты
+     нет — главным действием становится зум, он работает в любом случае. */
   function mxActions() {
-    if (!meetOn()) return '';
-    return '<div class="mx-top-acts">' +
-      '<button type="button" class="mx-act go" id="mx-start">' +
+    var zoom = can('tasks_all');
+    var acts = [];
+    if (meetOn()) {
+      acts.push('<button type="button" class="mx-act go" id="mx-start">' +
         '<span class="mx-act-i">' + ic('mic', 17) + '</span>' +
         '<span class="mx-act-b"><b>Начать встречу</b>' +
-          '<i>комната откроется сразу</i></span></button>' +
-      '<button type="button" class="mx-act" id="mx-plan">' +
+          '<i>комната откроется сразу</i></span></button>');
+      acts.push('<button type="button" class="mx-act" id="mx-plan">' +
         '<span class="mx-act-i">' + ic('cal', 17) + '</span>' +
         '<span class="mx-act-b"><b>Запланировать</b>' +
-          '<i>позову людей и напомню</i></span></button>' +
-    '</div>';
+          '<i>позову людей и напомню</i></span></button>');
+      if (zoom) {
+        acts.push('<button type="button" class="mx-act" id="mx-zoom">' +
+          '<span class="mx-act-i">' + ic('plus', 17) + '</span>' +
+          '<span class="mx-act-b"><b>Зум</b>' +
+            '<i>когда нужен именно он</i></span></button>');
+      }
+    } else if (zoom) {
+      acts.push('<button type="button" class="mx-act go" id="mx-zoom">' +
+        '<span class="mx-act-i">' + ic('plus', 17) + '</span>' +
+        '<span class="mx-act-b"><b>Создать зум</b>' +
+          '<i>время, тип, участники и проверка занятости</i></span></button>');
+    }
+    if (!acts.length) return '';
+    return '<div class="mx-top-acts' + (acts.length === 1 ? ' one' : '') +
+      (acts.length === 3 ? ' three' : '') + '">' + acts.join('') + '</div>';
   }
   function mxTabs() {
     var soon = mxSoonList().length;
+    var tab = mxTab();
     return '<div class="pay-seg plan-seg mx-tabs">' +
-      '<button type="button" class="' + (state.mxTab === 'rec' ? '' : 'on') + '" data-mxtab="soon">' +
+      '<button type="button" class="' + (tab === 'soon' ? 'on' : '') + '" data-mxtab="soon">' +
         'Ближайшие' + (soon ? '<i class="mx-tn num">' + soon + '</i>' : '') + '</button>' +
-      '<button type="button" class="' + (state.mxTab === 'rec' ? 'on' : '') + '" data-mxtab="rec">Записи</button>' +
+      '<button type="button" class="' + (tab === 'sched' ? 'on' : '') + '" data-mxtab="sched">Расписание</button>' +
+      '<button type="button" class="' + (tab === 'rec' ? 'on' : '') + '" data-mxtab="rec">Записи</button>' +
+      '</div>';
+  }
+  function mxTab() {
+    var t = state.mxTab;
+    return t === 'rec' || t === 'sched' ? t : 'soon';
+  }
+  /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие:
+     «Расписание» рисует себя само и до своего кода не доходит. */
+  function mxWireTop(view) {
+    el('mx-start') && el('mx-start').addEventListener('click', function () { openMeetRoom('now'); });
+    el('mx-plan') && el('mx-plan').addEventListener('click', function () { openMeetRoom('plan'); });
+    el('mx-zoom') && el('mx-zoom').addEventListener('click', function () {
+      openZoomForm({
+        kind: state.meetxDept ? mxDeptKinds(state.meetxDept)[0] : '',
+        after: function () { state.meetx = null; renderView(); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtab]'), function (b) {
+      b.addEventListener('click', function () {
+        state.mxTab = b.getAttribute('data-mxtab');
+        if (state.mxTab === 'soon' && !state.meetRooms) loadMeetRooms();
+        saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxDept = b.getAttribute('data-mxdept');
+        // Журнал записей режет сервер, ближайшие и расписание — фронт. Сбрасываем
+        // только то, что придет заново.
+        state.meetx = null; state.meetxOpen = null;
+        saveUi(); renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxScope = b.getAttribute('data-mxscope');
+        state.meetx = null; state.meetxOpen = null; saveUi(); renderView();
+      });
+    });
+  }
+  /* ── Отделы сервиса встреч ──────────────────────────────────────────────────
+     Павел 06.10.2026: «должно быть разделение на отделы». Справочник берем тот
+     же, что у задач (DEPTS): свой список отделов у встреч означал бы две правды
+     об одной компании. Порядок — его же: продукт, продажи, маркетинг, тьюторы
+     («Сопровождение»), преподаватели, управление.
+
+     Чипы стоят ОДНИМ рядом на весь раздел, а не отдельно в каждой вкладке:
+     «чьи встречи смотрим» — один вопрос, и ответ на него не должен сбрасываться
+     при переходе из ближайших в записи. */
+  var MX_DEPTS = ['product', 'sales', 'marketing', 'edu', 'teach', 'manage'];
+  /* У зума своего поля «направление» нет, есть тип встречи, и один отдел дает
+     несколько типов: продажи ведут и планерки, и продающие консультации. */
+  var MX_DEPT_KINDS = {
+    product: ['team_product'],
+    sales: ['team_sales', 'consult'],
+    marketing: ['team_marketing'],
+    edu: ['team_edu'],
+    teach: ['team_teach', 'lesson'],
+    manage: ['team_manage'],
+    finance: ['team_finance']
+  };
+  function mxDeptKinds(d) { return MX_DEPT_KINDS[d] || []; }
+  function mxDeptChips() {
+    return '<div class="wk-top mx-top"><div class="dept-seg pay-seg mx-depts">' +
+      '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
+      MX_DEPTS.map(function (d) {
+        return '<button type="button" class="' + (state.meetxDept === d ? 'on' : '') +
+          '" data-mxdept="' + d + '">' + esc(DEPTS[d]) + '</button>';
+      }).join('') + '</div>' +
+      '<span class="wk-spacer"></span>' + mxScopeSeg() + '</div>';
+  }
+  function mxScopeSeg() {
+    var d = state.meetx;
+    // В «Расписании» свой выбор человека («Все люди» / «Только мои встречи»), и
+    // второй переключатель про то же самое рядом только путает.
+    if (mxTab() === 'sched') return '';
+    if (!d || d === 'none' || !d.can_all) return '';
+    return '<div class="pay-seg plan-seg">' +
+      '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
+      '<button type="button" class="' + (state.meetxScope === 'my' ? 'on' : '') + '" data-mxscope="my">Мои</button>' +
       '</div>';
   }
   /* Что впереди: идущие прямо сейчас и назначенные на будущее. Прошедшие и
@@ -23027,7 +23155,13 @@
     var d = state.meetRooms;
     if (!d || d === 'none' || d === 'loading' || !d.rooms) return [];
     var now = Date.now();
+    var mine = state.meetxScope === 'my' && state.userId != null;
     return d.rooms.filter(function (r) {
+      if (state.meetxDept && (r.dept || '') !== state.meetxDept) return false;
+      // «Мои» на ближайших — те, что я завел или на которые позвали меня. Иначе
+      // переключатель стоял бы на экране и ничего не менял.
+      if (mine && r.created_by !== state.userId &&
+          (r.invited || []).indexOf(state.userId) === -1) return false;
       if (r.status === 'cancel' || r.status === 'failed') return false;
       if (r.status === 'live') return true;
       if (!r.starts_at) return false;
@@ -23042,6 +23176,7 @@
     var live = r.status === 'live';
     var guests = r.invited_names || [];
     var sub = [];
+    if (r.dept && DEPTS[r.dept]) sub.push(esc(DEPTS[r.dept]));
     if (r.created_by_name) sub.push('завел ' + esc(r.created_by_name));
     if (guests.length) {
       sub.push('позваны: ' + esc(guests.slice(0, 3).join(', ')) +
@@ -23073,12 +23208,16 @@
     var d = state.meetRooms;
     if (!d || d === 'loading') { return '<div class="card">' + meetRoomsSkeleton() + '</div>'; }
     if (!meetOn()) {
-      return '<div class="card"><div class="empty">Свои встречи на этом контуре еще не включены. ' +
-        'Пока их настраивают, пользуйтесь зумом — он на вкладке «Встречи» в задачах.</div></div>';
+      return '<div class="card"><div class="empty">Свои комнаты на этом контуре еще не включены. ' +
+        'Пока их настраивают, работаем через зум: кнопка сверху, а кто когда занят — во вкладке «Расписание».</div></div>';
     }
     if (!list.length) {
-      return '<div class="card"><div class="empty">Ничего не назначено. ' +
-        'Нажми «Запланировать» — выберешь время, позовешь людей, а ссылку и напоминания я разошлю сам.</div></div>';
+      return '<div class="card"><div class="empty">' +
+        (state.meetxDept
+          ? 'У направления «' + esc(DEPTS[state.meetxDept] || '') + '» ничего не назначено. ' +
+            'Сними фильтр, чтобы увидеть остальные.'
+          : 'Ничего не назначено. Нажми «Запланировать» — выберешь время, позовешь людей, ' +
+            'а ссылку и напоминания я разошлю сам.') + '</div></div>';
     }
     return '<div class="card mx-list">' + list.map(mxSoonRow).join('') + '</div>';
   }
@@ -23143,6 +23282,17 @@
   }
   function renderMeetx(view) {
     if (state.meetRooms === null || state.meetRooms === undefined) loadMeetRooms();
+    /* «Расписание» переехало сюда из задач целиком (Павел 06.10.2026) и от
+       журнала записей не зависит: оно открывается, даже если журнал не ответил,
+       и не ждет его загрузки. Экран свой — рисуем его в свой контейнер и отдаем
+       ему управление, он сам грузит данные и вешает обработчики. */
+    if (mxTab() === 'sched' && !state.meetxOpen) {
+      view.innerHTML = mxActions() + '<div class="wk-top mx-tabrow">' + mxTabs() + '</div>' +
+        mxDeptChips() + '<div id="mx-sched"></div>';
+      renderMeetings(el('mx-sched'), true);
+      mxWireTop(view);
+      return;
+    }
     if (state.meetx === null) { view.innerHTML = dashSkeleton(); loadMeetx(); return; }
     if (state.meetx === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить встречи. Обнови страницу.</div></div>';
@@ -23165,21 +23315,12 @@
 
     var d = state.meetx;
     var list = d.meetings || [];
-    var rec = state.mxTab === 'rec';
-    // Чипы направлений и «мои/все» — один ряд: это два среза одного вопроса
-    // «чьи встречи смотрим». В «Ближайших» они не нужны: там три строки.
-    var chips = rec
-      ? '<div class="wk-top mx-top"><div class="dept-seg pay-seg">' +
-        '<button type="button" class="' + (state.meetxDept ? '' : 'on') + '" data-mxdept="">Все</button>' +
-        (d.depts || []).map(function (x) {
-          return '<button type="button" class="' + (state.meetxDept === x.id ? 'on' : '') +
-            '" data-mxdept="' + esc(x.id) + '">' + esc(x.label) + '</button>';
-        }).join('') + '</div><span class="wk-spacer"></span>' +
-        (d.can_all ? '<div class="pay-seg plan-seg">' +
-          '<button type="button" class="' + (state.meetxScope === 'my' ? '' : 'on') + '" data-mxscope="all">Вся команда</button>' +
-          '<button type="button" class="' + (state.meetxScope === 'my' ? 'on' : '') + '" data-mxscope="my">Мои</button>' +
-          '</div>' : '') + '</div>'
-      : '';
+    var tab = mxTab();
+    var rec = tab === 'rec';
+    // Один ряд фильтров на весь раздел: направление и «мои/вся команда» — это
+    // два среза одного вопроса «чьи встречи смотрим», и ответ держится при
+    // переходе между вкладками.
+    var chips = mxDeptChips();
 
     var body;
     if (rec) {
@@ -23200,27 +23341,7 @@
 
     view.innerHTML = mxActions() + '<div class="wk-top mx-tabrow">' + mxTabs() + '</div>' + chips + body;
 
-    el('mx-start') && el('mx-start').addEventListener('click', function () { openMeetRoom('now'); });
-    el('mx-plan') && el('mx-plan').addEventListener('click', function () { openMeetRoom('plan'); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtab]'), function (b) {
-      b.addEventListener('click', function () {
-        state.mxTab = b.getAttribute('data-mxtab');
-        if (state.mxTab === 'soon' && !state.meetRooms) loadMeetRooms();
-        saveUi(); renderView();
-      });
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
-      b.addEventListener('click', function () {
-        state.meetxDept = b.getAttribute('data-mxdept');
-        state.meetx = null; state.meetxOpen = null; renderView();
-      });
-    });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
-      b.addEventListener('click', function () {
-        state.meetxScope = b.getAttribute('data-mxscope');
-        state.meetx = null; state.meetxOpen = null; renderView();
-      });
-    });
+    mxWireTop(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxlink]'), function (b) {
       b.addEventListener('click', function () { copyText(b.getAttribute('data-mxlink'), b); });
     });
@@ -36747,6 +36868,8 @@
     ['team_sales', 'Команда: продажи', 'Продажи'],
     ['team_manage', 'Команда: управление', 'Управление'],
     ['team_finance', 'Команда: финансы', 'Финансы'],
+    ['team_edu', 'Команда: сопровождение', 'Сопровождение'],
+    ['team_teach', 'Команда: преподаватели', 'Преподаватели'],
     ['consult', 'Продающая консультация', 'Консультации'],
     ['lesson', 'Учебное занятие', 'Занятия']
   ];
@@ -41095,6 +41218,8 @@
        шапка успевала нарисовать старый раздел и человек по ссылке из бота видел
        хлебную крошку «Фокус недели» вместо вкладок задач. */
     if (pg === 'focus' || pg === 'stuck') { state.teamMode = pg; return ['tasks', 'team']; }
+    // Расписание и зумы уехали из задач в EastSide Meeting (06.10.2026).
+    if (pg === 'sched' || (pg === 'tasks' && seg === 'meet')) { state.mxTab = 'sched'; return ['meetx', '']; }
     if (pg === 'attestations' && can('academy_review')) { state.acTab = 'att'; return ['academy', '']; }
     // Воркшопы стали курсом Академии (Павел 28.09.2026), но ссылки на раздел
     // ходят по чатам — ведем их в тот же курс, а не на пустую страницу.

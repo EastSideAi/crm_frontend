@@ -10864,6 +10864,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Ряд фильтров переносится: отделов бывает восемь, и вместе с «вся команда /
    мои» они не влезают в одну строку даже на большом экране. */
 .mx-top { margin-bottom: 12px; flex-wrap: wrap; row-gap: 8px; }
+/* Отделов семь, и на ноутбуке они доходят до правого края: ряд не должен
+   обрезать соседний переключатель — чипы прокручиваются, он остается целым. */
+.mx-top .mx-depts { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.mx-top .mx-depts::-webkit-scrollbar { display: none; }
+.mx-top > .pay-seg.plan-seg { flex: none; }
 .mx-list { padding: 6px 18px 10px; }
 .mx-row { display: flex; align-items: center; gap: 14px; padding: 12px 0;
   border-top: 1px solid var(--line-2); cursor: pointer; }
@@ -11013,6 +11018,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    что было. Два действия крупными карточками — это главное, зачем сюда заходят. */
 .mx-top-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px; margin-bottom: 16px; }
+/* Действий может быть одно (своих комнат нет — остается зум) или три (есть и
+   свои комнаты, и зум). Одно растягиваем на всю ширину, а не оставляем половинку
+   с дырой справа. */
+.mx-top-acts.one { grid-template-columns: minmax(0, 1fr); }
+.mx-top-acts.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* На ноутбуке 1280 три карточки в ряд ломают подписи посреди слова: третья
+   уходит под две первые во всю ширину, как плитки полосы цифр. */
+@media (max-width: 1180px) {
+  .mx-top-acts.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mx-top-acts.three > :nth-child(3) { grid-column: 1 / -1; }
+}
 .mx-act { display: flex; align-items: center; gap: 14px; text-align: left;
   padding: 16px 18px; border-radius: var(--r-lg); background: var(--card);
   border: 1px solid var(--line); cursor: pointer; transition: .15s var(--ease); }
@@ -11048,7 +11064,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    скругления на всех углах, отступ сверху не нужен. */
 .mx-one .mx-card { border-radius: var(--r-xl); padding: 16px 18px 18px; margin: 0; }
 @media (max-width: 760px) {
-  .mx-top-acts { grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+  .mx-top-acts, .mx-top-acts.three { grid-template-columns: 1fr; gap: 8px; margin-bottom: 12px; }
+  .mx-top-acts.three > :nth-child(3) { grid-column: auto; }
   .mx-act { padding: 12px 14px; gap: 12px; }
   .mx-act-i { width: 36px; height: 36px; border-radius: 11px; }
   .mx-soon { flex-wrap: wrap; gap: 8px 10px; }
