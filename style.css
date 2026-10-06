@@ -652,11 +652,22 @@ a { color: inherit; text-decoration: none; }
    уведомлений и звали нажать, хотя нажимать нечего: доступ дает роль. */
 .tm-cap { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
 .tm-cap.none { color: var(--ink-3); }
-/* Карточка лежит на --fill, и группа чипов на --fill в ней растворялась: было
-   не видно, где кончается один набор и начинается другой. */
-.tm-ed .tm-tp { background: var(--card); box-shadow: inset 0 0 0 1px var(--line-2); }
-.tm-ed .tm-tp.bot { color: var(--ink-3); }
-.tm-ed .tm-bt-b.on { background: var(--fill); box-shadow: none; }
+/* В карточке человека две группы отвечают на вопрос «сколько угодно» (темы
+   клиента, виды уведомлений бота), и рисуются они отдельными чипами, а не
+   капсулой: у капсулы пустой выбор читается как сломанный сегмент, хотя «ни
+   одной темы» — обычное состояние. Включено и выключено говорят одним кодом на
+   обе группы: синяя заливка против тихого контура. */
+.tm-ed .tm-tp { background: none; box-shadow: none; padding: 0; gap: 6px; flex-wrap: wrap; }
+.tm-ed .tm-tp.bot { color: var(--ink-3); padding-left: 0; }
+.tm-ed .tm-tp-b, .tm-ed .tm-bt-b { border: 1px solid var(--line-2); background: var(--card);
+  color: var(--ink-3); text-decoration: none; padding: 5px 11px; }
+.tm-ed .tm-tp-b:hover, .tm-ed .tm-bt-b:hover { border-color: #DCE7FF; color: var(--ink-2); }
+.tm-ed .tm-tp-b.on, .tm-ed .tm-bt-b.on { background: var(--blue-tint); color: var(--blue-d);
+  border-color: transparent; box-shadow: none; }
+/* «Задачи команды» — выбор одного из двух, поэтому системная капсула: серая
+   дорожка, белая активная кнопка. Форма сама говорит, что вариант всегда один. */
+.tm-ed .ft-seg { align-self: center; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tm-ed .tm-ft-b.on { background: #fff; color: var(--blue); box-shadow: 0 1px 2px rgba(15,19,32,.1); }
 .tm-ed-h { font-size: 12px; color: var(--ink-3); }
 .tm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--line-2); }
 .tm-row:first-child { border-top: none; }
@@ -743,7 +754,7 @@ a { color: inherit; text-decoration: none; }
 /* Телефон: уровень дерева показываем тонко (отступ 8px вместо 28), строку не
    ломаем на две — иначе аватар уезжает на свою строку и список рассыпается. */
 @media (max-width: 760px) {
-  .tm-kids { margin-left: 2px; padding-left: 8px; }
+  .tm-kids { margin-left: 2px; padding-left: 7px; }
   .tm-node-h > .tm-row { flex-wrap: nowrap; gap: 9px; }
   .tm-node-h .tm-av { width: 32px; height: 32px; border-radius: 9px; font-size: 12px; }
   /* 212px минимума под подстрочник на телефоне выдавливают стрелку за край */
@@ -756,6 +767,9 @@ a { color: inherit; text-decoration: none; }
      ни буквы, одни метки. Имя важнее метки, поэтому метка уходит, а не имя. */
   .tm-node-h .tm-tag.smz { display: none; }
   .tm-node-h .tm-nm { min-width: 62px; }
+  /* Стрелка справа на телефоне не нужна — нажимается вся строка, а 28px она
+     отнимала у имени; в дереве с пятого уровня от фамилии не оставалось ничего. */
+  .tm-node-h .tm-go { display: none; }
   .tm-fold { padding: 0 2px; }
   /* Шапка на телефоне: заголовок, счетчик и кнопки в первой строке, поиск во
      второй. Длинное пояснение про роли тут только съедает экран. */
@@ -4261,6 +4275,14 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-band-t.name { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--ink-1); }
 .tsk-band-h { font-size: 11.5px; color: var(--ink-3); }
 .tsk-band-n { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+/* Телефон: пояснение переносится, и счетчик вставал в конец его первой строки —
+   читался как часть фразы. Разводим по строкам: сверху название и число, под
+   ними пояснение во всю ширину. */
+@media (max-width: 760px) {
+  .tsk-band { flex-wrap: wrap; }
+  .tsk-band-n { order: 2; }
+  .tsk-band-h { flex: 1 1 100%; order: 3; }
+}
 
 /* Тумблер важности в карточке — рядом со сроком: две оси решаются вместе. */
 .tsk-mimp { display: inline-flex; align-items: center; gap: 6px; flex: none;
@@ -4690,7 +4712,9 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      активную вкладку, прокручивает ближайшего прокручиваемого предка. Если им
      оказывается страница, весь экран уезжает влево и содержимое раздела просто
      пропадает — так и было, пока капсула скроллилась «сама в себе». */
-  #tb-left { min-width: 0; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  /* flex, а не max-width: 100%. С максимальной шириной обертка занимала строку
+     целиком, и профиль уезжал на вторую — белая полоса с одним кружком. */
+  #tb-left { flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   #tb-left::-webkit-scrollbar { display: none; }
   .tabs { flex-wrap: nowrap; width: max-content; }
   .tab { flex: none; }
@@ -4847,7 +4871,8 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .statbar.three .stat:last-child { grid-column: 1 / -1; }
   .statbar.three .stat .sl, .statbar.compact .stat .sl { font-size: 11.5px; }
   .statbar.three .stat .sv, .statbar.compact .stat .sv { font-size: 26px; margin-top: 8px; }
-  .statbar.three .stat .sd, .statbar.compact .stat .sd { display: none; }
+  .statbar.three .stat .sd, .statbar.compact .stat .sd { margin-top: 7px; min-height: 0; }
+  .statbar.three .stat .sd .smut, .statbar.compact .stat .sd .smut { font-size: 11.5px; }
   /* Пять плиток одной колонкой — 650px скролла до содержимого, и последняя
      (на «Запусках» это «До эфира») уезжала за экран. Пятая — во всю ширину. */
   .statbar.five, .statbar.six { grid-template-columns: 1fr 1fr; }
@@ -8128,9 +8153,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .gd-foot { padding: 14px 18px; position: static; }
   .gd-foot .bp { flex: 1; }
   .gd-fin { padding: 34px 18px 30px; }
-  /* В шапке телефона от кнопки остается значок: подпись «Обучение по системе»
-     отбирает половину строки у заголовка раздела. */
-  .gd-btn span { display: none; }
+  /* Подпись на телефоне оставляем: кнопка все равно переносится на свою строку,
+     и без подписи там стоял безымянный значок в пустой полосе. */
+  .gd-btn { font-size: 12.5px; }
   .gd-skip span { display: inline; }
 }
 
@@ -10836,9 +10861,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-row { display: flex; align-items: center; gap: 14px; padding: 12px 0;
   border-top: 1px solid var(--line-2); cursor: pointer; }
 .mx-row:first-child { border-top: none; }
-/* Раскрытие встречи работает и с клавиатуры — фокус виден тем же рецептом, что
-   у остальных кликабельных строк CRM. */
-.mx-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); border-radius: 12px; }
 .mx-row:hover .mx-go { color: var(--ink-2); }
 .mx-row.open { background: var(--fill); border-radius: 12px 12px 0 0;
   padding-left: 10px; padding-right: 10px; border-top-color: transparent; }
@@ -10855,7 +10877,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-radius: var(--r-pill); padding: 4px 10px; }
 .mx-row.open .mx-tag { background: var(--card); }
 .mx-tag svg { color: var(--ink-3); }
-.mx-go { flex: none; color: var(--ink-3); transition: transform .18s var(--ease); }
+/* Раскрывашка — кнопка: ее берет Tab, по ней видно фокус, и ссылка «Войти» у
+   идущей встречи лежит рядом, а не внутри кликабельной области. */
+.mx-go { flex: none; display: grid; place-items: center; width: 28px; height: 28px;
+  border-radius: 9px; color: var(--ink-3); cursor: pointer;
+  transition: transform .18s var(--ease), color .15s, background .15s; }
+.mx-go:hover { background: var(--fill); color: var(--ink-2); }
+.mx-go:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .mx-row.open .mx-go { transform: rotate(90deg); color: var(--blue); }
 .mx-join { flex: none; }
 /* Карточка встречи: заголовки тихие и мелкие, содержание — обычным кеглем.
@@ -10890,7 +10918,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mx-marks { flex: 1 1 100%; min-width: 0; }
   .mx-row { flex-wrap: wrap; gap: 8px 10px; }
   .mx-when { width: auto; flex-direction: row; gap: 6px; align-items: baseline; }
-  .mx-main { flex: 1 1 100%; order: 3; }
-  .mx-marks { order: 4; flex-wrap: wrap; }
+  /* Порядок строки: когда, что за встреча, метки, действие. До этого «Войти» и
+     раскрывашка оставались с нулевым порядком и вставали ПЕРЕД названием —
+     и глазами, и озвучкой кнопка приходила раньше того, во что ведет. */
+  .mx-when { order: 1; }
+  .mx-main { flex: 1 1 100%; order: 2; }
+  .mx-marks { order: 3; flex-wrap: wrap; }
+  .mx-join, .mx-go { order: 4; }
   .mx-s { white-space: normal; }
 }

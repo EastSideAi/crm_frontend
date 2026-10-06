@@ -3053,10 +3053,12 @@
             '<div class="verdict"><span class="vspark">' + ic('compass', 13) + '</span><span>' +
             'Пятнадцать минут один раз. Пройдете до конца — этот раздел дальше будет открываться задачами.' +
             '</span></div></div>' +
-            '<button class="qchip gd-btn gd-skip" id="tsk-guide-skip">' + ic('go', 13) + '<span>Пропустить, к задачам</span></button>'
+            '<button class="qchip gd-btn gd-skip" id="tsk-guide-skip" aria-label="Пропустить обучение, перейти к задачам">' +
+              ic('go', 13) + '<span>Пропустить, к задачам</span></button>'
         : '<div><h2>Задачи</h2>' +
             '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + tphr + '</span></div></div>' +
-            '<button class="qchip gd-btn" id="tsk-guide" title="Обучение по системе">' + ic('compass', 13) +
+            '<button class="qchip gd-btn" id="tsk-guide" title="Обучение по системе" ' +
+              'aria-label="Обучение по системе">' + ic('compass', 13) +
               '<span>Обучение по системе</span>' +
               (gleft ? '<i class="gd-btn-n num">' + gleft + '</i>' : '') + '</button>';
     }
@@ -7080,7 +7082,7 @@
         (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
         '<div class="fw-rows">' + moreCut('fx' + g.id, steps).map(function (t) {
           return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
-            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true }) + '</div>';
         }).join('') + '</div>' + moreBtn('fx' + g.id, steps.length) +
       '</div>';
     }).join('');
@@ -7094,7 +7096,7 @@
             return (a.due_at || '').localeCompare(b.due_at || '');
           })).map(function (t) {
             return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
-              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
+              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true }) + '</div>';
           }).join('') + '</div>' + moreBtn('fxloose', loose.length) +
         '</div>'
       : '';
@@ -7186,6 +7188,8 @@
       }).join('') + '</div>' + moreBtn(key, list.length);
     };
 
+    /* Исполнителя в строках этого блока не пишем: полоса уже сказала, что их нет,
+       а шесть амберных «без исполнителя» подряд спорят с красным сроком справа. */
     var nobodyBlock = nobody.length
       ? '<div class="card fw">' +
           '<div class="tsk-band"><span class="tsk-band-t">Ничьи</span>' +
@@ -7193,7 +7197,7 @@
             '<span class="tsk-band-n num">' + nobody.length + '</span></div>' +
           rows('stnobody', nobody.slice().sort(function (a, b) {
             return (a.due_at || '9999').localeCompare(b.due_at || '9999');
-          }), true) +
+          })) +
         '</div>'
       : '';
 
@@ -7380,7 +7384,9 @@
       meta.push(names(ex.length ? 'исполнители' : 'исполнитель', [{ name: t.assignee_name }].concat(ex)));
     } else if (t.assignee_id && ex.length) {
       meta.push(names('вместе с', ex));
-    } else if (!t.assignee_id) {
+    } else if (!t.assignee_id && !opts.noWho) {
+      // noWho закрывает и эту подпись: под полосой «Ничьи» она повторяет то,
+      // что полоса уже сказала, шесть раз цветом внимания.
       meta.push('<span class="dy-m dy-none">без исполнителя</span>');
     }
     if (t.author_name && t.author_id !== me && t.author_id !== t.assignee_id) {
@@ -7411,8 +7417,11 @@
     var closed = !opts.accept && (t.status === 'done' || t.status === 'review' || t.status === 'cancel');
     var right = '';
     if (t.overdue) {
-      // Под полосой «Просрочено» слово не повторяем — только на сколько.
-      var od = dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
+      // Под полосой «Просрочено» слово не повторяем — только на сколько. Там,
+      // где такой полосы нет (Фокус недели), просрочка иначе отличается от
+      // обычного срока одним цветом — тогда слово оставляем (opts.odWord).
+      var od = opts.odWord ? dueLabel(t).text
+        : dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
       if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
     } else if (t.due_at && !closed && (opts.who || opts.due)) {
       right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
@@ -22565,6 +22574,7 @@
       (state._teamTopics || []).map(function (t) {
         var on = mine.indexOf(t.id) >= 0;
         return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'aria-pressed="' + (on ? 'true' : 'false') + '" ' +
           'title="' + esc(on ? 'Приходят уведомления: ' + t.label : 'Не приходят: ' + t.label) + '">' +
           esc(TM_TOPIC_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
@@ -22579,6 +22589,7 @@
       state._teamBotKinds.map(function (t) {
         var on = off.indexOf(t.id) < 0;
         return '<button type="button" class="tm-bt-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
+          'aria-pressed="' + (on ? 'true' : 'false') + '" ' +
           'title="' + esc((on ? 'Приходит: ' : 'Выключено: ') + t.label) + '">' +
           esc(TM_BOT_SHORT[t.id] || t.label) + '</button>';
       }).join('') + '</span>';
@@ -22675,8 +22686,10 @@
     if (m.client_name) sub.push('ученик: ' + esc(m.client_name));
     if (m.minutes) sub.push(m.minutes + ' мин');
     if (m.people) sub.push(m.people + ' ' + plural(m.people, 'участник', 'участника', 'участников'));
-    return '<div class="mx-row' + (open ? ' open' : '') + '" data-mx="' + esc(m.key) + '"' +
-        ' role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+    /* Раскрывашка — настоящая кнопка, а не роль на всей строке: у идущей встречи
+       внутри строки лежит ссылка «Войти», и кнопка со ссылкой внутри — ловушка
+       для клавиатуры и озвучки. Мышью по-прежнему работает вся строка. */
+    return '<div class="mx-row' + (open ? ' open' : '') + '" data-mx="' + esc(m.key) + '">' +
         '<div class="mx-when"><span class="mx-day">' + esc(dayLabel(m.at)) + '</span>' +
           '<span class="mx-time">' + esc(hhmm(m.at)) + '</span></div>' +
         '<div class="mx-main"><div class="mx-t">' + esc(m.title || 'Встреча') + '</div>' +
@@ -22684,7 +22697,11 @@
         '<span class="mx-marks">' + marks + '</span>' +
         (m.url && m.state === 'live'
           ? '<a class="bp sm mx-join" href="' + esc(m.url) + '" target="_blank" rel="noopener">Войти</a>'
-          : '<span class="mx-go">' + ic('go', 14) + '</span>') +
+          : '') +
+        '<button type="button" class="mx-go" data-mxgo="' + esc(m.key) + '" aria-expanded="' +
+          (open ? 'true' : 'false') + '" aria-label="' +
+          (open ? 'Свернуть встречу' : 'Показать встречу') + ': ' + esc(m.title || 'Встреча') + '">' +
+          ic('go', 14) + '</button>' +
       '</div>' + (open ? mxCard(m) : '');
   }
   function hhmm(iso) {
@@ -22792,32 +22809,40 @@
         state.meetx = null; state.meetxOpen = null; renderView();
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
-      /* Раскрытие встречи — главное действие экрана, поэтому оно работает и с
-         клавиатуры: пробел и Enter делают то же, что клик (общий рецепт CRM). */
-      r.addEventListener('keydown', function (e) {
-        if (e.target !== r) return;
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); r.click(); }
+    /* Фокус возвращаем следующим тиком и после КАЖДОЙ перерисовки: старая кнопка
+       умирает вместе с разметкой, браузер сбрасывает фокус на body уже после
+       обработчика, а когда приезжает карточка встречи, экран перерисовывается
+       второй раз. Без второго возврата Tab начинался бы заново от шапки. */
+    function mxFocus(kb, key) {
+      if (!kb) return;
+      setTimeout(function () {
+        var again = document.querySelector('[data-mxgo="' + key + '"]');
+        if (again) again.focus();
+      }, 0);
+    }
+    function mxToggle(key, kb) {
+      state.meetxOpen = state.meetxOpen === key ? null : key;
+      renderView();
+      mxFocus(kb, key);
+      if (state.meetxOpen && !state.meetxCard[key]) {
+        api('/admin/api/meet/journal/' + encodeURIComponent(key)).then(function (c) {
+          state.meetxCard[key] = c || 'none';
+          if (state.page === 'meetx') { renderView(); mxFocus(kb, key); }
+        }).catch(function () {
+          state.meetxCard[key] = 'none';
+          if (state.page === 'meetx') { renderView(); mxFocus(kb, key); }
+        });
+      }
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxgo]'), function (b) {
+      b.addEventListener('click', function () {
+        mxToggle(b.getAttribute('data-mxgo'), document.activeElement === b);
       });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
       r.addEventListener('click', function (e) {
         if (e.target.closest('a, button')) return;
-        var key = r.getAttribute('data-mx');
-        var kb = document.activeElement === r;
-        state.meetxOpen = state.meetxOpen === key ? null : key;
-        renderView();
-        // Экран перерисовывается целиком, и старая строка умирает вместе с фокусом.
-        // Пришел с клавиатуры — возвращаем фокус на ту же строку, иначе Tab
-        // начинается заново от шапки.
-        if (kb) { var again = document.querySelector('[data-mx="' + key + '"]'); if (again) again.focus(); }
-        if (state.meetxOpen && !state.meetxCard[key]) {
-          api('/admin/api/meet/journal/' + encodeURIComponent(key)).then(function (c) {
-            state.meetxCard[key] = c || 'none';
-            if (state.page === 'meetx') renderView();
-          }).catch(function () {
-            state.meetxCard[key] = 'none';
-            if (state.page === 'meetx') renderView();
-          });
-        }
+        mxToggle(r.getAttribute('data-mx'), false);
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
@@ -22928,12 +22953,18 @@
               'autocomplete="off" ' + (lock ? 'disabled ' : '') +
               'value="' + esc(u.email || '') + '" placeholder="нет почты"></label>' +
         '</div>' +
+        /* Два разных вопроса — две разные формы. «Сколько угодно» (темы клиента,
+           виды уведомлений бота) — отдельные чипы: когда не выбрано ничего, это
+           видно как «все выключены», а не как сломанный сегмент. «Один из»
+           (задачи команды) — системная капсула с белой активной кнопкой. */
         '<div class="tm-ed-r"><span class="tm-ed-s">Клиенты и заявки</span>' + tmTopicChips(u) + '</div>' +
         '<div class="tm-ed-r"><span class="tm-ed-s">Бот задач</span>' + tmBotChips(u) + '</div>' +
         (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s">Задачи команды</span>' +
-          '<span class="tm-tp ft-seg" data-uid="' + u.id + '">' +
-            '<button type="button" class="tm-ft-b' + (u.full_team ? '' : ' on') + '" data-ft="0">Своя ветка</button>' +
-            '<button type="button" class="tm-ft-b' + (u.full_team ? ' on' : '') + '" data-ft="1">Вся команда</button>' +
+          '<span class="pay-seg ft-seg" data-uid="' + u.id + '">' +
+            '<button type="button" class="tm-ft-b' + (u.full_team ? '' : ' on') + '" data-ft="0"' +
+              (u.full_team ? '' : ' aria-current="true"') + '>Своя ветка</button>' +
+            '<button type="button" class="tm-ft-b' + (u.full_team ? ' on' : '') + '" data-ft="1"' +
+              (u.full_team ? ' aria-current="true"' : '') + '>Вся команда</button>' +
           '</span></div>' : '') +
         '<div class="tm-ed-r"><span class="tm-ed-s">Разделы CRM</span>' +
           '<span class="tm-caps">' + tmCaps(u) + '</span></div>' +
@@ -23116,7 +23147,8 @@
         '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
         '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
           ic('compass', 13) + '<span>Обучение всем</span></button>' +
-        (d ? '' : '<button class="bp sm tm-new" id="tm-new">' + ic('plus', 14) + '<span>Добавить сотрудника</span></button>')) +
+        (d ? '' : '<button class="bp sm tm-new" id="tm-new" aria-label="Добавить сотрудника">' +
+          ic('plus', 14) + '<span>Добавить сотрудника</span></button>')) +
       '</div>' + (ro ? '' : gdSum + madeHtml + formHtml) +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
       (ro ? '' : hierHtml +
@@ -23154,7 +23186,10 @@
         var kb = document.activeElement === r;
         state._teamOpen = String(state._teamOpen || '') === id ? null : id;
         renderView();
-        if (kb) { var again = document.querySelector('[data-open="' + id + '"]'); if (again) again.focus(); }
+        if (kb) setTimeout(function () {
+          var again = document.querySelector('[data-open="' + id + '"]');
+          if (again) again.focus();
+        }, 0);
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-fold]'), function (b) {
@@ -23197,7 +23232,9 @@
       var btns = seg.querySelectorAll('.tm-ft-b');
       function paint(on) {
         Array.prototype.forEach.call(btns, function (x) {
-          x.classList.toggle('on', (x.getAttribute('data-ft') === '1') === on);
+          var mine = (x.getAttribute('data-ft') === '1') === on;
+          x.classList.toggle('on', mine);
+          if (mine) x.setAttribute('aria-current', 'true'); else x.removeAttribute('aria-current');
         });
       }
       Array.prototype.forEach.call(btns, function (b) {
@@ -23234,6 +23271,7 @@
           : was.concat([t]);
         u.bot_mute = next;
         b.classList.toggle('on');
+        b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false');
         b.disabled = true;
         apiSend('/admin/api/users/' + uid, 'PATCH', { bot_mute: next }, function () {
           b.disabled = false;
@@ -23242,6 +23280,7 @@
             : (u.name || u.login) + ' больше не получает: ' + (TM_BOT_SHORT[t] || t).toLowerCase());
         }, function () {
           b.disabled = false; u.bot_mute = was; b.classList.toggle('on');
+          b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false');
           showToast('Не удалось сохранить — попробуйте еще раз');
         });
       });
@@ -23259,6 +23298,7 @@
           : was.concat([t]);
         u.notify_topics = next;
         b.classList.toggle('on');
+        b.setAttribute('aria-pressed', b.classList.contains('on') ? 'true' : 'false');
         b.disabled = true;
         apiSend('/admin/api/users/' + uid, 'PATCH', { notify_topics: next }, function () {
           b.disabled = false;
