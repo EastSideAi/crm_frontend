@@ -17415,13 +17415,16 @@
     if (t.invoice_needed) {
       mwInv = '<div class="m-sec"><div class="m-sec-h">Счет</div><div class="ct-act">' +
         (MI
+          // «принят» сплошным зеленым обещало бы больше, чем есть: счет у нас лежит,
+          // а основанием платежа он станет на воротах выплаты. Говорим ровно факт.
           ? '<div class="ct-act-h"><b>Счет № ' + esc(MI.number) + '</b>' +
-              '<span class="ct-chip ct-paid">принят</span></div>' +
+              '<span class="ct-chip ct-ok">счет у нас</span></div>' +
             '<div class="ct-act-m">от ' + esc(czDate(MI.issued_on)) + ' · <b>' +
               ctMoney(MI.amount) + ' ₽</b></div>' +
             '<div class="ct-acts"><button class="bp sm ghost" id="mw-inv">' +
               'Исправить счет</button></div>'
-          : '<div class="field-empty">Пришлите счет на эту сумму: номер, дату и файл. ' +
+          : '<div class="ct-act-h"><b>Счета еще нет</b></div>' +
+            '<div class="ct-act-why">Пришлите счет на эту сумму: номер, дату и файл. ' +
               'Без него бухгалтерия не сможет сделать платежку.</div>' +
             '<div class="ct-acts"><button class="bp sm" id="mw-inv">' +
               'Прислать счет</button></div>') +
