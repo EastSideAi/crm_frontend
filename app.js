@@ -2269,14 +2269,13 @@
     // дотянем ли до цели. Cap свой: цели компании ставит руководитель.
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
-    // «Фокус недели» — управленческий взгляд: во что команда целится на этой
-    // неделе. Не вкладка внутри «Задач» намеренно: вкладки там — срезы работы
-    // одного человека, а этот вопрос про всю компанию (и cap другой).
-    { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all' },
-    // «Застряло» — второй управленческий взгляд, обратный фокусу: не «куда целимся»,
-    // а «что гниет». Отдельным пунктом, а не блоком в фокусе: на одном экране два
-    // разных вопроса делят внимание, и проигрывают оба.
-    { id: 'stuck', label: 'Застряло', icon: 'alert', cap: 'tasks_all' },
+    /* «Фокус недели» и «Застряло» больше не пункты меню: с 06.10.2026 это срезы
+       вкладки «Команда» внутри «Задач» (Павел: «перенести фильтрами в задачник и
+       убрать из боковой панели»). Оба вопроса управленческие и живут рядом с
+       пульсом команды, а слева на два пункта меньше. Строки остались скрытыми —
+       по ним работают старые ссылки из бота и закладки. */
+    { id: 'focus', label: 'Фокус недели', icon: 'target', cap: 'tasks_all', hidden: true },
+    { id: 'stuck', label: 'Застряло', icon: 'alert', cap: 'tasks_all', hidden: true },
     { id: 'inbox', label: 'Диалоги', icon: 'dialogs', cap: 'inbox|inbox_own' },
     // Старший тьютор видит лиды и все карточки (Павел 11.09.2026), обычный тьютор — только своих.
     { id: 'prospects', label: 'Лиды', icon: 'funnel', cap: 'clients', hideRole: ['tutor'] },
@@ -2916,33 +2915,6 @@
       html = '<div><h2>' + greeting() + (state.userName ? ', ' + esc(state.userName) : '') + '</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' + phrase + '</span></div></div>';
     }
-    if (state.page === 'focus') {
-      var fw = state.focus && state.focus !== 'none' ? state.focus : null;
-      var fwt = fw ? (fw.tasks || []).filter(function (t) { return t.status !== 'cancel'; }) : [];
-      var fwb = fwt.filter(function (t) { return t.overdue; }).length;
-      var fwd = fwt.filter(function (t) { return t.status === 'done'; }).length;
-      var fphr = !fw ? 'Собираю неделю…'
-        : !fwt.length ? 'Неделя пустая: ни одна задача не взята в работу.'
-        : fwb ? '<b>' + fwb + ' ' + plural(fwb, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
-                '.</b> Это первое, что стоит разобрать с людьми.'
-        : 'Просрочки нет. Закрыто ' + fwd + ' из ' + fwt.length + '.';
-      html = '<div><h2>Фокус недели' + (fw && fw.label ? ' · ' + esc(fw.label) : '') + '</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('target', 13) + '</span><span>' + fphr + '</span></div></div>' +
-        wkNav(fw ? fw.label : '');
-    }
-    if (state.page === 'stuck') {
-      var sk = state.stuck && state.stuck !== 'none' ? state.stuck.tasks || [] : null;
-      var skn = sk ? sk.filter(function (t) { return !t.assignee_id; }).length : 0;
-      var skl = sk ? sk.length - skn : 0;
-      var sphr = !sk ? 'Собираю…'
-        : !sk.length ? 'Ничего не застряло: у всех задач есть исполнитель и срок не вышел.'
-        : skn ? '<b>' + skn + ' ' + plural(skn, 'задача лежит', 'задачи лежат', 'задач лежат') +
-                ' без исполнителя.</b> Начни с них: просроченную хотя бы кто-то ведет, ничью — никто.'
-        : '<b>' + skl + ' ' + plural(skl, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
-          '.</b> Ниже по людям — с кем разговаривать.';
-      html = '<div><h2>Застряло</h2>' +
-        '<div class="verdict"><span class="vspark">' + ic('alert', 13) + '</span><span>' + sphr + '</span></div></div>';
-    }
     if (state.page === 'prospects') {
       var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
       html = '<div><h2>Лиды</h2>' +
@@ -2987,7 +2959,31 @@
       }
       // На «Потом» сводка про очередь, а не про просрочку: просрочки тут нет по
       // определению, и фраза «начни с них» указывала бы на другой экран.
-      if (TASK_SEGS[taskSeg()].view === 'teamweek') {
+      if (TASK_SEGS[taskSeg()].view === 'teamweek' && state.teamMode === 'focus') {
+        // Срез «Фокус»: во что команда целится на этой неделе.
+        var fw = state.focus && state.focus !== 'none' ? state.focus : null;
+        var fwt = fw ? (fw.tasks || []).filter(function (t) { return t.status !== 'cancel'; }) : [];
+        var fwb = fwt.filter(function (t) { return t.overdue; }).length;
+        var fwd = fwt.filter(function (t) { return t.status === 'done'; }).length;
+        tphr = !fw ? 'Собираю неделю.'
+          : !fwt.length ? 'Фокус недели: ни одна задача не взята в работу.'
+          : fwb ? 'Фокус недели: <b>' + fwb + ' ' + plural(fwb, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
+                  '.</b> Это первое, что стоит разобрать с людьми.'
+          : 'Фокус недели: просрочки нет, закрыто <b>' + fwd + '</b> из ' + fwt.length + '.';
+      }
+      else if (TASK_SEGS[taskSeg()].view === 'teamweek' && state.teamMode === 'stuck') {
+        // Срез «Застряло»: зеркало фокуса — не «куда целимся», а «что гниет».
+        var sk = state.stuck && state.stuck !== 'none' ? state.stuck.tasks || [] : null;
+        var skn = sk ? sk.filter(function (t) { return !t.assignee_id; }).length : 0;
+        var skl = sk ? sk.length - skn : 0;
+        tphr = !sk ? 'Смотрю, что застряло.'
+          : !sk.length ? 'Ничего не застряло: у всех задач есть исполнитель и срок не вышел.'
+          : skn ? '<b>' + skn + ' ' + plural(skn, 'задача лежит', 'задачи лежат', 'задач лежат') +
+                  ' без исполнителя.</b> Начни с них: просроченную хотя бы кто-то ведет, ничью — никто.'
+          : '<b>' + skl + ' ' + plural(skl, 'задача просрочена', 'задачи просрочены', 'задач просрочено') +
+            '.</b> Ниже по людям — с кем разговаривать.';
+      }
+      else if (TASK_SEGS[taskSeg()].view === 'teamweek') {
         var tw = state.teamWeek && state.teamWeek !== 'none' ? state.teamWeek : null;
         var pu = state.pulse && state.pulse !== 'none' ? state.pulse : null;
         if (!state.teamWho && pu && pu.mode === 'day') {
@@ -3391,6 +3387,11 @@
     // «Расписание» больше не отдельная страница — это половина вкладки «Встречи».
     // У кого сохранилась старая страница, тот попадает сразу туда, куда переехало.
     if (state.page === 'sched') { state.page = 'tasks'; state.taskSeg = 'meet'; }
+    // «Фокус недели» и «Застряло» переехали в срезы вкладки «Команда» (06.10.2026).
+    // Старые ссылки из бота и закладки ведут туда же, куда раньше.
+    if (state.page === 'focus' || state.page === 'stuck') {
+      state.teamMode = state.page; state.page = 'tasks'; state.taskSeg = 'team';
+    }
     // гард доступа: нет cap у текущей страницы → на первую доступную роли
     if (!can(pageCap(state.page)) || pageHidden(state.page)) state.page = firstAllowedPage();
     // «Обсуждения» больше не отдельная страница — это вкладка внутри «Диалогов»
@@ -3410,8 +3411,6 @@
     else if (state.page === 'finance') renderFinance(view);
     else if (state.page === 'analytics') renderBotAnalytics(view);
     else if (state.page === 'tasks') renderTasks(view);
-    else if (state.page === 'focus') renderFocus(view);
-    else if (state.page === 'stuck') renderStuck(view);
     else if (state.page === 'news') renderNews(view);
     else if (state.page === 'workshops') renderWorkshops(view);
     else if (state.page === 'team') renderTeam(view);
@@ -6483,12 +6482,14 @@
        планирования — неделя; все остальное либо очередь, либо разрез по ученикам,
        целям и людям. Старые «Сегодня», «План», «Все мои», «На приемку», «Готово»,
        «Вся команда», «По людям» слились сюда. */
+    /* Порядок задан Павлом 06.10.2026: План - Цели - Команда - Ученики - Встречи.
+       Сначала своя работа и куда она ведет, потом команда, потом ученики. */
     week:  { label: 'План',    view: 'myweek',   scope: 'my',  hint: 'мой план: сегодня, неделя, месяц; внизу очередь «Потом»' },
+    goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
+    team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'кто над чем работает, фокус недели и что застряло' },
     // Второй вопрос сотрудника — не «что делать мне», а «что сейчас с этим
     // учеником»: работа по одной семье разложена по разным исполнителям.
     stud:  { label: 'Ученики', view: 'students', scope: 'my',  hint: 'что команда должна сделать по каждому ученику' },
-    goals: { label: 'Цели',    view: 'goals',    scope: 'my',  hint: 'куда мы идем, по направлениям' },
-    team:  { label: 'Команда', view: 'teamweek', scope: 'all', cap: 'tasks_all', hint: 'у кого как идет неделя: собрана, сделано, застряло' },
     // Записи встреч (Fathom и загруженные протоколы) и что с каждой стало: до
     // 08.09.2026 черновики жили только за ссылкой из бота (Павел: «не могу найти»).
     // Встречи открыты всем, у кого есть «Задачи»: сюда 16.09.2026 переехал раздел
@@ -6528,6 +6529,12 @@
   function taskSeg() {
     var s = state.taskSeg;
     return TASK_SEGS[s] && taskSegs().indexOf(s) !== -1 ? s : 'week';
+  }
+  /* Открыт ли сейчас этот срез вкладки «Команда» («фокус», «застряло», «день»…).
+     Нужен загрузчикам: ответ приходит через секунду, и перерисовывать экран
+     можно, только если человек с него не ушел. */
+  function onTeamMode(mode) {
+    return state.page === 'tasks' && taskSeg() === 'team' && state.teamMode === mode;
   }
 
   /* Дата через N дней в формате поля <input type=date> (местный день, не UTC:
@@ -6888,6 +6895,31 @@
       (wkShift() ? '<button class="qchip" id="wk-now">Сейчас</button>' : '') +
     '</div>';
   }
+  /* Длинный список внутри блока: первые пять строк и кнопка на остальные.
+     «Застряло» на проде — это 57 задач подряд, а в фокусе у цели бывает десяток
+     шагов; сплошной лентой экран перестает читаться как список проблем
+     (Павел 06.10.2026: «получается там шквал задач»). */
+  var MORE_STEP = 5;
+  function moreOpen(key) { return !!(state.moreOpen && state.moreOpen[key]); }
+  function moreCut(key, list) { return moreOpen(key) ? list : list.slice(0, MORE_STEP); }
+  function moreBtn(key, total) {
+    if (total <= MORE_STEP) return '';
+    var hid = total - MORE_STEP;
+    return '<button type="button" class="qchip more-btn" data-more="' + esc(key) + '">' +
+      (moreOpen(key) ? 'Свернуть'
+        : 'Еще ' + hid + ' ' + plural(hid, 'задача', 'задачи', 'задач')) + '</button>';
+  }
+  function wireMore(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-more]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var k = b.getAttribute('data-more');
+        state.moreOpen = state.moreOpen || {};
+        state.moreOpen[k] = !state.moreOpen[k];
+        renderView();
+      });
+    });
+  }
   function wkWireNav(view) {
     function go(d) { state.weekShift = Math.max(-36, Math.min(12, wkShift() + d)); wkReload(); }
     if (el('wk-prev')) el('wk-prev').addEventListener('click', function () { go(-1); });
@@ -6902,8 +6934,9 @@
      которой есть шаги, взятые в текущую неделю. Поэтому лист не надо вести
      руками и он не устаревает: собрали неделю — фокус появился сам, закрыли
      шаг — он позеленел, кончилась неделя — лист собрался заново.
-     Отдельным разделом, а не пятой вкладкой «Задач»: там срезы работы одного
-     человека (мой план, мои ученики), а тут вся компания сверху. */
+     С 06.10.2026 это срез вкладки «Команда», а не свой пункт меню: вопрос
+     управленческий и стоит рядом с пульсом и «Застряло» (Павел: «перенести
+     фильтрами в задачник и убрать из боковой панели»). */
   function loadFocus(cb) {
     var sh = wkShift();
     state.tasksLoading = true;
@@ -6918,11 +6951,11 @@
         label: (rs[0] && rs[0].week_label) || '',
       };
       state.taskMe = rs[0] ? rs[0].me : state.taskMe;
-      if (cb) cb(); else if (state.page === 'focus') { renderHead(); renderView(); }
+      if (cb) cb(); else if (onTeamMode('focus')) { renderHead(); renderView(); }
     }).catch(function () {
       state.tasksLoading = false;
       state.focus = 'none';
-      if (state.page === 'focus') renderView();
+      if (onTeamMode('focus')) renderView();
     });
   }
 
@@ -6942,9 +6975,17 @@
   function focusDone(t) { return t.status === 'done'; }
 
   function renderFocus(view) {
-    if (state.focus === null) { view.innerHTML = dashSkeleton(); loadFocus(); return; }
+    // Шапка со срезами «Команды» едет вместе с экраном: он живет вкладкой, а не
+    // отдельной страницей, и без нее отсюда некуда вернуться.
+    var fcw = state.focus && state.focus !== 'none' ? state.focus : null;
+    var top = '<div class="wk-top">' + teamModeSeg() + '<span class="wk-spacer"></span>' +
+      wkNav(fcw ? fcw.label : '') + '</div>';
+    if (state.focus === null) {
+      view.innerHTML = top + dashSkeleton(); wireTeamMode(view); loadFocus(); return;
+    }
     if (state.focus === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
+      view.innerHTML = top + '<div class="card"><div class="empty">Не удалось загрузить неделю. Обнови страницу.</div></div>';
+      wireTeamMode(view);
       return;
     }
     var f = state.focus;
@@ -7003,10 +7044,10 @@
             '<span class="fw-plab">вся цель</span></div>' +
         '</div>' +
         (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
-        '<div class="fw-rows">' + steps.map(function (t) {
+        '<div class="fw-rows">' + moreCut('fx' + g.id, steps).map(function (t) {
           return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
             esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
-        }).join('') + '</div>' +
+        }).join('') + '</div>' + moreBtn('fx' + g.id, steps.length) +
       '</div>';
     }).join('');
 
@@ -7015,23 +7056,25 @@
           '<div class="tsk-band"><span class="tsk-band-t">Вне фокусов</span>' +
             '<span class="tsk-band-h">задачи недели, не привязанные к цели</span>' +
             '<span class="tsk-band-n num">' + loose.length + '</span></div>' +
-          '<div class="fw-rows">' + loose.sort(function (a, b) {
+          '<div class="fw-rows">' + moreCut('fxloose', loose.sort(function (a, b) {
             return (a.due_at || '').localeCompare(b.due_at || '');
-          }).map(function (t) {
+          })).map(function (t) {
             return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
               esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true }) + '</div>';
-          }).join('') + '</div>' +
+          }).join('') + '</div>' + moreBtn('fxloose', loose.length) +
         '</div>'
       : '';
 
-    view.innerHTML = bar +
+    view.innerHTML = top + bar +
       (focuses.length
         ? blocks
         : '<div class="card"><div class="empty">На этой неделе ни одна цель не взята в работу. ' +
-          'Неделя собирается в разделе «Задачи»: там люди берут задачи из «Потом».</div></div>') +
+          'Неделя собирается на вкладке «План»: там люди берут задачи из «Потом».</div></div>') +
       looseBlock;
 
+    wireTeamMode(view);
     wkWireNav(view);
+    wireMore(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
       b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-goalid')); });
     });
@@ -7046,7 +7089,7 @@
      списке это не видно.
 
      Зеркало «Фокуса недели»: тот отвечает на «куда целимся», этот — на «что
-     гниет». Два блока, и порядок в них не случайный. Сначала ничьи: у
+     гниет». Оба — срезы вкладки «Команда» (06.10.2026). Два блока, и порядок в них не случайный. Сначала ничьи: у
      просроченной есть хотя бы человек, который о ней знает, а у ничьей нет
      никого — ее не двигает никто и она не всплывет ни на чьем экране. Дальше
      просроченные, сгруппированные по людям: разговор про просрочку — это
@@ -7057,11 +7100,11 @@
       state.tasksLoading = false;
       state.stuck = { tasks: (r && r.tasks) || [] };
       state.taskMe = r ? r.me : state.taskMe;
-      if (cb) cb(); else if (state.page === 'stuck') { renderHead(); renderView(); }
+      if (cb) cb(); else if (onTeamMode('stuck')) { renderHead(); renderView(); }
     }).catch(function () {
       state.tasksLoading = false;
       state.stuck = 'none';
-      if (state.page === 'stuck') renderView();
+      if (onTeamMode('stuck')) renderView();
     });
   }
 
@@ -7075,9 +7118,13 @@
   }
 
   function renderStuck(view) {
-    if (state.stuck === null) { view.innerHTML = dashSkeleton(); loadStuck(); return; }
+    var top = '<div class="wk-top">' + teamModeSeg() + '</div>';
+    if (state.stuck === null) {
+      view.innerHTML = top + dashSkeleton(); wireTeamMode(view); loadStuck(); return;
+    }
     if (state.stuck === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить. Обнови страницу.</div></div>';
+      view.innerHTML = top + '<div class="card"><div class="empty">Не удалось загрузить. Обнови страницу.</div></div>';
+      wireTeamMode(view);
       return;
     }
     var all = state.stuck.tasks || [];
@@ -7099,10 +7146,10 @@
     /* who показываем только у ничьих: там он и есть сообщение («без исполнителя»).
        В блоке человека имя стоит в заголовке, и повторять его в каждой строке
        значит трижды сказать одно и то же. */
-    var rows = function (list, who) {
-      return '<div class="fw-rows">' + list.map(function (t) {
+    var rows = function (key, list, who) {
+      return '<div class="fw-rows">' + moreCut(key, list).map(function (t) {
         return dyRow(t, { who: !!who, noWho: !who, boss: true, due: true });
-      }).join('') + '</div>';
+      }).join('') + '</div>' + moreBtn(key, list.length);
     };
 
     var nobodyBlock = nobody.length
@@ -7110,7 +7157,7 @@
           '<div class="tsk-band"><span class="tsk-band-t">Ничьи</span>' +
             '<span class="tsk-band-h">задачу завели и не назначили — ее не делает никто</span>' +
             '<span class="tsk-band-n num">' + nobody.length + '</span></div>' +
-          rows(nobody.slice().sort(function (a, b) {
+          rows('stnobody', nobody.slice().sort(function (a, b) {
             return (a.due_at || '9999').localeCompare(b.due_at || '9999');
           }), true) +
         '</div>'
@@ -7119,7 +7166,7 @@
     var byWho = {};
     late.forEach(function (t) { (byWho[t.assignee_id] = byWho[t.assignee_id] || []).push(t); });
     var people = Object.keys(byWho).map(function (id) {
-      return { name: (byWho[id][0] || {}).assignee_name || 'Без имени', list: byWho[id] };
+      return { id: id, name: (byWho[id][0] || {}).assignee_name || 'Без имени', list: byWho[id] };
     }).sort(function (a, b) { return b.list.length - a.list.length; });
 
     var lateBlock = people.length
@@ -7130,17 +7177,19 @@
               '<span class="tsk-band-h">' + (deep ? 'самая старая ждет ' + deep + ' ' +
                 plural(deep, 'день', 'дня', 'дней') : 'срок вышел сегодня') + '</span>' +
               '<span class="tsk-band-n num">' + p.list.length + '</span></div>' +
-            rows(p.list.slice().sort(function (a, b) {
+            rows('st' + p.id, p.list.slice().sort(function (a, b) {
               return (a.due_at || '').localeCompare(b.due_at || '');
             })) +
           '</div>';
         }).join('')
       : '';
 
-    view.innerHTML = bar + nobodyBlock + lateBlock +
+    view.innerHTML = top + bar + nobodyBlock + lateBlock +
       (all.length ? '' : '<div class="card"><div class="empty">Ничего не застряло: ' +
         'у всех задач есть исполнитель и срок не вышел.</div></div>');
 
+    wireTeamMode(view);
+    wireMore(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-tid]'), function (row) {
       row.addEventListener('click', function () { openTask(+row.getAttribute('data-tid')); });
     });
@@ -10120,9 +10169,17 @@
     // переключатель «Месяц / Квартал» рядом с «День / Неделя / Месяц» читался как
     // два одинаковых (Павел 10.09.2026, скрин с двумя «Месяц» подряд).
     function on(m) { return m === 'month' || m === 'quarter' ? state.teamMode === 'stats' && state.teamPeriod === m : state.teamMode === m; }
-    return '<div class="pay-seg plan-seg">' + [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']].map(function (m) {
-      return '<button type="button" class="' + (on(m[0]) ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
-    }).join('') + '</div>';
+    function group(items) {
+      return '<div class="pay-seg plan-seg">' + items.map(function (m) {
+        return '<button type="button" class="' + (on(m[0]) ? 'on' : '') + '" data-teammode="' + m[0] + '">' + m[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    /* Два ряда кнопок, а не один из шести: слева период («когда смотрим»),
+       справа разрез («на что смотрим»). Фокус и застряло переехали сюда из
+       левого меню 06.10.2026 — вопросы у них управленческие, место рядом с
+       пульсом команды. */
+    return group([['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']]) +
+      group([['focus', 'Фокус'], ['stuck', 'Застряло']]);
   }
   function wireTeamMode(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-teammode]'), function (b) {
@@ -10365,6 +10422,8 @@
     }
     if (state.teamMode === 'stats') { renderTeamStats(view); return; }
     if (state.teamMode === 'reports') { renderTeamReports(view); return; }
+    if (state.teamMode === 'focus') { renderFocus(view); return; }
+    if (state.teamMode === 'stuck') { renderStuck(view); return; }
     renderPulse(view);
   }
 

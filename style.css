@@ -9480,6 +9480,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   font-size: 13px; line-height: 1.5; color: var(--ink-2);
 }
 .fw-rows { margin-top: 6px; }
+/* «еще N задач» под свернутым списком: кнопка принадлежит списку, поэтому
+   отступ сверху маленький, а снизу — как у блока */
+.more-btn { margin: 2px 0 2px 2px; }
 .fw-day-wrap { display: flex; align-items: stretch; gap: 10px; }
 .fw-day-wrap .dy-row { flex: 1 1 auto; min-width: 0; }
 .fw-day {
