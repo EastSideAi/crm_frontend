@@ -7082,7 +7082,7 @@
         (why ? '<div class="fw-why">' + esc(why) + '</div>' : '') +
         '<div class="fw-rows">' + moreCut('fx' + g.id, steps).map(function (t) {
           return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
-            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true }) + '</div>';
+            esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true, noDue: true }) + '</div>';
         }).join('') + '</div>' + moreBtn('fx' + g.id, steps.length) +
       '</div>';
     }).join('');
@@ -7096,7 +7096,7 @@
             return (a.due_at || '').localeCompare(b.due_at || '');
           })).map(function (t) {
             return '<div class="fw-day-wrap"><span class="fw-day' + (t.overdue ? ' over' : '') + '">' +
-              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true }) + '</div>';
+              esc(dayOf(t)) + '</span>' + dyRow(t, { who: true, boss: true, noGoal: true, odWord: true, noDue: true }) + '</div>';
           }).join('') + '</div>' + moreBtn('fxloose', loose.length) +
         '</div>'
       : '';
@@ -7423,7 +7423,9 @@
       var od = opts.odWord ? dueLabel(t).text
         : dueLabel(t).text.replace(/^просрочена( на)?\s*/, '');
       if (od) right += '<span class="tsk-due due-over">' + esc(od) + '</span>';
-    } else if (t.due_at && !closed && (opts.who || opts.due)) {
+    } else if (t.due_at && !closed && !opts.noDue && (opts.who || opts.due)) {
+      // noDue — там, где день уже стоит слева от строки (Фокус недели): справа
+      // он печатался второй раз, «ЧТ 8 … 8 окт».
       right += '<span class="tsk-due">' + esc(dueLabel(t).text) + '</span>';
     }
     // Статус только там, где он отклонение: в «Тебе сдали» все на приемке, и
@@ -22570,7 +22572,8 @@
   var TM_TOPIC_SHORT = { lang: 'Язык', docs: 'Документы', sales: 'Продажи', teachers: 'Преподаватели', tech: 'Техника' };
   function tmTopicChips(u) {
     var mine = u.notify_topics || [];
-    return '<span class="tm-tp" data-uid="' + u.id + '">' +
+    return '<span class="tm-tp" data-uid="' + u.id + '" role="group" ' +
+      'aria-labelledby="tm-s-tp-' + u.id + '">' +
       (state._teamTopics || []).map(function (t) {
         var on = mine.indexOf(t.id) >= 0;
         return '<button type="button" class="tm-tp-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
@@ -22585,7 +22588,8 @@
   function tmBotChips(u) {
     var off = u.bot_mute || [];
     if (!(state._teamBotKinds || []).length) return '';
-    return '<span class="tm-tp bot" data-uid="' + u.id + '" title="Уведомления бота задач">' + ic('bell', 12) +
+    return '<span class="tm-tp bot" data-uid="' + u.id + '" role="group" ' +
+      'aria-labelledby="tm-s-bot-' + u.id + '" title="Уведомления бота задач">' + ic('bell', 12) +
       state._teamBotKinds.map(function (t) {
         var on = off.indexOf(t.id) < 0;
         return '<button type="button" class="tm-bt-b' + (on ? ' on' : '') + '" data-t="' + esc(t.id) + '" ' +
@@ -22957,14 +22961,17 @@
            виды уведомлений бота) — отдельные чипы: когда не выбрано ничего, это
            видно как «все выключены», а не как сломанный сегмент. «Один из»
            (задачи команды) — системная капсула с белой активной кнопкой. */
-        '<div class="tm-ed-r"><span class="tm-ed-s">Клиенты и заявки</span>' + tmTopicChips(u) + '</div>' +
-        '<div class="tm-ed-r"><span class="tm-ed-s">Бот задач</span>' + tmBotChips(u) + '</div>' +
-        (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s">Задачи команды</span>' +
-          '<span class="pay-seg ft-seg" data-uid="' + u.id + '">' +
-            '<button type="button" class="tm-ft-b' + (u.full_team ? '' : ' on') + '" data-ft="0"' +
-              (u.full_team ? '' : ' aria-current="true"') + '>Своя ветка</button>' +
-            '<button type="button" class="tm-ft-b' + (u.full_team ? ' on' : '') + '" data-ft="1"' +
-              (u.full_team ? ' aria-current="true"' : '') + '>Вся команда</button>' +
+        '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-tp-' + u.id + '">Клиенты и заявки</span>' +
+          tmTopicChips(u) + '</div>' +
+        '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-bot-' + u.id + '">Бот задач</span>' +
+          tmBotChips(u) + '</div>' +
+        (iAmTop ? '<div class="tm-ed-r"><span class="tm-ed-s" id="tm-s-ft-' + u.id + '">Задачи команды</span>' +
+          '<span class="pay-seg ft-seg" data-uid="' + u.id + '" role="group" ' +
+            'aria-labelledby="tm-s-ft-' + u.id + '">' +
+            '<button type="button" class="tm-ft-b' + (u.full_team ? '' : ' on') + '" data-ft="0" ' +
+              'aria-pressed="' + (u.full_team ? 'false' : 'true') + '">Своя ветка</button>' +
+            '<button type="button" class="tm-ft-b' + (u.full_team ? ' on' : '') + '" data-ft="1" ' +
+              'aria-pressed="' + (u.full_team ? 'true' : 'false') + '">Вся команда</button>' +
           '</span></div>' : '') +
         '<div class="tm-ed-r"><span class="tm-ed-s">Разделы CRM</span>' +
           '<span class="tm-caps">' + tmCaps(u) + '</span></div>' +
@@ -23234,7 +23241,7 @@
         Array.prototype.forEach.call(btns, function (x) {
           var mine = (x.getAttribute('data-ft') === '1') === on;
           x.classList.toggle('on', mine);
-          if (mine) x.setAttribute('aria-current', 'true'); else x.removeAttribute('aria-current');
+          x.setAttribute('aria-pressed', mine ? 'true' : 'false');
         });
       }
       Array.prototype.forEach.call(btns, function (b) {
