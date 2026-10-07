@@ -3074,9 +3074,17 @@
       var mxl = state.meetx && state.meetx !== 'none' ? (state.meetx.meetings || []) : null;
       var mxLive = mxl ? mxl.filter(function (m) { return m.state === 'live'; }) : [];
       var mxNew = mxl ? mxl.filter(function (m) { return m.state === 'new' || m.state === 'failed'; }).length : 0;
-      var mxPhr = !mxl ? 'Собираю встречи команды.'
-        : mxLive.length ? '<b>' + mxLive.length + ' ' + plural(mxLive.length, 'встреча идет', 'встречи идут', 'встреч идет') +
-            ' прямо сейчас.</b> Она первой во вкладке «Ближайшие».'
+      /* Идущие считаем по своим комнатам, а не по журналу: журнал собирается
+         раз в минуту и про встречу, начатую только что, еще не знает. */
+      var mxr = state.meetRooms;
+      var liveN = (mxr && mxr !== 'none' && mxr !== 'loading' && mxr.rooms)
+        ? mxr.rooms.filter(function (r) { return r.status === 'live'; }).length
+        : mxLive.length;
+      var mxPhr = !mxl && !liveN ? 'Собираю встречи команды.'
+        : liveN ? '<b>' + liveN + ' ' + plural(liveN, 'встреча идет', 'встречи идут', 'встреч идет') +
+            ' прямо сейчас.</b> ' + (liveN > 1
+              ? 'Идут параллельно, зайти можно в любую.'
+              : 'Она первой во вкладке «Ближайшие».')
         : !mxl.length ? 'Встреч за полтора месяца нет.'
         : mxNew ? 'Записей без разбора: <b>' + mxNew + '</b>. У остальных есть конспект и договоренности.'
         : 'Все записи разобраны: конспект, договоренности и задачи на месте.';
@@ -7844,6 +7852,48 @@
 
   /* Что стоит в этот час этого дня: планерки, занятые окна, свободные окна, зумы.
      Порядок один и в неделе, и в дне — сверху то, что уже назначено. */
+  /* Свои встречи в сетке расписания. Раньше здесь были только планерки, зумы и
+     часы людей, а наш собственный сервис встреч в расписание не попадал вовсе —
+     и выходило, что назначенная через него встреча для остальных невидима
+     (Павел 07.10.2026: «нужно именно наш сервис организовать там»). */
+  function mxRoomsAt(day, hour) {
+    var d = state.meetRooms;
+    if (!d || d === 'none' || d === 'loading' || !d.rooms) return [];
+    return d.rooms.filter(function (r) {
+      if (r.status === 'cancel' || r.status === 'failed' || r.status === 'done') return false;
+      if (state.meetxDept && (r.dept || '') !== state.meetxDept) return false;
+      var at = r.starts_at ? new Date(r.starts_at) : (r.status === 'live' && r.started_at
+        ? new Date(r.started_at) : null);
+      if (!at || isNaN(at.getTime())) return false;
+      return zoomYmd(at) === day && at.getHours() === hour;
+    });
+  }
+  // Часы, в которые стоят свои встречи: по ним растягивается сетка, иначе
+  // встреча в восемь вечера оказалась бы за нижним краем расписания.
+  function mxRoomHours(day) {
+    var d = state.meetRooms, out = [];
+    if (!d || d === 'none' || d === 'loading' || !d.rooms) return out;
+    d.rooms.forEach(function (r) {
+      if (r.status === 'cancel' || r.status === 'failed' || r.status === 'done') return;
+      var at = r.starts_at ? new Date(r.starts_at)
+        : (r.status === 'live' && r.started_at ? new Date(r.started_at) : null);
+      if (!at || isNaN(at.getTime())) return;
+      if (day && zoomYmd(at) !== day) return;
+      out.push(at.getHours());
+    });
+    return out;
+  }
+  function mxRoomChip(r) {
+    var at = new Date(r.starts_at || r.started_at);
+    var live = r.status === 'live';
+    var tip = (r.title || 'Встреча') + ' · наша встреча' +
+      (live ? ' · идет сейчас' : ' · ' + hhmm(at.toISOString())) +
+      (r.created_by_name ? ' · завел ' + r.created_by_name : '') +
+      ' · нажми, чтобы открыть комнату';
+    return '<a class="sc-chip room' + (live ? ' live' : '') + '" href="' + esc(r.url) + '" ' +
+      'target="_blank" rel="noopener" title="' + esc(tip) + '">' +
+      (live ? 'идет: ' : '') + esc(r.title || 'Встреча') + '</a>';
+  }
   function schedAt(d, zooms, day, hour, who, mineOnly) {
     var fit = function (p) { return !who || p === who; };
     // Фильтр направления из шапки раздела режет и планерки: отдел у них свой
@@ -7866,6 +7916,9 @@
       busy: slots.filter(function (s) { return s.booked; }),
       free: slots.filter(function (s) { return !s.booked && !s.blocked; }),
       zooms: mine,
+      // Своя встреча принадлежит тому, кто ее завел, а не участнику расписания:
+      // при выборе конкретного человека ее не показываем, чтобы не приписать.
+      rooms: who ? [] : mxRoomsAt(day, hour),
     };
   }
 
@@ -7877,6 +7930,7 @@
     (d.slots || []).forEach(function (s) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); });
     (d.meetings || []).forEach(function (m) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); });
     zooms.forEach(function (z) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); });
+    mxRoomHours().forEach(function (h) { lo_h = Math.min(lo_h, h); hi_h = Math.max(hi_h, h); });
 
     var head = '<div class="sc-row head"><span class="sc-h"></span>' + days.map(function (x) {
       return '<span class="sc-d' + (x.getTime() === today.getTime() ? ' now' : '') + '">' +
@@ -7898,6 +7952,7 @@
           out.push(schedChip('busy', schedShort(s.person),
             s.person + ' · ' + (SC_WHAT[s.role] || 'занято') + (s.client ? ' · ' + s.client : '')));
         });
+        at.rooms.forEach(function (r) { out.push(mxRoomChip(r)); });
         at.zooms.forEach(function (z) { out.push(schedZoomChip(z, false)); });
         // Свой час всегда отдельным чипом, даже когда остальные схлопнуты в счетчик:
         // «где стоят мои окна» — первый вопрос к этому экрану у того, кто их отмечает.
@@ -7923,6 +7978,7 @@
     (d.slots || []).forEach(function (s) { if (s.date === key) { lo_h = Math.min(lo_h, s.hour); hi_h = Math.max(hi_h, s.hour); } });
     (d.meetings || []).forEach(function (m) { if (m.date === key) { lo_h = Math.min(lo_h, m.hour); hi_h = Math.max(hi_h, m.hour + m.duration - 1); } });
     zooms.forEach(function (z) { if (z.day === key) { lo_h = Math.min(lo_h, z.hour); hi_h = Math.max(hi_h, z.hour); } });
+    mxRoomHours(key).forEach(function (h) { lo_h = Math.min(lo_h, h); hi_h = Math.max(hi_h, h); });
     var nowH = day.getTime() === today.getTime() ? new Date().getHours() : -1;
     var rows = [], seen = 0;
     for (var h = lo_h; h <= hi_h; h++) {
@@ -7944,6 +8000,7 @@
         cells.push(schedChip('busy', schedShort(s.person) + ' · занято' + (s.client ? ' · ' + s.client : ''),
           (SC_WHAT[s.role] || '') && s.person + ' · ' + SC_WHAT[s.role]));
       });
+      at.rooms.forEach(function (r) { cells.push(mxRoomChip(r)); });
       at.zooms.forEach(function (z) { cells.push(schedZoomChip(z, true)); });
       at.free.forEach(function (s) {
         var can = state.schedEdit && schedCanEdit(d, s);
@@ -8051,7 +8108,9 @@
         '<span class="sc-chip free" title="Человек свободен: этот час можно продать клиенту">свободно</span>' +
         '<span class="sc-chip busy" title="Час уже занят уроком или разбором">занято</span>' +
         '<span class="sc-chip meet" title="Внутренняя встреча команды">планерка</span>' +
-        '<span class="sc-chip zoom" title="Встреча в зуме, ссылку видно в слоте">зум</span></div></div>';
+        '<span class="sc-chip zoom" title="Встреча в зуме, ссылку видно в слоте">зум</span>' +
+        '<span class="sc-chip room" title="Наша встреча: комната EastSide Meeting, ' +
+          'нажатие открывает ее">наша встреча</span></div></div>';
 
     // Пока человек не сказал, кто он в расписании, отмечать ему нечего: имена в CRM
     // и в расписании разные, угадывать их нельзя (можно отметить чужие часы).
@@ -23373,33 +23432,38 @@
      комнаты на контуре выключены, и раздел выглядел сломанным: заголовок,
      вкладки и пустота (Павел 06.10.2026, скрин с превью). Если своей комнаты
      нет — главным действием становится зум, он работает в любом случае. */
+  /* Своя встреча — главное действие раздела, и она стоит на экране всегда, даже
+     когда сервер комнат не отвечает. Пряталась она зря: Павел 07.10.2026 открыл
+     раздел и увидел один зум — «ты только перенес зум». Кнопка, которая честно
+     объясняет, почему сейчас не выйдет, лучше отсутствующей кнопки: по пустому
+     месту нечего нажать и не о чем спросить. */
   function mxActions() {
     var zoom = can('tasks_all');
-    var acts = [];
-    if (meetOn()) {
-      acts.push('<button type="button" class="mx-act go" id="mx-start">' +
+    var on = meetOn();
+    var acts = [
+      '<button type="button" class="mx-act go' + (on ? '' : ' mx-off') + '" id="mx-start">' +
         '<span class="mx-act-i">' + ic('mic', 17) + '</span>' +
         '<span class="mx-act-b"><b>Начать встречу</b>' +
-          '<i>комната откроется сразу</i></span></button>');
-      acts.push('<button type="button" class="mx-act" id="mx-plan">' +
+          '<i>' + (on ? 'комната откроется сразу' : 'сервер встреч сейчас не отвечает') +
+          '</i></span></button>',
+      '<button type="button" class="mx-act' + (on ? '' : ' mx-off') + '" id="mx-plan">' +
         '<span class="mx-act-i">' + ic('cal', 17) + '</span>' +
         '<span class="mx-act-b"><b>Запланировать</b>' +
-          '<i>позову людей и напомню</i></span></button>');
-      if (zoom) {
-        acts.push('<button type="button" class="mx-act" id="mx-zoom">' +
-          '<span class="mx-act-i">' + ic('plus', 17) + '</span>' +
-          '<span class="mx-act-b"><b>Зум</b>' +
-            '<i>когда нужен именно он</i></span></button>');
-      }
-    } else if (zoom) {
-      acts.push('<button type="button" class="mx-act go" id="mx-zoom">' +
+          '<i>позову людей и напомню</i></span></button>',
+    ];
+    if (zoom) {
+      acts.push('<button type="button" class="mx-act" id="mx-zoom">' +
         '<span class="mx-act-i">' + ic('plus', 17) + '</span>' +
-        '<span class="mx-act-b"><b>Создать зум</b>' +
-          '<i>время, тип, участники и проверка занятости</i></span></button>');
+        '<span class="mx-act-b"><b>Зум</b>' +
+          '<i>когда нужен именно он</i></span></button>');
     }
-    if (!acts.length) return '';
     return '<div class="mx-top-acts' + (acts.length === 1 ? ' one' : '') +
       (acts.length === 3 ? ' three' : '') + '">' + acts.join('') + '</div>';
+  }
+  // Одна и та же причина на обе кнопки своей встречи.
+  function mxNoServer() {
+    showToast('Своя встреча сейчас не заведется',
+      'сервер наших комнат не отвечает этой версии системы. Зум рядом работает');
   }
   function mxTabs() {
     var soon = mxSoonList().length;
@@ -23418,8 +23482,14 @@
   /* Шапка раздела одна на все вкладки, поэтому и обработчики у нее общие:
      «Расписание» рисует себя само и до своего кода не доходит. */
   function mxWireTop(view) {
-    el('mx-start') && el('mx-start').addEventListener('click', function () { openMeetRoom('now'); });
-    el('mx-plan') && el('mx-plan').addEventListener('click', function () { openMeetRoom('plan'); });
+    el('mx-start') && el('mx-start').addEventListener('click', function () {
+      if (!meetOn()) { mxNoServer(); return; }
+      openMeetRoom('now');
+    });
+    el('mx-plan') && el('mx-plan').addEventListener('click', function () {
+      if (!meetOn()) { mxNoServer(); return; }
+      openMeetRoom('plan');
+    });
     el('mx-zoom') && el('mx-zoom').addEventListener('click', function () {
       openZoomForm({
         kind: state.meetxDept ? mxDeptKinds(state.meetxDept)[0] : '',
@@ -23542,16 +23612,27 @@
             ic('ext', 13) + 'Открыть</a>') +
       '<button type="button" class="qchip mx-copy" data-mxlink="' + esc(r.url) + '" ' +
         'title="Скопировать ссылку">' + ic('copy', 13) + '</button>' +
-      (live ? '' : '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
+      /* У идущей встречи вместо «отменить» — «завершить»: отменять нечего, она
+         уже идет, а закрыть ее для всех надо уметь руками (Павел 07.10.2026).
+         Сама комната гаснет только через четверть часа после того, как все
+         вышли, и все это время выглядит живой. */
+      (live
+        ? '<button type="button" class="qchip mx-end" data-mxend="' + r.id + '">Завершить</button>'
+        : '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
     '</div>';
   }
   function renderMeetxSoon(view) {
     var list = mxSoonList();
     var d = state.meetRooms;
     if (!d || d === 'loading') { return '<div class="card">' + meetRoomsSkeleton() + '</div>'; }
-    if (!meetOn()) {
-      return '<div class="card"><div class="empty">Свои комнаты на этом контуре еще не включены. ' +
-        'Пока их настраивают, работаем через зум: кнопка сверху, а кто когда занят — во вкладке «Расписание».</div></div>';
+    /* Сервер комнат не отвечает. Раньше в этом случае пряталось и то, что уже
+       назначено, — а назначенные встречи никуда не делись, и человеку надо знать,
+       что сегодня в четыре у него планерка. Поэтому список остается, а причина
+       говорится строкой над ним. */
+    if (!meetOn() && !list.length) {
+      return '<div class="card"><div class="empty">Сервер наших встреч сейчас не отвечает, ' +
+        'новую комнату не завести. Пока так — работаем через зум: кнопка сверху, ' +
+        'а кто когда занят, видно во вкладке «Расписание».</div></div>';
     }
     if (!list.length) {
       return '<div class="card"><div class="empty">' +
@@ -23561,7 +23642,26 @@
           : 'Ничего не назначено. Нажми «Запланировать» — выберешь время, позовешь людей, ' +
             'а ссылку и напоминания я разошлю сам.') + '</div></div>';
     }
-    return '<div class="card mx-list">' + list.map(mxSoonRow).join('') + '</div>';
+    /* Идущие встречи отдельным блоком сверху. Их может быть несколько сразу:
+       комнаты независимые, и две планерки в одно время — обычный день, а не
+       ошибка. В общем списке «сейчас» терялось между назначенным на четверг. */
+    var live = list.filter(function (r) { return r.status === 'live'; });
+    var next = list.filter(function (r) { return r.status !== 'live'; });
+    var out = meetOn() ? '' :
+      '<div class="card mx-warn">' + ic('alert', 13) +
+      'Сервер наших встреч сейчас не отвечает: новую комнату не завести, ' +
+      'назначенные остаются на месте.</div>';
+    if (live.length) {
+      out += '<div class="card mx-list mx-live">' +
+        '<div class="tsk-band"><span class="tsk-band-t">Идет сейчас</span>' +
+          '<span class="tsk-band-h">' + (live.length > 1
+            ? 'встречи идут параллельно, зайти можно в любую'
+            : 'заходи по кнопке или скопируй ссылку') + '</span>' +
+          '<span class="tsk-band-n num">' + live.length + '</span></div>' +
+        live.map(mxSoonRow).join('') + '</div>';
+    }
+    if (next.length) out += '<div class="card mx-list">' + next.map(mxSoonRow).join('') + '</div>';
+    return out;
   }
   /* Экран одной встречи. Шапка с «назад» — единственный способ вернуться:
      вкладка раздела под ней уже не нужна, человек внутри одной встречи. */
@@ -23696,6 +23796,21 @@
             plural(r.told, 'человеку', 'людям', 'людям') : 'Встреча отменена');
           state.meetRooms = null; loadMeetRooms(); renderView();
         }, function () { b.disabled = false; showToast('Не получилось отменить'); });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxend]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-mxend');
+        b.disabled = true;
+        apiSend('/admin/api/meet/rooms/' + id + '/end', 'POST', {}, function () {
+          showToast('Встреча завершена', 'комната закрыта для всех');
+          state.meetRooms = null; loadMeetRooms(); renderView();
+        }, function (code, e) {
+          b.disabled = false;
+          var why = (e && e.body && e.body.detail) ||
+            (code === 403 ? 'это чужая встреча' : 'попробуй еще раз');
+          showToast('Не получилось завершить', why);
+        });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxgo]'), function (b) {
