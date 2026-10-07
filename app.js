@@ -31380,6 +31380,25 @@
         foot = '<span class="tg-by">' + ic('pen', 9) + 'изменено' +
                (m.edBy ? ' · ' + esc(m.edBy) : '') + '</span>' + (foot || '');
       }
+      /* Письмо в общей ленте помечено каналом и темой: без них реплика читается
+         как сообщение в боте, а это разный разговор с человеком. Вложения письма
+         лежат в документах карточки, здесь только их число. */
+      if (m.mail) {
+        var mfoot = '<span class="tg-by">' + ic('mail', 9) + 'письмо' +
+          (m.addr ? ' · ' + esc(m.addr) : '') +
+          (m.docs ? ' · ' + m.docs + ' ' + plural(m.docs, 'вложение', 'вложения', 'вложений') : '') +
+          (m.cut ? ' · письмо целиком в разделе «Почта»' : '') +
+          '</span>';
+        return sep + '<div class="tg-msg ' + side + ' mail">' +
+          '<div class="tg-bub">' +
+            '<div class="tg-mail-subj">' + esc(m.subject || 'Без темы') + '</div>' +
+            /* Текст письма показываем как есть, без разметки: письмо пишет чужой
+               человек, и превращать его [текст](ссылку) в красивую кликабельную
+               ссылку внутри CRM незачем. Сообщения бота — наши, там разметка наша. */
+            esc(m.text).replace(/\n/g, '<br>') +
+            '<span class="tg-mt num">' + fmtTime(m.at) + '</span>' +
+          '</div>' + mfoot + '</div>';
+      }
       var atts = m.atts || [];
       var files = atts.length ? '<div class="tg-atts">' + atts.map(tgFileCard).join('') + '</div>' : '';
       // Бот пишет в историю «[файл] имя», когда подписи к документу не было. Карточка
@@ -32101,13 +32120,51 @@
                canEdit: m.can_edit === true, edAt: m.edited_at, edBy: m.edited_by };
     });
   }
+  // Сколько текста письма показываем в ленте: дальше начинается цитата прошлой
+  // переписки, из-за которой одно письмо занимает весь экран.
+  var MAIL_FEED_MAX = 900;
+
+  /* Письма этого человека в виде реплик ленты. Направление читаем как в боте:
+     входящее письмо — это он, исходящее — это мы. */
+  function mailFeed(id) {
+    var b = MAIL[id];
+    if (!b || b === 'none') return [];
+    return (b.messages || []).map(function (m) {
+      /* Письмо с процитированной перепиской бывает на несколько экранов и в ленте
+         хоронит все остальное. Показываем начало, целиком письмо лежит в «Почте». */
+      var t = m.text || '';
+      if (t.length > MAIL_FEED_MAX) t = t.slice(0, MAIL_FEED_MAX).trim() + '…';
+      return { who: m.direction === 'in' ? 'client' : 'manager', mail: true,
+               text: t, cut: t.length !== (m.text || '').length,
+               at: m.created_at, subject: m.subject,
+               addr: m.direction === 'in' ? m.from : m.to,
+               docs: (m.doc_ids || []).length };
+    });
+  }
+
+  /* Одна лента переписки: бот и почта вместе, по времени.
+     Вера, 06.10.2026: «там вообще вся переписка должна быть, неважно, это ответ на
+     рекламную рассылку или сообщение в боте». Две ленты в двух разделах означали,
+     что про письмо узнают случайно: в карточку за ним никто не заходит. */
+  function convFeed(id, d) {
+    var msgs = leadConvMsgs(d);
+    if (can('clients')) {
+      if (!MAIL[id] && !MAIL_BUSY[id]) loadMail(id);
+      msgs = msgs.concat(mailFeed(id));
+    }
+    return msgs.sort(function (a, b) {
+      return String(a.at || '').localeCompare(String(b.at || ''));
+    });
+  }
+
   function buildDialog(ctx) {
     var id = ctx.id;
     var d = state.leadConv[id];
     if (!d) { leadConvLoad(id); d = 'load'; }
-    var head = '<div class="m-ctitle">Диалог</div>' +
-      '<div class="m-csub">Переписка человека с ботом — та же, что в разделе «Диалоги». ' +
-        'Ответите отсюда — сообщение уйдет ему тем же каналом, а бот в этом диалоге замолчит.</div>';
+    var head = '<div class="m-ctitle">Переписка</div>' +
+      '<div class="m-csub">Все, что человек нам писал и что писали мы: бот и почта в одной ленте. ' +
+        'Ответите отсюда — сообщение уйдет ему в бот тем же каналом, а бот в этом диалоге замолчит. ' +
+        'Письмо отправляется из раздела «Почта».</div>';
 
     if (d === 'load') {
       return head + '<div class="m-dlg"><div class="m-dlg-thread">' + buildThread(null) + '</div></div>' +
@@ -32122,6 +32179,16 @@
     }
     var c = (d.conversations || [])[0];
     if (!c) {
+      /* С ботом не писались, а письма есть: показываем ленту из одних писем.
+         Иначе ответ на рассылку виден только в разделе «Почта», куда за ним
+         никто не заходит. */
+      var tolkoPisma = convFeed(id, d);
+      if (tolkoPisma.length) {
+        return head +
+          '<div class="m-dlg"><div class="m-dlg-thread">' + buildThread(tolkoPisma) + '</div></div>' +
+          '<div class="m-dlg-more">С ботом этот человек не переписывался — в ленте только почта.</div>' +
+          buildNotifyFold(id);
+      }
       return head + '<div class="m-dlg-none">' + ic('chat', 22) +
         '<div><b>Переписки с ботом нет</b>' +
         '<span>Этот человек боту не писал, либо писал с другого аккаунта: сводим по телеграму, ' +
@@ -32145,7 +32212,7 @@
         '<div class="m-dlg-h">' + chBadge(c.channel) + st +
           '<button class="bp ghost sm" id="dlg-open">' + ic('chat', 13) + 'Открыть в «Диалогах»</button></div>' +
         matched +
-        '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(leadConvMsgs(d)) + '</div>' +
+        '<div class="m-dlg-thread" id="dlg-thread">' + buildThread(convFeed(id, d)) + '</div>' +
         '<div class="m-dlg-compose">' +
           '<label class="tg-clip" title="Отправить клиенту файл">' + ic('clip', 17) +
             '<input type="file" id="dlg-file" hidden></label>' +
@@ -32325,7 +32392,7 @@
     { id: 'docs',   label: 'Документы',  icon: 'doc' },
     { id: 'mail',   label: 'Почта',      icon: 'mail' },
     { id: 'pay',    label: 'Оплаты',     icon: 'card' },
-    { id: 'dialog', label: 'Диалог',     icon: 'chat' },
+    { id: 'dialog', label: 'Переписка',  icon: 'chat' },
     { id: 'ai',     label: 'Диагностика', icon: 'spark' },
   ];
 
@@ -33622,7 +33689,11 @@
     MAIL_BUSY[id] = true;
     api('/admin/api/leads/' + id + '/mail').then(function (r) {
       MAIL_BUSY[id] = false; MAIL[id] = r;
-      if (state.drawerId === id && state.modalSection === 'mail') renderModalContent();
+      /* Письма приезжают и в раздел «Почта», и в ленту переписки: в ленте они стоят
+         вперемешку с сообщениями бота, и без этой перерисовки лента осталась бы
+         без них до следующего открытия карточки. */
+      if (state.drawerId === id &&
+          (state.modalSection === 'mail' || state.modalSection === 'dialog')) renderModalContent();
     }).catch(function (e) {
       MAIL_BUSY[id] = false;
       if (e.message !== '403') { MAIL[id] = 'none'; if (state.drawerId === id) renderModalContent(); }

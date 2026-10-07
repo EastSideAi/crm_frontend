@@ -4420,6 +4420,15 @@ button.tsk-mimp { cursor: pointer; }
 .tg-msg.out.ai .tg-by { color: var(--blue); }
 .tg-msg.out.mgr .tg-by { color: var(--navy); }
 .tg-by.warn { color: var(--red-ink); }
+/* Письмо в общей ленте переписки. Пузырь тот же, чтобы лента читалась одним
+   потоком, но шире (в письме абзацы, а не реплики) и с темой сверху: без темы
+   письмо неотличимо от сообщения в боте, а это разный разговор. */
+.tg-msg.mail { max-width: 88%; }
+.tg-msg.mail .tg-bub { border-radius: 14px; }
+.tg-msg.in.mail .tg-bub { box-shadow: inset 0 0 0 1px var(--line-2); }
+.tg-mail-subj { font-weight: 700; font-size: 13px; letter-spacing: -.01em;
+  margin-bottom: 4px; }
+.tg-msg.out.mail .tg-mail-subj { color: rgba(255,255,255,.92); }
 .tg-msg.undelivered .tg-bub { box-shadow: inset 0 0 0 1px var(--red); }
 .tg-msg.out.undelivered .tg-bub { opacity: .82; }
 /* Фотография в переписке пузыря не требует: рамка вокруг снимка растягивала белую
