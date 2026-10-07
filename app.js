@@ -32786,12 +32786,14 @@
   /* нормализация агрегата из деталей (клиентский fallback) */
   function aggregatePayments(items) {
     var from = finPeriodFrom();
-    var paid = 0, pending = 0, refunded = 0, paidCount = 0;
+    var paid = 0, pending = 0, refunded = 0, paidCount = 0, archived = 0;
     var byMonth = {}, byProduct = {}, byClient = {};
     items.forEach(function (it) {
       (it.payments || []).forEach(function (p) {
         var when = p.paid_at || p.created_at;
         if (from && when && new Date(when) < from) return;
+        // оплата прошлого сезона в деньгах не участвует — как и на бэкенде
+        if (p.included === false) { archived += (p.amount_rub || 0); return; }
         var amt = p.amount_rub || 0;
         if (p.status === 'paid') {
           paid += amt; paidCount++;
@@ -32812,6 +32814,7 @@
     return {
       paid_total: paid, pending_total: pending, refunded_total: refunded,
       paid_count: paidCount, avg_check: paidCount ? Math.round(paid / paidCount) : 0,
+      archived_total: archived,
       by_status: [
         { key: 'paid', label: 'Оплачено', amount: paid },
         { key: 'pending', label: 'Ожидается', amount: pending },
@@ -32851,6 +32854,7 @@
           { key: 'refunded', label: 'Возвраты', amount: T.refunded != null ? T.refunded : (r.refunded_total || 0) },
         ],
         by_month: bm, by_product: bp, top_clients: tc,
+        archived_total: r.archived_total || 0, archived_count: r.archived_count || 0,
         pay_conv: payConvLocal(r.paying_lead_ids ? indexBy(r.paying_lead_ids) : null),
       };
       state.finance = fin; state.finLoading = false;
@@ -32916,10 +32920,18 @@
         '<span class="nm">' + esc(s.label) + '</span>' +
         '<span class="am' + (s.amount ? '' : ' muted') + '">' + fmtMoney(s.amount) + ' ₽</span></div>';
     }).join('') + '</div>';
+    /* Оплаты прошлых сезонов намеренно вне всех цифр выше. Строкой тут, чтобы на
+       вопрос «в карточках денег больше, чем в сводке» ответ был на том же экране. */
+    var archNote = f.archived_total
+      ? '<div class="fin-arch">Плюс ' + fmtMoney(f.archived_total) + ' ₽ оплат прошлых сезонов' +
+        (f.archived_count ? ' (' + f.archived_count + ' ' +
+          plural(f.archived_count, 'оплата', 'оплаты', 'оплат') + ')' : '') +
+        ' — они видны в карточках, но в выручку и средний чек не идут.</div>'
+      : '';
     var statusCard = '<div class="card sp5" style="padding:22px 26px">' +
       '<div class="sec-head"><span class="ic">' + ic('wallet', 14) + '</span>' +
       '<div><div class="t">Деньги по статусам</div><div class="s">сколько получено, ждем и вернули</div></div></div>' +
-      stack + leg + '</div>';
+      stack + leg + archNote + '</div>';
 
     var monthsCard;
     if (f.by_month.length) {
@@ -35272,6 +35284,9 @@
   }
   function buildAdmissionSection(ctx) {
     var id = state.drawerId;
+    // Когда семье выдали доступ в кабинет. Живет в overrides карточки рядом с
+    // тарифом и направлением: это такое же поле карточки, а не задача плана.
+    var accessAt = ((ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {}).access_at || '';
     var tasks = rmTasks(id);
     var byStage = {};
     tasks.forEach(function (t) { (byStage[t.stage] = byStage[t.stage] || []).push(t); });
@@ -35324,17 +35339,41 @@
           return '<button class="rm-at-t' + (i === 0 ? ' on' : '') + '" data-sub="' + o[0] + '">' + o[1] + '</button>';
         }).join('');
 
+      /* Доступ к платформе — не работа на несколько задач, а один факт: выдали или
+         нет и когда (Мария 07.10.2026: «не нужны задачи, нужна галочка да/нет и
+         дата»). Поэтому у этапа свое тело: переключатель и дата вместо конструктора
+         задач. Уже заведенные тут задачи показываем — чужую работу не прячем. */
+      var isAccess = st.key === 'access';
+      var accAt = isAccess ? String(accessAt || '') : '';
+      if (isAccess) {
+        scls = accAt ? 'done' : (list.length ? scls : 'empty');
+      }
+      var accBody = isAccess
+        ? '<div class="rm-access' + (accAt ? ' on' : '') + '">' +
+            '<button class="rm-acc-tgl" id="rm-acc-tgl">' +
+              ic(accAt ? 'check' : 'plus', 13) +
+              (accAt ? 'Доступ выдан' : 'Отметить, что доступ выдан') + '</button>' +
+            (accAt ? '<label class="rm-acc-date">Когда' +
+              '<input type="date" id="rm-acc-date" value="' + esc(accAt) + '"></label>' : '') +
+          '</div>'
+        : '';
+
       html += '<div class="rm-stage ' + scls + '">' +
-        '<div class="rm-rail"><div class="rm-node">' + (allDone ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
+        '<div class="rm-rail"><div class="rm-node">' + ((allDone || (isAccess && accAt)) ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
         '<div class="rm-body">' +
           '<div class="rm-shead">' +
             '<div class="rm-stitle">' + esc(meta.title || st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
-            (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
+            (isAccess
+              ? '<div class="rm-stag' + (accAt ? ' ok' : '') + '">' + (accAt ? 'выдан ' + fmtDay(accAt) : 'не выдан') + '</div>'
+              : list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
           '</div>' +
           '<div class="rm-ssub">' + esc(meta.about || st.sub) + '</div>' +
           (st.hint ? '<div class="rm-hint">' + ic('clock', 12) + esc(st.hint) + '</div>' : '') +
+          accBody +
           (rows ? '<div class="rm-tasks">' + rows + '</div>' : '') +
-          '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>' +
+          (isAccess ? '' :
+          '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>') +
+          (isAccess ? '' :
           '<div class="rm-add" data-stage="' + st.key + '" data-o="' + defOwner + '" hidden>' +
             '<div class="rm-add-own">' +
               '<button data-o="client"' + (defOwner === 'client' ? ' class="on"' : '') + '>' + ic('leads', 12) + 'Клиент делает</button>' +
@@ -35356,7 +35395,7 @@
               '</div>' +
               '<button class="rm-f-add bp sm">' + ic('plus', 13) + 'Добавить задачу</button>' +
             '</div>' +
-          '</div>' +
+          '</div>') +
         '</div>' +
       '</div>';
     });
@@ -37638,11 +37677,18 @@
     var pays = (d && d.payments) || [];
     if (!pays.length) return uzPanel({ icon: 'coins', title: 'Деньги', mute: true, goto: 'pay', golabel: 'оплаты',
       body: '<div class="uz-empty">Оплат пока нет</div>' });
-    var paid = 0, pend = 0;
-    pays.forEach(function (p) { if (p.status === 'paid') paid += (p.amount_rub || 0); else if (p.status === 'pending') pend += (p.amount_rub || 0); });
+    // Прошлый сезон считаем отдельно — как на вкладке оплат и в сводке по деньгам,
+    // иначе обзор и сводка показывают разные суммы по одной карточке.
+    var paid = 0, pend = 0, arch = 0;
+    pays.forEach(function (p) {
+      var amt = p.amount_rub || 0;
+      if (p.included === false) { if (p.status === 'paid') arch += amt; return; }
+      if (p.status === 'paid') paid += amt; else if (p.status === 'pending') pend += amt;
+    });
     var body = '<div class="uz-big num">' + fmtMoney(paid) + ' <span>₽</span></div>' +
       '<div class="uz-line">оплачено · <b class="num">' + pays.length + '</b> ' + plural(pays.length, 'платеж', 'платежа', 'платежей') +
-      (pend ? ' · ждем <b class="num">' + fmtMoney(pend) + ' ₽</b>' : '') + '</div>';
+      (pend ? ' · ждем <b class="num">' + fmtMoney(pend) + ' ₽</b>' : '') +
+      (arch ? ' · прошлые сезоны <b class="num">' + fmtMoney(arch) + ' ₽</b>' : '') + '</div>';
     return uzPanel({ icon: 'coins', title: 'Деньги', body: body, goto: 'pay', golabel: 'оплаты' });
   }
 
@@ -39336,14 +39382,23 @@
     var pays = (ctx.d && ctx.d.payments) || [];
     // Контакт для чека: берём известный из карточки, менеджер при нужде поправит.
     var qiContact = (ctx.d && (ctx.d.email || (ctx.d.booking && ctx.d.booking.contact))) || '';
-    var paid = pays.filter(function (p) { return p.status === 'paid'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
-    var pending = pays.filter(function (p) { return p.status === 'pending'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
-    var refunded = pays.filter(function (p) { return p.status === 'refunded'; }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
+    /* Оплата прошлого сезона (included === false) в деньгах компании не считается:
+       те суммы уже посчитаны в отчетности того года, и в доске они бы задвоились.
+       Своей ячейкой она все равно видна — иначе менеджер решит, что оплата пропала. */
+    function paySum(st, arch) {
+      return pays.filter(function (p) {
+        return p.status === st && (p.included === false) === !!arch;
+      }).reduce(function (s, p) { return s + (p.amount_rub || 0); }, 0);
+    }
+    var paid = paySum('paid', false), pending = paySum('pending', false), refunded = paySum('refunded', false);
+    var archived = paySum('paid', true);
 
-    var board = '<div class="pay-board">' +
+    var board = '<div class="pay-board' + (archived ? ' four' : '') + '">' +
       '<div class="pay-cell lead"><div class="pc-l">Оплачено</div><div class="pc-v num">' + fmtMoney(paid) + ' ₽</div></div>' +
       '<div class="pay-cell' + (pending ? '' : ' muted') + '"><div class="pc-l">Ожидается</div><div class="pc-v num">' + fmtMoney(pending) + ' ₽</div></div>' +
       '<div class="pay-cell' + (refunded ? '' : ' muted') + '"><div class="pc-l">Возвраты</div><div class="pc-v num">' + fmtMoney(refunded) + ' ₽</div></div>' +
+      (archived ? '<div class="pay-cell"><div class="pc-l">Прошлые сезоны</div>' +
+        '<div class="pc-v num">' + fmtMoney(archived) + ' ₽</div></div>' : '') +
     '</div>';
 
     var rows = pays.slice().sort(function (a, b) {
@@ -39355,14 +39410,22 @@
         ? p.paid_at.slice(8, 10) + '.' + p.paid_at.slice(5, 7) + '.' + p.paid_at.slice(0, 4)
         : fmtWhen(p.created_at);
       var amtCls = p.status === 'refunded' ? ' refunded' : (p.status === 'pending' ? ' pending' : '');
+      var arch = p.included === false;
+      /* Переключатель прямо в строке: старые оплаты вносят пачкой, и возвращаться
+         за галочкой в форму для каждой — лишний заход. */
+      var incBtn = '<button class="pay-inc' + (arch ? ' off' : '') + '" data-payinc="' +
+        p.id + '" data-payincv="' + (arch ? '1' : '0') + '" title="' +
+        (arch ? 'Оплата прошлого сезона: в выручку не идет. Нажмите, чтобы считать' :
+                'Считается в выручку. Нажмите, если это оплата прошлого сезона') + '">' +
+        (arch ? 'прошлый сезон' : 'в выручке') + '</button>';
       var rcpt = p.receipt_doc_id
         ? '<a class="pay-rcpt has" href="#" data-docdl="' + p.receipt_doc_id + '" title="Открыть квитанцию">' + ic('doc', 13) + 'квитанция</a>'
         : '<button class="pay-rcpt" data-attachpay="' + p.id + '" title="Прикрепить квитанцию">' + ic('plus', 12) + 'квитанция</button>';
-      return '<div class="pay-row">' +
+      return '<div class="pay-row' + (arch ? ' arch' : '') + '">' +
         '<div class="doc-b"><div class="doc-n">' + esc(p.title) +
           ' <span class="sev s-' + st.sev + '" style="margin-left:6px">' + st.label + '</span></div>' +
           '<div class="doc-m">' + [when, p.note].filter(Boolean).map(esc).join(' · ') + '</div></div>' +
-        rcpt +
+        incBtn + rcpt +
         '<span class="pay-amt' + amtCls + ' num">' + fmtMoney(p.amount_rub) + ' ₽</span>' +
         '<button class="icobtn del" data-delpay="' + p.id + '" title="Удалить">' + ic('x', 14) + '</button></div>';
     }).join('');
@@ -39436,6 +39499,9 @@
                 '<button class="bp sm" id="pay-add-btn" style="justify-content:center">' + ic('plus', 13) + 'Добавить</button>' +
               '</div>' +
               '<button class="pay-rcpt add" id="pay-rcpt-pick" type="button">' + ic('doc', 13) + '<span id="pay-rcpt-lbl">Прикрепить квитанцию (необязательно)</span></button>' +
+              '<label class="sv-onoff top"><input type="checkbox" id="pay-inc" checked>' +
+                '<span>Считать в выручку. Снимите галочку для оплаты прошлого сезона: ' +
+                'в карточке она останется, а в сводку, средний чек и процент продавцу не пойдет</span></label>' +
             '</div></div>' +
         '</div></details>' +
       '<input type="file" id="pay-rcpt-file" style="display:none">';
@@ -39997,6 +40063,23 @@
             rmUpd(tid, function (t) { t.submit = sb.getAttribute('data-sub'); return t; });
           });
         });
+      });
+      /* Доступ к платформе: галочка и дата вместо задач. Сохраняем сразу в карточку
+         (overrides.access_at) — пустая строка там значит «снять ключ», это и есть
+         «доступ не выдан». */
+      var accTgl = rmHost.querySelector('#rm-acc-tgl');
+      if (accTgl) accTgl.addEventListener('click', function () {
+        var ov = ((state.details[id] && state.details[id].crm && state.details[id].crm.overrides) || {});
+        var cur = ov.access_at || '';
+        accTgl.disabled = true;
+        patch(id, { overrides: { access_at: cur ? '' : todayISO(0) } }, null, function () {
+          showToast(cur ? 'Доступ снят' : 'Доступ отмечен как выданный');
+          rmReload();
+        });
+      });
+      var accDate = rmHost.querySelector('#rm-acc-date');
+      if (accDate) accDate.addEventListener('change', function () {
+        patch(id, { overrides: { access_at: accDate.value || '' } }, null, function () { rmReload(); });
       });
       // раскрытие панели добавления
       Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-add-btn'), function (b) {
@@ -40831,7 +40914,9 @@
         var amt = parseInt((el('pay-amt').value || '').replace(/\D/g, ''), 10) || 0;
         var date = el('pay-date') && el('pay-date').value ? el('pay-date').value : todayISO(0);
         if (!title) { el('pay-title').focus(); return; }
-        var body = { title: title, amount_rub: amt, status: payStatus };
+        var incEl = el('pay-inc');
+        var body = { title: title, amount_rub: amt, status: payStatus,
+                     included: incEl ? !!incEl.checked : true };
         if (payStatus === 'paid' || payStatus === 'refunded') body.paid_at = date;
         apiSend('/admin/api/leads/' + id + '/payments', 'POST', body, function (r) {
           if (stagedRcpt && r && r.id) {  // догружаем квитанцию и привязываем к созданной оплате
@@ -40845,6 +40930,17 @@
         });
       });
     }
+    Array.prototype.forEach.call(host.querySelectorAll('[data-payinc]'), function (b) {
+      b.addEventListener('click', function () {
+        var want = b.getAttribute('data-payincv') === '1';  // сейчас выключено → включаем
+        b.disabled = true;
+        apiSend('/admin/api/payments/' + b.getAttribute('data-payinc'), 'PATCH',
+          { included: want }, function () {
+            showToast(want ? 'Оплата считается в выручке' : 'Оплата помечена прошлым сезоном, в выручку не идет');
+            reloadPay();
+          });
+      });
+    });
     Array.prototype.forEach.call(host.querySelectorAll('[data-delpay]'), function (b) {
       b.addEventListener('click', function () {
         var row = b.closest('.pay-row'); if (row) { row.style.opacity = '.4'; row.style.pointerEvents = 'none'; }
