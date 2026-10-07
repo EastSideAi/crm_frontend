@@ -652,6 +652,15 @@ a { color: inherit; text-decoration: none; }
 .tm-ed .tm-f > span { font-size: 11px; font-weight: 600; color: var(--ink-3);
   text-transform: uppercase; letter-spacing: .02em; }
 .tm-ed .tm-mail { width: 190px; background: var(--card); }
+/* имя и фамилия правятся тут же, рядом с почтой: одна геометрия на оба поля */
+.tm-ed .tm-nm-f { width: 190px; font: 500 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line-2); border-radius: 9px; padding: 8px 11px;
+  transition: .15s var(--ease); }
+.tm-ed .tm-nm-f:hover { border-color: #DCE7FF; }
+.tm-ed .tm-nm-f:focus { background: #fff; border-color: var(--blue); }
+.tm-ed .tm-nm-f::placeholder { color: var(--ink-3); }
+.tm-ed .tm-nm-f:disabled { color: var(--ink-3); background: var(--fill);
+  border-color: transparent; cursor: default; }
 .tm-ed-r { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .tm-ed-s { font-size: 11px; font-weight: 600; color: var(--ink-3);
   text-transform: uppercase; letter-spacing: .02em; min-width: 132px; }
@@ -798,7 +807,7 @@ a { color: inherit; text-decoration: none; }
   .tm-q { width: 100%; order: 9; }
   .tm-ed { margin-left: 8px; }
   .tm-ed-g { flex-direction: column; }
-  .tm-ed .tm-f, .tm-ed .tm-f select, .tm-ed .tm-mail { width: 100%; }
+  .tm-ed .tm-f, .tm-ed .tm-f select, .tm-ed .tm-mail, .tm-ed .tm-nm-f { width: 100%; }
   .tm-ed-s { min-width: 0; width: 100%; }
 }
 @media (max-width: 960px) {

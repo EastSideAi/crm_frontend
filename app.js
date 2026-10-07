@@ -23991,6 +23991,13 @@
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-ed">' +
         '<div class="tm-ed-g">' +
+          /* Имя правится здесь же, а не только при заведении: человек выходит
+             замуж, приходит с опечаткой в фамилии, начинает работать под полным
+             именем вместо одного имени (Павел, 07.10.2026). */
+          '<label class="tm-f"><span>Имя и фамилия</span>' +
+            '<input class="tm-nm-f" data-uid="' + u.id + '" type="text" autocomplete="off" ' +
+              (lock ? 'disabled ' : '') +
+              'value="' + esc(u.name || '') + '" placeholder="как зовут человека"></label>' +
           '<label class="tm-f"><span>Роль</span>' + sel + '</label>' +
           (lock ? '' : '<label class="tm-f"><span>Руководитель</span>' +
             '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></label>') +
@@ -24460,6 +24467,32 @@
       }, function () {
         hib.disabled = false;
         showToast('Не удалось сохранить — попробуйте еще раз');
+      });
+    });
+    /* Имя сохраняется по уходу из поля, как и почта. Пустое не отправляем вовсе:
+       сервер отобьет 422, а человек останется смотреть на пустую строку и гадать,
+       сохранилось оно или нет. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-nm-f'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (!val) {
+          inp.value = (u && u.name) || '';
+          showToast('Имя не может быть пустым', 'по нему человека зовут в задачах и встречах');
+          return;
+        }
+        if (u && (u.name || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { name: val }, function (r) {
+          if (u) u.name = (r && r.user && r.user.name) || val;
+          /* Перерисовываем: имя стоит еще в строке дерева, в кружке с инициалами
+             и в списке руководителей — иначе половина экрана останется со старым. */
+          renderView();
+          showToast('Имя сохранено');
+        }, function () {
+          inp.value = (u && u.name) || '';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
       });
     });
     /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
