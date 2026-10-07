@@ -4572,6 +4572,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 @media (max-width: 1180px) {
   .sp7, .sp5 { grid-column: 1 / span 12; }
   .cvc-body { grid-template-columns: 1fr; }
+  /* Шесть плиток в одну строку тут уже не помещаются: слева меню 248px, на плитку
+     остается около 115px, а число в 38px при четырех знаках занимает 88px и лезет
+     на соседнюю. Двумя рядами по три читается и остается колонкой. */
+  .statbar.six { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 960px) {
   body { overflow: auto; }
@@ -10167,6 +10171,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    оставлял под адресом пустую полосу. Адрес переносится по буквам: пробелов в
    нем нет, и без этого длинная строка уехала бы за край экрана. */
 .bc-link .bc-co-nm { grid-column: 1; overflow-wrap: anywhere; }
+/* Колонки чисел фиксированные, как в .bc-nums: при auto ширина зависит от
+   числа знаков, и «9 человек» с «3 человека» разъезжаются — взгляд не может
+   сравнить две ссылки по вертикали. */
+.bc-link { grid-template-columns: minmax(0, 1fr) 104px 104px; }
+.bc-link .bc-co-n { justify-content: flex-end; }
 /* Вход в переписку с человеком прямо из строки: ответ площадки доказывает отправку,
    а чат показывает само сообщение. */
 /* Проверка у площадки: кнопка рядом со статусом и её вердикт на месте кнопки.
@@ -10258,6 +10267,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .trow.bc-grid .t-when { grid-column: 2; grid-row: 1; align-self: start; }
   .bc-st { grid-column: 1 / -1; grid-row: 2; }
   .bc-co { padding: 12px 16px; }
+  /* На телефоне адрес занимает всю ширину, числа уходят под него. В одной строке
+     адресу оставалось около 130px, и короткий «истсайд.рф/webinar» рвался посередине
+     слова. Фиксированные колонки чисел тут тоже снимаем. */
+  .bc-link { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .bc-link .bc-co-nm { grid-column: 1 / -1; }
+  .bc-link .bc-co-n:nth-of-type(2) { margin-left: auto; }
   /* Возврат и название прогона не делят одну строку: на 390px заголовку оставалось
      пол-экрана, и он ломался на три строки. */
   .bc-head { flex-direction: column; align-items: flex-start; gap: 10px; }

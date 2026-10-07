@@ -26623,14 +26623,18 @@
       return '<div class="bc-co bc-link">' +
         '<div class="bc-co-nm">' + esc(l.label || human) +
           (l.label ? '<small>' + esc(human) + '</small>' : '') + '</div>' +
-        '<div class="bc-co-n num">' + (l.people || 0) + '<small>человек</small></div>' +
-        '<div class="bc-co-n num">' + (l.clicks || 0) + '<small>нажатий</small></div>' +
+        '<div class="bc-co-n num">' + (l.people || 0) +
+          '<small>' + plural(l.people || 0, 'человек', 'человека', 'человек') + '</small></div>' +
+        '<div class="bc-co-n num">' + (l.clicks || 0) +
+          '<small>' + plural(l.clicks || 0, 'нажатие', 'нажатия', 'нажатий') + '</small></div>' +
       '</div>';
     }).join('');
     return '<div class="card sp12" style="overflow:hidden">' +
-      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('go', 14) + '</span>' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('ext', 14) + '</span>' +
       '<div><div class="t">По каким ссылкам нажимали</div>' +
-      '<div class="s">считаем сами: у почтового провайдера эти цифры наружу не выходят</div></div></div>' +
+      /* Сумма по ссылкам больше «Нажали» сверху, и это не ошибка: один человек мог
+         нажать и кнопку эфира, и ссылку в подписи. Сверху — люди, здесь — ссылки. */
+      '<div class="s">считаем сами, провайдер эти цифры наружу не отдает. Один человек мог нажать несколько ссылок, поэтому сумма больше, чем «Нажали» сверху</div></div></div>' +
       '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
@@ -26693,6 +26697,11 @@
      У рассылок до 21.09.2026 номера нет — там кнопки не будет, и это честнее заглушки. */
   function bcProof(p) {
     if (p.status !== 'ok' || !p.provider_msg_id) return '';
+    /* У почты спрашивать некого: smtp.bz отдает номер письма при отправке, но ручки
+       «а это письмо правда ушло» у него нет. Кнопка, которая всегда отвечает «не
+       вышло», хуже ее отсутствия. Контроль почтовой рассылки — свои получатели в
+       общем списке: пришло на почту сотруднику, значит рассылка была. */
+    if (p.channel === 'email') return '';
     return '<span class="bc-act"><button class="bc-verify" data-ch="' + esc(p.channel) +
       '" data-who="' + esc(p.channel_user_id) + '" data-mid="' + esc(p.provider_msg_id) +
       '">проверить у площадки</button></span>';
@@ -26861,12 +26870,15 @@
           '<div class="stat"><div class="sl">В списке</div><div class="sv num">' + (t.sent || 0) + '</div></div>' +
           '<div class="stat"><div class="sl"><span class="sdot green"></span>Дошло</div>' +
             '<div class="sv num">' + (t.delivered || 0) + '</div></div>' +
+          /* Точка у трех средних чисел не ставится намеренно: четыре одинаковых
+             зеленых кружка подряд перестают что-либо различать. Цветом помечено
+             только то, что меняет чтение, — дошло и не дошло. */
           (mail
-            ? '<div class="stat"><div class="sl"><span class="sdot green"></span>Открыли</div>' +
+            ? '<div class="stat"><div class="sl">Открыли</div>' +
                 '<div class="sv num">' + (t.opened || 0) + '</div></div>' +
-              '<div class="stat"><div class="sl"><span class="sdot green"></span>Нажали</div>' +
+              '<div class="stat"><div class="sl">Нажали</div>' +
                 '<div class="sv num">' + (t.clicked || 0) + '</div></div>' +
-              '<div class="stat"><div class="sl"><span class="sdot green"></span>Ответили</div>' +
+              '<div class="stat"><div class="sl">Ответили</div>' +
                 '<div class="sv num">' + (t.replied || 0) + '</div></div>'
             : '<div class="stat"><div class="sl"><span class="sdot red"></span>Закрыли бота</div>' +
                 '<div class="sv num">' + (t.blocked || 0) + '</div></div>') +
@@ -26880,9 +26892,16 @@
         '<div><div class="t">Что было после</div><div class="s">считается от даты отправки каждому человеку</div></div></div>' +
         '<div class="bc-lad" style="border-top:1px solid var(--line)">' + bcLadder(t, mail) + '</div></div>' +
       bcLinks(d.links) +
-      bcCohort('По каналу', 'где человек нас читает', co.channel) +
-      bcCohort('По давности', 'когда он в последний раз писал нам сам', co.age) +
-      bcCohort('Откуда он у нас', 'своя аудитория или старая база', co.origin) +
+      /* Когорты у почтовой рассылки не показываем. Они режут людей по данным бота
+         (когда человек последний раз писал боту, знаем ли мы его оттуда), а у
+         почтового адресата записи в боте нет вовсе: все до одного попадали бы в
+         «никогда нам не писал» и «старая база Salebot» — про человека, который
+         вчера зарегистрировался на сайте. Три карточки с одной строкой и неверной
+         подписью хуже, чем их отсутствие. */
+      (mail ? '' :
+        bcCohort('По каналу', 'где человек нас читает', co.channel) +
+        bcCohort('По давности', 'когда он в последний раз писал нам сам', co.age) +
+        bcCohort('Откуда он у нас', 'своя аудитория или старая база', co.origin)) +
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">Адресаты</div><div class="s">' +
@@ -26892,7 +26911,10 @@
           '<div class="searchwrap">' + ic('search', 15) +
             '<input id="bc-q" class="search" placeholder="имя, ник или id" value="' + esc(q.q) + '">' +
           '</div>' +
-          '<nav class="tabs">' + [['', 'Все'], ['ok', 'Дошло'], ['blocked', 'Закрыли бота'], ['fail', 'Не дошло']]
+          /* «Закрыл бота» у письма не бывает: вкладка всегда возвращала бы пусто. */
+          '<nav class="tabs">' + (mail
+            ? [['', 'Все'], ['ok', 'Дошло'], ['fail', 'Не дошло']]
+            : [['', 'Все'], ['ok', 'Дошло'], ['blocked', 'Закрыли бота'], ['fail', 'Не дошло']])
             .map(function (o) {
               return '<a class="tab' + (q.status === o[0] ? ' on' : '') + '" data-bcs="' + o[0] + '">' + o[1] + '</a>';
             }).join('') + '</nav>' +
