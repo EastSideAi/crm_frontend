@@ -23393,11 +23393,22 @@
   }
   function mxRow(m) {
     var st = MX_STATE[m.state] || MX_STATE.ended;
+    /* Метки не просто подписи: по ним встреча открывается сразу на нужном месте.
+       Павел 07.10.2026 просил «чтобы прям кнопкой можно было посмотреть, что
+       ушло в задачник». Раньше это был текст, и было непонятно, что внутрь
+       вообще можно зайти. */
+    function tag(to, body) {
+      return '<button type="button" class="mx-tag mx-tagb" data-mxopen="' + esc(m.key) +
+        '" data-mxat="' + to + '">' + body + '</button>';
+    }
     var marks = '<span class="sev ' + st.cls + '">' + st.label + '</span>';
-    if (m.agreements) marks += '<span class="mx-tag">' + ic('check', 11) +
-      m.agreements + ' ' + plural(m.agreements, 'договоренность', 'договоренности', 'договоренностей') + '</span>';
-    if (m.has_text) marks += '<span class="mx-tag">' + ic('mic', 11) + 'расшифровка</span>';
-    if (m.has_notes) marks += '<span class="mx-tag">' + ic('doc', 11) + 'конспект</span>';
+    /* agreements приходит счетом задач по этой встрече — так его и подписываем.
+       «7 договоренностей» рядом с блоком «Уехало в задачник» на том же числе
+       читалось как два разных счета. */
+    if (m.agreements) marks += tag('tasks', ic('task', 11) + m.agreements + ' ' +
+      plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
+    if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
+    if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
     var sub = [];
     if (m.by) sub.push(esc(m.by));
     if (m.dept) sub.push(esc(deptLabel(m.dept)));
@@ -23432,12 +23443,16 @@
     if (!c) return '<div class="mx-card"><div class="mx-load">Открываю встречу…</div></div>';
     if (c === 'none') return '<div class="mx-card"><div class="mx-load">Не удалось открыть встречу.</div></div>';
     var parts = [];
+    var jumps = [];
     if (c.summary) {
-      parts.push('<div class="mx-h">Конспект</div><div class="mx-sum">' +
+      parts.push('<div class="mx-h" id="mx-s-sum">Конспект</div><div class="mx-sum">' +
         esc(c.summary).replace(/\n/g, '<br>') + '</div>');
+      jumps.push(['sum', ic('doc', 13) + 'Конспект']);
     }
     if ((c.goals || []).length) {
-      parts.push('<div class="mx-h">О чем договорились</div>' + c.goals.map(function (g) {
+      jumps.push(['goals', ic('check', 13) + 'Договоренности ' +
+        '<b class="num">' + c.goals.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-goals">О чем договорились</div>' + c.goals.map(function (g) {
         return '<div class="mx-goal"><div class="mx-goal-t">' + esc(g.title) + '</div>' +
           (g.steps || []).map(function (st) {
             return '<div class="mx-step">' + esc(st) + '</div>';
@@ -23445,7 +23460,9 @@
       }).join(''));
     }
     if ((c.tasks || []).length) {
-      parts.push('<div class="mx-h">Уехало в задачник</div>' + c.tasks.map(function (t) {
+      jumps.push(['tasks', ic('task', 13) + 'Задачи со встречи ' +
+        '<b class="num">' + c.tasks.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-tasks">Уехало в задачник</div>' + c.tasks.map(function (t) {
         var ts = TASK_ST[t.status] || TASK_ST.wait;
         return '<button type="button" class="mx-task" data-mxtask="' + t.id + '">' +
           '<span class="mx-task-t">' + esc(t.title) + '</span>' +
@@ -23455,13 +23472,22 @@
     }
     var text = state.meetxText[m.key];
     if (text) {
-      parts.push('<div class="mx-h">Расшифровка</div><div class="mx-text">' +
+      jumps.push(['text', ic('mic', 13) + 'Расшифровка']);
+      parts.push('<div class="mx-h" id="mx-s-text">Расшифровка</div><div class="mx-text">' +
         esc(text).replace(/\n/g, '<br>') + '</div>');
     }
     var acts = [];
     if (c.text_chars && !text) {
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
         ic('mic', 13) + 'Показать расшифровку (' + Math.round(c.text_chars / 1000) + ' тыс. знаков)</button>');
+    }
+    /* Скачать можно, не открывая: расшифровка на час разговора — это десятки
+       тысяч знаков, и читать ее чаще удобнее в своем редакторе, чем в карточке
+       (Павел 07.10.2026). Файл собираем в браузере из того же ответа сервера,
+       чтобы ключ доступа не уезжал в адрес ссылки. */
+    if (c.text_chars) {
+      acts.push('<button type="button" class="qchip" data-mxdl="' + esc(m.key) + '">' +
+        ic('dl', 13) + 'Скачать файлом</button>');
     }
     if (c.url) {
       acts.push('<a class="qchip" href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
@@ -23475,7 +23501,16 @@
       parts.push('<div class="mx-load">Ни конспекта, ни договоренностей по этой встрече пока нет. ' +
         'Конспект появляется после разбора записи.</div>');
     }
-    return '<div class="mx-card">' + parts.join('') +
+    /* Ряд переходов: он не только навигация, но и опись — видно, что внутри
+       встречи вообще есть договоренности и задачи. Пока карточка падала,
+       человек не знал, что они там лежат (Павел 07.10.2026). Один блок — ряд
+       не нужен, прыгать некуда. */
+    var nav = jumps.length > 1
+      ? '<div class="mx-jump">' + jumps.map(function (j) {
+          return '<button type="button" class="qchip" data-mxjump="' + j[0] + '">' + j[1] + '</button>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="mx-card">' + nav + parts.join('') +
       (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
   }
   /* ── Раздел EastSide Meeting ───────────────────────────────────────────────
@@ -23775,15 +23810,85 @@
   }
   /* Обработчики карточки встречи: расшифровка по кнопке, задача, ученик. Живут
      отдельно, потому что карточка рисуется и на экране встречи, и в списке. */
+  /* Расшифровку тянем одним путем и для показа, и для скачивания: второй заход
+     за тем же текстом сервер только зря греет. */
+  function mxText(key, done, fail) {
+    if (state.meetxText[key]) { done(state.meetxText[key]); return; }
+    api('/admin/api/meet/journal/' + encodeURIComponent(key) + '/text').then(function (r) {
+      state.meetxText[key] = (r && r.text) || 'Расшифровки нет.';
+      done(state.meetxText[key]);
+    }).catch(fail);
+  }
+  /* Имя файла латиницей и датой: кириллица в именах ломает просмотр у части
+     почтовиков и облаков, а дата нужна, чтобы десяток скачанных расшифровок не
+     лег в «Загрузки» одинаковыми. */
+  function mxFileName(m) {
+    var d = m.at ? new Date(m.at) : new Date();
+    var iso = isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+    return 'rasshifrovka-' + (iso || 'vstrecha') + '.txt';
+  }
+  function mxSaveText(m, text) {
+    /* В файле дата полная, а не «Сегодня»: его откроют через месяц, и слово
+       «сегодня» в шапке будет врать. */
+    var d = m.at ? new Date(m.at) : null;
+    var when = d && !isNaN(d.getTime())
+      ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) +
+        ', ' + hhmm(m.at)
+      : '';
+    var head = (m.title || 'Встреча') + (when ? '\n' + when : '') + '\n\n';
+    var url = URL.createObjectURL(new Blob([head + text], { type: 'text/plain;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = mxFileName(m);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
   function wireMeetxCard(view, m) {
+    if (state.meetxJump) {
+      var want = state.meetxJump;
+      state.meetxJump = null;
+      /* Расшифровку по метке подгружаем сами: внутри карточки ее нет, а человек
+         нажал именно на нее и ждет текст, а не кнопку «показать». */
+      if (want === 'text' && !state.meetxText[m.key]) {
+        mxText(m.key, function () { if (state.page === 'meetx') renderView(); }, function () {
+          showToast('Не удалось открыть расшифровку');
+        });
+      } else {
+        setTimeout(function () {
+          var t = el('mx-s-' + want);
+          if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
+      }
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxjump]'), function (b) {
+      b.addEventListener('click', function () {
+        var t = el('mx-s-' + b.getAttribute('data-mxjump'));
+        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdl]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-mxdl');
+        b.disabled = true;
+        mxText(key, function (text) {
+          b.disabled = false;
+          mxSaveText(m, text);
+          showToast('Расшифровка скачана', mxFileName(m));
+        }, function () {
+          b.disabled = false;
+          showToast('Не удалось забрать расшифровку', 'попробуй еще раз');
+        });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-mxtext');
         b.disabled = true; b.textContent = 'Загружаю…';
-        api('/admin/api/meet/journal/' + encodeURIComponent(key) + '/text').then(function (r) {
-          state.meetxText[key] = (r && r.text) || 'Расшифровки нет.';
+        mxText(key, function () {
           if (state.page === 'meetx') renderView();
-        }).catch(function () { showToast('Не удалось открыть расшифровку'); });
+        }, function () {
+          b.disabled = false;
+          showToast('Не удалось открыть расшифровку');
+        });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtask]'), function (b) {
@@ -23904,6 +24009,15 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxgo]'), function (b) {
       b.addEventListener('click', function () {
         state.meetxOpen = b.getAttribute('data-mxgo'); renderView();
+      });
+    });
+    /* Метка открывает встречу и помнит, куда прыгнуть: карточка грузится
+       асинхронно, поэтому сам прыжок делает отрисовка карточки. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxopen]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxJump = b.getAttribute('data-mxat');
+        state.meetxOpen = b.getAttribute('data-mxopen');
+        renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {

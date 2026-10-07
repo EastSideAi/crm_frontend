@@ -10960,6 +10960,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-radius: var(--r-pill); padding: 4px 10px; }
 .mx-row.open .mx-tag { background: var(--card); }
 .mx-tag svg { color: var(--ink-3); }
+/* Метка-кнопка: ведет внутрь встречи, поэтому отзывается на наведение и держит
+   фокус. Вид тот же, что у обычной метки — ряд не должен пестреть. */
+.mx-tagb { cursor: pointer; transition: .15s var(--ease); }
+.mx-tagb:hover { background: var(--blue-tint); color: var(--blue-d); }
+.mx-tagb:hover svg { color: var(--blue); }
+.mx-tagb:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* Ряд переходов по карточке: он же опись того, что внутри встречи есть. */
+.mx-jump { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 2px;
+  border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 /* Раскрывашка — кнопка: ее берет Tab, по ней видно фокус, и ссылка «Войти» у
    идущей встречи лежит рядом, а не внутри кликабельной области. */
 .mx-go { flex: none; display: grid; place-items: center; width: 28px; height: 28px;
