@@ -38627,7 +38627,7 @@
     // Категория, которой нет в пакете (квитанция, итоги консультации), не должна
     // молча слететь при открытии выпадашки.
     var extra = (cur && !seen) ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' : '';
-    return '<select class="' + cls + '"' + (id ? ' id="' + id + '"' : '') + '>' +
+    return '<select class="doc-sel ' + cls + '"' + (id ? ' id="' + id + '"' : '') + '>' +
       '<option value=""' + (cur ? '' : ' selected') + '>Без категории</option>' + extra + opts + '</select>';
   }
 
@@ -38642,7 +38642,12 @@
   function docStSelect(current) {
     var cur = (current || 'received').trim().toLowerCase();
     if (cur === 'in_review') cur = 'received';
-    return '<select class="doc-kind doc-st">' + DOC_ST.map(function (o) {
+    /* Вид у обоих списков строки один (doc-sel), а классы смысла разные. Пока
+       список статуса носил и doc-kind, обработчик категории срабатывал на смене
+       статуса, и слово «accepted» улетало PATCH-ом в поле kind: 22 файла у двух
+       семей потеряли категорию, а с ней и закрытый пункт пакета в кабинете
+       (Мария 07.10.2026). Класс вида и класс поведения тут не смешиваем. */
+    return '<select class="doc-sel doc-st">' + DOC_ST.map(function (o) {
       return '<option value="' + o.k + '"' + (o.k === cur ? ' selected' : '') + '>' + o.t + '</option>';
     }).join('') + '</select>';
   }
