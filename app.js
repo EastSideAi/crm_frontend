@@ -99,7 +99,8 @@
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    glMode: 'cards', gantt: null, ganttWeeks: 12,   // «Цели»: карточки или полосы по неделям
+    glMode: 'cards', gantt: null, ganttWeeks: 12,   // «Цели»: карточки или гант
+    ganttOpen: {},      // какие цели в ганте раскрыты до шагов
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
@@ -134,7 +135,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks', 'ganttOpen', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -147,6 +148,7 @@
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
         attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
         glMode: state.glMode || 'cards', ganttWeeks: state.ganttWeeks || 12,
+        ganttOpen: state.ganttOpen || {},
         mxTab: state.mxTab || 'soon',
       }));
     } catch (e) {}
@@ -10853,6 +10855,9 @@
      (/admin/api/tasks/gantt). Цель без сроков в полосу не превращается — ей
      нечего рисовать, она идет отдельным списком «не на сетке». */
   var GANTT_SPANS = [[6, '6 недель'], [12, '3 месяца'], [26, 'Полгода']];
+  // Высота строки сетки. Держится в паре с .gt-r в style.css: по ней считаются
+  // стрелки связей, а посчитать ее из DOM нельзя — рисуем до вставки в документ.
+  var GT_ROW = 44;
   function loadGantt() {
     var dept = state.taskDept || '';
     api('/admin/api/tasks/gantt?weeks=' + state.ganttWeeks +
@@ -10868,28 +10873,88 @@
   }
   function gtDay(iso) { return new Date(iso + 'T00:00:00').getTime(); }
   function gtPct(ms, start, span) { return Math.max(0, Math.min(100, (ms - start) / span * 100)); }
-  function gtBar(b, start, span) {
+  // Где полоса начинается и сколько занимает, в процентах горизонта.
+  function gtGeom(b, start, span) {
     var from = gtDay(b.from), to = gtDay(b.to) + 86400000;
-    var left = gtPct(from, start, span), right = gtPct(to, start, span);
-    var w = Math.max(1.5, right - left);
-    var pct = b.steps_total ? Math.round(b.steps_done / b.steps_total * 100) : 0;
-    var cls = b.overdue ? ' over' : (pct === 100 ? ' done' : '');
-    var tip = b.title + ': ' + dayLabel(b.from) + ' — ' + dayLabel(b.to) +
-      ', сделано ' + b.steps_done + ' из ' + b.steps_total +
-      (b.overdue ? ', просрочено ' + b.overdue : '');
-    /* Названия внутри полосы нет: оно уже стоит слева, а поверх заливки прогресса
-       текст менял цвет посреди слова и не читался. Полоса говорит «когда» и
-       «сколько сделано», имя говорит колонка. */
-    return '<button type="button" class="gt-bar' + cls + '" data-gid="' + b.id + '" ' +
-        'style="left:' + left.toFixed(2) + '%;width:' + w.toFixed(2) + '%" ' +
+    var left = gtPct(from, start, span);
+    return { left: left, width: Math.max(1.2, gtPct(to, start, span) - left) };
+  }
+  /* Полоса цели — свод: от первого срока ее шагов до последнего, с заливкой
+     готовности. Названия внутри полосы нет: оно уже стоит слева, а поверх
+     заливки текст менял цвет посреди слова и не читался. */
+  function gtGoalBar(g, start, span) {
+    var geo = gtGeom(g, start, span);
+    var pct = g.steps_total ? Math.round(g.steps_done / g.steps_total * 100) : 0;
+    var cls = g.overdue ? ' over' : (pct === 100 ? ' done' : '');
+    var tip = g.title + ': ' + dayLabel(g.from) + ' — ' + dayLabel(g.to) +
+      ', сделано ' + g.steps_done + ' из ' + g.steps_total +
+      (g.overdue ? ', просрочено ' + g.overdue : '');
+    return '<button type="button" class="gt-bar sum' + cls + '" data-gid="' + g.id + '" ' +
+        'style="left:' + geo.left.toFixed(2) + '%;width:' + geo.width.toFixed(2) + '%" ' +
         'title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
         '<span class="gt-fill" style="width:' + pct + '%"></span>' +
       '</button>';
   }
+  /* Полоса шага. Пунктир — начало предположено по срокам соседей, а не
+     поставлено руками: экран не должен выдавать догадку за договоренность.
+     Шаг, у которого начало совпало со сроком, рисуется точкой: полосу нулевой
+     ширины на экране не видно вовсе. */
+  function gtStepBar(st, start, span) {
+    var geo = gtGeom(st, start, span);
+    var cls = (st.done ? ' done' : st.late ? ' over' : '') + (st.derived ? ' guess' : '');
+    var tip = st.title + ': ' +
+      (st.point ? 'срок ' + dayLabel(st.to)
+                : dayLabel(st.from) + ' — ' + dayLabel(st.to)) +
+      (st.assignee_name ? ' · ' + st.assignee_name : '') +
+      (st.derived ? ' · начало предположил по соседям' : '') +
+      (st.late ? ' · просрочен' : '');
+    if (st.point) {
+      return '<button type="button" class="gt-pt' + cls + '" data-gid="' + st.id + '" ' +
+        'style="left:' + geo.left.toFixed(2) + '%" title="' + esc(tip) + '" ' +
+        'aria-label="' + esc(tip) + '"></button>';
+    }
+    return '<button type="button" class="gt-bar step' + cls + '" data-gid="' + st.id + '" ' +
+      'style="left:' + geo.left.toFixed(2) + '%;width:' + geo.width.toFixed(2) + '%" ' +
+      'title="' + esc(tip) + '" aria-label="' + esc(tip) + '"></button>';
+  }
+  /* Стрелки связей «начинается после». Ради них гант и держат: сдвинул один шаг
+     — видно, что поедет следом. Рисуем двумя отрезками и наконечником, по
+     процентам горизонта и номеру строки: SVG здесь мешал бы, у него одна система
+     координат на обе оси, а у нас проценты по горизонтали и пиксели по вертикали. */
+  function gtLinks(g, start, span) {
+    var steps = g.steps || [];
+    var at = {}, i;
+    for (i = 0; i < steps.length; i++) at[steps[i].id] = i;
+    var out = '';
+    steps.forEach(function (st, idx) {
+      (st.after || []).forEach(function (pid) {
+        if (at[pid] === undefined) return;
+        var pre = steps[at[pid]];
+        var pg = gtGeom(pre, start, span), sg = gtGeom(st, start, span);
+        var x1 = pg.left + pg.width, x2 = sg.left;
+        // Строка 0 — сама цель, шаги идут под ней.
+        var y1 = (at[pid] + 1) * GT_ROW + GT_ROW / 2, y2 = (idx + 1) * GT_ROW + GT_ROW / 2;
+        var top = Math.min(y1, y2), h = Math.abs(y2 - y1);
+        var lx = Math.min(x1, x2), w = Math.abs(x2 - x1);
+        out += '<i class="gt-ln v" style="left:' + x1.toFixed(2) + '%;top:' + top +
+          'px;height:' + h + 'px"></i>' +
+          '<i class="gt-ln h" style="left:' + lx.toFixed(2) + '%;top:' + y2 +
+          'px;width:' + w.toFixed(2) + '%"></i>' +
+          '<i class="gt-ar' + (x2 < x1 ? ' back' : '') + '" style="left:' + x2.toFixed(2) +
+          '%;top:' + y2 + 'px"></i>';
+      });
+    });
+    return out ? '<div class="gt-links" aria-hidden="true">' + out + '</div>' : '';
+  }
+  function gtName(title, sub, extra) {
+    return '<div class="gt-name">' + (extra || '') +
+      '<span class="gt-nm"><span class="gt-t">' + esc(title) + '</span>' +
+      '<span class="gt-w">' + sub + '</span></span></div>';
+  }
   function renderGantt(view, head) {
     if (state.gantt === null) { view.innerHTML = head + dashSkeleton(); wireGanttTop(view); loadGantt(); return; }
     if (state.gantt === 'none') {
-      view.innerHTML = head + '<div class="card"><div class="empty">Не удалось собрать полосы. Обнови страницу.</div></div>';
+      view.innerHTML = head + '<div class="card"><div class="empty">Не удалось собрать гант. Обнови страницу.</div></div>';
       wireGanttTop(view);
       return;
     }
@@ -10918,13 +10983,29 @@
     var bars = d.bars || [], undated = d.undated || [];
     /* Линию «сегодня» рисуем в КАЖДОЙ строке, а не одной сквозной: соседняя
        строка с подсветкой при наведении закрасила бы сквозную собой. */
-    var rows = bars.map(function (b) {
-      return '<div class="gt-r">' +
-        '<div class="gt-name"><span class="gt-t">' + esc(b.title) + '</span>' +
-          '<span class="gt-w">' + (b.assignee_name ? esc(b.assignee_name) : 'без ответственного') +
-            (b.steps_total ? ' · ' + b.steps_done + '/' + b.steps_total : '') + '</span></div>' +
-        '<div class="gt-track">' + today + gtBar(b, start, span) + '</div>' +
-      '</div>';
+    var rows = bars.map(function (g) {
+      var steps = g.steps || [];
+      var open = !!state.ganttOpen[g.id];
+      var gsub = (g.assignee_name ? esc(g.assignee_name) : 'без ответственного') +
+        (g.steps_total ? ' · ' + g.steps_done + '/' + g.steps_total : '');
+      var tw = steps.length
+        ? '<button type="button" class="gt-tw" data-gtopen="' + g.id + '" ' +
+          'aria-expanded="' + (open ? 'true' : 'false') + '" ' +
+          'title="' + (open ? 'Свернуть шаги' : 'Показать шаги') + '">' + ic('go', 12) + '</button>'
+        : '<span class="gt-tw gt-off" aria-hidden="true"></span>';
+      var out = '<div class="gt-r goal' + (open ? ' open' : '') + '">' +
+        gtName(g.title, gsub, tw) +
+        '<div class="gt-track">' + today + gtGoalBar(g, start, span) + '</div></div>';
+      if (open) {
+        out += steps.map(function (st) {
+          // Про пунктир и ромб сказано в подписи под сеткой, а не в каждой
+          // строке: в колонке 216 пикселей такая приписка обрезается на полуслове.
+          var sub = st.assignee_name ? esc(st.assignee_name) : 'без исполнителя';
+          return '<div class="gt-r step">' + gtName(st.title, sub, '') +
+            '<div class="gt-track">' + today + gtStepBar(st, start, span) + '</div></div>';
+        }).join('') + gtLinks(g, start, span);
+      }
+      return '<div class="gt-grp">' + out + '</div>';
     }).join('');
 
     var late = '';
@@ -10946,18 +11027,29 @@
             '<div class="gt-r gt-head"><div class="gt-name"></div>' +
               '<div class="gt-track">' + cols + todayHead + '</div></div>' +
             rows +
-          '</div></div></div>'
+          '</div></div>' +
+          '<div class="gt-hint">Нажми на цель — раскроются ее шаги. Пунктиром идет шаг, ' +
+          'у которого начало я посчитал от срока предыдущего: поставь ему «Начать» в карточке, ' +
+          'и пунктир станет полосой. Ромб — у шага есть только срок. Стрелка — шаг ждет ' +
+          'предыдущий, это ставится в карточке полем «Начинается после».</div></div>'
         : '<div class="card"><div class="empty">На этом горизонте целей со сроками нет. ' +
           'Срок полосы берется из сроков шагов цели — проставь их, и цель появится здесь.</div></div>') +
       late;
 
     wireGanttTop(view);
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gtopen]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-gtopen');
+        if (state.ganttOpen[id]) delete state.ganttOpen[id]; else state.ganttOpen[id] = 1;
+        saveUi(); renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-gid]'), function (b) {
       b.addEventListener('click', function () { openTask(+b.getAttribute('data-gid')); });
     });
   }
   /* Переключатель вида живет в обоих видах, поэтому и вешается отдельно: из
-     карточек в сроки уходят тем же нажатием, что и обратно. */
+     карточек в гант уходят тем же нажатием, что и обратно. */
   function wireGlMode(view) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-glmode]'), function (b) {
       b.addEventListener('click', function () {
@@ -10979,7 +11071,7 @@
   function glModeSeg() {
     return '<div class="pay-seg plan-seg gl-mode">' +
       '<button type="button" class="' + (state.glMode === 'time' ? '' : 'on') + '" data-glmode="cards">Карточки</button>' +
-      '<button type="button" class="' + (state.glMode === 'time' ? 'on' : '') + '" data-glmode="time">Сроки</button>' +
+      '<button type="button" class="' + (state.glMode === 'time' ? 'on' : '') + '" data-glmode="time">Гант</button>' +
       '</div>';
   }
 
@@ -11830,6 +11922,18 @@
                 '<select id="tk-edept" class="al-sel">' + [''].concat(Object.keys(DEPTS)).map(function (d) {
                   return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') + '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
                 }).join('') + '</select></span></label>') +
+            // Начало работы и связи с соседними шагами — только у шага: это про
+            // то, как шаги цели ложатся во времени друг за другом (гант).
+            (t.parent_id
+              ? '<label class="al-f"><span class="al-l">Начать</span>' +
+                  '<input id="tk-estart" class="al-in" type="date" value="' +
+                  (t.starts_at ? zoomYmd(new Date(t.starts_at)) : '') + '">' +
+                  '<span class="al-hint">Пусто — начало посчитаю от срока предыдущего шага ' +
+                  'и покажу пунктиром.</span></label>' +
+                '<div class="al-f"><span class="al-l">Начинается после</span>' +
+                  '<div class="tk-after" id="tk-eafter"><span class="al-hint">Смотрю соседние шаги…</span></div>' +
+                  '<span class="al-hint">Сдвинешь тот шаг — видно, что поедет следом.</span></div>'
+              : '') +
             '<div class="tsk-resrow">' +
               '<button class="al-cancel" id="tk-ecx">Отмена</button>' +
               '<button class="bp" id="tk-eok">Сохранить</button>' +
@@ -12005,7 +12109,41 @@
           Array.prototype.forEach.call(ov.querySelectorAll('[data-editsec]'), function (x) { x.hidden = !!on; });
           if (on) { body.scrollTop = 0; el('tk-etitle').focus(); }
         };
-        editB.addEventListener('click', function () { setEdit(editF.hidden); });
+        /* Соседние шаги для связи «начинается после». Тянем только при открытии
+           редактора и только у шага: в карточке их нет, а грузить цель целиком
+           ради каждого просмотра незачем. */
+        var afterPick = null;
+        var loadAfter = function () {
+          var box = el('tk-eafter');
+          if (!box || afterPick) return;
+          afterPick = { ids: (t.starts_after || []).slice() };
+          api('/admin/api/tasks/' + t.parent_id).then(function (r) {
+            var sibs = ((r && r.steps) || []).filter(function (x) { return x.id !== id; });
+            if (!sibs.length) {
+              box.innerHTML = '<span class="al-hint">В этой цели других шагов нет.</span>';
+              return;
+            }
+            box.innerHTML = sibs.map(function (x) {
+              return '<button type="button" class="qchip' +
+                (afterPick.ids.indexOf(x.id) !== -1 ? ' on' : '') + '" data-after="' + x.id + '">' +
+                esc(x.title) + '</button>';
+            }).join('');
+            Array.prototype.forEach.call(box.querySelectorAll('[data-after]'), function (b) {
+              b.addEventListener('click', function () {
+                var sid = +b.getAttribute('data-after');
+                var at = afterPick.ids.indexOf(sid);
+                if (at === -1) afterPick.ids.push(sid); else afterPick.ids.splice(at, 1);
+                b.classList.toggle('on');
+              });
+            });
+          }).catch(function () {
+            box.innerHTML = '<span class="al-hint">Не получилось взять соседние шаги.</span>';
+          });
+        };
+        editB.addEventListener('click', function () {
+          setEdit(editF.hidden);
+          if (!editF.hidden && t.parent_id) loadAfter();
+        });
         el('tk-ecx').addEventListener('click', function () { setEdit(false); });
         el('tk-eok').addEventListener('click', function () {
           var title = (el('tk-etitle').value || '').trim();
@@ -12013,6 +12151,12 @@
           var patch = { title: title, details: (el('tk-edetails').value || '').trim(), result_expect: (el('tk-eexpect').value || '').trim() };
           var dsel = el('tk-edept');
           if (dsel && dsel.value !== (t.dept || '')) patch.dept = dsel.value;
+          var sIn = el('tk-estart');
+          if (sIn) {
+            if (sIn.value) patch.starts_at = sIn.value + 'T00:00:00';
+            else if (t.starts_at) patch.starts_clear = true;
+          }
+          if (afterPick) patch.starts_after = afterPick.ids;
           var ok = el('tk-eok'); ok.disabled = true;
           apiSend('/admin/api/tasks/' + id, 'PATCH', patch, function () {
             showToast('Сохранено');
