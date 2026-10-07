@@ -356,6 +356,10 @@ a { color: inherit; text-decoration: none; }
 .stat.go:hover::before, .stat.go:hover + .stat::before { opacity: 0; }
 .stat .sl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2);
   letter-spacing: .005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Приписка под числом: сколько в списке было своих. Тише подписи и сильно тише
+   самого числа — это сноска к цифре, а не вторая цифра. */
+.stat .sn { margin-top: 2px; font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat .sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ink-3); }
 .stat .sdot.blue { background: var(--blue); }
 .stat .sdot.navy { background: var(--navy); }
