@@ -2060,6 +2060,16 @@
     if (h >= 12 && h < 18) return 'Добрый день';
     return 'Добрый вечер';
   }
+  /* Какая версия файлов реально загружена в браузере. 07.10.2026 продюсер сутки не
+     видела выкаченную вкладку, и на выяснение «старый кэш или не выкачено» ушло
+     полдня: на сервере лежало новое, у человека старое, а сравнить было нечем.
+     Метку берём из адреса самого скрипта — это ровно то, что отдал браузеру сервер. */
+  function appVer() {
+    var el = document.querySelector('script[src*="app.js"]');
+    var m = el && /[?&]v=([\w.-]+)/.exec(el.getAttribute('src') || '');
+    return m ? m[1] : 'без метки';
+  }
+
   function renderShell() {
     root.innerHTML =
       '<div class="app">' +
@@ -2074,6 +2084,8 @@
             '<button class="side-bug" id="side-bug" title="Нашли баг платформы или бота — расскажите">' +
               ic('alert', 15) + '<span>Сообщить о баге</span>' +
               '<span class="side-bug-n num" id="side-bug-n"></span></button>' +
+            '<div class="side-ver num" title="Версия загруженной страницы. Не совпадает с той, ' +
+              'что называет коллега — обновите страницу с Ctrl+F5">' + esc(appVer()) + '</div>' +
           '</div>' +
         '</aside>' +
         '<main class="main">' +
@@ -25021,17 +25033,25 @@
     var pay = cur && cur.payment;
     if (!pay || pay.invoiced_rub == null || !pay.product) return '';
     var pr = pay.product;
-    var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0);
-    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0);
+    /* Третья дорога — счёт из CRM: так продаётся сопровождение по гранту. Касса
+       офферов его не видит, и до 07.10.2026 эти деньги на экране запуска отсутствовали
+       вовсе. Строка появляется, только когда такие счета есть: нули в подписи мешают
+       читать две другие дороги. */
+    var cr = pay.crm || { invoiced: 0, invoiced_rub: 0, paid: 0, paid_rub: 0, wait: 0, wait_rub: 0 };
+    var billed = (pay.invoiced_rub || 0) + (pr.invoiced_rub || 0) + (cr.invoiced_rub || 0);
+    var got = (pay.paid_rub || 0) + (pr.paid_rub || 0) + (cr.paid_rub || 0);
     var wait = Math.max(0, billed - got);
-    var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid);
+    var waitN = (pay.invoiced - pay.paid) + (pr.invoiced - pr.paid) + (cr.wait || 0);
     var money = function (n) { return fmtMoney(n) + ' ₽'; };
+    var tail = function (rub) { return cr.invoiced ? ' · сопровождение ' + money(rub || 0) : ''; };
     var rows =
       flatRow('Выставлено счетов',
-        'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0),
+        'участие ' + money(pay.invoiced_rub || 0) + ' · продукты ' + money(pr.invoiced_rub || 0) +
+        tail(cr.invoiced_rub),
         money(billed)) +
       flatRow('Оплачено',
-        'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0),
+        'участие ' + money(pay.paid_rub || 0) + ' · продукты ' + money(pr.paid_rub || 0) +
+        tail(cr.paid_rub),
         money(got)) +
       flatRow('Ждут оплаты',
         waitN ? waitN + ' ' + plural(waitN, 'счёт', 'счёта', 'счетов') + ' без оплаты' : 'непогашенных счетов нет',

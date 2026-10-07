@@ -10762,3 +10762,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 400px) { .cross-docs button { padding: 8px 11px; } }
 .cross-doc { padding: 0; overflow: hidden; }
 .cross-doc .empty { padding: 28px 18px; }
+
+/* Версия загруженной страницы под кнопкой «Сообщить о баге». Нужна в разговоре
+   «у меня этого нет, а у тебя есть»: сравнили две метки и сразу понятно, у кого
+   старый кэш, а не выкатка не доехала. */
+.side-ver { padding: 8px 14px 0; font-size: 10.5px; color: var(--ink-3); letter-spacing: .02em; }
