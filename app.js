@@ -3076,15 +3076,12 @@
       var mxNew = mxl ? mxl.filter(function (m) { return m.state === 'new' || m.state === 'failed'; }).length : 0;
       /* Идущие считаем по своим комнатам, а не по журналу: журнал собирается
          раз в минуту и про встречу, начатую только что, еще не знает. */
-      var mxr = state.meetRooms;
-      var liveN = (mxr && mxr !== 'none' && mxr !== 'loading' && mxr.rooms)
-        ? mxr.rooms.filter(function (r) { return r.status === 'live'; }).length
-        : mxLive.length;
+      var liveN = mxLiveCount();
       var mxPhr = !mxl && !liveN ? 'Собираю встречи команды.'
         : liveN ? '<b>' + liveN + ' ' + plural(liveN, 'встреча идет', 'встречи идут', 'встреч идет') +
             ' прямо сейчас.</b> ' + (liveN > 1
-              ? 'Идут параллельно, зайти можно в любую.'
-              : 'Она первой во вкладке «Ближайшие».')
+              ? 'Зайти можно в любую, они не мешают друг другу.'
+              : 'Она первой строкой в списке.')
         : !mxl.length ? 'Встреч за полтора месяца нет.'
         : mxNew ? 'Записей без разбора: <b>' + mxNew + '</b>. У остальных есть конспект и договоренности.'
         : 'Все записи разобраны: конспект, договоренности и задачи на месте.';
@@ -10962,8 +10959,11 @@
   /* Стрелки едут куском окна, а не целым: так на стыке видно, что было до и что
      будет после. По дням — неделей, по неделям — месяцем, по месяцам — кварталом. */
   function gtMove(dir) {
-    var w = gtWindow(), sc = gtScale();
-    var a = new Date(w.from + 'T00:00:00'), b = new Date(w.to + 'T00:00:00');
+    // Едем от того, что человек видит, а не от запрошенного окна: в месячном
+    // масштабе они расходятся (сетка подтянута к данным), и шаг от невидимого
+    // края выглядел бы прыжком.
+    var v = gtViewRange(), sc = gtScale();
+    var a = new Date(v.start), b = new Date(v.end - 86400000);
     if (sc === 'month') {
       var span = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1;
       var a2 = new Date(a.getFullYear(), a.getMonth() + 3 * dir, 1);
@@ -10983,7 +10983,11 @@
     return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] +
       (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
   }
-  function gtWinLbl(w) { return gtDayLbl(w.from) + ' — ' + gtDayLbl(w.to); }
+  function gtWinLbl() {
+    var v = gtViewRange();
+    var to = new Date(v.end - 86400000);
+    return gtDayLbl(gtIso(new Date(v.start))) + ' — ' + gtDayLbl(gtIso(to));
+  }
   /* Столбцы считаем по календарю, а не делением горизонта на равные части: месяцы
      разной длины, и ровная сетка разъезжается с полосами на несколько дней. */
   function gtCols(startMs, span, scale) {
@@ -11025,6 +11029,27 @@
       });
   }
   function gtDay(iso) { return new Date(iso + 'T00:00:00').getTime(); }
+  /* Какой кусок календаря реально на экране. Отвечает и подписи периода в шапке, и
+     сетке — иначе они расходятся и подпись врет.
+
+     Год по месяцам на три месяца работы — это десять пустых колонок и полоса в
+     восемь пикселей. Поэтому в месячном масштабе на своем окне (когда человек дат
+     не задавал) правый край подтягиваем к последнему сроку, но не ближе полугода:
+     сетка должна оставаться планом, а не списком текущих дел. */
+  function gtViewRange() {
+    var w = gtWindow();
+    var start = gtDay(w.from), end = gtDay(w.to) + 86400000;
+    var d = state.gantt;
+    if (gtScale() === 'month' && !w.own && d && d !== 'none' && (d.bars || []).length) {
+      var last = 0;
+      d.bars.forEach(function (b) { last = Math.max(last, gtDay(b.to)); });
+      var sd = new Date(start), ld = new Date(last);
+      var floor = new Date(sd.getFullYear(), sd.getMonth() + 6, 1).getTime();
+      var fit = new Date(ld.getFullYear(), ld.getMonth() + 1, 1).getTime();
+      end = Math.min(end, Math.max(floor, fit));
+    }
+    return { start: start, end: end };
+  }
   function gtPct(ms, start, span) { return Math.max(0, Math.min(100, (ms - start) / span * 100)); }
   // Где полоса начинается и сколько занимает, в процентах горизонта.
   function gtGeom(b, start, span) {
@@ -11066,8 +11091,11 @@
       (st.derived ? ' · начало предположил по соседям' : '') +
       (st.late ? ' · просрочен' : '');
     if (st.point) {
+      // У самого края дорожки ромб и стрелка связи вылезали за карточку: они
+      // рисуются от центра, а center на 100% это половина фигуры снаружи.
+      var px = Math.min(geo.left, 99.2);
       return '<button type="button" class="gt-pt' + cls + '" data-gid="' + st.id + '" ' +
-        'style="left:' + geo.left.toFixed(2) + '%" title="' + esc(tip) + '" ' +
+        'style="left:' + px.toFixed(2) + '%" title="' + esc(tip) + '" ' +
         'aria-label="' + esc(tip) + '"></button>';
     }
     return '<button type="button" class="gt-bar step' + cls + geo.cut + '" data-gid="' + st.id + '" ' +
@@ -11097,8 +11125,8 @@
           'px;height:' + h + 'px"></i>' +
           '<i class="gt-ln h" style="left:' + lx.toFixed(2) + '%;top:' + y2 +
           'px;width:' + w.toFixed(2) + '%"></i>' +
-          '<i class="gt-ar' + (x2 < x1 ? ' back' : '') + '" style="left:' + x2.toFixed(2) +
-          '%;top:' + y2 + 'px"></i>';
+          '<i class="gt-ar' + (x2 < x1 ? ' back' : '') + '" style="left:' +
+          Math.min(x2, 99.2).toFixed(2) + '%;top:' + y2 + 'px"></i>';
       });
     });
     return out ? '<div class="gt-links" aria-hidden="true">' + out + '</div>' : '';
@@ -11116,8 +11144,9 @@
       return;
     }
     var d = state.gantt;
-    var start = gtDay(d.start), end = gtDay(d.end), span = end - start;
     var sc = gtScale();
+    var v = gtViewRange();
+    var start = v.start, end = v.end, span = end - start;
     var cl = gtCols(start, span, sc);
     // Подписей на горизонте не больше шестнадцати: дальше даты налезают друг на
     // друга и не читается ни одна. Остальные столбцы остаются без подписи.
@@ -11131,41 +11160,49 @@
        фоном в каждой строке: по месяцам столбцы неравной ширины, полосками их не
        нарисовать. Слой стоит после фона строки, поэтому подсветка при наведении
        сетку не стирает. */
-    var bg = '<div class="gt-bg" aria-hidden="true">' + cl.map(function (c) {
-      return '<i class="gt-bc' + (c.we ? ' we' : '') + '" style="left:' + c.left.toFixed(3) +
-        '%;width:' + c.width.toFixed(3) + '%"></i>';
-    }).join('') + '</div>';
     var now = Date.now();
     var nowPct = gtPct(now, start, span).toFixed(2);
     var onGrid = now >= start && now <= end;
-    var today = onGrid ? '<span class="gt-now" style="left:' + nowPct + '%"></span>' : '';
+    /* «Сегодня» — одна сквозная линия в том же слое, что и вертикали сетки.
+       Раньше она рисовалась в каждой строке и читалась пунктиром с разрывами на
+       стыках; слой лежит после фона строки, поэтому подсветка при наведении его
+       не стирает — та причина, по которой линию резали на куски, отпала. */
+    var bg = '<div class="gt-bg" aria-hidden="true">' + cl.map(function (c) {
+      return '<i class="gt-bc' + (c.we ? ' we' : '') + '" style="left:' + c.left.toFixed(3) +
+        '%;width:' + c.width.toFixed(3) + '%"></i>';
+    }).join('') +
+      (onGrid ? '<i class="gt-now" style="left:' + nowPct + '%"></i>' : '') + '</div>';
     // Подпись «сегодня» только в шапке: в каждой строке она была бы шумом.
     var todayHead = onGrid
       ? '<span class="gt-now hd" style="left:' + nowPct + '%"><i>сегодня</i></span>' : '';
 
     var bars = d.bars || [], undated = d.undated || [];
-    /* Линию «сегодня» рисуем в КАЖДОЙ строке, а не одной сквозной: соседняя
-       строка с подсветкой при наведении закрасила бы сквозную собой. */
     var rows = bars.map(function (g) {
       var steps = g.steps || [];
       var open = !!state.ganttOpen[g.id];
       var gsub = (g.assignee_name ? esc(g.assignee_name) : 'без ответственного') +
         (g.steps_total ? ' · ' + g.steps_done + '/' + g.steps_total : '');
-      var tw = steps.length
-        ? '<button type="button" class="gt-tw" data-gtopen="' + g.id + '" ' +
-          'aria-expanded="' + (open ? 'true' : 'false') + '" ' +
-          'title="' + (open ? 'Свернуть шаги' : 'Показать шаги') + '">' + ic('go', 12) + '</button>'
-        : '<span class="gt-tw gt-off" aria-hidden="true"></span>';
+      /* Раскрывает шаги вся строка названия, а не одна галочка 18 пикселей:
+         подпись под сеткой обещает «нажми на цель», да и целиться в иконку с
+         клавиатуры и пальцем неудобно. Без шагов раскрывать нечего — тогда это
+         обычный текст, а не кнопка. */
       var out = '<div class="gt-r goal' + (open ? ' open' : '') + '">' +
-        gtName(g.title, gsub, tw) +
-        '<div class="gt-track">' + today + gtGoalBar(g, start, span) + '</div></div>';
+        (steps.length
+          ? '<button type="button" class="gt-name gt-nbtn" data-gtopen="' + g.id + '" ' +
+            'aria-expanded="' + (open ? 'true' : 'false') + '" ' +
+            'title="' + (open ? 'Свернуть шаги' : 'Показать шаги цели') + '">' +
+            '<span class="gt-tw" aria-hidden="true">' + ic('go', 12) + '</span>' +
+            '<span class="gt-nm"><span class="gt-t">' + esc(g.title) + '</span>' +
+            '<span class="gt-w">' + gsub + '</span></span></button>'
+          : gtName(g.title, gsub, '<span class="gt-tw gt-off" aria-hidden="true"></span>')) +
+        '<div class="gt-track">' + gtGoalBar(g, start, span) + '</div></div>';
       if (open) {
         out += steps.map(function (st) {
           // Про пунктир и ромб сказано в подписи под сеткой, а не в каждой
           // строке: в колонке 216 пикселей такая приписка обрезается на полуслове.
           var sub = st.assignee_name ? esc(st.assignee_name) : 'без исполнителя';
           return '<div class="gt-r step">' + gtName(st.title, sub, '') +
-            '<div class="gt-track">' + today + gtStepBar(st, start, span) + '</div></div>';
+            '<div class="gt-track">' + gtStepBar(st, start, span) + '</div></div>';
         }).join('') + gtLinks(g, start, span);
       }
       return '<div class="gt-grp">' + out + '</div>';
@@ -11190,23 +11227,32 @@
     var narrow = window.innerWidth <= 760;
     var minw = Math.max(narrow ? 620 : 720,
       (narrow ? 150 : 250) + cl.length * (sc === 'day' ? (narrow ? 22 : 26) : (narrow ? 44 : 56)));
+    /* Сколько работы спрятано от человека — это состояние экрана, а не пункт
+       легенды: в общей серой подписи оно весило столько же, сколько «ромб — у
+       шага есть только срок». */
     var out = d.hidden
-      ? 'Вне этого периода осталось целей: ' + d.hidden + '. Сдвинь период стрелками или возьми шире. '
+      ? '<div class="gt-out">' + ic('info', 13) + 'Вне этого периода осталось целей: ' +
+        d.hidden + '. Сдвинь период стрелками или возьми шире.</div>'
       : '';
-    view.innerHTML = head +
+    var anyOpen = bars.some(function (g) { return state.ganttOpen[g.id] && (g.steps || []).length; });
+    view.innerHTML = head + out +
       (bars.length
         ? '<div class="card gt-wrap"><div class="gt-scroll"><div class="gt-grid" style="min-width:' + minw + 'px">' +
             '<div class="gt-r gt-head"><div class="gt-name"></div>' +
               '<div class="gt-track">' + cols + todayHead + '</div></div>' +
             '<div class="gt-rows">' + bg + rows + '</div>' +
           '</div></div>' +
-          '<div class="gt-hint">' + out + 'Нажми на цель — раскроются ее шаги. Пунктиром идет шаг, ' +
-          'у которого начало я посчитал от срока предыдущего: поставь ему «Начать» в карточке, ' +
-          'и пунктир станет полосой. Ромб — у шага есть только срок. Стрелка — шаг ждет ' +
-          'предыдущий, это ставится в карточке полем «Начинается после».</div></div>'
+          /* Пока шаги свернуты, объяснять нечего: ни тихих полос, ни ромбов, ни
+             стрелок на экране нет, а три строки вечного текста в ежедневном
+             инструменте дороже пользы. */
+          (anyOpen
+            ? '<div class="gt-hint">Тихой полосой идет шаг, у которого начало я посчитал ' +
+              'от срока предыдущего: поставь ему «Начать» в карточке, и полоса станет ' +
+              'обычной. Ромб — у шага есть только срок. Стрелка — шаг ждет предыдущий, ' +
+              'это ставится в карточке полем «Начинается после».</div>'
+            : '<div class="gt-hint">Нажми на цель — раскроются ее шаги.</div>') + '</div>'
         : '<div class="card"><div class="empty">' + (d.hidden
-            ? 'В этом периоде целей нет, а всего их со сроками: ' + d.hidden +
-              '. Сдвинь период стрелками или возьми шире.'
+            ? 'В этом периоде целей нет, а всего их со сроками: ' + d.hidden + '.'
             : 'На этом горизонте целей со сроками нет. Срок полосы берется из сроков ' +
               'шагов цели — проставь их, и цель появится здесь.') + '</div></div>') +
       late;
@@ -11313,7 +11359,7 @@
             '<button type="button" class="gt-arr prev" data-gtmv="-1" title="Период назад" ' +
               'aria-label="Период назад">' + ic('go', 13) + '</button>' +
             '<button type="button" class="gt-wlbl" id="gt-range" title="Выбрать свой период">' +
-              ic('cal', 12) + esc(gtWinLbl(gw)) + '</button>' +
+              ic('cal', 12) + esc(gtWinLbl()) + '</button>' +
             '<button type="button" class="gt-arr" data-gtmv="1" title="Период вперед" ' +
               'aria-label="Период вперед">' + ic('go', 13) + '</button>' +
           '</div>' +
@@ -23462,7 +23508,8 @@
       '<button type="button" class="mx-act' + (on ? '' : ' mx-off') + '" id="mx-plan">' +
         '<span class="mx-act-i">' + ic('cal', 17) + '</span>' +
         '<span class="mx-act-b"><b>Запланировать</b>' +
-          '<i>позову людей и напомню</i></span></button>',
+          '<i>' + (on ? 'позову людей и напомню' : 'тоже ждет сервер встреч') +
+          '</i></span></button>',
     ];
     if (zoom) {
       acts.push('<button type="button" class="mx-act" id="mx-zoom">' +
@@ -23509,11 +23556,14 @@
         after: function () { state.meetx = null; renderView(); }
       });
     });
+    /* Шапка раздела считает идущие встречи тем же счетом, что и список, поэтому
+       перерисовывается вместе с ним: иначе на одном экране оказывались два разных
+       числа — «1 встреча идет» сверху и «идет сейчас: 2» под ним. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtab]'), function (b) {
       b.addEventListener('click', function () {
         state.mxTab = b.getAttribute('data-mxtab');
         if (state.mxTab === 'soon' && !state.meetRooms) loadMeetRooms();
-        saveUi(); renderView();
+        saveUi(); renderHead(); renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxdept]'), function (b) {
@@ -23522,13 +23572,13 @@
         // Журнал записей режет сервер, ближайшие и расписание — фронт. Сбрасываем
         // только то, что придет заново.
         state.meetx = null; state.meetxOpen = null;
-        saveUi(); renderView();
+        saveUi(); renderHead(); renderView();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxscope]'), function (b) {
       b.addEventListener('click', function () {
         state.meetxScope = b.getAttribute('data-mxscope');
-        state.meetx = null; state.meetxOpen = null; saveUi(); renderView();
+        state.meetx = null; state.meetxOpen = null; saveUi(); renderHead(); renderView();
       });
     });
   }
@@ -23576,6 +23626,17 @@
   }
   /* Что впереди: идущие прямо сейчас и назначенные на будущее. Прошедшие и
      отмененные сюда не попадают — для них есть «Записи». */
+  /* Сколько встреч идет прямо сейчас. Одна функция на шапку раздела и на блок
+     «идет сейчас»: считали в двух местах и на экране оказывались два разных
+     числа, если шапку не перерисовали вместе со списком. */
+  function mxLiveCount() {
+    var d = state.meetRooms;
+    if (!d || d === 'none' || d === 'loading' || !d.rooms) {
+      var j = state.meetx && state.meetx !== 'none' ? (state.meetx.meetings || []) : [];
+      return j.filter(function (m) { return m.state === 'live'; }).length;
+    }
+    return d.rooms.filter(function (r) { return r.status === 'live'; }).length;
+  }
   function mxSoonList() {
     var d = state.meetRooms;
     if (!d || d === 'none' || d === 'loading' || !d.rooms) return [];
@@ -23624,7 +23685,8 @@
         : '<a class="qchip mx-join" href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
             ic('ext', 13) + 'Открыть</a>') +
       '<button type="button" class="qchip mx-copy" data-mxlink="' + esc(r.url) + '" ' +
-        'title="Скопировать ссылку">' + ic('copy', 13) + '</button>' +
+        'title="Скопировать ссылку" aria-label="Скопировать ссылку: ' +
+        esc(r.title || 'Встреча') + '">' + ic('copy', 13) + '</button>' +
       /* У идущей встречи вместо «отменить» — «завершить»: отменять нечего, она
          уже идет, а закрыть ее для всех надо уметь руками (Павел 07.10.2026).
          Сама комната гаснет только через четверть часа после того, как все
@@ -23811,9 +23873,21 @@
         }, function () { b.disabled = false; showToast('Не получилось отменить'); });
       });
     });
+    /* Завершение выгоняет из разговора всех, поэтому подтверждается вторым
+       нажатием той же кнопки: отдельное окно ради одной секунды решения — перебор,
+       а промах пальцем по соседней «Войти» слишком дорог. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxend]'), function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-mxend');
+        if (!b._arm) {
+          b._arm = true; b.classList.add('arm'); b.textContent = 'Точно завершить?';
+          clearTimeout(b._armT);
+          b._armT = setTimeout(function () {
+            b._arm = false; b.classList.remove('arm'); b.textContent = 'Завершить';
+          }, 5000);
+          return;
+        }
+        clearTimeout(b._armT); b._arm = false; b.classList.remove('arm');
         b.disabled = true;
         apiSend('/admin/api/meet/rooms/' + id + '/end', 'POST', {}, function () {
           showToast('Встреча завершена', 'комната закрыта для всех');

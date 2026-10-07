@@ -3557,10 +3557,13 @@ button.tr-crumb:hover { color: var(--blue); }
 .sc-chip.meet.cont { border-top-left-radius: 2px; border-top-right-radius: 2px; }
 /* Своя встреча (EastSide Meeting). Это ссылка в комнату, поэтому она и выглядит
    нажимаемой, а идущая сейчас — единственная в сетке, кто горит синим. */
+/* Наша встреча. Заливка та же, что у занятого часа, поэтому различает их кольцо —
+   прием уже работает на своих свободных часах (.sc-chip.free.mine). Идущая берет
+   кольцо потолще: насыщенной заливкой чипы в этой системе не красят. */
 .sc-chip.room { background: var(--blue-tint); color: var(--blue-d); text-decoration: none;
-  box-shadow: inset 0 0 0 1px var(--blue-tint); transition: .15s var(--ease); }
-.sc-chip.room.live { background: var(--blue); color: #fff; box-shadow: none; }
-a.sc-chip.room:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+  box-shadow: inset 0 0 0 1px var(--blue); transition: .15s var(--ease); }
+.sc-chip.room.live { box-shadow: inset 0 0 0 2px var(--blue); font-weight: 700; }
+a.sc-chip.room:hover { filter: brightness(.97); }
 a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 /* Зум — единственный чип без своего цвета, и на клетке «сегодня» (тоже --fill) он
    сливался с фоном, а в легенде читался просто словом, а не образцом. Тонкое
@@ -10990,14 +10993,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gt-rows { position: relative; }
 .gt-bg { position: absolute; left: 240px; right: 10px; top: 0; bottom: 0; pointer-events: none; }
 .gt-bc { position: absolute; top: 0; bottom: 0; display: block;
-  border-left: 1px solid var(--line); opacity: .6; }
-/* Выходные в масштабе по дням: тише линии, но видно, что неделя кончилась. */
+  border-left: 1px solid var(--line); }
+/* Выходные в масштабе по дням. Приглушение держим на самой линии, а не на всем
+   столбце: с opacity на родителе заливка выходного давала 2% светлоты и на
+   экране не читалась вовсе. */
+.gt-bc:not(.we) { opacity: .6; }
 .gt-bc.we { background: var(--fill); }
 .gt-col.we i { color: var(--ink-4, var(--ink-3)); }
 /* Сегодня: единственная линия в цвете на экране, по ней читается «мы вот здесь». */
 /* Сегодня: единственная вертикаль в цвете, по ней читается «мы вот здесь».
    Подпись стоит один раз, в шапке. */
-.gt-now { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--blue);
+.gt-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--blue);
   opacity: .35; z-index: 1; pointer-events: none; border-radius: 2px; }
 .gt-now.hd { opacity: 1; top: 18px; bottom: -4px; }
 .gt-now.hd i { position: absolute; left: 4px; top: -1px;
@@ -11029,6 +11035,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tsk-agent .tsk-p { color: var(--ink-2); }
 /* Подпись под сеткой: что значат пунктир, ромб и стрелка. Одна на весь экран,
    а не приписка в каждой строке — там она обрезается на полуслове. */
+/* Что осталось за кадром выбранного периода. Не легенда, а состояние экрана:
+   стоит над сеткой и чернилами потемнее подписи. */
+.gt-out { display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  padding: 9px 14px; border-radius: var(--r-lg); background: var(--fill);
+  font-size: 12.5px; color: var(--ink-2); }
+.gt-out svg { flex: none; color: var(--ink-3); }
 .gt-hint { padding: 10px 16px 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
 /* Окно дат: стрелка, подпись периода, стрелка. Подпись это кнопка — по ней
    открывается выбор своих дат, поэтому она подчеркнуто нажимаемая. */
@@ -11055,6 +11067,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .tk-after { display: flex; flex-wrap: wrap; gap: 6px; }
 .tk-after .qchip { max-width: 100%; }
 .gt-r.goal .gt-name { display: flex; align-items: center; gap: 6px; }
+/* Имя цели — кнопка раскрытия, но выглядит оно по-прежнему строкой: рамки и
+   заливки у нее нет, нажатие читается по курсору и подсветке строки. */
+.gt-nbtn { min-width: 0; padding: 0; border: 0; background: none; font: inherit;
+  color: inherit; text-align: left; cursor: pointer; }
+.gt-nbtn:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue);
+  border-radius: 8px; }
 .gt-nm { min-width: 0; }
 .gt-tw { flex: none; align-self: center; width: 18px; height: 18px; min-height: 0;
   display: grid; place-items: center;
@@ -11067,17 +11085,24 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    общий «empty»: общий .empty — это пустое состояние карточки с отступом 52px,
    и спан разносило на всю строку. */
 .gt-tw.gt-off { pointer-events: none; }
-.gt-r.step .gt-name { padding-left: 24px; }
+/* Шаг уходит правее цели и мельче ее: на дорожке разница видна толщиной полосы,
+   а в колонке названий девять строк начинались с одного места. */
+.gt-r.step .gt-name { padding-left: 38px; }
+.gt-r.step .gt-t { font-size: 12.5px; font-weight: 500; }
 .gt-r.step .gt-t { font-weight: 500; color: var(--ink-2); }
 .gt-bar.sum { top: 6px; height: 18px; }
-.gt-bar.step { top: 9px; height: 12px; border-radius: 5px; background: #DCE4F5; }
+.gt-bar.step { top: 9px; height: 12px; border-radius: 5px; background: var(--navy-soft); }
 .gt-bar.step.done { background: var(--green-soft); }
 .gt-bar.step.over { background: var(--amber-soft); }
 /* Пунктир — начало предположено по срокам соседей, а не поставлено руками.
    Заливки у такой полосы нет: догадка не должна выглядеть как факт. */
-.gt-bar.step.guess { background: transparent; border: 1px dashed #BFCBE4; }
-.gt-bar.step.guess.over { border-color: var(--amber); }
-.gt-bar.step.guess.done { border-color: var(--green); }
+/* Начало посчитано нами, а не поставлено человеком. Раньше рисовали пустым
+   пунктиром — но ровно такой же тонкой линией идут стрелки связей, и две разные
+   вещи выглядели одинаково. Теперь догадка это полоса в полсилы: видно, что она
+   есть, и видно, что она тише поставленной руками. */
+.gt-bar.step.guess { background: var(--blue-tint); box-shadow: inset 0 0 0 1px var(--wire); }
+.gt-bar.step.guess.over { box-shadow: inset 0 0 0 1px var(--amber); }
+.gt-bar.step.guess.done { box-shadow: inset 0 0 0 1px var(--green); }
 /* Шаг, у которого начало совпало со сроком: веха, а не полоса нулевой ширины. */
 .gt-pt { position: absolute; top: 10px; width: 10px; height: 10px; z-index: 2;
   background: var(--blue); transform: translateX(-5px) rotate(45deg); border-radius: 2px;
@@ -11091,13 +11116,13 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    названия + 14 зазора. */
 .gt-links { position: absolute; left: 240px; right: 10px; top: 0; bottom: 0;
   pointer-events: none; z-index: 3; }
-.gt-ln { position: absolute; display: block; background: #B9C4D8; }
+.gt-ln { position: absolute; display: block; background: var(--wire); }
 .gt-ln.v { width: 1px; }
 .gt-ln.h { height: 1px; }
 .gt-ar { position: absolute; display: block; width: 0; height: 0;
-  border: 4px solid transparent; border-left-color: #B9C4D8;
+  border: 4px solid transparent; border-left-color: var(--wire);
   transform: translate(-4px, -4px); }
-.gt-ar.back { border-left-color: transparent; border-right-color: #B9C4D8;
+.gt-ar.back { border-left-color: transparent; border-right-color: var(--wire);
   transform: translate(-4px, -4px); }
 /* Цели, которым рисовать нечего: без сроков у шагов. Отдельным блоком под сеткой,
    а не серой полосой в ней — это не «ждет», это «не заполнено». */
@@ -11116,6 +11141,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   /* Слой стрелок начинается там же, где дорожка строки: 8 отступа + 132 колонка
      названия + 10 зазора. Разъедется с .gt-r — стрелки уедут от полос. */
   .gt-links, .gt-bg { left: 150px; right: 8px; }
+  /* Сетка на телефоне шире экрана и листается вбок. Колонку названий держим на
+     месте, иначе к декабрю человек смотрит на безымянные полосы. */
+  .gt-r .gt-name, .gt-r .gt-nbtn { position: sticky; left: 0; z-index: 3;
+    background: var(--card); }
+  .gt-r:hover .gt-name, .gt-r:hover .gt-nbtn { background: var(--fill); }
+  .gt-head .gt-name { background: var(--card); }
   .gt-nodate { padding: 8px 12px 12px; }
   .gt-hint { padding: 10px 12px 2px; }
 }
@@ -11139,7 +11170,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-act { display: flex; align-items: center; gap: 14px; text-align: left;
   padding: 16px 18px; border-radius: var(--r-lg); background: var(--card);
   border: 1px solid var(--line); cursor: pointer; transition: .15s var(--ease); }
-.mx-act:hover { border-color: #DCE7FF; }
+.mx-act:hover { border-color: var(--blue-tint); }
 .mx-act:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .mx-act-i { flex: none; width: 42px; height: 42px; border-radius: 13px; display: grid;
   place-items: center; background: var(--fill); color: var(--ink-2); }
@@ -11172,6 +11203,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-copy { flex: none; }
 .mx-cancel { flex: none; }
 .mx-end { flex: none; }
+/* Взведенная кнопка завершения: следующее нажатие закроет встречу у всех. */
+.mx-end.arm { background: var(--amber-soft); color: var(--amber-ink); }
 /* Экран одной встречи: заголовок, подстрочник, кнопка входа и содержимое. */
 .mx-one { display: flex; flex-direction: column; gap: 14px; }
 .mx-back { align-self: flex-start; }
