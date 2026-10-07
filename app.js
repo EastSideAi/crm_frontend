@@ -26578,8 +26578,16 @@
 
   /* Ступени отклика: считаются от даты отправки этому человеку, а не от даты прогона —
      досылка после обрыва идёт днём позже, и общая дата занизила бы отклик. */
-  function bcLadder(t) {
-    var steps = [
+  function bcLadder(t, mail) {
+    /* У почты своя лестница. «Воронка» и «анкета» считаются по id мессенджера, у
+       почтового адресата его нет, и в письме эти две ступени всегда были бы нулём —
+       то есть выглядели бы как провал рассылки. Зато есть открытие и переход. */
+    var steps = mail ? [
+      { label: 'Дошло', hint: 'почтовый сервер принял письмо', n: t.delivered || 0 },
+      { label: 'Открыл письмо', hint: 'загрузились картинки письма — это минимум', n: t.opened || 0 },
+      { label: 'Нажал ссылку', hint: 'перешёл из письма на страницу', n: t.clicked || 0 },
+      { label: 'Ответил', hint: 'написал нам письмом в ответ', n: t.replied || 0 }
+    ] : [
       { label: 'Дошло', hint: 'площадка приняла сообщение', n: t.delivered || 0 },
       { label: 'Ответил боту', hint: 'написал что-то после рассылки', n: t.replied || 0 },
       { label: 'Вошёл в воронку', hint: 'нажал кнопку, пошёл по сценарию', n: t.funnel || 0 },
@@ -26598,6 +26606,36 @@
         (i ? '<span class="lad-drop zero num">' + (lost ? '− ' + lost + ' здесь' : 'без потерь') + '</span>' : '') +
         '</div></div>';
     }).join('');
+  }
+
+  /* Человеческий вид адреса: в технической записи домен выглядит абракадаброй
+     (xn--80aikf2bag.xn--p1ai), и строку невозможно узнать глазами. */
+  function bcUrlHuman(u) {
+    return (u || '').replace('xn--80aikf2bag.xn--p1ai', 'истсайд.рф').replace(/^https?:\/\//, '');
+  }
+
+  /* Ссылки письма с числом нажавших. Одна цифра «нажали 12» не отвечает на вопрос,
+     который задают всегда: сработала кнопка эфира или ссылка на сайт в подписи. */
+  function bcLinks(links) {
+    if (!links || !links.length) return '';
+    var rows = links.map(function (l) {
+      var human = bcUrlHuman(l.url);
+      return '<div class="bc-co bc-link">' +
+        '<div class="bc-co-nm">' + esc(l.label || human) +
+          (l.label ? '<small>' + esc(human) + '</small>' : '') + '</div>' +
+        '<div class="bc-co-n num">' + (l.people || 0) +
+          '<small>' + plural(l.people || 0, 'человек', 'человека', 'человек') + '</small></div>' +
+        '<div class="bc-co-n num">' + (l.clicks || 0) +
+          '<small>' + plural(l.clicks || 0, 'нажатие', 'нажатия', 'нажатий') + '</small></div>' +
+      '</div>';
+    }).join('');
+    return '<div class="card sp12" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('ext', 14) + '</span>' +
+      '<div><div class="t">По каким ссылкам нажимали</div>' +
+      /* Сумма по ссылкам больше «Нажали» сверху, и это не ошибка: один человек мог
+         нажать и кнопку эфира, и ссылку в подписи. Сверху — люди, здесь — ссылки. */
+      '<div class="s">считаем сами, провайдер эти цифры наружу не отдает. Один человек мог нажать несколько ссылок, поэтому сумма больше, чем «Нажали» сверху</div></div></div>' +
+      '<div style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
   function bcCohort(title, hint, rows) {
@@ -26636,6 +26674,8 @@
     var st = BC_ST[p.status] || BC_ST.fail;
     var who = p.name || ('id ' + p.channel_user_id);
     var mark = [];
+    if (p.opened_at) mark.push('открыл');
+    if (p.clicked_at) mark.push('нажал');
     if (p.replied) mark.push('ответил');
     if (p.funnel) mark.push('воронка');
     if (p.form) mark.push('анкета');
@@ -26657,6 +26697,11 @@
      У рассылок до 21.09.2026 номера нет — там кнопки не будет, и это честнее заглушки. */
   function bcProof(p) {
     if (p.status !== 'ok' || !p.provider_msg_id) return '';
+    /* У почты спрашивать некого: smtp.bz отдает номер письма при отправке, но ручки
+       «а это письмо правда ушло» у него нет. Кнопка, которая всегда отвечает «не
+       вышло», хуже ее отсутствия. Контроль почтовой рассылки — свои получатели в
+       общем списке: пришло на почту сотруднику, значит рассылка была. */
+    if (p.channel === 'email') return '';
     return '<span class="bc-act"><button class="bc-verify" data-ch="' + esc(p.channel) +
       '" data-who="' + esc(p.channel_user_id) + '" data-mid="' + esc(p.provider_msg_id) +
       '">проверить у площадки</button></span>';
@@ -26687,15 +26732,21 @@
        что мы ничего не отправляли. */
     var notReady = state._bcList.ready === false;
     var rows = runs.length ? runs.map(function (r) {
+      /* У почты и у мессенджера разные числа. «Закрыли бота» для письма не бывает,
+         зато есть открытия и переходы, и ради них раздел и доделывали. */
+      var mail = (r.channel || '') === 'email';
+      var nums = mail
+        ? [[r.sent, 'в списке'], [r.delivered, 'дошло'], [r.opened, 'открыли'],
+           [r.clicked, 'нажали'], [r.replied, 'ответили'], [r.failed, 'не дошло']]
+        : [[r.sent, 'в списке'], [r.delivered, 'дошло'], [r.replied, 'ответили'],
+           [r.blocked, 'закрыли бота'], [r.failed, 'не дошло']];
       return '<div class="trow bc-run" data-run="' + r.id + '">' +
         '<div class="t-cell"><div class="t-ttl">' + esc(r.title) + '</div>' +
           '<div class="t-sub num">' + esc(r.channel || '—') + ' · ' + fmtWhen(r.started_at) + '</div></div>' +
-        '<div class="bc-nums">' +
-          '<span class="bc-n"><b class="num">' + (r.sent || 0) + '</b><small>в списке</small></span>' +
-          '<span class="bc-n"><b class="num">' + (r.delivered || 0) + '</b><small>дошло</small></span>' +
-          '<span class="bc-n"><b class="num">' + (r.replied || 0) + '</b><small>ответили</small></span>' +
-          '<span class="bc-n"><b class="num">' + (r.blocked || 0) + '</b><small>закрыли бота</small></span>' +
-          '<span class="bc-n"><b class="num">' + (r.failed || 0) + '</b><small>не дошло</small></span>' +
+        '<div class="bc-nums' + (mail ? ' mail' : '') + '">' +
+          nums.map(function (n) {
+            return '<span class="bc-n"><b class="num">' + (n[0] || 0) + '</b><small>' + n[1] + '</small></span>';
+          }).join('') +
         '</div>' +
         '<div class="bc-go">' + ic('go', 14) + '</div>' +
       '</div>';
@@ -26789,6 +26840,7 @@
       return;
     }
     var d = state._bcRun, r = d.run, t = d.total || {}, co = d.cohorts || {};
+    var mail = (r.channel || '') === 'email';
     /* Контрольные получатели — первое, что видно в рассылке: это свои люди, и проверка
        начинается с них. Из общей статистики они исключены на сервере, иначе портили бы
        и отклик, и доставку (Вера, 21.09.2026: контролем будут все сотрудники CRM). */
@@ -26814,12 +26866,22 @@
         '<div class="bc-title"><div class="t">' + esc(r.title) + '</div>' +
         '<div class="s num">' + esc(r.channel || '—') + ' · ' + fmtWhen(r.started_at) +
         (r.source ? ' · ' + esc(r.source) : '') + '</div></div></div>' +
-        '<div class="statbar bc-stat">' +
+        '<div class="statbar bc-stat' + (mail ? ' six' : '') + '">' +
           '<div class="stat"><div class="sl">В списке</div><div class="sv num">' + (t.sent || 0) + '</div></div>' +
           '<div class="stat"><div class="sl"><span class="sdot green"></span>Дошло</div>' +
             '<div class="sv num">' + (t.delivered || 0) + '</div></div>' +
-          '<div class="stat"><div class="sl"><span class="sdot red"></span>Закрыли бота</div>' +
-            '<div class="sv num">' + (t.blocked || 0) + '</div></div>' +
+          /* Точка у трех средних чисел не ставится намеренно: четыре одинаковых
+             зеленых кружка подряд перестают что-либо различать. Цветом помечено
+             только то, что меняет чтение, — дошло и не дошло. */
+          (mail
+            ? '<div class="stat"><div class="sl">Открыли</div>' +
+                '<div class="sv num">' + (t.opened || 0) + '</div></div>' +
+              '<div class="stat"><div class="sl">Нажали</div>' +
+                '<div class="sv num">' + (t.clicked || 0) + '</div></div>' +
+              '<div class="stat"><div class="sl">Ответили</div>' +
+                '<div class="sv num">' + (t.replied || 0) + '</div></div>'
+            : '<div class="stat"><div class="sl"><span class="sdot red"></span>Закрыли бота</div>' +
+                '<div class="sv num">' + (t.blocked || 0) + '</div></div>') +
           '<div class="stat"><div class="sl"><span class="sdot amber"></span>Не дошло</div>' +
             '<div class="sv num">' + (t.failed || 0) + '</div></div>' +
         '</div>' +
@@ -26828,10 +26890,18 @@
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('funnel', 14) + '</span>' +
         '<div><div class="t">Что было после</div><div class="s">считается от даты отправки каждому человеку</div></div></div>' +
-        '<div class="bc-lad" style="border-top:1px solid var(--line)">' + bcLadder(t) + '</div></div>' +
-      bcCohort('По каналу', 'где человек нас читает', co.channel) +
-      bcCohort('По давности', 'когда он в последний раз писал нам сам', co.age) +
-      bcCohort('Откуда он у нас', 'своя аудитория или старая база', co.origin) +
+        '<div class="bc-lad" style="border-top:1px solid var(--line)">' + bcLadder(t, mail) + '</div></div>' +
+      bcLinks(d.links) +
+      /* Когорты у почтовой рассылки не показываем. Они режут людей по данным бота
+         (когда человек последний раз писал боту, знаем ли мы его оттуда), а у
+         почтового адресата записи в боте нет вовсе: все до одного попадали бы в
+         «никогда нам не писал» и «старая база Salebot» — про человека, который
+         вчера зарегистрировался на сайте. Три карточки с одной строкой и неверной
+         подписью хуже, чем их отсутствие. */
+      (mail ? '' :
+        bcCohort('По каналу', 'где человек нас читает', co.channel) +
+        bcCohort('По давности', 'когда он в последний раз писал нам сам', co.age) +
+        bcCohort('Откуда он у нас', 'своя аудитория или старая база', co.origin)) +
       '<div class="card sp12" style="overflow:hidden">' +
         '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">Адресаты</div><div class="s">' +
@@ -26841,7 +26911,10 @@
           '<div class="searchwrap">' + ic('search', 15) +
             '<input id="bc-q" class="search" placeholder="имя, ник или id" value="' + esc(q.q) + '">' +
           '</div>' +
-          '<nav class="tabs">' + [['', 'Все'], ['ok', 'Дошло'], ['blocked', 'Закрыли бота'], ['fail', 'Не дошло']]
+          /* «Закрыл бота» у письма не бывает: вкладка всегда возвращала бы пусто. */
+          '<nav class="tabs">' + (mail
+            ? [['', 'Все'], ['ok', 'Дошло'], ['fail', 'Не дошло']]
+            : [['', 'Все'], ['ok', 'Дошло'], ['blocked', 'Закрыли бота'], ['fail', 'Не дошло']])
             .map(function (o) {
               return '<a class="tab' + (q.status === o[0] ? ' on' : '') + '" data-bcs="' + o[0] + '">' + o[1] + '</a>';
             }).join('') + '</nav>' +
