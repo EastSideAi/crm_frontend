@@ -11635,6 +11635,18 @@
     return '<div class="rv-facts">' + parts.join('') + '</div>';
   }
 
+  /* Числа плана — не те же, что у отчета: на входе в неделю важно сколько взято
+     и не тащит ли человек в новую неделю старые долги. */
+  function planFacts(f) {
+    f = f || {};
+    var n = f.plan || 0;
+    var parts = ['<span><b class="num">' + n + '</b> ' +
+      plural(n, 'задача', 'задачи', 'задач') + ' в плане</span>'];
+    if (f.overdue) parts.push('<span class="rv-bad"><b class="num">' + f.overdue + '</b> просрочено</span>');
+    if (f.stuck) parts.push('<span class="rv-bad">застряло <b class="num">' + f.stuck + '</b></span>');
+    return '<div class="rv-facts">' + parts.join('') + '</div>';
+  }
+
   function reviewCard(r, period, starts, after) {
     if (document.querySelector('.al-ov')) return;
     var rep = r.report || null;
@@ -11673,7 +11685,21 @@
                 '<textarea id="rv-note" class="al-in al-ta" rows="2" maxlength="1000" ' +
                 'placeholder="Коротко, что поправить в отчете"></textarea></label>' +
               '<div class="ct-err" id="rv-err"></div>'
-            : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
+            : plan
+              /* Уведомление о сдаче плана ведет сюда же, а отчета за идущую
+                 неделю еще нет. Показываем то, что человек правда сдал, иначе
+                 по ссылке из бота открывается пустая карточка. */
+              ? '<span class="sev ' + (plan.late ? RH_ST.late.cls : RH_ST.done.cls) + ' rv-badge">' +
+                  (plan.late ? 'план сдан с опозданием' : 'план сдан') + '</span>' +
+                planFacts(plan.facts) +
+                (plan.text
+                  ? '<div class="rv-said"><div class="rv-lbl">Что планирует</div>' + esc(plan.text) + '</div>'
+                  : '<div class="rv-said muted">Комментарий не оставлен — план это задачи периода, они по кнопке ниже.</div>') +
+                '<div class="rv-state calm">' + ic('clock', 14) +
+                  (period === 'week'
+                    ? 'Неделя еще идет. Отчет и приемка появятся, когда она будет закрыта.'
+                    : 'Период еще идет. Отчет и приемка появятся после него.') + '</div>'
+              : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
         '</div>' +
         (rep
           ? '<div class="al-foot rv-foot">' +
@@ -11681,7 +11707,12 @@
               '<button class="bp al-save" id="rv-ok">' + ic('check', 14) +
                 (rv.state === 'accepted' ? (period === 'week' ? 'Принята' : 'Принят') : (period === 'week' ? 'Принять неделю' : 'Принять')) + '</button>' +
             '</div>'
-          : '') +
+          : plan
+            ? '<div class="al-foot rv-foot">' +
+                '<button class="bp al-save" id="rv-tasks">' + ic('rows', 14) +
+                  (period === 'week' ? 'Задачи недели' : 'Задачи периода') + '</button>' +
+              '</div>'
+            : '') +
       '</div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -11689,6 +11720,11 @@
     var closed = false;
     var close = function () {
       if (closed) return; closed = true;
+      // Пришли по ссылке из бота — убираем ее из адреса, как у задачи и встречи:
+      // иначе обновление страницы снова открывает ту же карточку поверх работы.
+      if (location.hash.indexOf('#rreview/') === 0) {
+        try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      }
       ov.classList.remove('show');
       document.removeEventListener('keydown', onKey);
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
@@ -11697,6 +11733,16 @@
     document.addEventListener('keydown', onKey);
     el('rv-x').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    // План не принимают, его читают. Единственное осмысленное действие отсюда —
+    // посмотреть сами задачи периода, текст плана без них мало что говорит.
+    if (el('rv-tasks')) el('rv-tasks').addEventListener('click', function () {
+      close();
+      state.page = 'tasks'; applyTaskSeg('team');
+      if (period === 'week') state.weekShift = rhShiftFor('week', starts) || 0;
+      state.teamWho = { id: r.user_id, name: r.name || '' };
+      state.teamWeek = null; state.tasks = null; state.teamPerson = null;
+      saveUi(); renderSide(); renderTopbar(); renderHead(); renderView();
+    });
     if (!rep) return;
 
     function send(action, note) {

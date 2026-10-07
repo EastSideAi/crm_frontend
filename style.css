@@ -3119,6 +3119,8 @@ button.tr-crumb:hover { color: var(--blue); }
   font-size: 13px; font-weight: 600; line-height: 1.45; }
 .rv-state svg { flex: none; margin-top: 1px; }
 .rv-state.ok { color: var(--green-ink); }
+/* Строка «неделя еще идет» — пояснение, а не статус: тише остальных. */
+.rv-state.calm { color: var(--ink-3); font-weight: 500; }
 .rv-state.back { color: var(--red-ink); }
 .rv-note { margin-top: 14px; }
 .rv-foot .al-cancel { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
