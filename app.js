@@ -12923,6 +12923,18 @@
                 '" maxlength="200"></label>' +
             '<label class="al-f"><span class="al-l">' + (isGoal ? 'Кто ведет' : 'Кому') + ' <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
+            // Соисполнители и наблюдатели стоят вплотную к ответственному, а не
+            // в «подробнее» (просьба Ольги на обучении 07.10.2026: «подтянуть
+            // ячейку выше, к ответственному лицу»). Свернуты в одну строку,
+            // чтобы форма постановки не распухла обратно: раскрываются на месте.
+            '<button type="button" class="qchip nt-crewb" id="nt-crewb">' + ic('plus', 11) +
+              'Соисполнители и наблюдатели</button>' +
+            '<div id="nt-crew" hidden>' +
+              '<div class="al-f"><span class="al-l">Еще исполнители</span><div id="nt-exec"></div>' +
+                '<span class="al-hint">Делают вместе с тем, кому поставлена: видят ее в своем плане, могут взять и сдать. За срок отвечает первый.</span></div>' +
+              '<div class="al-f"><span class="al-l">Наблюдатели</span><div id="nt-watch"></div>' +
+                '<span class="al-hint">В курсе, но не делают: видят задачу в «Участвую», получают ее движение в бот.</span></div>' +
+            '</div>' +
             // У цели направление — первое, что нужно решить: это ее зона
             // ответственности. У задачи — уточнение после «что-кому-когда».
             (isGoal
@@ -12948,12 +12960,6 @@
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
               '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
             '</div>' +
-            // Участники — соисполнители и наблюдатели при одном ответственном
-            // (Павел 04.09.2026): видят задачу в «Участвую», получают движение в бот.
-            '<div class="al-f"><span class="al-l">Еще исполнители</span><div id="nt-exec"></div>' +
-              '<span class="al-hint">Делают вместе с тем, кому поставлена: видят ее в своем плане, могут взять и сдать. За срок отвечает первый.</span></div>' +
-            '<div class="al-f"><span class="al-l">Наблюдатели</span><div id="nt-watch"></div>' +
-              '<span class="al-hint">В курсе, но не делают: видят задачу в «Участвую», получают ее движение в бот.</span></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -12986,6 +12992,11 @@
       if (moreD.hidden) {
         moreB.addEventListener('click', function () { moreD.hidden = false; moreB.hidden = true; });
       } else moreB.hidden = true;
+      var crewB = ov.querySelector('#nt-crewb'), crewD = ov.querySelector('#nt-crew');
+      if (crewB) crewB.addEventListener('click', function () {
+        crewD.hidden = false; crewB.hidden = true;
+        var f = crewD.querySelector('input, button'); if (f) f.focus();
+      });
       var closed = false;
       var close = function () {
         if (closed) return; closed = true;

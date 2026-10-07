@@ -9532,6 +9532,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gl-add-go { align-self: flex-end; }
 .gl-goal-who { width: auto; min-width: 150px; }
 .nt-moreb { align-self: flex-start; margin: 2px 0 6px; }
+/* Строка под «Кому»: роли рядом с ответственным, но не распахнуты по умолчанию. */
+.nt-crewb { align-self: flex-start; margin: -4px 0 8px; }
 @media (max-width: 720px) {
   .gl-head { gap: 10px; padding: 12px; }
   .gl-more { opacity: 1; }
