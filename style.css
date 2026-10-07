@@ -1848,12 +1848,12 @@ a { color: inherit; text-decoration: none; }
 /* Категория документа. Это поле, а не подпись: именно она закрывает пункт пакета в
    кабинете семьи, и менеджер должен видеть, что ее можно поменять. Но и кричать ей
    незачем — в покое выглядит как часть меты, рамка проявляется на наведении. */
-.doc-kind { font: inherit; font-size: 12px; color: var(--ink-2); background: transparent;
+.doc-sel { font: inherit; font-size: 12px; color: var(--ink-2); background: transparent;
   border: 1px solid transparent; border-radius: 8px; padding: 2px 4px; max-width: 220px;
   cursor: pointer; transition: .15s; }
-.doc-kind:hover { border-color: var(--line-2); background: #fff; }
-.doc-kind:focus { outline: none; border-color: #C9D7FB; background: #fff; color: var(--ink); }
-.doc-kind:disabled { opacity: .5; cursor: default; }
+.doc-sel:hover { border-color: var(--line-2); background: #fff; }
+.doc-sel:focus { outline: none; border-color: #C9D7FB; background: #fff; color: var(--ink); }
+.doc-sel:disabled { opacity: .5; cursor: default; }
 /* Выбор категории перед загрузкой — здесь она не тихая: пропустить ее значит
    отправить файл, который не закроет строку в кабинете. */
 .doc-kindrow { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
