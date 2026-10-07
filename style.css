@@ -10976,10 +10976,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .gt-col { position: absolute; top: 0; bottom: -4px; border-left: 1px solid var(--line); }
 .gt-col i { position: absolute; top: 0; left: 5px; font-style: normal; font-size: 10.5px;
   font-weight: 600; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.gt-r:not(.gt-head) .gt-track::before { content: ''; position: absolute; inset: 0;
-  background: repeating-linear-gradient(to right, transparent 0, transparent calc(100% / var(--gt-w, 12) - 1px),
-    var(--line) calc(100% / var(--gt-w, 12) - 1px), var(--line) calc(100% / var(--gt-w, 12)));
-  opacity: .6; pointer-events: none; }
+/* Вертикали сетки — одним слоем под всеми строками. Полосатым фоном строки их
+   не нарисовать: в масштабе по месяцам столбцы неравной ширины. Слой лежит после
+   фона строки в порядке отрисовки, поэтому подсветка при наведении его не стирает,
+   а полосы (z-index 2) и стрелки связей идут поверх. */
+.gt-rows { position: relative; }
+.gt-bg { position: absolute; left: 240px; right: 10px; top: 0; bottom: 0; pointer-events: none; }
+.gt-bc { position: absolute; top: 0; bottom: 0; display: block;
+  border-left: 1px solid var(--line); opacity: .6; }
+/* Выходные в масштабе по дням: тише линии, но видно, что неделя кончилась. */
+.gt-bc.we { background: var(--fill); }
+.gt-col.we i { color: var(--ink-4, var(--ink-3)); }
 /* Сегодня: единственная линия в цвете на экране, по ней читается «мы вот здесь». */
 /* Сегодня: единственная вертикаль в цвете, по ней читается «мы вот здесь».
    Подпись стоит один раз, в шапке. */
@@ -10998,6 +11005,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Заливка — сделанная часть цели. Она внутри полосы, а не второй полосой рядом:
    прогресс это свойство цели, а не отдельная сущность. */
 .gt-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blue); opacity: .85; }
+/* Срезанный край: работа уходит за выбранный период. */
+.gt-bar.cutl { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.gt-bar.cutr { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .gt-bar.over { background: var(--amber-soft); }
 .gt-bar.over .gt-fill { background: var(--amber); }
 .gt-bar.done { background: var(--green-soft); }
@@ -11013,6 +11023,27 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Подпись под сеткой: что значат пунктир, ромб и стрелка. Одна на весь экран,
    а не приписка в каждой строке — там она обрезается на полуслове. */
 .gt-hint { padding: 10px 16px 2px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+/* Окно дат: стрелка, подпись периода, стрелка. Подпись это кнопка — по ней
+   открывается выбор своих дат, поэтому она подчеркнуто нажимаемая. */
+.gt-time { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gt-win { display: inline-flex; align-items: center; gap: 2px; }
+/* Стрелки это одна и та же галочка, развернутая в две стороны: отдельной иконки
+   «назад» в наборе нет, и заводить ее ради поворота не нужно. */
+.gt-arr.prev svg { transform: rotate(180deg); }
+.gt-arr { display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: 0; background: none; border-radius: 8px;
+  color: var(--ink-3); cursor: pointer; transition: .15s var(--ease); }
+.gt-arr:hover { background: var(--fill); color: var(--ink); }
+.gt-arr:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.gt-arr svg { display: block; }
+.gt-wlbl { display: inline-flex; align-items: center; gap: 6px; height: 28px;
+  padding: 0 10px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  font-variant-numeric: tabular-nums; white-space: nowrap; transition: .15s var(--ease); }
+.gt-wlbl:hover { background: var(--fill); color: var(--ink); }
+.gt-wlbl:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.gt-wlbl svg { color: var(--ink-3); }
+.gt-today { flex: none; }
 /* Соседние шаги в редакторе задачи: выбор связи «начинается после». */
 .tk-after { display: flex; flex-wrap: wrap; gap: 6px; }
 .tk-after .qchip { max-width: 100%; }
@@ -11077,7 +11108,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .gt-r { grid-template-columns: 132px 1fr; gap: 10px; padding: 0 8px; }
   /* Слой стрелок начинается там же, где дорожка строки: 8 отступа + 132 колонка
      названия + 10 зазора. Разъедется с .gt-r — стрелки уедут от полос. */
-  .gt-links { left: 150px; right: 8px; }
+  .gt-links, .gt-bg { left: 150px; right: 8px; }
   .gt-nodate { padding: 8px 12px 12px; }
   .gt-hint { padding: 10px 12px 2px; }
 }

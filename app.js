@@ -99,7 +99,8 @@
     _plat: {},          // кабинет клиента по карточкам: что семья делает на платформе
     taskMe: null, tasksLoading: false, taskDept: '', taskGoals: null,
     glOpen: {}, glNew: '', glPct: {}, planMode: 'day', mymonth: null, laterOpen: false,
-    glMode: 'cards', gantt: null, ganttWeeks: 12,   // «Цели»: карточки или гант
+    glMode: 'cards', gantt: null,   // «Цели»: карточки или гант
+    gtScale: 'week', gtFrom: '', gtTo: '',   // масштаб сетки ганта и окно дат («» — считаем от сегодня)
     ganttOpen: {},      // какие цели в ганте раскрыты до шагов
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
@@ -135,7 +136,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'ganttWeeks', 'ganttOpen', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'unSeg', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -147,7 +148,8 @@
         dashPeriod: state.dashPeriod, dashFrom: state.dashFrom, dashTo: state.dashTo,
         mkTab: state.mkTab, mkDays: state.mkDays, unSeg: state.unSeg, taskPrio: state.taskPrio || '',
         attSeg: state.attSeg || '', meetView: state.meetView || '', acTab: state.acTab || '',
-        glMode: state.glMode || 'cards', ganttWeeks: state.ganttWeeks || 12,
+        glMode: state.glMode || 'cards', gtScale: state.gtScale || 'week',
+        gtFrom: state.gtFrom || '', gtTo: state.gtTo || '',
         ganttOpen: state.ganttOpen || {},
         mxTab: state.mxTab || 'soon',
       }));
@@ -10873,13 +10875,86 @@
      Своих дат у цели нет: начало и конец считает сервер по срокам ее шагов
      (/admin/api/tasks/gantt). Цель без сроков в полосу не превращается — ей
      нечего рисовать, она идет отдельным списком «не на сетке». */
-  var GANTT_SPANS = [[6, '6 недель'], [12, '3 месяца'], [26, 'Полгода']];
+  /* Масштаб сетки и окно дат — два разных вопроса, поэтому и выбираются отдельно.
+     «6 недель / 3 месяца / полгода» Павел забраковал 07.10.2026: деление нужно и по
+     дням тоже, а период человек выбирает сам. Пустое окно значит «от сегодня по
+     масштабу»: день — две недели, неделя — три месяца, месяц — год. */
+  var GT_SCALES = [['day', 'Дни'], ['week', 'Недели'], ['month', 'Месяцы']];
+  function gtIso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function gtMonday(d) {
+    var x = new Date(d); x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return x;
+  }
+  function gtScale() { var x = state.gtScale; return x === 'day' || x === 'month' ? x : 'week'; }
+  function gtWindow() {
+    if (state.gtFrom && state.gtTo) return { from: state.gtFrom, to: state.gtTo, own: true };
+    var t = new Date(); t.setHours(0, 0, 0, 0);
+    var sc = gtScale(), a, b;
+    if (sc === 'month') {
+      a = new Date(t.getFullYear(), t.getMonth(), 1);
+      b = new Date(t.getFullYear(), t.getMonth() + 12, 0);
+    } else {
+      a = gtMonday(t);
+      b = new Date(a); b.setDate(b.getDate() + (sc === 'day' ? 13 : 7 * 12 - 1));
+    }
+    return { from: gtIso(a), to: gtIso(b), own: false };
+  }
+  /* Стрелки едут куском окна, а не целым: так на стыке видно, что было до и что
+     будет после. По дням — неделей, по неделям — месяцем, по месяцам — кварталом. */
+  function gtMove(dir) {
+    var w = gtWindow(), sc = gtScale();
+    var a = new Date(w.from + 'T00:00:00'), b = new Date(w.to + 'T00:00:00');
+    if (sc === 'month') {
+      var span = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1;
+      var a2 = new Date(a.getFullYear(), a.getMonth() + 3 * dir, 1);
+      // Конец считаем от нового начала, а не сдвигом даты: 30 ноября плюс три
+      // месяца это 2 марта, и окно молча уезжало бы на день-два каждый раз.
+      b = new Date(a2.getFullYear(), a2.getMonth() + span, 0);
+      a = a2;
+    } else {
+      var d = sc === 'day' ? 7 : 28;
+      a.setDate(a.getDate() + d * dir); b.setDate(b.getDate() + d * dir);
+    }
+    state.gtFrom = gtIso(a); state.gtTo = gtIso(b);
+    state.gantt = null; saveUi(); renderView();
+  }
+  function gtDayLbl(iso) {
+    var d = new Date(iso + 'T00:00:00'), now = new Date();
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()] +
+      (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '');
+  }
+  function gtWinLbl(w) { return gtDayLbl(w.from) + ' — ' + gtDayLbl(w.to); }
+  /* Столбцы считаем по календарю, а не делением горизонта на равные части: месяцы
+     разной длины, и ровная сетка разъезжается с полосами на несколько дней. */
+  function gtCols(startMs, span, scale) {
+    var out = [], d = new Date(startMs), endMs = startMs + span, guard = 0;
+    while (d.getTime() < endMs && guard++ < 500) {
+      var nxt;
+      if (scale === 'month') nxt = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      else { nxt = new Date(d); nxt.setDate(nxt.getDate() + (scale === 'day' ? 1 : 7)); }
+      var a = d.getTime(), b = Math.min(nxt.getTime(), endMs);
+      out.push({ left: (a - startMs) / span * 100, width: (b - a) / span * 100,
+                 d: new Date(d), we: scale === 'day' && (d.getDay() === 0 || d.getDay() === 6) });
+      d = nxt;
+    }
+    return out;
+  }
+  function gtColLbl(c, scale, first) {
+    var d = c.d;
+    if (scale === 'month') {
+      // Год пишем целиком: «окт 26» читается как двадцать шестое октября.
+      return MONTHS_RU[d.getMonth()] + (first || d.getMonth() === 0 ? ' ' + d.getFullYear() : '');
+    }
+    if (scale === 'day' && !first && d.getDate() !== 1) return String(d.getDate());
+    return d.getDate() + ' ' + MONTHS_RU[d.getMonth()];
+  }
   // Высота строки сетки. Держится в паре с .gt-r в style.css: по ней считаются
   // стрелки связей, а посчитать ее из DOM нельзя — рисуем до вставки в документ.
   var GT_ROW = 44;
   function loadGantt() {
-    var dept = state.taskDept || '';
-    api('/admin/api/tasks/gantt?weeks=' + state.ganttWeeks +
+    var dept = state.taskDept || '', w = gtWindow();
+    api('/admin/api/tasks/gantt?from=' + w.from + '&to=' + w.to +
         (dept ? '&dept=' + encodeURIComponent(dept) : ''))
       .then(function (r) {
         state.gantt = (r && r.bars) ? r : 'none';
@@ -10896,7 +10971,11 @@
   function gtGeom(b, start, span) {
     var from = gtDay(b.from), to = gtDay(b.to) + 86400000;
     var left = gtPct(from, start, span);
-    return { left: left, width: Math.max(1.2, gtPct(to, start, span) - left) };
+    /* Работа, которая началась до окна или кончается после него, обрезается
+       границей сетки. Чтобы обрезанный край не читался как «тут и конец»,
+       полоса теряет с этой стороны скругление: видно, что она идет дальше. */
+    return { left: left, width: Math.max(1.2, gtPct(to, start, span) - left),
+             cut: (from < start ? ' cutl' : '') + (to > start + span ? ' cutr' : '') };
   }
   /* Полоса цели — свод: от первого срока ее шагов до последнего, с заливкой
      готовности. Названия внутри полосы нет: оно уже стоит слева, а поверх
@@ -10908,7 +10987,7 @@
     var tip = g.title + ': ' + dayLabel(g.from) + ' — ' + dayLabel(g.to) +
       ', сделано ' + g.steps_done + ' из ' + g.steps_total +
       (g.overdue ? ', просрочено ' + g.overdue : '');
-    return '<button type="button" class="gt-bar sum' + cls + '" data-gid="' + g.id + '" ' +
+    return '<button type="button" class="gt-bar sum' + cls + geo.cut + '" data-gid="' + g.id + '" ' +
         'style="left:' + geo.left.toFixed(2) + '%;width:' + geo.width.toFixed(2) + '%" ' +
         'title="' + esc(tip) + '" aria-label="' + esc(tip) + '">' +
         '<span class="gt-fill" style="width:' + pct + '%"></span>' +
@@ -10932,7 +11011,7 @@
         'style="left:' + geo.left.toFixed(2) + '%" title="' + esc(tip) + '" ' +
         'aria-label="' + esc(tip) + '"></button>';
     }
-    return '<button type="button" class="gt-bar step' + cls + '" data-gid="' + st.id + '" ' +
+    return '<button type="button" class="gt-bar step' + cls + geo.cut + '" data-gid="' + st.id + '" ' +
       'style="left:' + geo.left.toFixed(2) + '%;width:' + geo.width.toFixed(2) + '%" ' +
       'title="' + esc(tip) + '" aria-label="' + esc(tip) + '"></button>';
   }
@@ -10979,18 +11058,24 @@
     }
     var d = state.gantt;
     var start = gtDay(d.start), end = gtDay(d.end), span = end - start;
-    var weeks = d.weeks;
-    // Подпись у каждой недели читается до двенадцати столбцов; дальше подписываем
-    // через одну, иначе даты налезают друг на друга и не читается ни одна.
-    var step = weeks <= 12 ? 1 : 2;
-    var cols = '';
-    for (var i = 0; i < weeks; i++) {
-      var dt = new Date(start + i * 7 * 86400000);
-      cols += '<span class="gt-col" style="left:' + (i / weeks * 100).toFixed(3) + '%;width:' +
-        (100 / weeks).toFixed(3) + '%">' +
-        (i % step === 0 ? '<i>' + dt.getDate() + ' ' + MONTHS_RU[dt.getMonth()].slice(0, 3) + '</i>' : '') +
-        '</span>';
-    }
+    var sc = gtScale();
+    var cl = gtCols(start, span, sc);
+    // Подписей на горизонте не больше шестнадцати: дальше даты налезают друг на
+    // друга и не читается ни одна. Остальные столбцы остаются без подписи.
+    var lstep = Math.max(1, Math.ceil(cl.length / 16));
+    var cols = cl.map(function (c, i) {
+      return '<span class="gt-col' + (c.we ? ' we' : '') + '" style="left:' + c.left.toFixed(3) +
+        '%;width:' + c.width.toFixed(3) + '%">' +
+        (i % lstep === 0 ? '<i>' + gtColLbl(c, sc, i === 0) + '</i>' : '') + '</span>';
+    }).join('');
+    /* Вертикали сетки под строками — одним слоем на всю таблицу, а не полосатым
+       фоном в каждой строке: по месяцам столбцы неравной ширины, полосками их не
+       нарисовать. Слой стоит после фона строки, поэтому подсветка при наведении
+       сетку не стирает. */
+    var bg = '<div class="gt-bg" aria-hidden="true">' + cl.map(function (c) {
+      return '<i class="gt-bc' + (c.we ? ' we' : '') + '" style="left:' + c.left.toFixed(3) +
+        '%;width:' + c.width.toFixed(3) + '%"></i>';
+    }).join('') + '</div>';
     var now = Date.now();
     var nowPct = gtPct(now, start, span).toFixed(2);
     var onGrid = now >= start && now <= end;
@@ -11040,19 +11125,31 @@
         }).join('') + '</div></div>';
     }
 
+    // Ширина сетки идет от числа столбцов: на год по дням столбец в один пиксель
+    // бессмысленен, лучше листать вбок (карточка это умеет). На телефоне мерки
+    // те же, что у .gt-r в мобильном блоке стилей.
+    var narrow = window.innerWidth <= 760;
+    var minw = Math.max(narrow ? 620 : 720,
+      (narrow ? 150 : 250) + cl.length * (sc === 'day' ? (narrow ? 22 : 26) : (narrow ? 44 : 56)));
+    var out = d.hidden
+      ? 'Вне этого периода осталось целей: ' + d.hidden + '. Сдвинь период стрелками или возьми шире. '
+      : '';
     view.innerHTML = head +
       (bars.length
-        ? '<div class="card gt-wrap"><div class="gt-scroll"><div class="gt-grid" style="--gt-w:' + weeks + '">' +
+        ? '<div class="card gt-wrap"><div class="gt-scroll"><div class="gt-grid" style="min-width:' + minw + 'px">' +
             '<div class="gt-r gt-head"><div class="gt-name"></div>' +
               '<div class="gt-track">' + cols + todayHead + '</div></div>' +
-            rows +
+            '<div class="gt-rows">' + bg + rows + '</div>' +
           '</div></div>' +
-          '<div class="gt-hint">Нажми на цель — раскроются ее шаги. Пунктиром идет шаг, ' +
+          '<div class="gt-hint">' + out + 'Нажми на цель — раскроются ее шаги. Пунктиром идет шаг, ' +
           'у которого начало я посчитал от срока предыдущего: поставь ему «Начать» в карточке, ' +
           'и пунктир станет полосой. Ромб — у шага есть только срок. Стрелка — шаг ждет ' +
           'предыдущий, это ставится в карточке полем «Начинается после».</div></div>'
-        : '<div class="card"><div class="empty">На этом горизонте целей со сроками нет. ' +
-          'Срок полосы берется из сроков шагов цели — проставь их, и цель появится здесь.</div></div>') +
+        : '<div class="card"><div class="empty">' + (d.hidden
+            ? 'В этом периоде целей нет, а всего их со сроками: ' + d.hidden +
+              '. Сдвинь период стрелками или возьми шире.'
+            : 'На этом горизонте целей со сроками нет. Срок полосы берется из сроков ' +
+              'шагов цели — проставь их, и цель появится здесь.') + '</div></div>') +
       late;
 
     wireGanttTop(view);
@@ -11080,11 +11177,55 @@
   function wireGanttTop(view) {
     wireDeptChips(view);
     wireGlMode(view);
-    Array.prototype.forEach.call(view.querySelectorAll('[data-gtw]'), function (b) {
+    /* Смена масштаба сбрасывает свой период: выбрал «Дни» — получи две недели по
+       дням, а не год, расчерченный на 365 полосок. Период после этого снова свой,
+       если человек его задаст. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gtsc]'), function (b) {
       b.addEventListener('click', function () {
-        state.ganttWeeks = +b.getAttribute('data-gtw');
+        state.gtScale = b.getAttribute('data-gtsc');
+        state.gtFrom = ''; state.gtTo = '';
         state.gantt = null; saveUi(); renderView();
       });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-gtmv]'), function (b) {
+      b.addEventListener('click', function () { gtMove(+b.getAttribute('data-gtmv')); });
+    });
+    el('gt-today') && el('gt-today').addEventListener('click', function () {
+      state.gtFrom = ''; state.gtTo = '';
+      state.gantt = null; saveUi(); renderView();
+    });
+    el('gt-range') && el('gt-range').addEventListener('click', function () {
+      openGanttRange(el('gt-range'));
+    });
+  }
+  /* Свой период в ганте. Диалог тот же, что на дашборде: один и тот же вопрос
+     «с какой даты по какую» должен выглядеть одинаково во всей системе. */
+  function openGanttRange(anchor) {
+    closeSmenu();
+    var w = gtWindow();
+    smenu = document.createElement('div');
+    smenu.id = 'smenu'; smenu.className = 'profmenu dp-pop';
+    smenu.innerHTML =
+      '<div class="dp-ttl">Период ганта</div>' +
+      '<div class="dp-row"><label>С</label><input type="date" id="gr-from" value="' + w.from + '"></div>' +
+      '<div class="dp-row"><label>По</label><input type="date" id="gr-to" value="' + w.to + '"></div>' +
+      '<div class="dp-acts"><button class="bp sm" id="gr-apply" style="flex:1;justify-content:center">Применить</button>' +
+      '<button class="dp-reset" id="gr-reset">Сбросить</button></div>';
+    document.body.appendChild(smenu);
+    var r = anchor.getBoundingClientRect();
+    smenu.style.minWidth = '244px';
+    smenu.style.top = (r.bottom + 8) + 'px';
+    smenu.style.left = Math.min(r.left, window.innerWidth - 264) + 'px';
+    el('gr-apply').addEventListener('click', function () {
+      var f = el('gr-from').value, t = el('gr-to').value;
+      if (!f || !t) { showToast('Нужны обе даты: с какой по какую'); return; }
+      if (t < f) { showToast('Вторая дата раньше первой — поменяй их местами'); return; }
+      state.gtFrom = f; state.gtTo = t;
+      state.gantt = null; closeSmenu(); saveUi(); renderView();
+    });
+    el('gr-reset').addEventListener('click', function () {
+      state.gtFrom = ''; state.gtTo = '';
+      state.gantt = null; closeSmenu(); saveUi(); renderView();
     });
   }
   function glModeSeg() {
@@ -11099,12 +11240,27 @@
        же вопрос «на что смотрим», и переставлять их местами при переключении
        значит каждый раз искать заново. */
     if (state.glMode === 'time') {
+      var gw = gtWindow();
       var gtTop = '<div class="gl-tools">' + deptChips() + glModeSeg() +
         '<span class="gl-spacer"></span>' +
-        '<div class="pay-seg plan-seg gt-span">' + GANTT_SPANS.map(function (x) {
-          return '<button type="button" class="' + (state.ganttWeeks === x[0] ? 'on' : '') +
-            '" data-gtw="' + x[0] + '">' + x[1] + '</button>';
-        }).join('') + '</div></div>';
+        /* Масштаб и окно дат — один инструмент «на что смотрим», поэтому они стоят
+           вместе и на узком экране переносятся тоже вместе. */
+        '<div class="gt-time">' +
+          '<div class="pay-seg plan-seg gt-sc">' + GT_SCALES.map(function (x) {
+            return '<button type="button" class="' + (gtScale() === x[0] ? 'on' : '') +
+              '" data-gtsc="' + x[0] + '">' + x[1] + '</button>';
+          }).join('') + '</div>' +
+          '<div class="gt-win">' +
+            '<button type="button" class="gt-arr prev" data-gtmv="-1" title="Период назад" ' +
+              'aria-label="Период назад">' + ic('go', 13) + '</button>' +
+            '<button type="button" class="gt-wlbl" id="gt-range" title="Выбрать свой период">' +
+              ic('cal', 12) + esc(gtWinLbl(gw)) + '</button>' +
+            '<button type="button" class="gt-arr" data-gtmv="1" title="Период вперед" ' +
+              'aria-label="Период вперед">' + ic('go', 13) + '</button>' +
+          '</div>' +
+          (gw.own ? '<button type="button" class="qchip gt-today" id="gt-today">Сегодня</button>' : '') +
+        '</div>' +
+      '</div>';
       return renderGantt(view, gtTop);
     }
     var q = (state.taskQ || '').toLowerCase().trim();
