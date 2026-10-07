@@ -13716,14 +13716,30 @@
       var itemsLeft = function () {
         return card.querySelectorAll('.mi-item:not(.made):not(.off)').length;
       };
+      // Пункты, которые уйдут в задачник ничьими. Ольга на обучении 07.10.2026:
+      // «задачи остаются либо без ответственного лица, либо там куча
+      // ответственных» — из 335 задач, заведенных со встреч, 45 оказались ничьи.
+      var nobodyLeft = function () {
+        return Array.prototype.filter.call(
+          card.querySelectorAll('.mi-item:not(.made):not(.off)'),
+          function (it) {
+            var sel = it.querySelector('.mi-who select');
+            return sel && !(+sel.value);
+          }).length;
+      };
       var mark = function () {
         var n = itemsLeft();
+        // Исполнителя поправили — снимаем взвод с кнопки: предупреждение было
+        // про прошлое состояние экрана.
+        save.removeAttribute('data-armed');
         // «Сняты» и «уже заведены» — разные новости, и путать их нельзя: в
         // первом случае человек сам отказался, во втором работа уже в задачнике.
         var off = card.querySelectorAll('.mi-item.off:not(.made)').length;
         var made = card.querySelectorAll('.mi-item.made').length;
+        var nob = nobodyLeft();
         count.textContent = n
-          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
+          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению' +
+            (nob ? ', ' + nob + ' без исполнителя' : '')
           : !off ? (made ? 'Все пункты в задачнике. Правки названия, исполнителя и срока уйдут в задачи' : 'Все пункты уже в задачнике')
           : made ? 'Заведено все, кроме снятого'
           : 'Все пункты сняты';
@@ -13732,6 +13748,7 @@
         save.disabled = !n && !made;
         save.classList.toggle('off', !n && !made);
         save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
+        count.classList.toggle('warn', !!(n && nob));
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
@@ -13757,6 +13774,11 @@
           }
         });
       }
+      // Выбрали исполнителя — счетчик ничьих пересчитывается сразу, иначе
+      // предупреждение под кнопкой говорит про прошлое состояние экрана.
+      if (!wired) card.addEventListener('change', function (e) {
+        if (e.target.closest && e.target.closest('.mi-who')) markRef();
+      });
       if (!wired) { wired = true; card.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('.mi-skip');
         if (!btn) return;
@@ -13798,6 +13820,17 @@
       };
       save.addEventListener('click', function () {
         if (save.disabled) return;
+        // Ничья задача — потерянная задача: в плане она не всплывает ни у кого.
+        // Не запрещаем (решать человеку), но говорим вслух и просим второй клик.
+        var nob = nobodyLeft();
+        if (nob && !save.getAttribute('data-armed')) {
+          save.setAttribute('data-armed', '1');
+          save.innerHTML = ic('alert', 14) + 'Все равно завести';
+          count.classList.add('warn');
+          count.textContent = nob + ' ' + plural(nob, 'пункт уйдет', 'пункта уйдут', 'пунктов уйдут') +
+            ' ничьими: их никто не увидит в своем плане';
+          return;
+        }
         save.disabled = true; save.classList.add('loading');
         // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
         // из трех файлов — это три независимых разбора, и упавший третий не

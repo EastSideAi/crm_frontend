@@ -7974,6 +7974,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .mi-foot { align-items: center; }
 .mi-count { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+/* Пункты уйдут ничьими — это предупреждение, а не статистика. */
+.mi-count.warn { color: var(--red-ink); }
 /* Погашенная кнопка все равно читается: --ink-3 на --fill дает контраст 2:1,
    и главное действие экрана просто исчезало. */
 .al-save.off { background: var(--fill); color: var(--ink-2); pointer-events: none; }
