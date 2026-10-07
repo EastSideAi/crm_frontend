@@ -2809,8 +2809,8 @@
       // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
     } else if (state.page === 'fintax') {
-      // Налог считается за год, а не за ведомость — год выбирается на самом экране.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог за год</div>';
+      // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -3272,8 +3272,8 @@
       }
       // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
       else if (state.page === 'fintax') {
-        ph = 'Плановый налог АУСН 8% по месяцам за год: сколько дохода пришло и сколько ' +
-          'с него отложить на налог. Доход берется из ведомости сам, база — до эквайринга.';
+        ph = 'Плановый налог АУСН 8%: сколько заплатить за каждый месяц. Платим помесячно, ' +
+          'до 25 числа следующего месяца. Доход берется из ведомости сам, база — до эквайринга.';
       }
       // План отделов считается по календарному месяцу, поперек периодов — ветка до !per,
       // иначе повисло бы «Загружаю ведомость».
@@ -17935,7 +17935,7 @@
     var taxCard = '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">Плановый налог (АУСН 8%)</div>' +
-        '<div class="s">8% от дохода до вычета эквайринга — сколько отложить на фонд налогов</div></div></div>' +
+        '<div class="s">8% от дохода до вычета эквайринга — сколько заплатить налога за период</div></div></div>' +
       '<div class="fin-kv">' +
         '<label class="fkv fin-taxrow"><span>Доход за период, ₽</span>' +
           '<input id="tax-inc" class="al-in num" type="number" min="0" step="0.01" value="' +
@@ -20759,12 +20759,34 @@
     var lo = (t.years && t.years.first) || yr, hi = Math.max((t.years && t.years.last) || yr,
       now.getFullYear());
     var yPrev = yr > lo, yNext = yr < hi;
-    var tiles = [
-      { label: 'Доход за год', value: finRub(t.income_total, 0), sub: 'база налога, до эквайринга' },
-      { label: 'Отложить на налог', value: finRub(t.tax_total, 0), sub: '8% АУСН за год' },
-      { label: 'В среднем за месяц', value: finRub(Math.round(t.tax_total / 12), 0),
-        sub: 'налог, если ровно' },
-    ];
+    /* АУСН — помесячный режим: налог за месяц платят до 25 числа СЛЕДУЮЩЕГО месяца
+       (налог за сентябрь — до 25 октября). Поэтому главная цифра экрана — к уплате за
+       прошлый завершённый месяц со сроком, а не сумма за год (Роман 07.10.2026). Год
+       остаётся справочной плиткой и таблицей ниже. */
+    var MGEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
+      'сентября', 'октября', 'ноября', 'декабря'];
+    var tiles;
+    if (curM >= 2) {
+      var payRow = t.months[curM - 2];           // прошлый месяц — его и платим сейчас
+      var payName = payRow.name.toLowerCase();
+      tiles = [
+        { label: 'Налог к уплате', value: finRub(payRow.tax || 0, 0),
+          sub: 'за ' + payName + ', до 25 ' + MGEN[curM - 1] },
+        { label: 'Доход за ' + payName, value: finRub(payRow.income || 0, 0),
+          sub: 'база налога, до эквайринга' },
+        { label: 'Налог за год', value: finRub(t.tax_total, 0),
+          sub: 'всего за ' + yr + ', справочно' },
+      ];
+    } else {
+      // Январь текущего года (платим декабрь прошлого — его тут нет) или просмотр
+      // прошлого года: показываем годовую сводку.
+      tiles = [
+        { label: 'Доход за год', value: finRub(t.income_total, 0), sub: 'база налога, до эквайринга' },
+        { label: 'Налог за год', value: finRub(t.tax_total, 0), sub: '8% АУСН' },
+        { label: 'В среднем за месяц', value: finRub(Math.round(t.tax_total / 12), 0),
+          sub: 'платить каждый месяц' },
+      ];
+    }
     var rows = t.months.map(function (m) {
       var w = maxInc ? Math.max(0, Math.round(m.income / maxInc * 100)) : 0;
       var cur = m.month === curM;
@@ -20779,7 +20801,7 @@
       '<div class="card listcard">' +
         '<div class="list-tools">' +
           '<div><div class="t fe-t">Плановый налог по месяцам</div>' +
-            '<div class="s fe-s">сколько отложить на налог с дохода каждого месяца</div></div>' +
+            '<div class="s fe-s">сколько заплатить налога с дохода каждого месяца</div></div>' +
           '<div class="tx-year">' +
             '<button class="icobtn" id="tx-prev" aria-label="Предыдущий год"' +
               (yPrev ? '' : ' disabled') + '>‹</button>' +
@@ -20797,8 +20819,8 @@
         '</div>' +
         '<div class="fin-note">' + ic('alert', 13) +
           'Доход берется из ведомости сам, база — до вычета эквайринга (полная сумма ' +
-          'оплаты клиента). Это плановый расчет, отложить на фонд налогов; итог по ' +
-          'декларации считает бухгалтер.</div>' +
+          'оплаты клиента). Налог АУСН платят помесячно, до 25 числа следующего месяца. ' +
+          'Это плановый расчет; итог по декларации считает бухгалтер.</div>' +
       '</div>';
     var go = function (d) {
       return function () { FIN.taxYear = yr + d; FIN.tax = null; renderAll(); finLoadTax(); };
