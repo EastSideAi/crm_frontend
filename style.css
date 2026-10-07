@@ -953,6 +953,10 @@ button.tm-tag.ft:hover { border-color: #DCE7FF; color: var(--ink-2); }
    не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
    (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
 .lad-row.gf-flat { cursor: default; }
+/* Ступень, за которой есть список: нажатие открывает тех, кто на ней стоит. */
+.lad-row.lad-go { cursor: pointer; }
+.lad-row.lad-go:hover { background: var(--blue-tint); }
+.lad-row.lad-go:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 /* Шкала ограничена по ширине: во всю строку она перетягивала внимание с лестницы
    пути, а якорь на экране один. */
 .gf-row { display: grid; grid-template-columns: 210px minmax(90px, 420px) 54px 1fr;
@@ -10211,6 +10215,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .bc-n { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .bc-n b { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .bc-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
+/* Приписка «+3» рядом с числом: то же самое по контрольным получателям. Тусклее и
+   мельче самого числа — это уточнение к нему, а не второе число в строке. */
+.bc-n i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--ink-3);
+  margin-left: 4px; }
 .bc-go { color: var(--ink-3); display: flex; justify-content: flex-end; }
 .bc-run:hover .bc-go { color: var(--blue); }
 
