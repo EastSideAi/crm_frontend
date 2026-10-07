@@ -33541,6 +33541,22 @@
     '</div>';
   }
 
+  /* Согласие на рассылку — не то же самое, что согласие на обработку анкеты.
+     Тьютору важно различать три состояния: человек не разрешал писать, разрешал,
+     отписался. «Не получал письма» и «отписался» — разные разговоры с клиентом. */
+  function rassylkaRow(b) {
+    var r = b.rassylka;
+    if (!r || !r.email) return '';
+    var when = r.at ? ', ' + fmtWhen(r.at) : '';
+    var text;
+    if (r.state === 'in') text = 'Рассылка: согласие есть' +
+      (r.source ? ' (' + esc(r.source) + ')' : '') + when;
+    else if (r.state === 'out') text = 'Рассылка: отписался' + when +
+      ' — рекламные письма больше не уходят';
+    else text = 'Рассылка: согласия нет — рекламные письма не отправляются';
+    return '<div class="mail-off">' + text + '</div>';
+  }
+
   function buildMailSection(id) {
     var b = MAIL[id];
     if (!b) { loadMail(id); return skeletonSection('mail'); }
@@ -33552,7 +33568,7 @@
       '<div class="m-csub">Свой адрес ученика на нашем домене: с него пишем в приемные комиссии, и ответы вузов приходят сюда же. Личная почта для подачи не годится: ответ уйдет мимо карточки.</div>';
 
     if (!b.address) {
-      return head +
+      return head + rassylkaRow(b) +
         '<div class="mail-hero empty">' +
           '<div class="mail-hero-ic">' + ic('mail', 20) + '</div>' +
           '<div class="mail-hero-b"><div class="mail-empty-t">Адреса еще нет</div>' +
@@ -33575,7 +33591,7 @@
       ? (b.messages || []).map(mailRow).join('')
       : '<div class="mail-off">Писем пока нет.</div>';
 
-    return head +
+    return head + rassylkaRow(b) +
       '<div class="mail-addr">' +
         '<span class="mail-addr-v" id="mail-addr-v">' + esc(b.address) + '</span>' +
         '<button class="bp ghost sm" id="mail-copy">' + ic('copy', 12) + 'Скопировать</button>' +
