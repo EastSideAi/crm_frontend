@@ -1079,6 +1079,10 @@ a { color: inherit; text-decoration: none; }
    не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
    (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
 .lad-row.gf-flat { cursor: default; }
+/* Ступень, за которой есть список: нажатие открывает тех, кто на ней стоит. */
+.lad-row.lad-go { cursor: pointer; }
+.lad-row.lad-go:hover { background: var(--blue-tint); }
+.lad-row.lad-go:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 /* Шкала ограничена по ширине: во всю строку она перетягивала внимание с лестницы
    пути, а якорь на экране один. */
 .gf-row { display: grid; grid-template-columns: 210px minmax(90px, 420px) 54px 1fr;
@@ -10376,6 +10380,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .bc-n { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; }
 .bc-n b { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
 .bc-n small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-top: 3px; }
+/* Приписка «+3» рядом с числом: то же самое по контрольным получателям. Тусклее и
+   мельче самого числа — это уточнение к нему, а не второе число в строке. */
+.bc-n i { font-style: normal; font-size: 12px; font-weight: 600; color: var(--ink-3);
+  margin-left: 4px; }
 .bc-go { color: var(--ink-3); display: flex; justify-content: flex-end; }
 .bc-run:hover .bc-go { color: var(--blue); }
 
@@ -11268,3 +11276,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mx-soon .mx-join, .mx-soon .mx-copy, .mx-soon .mx-cancel, .mx-soon .mx-end { order: 3; }
   .mx-one-t { font-size: 19px; }
 }
+
+/* ── Сквозная аналитика: закладки «Цифры / Методика счета / Техзадание» ──
+   Экран цифр рисует crosscut.js, два документа приходят с бэкенда целиком и
+   живут в shadow DOM (у них своя верстка), поэтому здесь только обертка. */
+.cross-docs { margin-bottom: 14px; max-width: 100%; flex-wrap: wrap; }
+/* на узком телефоне три закладки в строку не помещаются и уводили страницу вбок */
+@media (max-width: 400px) { .cross-docs button { padding: 8px 11px; } }
+.cross-doc { padding: 0; overflow: hidden; }
+.cross-doc .empty { padding: 28px 18px; }
