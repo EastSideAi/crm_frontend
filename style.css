@@ -1903,6 +1903,10 @@ a { color: inherit; text-decoration: none; }
 .pay-cell .pc-v { font-size: 23px; font-weight: 700; letter-spacing: -.03em; color: var(--ink); margin-top: 9px; line-height: 1; }
 .pay-cell.lead .pc-v { color: var(--blue-d); }
 .pay-cell.muted .pc-v { color: var(--ink-3); }
+/* Четвертая ячейка (оплаты прошлых сезонов) есть не всегда: с ней доска делится
+   на четыре, на узком экране переносится по две. */
+.pay-board.four { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1100px) { .pay-board.four { grid-template-columns: repeat(2, 1fr); } }
 .pay-amt { font-size: 15px; font-weight: 700; flex: none; }
 .pay-amt.refunded { color: var(--ink-3); text-decoration: line-through; }
 .pay-amt.pending { color: var(--amber-ink); }
@@ -2416,6 +2420,24 @@ a { color: inherit; text-decoration: none; }
 .rm-add-btn:hover svg { color: var(--blue); }
 .rm-add-btn.open { color: var(--blue); background: var(--blue-tint); }
 .rm-add-btn.open svg { color: var(--blue); transform: rotate(45deg); }
+/* Доступ к платформе: один факт вместо списка задач — выдали или нет и когда.
+   Выдан — зеленая пилюля и дата рядом; не выдан — тихая кнопка в языке «добавить». */
+.rm-access { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.rm-acc-tgl { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px;
+  border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  background: var(--fill); transition: color .15s, background .15s; }
+.rm-acc-tgl svg { color: var(--ink-3); transition: color .15s; }
+.rm-acc-tgl:hover { color: var(--blue); background: var(--blue-tint); }
+.rm-acc-tgl:hover svg { color: var(--blue); }
+.rm-acc-tgl:disabled { opacity: .55; }
+.rm-access.on .rm-acc-tgl { color: var(--green-ink); background: var(--green-soft); }
+.rm-access.on .rm-acc-tgl svg { color: var(--green-ink); }
+.rm-acc-date { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.rm-acc-date input { font: 500 12.5px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+  border: 1px solid transparent; border-radius: 10px; padding: 7px 10px; outline: none; }
+.rm-acc-date input:focus { background: #fff; border-color: #DCE7FF; }
+.rm-stag.ok { color: var(--green-ink); }
 .rm-add { margin-top: 10px; padding: 16px; border-radius: 14px; background: var(--fill);
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
 .rm-add-own { display: inline-flex; gap: 3px; padding: 4px; border-radius: 11px; background: #fff;
@@ -4063,6 +4085,24 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
   border: 1px dashed var(--line); background: transparent; color: var(--ink-2); }
 .pay-rcpt.add:hover { border-color: #DCE7FF; }
 .pay-rcpt.add.on { color: var(--blue); border-color: var(--blue); background: var(--blue-tint); }
+/* Считается ли оплата в деньгах компании. Пилюля того же языка, что квитанция
+   рядом, но тише кеглем: это пометка, которую изредка переключают, а не действие
+   строки. Снятая — янтарная: не ошибка, но и не обычное состояние. */
+.pay-inc { display: inline-flex; align-items: center; font: 600 11.5px 'Manrope', sans-serif;
+  color: var(--ink-3); background: var(--fill); border-radius: var(--r-pill);
+  padding: 5px 10px; flex: none; transition: .14s; opacity: 0; }
+/* Обычное состояние молчит: «в выручке» на каждой строке — шум, его читать не надо.
+   Пилюля проявляется под курсором, а снятая видна всегда — это как раз то, что
+   должно бросаться в глаза. */
+.pay-row:hover .pay-inc, .pay-inc.off, .pay-inc:focus-visible { opacity: 1; }
+.pay-inc:hover { color: var(--blue); background: var(--blue-tint); }
+.pay-inc.off { color: var(--amber-ink); background: var(--amber-soft); }
+.pay-inc:disabled { opacity: .5; }
+.pay-row.arch .pay-amt { color: var(--ink-3); }
+/* Галочка «считать в выручку» в форме оплаты. Вид берем у такой же галочки в
+   ведомости (sv-onoff), но там она живет в поле формы (.al-f), которое дает ей
+   display:flex — здесь сетки той формы нет, поэтому задаем сами. */
+.pay-form .sv-onoff { display: flex; margin-top: 2px; line-height: 1.45; }
 
 /* свёрнутая анкета */
 .qa-fold .m-sec-h { cursor: pointer; }
@@ -4405,6 +4445,9 @@ button.tsk-mimp { cursor: pointer; }
 .fin-leg .nm { flex: 1; font-size: 13.5px; color: var(--ink); font-weight: 500; }
 .fin-leg .am { font-size: 14.5px; font-weight: 700; white-space: nowrap; }
 .fin-leg .am.muted { color: var(--ink-3); }
+/* Оплаты прошлых сезонов: тихая строка под легендой, не часть стека. */
+.fin-arch { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 .fin-months { display: flex; align-items: flex-end; gap: 10px; height: 150px; padding-top: 14px; }
 .fin-mcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; height: 100%; }
 .fin-mcol .bar { background: var(--blue); border-radius: 7px; min-height: 3px; transition: height .2s; }
