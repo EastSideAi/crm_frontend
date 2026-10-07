@@ -7265,6 +7265,7 @@
       marks += '<span class="sev ' + (t.stuck ? 'rv-wait' : 'st-wait') + ' wk-mark">' +
         (t.stuck ? 'переносили ×' + t.carry_count : 'перенос') + '</span>';
     }
+    marks += agMark(t, closed);
     var quick = '';
     if (!closed && own && !opts.readOnly) {
       quick = '<button class="tsk-chk" data-done="' + t.id + '" title="Сделано">' + ic('check', 12) + '</button>';
@@ -7416,6 +7417,21 @@
      отклонение. opts: who — показать исполнителя даже если это я; due — срок
      всегда; boss — галочка руководителю; tickSlot — держать место под галочку;
      noGoal — без метки цели; accept — строка приемки; today — «на сегодня». */
+  /* Состояния агента песочницы. «Готово» у него нет вовсе: предел агента —
+     приемка, закрывает задачу человек (routers/agent_queue.py на бэкенде). */
+  var AGENT_ST = {
+    queued: { label: 'у агента', hint: 'Агент песочницы взял задачу в работу' },
+    ask: { label: 'агент спросил', hint: 'Агенту нужен твой ответ, чтобы продолжить' },
+    review: { label: 'агент сдал', hint: 'Агент сделал и отдал тебе на проверку' }
+  };
+  /* Метка «над задачей сидит агент». Одна на оба списка: план недели и срезы
+     команды рисуются разными функциями, но вопрос у человека один. */
+  function agMark(t, closed) {
+    var st = t.agent_state && t.agent_state !== 'drop' && !closed ? AGENT_ST[t.agent_state] : null;
+    if (!st) return '';
+    return '<span class="sev ag-chip' + (t.agent_state === 'ask' ? ' ask' : '') +
+      ' wk-mark" title="' + esc(st.hint) + '">' + st.label + '</span>';
+  }
   function dyRow(t, opts) {
     opts = opts || {};
     var me = state.taskMe;
@@ -7444,6 +7460,9 @@
     /* Не «застряла»: так называется вкладка, а там про другое — про задачи без
        исполнителя и с вышедшим сроком. Здесь факт: двигали срок дважды. */
     if (t.stuck) right += '<span class="sev rv-wait">переносили</span>';
+    // Задачу взял агент песочницы. Без этой метки человек в плане видел задачу
+    // нетронутой и брался за нее второй раз.
+    right += agMark(t, closed);
     // «На сегодня» у своей завтрашней задачи: раньше исполнитель двигает сам.
     var mine = !!(me && t.assignee_id === me);
     if (opts.today && mine && !closed) right += '<button class="qchip dy-today" data-today="' + t.id + '">на сегодня</button>';
@@ -11939,6 +11958,17 @@
               '<button class="bp" id="tk-eok">Сохранить</button>' +
             '</div>' +
           '</div>' +
+          // Агент песочницы: что он с задачей делает прямо сейчас. Стоит первым
+          // блоком — это ответ на вопрос «почему тут ничего не двигается».
+          (t.agent_state && t.agent_state !== 'drop'
+            ? '<div class="tsk-sec tsk-agent"><div class="tsk-l tsk-lrow">' +
+                (AGENT_ST[t.agent_state] ? AGENT_ST[t.agent_state].label : 'агент') +
+                '<button class="tsk-addstep" id="tk-agdrop">Забрать себе</button></div>' +
+                '<div class="tsk-p">' +
+                (t.agent_reason ? esc(t.agent_reason)
+                  : 'Агент взял задачу в работу. Закрыть ее сам он не может — ' +
+                    'сделает и отдаст тебе на проверку.') + '</div></div>'
+            : '') +
           (t.details ? '<div class="tsk-sec" data-editsec><div class="tsk-l">Что нужно сделать</div><div class="tsk-p">' + esc(t.details) + '</div></div>' : '') +
           (t.result_expect ? '<div class="tsk-sec tsk-crit" data-editsec><div class="tsk-l">Что считается сделанным</div><div class="tsk-p">' + esc(t.result_expect) + '</div></div>' : '') +
           // Результат — ответ исполнителя на этот критерий. Стоит сразу под ним:
@@ -12168,6 +12198,18 @@
             showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
                       (code === 403 ? 'Править может постановщик, исполнитель или руководитель' : 'Не удалось сохранить'));
           });
+        });
+      }
+      if (el('tk-agdrop')) {
+        el('tk-agdrop').addEventListener('click', function () {
+          var b = this; b.disabled = true;
+          apiSend('/admin/api/agent/queue/' + id, 'POST',
+            { state: 'drop', reason: 'человек забрал задачу себе' }, function () {
+              showToast('Забрал у агента');
+              state.tasks = null; state.myweek = null; state.myboard = null; state.mymonth = null;
+              api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+              if (state.page === 'tasks') renderView();
+            }, function () { b.disabled = false; showToast('Не получилось забрать'); });
         });
       }
       el('tk-resfile').addEventListener('change', function (e) {
