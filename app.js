@@ -26867,7 +26867,10 @@
         '<div class="s num">' + esc(r.channel || '—') + ' · ' + fmtWhen(r.started_at) +
         (r.source ? ' · ' + esc(r.source) : '') + '</div></div></div>' +
         '<div class="statbar bc-stat' + (mail ? ' six' : '') + '">' +
-          '<div class="stat"><div class="sl">В списке</div><div class="sv num">' + (t.sent || 0) + '</div></div>' +
+          '<div class="stat"><div class="sl">В списке</div><div class="sv num">' + (t.sent || 0) + '</div>' +
+            (wit.length ? '<div class="sn">+ ' + wit.length + ' ' +
+              plural(wit.length, 'контрольный', 'контрольных', 'контрольных') + '</div>' : '') +
+          '</div>' +
           '<div class="stat"><div class="sl"><span class="sdot green"></span>Дошло</div>' +
             '<div class="sv num">' + (t.delivered || 0) + '</div></div>' +
           /* Точка у трех средних чисел не ставится намеренно: четыре одинаковых
@@ -26906,6 +26909,11 @@
         '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">Адресаты</div><div class="s">' +
         (pp ? pp.total + ' ' + plural(pp.total, 'человек', 'человека', 'человек') : 'считаю') +
+        /* Список адресатов — доказательство отправки, в нем есть все, включая своих.
+           Цифры выше считаются только по аудитории, поэтому разницу называем прямо,
+           иначе «в списке 1» рядом с «4 человека» читается как ошибка. */
+        (wit.length ? ' · из них ' + wit.length + ' ' +
+          plural(wit.length, 'контрольный', 'контрольных', 'контрольных') : '') +
         ' · ответ площадки как есть</div></div></div>' +
         '<div class="bc-filters">' +
           '<div class="searchwrap">' + ic('search', 15) +
