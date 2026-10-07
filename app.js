@@ -23436,9 +23436,14 @@
        Павел 07.10.2026 просил «чтобы прям кнопкой можно было посмотреть, что
        ушло в задачник». Раньше это был текст, и было непонятно, что внутрь
        вообще можно зайти. */
+    var AT_RU = { goals: 'договоренности', tasks: 'задачи со встречи',
+                  text: 'расшифровку', sum: 'конспект' };
     function tag(to, body) {
+      /* Имя для озвучки называет встречу: в списке три одинаковых «конспект»
+         подряд, и голосом не понять, чей. Образец рядом — шеврон строки. */
       return '<button type="button" class="mx-tag mx-tagb" data-mxopen="' + esc(m.key) +
-        '" data-mxat="' + to + '">' + body + '</button>';
+        '" data-mxat="' + to + '" aria-label="' + esc((m.title || 'Встреча')) +
+        ': открыть ' + AT_RU[to] + '">' + body + '</button>';
     }
     var marks = '<span class="sev ' + st.cls + '">' + st.label + '</span>';
     /* agreements приходит счетом задач по этой встрече — так его и подписываем.
@@ -23510,8 +23515,11 @@
       }).join(''));
     }
     var text = state.meetxText[m.key];
+    /* Расшифровка стоит в ряду, если она у встречи ЕСТЬ, а не если ее уже
+       скачали: ряд обещает опись содержимого, и «появляется после нажатия» —
+       это другое обещание. Нажатие на пункт догрузит текст само. */
+    if (c.text_chars) jumps.push(['text', ic('mic', 13) + 'Расшифровка']);
     if (text) {
-      jumps.push(['text', ic('mic', 13) + 'Расшифровка']);
       parts.push('<div class="mx-h" id="mx-s-text">Расшифровка</div><div class="mx-text">' +
         esc(text).replace(/\n/g, '<br>') + '</div>');
     }
@@ -23530,7 +23538,7 @@
     }
     if (c.url) {
       acts.push('<a class="qchip" href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
-        ic('go', 13) + 'Запись встречи</a>');
+        ic('ext', 13) + 'Запись встречи</a>');
     }
     if (c.session_id) {
       acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
@@ -23863,8 +23871,13 @@
      лег в «Загрузки» одинаковыми. */
   function mxFileName(m) {
     var d = m.at ? new Date(m.at) : new Date();
-    var iso = isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
-    return 'rasshifrovka-' + (iso || 'vstrecha') + '.txt';
+    if (isNaN(d.getTime())) return 'rasshifrovka-vstrecha.txt';
+    // Время в имени: за день встреч бывает несколько, и в «Загрузках» файлы с
+    // одной датой различить нечем.
+    var ymd = ('000' + d.getFullYear()).slice(-4) + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    return 'rasshifrovka-' + ymd + '-' +
+      ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2) + '.txt';
   }
   function mxSaveText(m, text) {
     /* В файле дата полная, а не «Сегодня»: его откроют через месяц, и слово
@@ -23881,39 +23894,49 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
+  /* Один путь на оба перехода — из строки списка и из ряда в карточке.
+     Блока еще нет (расшифровку не грузили) — сначала грузим, прыжок доживает до
+     перерисовки в state.meetxJump. Заголовок, к которому пришли, на секунду
+     подсвечивается: на коротких карточках прокручивать нечего, и без этого
+     нажатие кнопки выглядит беззвучным. */
+  function mxGoTo(m, want) {
+    var t = el('mx-s-' + want);
+    if (t) {
+      state.meetxJump = null;
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      t.classList.add('hit');
+      setTimeout(function () { t.classList.remove('hit'); }, 1400);
+      return;
+    }
+    // Не расшифровка или она уже забрана, а блока все равно нет — прыгать некуда.
+    if (want !== 'text' || state.meetxText[m.key]) { state.meetxJump = null; return; }
+    state.meetxJump = 'text';
+    mxText(m.key, function () {
+      if (state.page === 'meetx') renderView();
+    }, function () {
+      state.meetxJump = null;
+      showToast('Не удалось открыть расшифровку');
+    });
+  }
   function wireMeetxCard(view, m) {
     if (state.meetxJump) {
       var want = state.meetxJump;
-      state.meetxJump = null;
-      /* Расшифровку по метке подгружаем сами: внутри карточки ее нет, а человек
-         нажал именно на нее и ждет текст, а не кнопку «показать». */
-      if (want === 'text' && !state.meetxText[m.key]) {
-        mxText(m.key, function () { if (state.page === 'meetx') renderView(); }, function () {
-          showToast('Не удалось открыть расшифровку');
-        });
-      } else {
-        setTimeout(function () {
-          var t = el('mx-s-' + want);
-          if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 0);
-      }
+      setTimeout(function () { mxGoTo(m, want); }, 0);
     }
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxjump]'), function (b) {
-      b.addEventListener('click', function () {
-        var t = el('mx-s-' + b.getAttribute('data-mxjump'));
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
+      b.addEventListener('click', function () { mxGoTo(m, b.getAttribute('data-mxjump')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxdl]'), function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-mxdl');
-        b.disabled = true;
+        var was = b.innerHTML;
+        b.disabled = true; b.innerHTML = ic('dl', 13) + 'Собираю файл…';
         mxText(key, function (text) {
-          b.disabled = false;
+          b.disabled = false; b.innerHTML = was;
           mxSaveText(m, text);
           showToast('Расшифровка скачана', mxFileName(m));
         }, function () {
-          b.disabled = false;
+          b.disabled = false; b.innerHTML = was;
           showToast('Не удалось забрать расшифровку', 'попробуй еще раз');
         });
       });
@@ -23921,11 +23944,14 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-mxtext');
-        b.disabled = true; b.textContent = 'Загружаю…';
+        var was = b.innerHTML;
+        b.disabled = true; b.innerHTML = ic('mic', 13) + 'Загружаю…';
         mxText(key, function () {
           if (state.page === 'meetx') renderView();
         }, function () {
-          b.disabled = false;
+          // Подпись возвращаем целиком: иначе кнопка остается с «Загружаю…»
+          // навсегда и спорит с тостом об ошибке.
+          b.disabled = false; b.innerHTML = was;
           showToast('Не удалось открыть расшифровку');
         });
       });
