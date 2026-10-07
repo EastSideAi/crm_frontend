@@ -34977,6 +34977,9 @@
   }
   function buildAdmissionSection(ctx) {
     var id = state.drawerId;
+    // Когда семье выдали доступ в кабинет. Живет в overrides карточки рядом с
+    // тарифом и направлением: это такое же поле карточки, а не задача плана.
+    var accessAt = ((ctx.crm && (ctx.crm._ov || ctx.crm.overrides)) || {}).access_at || '';
     var tasks = rmTasks(id);
     var byStage = {};
     tasks.forEach(function (t) { (byStage[t.stage] = byStage[t.stage] || []).push(t); });
@@ -35029,17 +35032,41 @@
           return '<button class="rm-at-t' + (i === 0 ? ' on' : '') + '" data-sub="' + o[0] + '">' + o[1] + '</button>';
         }).join('');
 
+      /* Доступ к платформе — не работа на несколько задач, а один факт: выдали или
+         нет и когда (Мария 07.10.2026: «не нужны задачи, нужна галочка да/нет и
+         дата»). Поэтому у этапа свое тело: переключатель и дата вместо конструктора
+         задач. Уже заведенные тут задачи показываем — чужую работу не прячем. */
+      var isAccess = st.key === 'access';
+      var accAt = isAccess ? String(accessAt || '') : '';
+      if (isAccess) {
+        scls = accAt ? 'done' : (list.length ? scls : 'empty');
+      }
+      var accBody = isAccess
+        ? '<div class="rm-access' + (accAt ? ' on' : '') + '">' +
+            '<button class="rm-acc-tgl" id="rm-acc-tgl">' +
+              ic(accAt ? 'check' : 'plus', 13) +
+              (accAt ? 'Доступ выдан' : 'Отметить, что доступ выдан') + '</button>' +
+            (accAt ? '<label class="rm-acc-date">Когда' +
+              '<input type="date" id="rm-acc-date" value="' + esc(accAt) + '"></label>' : '') +
+          '</div>'
+        : '';
+
       html += '<div class="rm-stage ' + scls + '">' +
-        '<div class="rm-rail"><div class="rm-node">' + (allDone ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
+        '<div class="rm-rail"><div class="rm-node">' + ((allDone || (isAccess && accAt)) ? ic('check', 13) : st.n) + '</div><div class="rm-line"></div></div>' +
         '<div class="rm-body">' +
           '<div class="rm-shead">' +
             '<div class="rm-stitle">' + esc(meta.title || st.title) + (hasReview ? '<span class="rm-shead-dot"></span>' : '') + '</div>' +
-            (list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
+            (isAccess
+              ? '<div class="rm-stag' + (accAt ? ' ok' : '') + '">' + (accAt ? 'выдан ' + fmtDay(accAt) : 'не выдан') + '</div>'
+              : list.length ? '<div class="rm-scount num">' + doneN + '/' + list.length + '</div>' : '<div class="rm-stag">пусто</div>') +
           '</div>' +
           '<div class="rm-ssub">' + esc(meta.about || st.sub) + '</div>' +
           (st.hint ? '<div class="rm-hint">' + ic('clock', 12) + esc(st.hint) + '</div>' : '') +
+          accBody +
           (rows ? '<div class="rm-tasks">' + rows + '</div>' : '') +
-          '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>' +
+          (isAccess ? '' :
+          '<button class="rm-add-btn" data-addstage="' + st.key + '">' + ic('plus', 13) + 'Добавить задачу</button>') +
+          (isAccess ? '' :
           '<div class="rm-add" data-stage="' + st.key + '" data-o="' + defOwner + '" hidden>' +
             '<div class="rm-add-own">' +
               '<button data-o="client"' + (defOwner === 'client' ? ' class="on"' : '') + '>' + ic('leads', 12) + 'Клиент делает</button>' +
@@ -35061,7 +35088,7 @@
               '</div>' +
               '<button class="rm-f-add bp sm">' + ic('plus', 13) + 'Добавить задачу</button>' +
             '</div>' +
-          '</div>' +
+          '</div>') +
         '</div>' +
       '</div>';
     });
@@ -39729,6 +39756,23 @@
             rmUpd(tid, function (t) { t.submit = sb.getAttribute('data-sub'); return t; });
           });
         });
+      });
+      /* Доступ к платформе: галочка и дата вместо задач. Сохраняем сразу в карточку
+         (overrides.access_at) — пустая строка там значит «снять ключ», это и есть
+         «доступ не выдан». */
+      var accTgl = rmHost.querySelector('#rm-acc-tgl');
+      if (accTgl) accTgl.addEventListener('click', function () {
+        var ov = ((state.details[id] && state.details[id].crm && state.details[id].crm.overrides) || {});
+        var cur = ov.access_at || '';
+        accTgl.disabled = true;
+        patch(id, { overrides: { access_at: cur ? '' : todayISO(0) } }, null, function () {
+          showToast(cur ? 'Доступ снят' : 'Доступ отмечен как выданный');
+          rmReload();
+        });
+      });
+      var accDate = rmHost.querySelector('#rm-acc-date');
+      if (accDate) accDate.addEventListener('change', function () {
+        patch(id, { overrides: { access_at: accDate.value || '' } }, null, function () { rmReload(); });
       });
       // раскрытие панели добавления
       Array.prototype.forEach.call(rmHost.querySelectorAll('.rm-add-btn'), function (b) {

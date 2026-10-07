@@ -2420,6 +2420,24 @@ a { color: inherit; text-decoration: none; }
 .rm-add-btn:hover svg { color: var(--blue); }
 .rm-add-btn.open { color: var(--blue); background: var(--blue-tint); }
 .rm-add-btn.open svg { color: var(--blue); transform: rotate(45deg); }
+/* Доступ к платформе: один факт вместо списка задач — выдали или нет и когда.
+   Выдан — зеленая пилюля и дата рядом; не выдан — тихая кнопка в языке «добавить». */
+.rm-access { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.rm-acc-tgl { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px;
+  border-radius: 10px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  background: var(--fill); transition: color .15s, background .15s; }
+.rm-acc-tgl svg { color: var(--ink-3); transition: color .15s; }
+.rm-acc-tgl:hover { color: var(--blue); background: var(--blue-tint); }
+.rm-acc-tgl:hover svg { color: var(--blue); }
+.rm-acc-tgl:disabled { opacity: .55; }
+.rm-access.on .rm-acc-tgl { color: var(--green-ink); background: var(--green-soft); }
+.rm-access.on .rm-acc-tgl svg { color: var(--green-ink); }
+.rm-acc-date { display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.rm-acc-date input { font: 500 12.5px 'Manrope', sans-serif; color: var(--ink); background: var(--fill);
+  border: 1px solid transparent; border-radius: 10px; padding: 7px 10px; outline: none; }
+.rm-acc-date input:focus { background: #fff; border-color: #DCE7FF; }
+.rm-stag.ok { color: var(--green-ink); }
 .rm-add { margin-top: 10px; padding: 16px; border-radius: 14px; background: var(--fill);
   box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); }
 .rm-add-own { display: inline-flex; gap: 3px; padding: 4px; border-radius: 11px; background: #fff;
