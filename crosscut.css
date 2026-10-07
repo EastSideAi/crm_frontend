@@ -1,0 +1,345 @@
+/* Стили экрана сквозной аналитики в CRM.
+
+   Те же правила, что на черновике истсайд.рф/сквозная-аналитика, целиком заведенные
+   под класс .crosscut: внутри своя палитра и своя типографика, наружу они не текут
+   и стилей CRM не трогают. Файл собирается скриптом analitika/snapshot/build_crm.py —
+   руками его не правят. */
+
+/* Токены CRM продублированы в файле: страница живет вне crm_frontend и его style.css
+   ей недоступен. Значения обязаны совпадать с design.md CRM — иначе два лица у одного
+   продукта. Тот же прием, что в join.html. */
+@font-face{font-family:'Manrope';src:url('fonts/Manrope.ttf') format('truetype-variations');font-weight:100 900;font-display:swap}
+.crosscut {
+  --app:#FFFFFF; --main:#F6F7F9; --card:#FFFFFF;
+  --ink:#11151F; --ink-2:#697086; --ink-3:#A6ABB8;
+  --line:#EDEEF2; --line-2:#E3E5EB; --fill:#F5F6F9;
+  --blue:#2F6BFF; --blue-d:#1E50E6; --navy:#1C2B4A; --blue-tint:#EAF0FF;
+  --green:#18A957; --green-ink:#0E7C3F; --green-soft:#E4F6EC;
+  --red:#E5484D; --red-ink:#C42A2F; --red-soft:#FCEBEC;
+  --amber:#E0922F; --amber-ink:#9A5B12; --amber-soft:#FBF0DD;
+  --r-xl:20px; --r-lg:14px; --r-pill:999px;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+.crosscut * {box-sizing:border-box}
+.crosscut {-webkit-text-size-adjust:100%}
+.crosscut {
+  margin:0; background:#E5E7EC; color:var(--ink);
+  font:400 14px/1.5 'Manrope','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-feature-settings:'tnum'; -webkit-font-smoothing:antialiased;
+}
+.crosscut .wrap {max-width:1180px; margin:0 auto; padding:32px 24px 90px}
+
+
+/* шапка */
+.crosscut .top {display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:6px}
+.crosscut .brand {font-size:15px; font-weight:800; letter-spacing:-.02em}
+.crosscut .tag {font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3)}
+.crosscut h1 {font-size:27px; line-height:1.18; font-weight:700; letter-spacing:-.03em; margin:14px 0 8px}
+.crosscut .sub {margin:0; font-size:14.5px; line-height:1.6; color:var(--ink-2); max-width:76ch}
+.crosscut .sub b {color:var(--ink); font-weight:600}
+
+
+/* кнопки на соседние документы: экран без правил счета и без задания на сбор
+   данных читается как «цифры взялись откуда-то». Держим их на виду, а не в подвале */
+/* Шапка в две колонки: слева о чем экран, справа переходы в документы.
+   Раньше кнопки лежали под текстом, одна из них была залита синим и читалась
+   как «уже нажата» (поймала Вера 06.10.2026). Теперь обе одинаковые. */
+.crosscut .head {display:grid; grid-template-columns:minmax(0,1fr) minmax(0,330px); gap:30px; align-items:start}
+.crosscut .docs {display:grid; gap:10px; margin:6px 0 0; align-content:start}
+
+/* Объем — внутренним светом и нижней гранью, а не тенью: в системе CRM тени
+   не живут, а кнопка должна читаться как нажимаемая. Под курсором приподнимается,
+   при нажатии проваливается на пиксель. */
+.crosscut .docs a {
+  display:flex; align-items:center; gap:10px; cursor:pointer;
+  background:linear-gradient(#fff,#F5F6FA); border:1px solid #DCDFE7; border-radius:12px;
+  box-shadow:inset 0 1px 0 #fff, inset 0 -2px 0 rgba(15,19,32,.09);
+  padding:13px 15px; font:600 13.5px/1.35 'Manrope','Inter',system-ui;
+  color:var(--ink); text-decoration:none; white-space:normal;
+  transition:border-color .13s var(--ease), background .13s var(--ease), transform .08s var(--ease);
+}
+.crosscut .docs a:hover {border-color:#C9CEDA; background:linear-gradient(#fff,#F7F8FB)}
+.crosscut .docs a:active {transform:translateY(1px); box-shadow:inset 0 2px 3px rgba(15,19,32,.07)}
+.crosscut .docs a:focus-visible {outline:2px solid var(--blue); outline-offset:2px}
+.crosscut .docs svg {flex:none; color:var(--ink-3)}
+.crosscut .docs a .go {margin-left:auto; color:var(--ink-3)}
+.crosscut .docs a:hover .go {color:var(--blue)}
+.crosscut .docs a em {font-style:normal; font-weight:600; color:var(--ink-3)}
+.crosscut .docs a.play svg:first-child {color:var(--blue)}
+
+
+/* плеер: открывается кнопкой, до нажатия грузится только картинка-обложка */
+.crosscut .vid video {display:block; width:100%; border-radius:var(--r-lg); background:#0E1220; margin-top:14px}
+
+
+/* панель фильтров */
+.crosscut .flabel {font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3)}
+
+/* Переносим кнопки на любой ширине, а не только на телефоне: панель периода
+   узкая (400px), и четвёртая кнопка просто обрезалась — от «Августа» оставалась
+   торчать одна буква «А» (поймала Вера 06.10.2026). */
+.crosscut .seg {display:flex; flex-wrap:wrap; background:var(--fill); border-radius:var(--r-lg); padding:3px; gap:2px; max-width:100%}
+.crosscut .seg button {
+  appearance:none; border:0; background:transparent; cursor:pointer;
+  font:600 13px/1 'Manrope','Inter',system-ui; color:var(--ink-2);
+  padding:8px 14px; border-radius:var(--r-pill); transition:all .13s var(--ease); white-space:nowrap;
+}
+.crosscut .seg button[aria-pressed="true"] {background:var(--app); color:var(--ink); box-shadow:0 1px 2px rgba(15,19,32,.07)}
+.crosscut .seg button:focus-visible {outline:2px solid var(--blue); outline-offset:1px}
+.crosscut .fnote {font-size:13px; color:var(--ink-2); margin-left:auto}
+.crosscut .fnote b {color:var(--ink); font-weight:600}
+
+
+/* плитки показателей */
+/* Две колонки на любой ширине. Показателей десять: в три колонки последняя
+   плитка всегда оставалась одна в ряду, а делители у десяти — только два и пять. */
+.crosscut .kpis {display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}
+.crosscut .kpi {
+  background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg);
+  padding:13px 14px 12px; text-align:left; cursor:pointer; position:relative;
+  font:inherit; color:inherit; transition:border-color .13s var(--ease);
+}
+.crosscut .kpi:hover {border-color:var(--line-2)}
+.crosscut .kpi[aria-expanded="true"] {border-color:var(--blue)}
+.crosscut .kpi:focus-visible {outline:2px solid var(--blue); outline-offset:2px}
+.crosscut .kpi .k-l {font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); display:block; margin-bottom:7px; padding-right:16px}
+.crosscut .kpi .k-v {font-size:24px; font-weight:700; letter-spacing:-.035em; line-height:1.05; display:block}
+
+/* Один якорь на экран: деньги. Остальные девять плиток держат общий кегль. */
+.crosscut .kpi.hero {grid-column:1 / -1; padding:18px 20px 16px}
+.crosscut .kpi.hero .k-v {font-size:38px; letter-spacing:-.04em}
+.crosscut .kpi.hero .k-d {margin-top:9px; font-size:13px}
+.crosscut .kpi .k-v small {font-size:12.5px; font-weight:600; letter-spacing:-.01em; color:var(--ink-2); display:block; margin-top:2px}
+.crosscut .kpi .k-d {display:flex; align-items:center; gap:5px; margin-top:7px; font-size:12px; font-weight:700}
+.crosscut .k-d.up {color:var(--green-ink)}
+.crosscut .k-d.down {color:var(--red-ink)}
+.crosscut .k-d.flat {color:var(--ink-3)}
+.crosscut .k-d .was {color:var(--ink-3); font-weight:500}
+.crosscut .kpi .k-no {margin-top:9px; font-size:12.5px; color:var(--ink-3)}
+.crosscut .chip-note {display:block; margin-top:4px; font-size:12.5px; color:var(--ink-2)}
+.crosscut .howto {
+  margin:0 0 8px; font-size:12.5px; line-height:1.55; color:var(--ink-2);
+  position:relative; padding-left:24px;
+}
+.crosscut .howto b {color:var(--ink); font-weight:600}
+.crosscut .howto::before {
+  content:''; position:absolute; left:0; top:1px; width:17px; height:17px; border-radius:50%;
+  background:var(--blue-tint) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6.5L8 10.5L12 6.5' stroke='%232F6BFF' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px no-repeat;
+}
+.crosscut .kpi::after {
+  content:''; position:absolute; right:13px; top:15px; width:14px; height:14px; opacity:.45;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6.5L8 10.5L12 6.5' stroke='%23697086' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;
+  transition:transform .15s var(--ease);
+}
+.crosscut .kpi[aria-expanded="true"]::after {transform:rotate(180deg); opacity:.9}
+
+
+/* раскрытие показателя */
+.crosscut .drawer {
+  grid-column:1 / -1; background:var(--fill); border-radius:var(--r-lg);
+  padding:18px 20px; margin-top:-2px;
+}
+.crosscut .drawer h4 {margin:0 0 10px; font-size:15px; font-weight:700; letter-spacing:-.015em}
+.crosscut .drawer dl {display:grid; grid-template-columns:132px 1fr; gap:7px 16px; margin:0; font-size:14px; line-height:1.6}
+.crosscut .drawer dt {font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); padding-top:3px}
+.crosscut .drawer dd {margin:0}
+.crosscut .drawer .people {
+  margin-top:14px; background:var(--app); border:1px dashed var(--line-2); border-radius:10px;
+  padding:12px 14px; font-size:13.5px; color:var(--ink-2); line-height:1.55;
+}
+.crosscut .drawer .people b {color:var(--ink); font-weight:600}
+
+
+/* секции */
+.crosscut .sec {background:var(--card); border:1px solid var(--line); border-radius:var(--r-xl); padding:22px 24px; margin-bottom:28px}
+.crosscut .sec-head {display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:4px}
+.crosscut .sec-head h2 {font-size:16px; font-weight:700; letter-spacing:-.015em; margin:0}
+.crosscut .sec-head .hint {font-size:13px; color:var(--ink-2)}
+.crosscut .sec > p.lede2 {margin:6px 0 0; font-size:13.5px; line-height:1.6; color:var(--ink-2); max-width:78ch}
+
+
+/* график столбцами */
+.crosscut .chart {display:flex; align-items:flex-end; gap:6px; height:168px; margin:22px 0 0; overflow-x:auto; padding-bottom:4px}
+.crosscut .bar {flex:1 1 0; min-width:16px; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; gap:6px; height:100%}
+.crosscut .bar .b {width:100%; max-width:36px; background:var(--green); border-radius:4px 4px 0 0; min-height:2px; transition:height .5s var(--ease)}
+.crosscut .bar.empty .b {background:var(--line); min-height:2px}
+.crosscut .bar .cap {font-size:10.5px; color:var(--ink-3); font-weight:600; white-space:nowrap}
+.crosscut .bar .val {font-size:11px; font-weight:700; color:var(--ink)}
+.crosscut .bar.empty .val {color:var(--ink-3); font-weight:500}
+
+
+/* две серии: счета и оплаты */
+.crosscut .legend {display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:12.5px; color:var(--ink-2)}
+.crosscut .legend i {display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px}
+.crosscut .legend .i-inv {background:var(--blue)}
+.crosscut .legend .i-pay {background:var(--green)}
+
+
+/* лестница */
+.crosscut .lad {margin-top:18px}
+.crosscut .lad-row {display:grid; grid-template-columns:1fr auto; gap:6px 14px; align-items:center; padding:11px 0; border-top:1px solid var(--line)}
+.crosscut .lad-row:first-child {border-top:0}
+.crosscut .lad-t {font-size:14.5px; font-weight:600}
+.crosscut .lad-t span {display:block; font-size:12.5px; font-weight:400; color:var(--ink-2); margin-top:2px}
+.crosscut .lad-n {font-size:20px; font-weight:700; letter-spacing:-.025em; white-space:nowrap}
+.crosscut .lad-n em {font-style:normal; font-size:13px; font-weight:600; color:var(--ink-2); margin-left:7px}
+.crosscut .lad-bar {grid-column:1 / -1; height:7px; border-radius:4px; background:var(--fill); overflow:hidden}
+.crosscut .lad-bar i {display:block; height:100%; background:var(--blue); border-radius:4px; transition:width .6s var(--ease)}
+.crosscut .lad-row.dead .lad-n {color:var(--ink-3)}
+.crosscut .lad-row.dead .lad-bar i {background:var(--line-2)}
+
+
+/* таблица */
+.crosscut .tbl {width:100%; border-collapse:collapse; font-size:14px; margin-top:16px}
+.crosscut .tbl th {
+  text-align:left; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--ink-3); padding:0 12px 9px 0; white-space:nowrap;
+}
+.crosscut .tbl th.r, .crosscut .tbl td.r {text-align:right; padding-right:0}
+.crosscut .tbl th.r + th, .crosscut .tbl td.r + td {padding-left:18px}
+.crosscut .tbl td {padding:11px 12px 11px 0; border-top:1px solid var(--line); line-height:1.5}
+.crosscut .tbl tr.total td {border-top:1.5px solid var(--line-2); font-weight:700}
+.crosscut .tbl .num {font-weight:600; letter-spacing:-.015em; white-space:nowrap}
+.crosscut .tbl .dim {color:var(--ink-3)}
+
+
+/* ── панели фильтров: раскладка монитора, материал наш ── */
+/* Период — одна строка во всю ширину. Раньше тут стояли две панели в 240px
+   высотой, из которых работал один ряд кнопок: мертвые фильтры занимали больше
+   половины первого экрана, а на телефоне цифры начинались только со второго.
+   Нерабочее убрано под раскрывашку, период остался на виду. */
+.crosscut .fbar {background:var(--card); border:1px solid var(--line); border-radius:var(--r-lg); margin:18px 0 14px}
+.crosscut .fhead {display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; padding:12px 16px}
+.crosscut .fhead2 {padding-top:0}
+.crosscut .fbar .fnote {display:block; margin:0; padding:0 16px 13px; font-size:13px; line-height:1.55; color:var(--ink-2)}
+.crosscut .dates {display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-left:auto; min-width:0}
+.crosscut .dates label {display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-3)}
+.crosscut .dates input {
+  max-width:100%; min-width:0;
+  font:500 13px/1 'Manrope','Inter',system-ui; color:var(--ink);
+  background:var(--card); border:1px solid var(--line); border-radius:9px; padding:7px 9px;
+  transition:border-color .13s var(--ease);
+}
+.crosscut .dates input:hover {border-color:var(--line-2)}
+.crosscut .dates input:focus-visible {outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue)}
+
+/* Нативное поле даты рисуется по локали браузера: у кого-то 09/01, у кого-то
+   01.09. Рядом всегда стоит та же дата словами, чтобы прочитать было нельзя
+   двояко. */
+.crosscut .dhint {font-size:12.5px; color:var(--ink-2)}
+.crosscut .tbl .muted {color:var(--ink-2)}
+.crosscut .tbl .sub {display:block; margin-top:2px; font-size:12.5px; font-weight:400; line-height:1.4; color:var(--ink-2)}
+.crosscut .chart .empty {margin:0; align-self:center; font-size:14px; color:var(--ink-3)}
+.crosscut .fhint {margin:10px 0 0; font-size:12.5px; line-height:1.55; color:var(--ink-3)}
+.crosscut .fhint b {color:var(--ink-2); font-weight:600}
+
+
+/* ── вкладки ── */
+.crosscut .tabs {display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px}
+.crosscut .tabs button {
+  appearance:none; cursor:pointer; background:var(--card); border:1px solid var(--line);
+  font:600 13px/1 'Manrope','Inter',system-ui; color:var(--ink-2);
+  padding:10px 15px; border-radius:10px; transition:all .13s var(--ease);
+}
+.crosscut .tabs button:hover {border-color:var(--line-2); color:var(--ink)}
+.crosscut .tabs button[aria-selected="true"] {background:var(--blue); border-color:var(--blue); color:#fff}
+.crosscut .tabs button:focus-visible {outline:2px solid var(--blue); outline-offset:2px}
+
+
+/* ── главная: график слева, плитки справа ── */
+.crosscut .mainrow {display:grid; grid-template-columns:minmax(0,1fr) minmax(0,580px); gap:20px; align-items:start}
+.crosscut .mainrow > .sec {margin-bottom:0}
+
+/* Левая колонка — два графика про деньги друг под другом. Раньше под графиком
+   выручки зияла пустота в треть экрана: плитки справа были вдвое выше. */
+.crosscut .mcol {display:flex; flex-direction:column; gap:20px}
+.crosscut .mcol > .sec {margin-bottom:0}
+.crosscut .chart.tall {height:258px}
+.crosscut .lines {display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:28px}
+.crosscut .lchart {width:100%; height:150px; display:block; margin-top:8px}
+.crosscut .lchart .ax {stroke:var(--line); stroke-width:1}
+.crosscut .lchart .ln {fill:none; stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.crosscut .lchart .dot {stroke:#fff; stroke-width:1.5}
+.crosscut .lchart text {font-size:10.5px; fill:var(--ink-3); font-weight:600}
+.crosscut .lchart text.v {fill:var(--ink-2); font-weight:700}
+.crosscut .lchart text.v.top {fill:var(--ink); font-size:11.5px}
+.crosscut [hidden] {display:none !important}
+
+
+
+/* чипы */
+.crosscut .chip {display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:var(--r-pill); white-space:nowrap}
+.crosscut .chip.ok {background:var(--green-soft); color:var(--green-ink)}
+.crosscut .chip.no {background:var(--red-soft); color:var(--red-ink)}
+.crosscut .chip.wait {background:var(--amber-soft); color:var(--amber-ink)}
+.crosscut .chip.neutral {background:var(--fill); color:var(--ink-2)}
+
+
+/* предупреждение */
+.crosscut .flag {
+  background:var(--amber-soft); color:var(--amber-ink); border-radius:var(--r-lg);
+  padding:16px 18px; margin-top:18px; font-size:14px; line-height:1.62; max-width:80ch;
+}
+.crosscut .flag b {font-weight:700}
+.crosscut .flag .fl-l {font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; opacity:.8; display:block; margin-bottom:7px}
+.crosscut .flag.bad {background:var(--red-soft); color:var(--red-ink)}
+.crosscut .note {margin-top:20px; background:var(--navy); color:#fff; border-radius:var(--r-xl); padding:22px 26px}
+.crosscut .note .fl-l {font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:rgba(255,255,255,.5); display:block; margin-bottom:8px}
+.crosscut .note p {margin:0 0 12px; font-size:14.5px; line-height:1.7; color:rgba(255,255,255,.86); max-width:74ch}
+.crosscut .note p:last-child {margin-bottom:0}
+.crosscut .note b {color:#fff; font-weight:600}
+.crosscut .note a {color:#fff; text-decoration:underline; text-underline-offset:3px}
+.crosscut .foot {margin-top:22px; text-align:center; font-size:12.5px; color:var(--ink-3)}
+.crosscut .foot a {color:var(--ink-2); text-decoration:underline; text-underline-offset:2px}
+.crosscut .foot a:hover {color:var(--blue)}
+@media (max-width:1120px){
+.crosscut .head {grid-template-columns:minmax(0,1fr); gap:18px}
+.crosscut .docs {grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.crosscut .mainrow {grid-template-columns:minmax(0,1fr)}
+
+  /* Сначала цифры, потом графики: на телефоне главная цифра не должна прятаться
+     за двумя картинками. */
+  .crosscut .mainrow > .mcol {order:2}
+.crosscut .mainrow > .kwrap {order:1}
+.crosscut .lines {grid-template-columns:minmax(0,1fr)}
+.crosscut .chart.tall {height:200px}
+}
+@media (max-width:760px){
+.crosscut .wrap {padding:22px 16px 60px}
+.crosscut h1 {font-size:23px}
+.crosscut .sec {padding:18px 16px}
+.crosscut .note {padding:18px 16px}
+.crosscut .kpis {gap:9px}
+.crosscut .docs {grid-template-columns:minmax(0,1fr)}
+.crosscut .tabs button {padding:9px 12px; font-size:12.5px}
+.crosscut .kpi {padding:13px 13px 12px}
+.crosscut .kpi .k-v {font-size:22px}
+.crosscut .drawer dl {grid-template-columns:1fr; gap:2px}
+.crosscut .drawer dt {padding-top:9px}
+.crosscut .fbar .fnote {padding-bottom:12px}
+.crosscut .dates {margin-left:0; width:100%}
+.crosscut .dates label {flex:1}
+.crosscut .dates input {width:100%}
+
+  /* на телефоне ровная сетка 2 в ряд: во flex длинная подпись не влезала
+     в половину и выталкивала соседку на свою строку — ряд выходил рваный */
+  .crosscut .seg {width:100%; display:grid; grid-template-columns:1fr 1fr}
+.crosscut .seg button {padding:9px 4px; font-size:12px; white-space:normal}
+
+  /* таблицы — карточками, страница не едет вбок */
+  .crosscut .tbl, .crosscut .tbl tbody, .crosscut .tbl tr, .crosscut .tbl td {display:block; width:100%}
+.crosscut .tbl thead {display:none}
+.crosscut .tbl tr {border-top:1px solid var(--line); padding:12px 0 4px}
+.crosscut .tbl tr:first-child {border-top:0}
+.crosscut .tbl td {border:0; padding:0 0 8px !important; text-align:left !important}
+.crosscut .tbl td::before {content:attr(data-l); display:block; font-size:10.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); margin-bottom:1px}
+.crosscut .tbl td:first-child {font-weight:700}
+.crosscut .tbl td:first-child::before {content:none}
+.crosscut .chip {white-space:normal}
+.crosscut .tabs button, .crosscut .seg button {padding-top:9px; padding-bottom:9px}
+.crosscut .chart {height:132px}
+.crosscut .bar {min-width:26px}
+}
+@media (prefers-reduced-motion:reduce){
+.crosscut * {transition:none !important}
+}

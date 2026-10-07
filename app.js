@@ -2758,15 +2758,16 @@
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
-      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['launch', 'Запуски'],
-                    ['efir', 'Эфиры'],
+      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['cross', 'Сквозная'],
+                    ['launch', 'Запуски'], ['efir', 'Эфиры'],
                     ['spend', 'Расход'], ['unit', 'Декомпозиция'], ['links', 'Ссылки и сценарии']];
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
         return '<a class="tab' + (state.mkTab === o[0] ? ' on' : '') + '" data-mktab="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>' +
-        (state.mkTab === 'launch' || state.mkTab === 'unit' || state.mkTab === 'efir' ? '' :
+        (state.mkTab === 'launch' || state.mkTab === 'unit' || state.mkTab === 'efir' ||
+         state.mkTab === 'cross' ? '' :
         '<div class="dperiod" id="mk-period">' + mkPers.map(function (o) {
           return '<button data-mkd="' + o[0] + '" class="' + (state.mkDays === o[0] ? 'on' : '') + '">' + o[1] + '</button>';
         }).join('') + '</div>');
@@ -26121,11 +26122,41 @@
     launchDaysBind(view);
   }
 
+  /* ── СКВОЗНАЯ АНАЛИТИКА ───────────────────────────────────────────────────
+     Экран и счет живут в crosscut.js — он же собирает черновик на сайте, чтобы
+     цифры в CRM и в черновике не разъезжались. Здесь только загрузка данных:
+     ручка отдает строки (карточка, метки, ступени, деньги), остальное считает
+     браузер. Срез кладем в state: вкладка переключается часто, а данные те же. */
+  function renderMkCross(view) {
+    if (!state._mkCross) {
+      view.innerHTML = '<div class="card"><div class="empty">Считаю срез базы…</div></div>';
+      if (state._mkCrossLoad) return;
+      state._mkCrossLoad = true;
+      api('/admin/api/marketing/crosscut').then(function (r) {
+        state._mkCrossLoad = false;
+        state._mkCross = (r && r.leads) ? r : 'none';
+        renderView();
+      }).catch(function () {
+        state._mkCrossLoad = false;
+        state._mkCross = 'none';
+        renderView();
+      });
+      return;
+    }
+    if (state._mkCross === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось посчитать срез — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    view.innerHTML = '<div id="crossBox"></div>';
+    window.CROSSCUT.render(document.getElementById('crossBox'), state._mkCross);
+  }
+
   function renderMarketing(view) {
     /* список людей принадлежит вкладке «Запуски»: на соседней он висел бы поверх
        чужого экрана и объяснял цифры, которых там нет */
     if (state._lpPeople && state.mkTab !== 'launch') launchPeopleClose();
     if (state.mkTab === 'dash' || state.mkTab === 'src') { renderMkDash(view); return; }
+    if (state.mkTab === 'cross') { renderMkCross(view); return; }
     if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'efir') { renderMkEfir(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
