@@ -6957,6 +6957,9 @@ button.fsp-via { cursor: pointer; }
    с колонкой состояния справа, где живет судьба самой бумаги. */
 .dc-off { font-size: 10.5px; font-weight: 600; color: var(--ink-3); margin-left: 6px;
   padding: 1px 6px; border-radius: var(--r-pill); border: 1px solid var(--line); }
+/* .dc-who — колонка, и пометка в ней растягивалась на всю ширину ячейки, раздувая
+   строку. Прижимаем к началу: это метка на человеке, а не полоса. */
+.dc-who .dc-off { align-self: flex-start; margin-left: 0; }
 .dc-when { font-size: 12.5px; color: var(--ink-2); }
 .dc-sum { font-size: 13px; color: var(--ink-3); font-feature-settings: 'tnum'; }
 .dc-sum b { color: var(--ink); font-weight: 700; }
@@ -6965,7 +6968,7 @@ button.fsp-via { cursor: pointer; }
 /* Папки по людям. Колонка слева отвечает на «подними бумаги по Петровой» — вопрос,
    на который общий список отвечает только через поиск по фамилии. Рецепт тот же, что
    у программы курса в Академии: липкая панель со списком и подсветкой выбранного. */
-.dc-wrap { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px;
+.dc-wrap { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 14px;
   align-items: start; }
 .dcf-box { padding: 13px 10px; position: sticky; top: 16px;
   max-height: calc(100vh - 32px); overflow: auto; }
@@ -7006,7 +7009,7 @@ button.fsp-via { cursor: pointer; }
    начинало обрезаться на первом же слове. Поэтому служебные колонки здесь ужаты до
    содержимого: якорь строки — название и состояние, дата и сумма читаются и так. */
 .dc-wrap .trow.dc-grid {
-  grid-template-columns: minmax(0, 2.2fr) 180px 104px 104px 150px; }
+  grid-template-columns: minmax(0, 2.4fr) 162px 96px 100px 142px; }
 .dc-wrap .listcard.in-folder .trow.dc-grid {
   grid-template-columns: minmax(0, 2.6fr) 112px 112px 150px !important; }
 .listcard.in-folder .dc-grid > :nth-child(2) { display: none !important; }
