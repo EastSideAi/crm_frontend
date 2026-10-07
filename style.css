@@ -6962,16 +6962,95 @@ button.fsp-via { cursor: pointer; }
 .dc-sum b { color: var(--ink); font-weight: 700; }
 .dc-state { display: flex; align-items: flex-start; }
 
+/* Папки по людям. Колонка слева отвечает на «подними бумаги по Петровой» — вопрос,
+   на который общий список отвечает только через поиск по фамилии. Рецепт тот же, что
+   у программы курса в Академии: липкая панель со списком и подсветкой выбранного. */
+.dc-wrap { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 16px;
+  align-items: start; }
+.dcf-box { padding: 13px 10px; position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow: auto; }
+.dcf-lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); padding: 2px 8px 9px; }
+.dcf { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: none; font: inherit; color: var(--ink-2); cursor: pointer;
+  padding: 8px 9px; border-radius: 10px; position: relative;
+  transition: .12s var(--ease); }
+.dcf + .dcf { margin-top: 1px; }
+.dcf:hover { background: #FBFBFC; }
+.dcf.on { background: var(--blue-tint); color: var(--ink); font-weight: 600; }
+.dcf.on::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 3px; background: var(--blue); }
+.dcf-nm { min-width: 0; flex: 1; font-size: 13px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.dcf .dc-off { flex: none; margin-left: 0; }
+/* «Все документы» — не человек, поэтому отделено линией, а не просто стоит первым. */
+.dcf-all { margin-bottom: 7px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  border-radius: 10px 10px 0 0; }
+.dcf-n { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink-3);
+  background: var(--fill); border-radius: var(--r-pill); padding: 1px 8px; }
+.dcf.on .dcf-n { color: var(--blue-d); background: #fff; }
+.dcf-empty { font-size: 12.5px; color: var(--ink-3); padding: 4px 9px 8px; }
+
+/* Шапка открытой папки: имя стоит здесь, а в строках колонка исполнителя гаснет —
+   собственная фамилия, повторенная в каждой строке, не несет ничего. */
+.dcf-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 16px 20px 0; }
+.dcf-h-nm { font-size: 17px; font-weight: 700; letter-spacing: -.02em; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcf-h-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); padding: 5px 11px;
+  border-radius: var(--r-pill); transition: .12s var(--ease); }
+.dcf-h-a:hover { background: var(--fill); color: var(--ink); }
+.dcf-h-a + .dcf-h-a { margin-left: -2px; }
+/* Рядом с колонкой папок таблице досталось на 236px меньше, и название документа
+   начинало обрезаться на первом же слове. Поэтому служебные колонки здесь ужаты до
+   содержимого: якорь строки — название и состояние, дата и сумма читаются и так. */
+.dc-wrap .trow.dc-grid {
+  grid-template-columns: minmax(0, 2.2fr) 180px 104px 104px 150px; }
+.dc-wrap .listcard.in-folder .trow.dc-grid {
+  grid-template-columns: minmax(0, 2.6fr) 112px 112px 150px !important; }
+.listcard.in-folder .dc-grid > :nth-child(2) { display: none !important; }
+
 @media (max-width: 1180px) {
   .trow.dc-grid { grid-template-columns: 1.6fr 150px 176px !important; }
   .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+  .dc-wrap .trow.dc-grid {
+    grid-template-columns: minmax(0, 1.6fr) 150px 176px; }
+  /* В папке колонка исполнителя погашена, поэтому место под дату есть даже тут:
+     «когда подписан» — второй вопрос к документу после «подписан ли вообще». */
+  .dc-wrap .listcard.in-folder .trow.dc-grid {
+    grid-template-columns: minmax(0, 1fr) 112px 176px !important; }
+  .listcard.in-folder .dc-grid > :nth-child(3) { display: block; }
+}
+@media (max-width: 980px) {
+  /* Узкий экран: папки ложатся лентой над списком, иначе колонка съедает половину
+     ширины у таблицы, ради которой сюда и заходят. */
+  .dc-wrap { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .dcf-box { position: static; max-height: none; overflow: visible;
+    display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 10px; }
+  .dcf-lbl { display: none; }
+  .dcf { width: auto; flex: none; padding: 6px 11px; border-radius: var(--r-pill);
+    border: 1px solid var(--line); }
+  .dcf + .dcf { margin-top: 0; }
+  .dcf.on { border-color: var(--blue-tint); }
+  .dcf.on::before { display: none; }
+  .dcf-nm { max-width: 190px; }
 }
 @media (max-width: 700px) {
   .trow.dc-grid { grid-template-columns: 1fr auto !important; gap: 4px 12px;
     align-items: start; }
   .dc-grid.thead { display: none; }
-  .dc-grid > :nth-child(2) { display: block; }
+  /* flex, а не block: иначе .dc-who перестает быть колонкой и ИНН прилипает к имени
+     справа. Название при этом переносится — обрезанное «Акт № 14…» не отличить от
+     соседнего акта, а именно по названию документ тут и ищут. */
+  .dc-grid > :nth-child(2) { display: flex; }
+  /* Высота строки фиксированная (58px) — с перенесенным названием текст вылезал на
+     соседнюю строку. На телефоне строка живет по содержимому. */
+  .trow.dc-grid { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; }
+  .dc-main { align-items: flex-start; }
+  .dc-main b { white-space: normal; }
   .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+  .dcf-head { padding: 14px 16px 0; }
 }
 
 

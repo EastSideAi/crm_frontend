@@ -15534,7 +15534,8 @@
 
      Акт открывается печатной формой в новой вкладке: этот документ печатают и
      отправляют, а не рассматривают в интерфейсе CRM. */
-  var DC = { items: null, err: '', q: '', kind: 'all', archived: false, _t: null };
+  var DC = { items: null, err: '', q: '', kind: 'all', archived: false,
+             who: '', whoName: '', _t: null };
   var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['receipt', 'Чеки'],
                   ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
@@ -15675,6 +15676,68 @@
       '</div>';
   }
 
+  /* Папки по людям. Вопрос раздела бывает двух видов: «покажи все акты» и «подними
+     бумаги по Петровой». На второй общий список отвечает плохо — фамилию надо вбивать
+     руками и помнить, как она пишется. Поэтому слева стоит колонка людей, у которых в
+     текущем срезе вообще есть документы, и клик открывает папку человека.
+
+     Папки считаются из того же списка, что и строки, а не отдельной ручкой: тогда
+     счетчик у имени и содержимое папки не могут разойтись, а переключение между
+     папками идет без запроса к серверу. Отсюда же граница: сервер отдает до 300 строк
+     на источник, и у человека в папке лежит ровно то, что попало в этот срез. */
+  function dcPeople(list) {
+    var by = {}, out = [];
+    (list || []).forEach(function (i) {
+      var id = i.contractor_id || '';
+      if (!id) return;
+      if (!by[id]) {
+        by[id] = { id: id, name: i.contractor || 'Без имени', inn: i.inn || '',
+                   archived: !!i.contractor_archived, n: 0 };
+        out.push(by[id]);
+      }
+      by[id].n++;
+    });
+    out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+    return out;
+  }
+
+  function dcShort(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    if (p.length < 2) return p[0] || '';
+    return p[0] + ' ' + p.slice(1, 3).map(function (w) {
+      return w.charAt(0).toUpperCase() + '.';
+    }).join(' ');
+  }
+
+  function dcFolders(people, total) {
+    // Выбранный человек остается в колонке, даже когда в срезе его документов нет:
+    // иначе смена фильтра вида молча выкидывает из открытой папки, и непонятно, где ты.
+    var ids = {};
+    people.forEach(function (p) { ids[p.id] = 1; });
+    var list = people.slice();
+    if (DC.who && !ids[DC.who]) {
+      list.push({ id: DC.who, name: DC.whoName || 'Выбранный человек', inn: '',
+                  archived: false, n: 0 });
+    }
+    // В колонке имя сокращается до фамилии с инициалами: три слова подряд все равно
+    // обрезаются многоточием, и список папок перестает читаться глазами. Полное ФИО
+    // стоит в шапке открытой папки и в подсказке.
+    var rows = list.map(function (p) {
+      return '<button class="dcf' + (DC.who === p.id ? ' on' : '') + '" data-dcwho="' +
+        esc(p.id) + '" data-dcname="' + esc(p.name) + '" title="' + esc(p.name) + '">' +
+        '<span class="dcf-nm">' + esc(dcShort(p.name)) + '</span>' +
+        (p.archived ? '<span class="dc-off">убран</span>' : '') +
+        '<span class="dcf-n">' + p.n + '</span></button>';
+    }).join('');
+    return '<aside class="card dcf-box">' +
+      '<div class="dcf-lbl">Папки</div>' +
+      '<button class="dcf dcf-all' + (DC.who ? '' : ' on') + '" data-dcwho="">' +
+        '<span class="dcf-nm">Все документы</span>' +
+        '<span class="dcf-n">' + total + '</span></button>' +
+      (rows || '<div class="dcf-empty">Людей с документами тут пока нет.</div>') +
+      '</aside>';
+  }
+
   function renderCzDocs(view) {
     var isRcp = DC.kind === 'receipt';
     // Чеки грузим всегда: даже на других вкладках вверху нужна полоса «по кому долг».
@@ -15685,7 +15748,11 @@
       view.innerHTML = dashSkeleton(); dcLoad(); return;
     }
 
-    var list = isRcp ? rcpFiltered() : DC.items;
+    var src = isRcp ? rcpFiltered() : DC.items;
+    var people = dcPeople(src);
+    var list = DC.who
+      ? src.filter(function (i) { return i.contractor_id === DC.who; })
+      : src;
     var chips = DC_KINDS.map(function (k) {
       var n = (k[0] === 'receipt' && RCP.stats && RCP.stats.debt)
         ? ' <span class="qn">' + RCP.stats.debt + '</span>' : '';
@@ -15713,7 +15780,9 @@
     var body = (!isRcp && DC.err)
       ? '<div class="empty">' + esc(DC.err) + '</div>'
       : (!list.length
-        ? '<div class="empty">' + (DC.q
+        ? '<div class="empty">' + (DC.who
+            ? 'В папке «' + esc(DC.whoName) + '» по этому фильтру ничего нет.'
+            : DC.q
             ? 'По запросу «' + esc(DC.q) + '» ничего не нашли.'
             : isRcp
             ? 'Чеков пока нет. Чек появляется здесь, как только по выплате проведут деньги, а исполнитель приложит его из «Мой налог».'
@@ -15726,22 +15795,34 @@
       ? plural(list.length, 'чек', 'чека', 'чеков')
       : plural(list.length, 'документ', 'документа', 'документов');
 
+    // В открытой папке имя человека стоит в шапке, а не в каждой строке: повторенная
+    // двадцать раз собственная фамилия ничего не говорит и съедает колонку (то же
+    // правило, что в задачах на своих вкладках).
+    var head = DC.who
+      ? '<div class="dcf-head"><span class="dcf-h-nm">' + esc(DC.whoName) + '</span>' +
+          '<button class="dcf-h-a" id="dc-who-card">Карточка исполнителя</button>' +
+          '<button class="dcf-h-a" id="dc-who-all">Ко всем документам</button></div>'
+      : '';
+
     view.innerHTML =
-      '<div class="card listcard">' + alert +
-        '<div class="list-tools">' +
-          '<div class="searchwrap' + (DC.q ? ' has-val' : '') + '">' + ic('search', 16) +
-            '<input class="search" id="dc-q" placeholder="Поиск по фамилии, ИНН, телефону или названию" value="' + esc(DC.q) + '">' +
-            (DC.q ? '<button class="s-clear" id="dc-qx">' + ic('x', 13) + '</button>' : '') +
+      '<div class="dc-wrap">' +
+        dcFolders(people, src.length) +
+        '<div class="card listcard' + (DC.who ? ' in-folder' : '') + '">' + alert + head +
+          '<div class="list-tools">' +
+            '<div class="searchwrap' + (DC.q ? ' has-val' : '') + '">' + ic('search', 16) +
+              '<input class="search" id="dc-q" placeholder="Поиск по фамилии, ИНН, телефону или названию" value="' + esc(DC.q) + '">' +
+              (DC.q ? '<button class="s-clear" id="dc-qx">' + ic('x', 13) + '</button>' : '') +
+            '</div>' +
+            '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
           '</div>' +
-          '<span class="list-count"><b>' + list.length + '</b> ' + noun + '</span>' +
+          '<div class="list-quick">' + chips + '</div>' +
+          '<div class="trow dc-grid thead">' +
+            '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
+            '<span class="th">Исполнитель</span>' +
+            '<span class="th">Дата</span><span class="th">Сумма</span>' +
+            '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
+          '</div>' + body +
         '</div>' +
-        '<div class="list-quick">' + chips + '</div>' +
-        '<div class="trow dc-grid thead">' +
-          '<span class="th">' + (isRcp ? 'Выплата' : 'Документ') + '</span>' +
-          '<span class="th">Исполнитель</span>' +
-          '<span class="th">Дата</span><span class="th">Сумма</span>' +
-          '<span class="th">' + (isRcp ? 'Чек' : 'Состояние') + '</span>' +
-        '</div>' + body +
       '</div>';
 
     var qi = el('dc-q');
@@ -15765,6 +15846,21 @@
         DC.archived = !DC.archived; DC.items = null; renderView();
       });
     });
+    // Папка переключается без запроса: список уже на руках, перезагрузка только мигала
+    // бы скелетоном на том же наборе строк.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-dcwho]'), function (b) {
+      b.addEventListener('click', function () {
+        DC.who = b.getAttribute('data-dcwho') || '';
+        DC.whoName = DC.who ? (b.getAttribute('data-dcname') || '') : '';
+        renderView();
+      });
+    });
+    var whoAll = el('dc-who-all');
+    if (whoAll) whoAll.addEventListener('click', function () {
+      DC.who = ''; DC.whoName = ''; renderView();
+    });
+    var whoCard = el('dc-who-card');
+    if (whoCard) whoCard.addEventListener('click', function () { openCz(DC.who); });
     /* Клик по акту открывает задание, а не сам документ: спор идет о работе, а
        печатная форма — одна кнопка внутри карточки. Личный документ ведется в карточке
        человека, туда и ведем. */
