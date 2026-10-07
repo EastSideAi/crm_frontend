@@ -10753,3 +10753,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pb-nav .bp { flex: 1 1 40%; padding-left: 8px; padding-right: 8px; }
   .pb-pend .pb-ra { min-width: 0; }
 }
+
+/* ── Сквозная аналитика: закладки «Цифры / Методика счета / Техзадание» ──
+   Экран цифр рисует crosscut.js, два документа приходят с бэкенда целиком и
+   живут в shadow DOM (у них своя верстка), поэтому здесь только обертка. */
+.cross-docs { margin-bottom: 14px; max-width: 100%; flex-wrap: wrap; }
+/* на узком телефоне три закладки в строку не помещаются и уводили страницу вбок */
+@media (max-width: 400px) { .cross-docs button { padding: 8px 11px; } }
+.cross-doc { padding: 0; overflow: hidden; }
+.cross-doc .empty { padding: 28px 18px; }

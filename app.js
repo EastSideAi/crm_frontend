@@ -26127,9 +26127,75 @@
      цифры в CRM и в черновике не разъезжались. Здесь только загрузка данных:
      ручка отдает строки (карточка, метки, ступени, деньги), остальное считает
      браузер. Срез кладем в state: вкладка переключается часто, а данные те же. */
+  /* Рядом с цифрами лежат два документа: по каким правилам цифра считается и что
+     техспецу настроить до запуска. На сайте они висели рядом с черновиком экрана,
+     черновик 07.10.2026 убран — и Вера попросила положить их сюда же. Страницы
+     приходят с бэкенда целиком и рисуются в shadow DOM: у них своя верстка и свои
+     имена классов, и мешать их со стилями CRM нельзя. */
+  var MK_CROSS_DOCS = [['', 'Цифры'], ['rules', 'Методика счета'], ['spec', 'Техзадание']];
+
+  function mkCrossTabs(cur) {
+    return '<div class="dperiod cross-docs">' + MK_CROSS_DOCS.map(function (o) {
+      return '<button data-crossdoc="' + o[0] + '" class="' + (cur === o[0] ? 'on' : '') + '">' +
+        o[1] + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function mkCrossTabsBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-crossdoc]'), function (b) {
+      b.addEventListener('click', function () {
+        state.mkCrossDoc = b.getAttribute('data-crossdoc');
+        renderView();
+      });
+    });
+  }
+
+  function mkCrossDocPaint(host, html) {
+    var sh = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    /* шрифт объявлен документом CRM (crosscut.css); свой @font-face страницы внутри
+       shadow все равно не работает, а запрос за Manrope.ttf отдал бы 404 */
+    sh.innerHTML = html.replace(/@font-face\{[^}]*\}/g, '');
+    /* шапка бренда и ссылка «вернуться к сквозной аналитике» тут лишние: экран и
+       есть сквозная, а страница черновика на сайте удалена */
+    Array.prototype.forEach.call(sh.querySelectorAll('.top, .back'), function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    /* оглавление страницы ведет якорями, а якорь в shadow браузер не ищет сам */
+    sh.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href^="#"]') : null;
+      if (!a) return;
+      var t = sh.getElementById(a.getAttribute('href').slice(1));
+      if (!t) return;
+      e.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  function renderMkCrossDoc(view, doc) {
+    view.innerHTML = mkCrossTabs(doc) + '<div class="card cross-doc"><div id="crossDoc"></div></div>';
+    mkCrossTabsBind(view);
+    var host = document.getElementById('crossDoc');
+    var cached = (state._mkDocs || {})[doc];
+    if (cached) { mkCrossDocPaint(host, cached); return; }
+    host.innerHTML = '<div class="empty">Открываю документ…</div>';
+    xfetch('/admin/api/marketing/analytics-doc?doc=' + encodeURIComponent(doc)).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (t) {
+      state._mkDocs = state._mkDocs || {};
+      state._mkDocs[doc] = t;
+      if (state.mkTab === 'cross' && state.mkCrossDoc === doc) renderView();
+    }).catch(function () {
+      host.innerHTML = '<div class="empty">Не удалось открыть документ — проверь сеть или доступ.</div>';
+    });
+  }
+
   function renderMkCross(view) {
+    var doc = state.mkCrossDoc || '';
+    if (doc) { renderMkCrossDoc(view, doc); return; }
     if (!state._mkCross) {
-      view.innerHTML = '<div class="card"><div class="empty">Считаю срез базы…</div></div>';
+      view.innerHTML = mkCrossTabs(doc) + '<div class="card"><div class="empty">Считаю срез базы…</div></div>';
+      mkCrossTabsBind(view);
       if (state._mkCrossLoad) return;
       state._mkCrossLoad = true;
       api('/admin/api/marketing/crosscut').then(function (r) {
@@ -26144,10 +26210,13 @@
       return;
     }
     if (state._mkCross === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось посчитать срез — проверь сеть или доступ.</div></div>';
+      view.innerHTML = mkCrossTabs(doc) +
+        '<div class="card"><div class="empty">Не удалось посчитать срез — проверь сеть или доступ.</div></div>';
+      mkCrossTabsBind(view);
       return;
     }
-    view.innerHTML = '<div id="crossBox"></div>';
+    view.innerHTML = mkCrossTabs(doc) + '<div id="crossBox"></div>';
+    mkCrossTabsBind(view);
     window.CROSSCUT.render(document.getElementById('crossBox'), state._mkCross);
   }
 
