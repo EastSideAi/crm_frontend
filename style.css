@@ -3192,6 +3192,16 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-mwho.tsk-watch:hover { color: var(--blue); }
 .tsk-mwho.tsk-edit { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--blue); }
 .tsk-mwho.tsk-edit svg { color: var(--blue); }
+/* Направление цели: выбор стоит прямо в строке мета-данных и выглядит как
+   подпись, пока на него не навели. Рамка появляется по наведению и фокусу —
+   иначе селект в ряду спокойных подписей кричит громче заголовка. */
+.tsk-mwho.tsk-dept { gap: 4px; cursor: pointer; }
+.tsk-deptsel { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2);
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 3px 6px; cursor: pointer; outline: none; transition: .15s var(--ease); }
+.tsk-deptsel:hover { background: var(--fill); border-color: var(--line-2); }
+.tsk-deptsel:focus-visible { background: var(--card); border-color: var(--blue); }
+.tsk-deptsel:disabled { color: var(--ink-3); cursor: default; }
 .tsk-sec[hidden] { display: none; }
 /* Участники: чипы и «+ участник» — в форме и на месте чипа в карточке. */
 .pp { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

@@ -12191,7 +12191,20 @@
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
             ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('pen', 12) + 'изменить</button>'
             : '') +
-          (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
+          /* Направление цели меняется прямо здесь, выбором из списка. Раньше оно
+             лежало внутри формы «изменить», а у цели без направления в шапке не
+             было вообще ничего — выглядело так, будто поменять нельзя (Павел
+             07.10.2026). У шага своего направления нет, он идет за целью. */
+          (!t.parent_id && (isAuthor || isAssignee || can('tasks_all')) &&
+             t.status !== 'done' && t.status !== 'cancel'
+            ? '<label class="tsk-mwho tsk-dept" title="К какому отделу относится цель">' +
+                ic('tree', 12) +
+                '<select id="tk-dept" class="tsk-deptsel" aria-label="Направление цели">' +
+                [''].concat(Object.keys(DEPTS)).map(function (d) {
+                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') +
+                    '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
+                }).join('') + '</select></label>'
+            : t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
           // карточка цели.
@@ -12401,6 +12414,32 @@
       };
       el('tk-rescx').addEventListener('click', function () { setRes(''); });
 
+      /* Смена направления сохраняется сразу: это один выбор, подтверждать его
+         отдельной кнопкой незачем. Не сохранилось — возвращаем прежнее, чтобы
+         на экране не осталось вранье. */
+      var deptSel = el('tk-dept');
+      if (deptSel) {
+        deptSel.addEventListener('change', function () {
+          var was = t.dept || '';
+          var now = deptSel.value;
+          if (now === was) return;
+          deptSel.disabled = true;
+          apiSend('/admin/api/tasks/' + id, 'PATCH', { dept: now }, function () {
+            t.dept = now;
+            deptSel.disabled = false;
+            showToast(now ? 'Цель ушла в «' + DEPTS[now] + '»' : 'Цель стала общей для компании');
+            state.tasks = null; state.myweek = null; state.myboard = null;
+            state.stuck = null; state.mymonth = null;
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            deptSel.disabled = false;
+            deptSel.value = was;
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 403 ? 'Менять может постановщик, ведущий цель или руководитель'
+                                    : 'Не удалось сохранить'));
+          });
+        });
+      }
       var editB = el('tk-edit'), editF = el('tk-editf');
       if (editB) {
         var setEdit = function (on) {
