@@ -12145,6 +12145,11 @@
       var isAssignee = me != null && (me === t.assignee_id || execIds.indexOf(me) !== -1);
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
+      // Свою работу не принимают. Право видеть все задачи дает приемку за
+      // других, но не за себя: иначе руководитель закрывает поставленную ему
+      // задачу сам, и тот, кто ее поставил, не узнает об этом никогда
+      // (Ольга на обучении 07.10.2026). Сервер отвечает на это 403.
+      var canAccept = isAuthor || (can('tasks_all') && !isAssignee);
       var canFiles = isAssignee || boss || (me != null && watchIds.indexOf(me) !== -1);
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.
@@ -12161,21 +12166,21 @@
       if (isAssignee && t.status === 'block') acts.push(['doing', 'Разблокировать', 'bp']);
       // Принять можно ТОЛЬКО сданное. Кнопка «принять» на несданной задаче
       // отменяет приемку как явление — а ее у команды как раз и не было.
-      if (boss && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
+      if (canAccept && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
       // Руководитель закрывает и несданное: человек сделал, но в систему не
       // зашел (Павел 04.09.2026, «закрыть за Лану»). Исполнителю уйдет
       // сообщение в бот, что задачу закрыли за него.
-      if (boss && !isAssignee && can('tasks_all') && (t.status === 'wait' || t.status === 'doing' || t.status === 'block')) {
+      if (canAccept && !isAssignee && can('tasks_all') && (t.status === 'wait' || t.status === 'doing' || t.status === 'block')) {
         acts.push(['done', 'Закрыть за исполнителя', 'bp ghost al-save']);
       }
-      if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
+      if (canAccept && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
       // Приемку иногда отменяют: приняли по ошибке или вскрылось, что работа
       // не доделана. Снятие идет тем же путем, что обычный возврат — с
       // причиной в ленте и уведомлением исполнителю, а не молча.
-      if (boss && t.status === 'done') acts.push(['return', 'Снять с готово', 'al-cancel']);
+      if (canAccept && t.status === 'done') acts.push(['return', 'Снять с готово', 'al-cancel']);
       // Обратно в «готово» возвращается то, что уже сдавали: правило «принимаем
       // только сданное» снятие приемки не отменяет.
-      if (boss && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
+      if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
       var feed = events.map(function (e) {
         return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
