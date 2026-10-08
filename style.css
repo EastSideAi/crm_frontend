@@ -11817,9 +11817,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-stem { position: relative; height: 24px; }
 .org-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--org-wire); }
+/* колонки тянутся на высоту ряда, карточки в нем одной высоты, а счетчик задач
+   прижат к низу: ряд с рваным низом читается как случайный набор, а не как уровень */
 .org-cols { display: grid; grid-template-columns: repeat(var(--org-n, 2), minmax(0, 1fr));
-  column-gap: 14px; align-items: start; }
+  column-gap: 14px; align-items: stretch; }
 .org-col { display: flex; flex-direction: column; }
+.org-col > .org-node { flex: 1; }
 /* тик тянется на всю колонку (align-self узла его не касается), иначе провод
    съедет к центру карточки и шина порвется */
 .org-tick { display: block; height: 20px; position: relative; align-self: stretch; }
@@ -11856,7 +11859,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    а не вторая такая же кнопка с тем же счетчиком */
 .org-node.head { background: var(--fill); border-color: transparent; cursor: default; }
 .org-node.head:hover { background: var(--fill); border-color: transparent; }
-.org-cnt { margin-top: 8px; display: inline-flex; align-items: center; gap: 4px;
+.org-cnt { margin-top: auto; padding-top: 8px; display: inline-flex; align-items: center; gap: 4px;
   font-size: 11.5px; font-weight: 600; color: var(--blue-d); }
 .org-cnt svg { transition: .14s var(--ease); }
 .org-node:hover .org-cnt svg { transform: translateX(2px); }
