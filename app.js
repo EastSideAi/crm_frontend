@@ -28104,6 +28104,37 @@
     });
   }
 
+  /* Строка «что поправлено руками» под шапкой лестницы. Нужна именно здесь, рядом
+     с цифрами: без неё владелец отмечает дубли и старых клиентов внутри списка, а
+     на экране ничего не меняется, и правка выглядит как действие в пустоту.
+     Ступени при этом остаются как есть — они считают то, что видит база. Чистая
+     база показана отдельным числом: это и есть то, от чего честно считать
+     конверсии, но подменять им расчёт мы не вправе, расчёт должен быть виден. */
+  function launchFixLine(cur) {
+    var f = cur.fixes;
+    if (!f) return '';
+    var n = (f.dups || 0) + (f.clients || 0) + (f.sold || 0) + (f.not_sold || 0) +
+            (f.resourced || 0);
+    if (!n) return '';
+    var reg = cur.registrations ? cur.registrations.total : 0;
+    var clean = Math.max(0, reg - (f.dups || 0) - (f.clients || 0));
+    var parts = [];
+    if (f.sold) parts.push('продаж ' + f.sold +
+      (f.sold_rub ? ' на ' + fmtMoney(f.sold_rub) + ' ₽' : ''));
+    if (f.dups) parts.push('дублей ' + f.dups);
+    if (f.clients) parts.push('уже были клиентами ' + f.clients);
+    if (f.not_sold) parts.push('не купили ' + f.not_sold);
+    if (f.resourced) parts.push('источник уточнён у ' + f.resourced);
+    return '<div class="card lfx" style="margin-bottom:16px">' +
+      '<div class="lfx-t">Отмечено руками</div>' +
+      '<div class="lfx-s">' + esc(parts.join(' · ')) + '</div>' +
+      (clean !== reg
+        ? '<div class="lfx-n">Чистая база <b class="num">' + fmtMoney(clean) +
+          '</b> вместо ' + fmtMoney(reg) + ': дубли и прежние клиенты не в счёт</div>'
+        : '') +
+      '</div>';
+  }
+
   function renderMkLaunch(view) {
     launchAutoStart();
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
@@ -28287,6 +28318,7 @@
             ? ' · ступени просмотра — только за выбранный вечер, остальные за весь запуск'
             : '') +
         '</div></div>' + launchDays(cur) + '</div>' +
+        launchFixLine(cur) +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
       launchMoney(cur) +
