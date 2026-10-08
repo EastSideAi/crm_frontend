@@ -118,6 +118,19 @@ a { color: inherit; text-decoration: none; }
 .tbr { display: flex; align-items: center; gap: 11px; flex: none; }
 .topbar > .tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .topbar > .tabs::-webkit-scrollbar { height: 0; }
+/* Ряд вкладок живет внутри #tb-left, а не прямым ребенком шапки, поэтому правило
+   выше до него не доставало: полоса не сжималась и не скроллилась, а просто уезжала
+   за правый край. Замер 08.10.2026: окно 1100px, восемь вкладок «Маркетинга»
+   заканчиваются на 1219px — «Декомпозиция» и «Ссылки и сценарии» не видны и мышкой
+   недостижимы, полосы прокрутки нет. На узком окне переносим на вторую строку: за
+   край не должно уходить ничего, а скрытая прокрутка этого не лечит. */
+/* Снизу 961px — там свои правила для телефона (блок max-width: 960px): обертка
+   скроллится, капсула идет одной строкой. Перенос оттуда убрал бы тот скролл:
+   селектор с id сильнее, чем .tabs, и победил бы несмотря на порядок. */
+@media (min-width: 961px) and (max-width: 1240px) {
+  .topbar > #tb-left { min-width: 0; }
+  .topbar > #tb-left > .tabs { flex-wrap: wrap; border-radius: var(--r-xl); }
+}
 .icocirc { width: 38px; height: 38px; border-radius: 50%; background: var(--fill);
   display: grid; place-items: center; color: var(--ink-2); cursor: pointer; transition: .15s; }
 .icocirc:hover { background: #ECEEF1; }
