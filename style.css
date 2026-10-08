@@ -11610,9 +11610,19 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    расчётом, а не вместо него.
    Контролы тихие: строка остаётся списком людей, а не формой. Цвет только у
    отмеченной продажи — единственное место, где он что-то значит. */
+/* Две колонки правки не влезают в обычное окно списка (720px): последняя уезжала
+   за край. Поэтому окно со списком людей ступени шире — но только оно, у блоков
+   правки нет и лишняя ширина им не нужна. */
+.mk-modal.wide.lp-wide { width: min(1000px, calc(100vw - 40px)); }
 .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr {
-  grid-template-columns: minmax(130px, 1.4fr) minmax(110px, 1fr) minmax(90px, .9fr)
-                         96px 104px minmax(110px, .9fr); }
+  grid-template-columns: minmax(150px, 1.5fr) minmax(130px, 1.1fr) minmax(95px, .85fr)
+                         72px 112px minmax(130px, 1fr); }
+/* На узком экране колонок шесть и ужимать дальше некуда: отдаём таблицу в
+   горизонтальную прокрутку целиком, вместе с шапкой. */
+@media (max-width: 860px) {
+  .lp-tbl.edit { overflow-x: auto; }
+  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 700px; }
+}
 .lp-tbl.edit .lp-th span:last-child { text-align: left; }
 .lp-fx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .lp-fx .al-in { font-size: 11.5px; padding: 4px 7px; border-radius: 7px; height: auto; }

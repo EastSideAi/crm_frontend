@@ -26804,8 +26804,9 @@
     var auto = (p.paid_rub && st === 'none') ? '<small>по базе ' + fmtMoney(p.paid_rub) + ' ₽</small>' : '';
     /* Совпал контакт с другой строкой запуска — говорим об этом сразу, но решение
        оставляем человеку: один номер бывает у мамы и дочки. */
-    var twin = (p.twins && st === 'none') ? '<small class="lp-twin">контакт как у ещё ' +
-      p.twins + '</small>' : '';
+    var twin = (p.twins && st === 'none')
+      ? '<small class="lp-twin" title="Контакт совпал ещё с ' + p.twins +
+        ' строкой этого запуска">совпал контакт</small>' : '';
     return '<span class="lp-fx">' +
       '<button class="lp-sold ' + st + '" data-lp-sold="' + esc(p.id) + '" data-st="' + st + '">' +
         LP_SOLD_LABEL[st] + '</button>' +
@@ -26867,6 +26868,10 @@
 
     var shown = p.rows.length;
     var total = p.total == null ? p.plate : p.total;
+    /* Правка доступна только на ступенях пути: у блоков за строкой стоит человек из
+       бота, у которого нет карточки регистрации. Считаем до сборки окна — от этого
+       зависит и ширина окна, и набор колонок. */
+    var canEdit = p.kind !== 'block';
     var body;
     if (p.error) {
       body = '<div class="mk-logic-empty">' + esc(p.error) + '</div>';
@@ -26886,12 +26891,14 @@
       var bot = p.kind === 'block' && p.block !== 'source';
       /* Правку показываем только там, где за строкой стоит регистрация запуска: у
          людей из бота id карточки нет, и правка им не к чему прицепиться. */
-      var edit = !bot && p.kind !== 'block';
+      var edit = !bot && canEdit;
       var cols = bot
         ? ['Человек', 'Ник', 'Откуда пришёл',
            p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
         : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
-      if (edit) cols = cols.concat(['Купил', 'Источник по факту']);
+      /* В режиме правки колонок шесть, и «Регистрация» перестаёт помещаться в свою
+         ширину — заголовок наезжал на соседний. В ней и так одна дата. */
+      if (edit) { cols[3] = 'Дата'; cols = cols.concat(['Купил', 'Источник по факту']); }
       body = '<div class="lp-tbl' + (edit ? ' edit' : '') + '"><div class="lp-th">' +
         cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(function (r) { return launchPeopleRow(r, edit); }).join('') + '</div>';
@@ -26932,7 +26939,8 @@
     var focusId = (hadFocus && document.activeElement.id) ? document.activeElement.id : '';
     var wasOpen = !!prevOvl;
     host.innerHTML = '<div class="mk-ovl' + (wasOpen ? ' no-anim' : '') + '" id="lp-ovl">' +
-      '<div class="mk-modal wide" id="lp-modal" role="dialog" aria-modal="true" tabindex="-1">' +
+      '<div class="mk-modal wide' + (canEdit ? ' lp-wide' : '') +
+        '" id="lp-modal" role="dialog" aria-modal="true" tabindex="-1">' +
       '<button class="mk-xbtn" id="lp-x" title="Закрыть">' + ic('x', 14) + '</button>' +
       head + body + foot + '</div></div>';
 
