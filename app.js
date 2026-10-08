@@ -19339,19 +19339,55 @@
     // Это либо не занесенные деньги, либо чек не на ту сумму — других способов это
     // заметить у нас нет вовсе.
     var orph = R.orphans || [];
+    var canRcp = can('finmodel_edit');
     if (orph.length) {
       out += '<div class="dc-alert warn"><span class="ic">' + ic('alert', 16) + '</span>' +
         '<span><b>' + orph.length + '</b> ' + plural(orph.length, 'чек', 'чека', 'чеков') +
         ' пробит' + (orph.length > 1 ? 'ы' : '') + ' в кассе, а прихода под ' +
-        (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет: ' +
-        orph.slice(0, 3).map(function (o) {
-          return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
-            esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
-            (o.name ? ', ' + esc(o.name) : '') + '</a>';
-        }).join('; ') + (orph.length > 3 ? ' и еще ' + (orph.length - 3) : '') +
-        '. Либо деньги не занесены, либо чек на другую сумму.</span></div>';
+        (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет. Либо деньги не занесены, ' +
+        'либо чек на другую сумму.' +
+        '<span class="rcp-orph">' + orph.map(function (o) {
+          return '<span class="rcp-o"><a href="' + esc(o.url) + '" target="_blank" ' +
+            'rel="noopener">' + esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
+            (o.name ? ', ' + esc(o.name) : '') + '</a>' +
+            (canRcp ? '<button class="fin-rcp off" data-rcporph="' + esc(o.id) +
+              '">разобрал</button>' : '') + '</span>';
+        }).join('') + '</span></span></div>';
+    }
+    // Разобранные руками не исчезают совсем: иначе отметка «чека нет прихода, и так
+    // надо» со временем спрячет настоящие несведенные деньги. Строка тихая — вопрос по
+    // ним уже закрыт, — но причина и кнопка «вернуть» на месте.
+    var oseen = R.orphans_seen || [];
+    if (oseen.length) {
+      out += '<div class="rcp-seen"><b>' + oseen.length + '</b> ' +
+        plural(oseen.length, 'чек', 'чека', 'чеков') + ' без прихода ' +
+        plural(oseen.length, 'отмечен', 'отмечены', 'отмечены') + ' разобранными: ' +
+        oseen.map(function (o) {
+          return '<span class="rcp-o"><a href="' + esc(o.url) + '" target="_blank" ' +
+            'rel="noopener">' + esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
+            (o.name ? ', ' + esc(o.name) : '') + '</a>' +
+            (o.note ? ' — ' + esc(o.note) : '') +
+            (canRcp ? '<button class="fin-rcp off" data-rcporph="' + esc(o.id) +
+              '" data-rcpback="1">вернуть</button>' : '') + '</span>';
+        }).join('') + '</div>';
     }
     return out;
+  }
+
+  /* Чек, под который прихода в ведомости нет. Кнопка не правит ни одной цифры — она
+     закрывает вопрос «а где эти деньги», поэтому причину спрашиваем словами. */
+  function finOrphanMark(cid, back) {
+    if (!cid) return;
+    var url = '/admin/api/fin/receipts/orphan/' + encodeURIComponent(cid);
+    if (back) return finDo(url, 'POST', { seen: false }, 'Вернул чек на экран');
+    openSheet('Чек без прихода', 'Отметка не меняет цифры ведомости',
+      [['why', 'text', 'Почему прихода под этот чек нет', '']],
+      function (v, close) {
+        var why = (v.why || '').trim();
+        if (!why) return 'Напишите причину — например, деньги уже учтены строкой Юкассы';
+        close();
+        finDo(url, 'POST', { seen: true, note: why }, 'Отметил: чек разобран');
+      }, null, 'Чек', 'Разобрал');
   }
 
   function finReceiptMark(id, st, cur) {
@@ -19609,9 +19645,15 @@
         finRcpSend(n.getAttribute('data-rcpsend'));
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcporph]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finOrphanMark(n.getAttribute('data-rcporph'), n.getAttribute('data-rcpback'));
+      });
+    });
     // Ссылка на чек лежит внутри строки, а клик по строке открывает карточку клиента:
     // без этого человек вместо чека попадал бы в карточку.
-    Array.prototype.forEach.call(view.querySelectorAll('.rcp-l a'), function (n) {
+    Array.prototype.forEach.call(view.querySelectorAll('.rcp-l a, .rcp-o a'), function (n) {
       n.addEventListener('click', function (e) { e.stopPropagation(); });
     });
     if (planSec) finWirePlanBlock(view, planSec);
