@@ -32,6 +32,23 @@ jobs:
           grep -E '(app\.js|style\.css)\?v=' index.html || {
             echo "версия не проставилась — проверь разметку index.html"; exit 1; }
 
+      # Презентация отдела продаж выкладывается не под своим именем, а по длинному
+      # случайному адресу: на слайдах ставки смен, проценты продавцов и калькулятор
+      # дохода, а статика CRM отдается без входа — кто знает адрес, тот и открыл.
+      # Случайный путь закрывает единственную реальную дыру: чтобы страницу нашли
+      # перебором или по ссылке из поиска. Саму папку sales-intro в пакет по-прежнему
+      # не кладем (см. --exclude ниже), уезжает только копия под секретным адресом.
+      # Открывать ее надо строго с /index.html на конце: в Caddy у CRM стоит
+      # try_files {path} /index.html, без {path}/index.html посередине — адрес папки
+      # уходит в SPA-фолбэк и открывает саму CRM вместо презентации.
+      - name: Разложить презентацию отдела продаж по секретному адресу
+        run: |
+          set -eo pipefail
+          test -f sales-intro/index.html || { echo "нет sales-intro/index.html"; exit 1; }
+          mkdir -p 's/02c41edba0a087'
+          cp -R sales-intro/. 's/02c41edba0a087/'
+          test -f 's/02c41edba0a087/index.html'
+
       - name: Собрать пакет для выкладки
         run: |
           set -eo pipefail
@@ -54,6 +71,7 @@ jobs:
             --exclude='./.agents' \
             --exclude='./.tmp' \
             --exclude='./files' \
+            --exclude='./sales-intro' \
             --exclude='./_*.mjs' \
             --exclude='./_*.py' \
             --exclude='./_*.html' \

@@ -16,7 +16,7 @@
 
    Движок — edge-tts (нейронные голоса Microsoft, ключа не требуют):
    pip install --user edge-tts, бинарь ложится в ~/.local/bin/edge-tts. */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync, unlinkSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import { dirname, join } from 'path';
@@ -80,6 +80,12 @@ function screenScript(sc) {
   if (sc.type === 'chklist') { add('Отметьте, что уже умеете.'); add(...(sc.items || [])); }
   if (sc.type === 'howto') (sc.items || []).forEach((it, i) => add((i + 1) + '. ' + it[0] + '. Где: ' + it[1]));
   if (sc.type === 'q') { add(...(sc.sit || []), sc.lead); (sc.opts || []).forEach((o) => add(o[0] + '. ' + o[1])); }
+  /* Тренажеры диктор НЕ решает вслух. Верный порядок, пары и обороты карточек —
+     это ответы: прочитанные заранее, они превращают тренажер в диктант. Голос
+     читает только задание, дальше человек работает руками. */
+  if (sc.type === 'order') add('Соберите порядок сами, нажимая шаги по одному.');
+  if (sc.type === 'match') add('Соедините пары сами: сначала левое, потом правое.');
+  if (sc.type === 'flip') { (sc.cards || []).forEach((c) => add(c[0] + '.')); add('Переверните карточки и проверьте себя.'); }
 
   if (sc.note && sc.note.t) add((sc.note.warn ? 'Важно. ' : '') + sc.note.t);
   // Реплику преподавателя на вопросе не читаем: она объясняет верный ответ, и
@@ -138,9 +144,22 @@ function dot(s) { return /[.!?:;,]$/.test(s) ? s : s + '.'; }
 // «-2Hz» как еще один ключ и падает.
 const PAUSE_SEC = 4;
 const BACKOFF_SEC = [20, 45, 90, 180];
-const TTS_TIMEOUT_MS = 90000;             // зависший поток не должен держать прогон
+// Экран на тысячу знаков это полторы-две минуты речи, а поток идет медленнее
+// реального времени: на 90 секундах таймаут рубил КАЖДУЮ длинную реплику, и прогон
+// выглядел как «сервис молчит» при живом сервисе (25.09.2026, урок про аудит).
+const TTS_TIMEOUT_MS = 300000;            // зависший поток не должен держать прогон
 
 function sleep(sec) { execFileSync('sleep', [String(sec)]); }
+
+// ffmpeg в песочнице есть не всегда (21.09.2026 его снесли вместе с образом), а
+// edge-tts и без него отдает готовый mp3 — просто на 48 кбит/с вместо наших 32.
+// Без этой проверки прогон падал на каждом экране и уходил в отступление по
+// 20/45/90/180 секунд, то есть выглядел как «сервис не отдает звук», хотя звук
+// приходил. Нет ffmpeg — берем поток как есть и говорим об этом один раз.
+const HAS_FFMPEG = (() => {
+  try { execFileSync('ffmpeg', ['-version'], { stdio: 'pipe' }); return true; }
+  catch { console.log('ffmpeg не найден: складываю звук как есть, 48 кбит/с вместо 32'); return false; }
+})();
 
 function say(text, path) {
   for (let i = 0; ; i++) {
@@ -149,9 +168,13 @@ function say(text, path) {
         '--text', text, '--write-media', path + '.raw'], { stdio: 'pipe', timeout: TTS_TIMEOUT_MS });
       // Движок отдает 48 кбит/с. Речи хватает 32: на курс это минус треть
       // веса и репозитория, и того, что грузит тьютор с телефона.
-      execFileSync('ffmpeg', ['-v', 'quiet', '-y', '-threads', '2', '-i', path + '.raw',
-        '-ac', '1', '-ar', '24000', '-b:a', '32k', path], { stdio: 'pipe' });
-      unlinkSync(path + '.raw');
+      if (HAS_FFMPEG) {
+        execFileSync('ffmpeg', ['-v', 'quiet', '-y', '-threads', '2', '-i', path + '.raw',
+          '-ac', '1', '-ar', '24000', '-b:a', '32k', path], { stdio: 'pipe' });
+        unlinkSync(path + '.raw');
+      } else {
+        renameSync(path + '.raw', path);
+      }
       sleep(PAUSE_SEC);
       return true;
     } catch (e) {
