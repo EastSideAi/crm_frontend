@@ -30693,7 +30693,7 @@
     /* голова второй доски — та же карточка, что стояла рядом на первой. Второй
        раз подряд она не кнопка и не повторяет подпись, которую уже несет
        заголовок доски над ней: иначе человек видит один и тот же узел дважды */
-    var inner = '<b>' + esc(n.title) + '</b>' +
+    var inner = '<b>' + esc(head ? (n.headRole || n.title) : n.title) + '</b>' +
       (n.person ? '<i>' + esc(n.person) + '</i>' : '') +
       (n.role && !head ? '<small>' + esc(n.role) + '</small>' : '') +
       (n.from ? '<span class="org-from">' + esc(n.from) + '</span>' : '') +
@@ -30707,9 +30707,12 @@
       '</button>';
   }
 
-  function orgRowHtml(kids) {
+  /* wire=false — ряд без проводов: он идет первым на доске, и шина вела бы
+     в пустоту над верхней карточкой */
+  function orgRowHtml(kids, wire) {
     var cols = kids.map(function (k) {
-      return '<div class="org-col"><span class="org-tick"></span>' + orgNodeHtml(k) + '</div>';
+      return '<div class="org-col">' + (wire === false ? '' : '<span class="org-tick"></span>') +
+        orgNodeHtml(k) + '</div>';
     }).join('');
     return '<div class="org-cols" style="--org-n:' + (kids.length || 1) + '">' + cols + '</div>';
   }
@@ -30746,10 +30749,12 @@
     var out = [orgBoardHtml('Компания', top + (row.length ? '<div class="org-stem"></div>' + orgRowHtml(row) : ''))];
     row.forEach(function (c) {
       if (!(c.children || []).length && !c.crew) return;
-      out.push(orgBoardHtml(c.role || c.title,
-        '<div class="org-one">' + orgNodeHtml(c, true) + '</div>' +
-        ((c.children || []).length ? '<div class="org-stem"></div>' + orgRowHtml(c.children) : '') +
-        orgCrewHtml(c.crew)));
+      /* голову доски рисуем, только когда она добавляет имя руководителя: иначе
+         карточка слово в слово повторяет заголовок доски прямо над ней */
+      var head = c.person ? '<div class="org-one">' + orgNodeHtml(c, true) + '</div>' +
+        ((c.children || []).length ? '<div class="org-stem"></div>' : '') : '';
+      out.push(orgBoardHtml(c.board || c.role || c.title,
+        head + ((c.children || []).length ? orgRowHtml(c.children, !!c.person) : '') + orgCrewHtml(c.crew)));
     });
     return out.join('');
   }
@@ -30780,7 +30785,7 @@
         '<button type="button" class="org-drow" data-duty="' + esc(n.duties) + '"' +
           ' aria-expanded="' + (on ? 'true' : 'false') + '" aria-controls="orgb-' + esc(n.duties) + '">' +
           '<span class="org-plus">' + ic('plus', 13) + '</span>' +
-          '<span class="org-dt"><b>' + esc(n.title) + '</b><small>' + esc(n.role || n.from || '') + '</small></span>' +
+          '<span class="org-dt"><b>' + esc(n.dutyName || n.title) + '</b><small>' + esc(n.role || n.from || '') + '</small></span>' +
           '<span class="org-dn">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + '</span>' +
         '</button>' +
         '<div class="org-dbody" id="orgb-' + esc(n.duties) + '">' +
