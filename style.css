@@ -11809,7 +11809,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 
 .org-tree { --org-wire: var(--wire); display: flex; flex-direction: column; }
 .org-one { display: flex; justify-content: center; }
-.org-one > .org-node { width: min(400px, 100%); }
+/* мера узла одна на всю схему: и у одиночного, и у узла в ряду. Карточка во всю
+   колонку на широком мониторе превращается в полупустую плиту, и ряд начинает
+   весить больше стопки над ним */
+.org-one > .org-node, .org-col > .org-node { width: 100%; max-width: 400px; align-self: center; }
 /* ствол и отвод к карточке — одна линия по центру, как в .po-tree */
 .org-stem { position: relative; height: 24px; }
 .org-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
@@ -11817,7 +11820,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-cols { display: grid; grid-template-columns: repeat(var(--org-n, 2), minmax(0, 1fr));
   column-gap: 14px; align-items: start; }
 .org-col { display: flex; flex-direction: column; }
-.org-tick { display: block; height: 20px; position: relative; }
+/* тик тянется на всю колонку (align-self узла его не касается), иначе провод
+   съедет к центру карточки и шина порвется */
+.org-tick { display: block; height: 20px; position: relative; align-self: stretch; }
 .org-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
   width: 1px; background: var(--org-wire); }
 .org-tick::after { content: ''; position: absolute; top: 0; height: 1px;
@@ -11835,18 +11840,22 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-node:hover { border-color: #CFE0FF; background: #FBFBFC; }
 .org-node:focus-visible { outline: none; border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
-/* роль без описанных обязанностей не кликается: у кнопки, которая ничего не
-   открывает, нет работы */
-.org-node.flat { cursor: default; background: var(--fill); border-color: transparent; }
-.org-node.flat:hover { background: var(--fill); border-color: transparent; }
+/* роль без описанных обязанностей не кликается — но и не тускнеет: отсутствие
+   материала не понижает человека в иерархии. Отличие только в счетчике и курсоре */
+.org-node.flat { cursor: default; }
+.org-node.flat:hover { background: var(--card); border-color: var(--line); }
 .org-node.k-owner, .org-node.k-owner.flat { background: var(--navy); border-color: transparent; color: #fff; }
 .org-node.k-owner b { font-size: 15px; }
 .org-node.k-owner i { color: rgba(255,255,255,.72); }
 .org-node.k-owner small { color: rgba(255,255,255,.6); }
-.org-node.k-owner:hover { background: #24365C; border-color: transparent; }
-/* AI-агенты тише людей: это исполнители по ТЗ, а не ступень иерархии */
+.org-node.k-owner.flat:hover { background: var(--navy); border-color: transparent; }
+/* серая поверхность значит одно: исполнитель по ТЗ, а не ступень иерархии */
 .org-node.k-agent, .org-node.k-crew { background: var(--fill); border-color: transparent; }
 .org-node.k-agent:hover, .org-node.k-crew:hover { background: var(--card); border-color: #CFE0FF; }
+/* голова второй доски повторяет карточку с первой — здесь она тихая подпись,
+   а не вторая такая же кнопка с тем же счетчиком */
+.org-node.head { background: var(--fill); border-color: transparent; cursor: default; }
+.org-node.head:hover { background: var(--fill); border-color: transparent; }
 .org-cnt { margin-top: 8px; display: inline-flex; align-items: center; gap: 4px;
   font-size: 11.5px; font-weight: 600; color: var(--blue-d); }
 .org-cnt svg { transition: .14s var(--ease); }
@@ -11854,7 +11863,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-from { margin-top: 6px; font-size: 11.5px; color: var(--ink-2); }
 
 .org-crew-h { display: flex; align-items: baseline; justify-content: center; gap: 9px;
-  margin-bottom: 11px; }
+  flex-wrap: wrap; margin-bottom: 11px; }
 .org-crew-h small { font-size: 12px; color: var(--ink-3); }
 
 /* ── зоны ответственности: строка с плюсом, под ней группы задач ── */
@@ -11862,10 +11871,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-duties > .po-lbl { margin: 10px 0 2px; }
 .org-duty { background: var(--card); border: 1px solid var(--line);
   border-radius: var(--r-lg); overflow: hidden; }
-.org-drow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
-  background: none; border: 0; font: inherit; color: var(--ink); padding: 13px 16px;
-  cursor: pointer; transition: .14s var(--ease); }
+.org-drow { position: relative; display: flex; align-items: center; gap: 12px; width: 100%;
+  text-align: left; background: none; border: 0; font: inherit; color: var(--ink);
+  padding: 13px 16px; cursor: pointer; transition: .14s var(--ease); }
+.org-drow::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: .14s var(--ease); }
 .org-drow:hover { background: #FBFBFC; }
+.org-drow:hover::before, .org-duty.on .org-drow::before { opacity: 1; }
+.org-drow:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .org-plus { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid;
   place-items: center; background: var(--blue-tint); color: var(--blue-d);
   transition: transform .2s var(--ease); }
@@ -11877,9 +11890,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-dbody { display: none; padding: 0 16px 18px; }
 .org-duty.on .org-dbody { display: block; }
 .org-lede { margin: 2px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 92ch; }
-/* колонки, а не грид: группы разной длины, и в сетке 1fr 1fr рядом с длинной
-   группой встает пустая половина экрана */
-.org-gs { columns: 2; column-gap: 36px; margin-top: 14px; }
+/* колонки задаются ШИРИНОЙ, а не числом: на телефоне колонка одна сама собой,
+   на широком мониторе строка не растягивается до 110 знаков. Сетка 1fr 1fr тут
+   не годится — рядом с длинной группой встает пустая половина экрана */
+.org-gs { columns: 460px 2; column-gap: 36px; margin-top: 14px; }
 .org-g { break-inside: avoid; margin-bottom: 18px; }
 .org-gh { display: flex; gap: 9px; font-size: 13px; font-weight: 700; margin-bottom: 9px; }
 .org-gh i { font-style: normal; color: var(--blue); }
@@ -11887,13 +11901,17 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .org-ul li { position: relative; padding-left: 17px; font-size: 13px; line-height: 1.5; }
 .org-ul li::before { content: ''; position: absolute; left: 0; top: 9px; width: 9px; height: 2px;
   border-radius: 1px; background: var(--blue); opacity: .55; }
+.org-src { margin: 4px 0 0; font-size: 11.5px; color: var(--ink-3); }
 .org-foot { font-size: 12px; color: var(--ink-3); padding: 0 2px 18px; }
 
-@media (max-width: 1100px) { .org-gs { grid-template-columns: 1fr; } }
 /* на телефоне схема ложится столбиком: ряд из четырех карточек в 390px
    превращается в четыре колонки по одному слову */
 @media (max-width: 860px) {
   .org-cols { grid-template-columns: 1fr; row-gap: 10px; }
   .org-tick::after { display: none; }
-  .org-one > .org-node { width: 100%; }
+  .org-one > .org-node, .org-col > .org-node { max-width: none; }
+  .org-crew-h { flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .org-plus, .org-cnt svg, .org-drow::before { transition: none; }
 }

@@ -30688,13 +30688,17 @@
 
   /* Узел схемы. Кликается только тот, у кого есть зоны ответственности: кнопка,
      которая ничего не открывает, — обещание, которого экран не держит. */
-  function orgNodeHtml(n) {
+  function orgNodeHtml(n, head) {
     var d = orgDuty(n.duties), cnt = d ? orgCount(d) : 0;
+    /* голова второй доски — та же карточка, что стояла рядом на первой. Второй
+       раз подряд она не кнопка и не повторяет подпись, которую уже несет
+       заголовок доски над ней: иначе человек видит один и тот же узел дважды */
     var inner = '<b>' + esc(n.title) + '</b>' +
       (n.person ? '<i>' + esc(n.person) + '</i>' : '') +
-      (n.role ? '<small>' + esc(n.role) + '</small>' : '') +
+      (n.role && !head ? '<small>' + esc(n.role) + '</small>' : '') +
       (n.from ? '<span class="org-from">' + esc(n.from) + '</span>' : '') +
       (n.note && !n.role ? '<small>' + esc(n.note) + '</small>' : '');
+    if (head) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
     if (!d) {
       return '<div class="org-node k-' + esc(n.kind || 'role') + ' flat">' + inner + '</div>';
     }
@@ -30743,7 +30747,7 @@
     row.forEach(function (c) {
       if (!(c.children || []).length && !c.crew) return;
       out.push(orgBoardHtml(c.role || c.title,
-        '<div class="org-one">' + orgNodeHtml(c) + '</div>' +
+        '<div class="org-one">' + orgNodeHtml(c, true) + '</div>' +
         ((c.children || []).length ? '<div class="org-stem"></div>' + orgRowHtml(c.children) : '') +
         orgCrewHtml(c.crew)));
     });
@@ -30769,15 +30773,20 @@
           (g.title ? '<div class="org-gh"><i>' + (i + 1) + '</i>' + esc(g.title) + '</div>' : '') +
           '<ul class="org-ul">' + items + '</ul></div>';
       }).join('');
+      /* подпись строки — чем человек занимается, а не название документа: «Продюсеры»
+         над «Должностной инструкцией продюсера» пересказывает сам себя. Источник
+         нужен, но внизу раскрытия, рядом с тем, что из него перенесено. */
       return '<div class="org-duty' + (on ? ' on' : '') + '" id="org-' + esc(n.duties) + '">' +
-        '<button type="button" class="org-drow" data-duty="' + esc(n.duties) + '">' +
+        '<button type="button" class="org-drow" data-duty="' + esc(n.duties) + '"' +
+          ' aria-expanded="' + (on ? 'true' : 'false') + '" aria-controls="orgb-' + esc(n.duties) + '">' +
           '<span class="org-plus">' + ic('plus', 13) + '</span>' +
-          '<span class="org-dt"><b>' + esc(n.title) + '</b><small>' + esc(d.source || '') + '</small></span>' +
+          '<span class="org-dt"><b>' + esc(n.title) + '</b><small>' + esc(n.role || n.from || '') + '</small></span>' +
           '<span class="org-dn">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + '</span>' +
         '</button>' +
-        '<div class="org-dbody">' +
+        '<div class="org-dbody" id="orgb-' + esc(n.duties) + '">' +
           (d.lede ? '<p class="org-lede">' + esc(d.lede) + '</p>' : '') +
           '<div class="org-gs">' + gs + '</div>' +
+          (d.source ? '<p class="org-src">Источник: ' + esc(d.source) + '</p>' : '') +
         '</div></div>';
     }).join('');
     return '<div class="org-duties"><div class="po-lbl">Зоны ответственности и задачи</div>' + rows + '</div>';
@@ -30815,7 +30824,15 @@
     else state.orgOpen[key] = !state.orgOpen[key];
     renderView();
     var box = el('org-' + key);
-    if (box && fromTree) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    /* ререндер убивает кнопку вместе с фокусом, и следующий Tab начинает обход с
+       начала документа. На справочнике, который читают подряд с клавиатуры, это
+       главная поломка экрана — возвращаем фокус на ту же строку. */
+    var row = document.querySelector('.org-drow[data-duty="' + key + '"]');
+    if (row && !fromTree) row.focus();
+    if (box && fromTree) {
+      var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      box.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
   }
 
   /* ── ПРОДУКТОВЫЙ ПОРТАЛ — база знаний команды по продуктам ────────────────
