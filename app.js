@@ -42781,7 +42781,10 @@
   function openDialogFromHash() {
     var id = hashDialogId();
     if (!id) return;
-    if (!can(pageCap('inbox'))) { denyLink('Переписка вам не открыта', 'раздела «Диалоги» нет в вашем доступе'); return; }
+    if (!can(pageCap('inbox'))) {
+      denyLink('dialog', 'Диалоги', 'Переписка вам не открыта', 'раздела «Диалоги» нет в вашем доступе');
+      return;
+    }
     if (state.page === 'inbox' && state.inboxMode === 'bot' && String(state.inboxSel) === String(id)) return;
     if (state.drawerId) closeDrawer();
     state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
@@ -42792,7 +42795,10 @@
   function openTaskFromHash() {
     var tid = hashTaskId();
     if (!tid || document.querySelector('.al-ov')) return;
-    if (!can('tasks')) { denyLink('Задача вам не открыта', 'раздела «Задачи» нет в вашем доступе'); return; }
+    if (!can('tasks')) {
+      denyLink('task', 'Задачи', 'Задача вам не открыта', 'раздела «Задачи» нет в вашем доступе');
+      return;
+    }
     openTask(+tid);
   }
   /* #meeting/<id> — разбор протокола встречи. На эту ссылку ведет ответ бота
@@ -42801,7 +42807,10 @@
   function openMeetingFromHash() {
     var mid = hashMeetingId();
     if (!mid || document.querySelector('.al-ov')) return;
-    if (!can('tasks')) { denyLink('Разбор встречи вам не открыт', 'раздела «Задачи» нет в вашем доступе'); return; }
+    if (!can('tasks')) {
+      denyLink('meeting', 'Задачи', 'Разбор встречи вам не открыт', 'раздела «Задачи» нет в вашем доступе');
+      return;
+    }
     // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
     // тому, кто ведет встречи и заводит их протоколы каждую неделю.
     if (mid === 'new') { openMeetingUpload(); return; }
@@ -42833,7 +42842,10 @@
   function openReportReviewFromHash() {
     var q = hashReviewParts();
     if (!q || document.querySelector('.al-ov')) return;
-    if (!can('tasks_all')) { denyLink('Отчет вам не открыт', 'задачи всей команды видит руководитель'); return; }
+    if (!can('tasks_all')) {
+      denyLink('rreview', 'Отчеты команды', 'Отчет вам не открыт', 'задачи всей команды видит руководитель');
+      return;
+    }
     // Срез команды на нужном периоде — контекст под модалкой и верный список после.
     state.page = 'tasks'; applyTaskSeg('team');
     state.weekShift = q.period === 'week' ? (rhShiftFor('week', q.starts) || 0) : 0;
@@ -42872,11 +42884,17 @@
   function openPageFromHash() {
     var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
     if (!pg || !navMeta(pg)) return;
-    if (!can(pageCap(pg))) { denyLink('Раздел «' + navMeta(pg).label + '» вам не открыт'); return; }
+    if (!can(pageCap(pg))) {
+      denyLink(pg, navMeta(pg).label, 'Раздел «' + navMeta(pg).label + '» вам не открыт');
+      return;
+    }
     // Вкладка закрыта, а раздел нет — открываем раздел и говорим про вкладку:
     // по ссылке человек должен попасть хотя бы туда, куда ему можно.
     var lock = segLocked(pg, seg);
-    if (lock) denyLink('Открыли раздел «' + navMeta(pg).label + '»', 'вкладка «' + lock + '» вам не открыта');
+    if (lock) {
+      denyLink(pg + '/' + seg, navMeta(pg).label + ' · ' + lock,
+               'Открыли раздел «' + navMeta(pg).label + '»', 'вкладка «' + lock + '» вам не открыта');
+    }
     var moved = applyPageSeg(pg, seg);
     setPage(pg);
     // страница уже была открыта — setPage выходит сразу, вкладку перерисовываем сами
@@ -42965,11 +42983,17 @@
      в этом месте читается как поломка: человек жмет и остается на своем экране, не
      понимая, ссылка кривая или система (вопрос Веры 08.10.2026: «что он увидит?»).
      Поэтому любой отказ по ссылке называет, что именно закрыто. */
-  function denyLink(what, why) {
+  function denyLink(target, label, what, why) {
     showToast(what, why || 'доступ открывает руководитель в разделе «Команда»');
     // и адрес приводим к тому, что человек реально видит: иначе в строке висит
     // чужой раздел, а на экране свой, и обновление страницы повторяет отказ.
     backToPageHash();
+    /* Тому, кто раздает доступы, об этом никто не расскажет: человек просто молча
+       не попал туда, куда его позвали (Вера 08.10.2026: «хочу понимать, кто куда
+       заходил и не смог зайти»). Шлем тихо и не ждем ответа: объяснение человек
+       уже видит, а журнал — не его забота. Дедуп и сообщение в бот держит сервер. */
+    apiSend('/admin/api/access-denied', 'POST', { target: target, label: label || null },
+            null, function () {});
   }
   /* У вкладок свои замки, и они не совпадают с правом на раздел: «Выплаты» в
      сопровождении и «Кто прошел» в Академии открыты не всем, кто видит раздел.
@@ -43054,7 +43078,9 @@
       state.loaded = true;
       // Ссылка на клиента в руках того, кому карточки не открыты: без этой строки
       // он видит свой обычный экран и думает, что ссылка битая.
-      if (hashLeadId()) denyLink('Карточка клиента вам не открыта', 'раздела «Люди» нет в вашем доступе');
+      if (hashLeadId()) {
+        denyLink('lead', 'Люди', 'Карточка клиента вам не открыта', 'раздела «Люди» нет в вашем доступе');
+      }
       renderView();
     }
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
