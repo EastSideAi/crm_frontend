@@ -127,6 +127,15 @@ a { color: inherit; text-decoration: none; }
 /* Правая часть шапки не сжимается: в финансах вкладки ведомостей длинные и раньше
    рвали имя пользователя на три строки. Сжимается и скроллится список вкладок. */
 .tbr { display: flex; align-items: center; gap: 11px; flex: none; }
+/* Ссылка на открытый экран. Адрес CRM не менялся при переходе по разделам, и
+   прислать коллеге раздел или вкладку было нечем (Вера, 08.10.2026). Кнопка
+   тихая и стоит у профиля: главное действие экрана остается в самом экране. */
+.tb-link { display: flex; align-items: center; gap: 7px; flex: none;
+  padding: 8px 13px 8px 11px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--app); color: var(--ink-2); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: .15s; white-space: nowrap; }
+.tb-link:hover { background: var(--fill); border-color: var(--line-2); color: var(--ink); }
+.tb-link svg { flex: none; }
 .topbar > .tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .topbar > .tabs::-webkit-scrollbar { height: 0; }
 /* Ряд вкладок живет внутри #tb-left, а не прямым ребенком шапки, поэтому правило
@@ -138,7 +147,11 @@ a { color: inherit; text-decoration: none; }
 /* Снизу 961px — там свои правила для телефона (блок max-width: 960px): обертка
    скроллится, капсула идет одной строкой. Перенос оттуда убрал бы тот скролл:
    селектор с id сильнее, чем .tabs, и победил бы несмотря на порядок. */
-@media (min-width: 961px) and (max-width: 1240px) {
+/* Верхней границы у правила нет намеренно: перенос срабатывает ровно тогда, когда
+   ряд не влез, а порог в пикселях врет при любой новой вкладке или кнопке в шапке.
+   08.10.2026 кнопка «Ссылка» съела те самые сто пикселей, и на 1440 обрезалось уже
+   имя в профиле — выбран перенос вкладок, а не обрезанный профиль. */
+@media (min-width: 961px) {
   .topbar > #tb-left { min-width: 0; }
   .topbar > #tb-left > .tabs { flex-wrap: wrap; border-radius: var(--r-xl); }
 }
@@ -4876,6 +4889,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      чтобы не спорить со скроллом вкладок. */
   .tbr .profile { padding: 4px; gap: 0; border-radius: var(--r-pill); flex: none; }
   .tbr .profile .pinfo, .tbr .profile .pchev { display: none; }
+  /* У кнопки ссылки на телефоне остается иконка: подпись отбирала место у
+     вкладок, а они и так скроллятся на пределе. */
+  .tbr .tb-link { padding: 8px; }
+  .tbr .tb-link span { display: none; }
   .content { padding: 16px 16px 36px; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
