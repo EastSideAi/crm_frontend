@@ -26772,21 +26772,47 @@
      «не трогали» и «не купил» — разные ответы: в первом цифру считает автоматика,
      во втором владелец сказал «нет», и автоматику надо перебить. Снять ошибочную
      галочку иначе было бы нечем. */
+  /* Четыре ответа по кругу: не трогали → купил → не купил → уже был клиентом →
+     дубль → снова не трогали. Почему все четыре в одной кнопке, а не галочками:
+     они взаимоисключающие. «Купил» и «уже был клиентом» одновременно — это не
+     продажа запуска, а старая сделка, и две независимые галочки позволили бы
+     записать ее запуску в заслугу. */
+  var LP_SOLD_CYCLE = ['none', 'yes', 'no', 'client', 'dup'];
+  var LP_SOLD_LABEL = { none: 'отметить', yes: 'купил', no: 'не купил',
+                        client: 'уже клиент', dup: 'дубль' };
+
+  function lpSoldState(fx) {
+    if (fx.dup) return 'dup';
+    if (fx.was_client) return 'client';
+    return (fx.sold === true) ? 'yes' : (fx.sold === false ? 'no' : 'none');
+  }
+
+  /* Состояние → что отправляем. Посылаем ВСЕ три поля, а не только изменившееся:
+     иначе «купил», переведенный в «дубль», остался бы с sold = true, и человек
+     попал бы и в дубли, и в продажи разом. */
+  function lpSoldPatch(st) {
+    return { sold: st === 'yes' ? true : (st === 'no' ? false : null),
+             was_client: st === 'client', dup: st === 'dup' };
+  }
+
   function lpSoldCell(p) {
     var fx = p.fix || {};
-    var st = (fx.sold === true) ? 'yes' : (fx.sold === false ? 'no' : 'none');
-    var lab = st === 'yes' ? 'купил' : (st === 'no' ? 'не купил' : 'отметить');
+    var st = lpSoldState(fx);
     var rub = (fx.sold_rub != null && fx.sold_rub !== '') ? fx.sold_rub : '';
     /* Подсказка от базы: сколько человек реально заплатил после старта запуска.
        Стоит рядом, а не вместо: владелец правит только то, чего база не знает. */
-    var auto = (p.paid_rub && !fx.sold) ? '<small>по базе ' + fmtMoney(p.paid_rub) + ' ₽</small>' : '';
+    var auto = (p.paid_rub && st === 'none') ? '<small>по базе ' + fmtMoney(p.paid_rub) + ' ₽</small>' : '';
+    /* Совпал контакт с другой строкой запуска — говорим об этом сразу, но решение
+       оставляем человеку: один номер бывает у мамы и дочки. */
+    var twin = (p.twins && st === 'none') ? '<small class="lp-twin">контакт как у ещё ' +
+      p.twins + '</small>' : '';
     return '<span class="lp-fx">' +
       '<button class="lp-sold ' + st + '" data-lp-sold="' + esc(p.id) + '" data-st="' + st + '">' +
-        lab + '</button>' +
+        LP_SOLD_LABEL[st] + '</button>' +
       (st === 'yes'
         ? '<input class="al-in lp-rub" data-lp-rub="' + esc(p.id) + '" inputmode="numeric" ' +
           'maxlength="9" placeholder="сумма" value="' + esc(String(rub)) + '">'
-        : auto) +
+        : (auto || twin)) +
       '</span>';
   }
 
@@ -26803,7 +26829,11 @@
     var src = p.source ? mkSourceName(p.source) : (p.channel ? mkSourceName(p.channel) : '');
     var sub = (p.source && p.channel) ? mkSourceName(p.channel) : '';
     if (sub === src) sub = '';   /* метка и канал совпали — «Telegram / Telegram» не пишем */
-    return '<div class="lp-tr' + (id ? ' go' : '') + '"' +
+    var fxs = edit && p.fix ? lpSoldState(p.fix) : 'none';
+    /* Отмеченные дубли и старые клиенты остаются в списке, но тускнеют: убрать их
+       совсем значило бы, что проверить отметку больше нельзя. */
+    var off = (fxs === 'dup' || fxs === 'client') ? ' lp-off' : '';
+    return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
         (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</span>' +
@@ -26942,8 +26972,9 @@
         /* По кругу: не трогали → купил → не купил → не трогали. Третье состояние
            нужно, чтобы вернуть строку автоматике, а не остаться с чужим «нет». */
         var st = b.getAttribute('data-st');
-        var next = st === 'none' ? true : (st === 'yes' ? false : null);
-        lpFixSend(b.getAttribute('data-lp-sold'), { sold: next }, b);
+        var i = LP_SOLD_CYCLE.indexOf(st);
+        var next = LP_SOLD_CYCLE[(i < 0 ? 0 : i + 1) % LP_SOLD_CYCLE.length];
+        lpFixSend(b.getAttribute('data-lp-sold'), lpSoldPatch(next), b);
       });
     });
     Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src]'), function (inp) {

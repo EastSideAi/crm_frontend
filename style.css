@@ -11623,5 +11623,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lp-sold.yes { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
 .lp-sold.no { background: var(--fill); border-color: transparent; color: var(--ink-2);
   text-decoration: line-through; }
+/* «уже клиент» и «дубль» — не продажа и не отказ, а исключение строки из счета.
+   Поэтому они тише обоих: заливки нет, только рамка пунктиром. */
+.lp-sold.client, .lp-sold.dup { background: transparent; border-style: dashed;
+  border-color: var(--ink-3); color: var(--ink-2); }
+.lp-tr.lp-off { opacity: .52; }
+.lp-tr.lp-off:hover { opacity: 1; }
+.lp-twin { color: var(--amber-ink); }
 .lp-sold.busy, .lp-fx .al-in.busy { opacity: .5; pointer-events: none; }
 .lp-sold.err, .lp-fx .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }
