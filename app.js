@@ -12628,7 +12628,14 @@
         if (footActs) footActs.hidden = !!mode;
         if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
         el('tk-resok').textContent = mode === 'review' ? 'Сдать' : 'Сохранить';
-        resT.value = mode === 'review' ? '' : (t.result_text || '');
+        // Что человек уже набрал в строке обсуждения, переезжает сюда. Он писал
+        // это как «сдаю», а не репликой, и просить написать то же самое второй
+        // раз в панели нельзя (Ольга 08.10.2026: «в итоге приходится по два
+        // раза одно и то же писать»). В режиме возврата строка занята причиной
+        // возврата — ее не трогаем.
+        var typed = retMode ? '' : (say.value || '').trim();
+        resT.value = typed || (mode === 'review' ? '' : (t.result_text || ''));
+        if (typed) say.value = '';
         resT.focus();
         body.scrollTop = body.scrollHeight;
       };
