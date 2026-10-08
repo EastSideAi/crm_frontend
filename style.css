@@ -2759,6 +2759,8 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 14px 40px -16px rgba(20,25,40,.28); padding: 10px;
   display: flex; flex-direction: column; gap: 8px; animation: rmPop .16s ease; }
 .ss-pop.flip { left: auto; right: 0; }
+/* Оправа, которую компонент завел сам: в ряду она ведет себя как сам селект. */
+.ss-wrap { display: inline-block; }
 .ss-list { display: flex; flex-direction: column; gap: 1px; max-height: 240px; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: #DFE2E8 transparent; margin: 0 -4px; padding: 0 4px; }
 .ss-i { text-align: left; padding: 8px 10px; border-radius: 9px; font: 600 13px 'Manrope', sans-serif;

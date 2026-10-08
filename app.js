@@ -6969,7 +6969,16 @@
     if (!sel || sel.getAttribute('data-ss')) return;
     opts = opts || {};
     sel.setAttribute('data-ss', '1');
+    // Поповер встает относительно оправы селекта. Там, где select стоит голым,
+    // оправу заводим сами — заодно появляется привычная стрелка.
     var wrap = sel.parentNode;
+    if (!wrap.classList || !wrap.classList.contains('al-selwrap')) {
+      var box = document.createElement('span');
+      box.className = 'al-selwrap ss-wrap';
+      wrap.insertBefore(box, sel);
+      box.appendChild(sel);
+      wrap = box;
+    }
     var btn = document.createElement('button');
     btn.type = 'button';
     // Кнопка носит классы селекта — иначе ее пришлось бы описывать в стилях
@@ -6977,6 +6986,8 @@
     // находит теперь кнопку, она в разметке первая. Ищи сам select как
     // 'select.имя-класса'.
     btn.className = sel.className + ' ss-btn';
+    btn.setAttribute('aria-haspopup', 'listbox');
+    btn.setAttribute('aria-expanded', 'false');
     sel.hidden = true;
     sel.style.display = 'none';
     wrap.insertBefore(btn, sel);
@@ -6994,6 +7005,7 @@
       if (!pop) return;
       if (pop.parentNode) pop.parentNode.removeChild(pop);
       pop = null;
+      btn.setAttribute('aria-expanded', 'false');
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onOut, true);
     };
@@ -7009,6 +7021,8 @@
       if (pop) { close(); return; }
       pop = document.createElement('div');
       pop.className = 'ss-pop';
+      pop.setAttribute('role', 'listbox');
+      btn.setAttribute('aria-expanded', 'true');
       pop.innerHTML =
         '<input type="search" class="al-in sm ss-q" autocomplete="off" placeholder="' +
           esc(opts.find || 'Имя или фамилия') + '">' +
@@ -11558,7 +11572,9 @@
       var addRow = adding
         ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
             '<select class="al-sel sm gl-goal-who" title="Кто ведет"><option value="">Кто ведет</option></select>' +
-            '<select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select>' +
+            // В оправе, как и выбор человека рядом: иначе у одного поля в строке
+            // есть стрелка, а у соседнего нет.
+            '<span class="al-selwrap"><select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select></span>' +
             '<button class="qchip gl-goal-x" type="button">Отмена</button></div>'
         : '';
       return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
@@ -11707,10 +11723,11 @@
     var gi = view.querySelector('.gl-goal-in');
     if (gi) {
       loadTaskPeople(function (people) {
-        var gw = view.querySelector('.gl-goal-who'); if (!gw) return;
+        var gw = view.querySelector('select.gl-goal-who'); if (!gw) return;
         gw.innerHTML = people.map(function (x) {
           return '<option value="' + x.id + '"' + (x.id === state.taskMe ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
         }).join('');
+        searchSelect(gw);
       });
       gi.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { state.glNew = ''; renderView(); return; }
@@ -11719,7 +11736,7 @@
         var dept = gi.getAttribute('data-goal-for') || '';
         var mon = view.querySelector('.gl-goal-mon').value;
         gi.disabled = true;
-        var gwho = view.querySelector('.gl-goal-who');
+        var gwho = view.querySelector('select.gl-goal-who');
         apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: (gwho && +gwho.value) || state.taskMe || null,
                                               due_at: new Date(mon + 'T23:59:59').toISOString() }, function (r) {
           state.glNew = ''; state.tasks = null;
