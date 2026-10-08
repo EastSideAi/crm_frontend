@@ -3131,6 +3131,12 @@
       // читается как ошибка системы.
       if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
         '</b>. Сними чип с именем, чтобы вернуться ко всей команде.';
+      // Пока в строке поиска слово, список внизу не про неделю: сводка «неделя
+      // пустая» рядом с найденными задачами читается как сбой.
+      var fv = TASK_SEGS[taskSeg()].view;
+      if (fndOn() && (fv === 'myweek' || fv === 'goals')) {
+        tphr = 'Ищу по всему задачнику, а не только по открытой неделе.';
+      }
       /* Обучение открывается в этом же разделе (решение Павла от 25.08.2026), и
          шапка честно говорит, где человек находится: иначе он видит курс под
          заголовком «Задачи» и не понимает, куда делся список. Выход и повторный
@@ -6854,6 +6860,10 @@
     // Первый заход в «Задачи» встречает обучением, дальше — обычный экран.
     if (state.guideOn) { renderGuide(view); return; }
     var v = TASK_SEGS[taskSeg()].view;
+    // Слово в строке поиска — ищем по всему задачнику, а не по открытому срезу.
+    // На «Команде» и «Учениках» строка ищет людей и учеников, а не задачи, —
+    // там она своя и остается как была.
+    if (fndOn() && (v === 'myweek' || v === 'goals')) { renderTaskFind(view); return; }
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
@@ -6994,20 +7004,199 @@
             free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select></span>'
         : '';
       box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
+      searchSelect(box.querySelector('select.pp-add'));
       Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
         b.addEventListener('click', function () {
           ids = ids.filter(function (x) { return x !== +b.getAttribute('data-ppx'); });
           draw(); if (opts.onChange) opts.onChange(ids);
         });
       });
-      var add = box.querySelector('.pp-add');
+      var add = box.querySelector('select.pp-add');
       if (add) add.addEventListener('change', function () {
         if (!add.value) return;
-        ids.push(+add.value); draw(); if (opts.onChange) opts.onChange(ids);
+        ids.push(+add.value); draw();
+        // Коробка перерисована, прежней кнопки нет — фокус на новую, иначе
+        // второго человека с клавиатуры не добавить.
+        var again = box.querySelector('.ss-btn');
+        if (again) again.focus();
+        if (opts.onChange) opts.onChange(ids);
       });
     }
     draw();
     return { get: function () { return ids.slice(); } };
+  }
+  /* Выбор человека с поиском. Сам select остается в разметке и остается
+     источником значения: все, кто его читает и пишет, работают как раньше —
+     меняется только то, чем человек в него тыкает. В списке 37 фамилий, и
+     крутить его колесом дольше, чем набрать три буквы (Ольга 08.10.2026:
+     «сделать возможность напечатать имя, а не выбирать из списка, людей
+     много»; то же просил Павел 17.09.2026 про участников планерки). */
+  function searchSelect(sel, opts) {
+    if (!sel || sel.getAttribute('data-ss')) return;
+    opts = opts || {};
+    sel.setAttribute('data-ss', '1');
+    // Поповер встает относительно оправы селекта. Там, где select стоит голым,
+    // оправу заводим сами — заодно появляется привычная стрелка.
+    var wrap = sel.parentNode;
+    if (!wrap.classList || !wrap.classList.contains('al-selwrap')) {
+      var box = document.createElement('span');
+      box.className = 'al-selwrap ss-wrap';
+      wrap.insertBefore(box, sel);
+      box.appendChild(sel);
+      wrap = box;
+    }
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    // Кнопка носит классы селекта — иначе ее пришлось бы описывать в стилях
+    // отдельно под каждое место. Плата за это: querySelector по такому классу
+    // находит теперь кнопку, она в разметке первая. Ищи сам select как
+    // 'select.имя-класса'.
+    btn.className = sel.className + ' ss-btn';
+    btn.setAttribute('aria-haspopup', 'listbox');
+    btn.setAttribute('aria-expanded', 'false');
+    sel.hidden = true;
+    sel.style.display = 'none';
+    wrap.insertBefore(btn, sel);
+
+    // «Никто» приходит и пустой строкой, и нулем (whoOpts на разборе встречи
+    // отдает value="0"). Для человека это одно и то же — поле не заполнено.
+    var empty = function (v) { return !v || v === '0'; };
+    var label = function () {
+      var o = sel.options[sel.selectedIndex];
+      btn.textContent = (o && o.text) || opts.empty || 'Выбрать';
+      btn.classList.toggle('ss-empty', empty(sel.value));
+    };
+    label();
+    sel.addEventListener('change', label);
+
+    var pop = null;
+    var close = function () {
+      if (!pop) return;
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      pop = null;
+      btn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOut, true);
+      document.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+    var onKey = function (e) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); btn.focus(); }
+    };
+    // btn.contains, а не сравнение с самим btn: клик приходится на текст внутри.
+    var onOut = function (e) {
+      if (pop && !pop.contains(e.target) && !btn.contains(e.target)) close();
+    };
+    /* Поповер лежит в body и позиционируется от кнопки. Внутри разметки он
+       обрезался бы: у карточки цели overflow:hidden, у тела модалки своя
+       прокрутка — список открывался бы в никуда. */
+    var place = function () {
+      if (!pop) return;
+      if (!btn.isConnected) { close(); return; }
+      var r = btn.getBoundingClientRect();
+      // Поле спрятали, пока список был открыт — закрываем, иначе он висит сам
+      // по себе.
+      if (!r.width && !r.height) { close(); return; }
+      // Список не уже своего поля: иначе он перестает читаться как его
+      // продолжение. Уже — только под узким чипом «+ еще».
+      pop.style.minWidth = Math.round(r.width) + 'px';
+      var w = pop.offsetWidth, h = pop.offsetHeight;
+      pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+      var top = r.bottom + 6;
+      // Снизу не влезает, а сверху есть место — встаем над полем.
+      if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      pop.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
+    };
+
+    var open = function () {
+      if (pop) { close(); return; }
+      pop = document.createElement('div');
+      pop.className = 'ss-pop';
+      pop.setAttribute('role', 'listbox');
+      btn.setAttribute('aria-expanded', 'true');
+      pop.innerHTML =
+        '<input type="text" class="al-in sm ss-q" autocomplete="off" placeholder="' +
+          esc(opts.find || 'Имя или фамилия') + '">' +
+        '<div class="ss-list"></div>' +
+        '<div class="ss-none" hidden>Никого с таким именем нет</div>';
+      document.body.appendChild(pop);
+
+      var list = pop.querySelector('.ss-list'), q = pop.querySelector('.ss-q');
+      // Пустой пункт («+ исполнитель», «— не назначен —») — это подпись самого
+      // поля, а не человек: в списке он строка, которая ничего не делает.
+      var all = Array.prototype.map.call(sel.options, function (o, i) {
+        var t = o.text || '';
+        // Хвост в скобках — пометка про бота, а не часть имени.
+        var at = t.indexOf(' (');
+        return { i: i, text: at > 0 ? t.slice(0, at) : t, alt: at > 0 ? t.slice(at + 1) : '',
+                 val: o.value, low: t.toLowerCase() };
+      }).filter(function (it) { return !empty(it.val); });
+      var paint = function () {
+        var want = (q.value || '').trim().toLowerCase();
+        var hits = all.filter(function (it) { return !want || it.low.indexOf(want) !== -1; });
+        // Совпадение в начале имени или фамилии — выше: Enter берет первую
+        // строку, поэтому порядок здесь работа, а не косметика.
+        if (want) {
+          hits = hits.map(function (it, n) {
+            var head = it.low.split(' ').some(function (wd) { return wd.indexOf(want) === 0; });
+            return { it: it, k: (head ? 0 : 1), n: n };
+          }).sort(function (a, b) { return a.k - b.k || a.n - b.n; })
+            .map(function (x) { return x.it; });
+        }
+        list.innerHTML = hits.map(function (it, n) {
+          return '<button type="button" class="ss-i' + (it.val === sel.value ? ' on' : '') +
+            (n === 0 ? ' act' : '') + '" data-i="' + it.i + '">' + esc(it.text) +
+            (it.alt ? '<i class="ss-alt">' + esc(it.alt) + '</i>' : '') + '</button>';
+        }).join('');
+        pop.querySelector('.ss-none').hidden = !!hits.length;
+        place();
+      };
+      var pick = function (i) {
+        sel.selectedIndex = i;
+        close();
+        label();
+        // Фокус возвращаем на поле: выбрать трех соисполнителей подряд с
+        // клавиатуры иначе нельзя. Если место перерисовалось (peoplePick),
+        // фокус ставит уже оно — на свою свежую кнопку.
+        btn.focus();
+        try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* старый браузер */ }
+      };
+      list.addEventListener('click', function (e) {
+        var b = e.target.closest('.ss-i');
+        if (b) pick(+b.getAttribute('data-i'));
+      });
+      q.addEventListener('input', paint);
+      q.addEventListener('keydown', function (e) {
+        var items = list.querySelectorAll('.ss-i');
+        var act = list.querySelector('.ss-i.act') || items[0];
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (act) pick(+act.getAttribute('data-i'));
+          return;
+        }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        if (!items.length) return;
+        var at = Array.prototype.indexOf.call(items, act);
+        var to = Math.max(0, Math.min(items.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)));
+        Array.prototype.forEach.call(items, function (x) { x.classList.remove('act'); });
+        items[to].classList.add('act');
+        items[to].scrollIntoView({ block: 'nearest' });
+      });
+      paint();
+      place();
+      q.focus();
+      document.addEventListener('keydown', onKey, true);
+      document.addEventListener('mousedown', onOut, true);
+      // true: прокрутка идет у тела модалки и у страницы, всплытия у нее нет.
+      document.addEventListener('scroll', place, true);
+      window.addEventListener('resize', place);
+    };
+    btn.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      // Пока селект выключен (идет сохранение), выбирать нечего.
+      if (!sel.disabled) open();
+    });
   }
   function loadTaskPeople(cb) {
     if (state.taskPeople && state.taskPeople.length) { cb(state.taskPeople); return; }
@@ -7542,6 +7731,161 @@
     return '<span class="sev ag-chip' + (t.agent_state === 'ask' ? ' ask' : '') +
       ' wk-mark" title="' + esc(st.hint) + '">' + st.label + '</span>';
   }
+  /* ── Поиск по всему задачнику ───────────────────────────────────────────────
+     Поиск на экранах фильтрует то, что экран уже загрузил: стоишь на этой
+     неделе — ищешь по этой неделе, и задача месячной давности не находится
+     никогда (Павел 08.10.2026: «пытаюсь найти эти задачи, пока сложно
+     дается»). Поэтому слова от двух букв уводят на свой экран: сервер ищет по
+     всей базе, а строка результата говорит, из какой задача недели и где
+     именно нашлось слово. */
+  function fndWords() {
+    return (state.taskQ || '').toLowerCase().split(/\s+/)
+      .filter(function (w) { return w.length >= 2; }).slice(0, 6);
+  }
+  function fndOn() { return fndWords().length > 0; }
+  /* Подсветка совпадений. Одним проходом по тексту, а не заменой в готовом
+     html: иначе «amp» из запроса попадет внутрь экранированного символа. */
+  function fndMark(text, words) {
+    text = text || '';
+    if (!words.length) return esc(text);
+    var re = new RegExp('(' + words.map(function (w) {
+      return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|') + ')', 'gi');
+    var out = '', last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index)) + '<mark>' + esc(m[0]) + '</mark>';
+      last = m.index + m[0].length;
+      if (!m[0]) re.lastIndex++;
+    }
+    return out + esc(text.slice(last));
+  }
+  function fndWeek(t) {
+    if (!t.week_starts) return 'без недели';
+    var a = new Date(t.week_starts), b = new Date(a.getTime() + 6 * 86400000);
+    // Неделя на стыке месяцев: «29 сен – 5 окт», а не «29–5 окт».
+    return a.getMonth() === b.getMonth()
+      ? a.getDate() + '–' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()]
+      : a.getDate() + ' ' + MONTHS_RU[a.getMonth()] + ' – ' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()];
+  }
+  var fndTimer = null;
+  /* Перерисовка, не роняя каретку: человек продолжает печатать, пока ответ
+     летит с сервера. */
+  function fndRedraw() {
+    var on = document.activeElement && document.activeElement.id === 'tsk-q';
+    var pos = on ? document.activeElement.selectionStart : 0;
+    renderHead(); renderView();
+    if (!on) return;
+    var again = el('tsk-q');
+    if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+  }
+  function loadTaskFind(q) {
+    if (fndTimer) clearTimeout(fndTimer);
+    state.fndAsked = q;
+    state.fndErr = '';
+    // Четверть секунды тишины: иначе на каждую букву уходит запрос.
+    fndTimer = setTimeout(function () {
+      api('/admin/api/tasks/search?q=' + encodeURIComponent(q)).then(function (r) {
+        // Пока ждали, человек дописал еще слово — этот ответ уже не про то.
+        if (state.fndAsked !== q) return;
+        state.fndFound = { q: q, tasks: (r && r.tasks) || [], total: (r && r.total) || 0 };
+        if (state.page === 'tasks') fndRedraw();
+      }).catch(function () {
+        if (state.fndAsked !== q) return;
+        // Ошибку не кладем в кэш результатов: иначе повтор по той же строке
+        // уже никогда не уйдет, а кнопка «Повторить» станет враньем.
+        state.fndErr = q;
+        if (state.page === 'tasks') fndRedraw();
+      });
+    }, 260);
+  }
+  function fndSkeleton() {
+    var row = '<div class="sk-row fnd-sk">' +
+      '<span class="shim sk-cell w60"></span>' +
+      '<span class="shim sk-cell w40"></span></div>';
+    return '<div class="sk-list">' + row + row + row + '</div>';
+  }
+  function renderTaskFind(view) {
+    var q = (state.taskQ || '').trim(), words = fndWords();
+    var got = state.fndFound && state.fndFound.q === q ? state.fndFound : null;
+    var failed = state.fndErr === q;
+    if (!got && !failed && state.fndAsked !== q) loadTaskFind(q);
+
+    var head = '', body;
+    if (failed) {
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">Поиск не ответил</div>' +
+        '<div class="wk-empty-s">Похоже, пропал интернет. Задачи никуда не делись.</div>' +
+        '<button class="bp sm" id="fnd-retry">' + ic('refresh', 14) + 'Попробовать снова</button></div>';
+    } else if (!got) {
+      head = 'ищу по всему задачнику…';
+      body = fndSkeleton();
+    } else if (!got.tasks.length) {
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">Ничего не нашлось</div>' +
+        '<div class="wk-empty-s">Ни одной задачи с такими словами. Попробуй одно слово вместо ' +
+          'нескольких или фамилию исполнителя: ищем по названию, описанию, критерию, ' +
+          'обсуждению, людям и ученикам.</div></div>';
+    } else {
+      head = got.total + ' ' + plural(got.total, 'задача', 'задачи', 'задач') + ' по всему задачнику' +
+        (got.total > got.tasks.length ? ', показываю первые ' + got.tasks.length : '');
+      body = got.tasks.map(function (t) {
+        var extra = ['<span class="dy-m fnd-week">неделя ' + esc(fndWeek(t)) + '</span>'];
+        // Статус показываем у всего, что уже не в работе: ищут обычно старое,
+        // и «эта закрыта, а эта отменена» — первое, что надо понять.
+        if (t.status === 'done' || t.status === 'cancel') {
+          extra.push('<span class="sev ' + TASK_ST[t.status].cls + '">' + TASK_ST[t.status].label + '</span>');
+        }
+        if (t.found_in) {
+          extra.push('<span class="dy-m fnd-in"><i>' + esc(t.found_in) + '</i>' +
+            fndMark(t.excerpt || '', words) + '</span>');
+        }
+        return dyRow(t, { who: true, due: true, odWord: true, readOnly: true,
+                          mark: words, extra: extra });
+      }).join('');
+    }
+
+    view.innerHTML = '<div class="card listcard">' +
+      '<div class="list-tools fnd-tools">' +
+        '<div class="searchwrap wk-search has-val">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Слово из задачи, фамилия, ученик" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx" title="Очистить поиск" aria-label="Очистить поиск">' + ic('x', 12) + '</button></div>' +
+        (head ? '<span class="fnd-head">' + esc(head) + '</span>' : '') +
+      '</div>' +
+      '<div class="list-body fnd-list">' + body + '</div>' +
+    '</div>';
+
+    var qi = el('tsk-q');
+    qi.addEventListener('input', function () {
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
+      var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
+    if (el('fnd-retry')) el('fnd-retry').addEventListener('click', function () {
+      state.fndErr = ''; state.fndAsked = null; fndRedraw();
+    });
+    qi.focus();
+    try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) {}
+    // Экран клавиатурный по природе: человек печатает и жмет Enter на найденном.
+    Array.prototype.forEach.call(view.querySelectorAll('.dy-row[data-tid]'), function (row) {
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      var open = function () { openTask(+row.getAttribute('data-tid')); };
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('[data-goalid]')) return;
+        open();
+      });
+      row.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target.closest('[data-goalid]')) return;
+        e.preventDefault(); open();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation(); openTask(+b.getAttribute('data-goalid'));
+      });
+    });
+  }
   function dyRow(t, opts) {
     opts = opts || {};
     var me = state.taskMe;
@@ -7594,8 +7938,13 @@
     if (!opts.noGoal && t.parent_id && t.parent_title) {
       meta.push('<button class="tsk-goal dy-goal" data-goalid="' + t.parent_id + '">' + ic('target', 11) + '<span>' + esc(t.parent_title) + '</span></button>');
     }
+    // extra — подписи, которые нужны только одному экрану (поиск: из какой
+    // недели задача и где нашлось слово). Последними: кусок текста занимает
+    // свою строку, и все, что после него, уехало бы на третью.
+    if (opts.extra) meta = meta.concat(opts.extra);
     return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
-      '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) + esc(t.title) + '</span>' +
+      '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) +
+        (opts.mark ? fndMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
         (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
@@ -8249,7 +8598,7 @@
     }
     var hint = state.schedEdit
       ? '<div class="zw-hint">Клик по клетке отмечает час свободным, клик по своему зеленому часу — убирает. Час с записанным клиентом убрать нельзя: сначала отмените запись в карточке.</div>'
-      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
+      : '<div class="zw-hint">Зеленое — человек свободен, этот час можно продать клиенту. Голубое — час уже занят уроком или разбором. Темно-синее — планерка команды. Серое — встреча в зуме, ссылку видно прямо в слоте. Чип в рамке — встреча в нашем сервисе, у идущей рамка толще. Свободные часы отмечают сами преподаватели и тьюторы, здесь или в боте по четвергам; планерки ставит руководитель отдела.</div>';
     view.innerHTML = '<div class="card zw sc">' + head + flt + claim + kindNote + body + hint + '</div>';
     schedWire(view, d);
   }
@@ -9822,7 +10171,6 @@
     var q = (state.taskQ || '').toLowerCase().trim();
     // base — то, что доска покажет без отбора по цели: по нему же считают чипы целей.
     var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine);
-    if (q) base = base.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var list = base;
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
@@ -9860,8 +10208,8 @@
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
     view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
-        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         (dept ? boardGoalSelect(state.myboard.dept, base) : '') + '</div>' +
       how +
@@ -9879,10 +10227,10 @@
     var qi = el('tsk-q');
     if (qi) {
       qi.addEventListener('input', function () {
-        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
         var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
       });
-      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
     }
     Array.prototype.forEach.call(view.querySelectorAll('[data-boardwho]'), function (b) {
       b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); state.boardGoal = ''; renderView(); });
@@ -10020,8 +10368,10 @@
     }
     var w = state.myweek, r = w.r || {};
     var tasks = prioSort(w.tasks || []);
+    // Слово из двух букв уводит на экран поиска по всему задачнику (renderTasks),
+    // сюда доходит только одна буква. По одной букве не отбираем: список бы
+    // опустел и экран дня подпрыгнул на пустое место.
     var q = (state.taskQ || '').toLowerCase().trim();
-    if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
     var cap = r.cap || 0, load = r.load || 0;
     var planGiven = !!(r.plan && r.plan.given), repGiven = !!(r.report && r.report.given);
     var sh = wkShift();
@@ -10067,11 +10417,16 @@
     }
 
     var head = planModeSeg() + deptChips() + prioSeg();
-    if (state.planMode === 'day' && sh === 0 && !q) {
-      // Текущая неделя — это день. Панель сверху без поиска: на экране дня
-      // искать нечего, десять строк видны целиком.
+    if (state.planMode === 'day' && sh === 0) {
+      // Текущая неделя — это день. Поиск тут раньше не ставили: фильтровать
+      // десять строк нечего. Теперь он ищет по всему задачнику, и экран дня —
+      // как раз тот, с которого ищут (Павел 08.10.2026), поэтому поле есть.
       var wd = state.taskPrio ? Object.assign({}, w, { tasks: tasks }) : w;
-      renderMyDay(view, wd, r, head + '<span class="wk-spacer"></span>' + meter + act +
+      renderMyDay(view, wd, r, head + '<span class="wk-spacer"></span>' +
+        '<div class="searchwrap wk-search">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
+        meter + act +
         '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' + wkStateLine(r));
       var dg = view.querySelector('.dy-grid');
       if (dg) dg.insertAdjacentHTML('afterend', laterBand(w.later || []));
@@ -10079,8 +10434,8 @@
       view.innerHTML = '<div class="wk-top">' + head + '<span class="wk-spacer"></span>' + wkNav(w.label || r.label) + '</div>' +
         '<div class="card listcard">' +
         '<div class="list-tools brd-tools">' + meter +
-          '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-            '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+            '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
             '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
           act +
           '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
@@ -10095,10 +10450,10 @@
     var qi = el('tsk-q');
     if (qi) {
       qi.addEventListener('input', function () {
-        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
         var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
       });
-      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
     }
     ['wk-collect', 'wk-collect2'].forEach(function (id) {
       if (el(id)) el(id).addEventListener('click', function () { openWeekCollect(w); });
@@ -11472,10 +11827,7 @@
       return renderGantt(view, gtTop);
     }
     var q = (state.taskQ || '').toLowerCase().trim();
-    var list = (state.tasks || []).filter(function (g) {
-      if (!q) return true;
-      return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
-    });
+    var list = (state.tasks || []);
     var order = [''].concat(Object.keys(DEPTS));
     var groups = order.map(function (d) {
       return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
@@ -11484,7 +11836,7 @@
       if (state.taskDept) return grp.dept === state.taskDept;
       // Пустой блок показываем, чтобы было куда завести цель; операционку и
       // «вся компания» — только когда там что-то есть.
-      return grp.goals.length || (deptLive(grp.dept) && !q);
+      return grp.goals.length || deptLive(grp.dept);
     });
 
     var body = groups.map(function (grp) {
@@ -11492,7 +11844,9 @@
       var addRow = adding
         ? '<div class="gl-newgoal"><input class="al-in sm gl-goal-in" data-goal-for="' + (grp.dept || '') + '" maxlength="200" placeholder="Название цели и Enter" autocomplete="off">' +
             '<select class="al-sel sm gl-goal-who" title="Кто ведет"><option value="">Кто ведет</option></select>' +
-            '<select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select>' +
+            // В оправе, как и выбор человека рядом: иначе у одного поля в строке
+            // есть стрелка, а у соседнего нет.
+            '<span class="al-selwrap"><select class="al-sel sm gl-goal-mon">' + glMonthOpts() + '</select></span>' +
             '<button class="qchip gl-goal-x" type="button">Отмена</button></div>'
         : '';
       return '<section class="gl-dept' + (grp.dept ? '' : ' gl-company') + '">' +
@@ -11505,23 +11859,23 @@
     }).join('');
 
     view.innerHTML = '<div class="gl-tools">' + deptChips() + glModeSeg() +
-        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти цель или задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<button class="bp ghost sm gl-meet" id="tsk-meet" title="Импорт встречи">' + ic('doc', 14) + '<span>Импорт встречи</span></button>' +
       '</div>' +
       (groups.length ? body
-        : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
+        : '<div class="card"><div class="empty">Целей пока нет.</div></div>');
 
     wireDeptChips(view);
     wireGlMode(view);
     el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
-      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
       var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
-    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
 
     // Кольца: от прошлого значения к новому, чтобы закрытый шаг было видно движением.
     Array.prototype.forEach.call(view.querySelectorAll('.gl-ring'), function (r) {
@@ -11580,6 +11934,7 @@
           who.innerHTML = people.map(function (x) {
             return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
           }).join('');
+          searchSelect(who);
           var pp = box.querySelector('.gl-add-pp'), px = box.querySelector('.gl-add-ex');
           pick = peoplePick(pp, [], people, { except: +who.value || null, word: 'наблюдатель' });
           pickEx = peoplePick(px, [], people, { except: +who.value || null, word: 'исполнитель' });
@@ -11619,6 +11974,9 @@
       // пустой композер под каждой открытой целью это шум.
       box.addEventListener('focusout', function () {
         setTimeout(function () {
+          // Открытый поиск человека лежит в body, фокус уходит туда — но из
+          // композера человек не уходил, он как раз выбирает исполнителя.
+          if (document.querySelector('.ss-pop')) return;
           if (!box.contains(document.activeElement) && !inp.value.trim()) more.hidden = true;
         }, 150);
       });
@@ -11640,10 +11998,11 @@
     var gi = view.querySelector('.gl-goal-in');
     if (gi) {
       loadTaskPeople(function (people) {
-        var gw = view.querySelector('.gl-goal-who'); if (!gw) return;
+        var gw = view.querySelector('select.gl-goal-who'); if (!gw) return;
         gw.innerHTML = people.map(function (x) {
           return '<option value="' + x.id + '"' + (x.id === state.taskMe ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
         }).join('');
+        searchSelect(gw);
       });
       gi.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { state.glNew = ''; renderView(); return; }
@@ -11652,7 +12011,7 @@
         var dept = gi.getAttribute('data-goal-for') || '';
         var mon = view.querySelector('.gl-goal-mon').value;
         gi.disabled = true;
-        var gwho = view.querySelector('.gl-goal-who');
+        var gwho = view.querySelector('select.gl-goal-who');
         apiSend('/admin/api/tasks', 'POST', { title: title, is_goal: true, dept: dept || null, assignee_id: (gwho && +gwho.value) || state.taskMe || null,
                                               due_at: new Date(mon + 'T23:59:59').toISOString() }, function (r) {
           state.glNew = ''; state.tasks = null;
@@ -11737,6 +12096,18 @@
     return '<div class="rv-facts">' + parts.join('') + '</div>';
   }
 
+  /* Числа плана — не те же, что у отчета: на входе в неделю важно сколько взято
+     и не тащит ли человек в новую неделю старые долги. */
+  function planFacts(f) {
+    f = f || {};
+    var n = f.plan || 0;
+    var parts = ['<span><b class="num">' + n + '</b> ' +
+      plural(n, 'задача', 'задачи', 'задач') + ' в плане</span>'];
+    if (f.overdue) parts.push('<span class="rv-bad"><b class="num">' + f.overdue + '</b> просрочено</span>');
+    if (f.stuck) parts.push('<span class="rv-bad">застряло <b class="num">' + f.stuck + '</b></span>');
+    return '<div class="rv-facts">' + parts.join('') + '</div>';
+  }
+
   function reviewCard(r, period, starts, after) {
     if (document.querySelector('.al-ov')) return;
     var rep = r.report || null;
@@ -11775,7 +12146,21 @@
                 '<textarea id="rv-note" class="al-in al-ta" rows="2" maxlength="1000" ' +
                 'placeholder="Коротко, что поправить в отчете"></textarea></label>' +
               '<div class="ct-err" id="rv-err"></div>'
-            : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
+            : plan
+              /* Уведомление о сдаче плана ведет сюда же, а отчета за идущую
+                 неделю еще нет. Показываем то, что человек правда сдал, иначе
+                 по ссылке из бота открывается пустая карточка. */
+              ? '<span class="sev ' + (plan.late ? RH_ST.late.cls : RH_ST.done.cls) + ' rv-badge">' +
+                  (plan.late ? 'план сдан с опозданием' : 'план сдан') + '</span>' +
+                planFacts(plan.facts) +
+                (plan.text
+                  ? '<div class="rv-said"><div class="rv-lbl">Что планирует</div>' + esc(plan.text) + '</div>'
+                  : '<div class="rv-said muted">Комментарий не оставлен — план это задачи периода, они по кнопке ниже.</div>') +
+                '<div class="rv-state calm">' + ic('clock', 14) +
+                  (period === 'week'
+                    ? 'Неделя еще идет. Отчет и приемка появятся, когда она будет закрыта.'
+                    : 'Период еще идет. Отчет и приемка появятся после него.') + '</div>'
+              : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
         '</div>' +
         (rep
           ? '<div class="al-foot rv-foot">' +
@@ -11783,7 +12168,12 @@
               '<button class="bp al-save" id="rv-ok">' + ic('check', 14) +
                 (rv.state === 'accepted' ? (period === 'week' ? 'Принята' : 'Принят') : (period === 'week' ? 'Принять неделю' : 'Принять')) + '</button>' +
             '</div>'
-          : '') +
+          : plan
+            ? '<div class="al-foot rv-foot">' +
+                '<button class="bp al-save" id="rv-tasks">' + ic('rows', 14) +
+                  (period === 'week' ? 'Задачи недели' : 'Задачи периода') + '</button>' +
+              '</div>'
+            : '') +
       '</div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -11791,6 +12181,11 @@
     var closed = false;
     var close = function () {
       if (closed) return; closed = true;
+      // Пришли по ссылке из бота — убираем ее из адреса, как у задачи и встречи:
+      // иначе обновление страницы снова открывает ту же карточку поверх работы.
+      if (location.hash.indexOf('#rreview/') === 0) {
+        try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      }
       ov.classList.remove('show');
       document.removeEventListener('keydown', onKey);
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
@@ -11799,6 +12194,16 @@
     document.addEventListener('keydown', onKey);
     el('rv-x').addEventListener('click', close);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+    // План не принимают, его читают. Единственное осмысленное действие отсюда —
+    // посмотреть сами задачи периода, текст плана без них мало что говорит.
+    if (el('rv-tasks')) el('rv-tasks').addEventListener('click', function () {
+      close();
+      state.page = 'tasks'; applyTaskSeg('team');
+      if (period === 'week') state.weekShift = rhShiftFor('week', starts) || 0;
+      state.teamWho = { id: r.user_id, name: r.name || '' };
+      state.teamWeek = null; state.tasks = null; state.teamPerson = null;
+      saveUi(); renderSide(); renderTopbar(); renderHead(); renderView();
+    });
     if (!rep) return;
 
     function send(action, note) {
@@ -12201,6 +12606,11 @@
       var isAssignee = me != null && (me === t.assignee_id || execIds.indexOf(me) !== -1);
       var isAuthor = me != null && me === t.author_id;
       var boss = isAuthor || can('tasks_all');
+      // Свою работу не принимают. Право видеть все задачи дает приемку за
+      // других, но не за себя: иначе руководитель закрывает поставленную ему
+      // задачу сам, и тот, кто ее поставил, не узнает об этом никогда
+      // (Ольга на обучении 07.10.2026). Сервер отвечает на это 403.
+      var canAccept = isAuthor || (can('tasks_all') && !isAssignee);
       var canFiles = isAssignee || boss || (me != null && watchIds.indexOf(me) !== -1);
       // Закрытую и отмененную задачу не двигают: срок у нее уже ничего не
       // назначает, а история должна остаться такой, какой была.
@@ -12217,21 +12627,21 @@
       if (isAssignee && t.status === 'block') acts.push(['doing', 'Разблокировать', 'bp']);
       // Принять можно ТОЛЬКО сданное. Кнопка «принять» на несданной задаче
       // отменяет приемку как явление — а ее у команды как раз и не было.
-      if (boss && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
+      if (canAccept && t.status === 'review') { acts.push(['done', 'Принять', 'bp']); acts.push(['return', 'Вернуть', 'al-cancel']); }
       // Руководитель закрывает и несданное: человек сделал, но в систему не
       // зашел (Павел 04.09.2026, «закрыть за Лану»). Исполнителю уйдет
       // сообщение в бот, что задачу закрыли за него.
-      if (boss && !isAssignee && can('tasks_all') && (t.status === 'wait' || t.status === 'doing' || t.status === 'block')) {
+      if (canAccept && !isAssignee && can('tasks_all') && (t.status === 'wait' || t.status === 'doing' || t.status === 'block')) {
         acts.push(['done', 'Закрыть за исполнителя', 'bp ghost al-save']);
       }
-      if (boss && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
+      if (canAccept && t.status !== 'cancel' && t.status !== 'done') acts.push(['cancel', 'Отменить задачу', 'al-cancel']);
       // Приемку иногда отменяют: приняли по ошибке или вскрылось, что работа
       // не доделана. Снятие идет тем же путем, что обычный возврат — с
       // причиной в ленте и уведомлением исполнителю, а не молча.
-      if (boss && t.status === 'done') acts.push(['return', 'Снять с готово', 'al-cancel']);
+      if (canAccept && t.status === 'done') acts.push(['return', 'Снять с готово', 'al-cancel']);
       // Обратно в «готово» возвращается то, что уже сдавали: правило «принимаем
       // только сданное» снятие приемки не отменяет.
-      if (boss && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
+      if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
       var feed = events.map(function (e) {
         return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
@@ -12293,7 +12703,20 @@
           ((isAuthor || isAssignee || can('tasks_all')) && t.status !== 'done' && t.status !== 'cancel'
             ? '<button class="tsk-mwho tsk-edit" id="tk-edit" title="Название, описание, критерий, направление">' + ic('pen', 12) + 'изменить</button>'
             : '') +
-          (t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
+          /* Направление цели меняется прямо здесь, выбором из списка. Раньше оно
+             лежало внутри формы «изменить», а у цели без направления в шапке не
+             было вообще ничего — выглядело так, будто поменять нельзя (Павел
+             07.10.2026). У шага своего направления нет, он идет за целью. */
+          (!t.parent_id && (isAuthor || isAssignee || can('tasks_all')) &&
+             t.status !== 'done' && t.status !== 'cancel'
+            ? '<label class="tsk-mwho tsk-dept" title="К какому отделу относится цель">' +
+                ic('tree', 12) +
+                '<select id="tk-dept" class="tsk-deptsel" aria-label="Направление цели">' +
+                [''].concat(Object.keys(DEPTS)).map(function (d) {
+                  return '<option value="' + d + '"' + ((t.dept || '') === d ? ' selected' : '') +
+                    '>' + (d ? esc(DEPTS[d]) : 'Без направления') + '</option>';
+                }).join('') + '</select></label>'
+            : t.dept ? '<span class="tsk-mwho dim">' + ic('tree', 12) + esc(deptLabel(t.dept)) + '</span>' : '') +
           // Шаг ведет к своей цели одним кликом: вложенных модалок в системе нет
           // (design.md §7.6), поэтому текущая карточка закрывается и открывается
           // карточка цели.
@@ -12497,12 +12920,45 @@
         if (footActs) footActs.hidden = !!mode;
         if (!mode) { picked = []; resT.value = ''; drawPicked(); return; }
         el('tk-resok').textContent = mode === 'review' ? 'Сдать' : 'Сохранить';
-        resT.value = mode === 'review' ? '' : (t.result_text || '');
+        // Что человек уже набрал в строке обсуждения, переезжает сюда. Он писал
+        // это как «сдаю», а не репликой, и просить написать то же самое второй
+        // раз в панели нельзя (Ольга 08.10.2026: «в итоге приходится по два
+        // раза одно и то же писать»). В режиме возврата строка занята причиной
+        // возврата — ее не трогаем.
+        var typed = retMode ? '' : (say.value || '').trim();
+        resT.value = typed || (mode === 'review' ? '' : (t.result_text || ''));
+        if (typed) say.value = '';
         resT.focus();
         body.scrollTop = body.scrollHeight;
       };
       el('tk-rescx').addEventListener('click', function () { setRes(''); });
 
+      /* Смена направления сохраняется сразу: это один выбор, подтверждать его
+         отдельной кнопкой незачем. Не сохранилось — возвращаем прежнее, чтобы
+         на экране не осталось вранье. */
+      var deptSel = el('tk-dept');
+      if (deptSel) {
+        deptSel.addEventListener('change', function () {
+          var was = t.dept || '';
+          var now = deptSel.value;
+          if (now === was) return;
+          deptSel.disabled = true;
+          apiSend('/admin/api/tasks/' + id, 'PATCH', { dept: now }, function () {
+            t.dept = now;
+            deptSel.disabled = false;
+            showToast(now ? 'Цель ушла в «' + DEPTS[now] + '»' : 'Цель стала общей для компании');
+            state.tasks = null; state.myweek = null; state.myboard = null;
+            state.stuck = null; state.mymonth = null;
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            deptSel.disabled = false;
+            deptSel.value = was;
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 403 ? 'Менять может постановщик, ведущий цель или руководитель'
+                                    : 'Не удалось сохранить'));
+          });
+        });
+      }
       var editB = el('tk-edit'), editF = el('tk-editf');
       if (editB) {
         var setEdit = function (on) {
@@ -12658,6 +13114,8 @@
         if (btn) btn.disabled = true;
         apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
           state.tasks = null;
+          // Результат поиска держит прежний статус задачи — он устарел.
+          state.fndFound = null; state.fndAsked = null;
           loadTaskSummary();
           api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
           if (state.page === 'tasks') renderView();
@@ -12714,6 +13172,7 @@
             }, function () { showToast('Не получилось поменять роли'); });
           };
           var ownerSel = box.querySelector('#tk-owner');
+          if (ownerSel) searchSelect(ownerSel, { empty: 'не назначена' });
           if (ownerSel) ownerSel.addEventListener('change', function () {
             var to = +ownerSel.value;
             if (!to || to === t.assignee_id) return;
@@ -12935,6 +13394,18 @@
                 '" maxlength="200"></label>' +
             '<label class="al-f"><span class="al-l">' + (isGoal ? 'Кто ведет' : 'Кому') + ' <i>*</i></span><span class="al-selwrap">' +
               '<select id="nt-who" class="al-sel">' + opts + '</select></span></label>' +
+            // Соисполнители и наблюдатели стоят вплотную к ответственному, а не
+            // в «подробнее» (просьба Ольги на обучении 07.10.2026: «подтянуть
+            // ячейку выше, к ответственному лицу»). Свернуты в одну строку,
+            // чтобы форма постановки не распухла обратно: раскрываются на месте.
+            '<button type="button" class="qchip nt-crewb" id="nt-crewb">' + ic('plus', 11) +
+              'Соисполнители и наблюдатели</button>' +
+            '<div id="nt-crew" hidden>' +
+              '<div class="al-f"><span class="al-l">Еще исполнители</span><div id="nt-exec"></div>' +
+                '<span class="al-hint">Делают вместе с тем, кому поставлена: видят ее в своем плане, могут взять и сдать. За срок отвечает первый.</span></div>' +
+              '<div class="al-f"><span class="al-l">Наблюдатели</span><div id="nt-watch"></div>' +
+                '<span class="al-hint">В курсе, но не делают: видят задачу в «Участвую», получают ее движение в бот.</span></div>' +
+            '</div>' +
             // У цели направление — первое, что нужно решить: это ее зона
             // ответственности. У задачи — уточнение после «что-кому-когда».
             (isGoal
@@ -12960,12 +13431,6 @@
                 (isGoal ? 'Важная цель' : 'Важная задача') + '</button>' +
               '<span class="al-hint">Важное поднимается в списке выше и попадает в квадрант «срочно и важно».</span>' +
             '</div>' +
-            // Участники — соисполнители и наблюдатели при одном ответственном
-            // (Павел 04.09.2026): видят задачу в «Участвую», получают движение в бот.
-            '<div class="al-f"><span class="al-l">Еще исполнители</span><div id="nt-exec"></div>' +
-              '<span class="al-hint">Делают вместе с тем, кому поставлена: видят ее в своем плане, могут взять и сдать. За срок отвечает первый.</span></div>' +
-            '<div class="al-f"><span class="al-l">Наблюдатели</span><div id="nt-watch"></div>' +
-              '<span class="al-hint">В курсе, но не делают: видят задачу в «Участвую», получают ее движение в бот.</span></div>' +
             // Направление и цель идут после «что-кому-когда»: это уточнения, а
             // разрывать ими обязательную связку значит замедлять постановку.
             // Выбирают обычно одно из двух — либо задача самостоятельная и у нее
@@ -12998,6 +13463,11 @@
       if (moreD.hidden) {
         moreB.addEventListener('click', function () { moreD.hidden = false; moreB.hidden = true; });
       } else moreB.hidden = true;
+      var crewB = ov.querySelector('#nt-crewb'), crewD = ov.querySelector('#nt-crew');
+      if (crewB) crewB.addEventListener('click', function () {
+        crewD.hidden = false; crewB.hidden = true;
+        var f = crewD.querySelector('input, button'); if (f) f.focus();
+      });
       var closed = false;
       var close = function () {
         if (closed) return; closed = true;
@@ -13032,6 +13502,7 @@
 
       // Участники: ответственный из списка исключается, при смене «кому» —
       // пересобирается.
+      searchSelect(el('nt-who'));
       var partPick = el('nt-watch') ? peoplePick(el('nt-watch'), [], people, { except: +el('nt-who').value || null, word: 'наблюдатель' }) : null;
       var execPick = el('nt-exec') ? peoplePick(el('nt-exec'), [], people, { except: +el('nt-who').value || null, word: 'исполнитель' }) : null;
       el('nt-who').addEventListener('change', function () {
@@ -13060,7 +13531,12 @@
         if (d.title) ti.value = d.title;
         if (d.details) el('nt-det').value = d.details;
         if (d.result_expect) el('nt-res').value = d.result_expect;
-        if (d.assignee_id) el('nt-who').value = String(d.assignee_id);
+        if (d.assignee_id) {
+          el('nt-who').value = String(d.assignee_id);
+          // Через change, а не молча: от него обновляются и надпись на выборе
+          // человека, и списки соисполнителей (ответственный из них уходит).
+          try { el('nt-who').dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* старый браузер */ }
+        }
         if (d.due_date) { el('nt-due').value = d.due_date; markWhen(); }
         if (goalS && d.parent_id) {
           goalS.value = String(d.parent_id);
@@ -13712,19 +14188,40 @@
         '</div>';
       el('mi-x').addEventListener('click', close);
       el('mi-cancel').addEventListener('click', close);
+      // Исполнителя на разборе встречи ищут тем же поиском по имени: тут строк
+      // бывает два десятка, и в каждой список на весь отдел.
+      Array.prototype.forEach.call(card.querySelectorAll('.mi-who select'), function (x) {
+        searchSelect(x, { empty: 'не назначен' });
+      });
 
       var save = el('mi-save'), count = el('mi-count');
       var itemsLeft = function () {
         return card.querySelectorAll('.mi-item:not(.made):not(.off)').length;
       };
+      // Пункты, которые уйдут в задачник ничьими. Ольга на обучении 07.10.2026:
+      // «задачи остаются либо без ответственного лица, либо там куча
+      // ответственных» — из 335 задач, заведенных со встреч, 45 оказались ничьи.
+      var nobodyLeft = function () {
+        return Array.prototype.filter.call(
+          card.querySelectorAll('.mi-item:not(.made):not(.off)'),
+          function (it) {
+            var sel = it.querySelector('.mi-who select');
+            return sel && !(+sel.value);
+          }).length;
+      };
       var mark = function () {
         var n = itemsLeft();
+        // Исполнителя поправили — снимаем взвод с кнопки: предупреждение было
+        // про прошлое состояние экрана.
+        save.removeAttribute('data-armed');
         // «Сняты» и «уже заведены» — разные новости, и путать их нельзя: в
         // первом случае человек сам отказался, во втором работа уже в задачнике.
         var off = card.querySelectorAll('.mi-item.off:not(.made)').length;
         var made = card.querySelectorAll('.mi-item.made').length;
+        var nob = nobodyLeft();
         count.textContent = n
-          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению'
+          ? n + ' ' + plural(n, 'пункт', 'пункта', 'пунктов') + ' к заведению' +
+            (nob ? ', ' + nob + ' без исполнителя' : '')
           : !off ? (made ? 'Все пункты в задачнике. Правки названия, исполнителя и срока уйдут в задачи' : 'Все пункты уже в задачнике')
           : made ? 'Заведено все, кроме снятого'
           : 'Все пункты сняты';
@@ -13733,6 +14230,7 @@
         save.disabled = !n && !made;
         save.classList.toggle('off', !n && !made);
         save.innerHTML = n ? ic('plus', 14) + 'Завести' : ic('check', 14) + 'Сохранить';
+        count.classList.toggle('warn', !!(n && nob));
       };
       markRef = mark;
       // Высота заголовков по содержимому: считаем после вставки в DOM, иначе
@@ -13758,6 +14256,11 @@
           }
         });
       }
+      // Выбрали исполнителя — счетчик ничьих пересчитывается сразу, иначе
+      // предупреждение под кнопкой говорит про прошлое состояние экрана.
+      if (!wired) card.addEventListener('change', function (e) {
+        if (e.target.closest && e.target.closest('.mi-who')) markRef();
+      });
       if (!wired) { wired = true; card.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('.mi-skip');
         if (!btn) return;
@@ -13799,6 +14302,17 @@
       };
       save.addEventListener('click', function () {
         if (save.disabled) return;
+        // Ничья задача — потерянная задача: в плане она не всплывает ни у кого.
+        // Не запрещаем (решать человеку), но говорим вслух и просим второй клик.
+        var nob = nobodyLeft();
+        if (nob && !save.getAttribute('data-armed')) {
+          save.setAttribute('data-armed', '1');
+          save.innerHTML = ic('alert', 14) + 'Все равно завести';
+          count.classList.add('warn');
+          count.textContent = nob + ' ' + plural(nob, 'пункт уйдет', 'пункта уйдут', 'пунктов уйдут') +
+            ' ничьими: их никто не увидит в своем плане';
+          return;
+        }
         save.disabled = true; save.classList.add('loading');
         // Заводим по протоколу за раз и в том же порядке, что на экране: пакет
         // из трех файлов — это три независимых разбора, и упавший третий не
@@ -23894,11 +24408,27 @@
   }
   function mxRow(m) {
     var st = MX_STATE[m.state] || MX_STATE.ended;
+    /* Метки не просто подписи: по ним встреча открывается сразу на нужном месте.
+       Павел 07.10.2026 просил «чтобы прям кнопкой можно было посмотреть, что
+       ушло в задачник». Раньше это был текст, и было непонятно, что внутрь
+       вообще можно зайти. */
+    var AT_RU = { goals: 'договоренности', tasks: 'задачи со встречи',
+                  text: 'расшифровку', sum: 'конспект' };
+    function tag(to, body) {
+      /* Имя для озвучки называет встречу: в списке три одинаковых «конспект»
+         подряд, и голосом не понять, чей. Образец рядом — шеврон строки. */
+      return '<button type="button" class="mx-tag mx-tagb" data-mxopen="' + esc(m.key) +
+        '" data-mxat="' + to + '" aria-label="' + esc((m.title || 'Встреча')) +
+        ': открыть ' + AT_RU[to] + '">' + body + '</button>';
+    }
     var marks = '<span class="sev ' + st.cls + '">' + st.label + '</span>';
-    if (m.agreements) marks += '<span class="mx-tag">' + ic('check', 11) +
-      m.agreements + ' ' + plural(m.agreements, 'договоренность', 'договоренности', 'договоренностей') + '</span>';
-    if (m.has_text) marks += '<span class="mx-tag">' + ic('mic', 11) + 'расшифровка</span>';
-    if (m.has_notes) marks += '<span class="mx-tag">' + ic('doc', 11) + 'конспект</span>';
+    /* agreements приходит счетом задач по этой встрече — так его и подписываем.
+       «7 договоренностей» рядом с блоком «Уехало в задачник» на том же числе
+       читалось как два разных счета. */
+    if (m.agreements) marks += tag('tasks', ic('task', 11) + m.agreements + ' ' +
+      plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
+    if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
+    if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
     var sub = [];
     if (m.by) sub.push(esc(m.by));
     if (m.dept) sub.push(esc(deptLabel(m.dept)));
@@ -23933,12 +24463,16 @@
     if (!c) return '<div class="mx-card"><div class="mx-load">Открываю встречу…</div></div>';
     if (c === 'none') return '<div class="mx-card"><div class="mx-load">Не удалось открыть встречу.</div></div>';
     var parts = [];
+    var jumps = [];
     if (c.summary) {
-      parts.push('<div class="mx-h">Конспект</div><div class="mx-sum">' +
+      parts.push('<div class="mx-h" id="mx-s-sum">Конспект</div><div class="mx-sum">' +
         esc(c.summary).replace(/\n/g, '<br>') + '</div>');
+      jumps.push(['sum', ic('doc', 13) + 'Конспект']);
     }
     if ((c.goals || []).length) {
-      parts.push('<div class="mx-h">О чем договорились</div>' + c.goals.map(function (g) {
+      jumps.push(['goals', ic('check', 13) + 'Договоренности ' +
+        '<b class="num">' + c.goals.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-goals">О чем договорились</div>' + c.goals.map(function (g) {
         return '<div class="mx-goal"><div class="mx-goal-t">' + esc(g.title) + '</div>' +
           (g.steps || []).map(function (st) {
             return '<div class="mx-step">' + esc(st) + '</div>';
@@ -23946,7 +24480,9 @@
       }).join(''));
     }
     if ((c.tasks || []).length) {
-      parts.push('<div class="mx-h">Уехало в задачник</div>' + c.tasks.map(function (t) {
+      jumps.push(['tasks', ic('task', 13) + 'Задачи со встречи ' +
+        '<b class="num">' + c.tasks.length + '</b>']);
+      parts.push('<div class="mx-h" id="mx-s-tasks">Уехало в задачник</div>' + c.tasks.map(function (t) {
         var ts = TASK_ST[t.status] || TASK_ST.wait;
         return '<button type="button" class="mx-task" data-mxtask="' + t.id + '">' +
           '<span class="mx-task-t">' + esc(t.title) + '</span>' +
@@ -23955,8 +24491,12 @@
       }).join(''));
     }
     var text = state.meetxText[m.key];
+    /* Расшифровка стоит в ряду, если она у встречи ЕСТЬ, а не если ее уже
+       скачали: ряд обещает опись содержимого, и «появляется после нажатия» —
+       это другое обещание. Нажатие на пункт догрузит текст само. */
+    if (c.text_chars) jumps.push(['text', ic('mic', 13) + 'Расшифровка']);
     if (text) {
-      parts.push('<div class="mx-h">Расшифровка</div><div class="mx-text">' +
+      parts.push('<div class="mx-h" id="mx-s-text">Расшифровка</div><div class="mx-text">' +
         esc(text).replace(/\n/g, '<br>') + '</div>');
     }
     var acts = [];
@@ -23964,9 +24504,17 @@
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
         ic('mic', 13) + 'Показать расшифровку (' + Math.round(c.text_chars / 1000) + ' тыс. знаков)</button>');
     }
+    /* Скачать можно, не открывая: расшифровка на час разговора — это десятки
+       тысяч знаков, и читать ее чаще удобнее в своем редакторе, чем в карточке
+       (Павел 07.10.2026). Файл собираем в браузере из того же ответа сервера,
+       чтобы ключ доступа не уезжал в адрес ссылки. */
+    if (c.text_chars) {
+      acts.push('<button type="button" class="qchip" data-mxdl="' + esc(m.key) + '">' +
+        ic('dl', 13) + 'Скачать файлом</button>');
+    }
     if (c.url) {
       acts.push('<a class="qchip" href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
-        ic('go', 13) + 'Запись встречи</a>');
+        ic('ext', 13) + 'Запись встречи</a>');
     }
     if (c.session_id) {
       acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
@@ -23976,7 +24524,16 @@
       parts.push('<div class="mx-load">Ни конспекта, ни договоренностей по этой встрече пока нет. ' +
         'Конспект появляется после разбора записи.</div>');
     }
-    return '<div class="mx-card">' + parts.join('') +
+    /* Ряд переходов: он не только навигация, но и опись — видно, что внутри
+       встречи вообще есть договоренности и задачи. Пока карточка падала,
+       человек не знал, что они там лежат (Павел 07.10.2026). Один блок — ряд
+       не нужен, прыгать некуда. */
+    var nav = jumps.length > 1
+      ? '<div class="mx-jump">' + jumps.map(function (j) {
+          return '<button type="button" class="qchip" data-mxjump="' + j[0] + '">' + j[1] + '</button>';
+        }).join('') + '</div>'
+      : '';
+    return '<div class="mx-card">' + nav + parts.join('') +
       (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
   }
   /* ── Раздел EastSide Meeting ───────────────────────────────────────────────
@@ -24276,15 +24833,103 @@
   }
   /* Обработчики карточки встречи: расшифровка по кнопке, задача, ученик. Живут
      отдельно, потому что карточка рисуется и на экране встречи, и в списке. */
+  /* Расшифровку тянем одним путем и для показа, и для скачивания: второй заход
+     за тем же текстом сервер только зря греет. */
+  function mxText(key, done, fail) {
+    if (state.meetxText[key]) { done(state.meetxText[key]); return; }
+    api('/admin/api/meet/journal/' + encodeURIComponent(key) + '/text').then(function (r) {
+      state.meetxText[key] = (r && r.text) || 'Расшифровки нет.';
+      done(state.meetxText[key]);
+    }).catch(fail);
+  }
+  /* Имя файла латиницей и датой: кириллица в именах ломает просмотр у части
+     почтовиков и облаков, а дата нужна, чтобы десяток скачанных расшифровок не
+     лег в «Загрузки» одинаковыми. */
+  function mxFileName(m) {
+    var d = m.at ? new Date(m.at) : new Date();
+    if (isNaN(d.getTime())) return 'rasshifrovka-vstrecha.txt';
+    // Время в имени: за день встреч бывает несколько, и в «Загрузках» файлы с
+    // одной датой различить нечем.
+    var ymd = ('000' + d.getFullYear()).slice(-4) + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    return 'rasshifrovka-' + ymd + '-' +
+      ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2) + '.txt';
+  }
+  function mxSaveText(m, text) {
+    /* В файле дата полная, а не «Сегодня»: его откроют через месяц, и слово
+       «сегодня» в шапке будет врать. */
+    var d = m.at ? new Date(m.at) : null;
+    var when = d && !isNaN(d.getTime())
+      ? d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) +
+        ', ' + hhmm(m.at)
+      : '';
+    var head = (m.title || 'Встреча') + (when ? '\n' + when : '') + '\n\n';
+    var url = URL.createObjectURL(new Blob([head + text], { type: 'text/plain;charset=utf-8' }));
+    var a = document.createElement('a');
+    a.href = url; a.download = mxFileName(m);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+  /* Один путь на оба перехода — из строки списка и из ряда в карточке.
+     Блока еще нет (расшифровку не грузили) — сначала грузим, прыжок доживает до
+     перерисовки в state.meetxJump. Заголовок, к которому пришли, на секунду
+     подсвечивается: на коротких карточках прокручивать нечего, и без этого
+     нажатие кнопки выглядит беззвучным. */
+  function mxGoTo(m, want) {
+    var t = el('mx-s-' + want);
+    if (t) {
+      state.meetxJump = null;
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      t.classList.add('hit');
+      setTimeout(function () { t.classList.remove('hit'); }, 1400);
+      return;
+    }
+    // Не расшифровка или она уже забрана, а блока все равно нет — прыгать некуда.
+    if (want !== 'text' || state.meetxText[m.key]) { state.meetxJump = null; return; }
+    state.meetxJump = 'text';
+    mxText(m.key, function () {
+      if (state.page === 'meetx') renderView();
+    }, function () {
+      state.meetxJump = null;
+      showToast('Не удалось открыть расшифровку');
+    });
+  }
   function wireMeetxCard(view, m) {
+    if (state.meetxJump) {
+      var want = state.meetxJump;
+      setTimeout(function () { mxGoTo(m, want); }, 0);
+    }
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxjump]'), function (b) {
+      b.addEventListener('click', function () { mxGoTo(m, b.getAttribute('data-mxjump')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxdl]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-mxdl');
+        var was = b.innerHTML;
+        b.disabled = true; b.innerHTML = ic('dl', 13) + 'Собираю файл…';
+        mxText(key, function (text) {
+          b.disabled = false; b.innerHTML = was;
+          mxSaveText(m, text);
+          showToast('Расшифровка скачана', mxFileName(m));
+        }, function () {
+          b.disabled = false; b.innerHTML = was;
+          showToast('Не удалось забрать расшифровку', 'попробуй еще раз');
+        });
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtext]'), function (b) {
       b.addEventListener('click', function () {
         var key = b.getAttribute('data-mxtext');
-        b.disabled = true; b.textContent = 'Загружаю…';
-        api('/admin/api/meet/journal/' + encodeURIComponent(key) + '/text').then(function (r) {
-          state.meetxText[key] = (r && r.text) || 'Расшифровки нет.';
+        var was = b.innerHTML;
+        b.disabled = true; b.innerHTML = ic('mic', 13) + 'Загружаю…';
+        mxText(key, function () {
           if (state.page === 'meetx') renderView();
-        }).catch(function () { showToast('Не удалось открыть расшифровку'); });
+        }, function () {
+          // Подпись возвращаем целиком: иначе кнопка остается с «Загружаю…»
+          // навсегда и спорит с тостом об ошибке.
+          b.disabled = false; b.innerHTML = was;
+          showToast('Не удалось открыть расшифровку');
+        });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtask]'), function (b) {
@@ -24407,6 +25052,15 @@
         state.meetxOpen = b.getAttribute('data-mxgo'); renderView();
       });
     });
+    /* Метка открывает встречу и помнит, куда прыгнуть: карточка грузится
+       асинхронно, поэтому сам прыжок делает отрисовка карточки. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxopen]'), function (b) {
+      b.addEventListener('click', function () {
+        state.meetxJump = b.getAttribute('data-mxat');
+        state.meetxOpen = b.getAttribute('data-mxopen');
+        renderView();
+      });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
       r.addEventListener('click', function (e) {
         if (e.target.closest('a, button')) return;
@@ -24492,6 +25146,13 @@
         : '<select class="tm-sel" data-uid="' + u.id + '">' + legacy + roleOpts(u.role) + '</select>';
       return '<div class="tm-ed">' +
         '<div class="tm-ed-g">' +
+          /* Имя правится здесь же, а не только при заведении: человек выходит
+             замуж, приходит с опечаткой в фамилии, начинает работать под полным
+             именем вместо одного имени (Павел, 07.10.2026). */
+          '<label class="tm-f"><span>Имя и фамилия</span>' +
+            '<input class="tm-nm-f" data-uid="' + u.id + '" type="text" autocomplete="off" ' +
+              (lock ? 'disabled ' : '') +
+              'value="' + esc(u.name || '') + '" placeholder="как зовут человека"></label>' +
           '<label class="tm-f"><span>Роль</span>' + sel + '</label>' +
           (lock ? '' : '<label class="tm-f"><span>Руководитель</span>' +
             '<select class="tm-mgr" data-uid="' + u.id + '">' + mgrOpts(u.manager_id, u.id) + '</select></label>') +
@@ -24961,6 +25622,32 @@
       }, function () {
         hib.disabled = false;
         showToast('Не удалось сохранить — попробуйте еще раз');
+      });
+    });
+    /* Имя сохраняется по уходу из поля, как и почта. Пустое не отправляем вовсе:
+       сервер отобьет 422, а человек останется смотреть на пустую строку и гадать,
+       сохранилось оно или нет. */
+    Array.prototype.forEach.call(view.querySelectorAll('.tm-nm-f'), function (inp) {
+      inp.addEventListener('change', function () {
+        var uid = inp.getAttribute('data-uid');
+        var u = (state._team || []).filter(function (x) { return String(x.id) === uid; })[0];
+        var val = inp.value.trim();
+        if (!val) {
+          inp.value = (u && u.name) || '';
+          showToast('Имя не может быть пустым', 'по нему человека зовут в задачах и встречах');
+          return;
+        }
+        if (u && (u.name || '') === val) return;
+        apiSend('/admin/api/users/' + uid, 'PATCH', { name: val }, function (r) {
+          if (u) u.name = (r && r.user && r.user.name) || val;
+          /* Перерисовываем: имя стоит еще в строке дерева, в кружке с инициалами
+             и в списке руководителей — иначе половина экрана останется со старым. */
+          renderView();
+          showToast('Имя сохранено');
+        }, function () {
+          inp.value = (u && u.name) || '';
+          showToast('Не удалось сохранить — попробуйте еще раз');
+        });
       });
     });
     /* почта сохраняется по уходу из поля: печатать и слать на каждую букву — лишние запросы */
@@ -38714,6 +39401,9 @@
     // Высота названий по тексту — формулировку надо видеть целиком, как в импорте.
     var grow = function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; };
     Array.prototype.forEach.call(host.querySelectorAll('.mi-title'), grow);
+    Array.prototype.forEach.call(host.querySelectorAll('.mi-who select'), function (x) {
+      searchSelect(x, { empty: 'не назначен' });
+    });
     host.addEventListener('input', function (e) {
       if (e.target.classList && e.target.classList.contains('mi-title')) grow(e.target);
     });
