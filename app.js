@@ -6943,13 +6943,14 @@
             free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select></span>'
         : '';
       box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
+      searchSelect(box.querySelector('select.pp-add'), { find: 'Кого добавить' });
       Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
         b.addEventListener('click', function () {
           ids = ids.filter(function (x) { return x !== +b.getAttribute('data-ppx'); });
           draw(); if (opts.onChange) opts.onChange(ids);
         });
       });
-      var add = box.querySelector('.pp-add');
+      var add = box.querySelector('select.pp-add');
       if (add) add.addEventListener('change', function () {
         if (!add.value) return;
         ids.push(+add.value); draw(); if (opts.onChange) opts.onChange(ids);
@@ -6957,6 +6958,122 @@
     }
     draw();
     return { get: function () { return ids.slice(); } };
+  }
+  /* Выбор человека с поиском. Сам select остается в разметке и остается
+     источником значения: все, кто его читает и пишет, работают как раньше —
+     меняется только то, чем человек в него тыкает. В списке 37 фамилий, и
+     крутить его колесом дольше, чем набрать три буквы (Ольга 08.10.2026:
+     «сделать возможность напечатать имя, а не выбирать из списка, людей
+     много»; то же просил Павел 17.09.2026 про участников планерки). */
+  function searchSelect(sel, opts) {
+    if (!sel || sel.getAttribute('data-ss')) return;
+    opts = opts || {};
+    sel.setAttribute('data-ss', '1');
+    var wrap = sel.parentNode;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    // Кнопка носит классы селекта — иначе ее пришлось бы описывать в стилях
+    // отдельно под каждое место. Плата за это: querySelector по такому классу
+    // находит теперь кнопку, она в разметке первая. Ищи сам select как
+    // 'select.имя-класса'.
+    btn.className = sel.className + ' ss-btn';
+    sel.hidden = true;
+    sel.style.display = 'none';
+    wrap.insertBefore(btn, sel);
+
+    var label = function () {
+      var o = sel.options[sel.selectedIndex];
+      btn.textContent = (o && o.text) || opts.empty || 'Выбрать';
+      btn.classList.toggle('ss-empty', !sel.value);
+    };
+    label();
+    sel.addEventListener('change', label);
+
+    var pop = null;
+    var close = function () {
+      if (!pop) return;
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      pop = null;
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('mousedown', onOut, true);
+    };
+    var onKey = function (e) {
+      if (e.key === 'Escape') { e.stopPropagation(); close(); btn.focus(); }
+    };
+    // btn.contains, а не сравнение с самим btn: клик приходится на текст внутри.
+    var onOut = function (e) {
+      if (pop && !pop.contains(e.target) && !btn.contains(e.target)) close();
+    };
+
+    var open = function () {
+      if (pop) { close(); return; }
+      pop = document.createElement('div');
+      pop.className = 'ss-pop';
+      pop.innerHTML =
+        '<input type="search" class="al-in sm ss-q" autocomplete="off" placeholder="' +
+          esc(opts.find || 'Имя или фамилия') + '">' +
+        '<div class="ss-list"></div>' +
+        '<div class="ss-none" hidden>Никого с таким именем нет</div>';
+      wrap.appendChild(pop);
+      // Селект у правого края карточки — список уезжал бы за экран.
+      if (pop.getBoundingClientRect().right > window.innerWidth - 8) pop.classList.add('flip');
+      // На телефоне выбор часто стоит у нижнего края окна, и список открывается
+      // уже за ним: человек видит поле поиска и пустоту под ним.
+      if (pop.scrollIntoView) pop.scrollIntoView({ block: 'nearest' });
+
+      var list = pop.querySelector('.ss-list'), q = pop.querySelector('.ss-q');
+      // Пустой пункт («+ исполнитель», «не назначена») — это подпись самого
+      // поля, а не человек: в списке он строка, которая ничего не делает.
+      var all = Array.prototype.map.call(sel.options, function (o, i) {
+        return { i: i, text: o.text, val: o.value, low: (o.text || '').toLowerCase() };
+      }).filter(function (it) { return it.val !== ''; });
+      var paint = function () {
+        var want = (q.value || '').trim().toLowerCase();
+        var hits = want ? all.filter(function (it) { return it.low.indexOf(want) !== -1; }) : all;
+        list.innerHTML = hits.map(function (it, n) {
+          return '<button type="button" class="ss-i' + (it.val === sel.value ? ' on' : '') +
+            (n === 0 && want ? ' act' : '') + '" data-i="' + it.i + '">' + esc(it.text) + '</button>';
+        }).join('');
+        pop.querySelector('.ss-none').hidden = !!hits.length;
+      };
+      var pick = function (i) {
+        sel.selectedIndex = i;
+        close();
+        label();
+        try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* старый браузер */ }
+      };
+      list.addEventListener('click', function (e) {
+        var b = e.target.closest('.ss-i');
+        if (b) pick(+b.getAttribute('data-i'));
+      });
+      q.addEventListener('input', paint);
+      q.addEventListener('keydown', function (e) {
+        var items = list.querySelectorAll('.ss-i');
+        var act = list.querySelector('.ss-i.act') || items[0];
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (act) pick(+act.getAttribute('data-i'));
+          return;
+        }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        if (!items.length) return;
+        var at = Array.prototype.indexOf.call(items, act);
+        var to = Math.max(0, Math.min(items.length - 1, at + (e.key === 'ArrowDown' ? 1 : -1)));
+        Array.prototype.forEach.call(items, function (x) { x.classList.remove('act'); });
+        items[to].classList.add('act');
+        items[to].scrollIntoView({ block: 'nearest' });
+      });
+      paint();
+      q.focus();
+      document.addEventListener('keydown', onKey, true);
+      document.addEventListener('mousedown', onOut, true);
+    };
+    btn.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      // Пока селект выключен (идет сохранение), выбирать нечего.
+      if (!sel.disabled) open();
+    });
   }
   function loadTaskPeople(cb) {
     if (state.taskPeople && state.taskPeople.length) { cb(state.taskPeople); return; }
@@ -11529,6 +11646,7 @@
           who.innerHTML = people.map(function (x) {
             return '<option value="' + x.id + '"' + (x.id === def ? ' selected' : '') + '>' + esc(x.name || x.login) + '</option>';
           }).join('');
+          searchSelect(who);
           var pp = box.querySelector('.gl-add-pp'), px = box.querySelector('.gl-add-ex');
           pick = peoplePick(pp, [], people, { except: +who.value || null, word: 'наблюдатель' });
           pickEx = peoplePick(px, [], people, { except: +who.value || null, word: 'исполнитель' });
@@ -12753,6 +12871,7 @@
             }, function () { showToast('Не получилось поменять роли'); });
           };
           var ownerSel = box.querySelector('#tk-owner');
+          if (ownerSel) searchSelect(ownerSel, { empty: 'не назначена' });
           if (ownerSel) ownerSel.addEventListener('change', function () {
             var to = +ownerSel.value;
             if (!to || to === t.assignee_id) return;
@@ -13082,6 +13201,7 @@
 
       // Участники: ответственный из списка исключается, при смене «кому» —
       // пересобирается.
+      searchSelect(el('nt-who'));
       var partPick = el('nt-watch') ? peoplePick(el('nt-watch'), [], people, { except: +el('nt-who').value || null, word: 'наблюдатель' }) : null;
       var execPick = el('nt-exec') ? peoplePick(el('nt-exec'), [], people, { except: +el('nt-who').value || null, word: 'исполнитель' }) : null;
       el('nt-who').addEventListener('change', function () {
@@ -13110,7 +13230,12 @@
         if (d.title) ti.value = d.title;
         if (d.details) el('nt-det').value = d.details;
         if (d.result_expect) el('nt-res').value = d.result_expect;
-        if (d.assignee_id) el('nt-who').value = String(d.assignee_id);
+        if (d.assignee_id) {
+          el('nt-who').value = String(d.assignee_id);
+          // Через change, а не молча: от него обновляются и надпись на выборе
+          // человека, и списки соисполнителей (ответственный из них уходит).
+          try { el('nt-who').dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* старый браузер */ }
+        }
         if (d.due_date) { el('nt-due').value = d.due_date; markWhen(); }
         if (goalS && d.parent_id) {
           goalS.value = String(d.parent_id);
