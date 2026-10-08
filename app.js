@@ -13894,6 +13894,11 @@
         '</div>';
       el('mi-x').addEventListener('click', close);
       el('mi-cancel').addEventListener('click', close);
+      // Исполнителя на разборе встречи ищут тем же поиском по имени: тут строк
+      // бывает два десятка, и в каждой список на весь отдел.
+      Array.prototype.forEach.call(card.querySelectorAll('.mi-who select'), function (x) {
+        searchSelect(x, { empty: 'не назначен' });
+      });
 
       var save = el('mi-save'), count = el('mi-count');
       var itemsLeft = function () {
@@ -38701,6 +38706,9 @@
     // Высота названий по тексту — формулировку надо видеть целиком, как в импорте.
     var grow = function (t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; };
     Array.prototype.forEach.call(host.querySelectorAll('.mi-title'), grow);
+    Array.prototype.forEach.call(host.querySelectorAll('.mi-who select'), function (x) {
+      searchSelect(x, { empty: 'не назначен' });
+    });
     host.addEventListener('input', function (e) {
       if (e.target.classList && e.target.classList.contains('mi-title')) grow(e.target);
     });
