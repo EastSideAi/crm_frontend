@@ -9688,6 +9688,34 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .dy-avs .dy-avp + .dy-avp { margin-left: -5px; }
 .gl-meta .tsk-due { font-weight: 500; color: var(--ink-3); }
 .dy-row .dy-goal { margin-top: 0; }
+/* ── Поиск по всему задачнику ──
+   Строка результата — обычная .dy-row. Своего тут две подписи: откуда взялся
+   кусок текста и из какой задача недели. */
+.ts-head { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--ink-3);
+  white-space: nowrap; }
+/* Кусок текста уходит на свою строку: он длинный, и в ряду коротких подписей
+   растягивал бы их все. */
+/* Блок, а не флекс: подпись «в описании» должна стоять в самом тексте первым
+   словом, иначе текст течет в узкой колонке рядом с ней. */
+.ts-found { display: block; flex-basis: 100%; white-space: normal;
+  color: var(--ink-2); line-height: 1.45; }
+.ts-found i { font-style: normal; font-weight: 600; color: var(--ink-3); margin-right: 5px; }
+.ts-found i::after { content: ':'; }
+.ts-week { color: var(--ink-3); }
+.dy-row mark { background: var(--blue-tint); color: var(--blue-d);
+  border-radius: 4px; padding: 1px 2px; margin: 0 -2px; }
+/* Строка результата высокая: подпись «где нашлось» занимает свою строку.
+   Срок и статус справа держим у верхнего края, иначе они повисают посередине
+   между строками подписей. */
+.ts-list .dy-row .dy-r { align-self: start; margin-top: 2px; }
+@media (max-width: 720px) {
+  /* .wk-search на телефоне уезжает в order: 5 — счетчик должен идти за ним. */
+  .ts-head { order: 6; flex-basis: 100%; margin: 0; white-space: normal; }
+  /* Срок и статус уходят под строку: иначе они держат свою колонку на всю
+     высоту, и кусок найденного текста сжимается в полоску в три слова. */
+  .ts-list .trow.dy-row { grid-template-columns: minmax(0, 1fr) !important; gap: 6px; }
+  .ts-list .dy-row .dy-r { justify-content: flex-start; margin: 0; }
+}
 .tsk-chk.quiet { cursor: default; border-color: transparent; background: transparent; }
 .dy-row .dy-ttl { font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
