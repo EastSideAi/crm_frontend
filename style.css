@@ -43,7 +43,18 @@ a { color: inherit; text-decoration: none; }
 .side { flex: 0 0 248px; overflow-y: auto; background: var(--app);
   border: 1px solid var(--line); border-radius: var(--r-xl);
   padding: 22px 18px; display: flex; flex-direction: column; }
-.side::-webkit-scrollbar { width: 0; }
+/* Меню длиннее экрана на невысоком окне, и спрятанная полоса прокрутки стоила
+   нам дня переписки: человек с правом на «Маркетинг» не видел пункт, потому что
+   тот ушел под нижний край, а признака, что список продолжается, не было
+   (08.10.2026). Полоса тонкая и появляется только когда список реально не влез. */
+.side { scrollbar-width: thin; scrollbar-color: #DFE2E8 transparent; }
+.side::-webkit-scrollbar { width: 7px; }
+/* Тень у нижнего края, пока меню не прокручено до конца (класс ставит app.js).
+   Системной полосы тут мало: в половине браузеров она всплывает только в момент
+   прокрутки, и список выглядит законченным там, где он просто обрезан. */
+.side.cut { box-shadow: inset 0 -30px 22px -22px rgba(3, 8, 28, .22); }
+.side::-webkit-scrollbar-track { background: transparent; }
+.side::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
 .logo { display: flex; align-items: center; gap: 11px; padding: 0 6px 24px; }
 .logo .mk { width: 32px; height: 32px; border-radius: 9px; background: var(--blue);
   display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 16px; letter-spacing: -.03em; }
@@ -116,8 +127,34 @@ a { color: inherit; text-decoration: none; }
 /* Правая часть шапки не сжимается: в финансах вкладки ведомостей длинные и раньше
    рвали имя пользователя на три строки. Сжимается и скроллится список вкладок. */
 .tbr { display: flex; align-items: center; gap: 11px; flex: none; }
+/* Ссылка на открытый экран. Адрес CRM не менялся при переходе по разделам, и
+   прислать коллеге раздел или вкладку было нечем (Вера, 08.10.2026). Кнопка
+   тихая и стоит у профиля: главное действие экрана остается в самом экране. */
+.tb-link { display: flex; align-items: center; gap: 7px; flex: none;
+  padding: 8px 13px 8px 11px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--app); color: var(--ink-2); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: .15s; white-space: nowrap; }
+.tb-link:hover { background: var(--fill); border-color: var(--line-2); color: var(--ink); }
+.tb-link svg { flex: none; }
 .topbar > .tabs { min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .topbar > .tabs::-webkit-scrollbar { height: 0; }
+/* Ряд вкладок живет внутри #tb-left, а не прямым ребенком шапки, поэтому правило
+   выше до него не доставало: полоса не сжималась и не скроллилась, а просто уезжала
+   за правый край. Замер 08.10.2026: окно 1100px, восемь вкладок «Маркетинга»
+   заканчиваются на 1219px — «Декомпозиция» и «Ссылки и сценарии» не видны и мышкой
+   недостижимы, полосы прокрутки нет. На узком окне переносим на вторую строку: за
+   край не должно уходить ничего, а скрытая прокрутка этого не лечит. */
+/* Снизу 961px — там свои правила для телефона (блок max-width: 960px): обертка
+   скроллится, капсула идет одной строкой. Перенос оттуда убрал бы тот скролл:
+   селектор с id сильнее, чем .tabs, и победил бы несмотря на порядок. */
+/* Верхней границы у правила нет намеренно: перенос срабатывает ровно тогда, когда
+   ряд не влез, а порог в пикселях врет при любой новой вкладке или кнопке в шапке.
+   08.10.2026 кнопка «Ссылка» съела те самые сто пикселей, и на 1440 обрезалось уже
+   имя в профиле — выбран перенос вкладок, а не обрезанный профиль. */
+@media (min-width: 961px) {
+  .topbar > #tb-left { min-width: 0; }
+  .topbar > #tb-left > .tabs { flex-wrap: wrap; border-radius: var(--r-xl); }
+}
 .icocirc { width: 38px; height: 38px; border-radius: 50%; background: var(--fill);
   display: grid; place-items: center; color: var(--ink-2); cursor: pointer; transition: .15s; }
 .icocirc:hover { background: #ECEEF1; }
@@ -2642,6 +2679,16 @@ a { color: inherit; text-decoration: none; }
 .al-in:focus { background: #fff; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); outline: none; }
 .al-in.al-err { box-shadow: inset 0 0 0 1.5px var(--red), 0 0 0 3px rgba(196,42,47,.1); background: #fff; }
 .al-ta { resize: vertical; min-height: 46px; line-height: 1.5; }
+/* Поле с файлом (счет от ИП, openSheet тип `file`). Родная кнопка «Выберите файл»
+   в наших формах читается как чужая деталь, поэтому приводим ее к нашей тихой
+   кнопке; само поле остается тем же .al-in, второго рецепта поля не заводим. */
+.al-in[type=file] { padding: 7px 9px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.al-in[type=file]::file-selector-button { font: 600 12.5px 'Manrope', sans-serif;
+  color: var(--ink); background: #fff; border: 0; border-radius: 9px;
+  padding: 7px 12px; margin-right: 10px; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.1); transition: background .15s; }
+.al-in[type=file]::file-selector-button:hover { background: var(--fill); }
+
 /* подсказка под полем — там, где выбор неочевиден по подписи (направление цели) */
 .al-hint { font-size: 11.5px; line-height: 1.45; color: var(--ink-3); }
 
@@ -4541,10 +4588,13 @@ button.tsk-mimp { cursor: pointer; }
   color: var(--ink-3); font-size: 14px; background: #F3F5F8; }
 .tg-blank-ic { width: 64px; height: 64px; border-radius: 20px; background: #fff; display: grid; place-items: center;
   color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
-.tg-chead { flex: none; display: flex; align-items: center; gap: 12px; padding: 11px 18px; background: #fff; border-bottom: 1px solid var(--line); }
+/* Шапка переносится: кнопок над перепиской бывает четыре (карточка, исполнитель,
+   ученик, тумблер бота), и на ноутбуке они съедали имя человека до «Рел…».
+   Та же беда и то же лечение, что у шапки «Встреч» (грабля 3г). */
+.tg-chead { flex: none; display: flex; flex-wrap: wrap; row-gap: 8px; align-items: center; gap: 12px; padding: 11px 18px; background: #fff; border-bottom: 1px solid var(--line); }
 .tg-back { display: none; width: 32px; height: 32px; border-radius: 9px; color: var(--ink-2); transform: rotate(180deg); }
 .tg-back:hover { background: var(--fill); }
-.tg-ci { flex: 1; min-width: 0; }
+.tg-ci { flex: 1 1 200px; min-width: 0; }
 .tg-cn { font-size: 15px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tg-cs { display: flex; align-items: center; gap: 10px; margin-top: 3px; flex-wrap: wrap; }
 .tg-st { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; }
@@ -4553,6 +4603,9 @@ button.tsk-mimp { cursor: pointer; }
 /* кнопка «Карточка» в шапке диалога: тихая таблетка рядом с тумблером бота —
    якорь экрана это переписка, а не кнопки над ней */
 .tg-cwrap { flex: none; display: inline-flex; }
+/* Группа кнопок шапки: прижата вправо, переносится целиком. Поодиночке они
+   рвались между строками, и ряд читался как две случайные кучки. */
+.tg-cacts { flex: none; margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .tg-cact { flex: none; display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
   color: var(--ink-2); background: var(--fill); border-radius: var(--r-pill); padding: 8px 13px; transition: .15s; }
 .tg-cact:hover { background: #EDEFF3; color: var(--ink); }
@@ -4735,6 +4788,33 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
 .handoff-banner b { display: block; font-size: 13.5px; color: var(--amber-ink); }
 .handoff-banner span { display: block; font-size: 12.5px; color: #8A6A2E; margin-top: 2px; line-height: 1.4; }
 
+/* Полоса «это исполнитель, а не клиент». Бот наружу у нас один, подрядчик пишет в
+   него же, что семьи, и менеджер отвечает ему как клиенту. Полоса тихая, не
+   предупреждение: ошибка тут не в том, что случилась беда, а в том, что человек
+   говорит не с тем — довольно одного факта и адреса, куда идти за его заданиями. */
+.tg-czb { display: flex; align-items: flex-start; gap: 12px; background: var(--fill);
+  border-radius: 14px; padding: 12px 16px; margin: 14px 20px 0; }
+.tg-czb svg { color: var(--ink-2); flex: none; margin-top: 2px; }
+.tg-czb > div { flex: 1; min-width: 0; }
+.tg-czb b { display: block; font-size: 13.5px; }
+.tg-czb span { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.4; }
+.tg-tag.cz { color: var(--ink-2); background: var(--fill); }
+.tg-cact.cz { color: var(--ink-2); }
+.tg-cact.cz:hover { color: var(--ink); }
+/* Без права на модуль «Исполнитель» — подпись, а не кнопка. Нажать нельзя, но читать
+   можно: `.off` с его opacity .45 помечает ЗАГРУЗКУ «Карточки», и постоянная плашка в
+   том же виде читалась бы как подвисший скелетон. */
+.tg-cact.quiet { pointer-events: none; }
+/* «Это исполнитель» — вторая дверь рядом с «Завести карточку» на диалоге без карточки
+   клиента. Тихая: главный путь тут все-таки клиентский, а исполнитель — исключение. */
+.tg-cact.czmark { color: var(--ink-2); }
+.tg-cact.czmark:hover { color: var(--ink); }
+/* «отметил не того» — отказ от своего же действия, поэтому он тихий и стоит с краю
+   полосы, а не рядом с именем человека. */
+.czb-off { margin-left: auto; align-self: flex-start; flex: none; border: 0; background: none;
+  font: 600 12px var(--font); color: var(--ink-3); cursor: pointer; padding: 2px 0; }
+.czb-off:hover { color: var(--ink-2); text-decoration: underline; }
+
 /* действия в баре диалога */
 .dlg-acts { display: flex; align-items: center; gap: 8px; }
 .bc-foot { justify-content: space-between; align-items: center; }
@@ -4809,6 +4889,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      чтобы не спорить со скроллом вкладок. */
   .tbr .profile { padding: 4px; gap: 0; border-radius: var(--r-pill); flex: none; }
   .tbr .profile .pinfo, .tbr .profile .pchev { display: none; }
+  /* У кнопки ссылки на телефоне остается иконка: подпись отбирала место у
+     вкладок, а они и так скроллятся на пределе. */
+  .tbr .tb-link { padding: 8px; }
+  .tbr .tb-link span { display: none; }
   .content { padding: 16px 16px 36px; }
   .chead h2 { font-size: 23px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
@@ -4904,12 +4988,18 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
   .tg-chead .ai-toggle { padding: 8px 10px; gap: 0; font-size: 0; }
   /* «Ученик» на телефоне остается со словом, как «Завести карточку»: у «Карточки»
      иконка говорит сама за себя, а точка привязки — нет. */
-  .tg-cact:not(.new):not(.sch) { padding: 8px 10px; gap: 0; font-size: 0; }
-  .tg-cact.sch { padding: 8px 11px; gap: 6px; font-size: 12.5px; }
+  .tg-cact:not(.new):not(.sch):not(.cz) { padding: 8px 10px; gap: 0; font-size: 0; }
+  /* «Исполнитель» со словом по той же причине, что «Ученик»: иконка нового значения
+     не объясняет, а рядом стоит такая же по размеру иконка карточки. */
+  .tg-cact.sch, .tg-cact.cz { padding: 8px 11px; gap: 6px; font-size: 12.5px; }
   .tg-cact .tg-cl { display: none; }
   .tg-cact .tg-cls { display: inline; }
   .tg-cact svg { width: 15px; height: 15px; }
   .tg-cact .tg-cw { display: none; }
+  /* Полоса исполнителя на телефоне: «отметил не того» рядом с текстом отжимало
+     объяснение в колонку в три слова. Кладем кнопку под текст отдельной строкой. */
+  .tg-czb { flex-wrap: wrap; margin: 12px 12px 0; }
+  .czb-off { order: 3; width: 100%; margin-left: 0; margin-top: 6px; text-align: left; }
   /* Разделов больше, чем влезает в ширину телефона: у руководителя их девять.
      Раньше лишние просто обрезались краем плашки — пункт «Продукты» с экрана
      пропадал совсем. Теперь ряд скроллится, а при малом числе разделов кнопки
@@ -6319,6 +6409,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-feature-settings: 'tnum'; }
 .ct-act-m { font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
 .ct-act-m b { color: var(--ink); font-weight: 700; }
+/* Объяснение на две-три строки, а не строка реквизитов: ему нужны мера строки и
+   воздух между строками, иначе оно читается как мелкий технический хвост. */
+.ct-act-why { font-size: 13px; line-height: 1.5; color: var(--ink-2); max-width: 62ch; }
 /* Две подписи — две колонки: чья очередь, видно без чтения. */
 .ct-sg { display: flex; gap: 28px; flex-wrap: wrap; width: 100%; }
 .ct-sg1 { display: flex; flex-direction: column; gap: 2px; min-width: 156px; }
@@ -7118,21 +7211,103 @@ button.fsp-via { cursor: pointer; }
    с колонкой состояния справа, где живет судьба самой бумаги. */
 .dc-off { font-size: 10.5px; font-weight: 600; color: var(--ink-3); margin-left: 6px;
   padding: 1px 6px; border-radius: var(--r-pill); border: 1px solid var(--line); }
+/* .dc-who — колонка, и пометка в ней растягивалась на всю ширину ячейки, раздувая
+   строку. Прижимаем к началу: это метка на человеке, а не полоса. */
+.dc-who .dc-off { align-self: flex-start; margin-left: 0; }
 .dc-when { font-size: 12.5px; color: var(--ink-2); }
 .dc-sum { font-size: 13px; color: var(--ink-3); font-feature-settings: 'tnum'; }
 .dc-sum b { color: var(--ink); font-weight: 700; }
 .dc-state { display: flex; align-items: flex-start; }
 
+/* Папки по людям. Колонка слева отвечает на «подними бумаги по Петровой» — вопрос,
+   на который общий список отвечает только через поиск по фамилии. Рецепт тот же, что
+   у программы курса в Академии: липкая панель со списком и подсветкой выбранного. */
+.dc-wrap { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 14px;
+  align-items: start; }
+.dcf-box { padding: 13px 10px; position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow: auto; }
+.dcf-lbl { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); padding: 2px 8px 9px; }
+.dcf { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: none; font: inherit; color: var(--ink-2); cursor: pointer;
+  padding: 8px 9px; border-radius: 10px; position: relative;
+  transition: .12s var(--ease); }
+.dcf + .dcf { margin-top: 1px; }
+.dcf:hover { background: #FBFBFC; }
+.dcf.on { background: var(--blue-tint); color: var(--ink); font-weight: 600; }
+.dcf.on::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+  width: 3px; border-radius: 3px; background: var(--blue); }
+.dcf-nm { min-width: 0; flex: 1; font-size: 13px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.dcf .dc-off { flex: none; margin-left: 0; }
+/* «Все документы» — не человек, поэтому отделено линией, а не просто стоит первым. */
+.dcf-all { margin-bottom: 7px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  border-radius: 10px 10px 0 0; }
+.dcf-n { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink-3);
+  background: var(--fill); border-radius: var(--r-pill); padding: 1px 8px; }
+.dcf.on .dcf-n { color: var(--blue-d); background: #fff; }
+.dcf-empty { font-size: 12.5px; color: var(--ink-3); padding: 4px 9px 8px; }
+
+/* Шапка открытой папки: имя стоит здесь, а в строках колонка исполнителя гаснет —
+   собственная фамилия, повторенная в каждой строке, не несет ничего. */
+.dcf-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 16px 20px 0; }
+.dcf-h-nm { font-size: 17px; font-weight: 700; letter-spacing: -.02em; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcf-h-a { border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  font: 600 12px 'Manrope', sans-serif; color: var(--ink-2); padding: 5px 11px;
+  border-radius: var(--r-pill); transition: .12s var(--ease); }
+.dcf-h-a:hover { background: var(--fill); color: var(--ink); }
+.dcf-h-a + .dcf-h-a { margin-left: -2px; }
+/* Рядом с колонкой папок таблице досталось на 236px меньше, и название документа
+   начинало обрезаться на первом же слове. Поэтому служебные колонки здесь ужаты до
+   содержимого: якорь строки — название и состояние, дата и сумма читаются и так. */
+.dc-wrap .trow.dc-grid {
+  grid-template-columns: minmax(0, 2.4fr) 162px 96px 100px 142px; }
+.dc-wrap .listcard.in-folder .trow.dc-grid {
+  grid-template-columns: minmax(0, 2.6fr) 112px 112px 150px !important; }
+.listcard.in-folder .dc-grid > :nth-child(2) { display: none !important; }
+
 @media (max-width: 1180px) {
   .trow.dc-grid { grid-template-columns: 1.6fr 150px 176px !important; }
   .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+  .dc-wrap .trow.dc-grid {
+    grid-template-columns: minmax(0, 1.6fr) 150px 176px; }
+  /* В папке колонка исполнителя погашена, поэтому место под дату есть даже тут:
+     «когда подписан» — второй вопрос к документу после «подписан ли вообще». */
+  .dc-wrap .listcard.in-folder .trow.dc-grid {
+    grid-template-columns: minmax(0, 1fr) 112px 176px !important; }
+  .listcard.in-folder .dc-grid > :nth-child(3) { display: block; }
+}
+@media (max-width: 980px) {
+  /* Узкий экран: папки ложатся лентой над списком, иначе колонка съедает половину
+     ширины у таблицы, ради которой сюда и заходят. */
+  .dc-wrap { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .dcf-box { position: static; max-height: none; overflow: visible;
+    display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 10px; }
+  .dcf-lbl { display: none; }
+  .dcf { width: auto; flex: none; padding: 6px 11px; border-radius: var(--r-pill);
+    border: 1px solid var(--line); }
+  .dcf + .dcf { margin-top: 0; }
+  .dcf.on { border-color: var(--blue-tint); }
+  .dcf.on::before { display: none; }
+  .dcf-nm { max-width: 190px; }
 }
 @media (max-width: 700px) {
   .trow.dc-grid { grid-template-columns: 1fr auto !important; gap: 4px 12px;
     align-items: start; }
   .dc-grid.thead { display: none; }
-  .dc-grid > :nth-child(2) { display: block; }
+  /* flex, а не block: иначе .dc-who перестает быть колонкой и ИНН прилипает к имени
+     справа. Название при этом переносится — обрезанное «Акт № 14…» не отличить от
+     соседнего акта, а именно по названию документ тут и ищут. */
+  .dc-grid > :nth-child(2) { display: flex; }
+  /* Высота строки фиксированная (58px) — с перенесенным названием текст вылезал на
+     соседнюю строку. На телефоне строка живет по содержимому. */
+  .trow.dc-grid { height: auto; min-height: 58px; padding-top: 11px; padding-bottom: 11px; }
+  .dc-main { align-items: flex-start; }
+  .dc-main b { white-space: normal; }
   .dc-grid > :nth-child(3), .dc-grid > :nth-child(4) { display: none; }
+  .dcf-head { padding: 14px 16px 0; }
 }
 
 
@@ -11328,3 +11503,168 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 @media (max-width: 400px) { .cross-docs button { padding: 8px 11px; } }
 .cross-doc { padding: 0; overflow: hidden; }
 .cross-doc .empty { padding: 28px 18px; }
+
+/* Версия загруженной страницы под кнопкой «Сообщить о баге». Нужна в разговоре
+   «у меня этого нет, а у тебя есть»: сравнили две метки и сразу понятно, у кого
+   старый кэш, а не выкатка не доехала. */
+.side-ver { padding: 8px 14px 0; font-size: 10.5px; color: var(--ink-3); letter-spacing: .02em; }
+
+/* ── Мотивация отдела продаж ──────────────────────────────────────────────
+   Экран отвечает на один вопрос: сколько человек получит за месяц. Поэтому
+   якорь строки — итог, а не проценты, из которых он сложился; они тише и правее
+   слева направо не по важности, а по порядку счета. Своих цветов тут нет: суммы
+   черные, единственное цветное место — оплаты без продавца, потому что это долг
+   по работе, а не факт. */
+.mot-stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mot-stat b { font-size: 26px; font-weight: 800; letter-spacing: -.035em; color: var(--ink);
+  line-height: 1.1; font-variant-numeric: tabular-nums; }
+.mot-stat span { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.mot-stat.mot-in b { color: var(--ink-2); }
+
+.mot-grid { grid-template-columns: minmax(0, 1.7fr) repeat(4, minmax(0, .9fr)); }
+.mot-row { cursor: pointer; }
+.mot-name { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  font-weight: 600; color: var(--ink); }
+.mot-sub { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.mot-num { text-align: right; font-size: 14px; color: var(--ink-2); white-space: nowrap;
+  font-variant-numeric: tabular-nums; }
+.mot-num.mot-total { color: var(--ink); font-weight: 700; }
+.mot-item { border-bottom: 1px solid var(--line); }
+.mot-item:last-child { border-bottom: 0; }
+.mot-item.open { background: var(--fill); }
+.mot-item.open .trow { border-bottom: 0; }
+
+.mot-detail { padding: 2px 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.mot-lines { display: flex; flex-direction: column; border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--card); overflow: hidden; }
+.mot-line { display: grid; grid-template-columns: 46px minmax(0, 1.6fr) minmax(0, 1fr) 96px 92px;
+  gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--line);
+  cursor: pointer; font-size: 13px; }
+.mot-line:last-child { border-bottom: 0; }
+.mot-line:hover { background: var(--fill); }
+/* Без права на карточки клиента строка никуда не ведет — и не притворяется. */
+.mot-line:not([data-motlead]) { cursor: default; }
+.ml-d { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ml-c { display: flex; flex-direction: column; gap: 1px; min-width: 0; color: var(--ink); font-weight: 600; }
+.ml-t { font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+.ml-r { font-size: 11.5px; color: var(--ink-2); }
+.ml-b, .ml-s { text-align: right; font-variant-numeric: tabular-nums; }
+.ml-b { color: var(--ink-3); }
+.ml-s { font-weight: 700; color: var(--ink); }
+.mot-line.neg .ml-s { color: var(--red-ink); }
+
+/* Ручной ввод — служебная часть экрана, поэтому она тише таблицы: подписи мелкие,
+   поля узкие. Когда смены поедут из CRM, блок уйдет отсюда целиком. */
+.mot-manual { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; }
+.mm-h { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.mm-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.mm-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.mm-grid input { width: 120px; padding: 7px 10px; border: 1px solid var(--line-2);
+  border-radius: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--card);
+  font-variant-numeric: tabular-nums; }
+.mm-grid input:focus { outline: 2px solid var(--blue-tint); border-color: var(--blue); }
+.mm-note { font-size: 11.5px; color: var(--ink-3); }
+
+.mot-rates-closed { margin-bottom: 12px; }
+.mot-rates .mm-grid { margin-top: 12px; }
+
+.mot-uns { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.mot-un { display: grid; grid-template-columns: minmax(0, 1.4fr) 110px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-lg); background: var(--card); }
+.un-c { font-weight: 600; color: var(--ink); }
+.un-t { font-size: 11.5px; color: var(--ink-3); }
+.un-a { text-align: right; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.un-s { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600;
+  color: var(--ink-3); min-width: 0; }
+.un-s select { padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 10px;
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--card); max-width: 100%; }
+
+/* Кто продал — прямо под строкой оплаты в карточке клиента. Не отдельным экраном:
+   отмечает это тот же человек, который заводит платеж, и в тот же момент. */
+.pay-wrap { display: flex; flex-direction: column; }
+.pay-who { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 0 0 10px 2px; }
+.pay-who.new { padding-top: 4px; }
+.pay-who label { display: flex; align-items: center; gap: 6px; font-size: 11.5px;
+  font-weight: 600; color: var(--ink-3); }
+.pay-who select { padding: 5px 8px; border: 1px solid var(--line-2); border-radius: 10px;
+  font: inherit; font-size: 12.5px; color: var(--ink); background: var(--card); max-width: 190px; }
+
+@media (max-width: 760px) {
+  /* Телефон: шапка таблицы прячется, и каждое число называет себя само — тот же
+     прием, что на отчете по исполнителям. height: auto обязателен — общая .trow
+     прибита к 58px, и без этого строки налезают друг на друга. */
+  .trow.mot-grid { grid-template-columns: 1fr 1fr !important; gap: 10px 14px;
+    height: auto; padding: 14px 16px; align-items: start; }
+  .trow.mot-grid.thead { display: none; }
+  .trow.mot-grid .mot-name { grid-column: 1 / -1; }
+  .trow.mot-grid .mot-num { text-align: left; }
+  .trow.mot-grid .mot-num::before { content: attr(data-l); display: block;
+    font: 600 10px 'Manrope', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 2px; }
+  .mot-detail { padding: 2px 12px 14px; }
+  .mm-grid input { width: 100%; }
+  .mm-grid label { flex: 1 1 130px; }
+  .mot-stat b { font-size: 20px; }
+  .mot-line { grid-template-columns: 44px minmax(0, 1fr) 84px; }
+  .mot-line .ml-r { display: none; }
+  .mot-line .ml-b { display: none; }
+  .mot-un { grid-template-columns: minmax(0, 1fr) auto; }
+  /* Выпадашки на телефоне занимают всю ширину строки: в 100 px имя человека
+     обрезается на середине, и выбрать наугад — ровно то, чего экран избегает. */
+  .mot-un .un-s { grid-column: 1 / -1; }
+  .mot-un .un-s select { width: 100%; max-width: none; }
+}
+
+/* ── Правка строки человека в отчёте запуска ───────────────────────────────
+   Два поля в конце строки: купил и настоящий источник. Автоматика считает запуск
+   по следам в базе, а половина сделок идёт мимо них — продали по телефону, пришёл
+   по совету. Поэтому владелец правит строку прямо здесь, и правка видна рядом с
+   расчётом, а не вместо него.
+   Контролы тихие: строка остаётся списком людей, а не формой. Цвет только у
+   отмеченной продажи — единственное место, где он что-то значит. */
+/* Две колонки правки не влезают в обычное окно списка (720px): последняя уезжала
+   за край. Поэтому окно со списком людей ступени шире — но только оно, у блоков
+   правки нет и лишняя ширина им не нужна. */
+.mk-modal.wide.lp-wide { width: min(1000px, calc(100vw - 40px)); }
+.lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr {
+  grid-template-columns: minmax(150px, 1.5fr) minmax(130px, 1.1fr) minmax(95px, .85fr)
+                         72px 112px minmax(130px, 1fr); }
+/* На узком экране колонок шесть и ужимать дальше некуда: отдаём таблицу в
+   горизонтальную прокрутку целиком, вместе с шапкой. */
+@media (max-width: 860px) {
+  .lp-tbl.edit { overflow-x: auto; }
+  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 700px; }
+}
+.lp-tbl.edit .lp-th span:last-child { text-align: left; }
+.lp-fx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lp-fx .al-in { font-size: 11.5px; padding: 4px 7px; border-radius: 7px; height: auto; }
+.lp-sold { font-size: 11.5px; font-weight: 600; padding: 4px 8px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-3);
+  cursor: pointer; white-space: nowrap; text-align: center; }
+.lp-sold:hover { border-color: var(--ink-3); color: var(--ink-2); }
+.lp-sold.yes { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
+.lp-sold.no { background: var(--fill); border-color: transparent; color: var(--ink-2);
+  text-decoration: line-through; }
+/* «уже клиент» и «дубль» — не продажа и не отказ, а исключение строки из счета.
+   Поэтому они тише обоих: заливки нет, только рамка пунктиром. */
+.lp-sold.client, .lp-sold.dup { background: transparent; border-style: dashed;
+  border-color: var(--ink-3); color: var(--ink-2); }
+.lp-tr.lp-off { opacity: .52; }
+.lp-tr.lp-off:hover { opacity: 1; }
+.lp-twin { color: var(--amber-ink); }
+.lp-sold.busy, .lp-fx .al-in.busy { opacity: .5; pointer-events: none; }
+.lp-sold.err, .lp-fx .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }
+
+/* Строка «отмечено руками» под шапкой лестницы запуска. Тихая: это не метрика, а
+   отметка о том, что часть цифр держится на слове человека, а не на базе. */
+.lfx { padding: 12px 16px; display: flex; flex-direction: column; gap: 3px; }
+.lfx-t { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.lfx-s { font-size: 13px; color: var(--ink); }
+.lfx-n { font-size: 12.5px; color: var(--ink-2); }
+.lfx-n b { color: var(--ink); font-weight: 700; }
