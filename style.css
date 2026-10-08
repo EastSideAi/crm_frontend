@@ -6973,9 +6973,10 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .rcp-orph .fin-rcp.off:hover, .rcp-seen .fin-rcp.off:hover { opacity: 1; }
 /* Разобранные стоят под плашкой тихой строкой: вопрос по ним закрыт, но спрятаны они
    не насовсем — видно причину и кнопку «вернуть». */
-.rcp-seen { margin: -8px 0 14px; padding: 0 2px; display: flex; flex-direction: column;
-  gap: 2px; font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); }
+.rcp-seen { margin: -8px 0 14px; padding: 0 2px;
+  font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); }
 .rcp-seen b { font-weight: 700; color: var(--ink-2); }
+.rcp-seen .rcp-o { margin-top: 2px; }
 /* «Разбить» — разложить сумму строки листа на задания самозанятого (в «Финансах»). */
 .fin-brk { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
