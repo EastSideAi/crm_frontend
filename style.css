@@ -11668,3 +11668,105 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lfx-s { font-size: 13px; color: var(--ink); }
 .lfx-n { font-size: 12.5px; color: var(--ink-2); }
 .lfx-n b { color: var(--ink); font-weight: 700; }
+
+/* ══════════════════ СТРУКТУРА КОМПАНИИ ══════════════════
+   Доска-схема (кто кому подчиняется) и раскрываемые зоны ответственности под
+   ней. Провода — общий токен --wire, тот же, что в дереве продуктов и Академии:
+   рецепт связи в CRM один. Своих цветов раздел не заводит: вершина компании на
+   --navy («второй чернильный»), все остальное — обычные белые карточки. */
+.org-wrap { display: flex; flex-direction: column; gap: 18px; }
+.org-h1 { font-size: 27px; font-weight: 700; letter-spacing: -.03em; margin-bottom: 7px; }
+.org-sub { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); max-width: 86ch; }
+.org-board { padding: 18px 20px 26px; }
+.org-board .sec-head { margin-bottom: 10px; }
+
+.org-tree { --org-wire: var(--wire); display: flex; flex-direction: column; }
+.org-one { display: flex; justify-content: center; }
+.org-one > .org-node { width: min(400px, 100%); }
+/* ствол и отвод к карточке — одна линия по центру, как в .po-tree */
+.org-stem { position: relative; height: 24px; }
+.org-stem::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--org-wire); }
+.org-cols { display: grid; grid-template-columns: repeat(var(--org-n, 2), minmax(0, 1fr));
+  column-gap: 14px; align-items: start; }
+.org-col { display: flex; flex-direction: column; }
+.org-tick { display: block; height: 20px; position: relative; }
+.org-tick::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 1px; background: var(--org-wire); }
+.org-tick::after { content: ''; position: absolute; top: 0; height: 1px;
+  left: -7px; right: -7px; background: var(--org-wire); }
+.org-col:first-child .org-tick::after { left: 50%; }
+.org-col:last-child .org-tick::after { right: 50%; }
+
+.org-node { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 13px 15px; font: inherit; color: var(--ink); cursor: pointer;
+  transition: .14s var(--ease); }
+.org-node b { font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
+.org-node i { font-style: normal; font-size: 12.5px; color: var(--ink-2); }
+.org-node small { font-size: 12px; line-height: 1.42; color: var(--ink-3); }
+.org-node:hover { border-color: #CFE0FF; background: #FBFBFC; }
+.org-node:focus-visible { outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
+/* роль без описанных обязанностей не кликается: у кнопки, которая ничего не
+   открывает, нет работы */
+.org-node.flat { cursor: default; background: var(--fill); border-color: transparent; }
+.org-node.flat:hover { background: var(--fill); border-color: transparent; }
+.org-node.k-owner, .org-node.k-owner.flat { background: var(--navy); border-color: transparent; color: #fff; }
+.org-node.k-owner b { font-size: 15px; }
+.org-node.k-owner i { color: rgba(255,255,255,.72); }
+.org-node.k-owner small { color: rgba(255,255,255,.6); }
+.org-node.k-owner:hover { background: #24365C; border-color: transparent; }
+/* AI-агенты тише людей: это исполнители по ТЗ, а не ступень иерархии */
+.org-node.k-agent, .org-node.k-crew { background: var(--fill); border-color: transparent; }
+.org-node.k-agent:hover, .org-node.k-crew:hover { background: var(--card); border-color: #CFE0FF; }
+.org-cnt { margin-top: 8px; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 600; color: var(--blue-d); }
+.org-cnt svg { transition: .14s var(--ease); }
+.org-node:hover .org-cnt svg { transform: translateX(2px); }
+.org-from { margin-top: 6px; font-size: 11.5px; color: var(--ink-2); }
+
+.org-crew-h { display: flex; align-items: baseline; justify-content: center; gap: 9px;
+  margin-bottom: 11px; }
+.org-crew-h small { font-size: 12px; color: var(--ink-3); }
+
+/* ── зоны ответственности: строка с плюсом, под ней группы задач ── */
+.org-duties { display: flex; flex-direction: column; gap: 8px; }
+.org-duties > .po-lbl { margin: 10px 0 2px; }
+.org-duty { background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-lg); overflow: hidden; }
+.org-drow { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: none; border: 0; font: inherit; color: var(--ink); padding: 13px 16px;
+  cursor: pointer; transition: .14s var(--ease); }
+.org-drow:hover { background: #FBFBFC; }
+.org-plus { width: 26px; height: 26px; border-radius: 8px; flex: none; display: grid;
+  place-items: center; background: var(--blue-tint); color: var(--blue-d);
+  transition: transform .2s var(--ease); }
+.org-duty.on .org-plus { transform: rotate(45deg); }
+.org-dt { flex: 1; min-width: 0; }
+.org-dt b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
+.org-dt small { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-3); }
+.org-dn { flex: none; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.org-dbody { display: none; padding: 0 16px 18px; }
+.org-duty.on .org-dbody { display: block; }
+.org-lede { margin: 2px 0 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 92ch; }
+/* колонки, а не грид: группы разной длины, и в сетке 1fr 1fr рядом с длинной
+   группой встает пустая половина экрана */
+.org-gs { columns: 2; column-gap: 36px; margin-top: 14px; }
+.org-g { break-inside: avoid; margin-bottom: 18px; }
+.org-gh { display: flex; gap: 9px; font-size: 13px; font-weight: 700; margin-bottom: 9px; }
+.org-gh i { font-style: normal; color: var(--blue); }
+.org-ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.org-ul li { position: relative; padding-left: 17px; font-size: 13px; line-height: 1.5; }
+.org-ul li::before { content: ''; position: absolute; left: 0; top: 9px; width: 9px; height: 2px;
+  border-radius: 1px; background: var(--blue); opacity: .55; }
+.org-foot { font-size: 12px; color: var(--ink-3); padding: 0 2px 18px; }
+
+@media (max-width: 1100px) { .org-gs { grid-template-columns: 1fr; } }
+/* на телефоне схема ложится столбиком: ряд из четырех карточек в 390px
+   превращается в четыре колонки по одному слову */
+@media (max-width: 860px) {
+  .org-cols { grid-template-columns: 1fr; row-gap: 10px; }
+  .org-tick::after { display: none; }
+  .org-one > .org-node { width: 100%; }
+}
