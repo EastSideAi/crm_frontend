@@ -2667,7 +2667,28 @@
       var onTab = mt.querySelector('.mtab.on');
       if (onTab) mt.scrollLeft = Math.max(0, onTab.offsetLeft - (mt.clientWidth - onTab.offsetWidth) / 2);
     }
+    sideCutMark();
     document.title = (c.hot ? '(' + c.hot + ') ' : '') + 'ИстСайд · CRM';
+  }
+
+  /* Левое меню длиннее невысокого окна, а полоса прокрутки у него системная: на маке
+     и в части браузеров она видна только во время прокрутки. Человек с правом на
+     раздел не находил «Маркетинг», потому что пункт ушел под нижний край, и решал,
+     что раздела у него нет (08.10.2026, двое продюсеров). Ставим внизу мягкую тень,
+     пока список не влез и не прокручен до конца, — это единственный намек, что
+     список продолжается. */
+  function sideCutMark() {
+    var s = document.querySelector('.side');
+    if (!s) return;
+    var mark = function () {
+      s.classList.toggle('cut', s.scrollHeight - s.clientHeight - s.scrollTop > 4);
+    };
+    if (!s._cutBound) {
+      s._cutBound = true;
+      s.addEventListener('scroll', mark);
+      window.addEventListener('resize', mark);
+    }
+    mark();
   }
 
   /* Переключение пространства = переход на первый его раздел. Отдельного состояния
