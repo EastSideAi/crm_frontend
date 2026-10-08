@@ -26700,6 +26700,34 @@
       '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
   }
 
+  /* Деньги на трафик (ТЗ Олеси 7.1): сколько потратили и во что обошлась каждая
+     ступень. Расход вносят руками — доступов к рекламным кабинетам нет, — поэтому
+     без него блок честно говорит «расход не внесён», а не показывает нули: ноль
+     читается как «бесплатно», и на этом принимают решения о бюджете. */
+  function launchSpend(cur) {
+    var e = cur && cur.econ, sp = cur && cur.spend;
+    if (!e) return '';
+    var money = function (n) { return n == null ? '—' : fmtMoney(n) + ' ₽'; };
+    var hint = !e.spend ? 'за этот период расход не внесён'
+      : (sp && sp.by_date_only
+         ? 'часть расхода без кампании, отнесена к запуску по датам'
+         : 'по кампаниям запуска');
+    var rows =
+      flatRow('Расход на рекламу', hint, money(e.spend || null)) +
+      flatRow('Цена регистрации', 'расход на одного записавшегося', money(e.per_reg)) +
+      flatRow('Цена зрителя', 'расход на одного пришедшего на эфир', money(e.per_viewer)) +
+      flatRow('Цена записи к тьютору', 'расход на одну заявку на разбор', money(e.per_tutor)) +
+      flatRow('Цена оплаты', 'расход на одного заплатившего', money(e.per_paid)) +
+      flatRow('Окупаемость', e.romi == null ? 'без расхода не считается'
+        : (e.romi >= 100 ? 'выручка больше вложенного' : 'выручка меньше вложенного'),
+        e.romi == null ? '—' : e.romi + '%');
+    return '<div class="card" style="overflow:hidden;margin-bottom:16px">' +
+      '<div class="sec-head pad"><div><div class="t">Деньги на трафик</div>' +
+      '<div class="s">расход заводится вручную на вкладке «Расход» · ' +
+      'выручка берётся по обеим дорогам: касса и счета CRM</div></div></div>' +
+      '<div class="brk" style="border-top:1px solid var(--line)">' + rows + '</div></div>';
+  }
+
   function launchCharts(cur) {
     var days = cur.by_day || [];
     var withData = days.filter(function (d) { return d.registered || d.paid; });
@@ -27677,6 +27705,7 @@
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
       launchMoney(cur) +
+      launchSpend(cur) +
       launchViewers(cur) +
       launchCharts(cur) +
       '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
