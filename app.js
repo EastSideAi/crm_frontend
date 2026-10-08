@@ -6943,7 +6943,7 @@
             free.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name || x.login) + '</option>'; }).join('') + '</select></span>'
         : '';
       box.innerHTML = '<div class="pp">' + chips + sel + '</div>';
-      searchSelect(box.querySelector('select.pp-add'), { find: 'Кого добавить' });
+      searchSelect(box.querySelector('select.pp-add'));
       Array.prototype.forEach.call(box.querySelectorAll('[data-ppx]'), function (b) {
         b.addEventListener('click', function () {
           ids = ids.filter(function (x) { return x !== +b.getAttribute('data-ppx'); });
@@ -6953,7 +6953,12 @@
       var add = box.querySelector('select.pp-add');
       if (add) add.addEventListener('change', function () {
         if (!add.value) return;
-        ids.push(+add.value); draw(); if (opts.onChange) opts.onChange(ids);
+        ids.push(+add.value); draw();
+        // Коробка перерисована, прежней кнопки нет — фокус на новую, иначе
+        // второго человека с клавиатуры не добавить.
+        var again = box.querySelector('.ss-btn');
+        if (again) again.focus();
+        if (opts.onChange) opts.onChange(ids);
       });
     }
     draw();
@@ -6992,10 +6997,13 @@
     sel.style.display = 'none';
     wrap.insertBefore(btn, sel);
 
+    // «Никто» приходит и пустой строкой, и нулем (whoOpts на разборе встречи
+    // отдает value="0"). Для человека это одно и то же — поле не заполнено.
+    var empty = function (v) { return !v || v === '0'; };
     var label = function () {
       var o = sel.options[sel.selectedIndex];
       btn.textContent = (o && o.text) || opts.empty || 'Выбрать';
-      btn.classList.toggle('ss-empty', !sel.value);
+      btn.classList.toggle('ss-empty', empty(sel.value));
     };
     label();
     sel.addEventListener('change', label);
@@ -7008,6 +7016,8 @@
       btn.setAttribute('aria-expanded', 'false');
       document.removeEventListener('keydown', onKey, true);
       document.removeEventListener('mousedown', onOut, true);
+      document.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
     };
     var onKey = function (e) {
       if (e.key === 'Escape') { e.stopPropagation(); close(); btn.focus(); }
@@ -7015,6 +7025,26 @@
     // btn.contains, а не сравнение с самим btn: клик приходится на текст внутри.
     var onOut = function (e) {
       if (pop && !pop.contains(e.target) && !btn.contains(e.target)) close();
+    };
+    /* Поповер лежит в body и позиционируется от кнопки. Внутри разметки он
+       обрезался бы: у карточки цели overflow:hidden, у тела модалки своя
+       прокрутка — список открывался бы в никуда. */
+    var place = function () {
+      if (!pop) return;
+      if (!btn.isConnected) { close(); return; }
+      var r = btn.getBoundingClientRect();
+      // Поле спрятали, пока список был открыт — закрываем, иначе он висит сам
+      // по себе.
+      if (!r.width && !r.height) { close(); return; }
+      // Список не уже своего поля: иначе он перестает читаться как его
+      // продолжение. Уже — только под узким чипом «+ еще».
+      pop.style.minWidth = Math.round(r.width) + 'px';
+      var w = pop.offsetWidth, h = pop.offsetHeight;
+      pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+      var top = r.bottom + 6;
+      // Снизу не влезает, а сверху есть место — встаем над полем.
+      if (top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      pop.style.top = Math.max(8, Math.min(top, window.innerHeight - h - 8)) + 'px';
     };
 
     var open = function () {
@@ -7024,36 +7054,50 @@
       pop.setAttribute('role', 'listbox');
       btn.setAttribute('aria-expanded', 'true');
       pop.innerHTML =
-        '<input type="search" class="al-in sm ss-q" autocomplete="off" placeholder="' +
+        '<input type="text" class="al-in sm ss-q" autocomplete="off" placeholder="' +
           esc(opts.find || 'Имя или фамилия') + '">' +
         '<div class="ss-list"></div>' +
         '<div class="ss-none" hidden>Никого с таким именем нет</div>';
-      wrap.appendChild(pop);
-      // Селект у правого края карточки — список уезжал бы за экран.
-      if (pop.getBoundingClientRect().right > window.innerWidth - 8) pop.classList.add('flip');
-      // На телефоне выбор часто стоит у нижнего края окна, и список открывается
-      // уже за ним: человек видит поле поиска и пустоту под ним.
-      if (pop.scrollIntoView) pop.scrollIntoView({ block: 'nearest' });
+      document.body.appendChild(pop);
 
       var list = pop.querySelector('.ss-list'), q = pop.querySelector('.ss-q');
-      // Пустой пункт («+ исполнитель», «не назначена») — это подпись самого
+      // Пустой пункт («+ исполнитель», «— не назначен —») — это подпись самого
       // поля, а не человек: в списке он строка, которая ничего не делает.
       var all = Array.prototype.map.call(sel.options, function (o, i) {
-        return { i: i, text: o.text, val: o.value, low: (o.text || '').toLowerCase() };
-      }).filter(function (it) { return it.val !== ''; });
+        var t = o.text || '';
+        // Хвост в скобках — пометка про бота, а не часть имени.
+        var at = t.indexOf(' (');
+        return { i: i, text: at > 0 ? t.slice(0, at) : t, alt: at > 0 ? t.slice(at + 1) : '',
+                 val: o.value, low: t.toLowerCase() };
+      }).filter(function (it) { return !empty(it.val); });
       var paint = function () {
         var want = (q.value || '').trim().toLowerCase();
-        var hits = want ? all.filter(function (it) { return it.low.indexOf(want) !== -1; }) : all;
+        var hits = all.filter(function (it) { return !want || it.low.indexOf(want) !== -1; });
+        // Совпадение в начале имени или фамилии — выше: Enter берет первую
+        // строку, поэтому порядок здесь работа, а не косметика.
+        if (want) {
+          hits = hits.map(function (it, n) {
+            var head = it.low.split(' ').some(function (wd) { return wd.indexOf(want) === 0; });
+            return { it: it, k: (head ? 0 : 1), n: n };
+          }).sort(function (a, b) { return a.k - b.k || a.n - b.n; })
+            .map(function (x) { return x.it; });
+        }
         list.innerHTML = hits.map(function (it, n) {
           return '<button type="button" class="ss-i' + (it.val === sel.value ? ' on' : '') +
-            (n === 0 && want ? ' act' : '') + '" data-i="' + it.i + '">' + esc(it.text) + '</button>';
+            (n === 0 ? ' act' : '') + '" data-i="' + it.i + '">' + esc(it.text) +
+            (it.alt ? '<i class="ss-alt">' + esc(it.alt) + '</i>' : '') + '</button>';
         }).join('');
         pop.querySelector('.ss-none').hidden = !!hits.length;
+        place();
       };
       var pick = function (i) {
         sel.selectedIndex = i;
         close();
         label();
+        // Фокус возвращаем на поле: выбрать трех соисполнителей подряд с
+        // клавиатуры иначе нельзя. Если место перерисовалось (peoplePick),
+        // фокус ставит уже оно — на свою свежую кнопку.
+        btn.focus();
         try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { /* старый браузер */ }
       };
       list.addEventListener('click', function (e) {
@@ -7079,9 +7123,13 @@
         items[to].scrollIntoView({ block: 'nearest' });
       });
       paint();
+      place();
       q.focus();
       document.addEventListener('keydown', onKey, true);
       document.addEventListener('mousedown', onOut, true);
+      // true: прокрутка идет у тела модалки и у страницы, всплытия у нее нет.
+      document.addEventListener('scroll', place, true);
+      window.addEventListener('resize', place);
     };
     btn.addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation();
@@ -11702,6 +11750,9 @@
       // пустой композер под каждой открытой целью это шум.
       box.addEventListener('focusout', function () {
         setTimeout(function () {
+          // Открытый поиск человека лежит в body, фокус уходит туда — но из
+          // композера человек не уходил, он как раз выбирает исполнителя.
+          if (document.querySelector('.ss-pop')) return;
           if (!box.contains(document.activeElement) && !inp.value.trim()) more.hidden = true;
         }, 150);
       });
