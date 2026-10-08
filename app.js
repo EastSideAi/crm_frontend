@@ -9,6 +9,12 @@
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
   // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
   // из-за рубежа. С зеркала по умолчанию ходим в api.eastside.study.
+  // Потолок файла в карточке. Тот же, что у кабинета семьи и у бэкенда
+  // (storage.MAX_CASE_FILE_BYTES): документ один и тот же, а дверей две. Раньше
+  // тут стоял потолок базы в 12 МБ, и менеджер не мог положить в карточку скан,
+  // который клиент спокойно грузил себе сам (Мария 08.10.2026).
+  var DOC_MAX_MB = 100;
+
   var API_RU = 'https://api.xn--80aikf2bag.xn--p1ai';
   var API_INT = 'https://api.eastside.study';
   var API_LS = 'eastside_crm_api';
@@ -40260,7 +40266,7 @@
         '<span class="doc-fld-v">' + esc(f.value) + '</span></div>';
     }).join('');
     return '<div class="m-ctitle">Документы</div>' +
-      '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до 12 МБ или ссылка.</div>' +
+      '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до ' + DOC_MAX_MB + ' МБ или ссылка.</div>' +
       (fields ? '<div class="doc-flds">' + fields + '</div>' : '') +
       (docs.length ? '<div>' + rows + '</div>' : '') +
       // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
@@ -41835,7 +41841,7 @@
     var rcptFile = el('pay-rcpt-file'), attachTo = null, stagedRcpt = null;
     function reloadPay() { refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'pay') renderDrawer(true); }); }
     function uploadReceipt(file, cb) {
-      if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
+      if (file.size > DOC_MAX_MB * 1024 * 1024) { showToast('Файл больше ' + DOC_MAX_MB + ' МБ'); return; }
       var reader = new FileReader();
       reader.onload = function () {
         apiSend('/admin/api/leads/' + id + '/docs', 'POST',
@@ -42585,7 +42591,7 @@
     }
   }
   function uploadDoc(id, file, kind) {
-    if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
+    if (file.size > DOC_MAX_MB * 1024 * 1024) { showToast('Файл больше ' + DOC_MAX_MB + ' МБ'); return; }
     // моментальный фидбек — не ждём сервер
     var drop = el('m-drop');
     if (drop) { drop.classList.add('loading'); drop.innerHTML = '<div class="dz-ic">' + ic('dl', 18) + '</div><div><b>Загружаю</b> ' + esc(file.name) + '…</div>'; }
