@@ -3121,6 +3121,12 @@
       // читается как ошибка системы.
       if (state.taskWho) tphr = 'Задачи одного человека: <b>' + esc(state.taskWho.name) +
         '</b>. Сними чип с именем, чтобы вернуться ко всей команде.';
+      // Пока в строке поиска слово, список внизу не про неделю: сводка «неделя
+      // пустая» рядом с найденными задачами читается как сбой.
+      var fv = TASK_SEGS[taskSeg()].view;
+      if (fndOn() && (fv === 'myweek' || fv === 'goals')) {
+        tphr = 'Ищу по всему задачнику, а не только по открытой неделе.';
+      }
       /* Обучение открывается в этом же разделе (решение Павла от 25.08.2026), и
          шапка честно говорит, где человек находится: иначе он видит курс под
          заголовком «Задачи» и не понимает, куда делся список. Выход и повторный
@@ -6834,7 +6840,7 @@
     // Слово в строке поиска — ищем по всему задачнику, а не по открытому срезу.
     // На «Команде» и «Учениках» строка ищет людей и учеников, а не задачи, —
     // там она своя и остается как была.
-    if (tsOn() && (v === 'myweek' || v === 'goals')) { renderTaskSearch(view); return; }
+    if (fndOn() && (v === 'myweek' || v === 'goals')) { renderTaskFind(view); return; }
     if (v === 'myweek') { renderMyWeek(view); return; }
     if (v === 'teamweek') { renderTeamWeek(view); return; }
     if (state.tasks === null) { view.innerHTML = dashSkeleton(); loadTasks(); return; }
@@ -7709,14 +7715,14 @@
      дается»). Поэтому слова от двух букв уводят на свой экран: сервер ищет по
      всей базе, а строка результата говорит, из какой задача недели и где
      именно нашлось слово. */
-  function tsWords() {
+  function fndWords() {
     return (state.taskQ || '').toLowerCase().split(/\s+/)
       .filter(function (w) { return w.length >= 2; }).slice(0, 6);
   }
-  function tsOn() { return tsWords().length > 0; }
+  function fndOn() { return fndWords().length > 0; }
   /* Подсветка совпадений. Одним проходом по тексту, а не заменой в готовом
      html: иначе «amp» из запроса попадет внутрь экранированного символа. */
-  function tsMark(text, words) {
+  function fndMark(text, words) {
     text = text || '';
     if (!words.length) return esc(text);
     var re = new RegExp('(' + words.map(function (w) {
@@ -7730,69 +7736,85 @@
     }
     return out + esc(text.slice(last));
   }
-  function tsWeek(t) {
+  function fndWeek(t) {
     if (!t.week_starts) return 'без недели';
     var a = new Date(t.week_starts), b = new Date(a.getTime() + 6 * 86400000);
-    return a.getDate() + '–' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()];
+    // Неделя на стыке месяцев: «29 сен – 5 окт», а не «29–5 окт».
+    return a.getMonth() === b.getMonth()
+      ? a.getDate() + '–' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()]
+      : a.getDate() + ' ' + MONTHS_RU[a.getMonth()] + ' – ' + b.getDate() + ' ' + MONTHS_RU[b.getMonth()];
   }
-  var tsTimer = null;
+  var fndTimer = null;
   /* Перерисовка, не роняя каретку: человек продолжает печатать, пока ответ
      летит с сервера. */
-  function tsRedraw() {
+  function fndRedraw() {
     var on = document.activeElement && document.activeElement.id === 'tsk-q';
     var pos = on ? document.activeElement.selectionStart : 0;
-    renderView();
+    renderHead(); renderView();
     if (!on) return;
     var again = el('tsk-q');
     if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
   }
-  function loadTaskSearch(q) {
-    if (tsTimer) clearTimeout(tsTimer);
-    state.tsAsked = q;
+  function loadTaskFind(q) {
+    if (fndTimer) clearTimeout(fndTimer);
+    state.fndAsked = q;
+    state.fndErr = '';
     // Четверть секунды тишины: иначе на каждую букву уходит запрос.
-    tsTimer = setTimeout(function () {
+    fndTimer = setTimeout(function () {
       api('/admin/api/tasks/search?q=' + encodeURIComponent(q)).then(function (r) {
         // Пока ждали, человек дописал еще слово — этот ответ уже не про то.
-        if (state.tsAsked !== q) return;
-        state.tsFound = { q: q, tasks: (r && r.tasks) || [], total: (r && r.total) || 0 };
-        if (state.page === 'tasks') tsRedraw();
+        if (state.fndAsked !== q) return;
+        state.fndFound = { q: q, tasks: (r && r.tasks) || [], total: (r && r.total) || 0 };
+        if (state.page === 'tasks') fndRedraw();
       }).catch(function () {
-        if (state.tsAsked !== q) return;
-        state.tsFound = { q: q, tasks: 'none', total: 0 };
-        if (state.page === 'tasks') tsRedraw();
+        if (state.fndAsked !== q) return;
+        // Ошибку не кладем в кэш результатов: иначе повтор по той же строке
+        // уже никогда не уйдет, а кнопка «Повторить» станет враньем.
+        state.fndErr = q;
+        if (state.page === 'tasks') fndRedraw();
       });
     }, 260);
   }
-  function renderTaskSearch(view) {
-    var q = (state.taskQ || '').trim(), words = tsWords();
-    var got = state.tsFound && state.tsFound.q === q ? state.tsFound : null;
-    if (!got && state.tsAsked !== q) loadTaskSearch(q);
+  function fndSkeleton() {
+    var row = '<div class="sk-row fnd-sk">' +
+      '<span class="shim sk-cell w60"></span>' +
+      '<span class="shim sk-cell w40"></span></div>';
+    return '<div class="sk-list">' + row + row + row + '</div>';
+  }
+  function renderTaskFind(view) {
+    var q = (state.taskQ || '').trim(), words = fndWords();
+    var got = state.fndFound && state.fndFound.q === q ? state.fndFound : null;
+    var failed = state.fndErr === q;
+    if (!got && !failed && state.fndAsked !== q) loadTaskFind(q);
 
-    var head, body;
-    if (!got) {
-      head = 'Ищу по всему задачнику…';
-      body = '<div class="empty">Секунду.</div>';
-    } else if (got.tasks === 'none') {
-      head = 'Поиск не ответил';
-      body = '<div class="empty">Не получилось спросить сервер. Проверь интернет и набери еще раз.</div>';
+    var head = '', body;
+    if (failed) {
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">Поиск не ответил</div>' +
+        '<div class="wk-empty-s">Похоже, пропал интернет. Задачи никуда не делись.</div>' +
+        '<button class="bp sm" id="fnd-retry">' + ic('refresh', 14) + 'Попробовать снова</button></div>';
+    } else if (!got) {
+      head = 'ищу по всему задачнику…';
+      body = fndSkeleton();
     } else if (!got.tasks.length) {
-      head = 'Ничего не нашлось';
-      body = '<div class="empty">Ни одной задачи с такими словами. Попробуй одно слово вместо нескольких' +
-        ' или фамилию исполнителя: ищем по названию, описанию, критерию, обсуждению и людям.</div>';
+      body = '<div class="wk-empty">' +
+        '<div class="wk-empty-t">Ничего не нашлось</div>' +
+        '<div class="wk-empty-s">Ни одной задачи с такими словами. Попробуй одно слово вместо ' +
+          'нескольких или фамилию исполнителя: ищем по названию, описанию, критерию, ' +
+          'обсуждению, людям и ученикам.</div></div>';
     } else {
-      head = 'Нашлось ' + got.total + ' ' + plural(got.total, 'задача', 'задачи', 'задач') +
-        ' по всему задачнику' +
+      head = got.total + ' ' + plural(got.total, 'задача', 'задачи', 'задач') + ' по всему задачнику' +
         (got.total > got.tasks.length ? ', показываю первые ' + got.tasks.length : '');
       body = got.tasks.map(function (t) {
-        var extra = ['<span class="dy-m ts-week">' + esc(tsWeek(t)) + '</span>'];
+        var extra = ['<span class="dy-m fnd-week">неделя ' + esc(fndWeek(t)) + '</span>'];
         // Статус показываем у всего, что уже не в работе: ищут обычно старое,
         // и «эта закрыта, а эта отменена» — первое, что надо понять.
         if (t.status === 'done' || t.status === 'cancel') {
           extra.push('<span class="sev ' + TASK_ST[t.status].cls + '">' + TASK_ST[t.status].label + '</span>');
         }
         if (t.found_in) {
-          extra.push('<span class="dy-m ts-found"><i>' + esc(t.found_in) + '</i>' +
-            tsMark(t.excerpt || '', words) + '</span>');
+          extra.push('<span class="dy-m fnd-in"><i>' + esc(t.found_in) + '</i>' +
+            fndMark(t.excerpt || '', words) + '</span>');
         }
         return dyRow(t, { who: true, due: true, odWord: true, readOnly: true,
                           mark: words, extra: extra });
@@ -7800,27 +7822,39 @@
     }
 
     view.innerHTML = '<div class="card listcard">' +
-      '<div class="list-tools brd-tools">' +
+      '<div class="list-tools fnd-tools">' +
         '<div class="searchwrap wk-search has-val">' + ic('search', 15) +
           '<input id="tsk-q" class="search" type="search" placeholder="Слово из задачи, фамилия, ученик" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
-          '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
-        '<span class="ts-head">' + esc(head) + '</span>' +
+          '<button class="s-clear" id="tsk-qx" title="Очистить поиск" aria-label="Очистить поиск">' + ic('x', 12) + '</button></div>' +
+        (head ? '<span class="fnd-head">' + esc(head) + '</span>' : '') +
       '</div>' +
-      '<div class="list-body ts-list">' + body + '</div>' +
+      '<div class="list-body fnd-list">' + body + '</div>' +
     '</div>';
 
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
-      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
       var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
-    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
+    if (el('fnd-retry')) el('fnd-retry').addEventListener('click', function () {
+      state.fndErr = ''; state.fndAsked = null; fndRedraw();
+    });
     qi.focus();
     try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) {}
+    // Экран клавиатурный по природе: человек печатает и жмет Enter на найденном.
     Array.prototype.forEach.call(view.querySelectorAll('.dy-row[data-tid]'), function (row) {
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      var open = function () { openTask(+row.getAttribute('data-tid')); };
       row.addEventListener('click', function (e) {
         if (e.target.closest('[data-goalid]')) return;
-        openTask(+row.getAttribute('data-tid'));
+        open();
+      });
+      row.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target.closest('[data-goalid]')) return;
+        e.preventDefault(); open();
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-goalid]'), function (b) {
@@ -7887,7 +7921,7 @@
     if (opts.extra) meta = meta.concat(opts.extra);
     return '<div class="trow dy-row' + (closed ? ' closed' : '') + (t.overdue ? ' r-crit' : '') + (meta.length ? ' has-meta' : '') + '" data-tid="' + t.id + '">' +
       '<div class="dy-t">' + quick + '<div class="dy-main"><span class="dy-ttl">' + impMark(t) +
-        (opts.mark ? tsMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
+        (opts.mark ? fndMark(t.title, opts.mark) : esc(t.title)) + '</span>' +
         (meta.length ? '<div class="dy-meta">' + meta.join('') + '</div>' : '') + '</div></div>' +
       '<div class="dy-r">' + right + '</div>' +
     '</div>';
@@ -10114,7 +10148,6 @@
     var q = (state.taskQ || '').toLowerCase().trim();
     // base — то, что доска покажет без отбора по цели: по нему же считают чипы целей.
     var base = (dept ? state.myboard.dept.tasks : gave ? state.myboard.gave : state.myboard.mine);
-    if (q) base = base.filter(function (t) { return (t.title + ' ' + (t.client_name || '') + ' ' + (t.assignee_name || '')).toLowerCase().indexOf(q) !== -1; });
     var list = base;
     if (dept && state.boardGoal) {
       list = list.filter(function (t) { return state.boardGoal === 'none' ? !t.parent_id : String(t.parent_id) === String(state.boardGoal); });
@@ -10152,8 +10185,8 @@
       '<button class="rh-hx" id="tb-how-x" title="Понятно, больше не показывать">' + ic('x', 14) + '</button></div>' +
       '<div class="rh-ht tb-how-d">' + hint + '</div><div class="rh-ht tb-how-m">' + hintM + '</div></div>';
     view.innerHTML = '<div class="wk-top tb-top">' + planModeSeg() + deptChips() + prioSeg() + whoSeg + '<span class="wk-spacer"></span>' +
-        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Найти на доске" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+        '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         (dept ? boardGoalSelect(state.myboard.dept, base) : '') + '</div>' +
       how +
@@ -10171,10 +10204,10 @@
     var qi = el('tsk-q');
     if (qi) {
       qi.addEventListener('input', function () {
-        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
         var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
       });
-      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
     }
     Array.prototype.forEach.call(view.querySelectorAll('[data-boardwho]'), function (b) {
       b.addEventListener('click', function () { state.boardWho = b.getAttribute('data-boardwho'); state.boardGoal = ''; renderView(); });
@@ -10312,8 +10345,10 @@
     }
     var w = state.myweek, r = w.r || {};
     var tasks = prioSort(w.tasks || []);
+    // Слово из двух букв уводит на экран поиска по всему задачнику (renderTasks),
+    // сюда доходит только одна буква. По одной букве не отбираем: список бы
+    // опустел и экран дня подпрыгнул на пустое место.
     var q = (state.taskQ || '').toLowerCase().trim();
-    if (q) tasks = tasks.filter(function (t) { return (t.title + ' ' + (t.client_name || '')).toLowerCase().indexOf(q) !== -1; });
     var cap = r.cap || 0, load = r.load || 0;
     var planGiven = !!(r.plan && r.plan.given), repGiven = !!(r.report && r.report.given);
     var sh = wkShift();
@@ -10359,7 +10394,7 @@
     }
 
     var head = planModeSeg() + deptChips() + prioSeg();
-    if (state.planMode === 'day' && sh === 0 && !q) {
+    if (state.planMode === 'day' && sh === 0) {
       // Текущая неделя — это день. Поиск тут раньше не ставили: фильтровать
       // десять строк нечего. Теперь он ищет по всему задачнику, и экран дня —
       // как раз тот, с которого ищут (Павел 08.10.2026), поэтому поле есть.
@@ -10376,8 +10411,8 @@
       view.innerHTML = '<div class="wk-top">' + head + '<span class="wk-spacer"></span>' + wkNav(w.label || r.label) + '</div>' +
         '<div class="card listcard">' +
         '<div class="list-tools brd-tools">' + meter +
-          '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-            '<input id="tsk-q" class="search" type="search" placeholder="Найти в неделе" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+          '<div class="searchwrap wk-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+            '<input id="tsk-q" class="search" type="search" placeholder="Найти задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
             '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
           act +
           '<button class="bp ghost sm" id="tsk-new">' + ic('plus', 14) + 'Новая задача</button>' +
@@ -10392,10 +10427,10 @@
     var qi = el('tsk-q');
     if (qi) {
       qi.addEventListener('input', function () {
-        state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+        state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
         var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
       });
-      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+      el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
     }
     ['wk-collect', 'wk-collect2'].forEach(function (id) {
       if (el(id)) el(id).addEventListener('click', function () { openWeekCollect(w); });
@@ -11769,10 +11804,7 @@
       return renderGantt(view, gtTop);
     }
     var q = (state.taskQ || '').toLowerCase().trim();
-    var list = (state.tasks || []).filter(function (g) {
-      if (!q) return true;
-      return (g.title + ' ' + (g.assignee_name || '')).toLowerCase().indexOf(q) !== -1;
-    });
+    var list = (state.tasks || []);
     var order = [''].concat(Object.keys(DEPTS));
     var groups = order.map(function (d) {
       return { dept: d, label: d ? DEPTS[d] : 'Цели компании',
@@ -11781,7 +11813,7 @@
       if (state.taskDept) return grp.dept === state.taskDept;
       // Пустой блок показываем, чтобы было куда завести цель; операционку и
       // «вся компания» — только когда там что-то есть.
-      return grp.goals.length || (deptLive(grp.dept) && !q);
+      return grp.goals.length || deptLive(grp.dept);
     });
 
     var body = groups.map(function (grp) {
@@ -11804,23 +11836,23 @@
     }).join('');
 
     view.innerHTML = '<div class="gl-tools">' + deptChips() + glModeSeg() +
-        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('filter', 15) +
-          '<input id="tsk-q" class="search" type="search" placeholder="Цель или человек" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
+        '<div class="searchwrap gl-search' + (q ? ' has-val' : '') + '">' + ic('search', 15) +
+          '<input id="tsk-q" class="search" type="search" placeholder="Найти цель или задачу" autocomplete="off" value="' + esc(state.taskQ || '') + '">' +
           '<button class="s-clear" id="tsk-qx">' + ic('x', 12) + '</button></div>' +
         '<button class="bp ghost sm gl-meet" id="tsk-meet" title="Импорт встречи">' + ic('doc', 14) + '<span>Импорт встречи</span></button>' +
       '</div>' +
       (groups.length ? body
-        : '<div class="card"><div class="empty">' + (q ? 'Ничего не нашлось по этому запросу.' : 'Целей пока нет.') + '</div></div>');
+        : '<div class="card"><div class="empty">Целей пока нет.</div></div>');
 
     wireDeptChips(view);
     wireGlMode(view);
     el('tsk-meet').addEventListener('click', openMeetingUpload);
     var qi = el('tsk-q');
     qi.addEventListener('input', function () {
-      state.taskQ = qi.value; var pos = qi.selectionStart; renderView();
+      state.taskQ = qi.value; var pos = qi.selectionStart; renderHead(); renderView();
       var again = el('tsk-q'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} }
     });
-    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderView(); });
+    el('tsk-qx').addEventListener('click', function () { state.taskQ = ''; renderHead(); renderView(); });
 
     // Кольца: от прошлого значения к новому, чтобы закрытый шаг было видно движением.
     Array.prototype.forEach.call(view.querySelectorAll('.gl-ring'), function (r) {
@@ -13060,7 +13092,7 @@
         apiSend('/admin/api/tasks/' + id + '/status', 'POST', { status: to, text: why || '' }, function () {
           state.tasks = null;
           // Результат поиска держит прежний статус задачи — он устарел.
-          state.tsFound = null; state.tsAsked = null;
+          state.fndFound = null; state.fndAsked = null;
           loadTaskSummary();
           api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
           if (state.page === 'tasks') renderView();
