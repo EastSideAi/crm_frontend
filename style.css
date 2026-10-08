@@ -11602,3 +11602,26 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mot-un .un-s { grid-column: 1 / -1; }
   .mot-un .un-s select { width: 100%; max-width: none; }
 }
+
+/* ── Правка строки человека в отчёте запуска ───────────────────────────────
+   Два поля в конце строки: купил и настоящий источник. Автоматика считает запуск
+   по следам в базе, а половина сделок идёт мимо них — продали по телефону, пришёл
+   по совету. Поэтому владелец правит строку прямо здесь, и правка видна рядом с
+   расчётом, а не вместо него.
+   Контролы тихие: строка остаётся списком людей, а не формой. Цвет только у
+   отмеченной продажи — единственное место, где он что-то значит. */
+.lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr {
+  grid-template-columns: minmax(130px, 1.4fr) minmax(110px, 1fr) minmax(90px, .9fr)
+                         96px 104px minmax(110px, .9fr); }
+.lp-tbl.edit .lp-th span:last-child { text-align: left; }
+.lp-fx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lp-fx .al-in { font-size: 11.5px; padding: 4px 7px; border-radius: 7px; height: auto; }
+.lp-sold { font-size: 11.5px; font-weight: 600; padding: 4px 8px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink-3);
+  cursor: pointer; white-space: nowrap; text-align: center; }
+.lp-sold:hover { border-color: var(--ink-3); color: var(--ink-2); }
+.lp-sold.yes { background: var(--green-soft); border-color: transparent; color: var(--green-ink); }
+.lp-sold.no { background: var(--fill); border-color: transparent; color: var(--ink-2);
+  text-decoration: line-through; }
+.lp-sold.busy, .lp-fx .al-in.busy { opacity: .5; pointer-events: none; }
+.lp-sold.err, .lp-fx .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }

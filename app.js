@@ -26768,7 +26768,35 @@
   /* Пустое значение показываем прочерком: «null» на экране CRM читается как поломка. */
   function lpCell(v) { return v ? esc(v) : '<i class="lp-dash">—</i>'; }
 
-  function launchPeopleRow(p) {
+  /* Ячейка «купил»: тумблер на три состояния и сумма. Три, а не два, потому что
+     «не трогали» и «не купил» — разные ответы: в первом цифру считает автоматика,
+     во втором владелец сказал «нет», и автоматику надо перебить. Снять ошибочную
+     галочку иначе было бы нечем. */
+  function lpSoldCell(p) {
+    var fx = p.fix || {};
+    var st = (fx.sold === true) ? 'yes' : (fx.sold === false ? 'no' : 'none');
+    var lab = st === 'yes' ? 'купил' : (st === 'no' ? 'не купил' : 'отметить');
+    var rub = (fx.sold_rub != null && fx.sold_rub !== '') ? fx.sold_rub : '';
+    /* Подсказка от базы: сколько человек реально заплатил после старта запуска.
+       Стоит рядом, а не вместо: владелец правит только то, чего база не знает. */
+    var auto = (p.paid_rub && !fx.sold) ? '<small>по базе ' + fmtMoney(p.paid_rub) + ' ₽</small>' : '';
+    return '<span class="lp-fx">' +
+      '<button class="lp-sold ' + st + '" data-lp-sold="' + esc(p.id) + '" data-st="' + st + '">' +
+        lab + '</button>' +
+      (st === 'yes'
+        ? '<input class="al-in lp-rub" data-lp-rub="' + esc(p.id) + '" inputmode="numeric" ' +
+          'maxlength="9" placeholder="сумма" value="' + esc(String(rub)) + '">'
+        : auto) +
+      '</span>';
+  }
+
+  function lpSrcCell(p) {
+    var fx = p.fix || {};
+    return '<span class="lp-fx"><input class="al-in lp-src" data-lp-src="' + esc(p.id) + '" ' +
+      'maxlength="120" placeholder="как есть" value="' + esc(fx.real_source || '') + '"></span>';
+  }
+
+  function launchPeopleRow(p, edit) {
     var id = (p.session_id == null || p.session_id === '') ? '' : String(p.session_id);
     /* Откуда пришёл: метка ссылки — главное, канал связи — подпись. Метки нет —
        показываем канал, он тоже ответ на вопрос «откуда». */
@@ -26782,7 +26810,14 @@
       '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
       '<span class="lp-sr">' + lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
       '<span class="lp-dt">' + (p.registered_at ? esc(fmtWhen(p.registered_at)) : '<i class="lp-dash">—</i>') +
-      '</span></div>';
+      '</span>' +
+      /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
+         нет id, которым её привязать, и кнопка молча не сработала бы. */
+      (edit ? (p.id && p.id.indexOf('anon:') !== 0
+               ? lpSoldCell(p) + lpSrcCell(p)
+               : '<span class="lp-fx"><i class="lp-dash">—</i></span>' +
+                 '<span class="lp-fx"><i class="lp-dash">—</i></span>') : '') +
+      '</div>';
   }
 
   /* ESC закрывает список людей (навешивается один раз). Попап маркетинга ловит свой
@@ -26819,13 +26854,17 @@
          Назвать чужой столбец «Контакт» и «Регистрация» значит пообещать данные,
          которых в строке нет. */
       var bot = p.kind === 'block' && p.block !== 'source';
+      /* Правку показываем только там, где за строкой стоит регистрация запуска: у
+         людей из бота id карточки нет, и правка им не к чему прицепиться. */
+      var edit = !bot && p.kind !== 'block';
       var cols = bot
         ? ['Человек', 'Ник', 'Откуда пришёл',
            p.block === 'channel' ? 'Вступил' : 'Зашёл в тест']
         : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
-      body = '<div class="lp-tbl"><div class="lp-th">' +
+      if (edit) cols = cols.concat(['Купил', 'Источник по факту']);
+      body = '<div class="lp-tbl' + (edit ? ' edit' : '') + '"><div class="lp-th">' +
         cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
-        p.rows.map(launchPeopleRow).join('') + '</div>';
+        p.rows.map(function (r) { return launchPeopleRow(r, edit); }).join('') + '</div>';
     }
 
     var more = shown > 0 && p.total != null && shown < p.total;
@@ -26874,6 +26913,58 @@
     if (moreBtn) moreBtn.addEventListener('click', function () {
       if (state._lpPeople && !state._lpPeople.loading) launchPeopleLoad(true);
     });
+    /* Правка сохраняется сразу, без кнопки «Сохранить»: экран разбирают на двести
+       строк, и собирать их все, чтобы нажать одну кнопку, никто не станет. Цена —
+       запрос на каждое действие, но запрос тут дешевле потерянной правки.
+       stopPropagation обязателен: строка целиком открывает карточку человека, и без
+       него первый же клик по галочке уводил бы со страницы. */
+    function lpFixSend(regId, patch, node) {
+      if (node) node.classList.add('busy');
+      api('/admin/api/marketing/launch/person-fix', {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({ launch_slug: p.slug, reg_id: regId }, patch))
+      }).then(function (r) {
+        var cur = state._lpPeople;
+        if (!cur) return;
+        for (var i = 0; i < cur.rows.length; i++) {
+          if (String(cur.rows[i].id) === String(regId)) { cur.rows[i].fix = r.fix; break; }
+        }
+        launchPeopleModal();
+      }).catch(function () {
+        if (node) { node.classList.remove('busy'); node.classList.add('err'); }
+        showToast('Не удалось сохранить правку — попробуйте ещё раз');
+      });
+    }
+
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-sold]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        /* По кругу: не трогали → купил → не купил → не трогали. Третье состояние
+           нужно, чтобы вернуть строку автоматике, а не остаться с чужим «нет». */
+        var st = b.getAttribute('data-st');
+        var next = st === 'none' ? true : (st === 'yes' ? false : null);
+        lpFixSend(b.getAttribute('data-lp-sold'), { sold: next }, b);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src]'), function (inp) {
+      inp.addEventListener('click', function (e) { e.stopPropagation(); });
+      inp.addEventListener('keydown', function (e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+      });
+      /* Пишем на уходе из поля, а не на каждой букве: иначе «Инстаграм» улетел бы
+         девятью запросами, и в базе осело бы «И». */
+      inp.addEventListener('change', function () {
+        var rub = inp.getAttribute('data-lp-rub');
+        if (rub) {
+          var n = parseInt(String(inp.value).replace(/\D/g, ''), 10);
+          lpFixSend(rub, { sold_rub: isNaN(n) ? 0 : n }, inp);
+        } else {
+          lpFixSend(inp.getAttribute('data-lp-src'), { real_source: inp.value }, inp);
+        }
+      });
+    });
+
     Array.prototype.forEach.call(host.querySelectorAll('[data-lp-lead]'), function (row) {
       var go = function () { openLeadTab(row.getAttribute('data-lp-lead')); };
       row.addEventListener('click', go);
