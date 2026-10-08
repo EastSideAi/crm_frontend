@@ -2102,6 +2102,11 @@
         '<main class="main">' +
           '<div class="topbar"><div id="tb-left"></div>' +
             '<div class="tbr">' +
+              /* Ссылка на то, что открыто: раздел с вкладкой, а при открытой
+                 карточке — она сама. Без кнопки адрес приходилось искать в строке
+                 браузера, и люди присылали друг другу вход в систему целиком. */
+              '<button class="tb-link" id="tb-link" title="Скопировать ссылку на этот экран">' +
+                ic('copy', 15) + '<span>Ссылка</span></button>' +
               '<button class="profile" id="profile"><div class="av">' + esc(initials(state.userName)) + '</div>' +
                 '<div class="pinfo"><div class="pn">' + esc(state.userName || 'EastSide') + '</div>' +
                 '<div class="pe">' + esc(roleInfo().label) + '</div></div>' +
@@ -2116,6 +2121,11 @@
       '<nav class="mtabs" id="mtabs"></nav>';
 
     el('logout').addEventListener('click', logout);
+    var tbl = el('tb-link');
+    if (tbl) tbl.addEventListener('click', function () {
+      copyText(screenUrl(), tbl);
+      showToast('Ссылка скопирована', 'у коллеги откроется ровно этот экран');
+    });
     var bugBtn = el('side-bug');
     if (bugBtn) bugBtn.addEventListener('click', function () { openBugPanel(); });
     refreshBugCount();
@@ -2353,12 +2363,18 @@
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
+    /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
+       Аналитика бота рядом друг с другом». До этого соцсети стояли через два
+       пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
+       человек искал ее глазами каждый раз. Дальше той же группой идут подарки и
+       рассылки — это тот же трафик, только в лицах. */
+    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
+    { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     // Рассылки — журнал отправок бота: кому писали и что ответила площадка.
     { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing' },
-    { id: 'social', label: 'Соцстатистика', icon: 'chart', cap: 'marketing' },
     { id: 'partners', label: 'Партнёры', icon: 'handshake', cap: 'partners' },
     // «Что нового» видят все: cap dash есть у каждой роли. Точка — непрочитанные записи.
     { id: 'news', label: 'Что нового', icon: 'bell', cap: 'dash' },
@@ -2450,7 +2466,6 @@
     { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
-    { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
   ];
 
@@ -2724,6 +2739,17 @@
     var m = document.querySelector('.main'); if (m) m.scrollTop = 0;
   }
 
+  /* Вкладки «Маркетинга» живут отдельной константой: их спрашивает и топбар, и
+     реестр вкладок у ссылки на экран. Второй список разъехался бы при первой
+     новой вкладке, и ссылка на нее молча перестала бы работать. */
+  var MK_TABS = [['dash', 'Воронка'], ['src', 'Источники'], ['cross', 'Сквозная'],
+                 ['launch', 'Запуски'], ['efir', 'Эфиры'],
+                 ['spend', 'Расход'], ['unit', 'Декомпозиция'], ['links', 'Ссылки и сценарии']];
+  function mkTabKnown(t) {
+    return MK_TABS.filter(function (o) { return o[0] === t; }).length > 0;
+  }
+  function mkTabOk(t) { return mkTabKnown(t) ? t : 'dash'; }
+
   /* topbar: контекстные табы */
   function renderTopbar() {
     var tb = el('tb-left');
@@ -2823,9 +2849,7 @@
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
-      var mkTabs = [['dash', 'Воронка'], ['src', 'Источники'], ['cross', 'Сквозная'],
-                    ['launch', 'Запуски'], ['efir', 'Эфиры'],
-                    ['spend', 'Расход'], ['unit', 'Декомпозиция'], ['links', 'Ссылки и сценарии']];
+      var mkTabs = MK_TABS;
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
@@ -3482,7 +3506,11 @@
 
   /* ── view ─────────────────────────────────────────────── */
   var STUB_PAGES = { grants: 1, partners: 1 };
-  function renderView() {
+  /* Адрес открытого экрана ставим в обертке, а не внутри диспетчера: у него
+     десятки ранних return, и один пропущенный оставил бы в строке браузера
+     ссылку на прошлый раздел. */
+  function renderView() { renderViewBody(); syncPageHash(); }
+  function renderViewBody() {
     var view = el('view');
     if (!view) return;
     if (noSections()) {
@@ -12144,7 +12172,7 @@
       if (closed) return; closed = true;
       ov.classList.remove('show');
       document.removeEventListener('keydown', onKey);
-      if (location.hash.indexOf('#task/') === 0) history.replaceState(null, '', location.pathname + location.search);
+      if (location.hash.indexOf('#task/') === 0) backToPageHash();
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
     };
     var onKey = function (e) { if (e.key === 'Escape') close(); };
@@ -12391,7 +12419,7 @@
 
       el('tk-x').addEventListener('click', close);
       el('tk-link') && el('tk-link').addEventListener('click', function () {
-        copyText(location.origin + location.pathname + '#task/' + id, this);
+        copyText(CRM_HOME + '#task/' + id, this);
         showToast('Ссылка скопирована',
           'откроется сразу на этой карточке, вход система спросит сама');
       });
@@ -13532,7 +13560,7 @@
       if (closed) return; closed = true;
       ov.classList.remove('show');
       document.removeEventListener('keydown', onKey);
-      if (location.hash.indexOf('#meeting/') === 0) history.replaceState(null, '', location.pathname + location.search);
+      if (location.hash.indexOf('#meeting/') === 0) backToPageHash();
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
     };
     var onKey = function (e) { if (e.key === 'Escape') close(); };
@@ -36182,7 +36210,7 @@
     });
   }
   function closeDrawer() {
-    syncHash('');
+    backToPageHash();
     state.drawerId = null;
     state.botConvoId = null;
     RM_CHAT = null;
@@ -43212,6 +43240,10 @@
   function openDialogFromHash() {
     var id = hashDialogId();
     if (!id) return;
+    if (!can(pageCap('inbox'))) {
+      denyLink('dialog', 'Диалоги', 'Переписка вам не открыта', 'раздела «Диалоги» нет в вашем доступе');
+      return;
+    }
     if (state.page === 'inbox' && state.inboxMode === 'bot' && String(state.inboxSel) === String(id)) return;
     if (state.drawerId) closeDrawer();
     state.page = 'inbox'; state.inboxMode = 'bot'; state.inboxSel = id;
@@ -43222,7 +43254,10 @@
   function openTaskFromHash() {
     var tid = hashTaskId();
     if (!tid || document.querySelector('.al-ov')) return;
-    if (!can('tasks')) return;
+    if (!can('tasks')) {
+      denyLink('task', 'Задачи', 'Задача вам не открыта', 'раздела «Задачи» нет в вашем доступе');
+      return;
+    }
     openTask(+tid);
   }
   /* #meeting/<id> — разбор протокола встречи. На эту ссылку ведет ответ бота
@@ -43231,7 +43266,10 @@
   function openMeetingFromHash() {
     var mid = hashMeetingId();
     if (!mid || document.querySelector('.al-ov')) return;
-    if (!can('tasks')) return;
+    if (!can('tasks')) {
+      denyLink('meeting', 'Задачи', 'Разбор встречи вам не открыт', 'раздела «Задачи» нет в вашем доступе');
+      return;
+    }
     // #meeting/new — сразу форма загрузки: такую ссылку удобно держать под рукой
     // тому, кто ведет встречи и заводит их протоколы каждую неделю.
     if (mid === 'new') { openMeetingUpload(); return; }
@@ -43262,7 +43300,11 @@
   }
   function openReportReviewFromHash() {
     var q = hashReviewParts();
-    if (!q || document.querySelector('.al-ov') || !can('tasks_all')) return;
+    if (!q || document.querySelector('.al-ov')) return;
+    if (!can('tasks_all')) {
+      denyLink('rreview', 'Отчеты команды', 'Отчет вам не открыт', 'задачи всей команды видит руководитель');
+      return;
+    }
     // Срез команды на нужном периоде — контекст под модалкой и верный список после.
     state.page = 'tasks'; applyTaskSeg('team');
     state.weekShift = q.period === 'week' ? (rhShiftFor('week', q.starts) || 0) : 0;
@@ -43300,11 +43342,22 @@
 
   function openPageFromHash() {
     var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
-    if (!pg || !navMeta(pg) || !can(pageCap(pg))) return;
-    var moved = pg === 'tasks' && applyTaskSeg(seg);
+    if (!pg || !navMeta(pg)) return;
+    if (!can(pageCap(pg))) {
+      denyLink(pg, navMeta(pg).label, 'Раздел «' + navMeta(pg).label + '» вам не открыт');
+      return;
+    }
+    // Вкладка закрыта, а раздел нет — открываем раздел и говорим про вкладку:
+    // по ссылке человек должен попасть хотя бы туда, куда ему можно.
+    var lock = segLocked(pg, seg);
+    if (lock) {
+      denyLink(pg + '/' + seg, navMeta(pg).label + ' · ' + lock,
+               'Открыли раздел «' + navMeta(pg).label + '»', 'вкладка «' + lock + '» вам не открыта');
+    }
+    var moved = applyPageSeg(pg, seg);
     setPage(pg);
     // страница уже была открыта — setPage выходит сразу, вкладку перерисовываем сами
-    if (moved && state.page === 'tasks') { renderTopbar(); renderHead(); renderView(); }
+    if (moved && state.page === pg) { renderTopbar(); renderHead(); renderView(); }
   }
   /* Вкладку из ссылки ставим, только если она этому человеку доступна: ссылку из
      общего чата откроет и тот, у кого нет прав на «Всю команду». */
@@ -43314,6 +43367,145 @@
     state.taskSeg = seg;
     state.tasks = null;
     return true;
+  }
+  /* ── адрес открытого экрана ────────────────────────────────
+     Маршруты #page/<раздел>/<вкладка> были и раньше, но адрес в строке браузера
+     под них не подстраивался: человек стоял на «Маркетинг → Сквозная» и мог
+     прислать коллеге только голый crm.истсайд.рф (Вера, 08.10.2026). Реестр ниже
+     отвечает на два вопроса: какая вкладка открыта сейчас и как поставить ту, что
+     пришла ссылкой. Вкладку из чужой ссылки ставим ТОЛЬКО когда она этому человеку
+     доступна: ссылку пересылают и тем, у кого прав на нее нет. */
+  var PAGE_SEG = {
+    leads: {
+      get: function () { return SEGS[state.seg] ? state.seg : ''; },
+      set: function (s) {
+        if (!SEGS[s] || s === state.seg) return false;
+        state.seg = s; state.sort = null;
+        // архив тянет ОТДЕЛЬНЫЙ набор (скрытые) — тот же порядок, что у вкладки
+        if (s === 'archive') loadLeads(false);
+        return true;
+      },
+    },
+    prospects: {
+      get: function () { return PR_SEGS[state.prSeg] ? state.prSeg : ''; },
+      set: function (s) { if (!PR_SEGS[s] || s === state.prSeg) return false; state.prSeg = s; return true; },
+    },
+    tasks: { get: taskSeg, set: applyTaskSeg },
+    inbox: {
+      get: function () { return state.inboxMode === 'threads' ? 'threads' : 'bot'; },
+      set: function (s) {
+        if ((s !== 'bot' && s !== 'threads') || s === state.inboxMode) return false;
+        if (s === 'threads' && !can('clients')) return false;
+        state.inboxMode = s; state.inboxSel = null; return true;
+      },
+    },
+    marketing: {
+      get: function () { return mkTabOk(state.mkTab); },
+      set: function (s) {
+        if (!mkTabKnown(s) || s === state.mkTab) return false;
+        state.mkTab = s;
+        // те же сбросы кэша, что и у вкладки: иначе экран покажет цифры прошлой
+        if (s === 'spend') state._mkSpend = null;
+        if (s === 'launch') state._mkLaunch = null;
+        if (s === 'efir') state._mkEfir = null;
+        return true;
+      },
+    },
+    points: {
+      get: pbSeg,
+      set: function (s) {
+        var g = PB_SEGS.filter(function (x) { return x.id === s; })[0];
+        if (!g || (g.cap && !can(g.cap)) || s === state.ptSeg) return false;
+        state.ptSeg = s; return true;
+      },
+    },
+    academy: {
+      get: acTabNow,
+      set: function (s) {
+        if (s !== 'courses' && s !== 'att' && s !== 'ws') return false;
+        if (s === 'att' && !can('academy_review')) return false;
+        if (s === acTabNow()) return false;
+        state.acTab = s;
+        if (s === 'courses' && state.ac) state.ac.course = null;
+        return true;
+      },
+    },
+    meetx: {
+      get: mxTab,
+      set: function (s) {
+        if ((s !== 'soon' && s !== 'sched' && s !== 'rec') || s === mxTab()) return false;
+        state.mxTab = s; return true;
+      },
+    },
+  };
+  /* Ссылку пересылают дальше, и она доходит до того, у кого раздела нет. Молчание
+     в этом месте читается как поломка: человек жмет и остается на своем экране, не
+     понимая, ссылка кривая или система (вопрос Веры 08.10.2026: «что он увидит?»).
+     Поэтому любой отказ по ссылке называет, что именно закрыто. */
+  function denyLink(target, label, what, why) {
+    showToast(what, why || 'доступ открывает руководитель в разделе «Команда»');
+    // и адрес приводим к тому, что человек реально видит: иначе в строке висит
+    // чужой раздел, а на экране свой, и обновление страницы повторяет отказ.
+    backToPageHash();
+    /* Тому, кто раздает доступы, об этом никто не расскажет: человек просто молча
+       не попал туда, куда его позвали (Вера 08.10.2026: «хочу понимать, кто куда
+       заходил и не смог зайти»). Шлем тихо и не ждем ответа: объяснение человек
+       уже видит, а журнал — не его забота. Дедуп и сообщение в бот держит сервер. */
+    apiSend('/admin/api/access-denied', 'POST', { target: target, label: label || null },
+            null, function () {});
+  }
+  /* У вкладок свои замки, и они не совпадают с правом на раздел: «Выплаты» в
+     сопровождении и «Кто прошел» в Академии открыты не всем, кто видит раздел.
+     Возвращаем НАЗВАНИЕ закрытой вкладки — его человеку и показываем. */
+  function segLocked(pg, seg) {
+    var m = null;
+    if (!seg) return '';
+    if (pg === 'tasks') m = TASK_SEGS[seg] || null;
+    else if (pg === 'points') m = PB_SEGS.filter(function (x) { return x.id === seg; })[0] || null;
+    else if (pg === 'academy' && seg === 'att') m = { cap: 'academy_review', label: 'Кто прошел' };
+    else if (pg === 'inbox' && seg === 'threads') m = { cap: 'clients', label: 'Обсуждения' };
+    return (m && m.cap && !can(m.cap)) ? (m.label || seg) : '';
+  }
+  /* Вкладка из ссылки. Вернули true — экран надо перерисовать. */
+  function applyPageSeg(pg, seg) {
+    var r = PAGE_SEG[pg];
+    return !!(seg && r && r.set(seg));
+  }
+  /* Хэш открытого экрана: раздел и вкладка. Карточки (клиент, диалог, задача,
+     встреча, приемка отчета) владеют адресом сами — сюда они не попадают. */
+  function screenHash() {
+    var pg = state.page;
+    if (!pg || !navMeta(pg)) return '';
+    var r = PAGE_SEG[pg], seg = r ? (r.get() || '') : '';
+    return '#page/' + pg + (seg ? '/' + seg : '');
+  }
+  /* Ссылка, которую копирует кнопка в шапке: то, что сейчас открыто. Домен всегда
+     боевой (CRM_HOME) — из превью ветки уехал бы временный адрес с именем оператора. */
+  function screenUrl() {
+    var h = String(location.hash || '');
+    if (!h || h.indexOf('#page/') === 0) h = screenHash();
+    return CRM_HOME + h;
+  }
+  /* До того как приложение разобрало адрес, трогать его нельзя: первый же рендер
+     переписывал ссылку из чужого сообщения на свой дежурный экран, и разбирать было
+     уже нечего — человек по ссылке на закрытый ему раздел не получал даже объяснения
+     (поймано на стенде 08.10.2026). Флаг поднимает startApp, когда адрес прочитан. */
+  var routeReady = false;
+  /* Правим только пустой адрес и свой же #page/...: все остальные виды хэша
+     принадлежат открытой карточке, и ререндер не должен стирать ссылку на нее. */
+  function syncPageHash() {
+    if (!routeReady) return;
+    var h = String(location.hash || '');
+    if (h && h.indexOf('#page/') !== 0) return;
+    var want = screenHash();
+    if (!want || h === want) return;
+    try { history.replaceState(null, '', want); } catch (e) {}
+  }
+  /* Карточка закрылась — в адресе остается экран под ней, а не голый домен:
+     иначе ссылку на раздел после закрытия клиента снова негде взять. */
+  function backToPageHash() {
+    var want = screenHash();
+    try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) {}
   }
   window.addEventListener('hashchange', function () {
     if (!state.loaded) return;
@@ -43334,14 +43526,22 @@
     // пришли по ссылке вида #page/<id> — открываем этот раздел, а не последний сохранённый
     var hp = acRedirect(hashPageParts()[0], hashPageParts()[1]);
     for (var i = 0; hp[0] && i < NAV_ALL.length; i++) {
-      if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyTaskSeg(hp[1]); break; }
+      if (NAV_ALL[i].id === hp[0] && can(NAV_ALL[i].cap)) { state.page = hp[0]; applyPageSeg(hp[0], hp[1]); break; }
     }
     renderShell();
     /* Список людей и переписку тянем только тем, у кого есть на них права: у
        преподавателя их нет, а неудачный запрос CRM трактует как «сессия истекла»
        и выкидывает на вход. */
     if (can('clients')) loadLeads(false, openFromHash);
-    else { state.loaded = true; renderView(); }
+    else {
+      state.loaded = true;
+      // Ссылка на клиента в руках того, кому карточки не открыты: без этой строки
+      // он видит свой обычный экран и думает, что ссылка битая.
+      if (hashLeadId()) {
+        denyLink('lead', 'Люди', 'Карточка клиента вам не открыта', 'раздела «Люди» нет в вашем доступе');
+      }
+      renderView();
+    }
     openDialogFromHash();   // а по #dialog/<id> — сразу нужную переписку, список лидов не нужен
     // счетчик задач нужен бейджу в меню сразу, до открытия раздела
     loadTaskSummary();
@@ -43353,6 +43553,9 @@
     else if (hashMeetingId()) openMeetingFromHash();
     else if (hashReviewParts()) openReportReviewFromHash();
     else if (hashPageId()) openPageFromHash();
+    // адрес разобран — дальше его ведет сам экран
+    routeReady = true;
+    syncPageHash();
     // диалоги бота — подтянуть для бейджа «просят менеджера» в меню (не блокирует)
     if (can('inbox')) refreshBot(function () { renderSide(); });
     if (state.timer) clearInterval(state.timer);
