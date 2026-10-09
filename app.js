@@ -41244,7 +41244,14 @@
             '<div class="pay-form">' +
               '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
                 '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
-              '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
+              /* Продукт обязателен. Пока его не спрашивали, за что заплатили, знал
+                 только текст строки: из 26 сентябрьских оплат продукт стоял у одной,
+                 и ни лестница запуска, ни сквозная не могли сказать, сколько человек
+                 купили сопровождение. Строка названия остаётся: в ней номер договора
+                 и взнос, а продукт отвечает на вопрос «что продали». */
+              '<span class="pay-selwrap"><select class="ord-sel" id="pay-prod">' +
+                '<option value="">За что платят — выберите продукт</option></select></span>' +
+              '<input id="pay-title" placeholder="Строкой: например «Договор 57, первый платеж 50%»">' +
               '<div class="pay-grid">' +
                 '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
                 '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
@@ -42692,14 +42699,42 @@
           Array.prototype.forEach.call(payStEl.children, function (x) { x.classList.toggle('on', x === b); });
         });
       });
+      /* Список продуктов тот же, что на витрине клиента, с теми же группами. */
+      var prodSel = el('pay-prod');
+      if (prodSel) fetchCatalog(function (list) {
+        if (!list || !el('pay-prod')) return;
+        var by = {};
+        list.filter(function (p) { return p.is_active !== false; })
+            .forEach(function (p) { (by[p.category || 'service'] || (by[p.category || 'service'] = [])).push(p); });
+        var html = '<option value="">За что платят — выберите продукт</option>';
+        PRODUCT_CAT_ORDER.concat(Object.keys(by)).forEach(function (c) {
+          if (!by[c]) return;
+          html += '<optgroup label="' + esc(PRODUCT_CAT_RU[c] || c) + '">' +
+            by[c].map(function (p) {
+              return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>';
+            }).join('') + '</optgroup>';
+          delete by[c];
+        });
+        /* Последним — честный выход для того, чего в каталоге нет (оплата прошлого
+           сезона, доплата). Лучше явный выбор, чем пустое поле по умолчанию. */
+        html += '<option value="-">другое, продукта в каталоге нет</option>';
+        el('pay-prod').innerHTML = html;
+      });
       payBtn.addEventListener('click', function () {
         var title = (el('pay-title').value || '').trim();
         var amt = parseInt((el('pay-amt').value || '').replace(/\D/g, ''), 10) || 0;
         var date = el('pay-date') && el('pay-date').value ? el('pay-date').value : todayISO(0);
+        var prod = prodSel ? prodSel.value : '-';
+        if (!prod) {
+          showToast('Выберите, за что оплата — иначе продажа не попадет в аналитику');
+          prodSel.focus();
+          return;
+        }
         if (!title) { el('pay-title').focus(); return; }
         var incEl = el('pay-inc');
         var body = { title: title, amount_rub: amt, status: payStatus,
                      included: incEl ? !!incEl.checked : true };
+        if (prod && prod !== '-') body.product_id = prod;
         if (payStatus === 'paid' || payStatus === 'refunded') body.paid_at = date;
         var selA = el('pay-seller'), selB = el('pay-setter');
         if (selA && selA.value) body.seller_id = parseInt(selA.value, 10);
