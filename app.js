@@ -9,6 +9,12 @@
   // window.EASTSIDE_API_BASE (напр. на staging/локали).
   // У CRM два адреса: crm.истсайд.рф и зеркало crm.eastside.study для тех, кто работает
   // из-за рубежа. С зеркала по умолчанию ходим в api.eastside.study.
+  // Потолок файла в карточке. Тот же, что у кабинета семьи и у бэкенда
+  // (storage.MAX_CASE_FILE_BYTES): документ один и тот же, а дверей две. Раньше
+  // тут стоял потолок базы в 12 МБ, и менеджер не мог положить в карточку скан,
+  // который клиент спокойно грузил себе сам (Мария 08.10.2026).
+  var DOC_MAX_MB = 100;
+
   var API_RU = 'https://api.xn--80aikf2bag.xn--p1ai';
   var API_INT = 'https://api.eastside.study';
   var API_LS = 'eastside_crm_api';
@@ -9006,7 +9012,10 @@
       var x = (n.chats || []).filter(function (y) { return y.id === id; })[0]; return 'чат ' + (x ? x.title : id);
     });
     var who = roles.concat(people);
-    return (who.length ? who.join(', ') : 'всем') + (chats.length ? ' + ' + chats.join(', ') : '');
+    // «всем» теперь говорит только тот, кто это выбрал. Без адресата запись
+    // не отправляется, но черновик без него жить может — так и подписываем.
+    return (it.everyone ? 'всей команде' : who.length ? who.join(', ') : 'адресата нет') +
+      (chats.length ? ' + ' + chats.join(', ') : '');
   }
   /* ── Воркшопы: библиотека обучения команды ─────────────────────────────────
      Лиана 16.09.2026: «организовать обучение команды», и отдельно — «давай как
@@ -9414,7 +9423,12 @@
   function openNewsForm(it) {
     if (document.querySelector('.al-ov.nw-ov')) return;
     var n = state.news || {}, roles = n.roles || [], people = n.people || [], chats = n.chats || [];
-    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice(), chats: (it && it.chats || []).slice() };
+    var packs = n.packs || [];
+    /* everyone — отдельный выбор, а не пустой список ролей. Раньше «забыл выбрать»
+       и «выбрал всех» были одним действием, и новость про маркетинг прилетала
+       преподавателям (Павел 08.10.2026). У новой записи адресата нет. */
+    var sel = { roles: (it && it.roles || []).slice(), users: (it && it.users || []).slice(),
+                chats: (it && it.chats || []).slice(), everyone: !!(it && it.everyone) };
     var ov = document.createElement('div');
     ov.className = 'al-ov over nw-ov';
     ov.innerHTML =
@@ -9428,6 +9442,12 @@
           '<label class="al-f"><span class="al-l">Как этим пользоваться</span>' +
             '<textarea id="nw-body" class="al-in al-ta" rows="6" maxlength="4000" placeholder="Простыми словами: где найти, что нажать, что изменилось">' + esc(it ? it.body : '') + '</textarea></label>' +
           '<div class="al-f"><span class="al-l">Кому</span>' +
+            // Наборы рядом с «всей командой»: ролей двенадцать, и выбирать их по
+            // одной — ровно та работа, ради которой выбор пропускают целиком.
+            '<div class="nw-who"><span class="nw-who-l">Быстро</span><span class="nw-roles">' +
+              '<button type="button" class="tm-tp-b nw-p nw-all' + (sel.everyone ? ' on' : '') + '" id="nw-all">Вся команда</button>' +
+              packs.map(function (p) { return '<button type="button" class="tm-tp-b nw-p" data-nwpack="' + esc(p.id) + '">' + esc(p.label) + '</button>'; }).join('') +
+            '</span></div>' +
             '<div class="nw-who"><span class="nw-who-l">Роли</span><span class="nw-roles">' +
               roles.map(function (r) { return '<button type="button" class="tm-tp-b nw-p' + (sel.roles.indexOf(r.id) >= 0 ? ' on' : '') + '" data-nwr="' + esc(r.id) + '">' + esc(r.label) + '</button>'; }).join('') +
             '</span></div>' +
@@ -9461,7 +9481,10 @@
       sel.roles.forEach(function (id) { var r = roles.filter(function (x) { return x.id === id; })[0]; who.push(r ? r.label : id); });
       sel.users.forEach(function (id) { var p = people.filter(function (x) { return x.id === id; })[0]; who.push(p ? p.name : '#' + id); });
       var ch = sel.chats.map(function (id) { var c = chats.filter(function (x) { return x.id === id; })[0]; return c ? c.title : id; });
-      el('nw-sum').innerHTML = (who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>' : 'Получит <b>вся команда</b>. Выбери роли или людей, чтобы сузить.') +
+      el('nw-sum').innerHTML = (sel.everyone ? 'Получит <b>вся команда</b>.'
+          : who.length ? 'Получат: <b>' + esc(who.join(', ')) + '</b>'
+          : ch.length ? 'В боте не получит <b>никто</b>, только чаты.'
+          : 'Адресата нет. Выбери роли, людей или нажми «Вся команда».') +
         (ch.length ? '<br>И в чаты: <b>' + esc(ch.join(', ')) + '</b>' : '');
     };
     var renderPeople = function () {
@@ -9474,14 +9497,42 @@
         b.addEventListener('click', function () {
           var id = +b.getAttribute('data-nwp'), i = sel.users.indexOf(id);
           if (i >= 0) sel.users.splice(i, 1); else sel.users.push(id);
+          if (i < 0) dropAll();
           renderPeople(); sum();
         });
       });
     };
+    /* Включили «всю команду» — выбранные роли и люди гаснут: адресат один, и
+       два разных ответа на вопрос «кому» на экране висеть не должны. */
+    var dropAll = function () {
+      if (!sel.everyone) return;
+      sel.everyone = false; el('nw-all').classList.remove('on');
+    };
+    var paintRoles = function () {
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-nwr]'), function (b) {
+        b.classList.toggle('on', sel.roles.indexOf(b.getAttribute('data-nwr')) >= 0);
+      });
+    };
+    el('nw-all').addEventListener('click', function () {
+      sel.everyone = !sel.everyone;
+      el('nw-all').classList.toggle('on', sel.everyone);
+      if (sel.everyone) { sel.roles = []; sel.users = []; paintRoles(); renderPeople(); }
+      sum();
+    });
+    Array.prototype.forEach.call(ov.querySelectorAll('[data-nwpack]'), function (b) {
+      b.addEventListener('click', function () {
+        var pack = packs.filter(function (p) { return p.id === b.getAttribute('data-nwpack'); })[0];
+        if (!pack) return;
+        dropAll();
+        (pack.roles || []).forEach(function (r) { if (sel.roles.indexOf(r) < 0) sel.roles.push(r); });
+        paintRoles(); sum();
+      });
+    });
     Array.prototype.forEach.call(ov.querySelectorAll('[data-nwr]'), function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-nwr'), i = sel.roles.indexOf(id);
         if (i >= 0) sel.roles.splice(i, 1); else sel.roles.push(id);
+        dropAll();
         b.classList.toggle('on', i < 0); sum();
       });
     });
@@ -9496,13 +9547,18 @@
     renderPeople(); sum();
     setTimeout(function () { el('nw-title').focus(); }, 30);
     var payload = function () {
-      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(), roles: sel.roles, users: sel.users, chats: sel.chats };
+      return { title: el('nw-title').value.trim(), body: el('nw-body').value.trim(),
+               roles: sel.roles, users: sel.users, chats: sel.chats, everyone: sel.everyone };
     };
     var busy = function (on) { Array.prototype.forEach.call(ov.querySelectorAll('.al-foot button'), function (b) { b.disabled = on; }); };
     var fail = function (e) { busy(false); showToast((e && e.message) || 'Не сохранилось, попробуй еще раз'); };
     var save = function (send) {
       var p = payload();
       if (!p.title) { showToast('Нужен заголовок'); el('nw-title').focus(); return; }
+      // В черновик без адресата можно: его дописывают. Отправить — нет.
+      if (send && !p.everyone && !p.roles.length && !p.users.length && !p.chats.length) {
+        showToast('Выбери, кому эта запись'); el('nw-all').focus(); return;
+      }
       busy(true);
       var done = function (r) {
         close();
@@ -24428,6 +24484,17 @@
       plural(m.agreements, 'задача', 'задачи', 'задач') + ' со встречи');
     if (m.has_text) marks += tag('text', ic('mic', 11) + 'расшифровка');
     if (m.has_notes) marks += tag('sum', ic('doc', 11) + 'конспект');
+    /* Сама запись разговора лежит в Фатоме. Ссылка на нее была только внутри
+       карточки встречи, среди действий внизу: чтобы пересмотреть кусок, надо
+       было провалиться и найти ее там (Павел 08.10.2026). Теперь она в том же
+       ряду, что расшифровка и конспект — это все «что осталось от встречи».
+       У идущей встречи url означает другое, вход в комнату, и уходит в свою
+       синюю кнопку ниже. */
+    if (m.url && m.state !== 'live') {
+      marks += '<a class="mx-tag mx-tagb" href="' + esc(m.url) + '" target="_blank" rel="noopener"' +
+        ' aria-label="' + esc(m.title || 'Встреча') + ': смотреть запись">' +
+        ic('play', 11) + 'запись</a>';
+    }
     var sub = [];
     if (m.by) sub.push(esc(m.by));
     if (m.dept) sub.push(esc(deptLabel(m.dept)));
@@ -40442,7 +40509,7 @@
         '<span class="doc-fld-v">' + esc(f.value) + '</span></div>';
     }).join('');
     return '<div class="m-ctitle">Документы</div>' +
-      '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до 12 МБ или ссылка.</div>' +
+      '<div class="m-csub">Паспорт, аттестат, согласия — что прислал клиент. Файл до ' + DOC_MAX_MB + ' МБ или ссылка.</div>' +
       (fields ? '<div class="doc-flds">' + fields + '</div>' : '') +
       (docs.length ? '<div>' + rows + '</div>' : '') +
       // Категория выбирается ДО загрузки: файл без нее не закрывает строку пакета в
@@ -42017,7 +42084,7 @@
     var rcptFile = el('pay-rcpt-file'), attachTo = null, stagedRcpt = null;
     function reloadPay() { refreshDetail(id, function () { if (state.drawerId === id && state.modalSection === 'pay') renderDrawer(true); }); }
     function uploadReceipt(file, cb) {
-      if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
+      if (file.size > DOC_MAX_MB * 1024 * 1024) { showToast('Файл больше ' + DOC_MAX_MB + ' МБ'); return; }
       var reader = new FileReader();
       reader.onload = function () {
         apiSend('/admin/api/leads/' + id + '/docs', 'POST',
@@ -42767,7 +42834,7 @@
     }
   }
   function uploadDoc(id, file, kind) {
-    if (file.size > 12 * 1024 * 1024) { showToast('Файл больше 12 МБ'); return; }
+    if (file.size > DOC_MAX_MB * 1024 * 1024) { showToast('Файл больше ' + DOC_MAX_MB + ' МБ'); return; }
     // моментальный фидбек — не ждём сервер
     var drop = el('m-drop');
     if (drop) { drop.classList.add('loading'); drop.innerHTML = '<div class="dz-ic">' + ic('dl', 18) + '</div><div><b>Загружаю</b> ' + esc(file.name) + '…</div>'; }
