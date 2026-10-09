@@ -28425,9 +28425,11 @@
      нельзя: по этой таблице команда договаривается, и расхождение с файлом
      читается как ошибка CRM.
 
-     Вводные (подсвеченные поля) лежат в content/launch.json, правка на экране
-     живет в localStorage того, кто крутит: это прикидка под разговор, а факт
-     запуска считает соседняя вкладка «Запуски». */
+     Вводные (подсвеченные поля) приезжают с сервера — GET /admin/api/launch-plan,
+     файл `app/data/launch_plan.json` в бэкенде. В content/ их класть нельзя:
+     статика CRM раздается без входа (§10.7), а тут план продаж и бюджеты. Правка
+     на экране живет в localStorage того, кто крутит: это прикидка под разговор,
+     а факт запуска считает соседняя вкладка «Запуски». */
   var LA_KEY = 'es_launch_plan_v1';
   var LA_PLANS = [['min', 'План min'], ['opt', 'План opt'], ['max', 'План max']];
   var LA_SRC = [{ id: 'warm', label: 'Тёплая база' }, { id: 'vk', label: 'Трафик ВК' }, { id: 'total', label: 'Всего' }];
@@ -28438,8 +28440,7 @@
   var LA_HALF = 0.5;   // первый платеж по правилу 50%
 
   function fetchLaunch() {
-    fetch('content/launch.json', { cache: 'no-cache' })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    api('/admin/api/launch-plan')
       .then(function (d) { state._launch = d; if (state.page === 'marketing' && state.mkTab === 'plan') renderView(); })
       .catch(function () { state._launch = 'none'; if (state.page === 'marketing' && state.mkTab === 'plan') renderView(); });
   }
@@ -28700,7 +28701,7 @@
   function renderMkPlan(view) {
     if (!state._launch) { view.innerHTML = dashSkeleton(); fetchLaunch(); return; }
     if (state._launch === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию — проверь сеть и обнови страницу.</div></div>';
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию — проверь сеть и обнови страницу. Если раздел закрыт правами, скажи руководителю.</div></div>';
       return;
     }
     var d = state._launch;
