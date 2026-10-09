@@ -33810,8 +33810,15 @@
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
     instagram: { label: 'Instagram', icon: 'inst' },
   };
+  /* Клиент прохожим не бывает. Статус воронки говорит только о том, что человек не
+     оставил анкету на платформе, а семью заводят в CRM и руками — тогда у дела стоит
+     «клиент», но status остается visited, и карточка молча пропадала из «Людей»
+     (Мария 09.10.2026: закрепленная за тьютором Попова не показывалась ни в списке,
+     ни у ответственного; таких карточек на бою нашлось пять). Признак клиента тот же,
+     что у вкладки «Клиенты», — иначе вкладка показывала бы человека, которого нет в
+     списке людей. */
   function isProspect(l) {
-    return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
+    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected';
   }
   function prAge(l) {
     var t = l.last_activity || l.created_at;
