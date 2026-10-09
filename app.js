@@ -2367,6 +2367,10 @@
     { id: 'motivation', label: 'Мотивация', icon: 'award', cap: 'finance' },
     { id: 'products', label: 'Продукты', icon: 'box', cap: 'products' },
     { id: 'portal', label: 'Портал', icon: 'tree', cap: 'portal' },
+    /* «Структура» — кто кому подчиняется и что входит в роль. Рядом с «Порталом»
+       намеренно: оба раздела отвечают на вопрос «как у нас устроено», только один
+       про продукты, другой про людей. Видят все, cap dash есть у каждой роли. */
+    { id: 'org', label: 'Структура', icon: 'team', cap: 'dash' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
@@ -3572,6 +3576,7 @@
     else if (state.page === 'social') renderSocial(view);
     else if (state.page === 'products') renderProducts(view);
     else if (state.page === 'portal') renderPortal(view);
+    else if (state.page === 'org') renderOrg(view);
     else if (state.page === 'prospects') renderProspects(view);
     else if (state.page === 'roadmap') renderRoadmap(view);
     else if (state.page === 'dupes') renderDupes(view);
@@ -30723,6 +30728,183 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-pdclose]'), function (b) {
       b.addEventListener('click', function () { state._pdEdit = null; renderView(); });
     });
+  }
+
+  /* ── СТРУКТУРА КОМПАНИИ — кто кому подчиняется и что входит в роль ─────────
+     Два слоя на одном экране: доска-схема сверху (видно целиком, без чтения) и
+     раскрываемые зоны ответственности под ней. Человек приходит сюда дважды —
+     на онбординге («кто все эти люди») и за ответом «чья это работа», и оба
+     вопроса закрываются без того, чтобы кого-то спрашивать.
+     Данные — content/org.json: роли и их задачи перенесены из должностных
+     инструкций дословно, в коде их нет. Поменялась инструкция — меняется json,
+     верстку под новую роль писать не надо.
+     Видят все (cap dash): структура компании закрытыми данными не является. */
+  function fetchOrg() {
+    /* путь относительный, как у портала: превью ветки живет по адресу с
+       префиксом /p/<оператор>__crm_frontend/, от корня файл бы не нашелся */
+    fetch('content/org.json', { cache: 'no-cache' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (d) { state._org = d; if (state.page === 'org') renderView(); })
+      .catch(function () { state._org = 'none'; if (state.page === 'org') renderView(); });
+  }
+
+  function orgDuty(key) { return key ? ((state._org.duties || {})[key] || null) : null; }
+  function orgCount(d) {
+    return (d.groups || []).reduce(function (n, g) { return n + (g.items || []).length; }, 0);
+  }
+
+  /* Узел схемы. Кликается только тот, у кого есть зоны ответственности: кнопка,
+     которая ничего не открывает, — обещание, которого экран не держит. */
+  function orgNodeHtml(n, head) {
+    var d = orgDuty(n.duties), cnt = d ? orgCount(d) : 0;
+    /* голова второй доски — та же карточка, что стояла рядом на первой. Второй
+       раз подряд она не кнопка и не повторяет подпись, которую уже несет
+       заголовок доски над ней: иначе человек видит один и тот же узел дважды */
+    var inner = '<b>' + esc(head ? (n.headRole || n.title) : n.title) + '</b>' +
+      (n.person ? '<i>' + esc(n.person) + '</i>' : '') +
+      (n.role && !head ? '<small>' + esc(n.role) + '</small>' : '') +
+      (n.from ? '<span class="org-from">' + esc(n.from) + '</span>' : '') +
+      (n.note && !n.role ? '<small>' + esc(n.note) + '</small>' : '');
+    if (head) return '<div class="org-node head k-' + esc(n.kind || 'role') + '">' + inner + '</div>';
+    if (!d) {
+      return '<div class="org-node k-' + esc(n.kind || 'role') + ' flat">' + inner + '</div>';
+    }
+    return '<button type="button" class="org-node k-' + esc(n.kind || 'role') + '" data-org="' + esc(n.duties) + '">' +
+      inner + '<span class="org-cnt">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + ic('go', 12) + '</span>' +
+      '</button>';
+  }
+
+  /* wire=false — ряд без проводов: он идет первым на доске, и шина вела бы
+     в пустоту над верхней карточкой */
+  function orgRowHtml(kids, wire) {
+    var cols = kids.map(function (k) {
+      return '<div class="org-col">' + (wire === false ? '' : '<span class="org-tick"></span>') +
+        orgNodeHtml(k) + '</div>';
+    }).join('');
+    return '<div class="org-cols" style="--org-n:' + (kids.length || 1) + '">' + cols + '</div>';
+  }
+
+  function orgCrewHtml(crew) {
+    if (!crew || !(crew.items || []).length) return '';
+    return '<div class="org-stem"></div>' +
+      '<div class="org-crew">' +
+        '<div class="org-crew-h"><span class="po-lbl">' + esc(crew.label || '') + '</span>' +
+          (crew.note ? '<small>' + esc(crew.note) + '</small>' : '') + '</div>' +
+        orgRowHtml(crew.items) +
+      '</div>';
+  }
+
+  function orgBoardHtml(title, body) {
+    return '<div class="card org-board">' +
+      (title ? '<div class="sec-head"><div><b>' + esc(title) + '</b></div></div>' : '') +
+      '<div class="org-tree">' + body + '</div></div>';
+  }
+
+  /* Схема режется на доски, а не рисуется одним деревом на весь экран: у отдела
+     с четырьмя исполнителями колонка внутри общей сетки схлопывается до пяти
+     букв. Верхушку (узлы с единственным подчиненным) ведем стопкой по центру,
+     ряд направлений — одной шиной, а направление со своими людьми получает
+     отдельную доску ниже. */
+  function orgBoardsHtml(root) {
+    var chain = [], n = root;
+    while (n) { chain.push(n); n = (n.children && n.children.length === 1) ? n.children[0] : null; }
+    var head = chain[chain.length - 1];
+    var row = head.children || [];
+    var top = chain.map(function (x, i) {
+      return (i ? '<div class="org-stem"></div>' : '') + '<div class="org-one">' + orgNodeHtml(x) + '</div>';
+    }).join('');
+    var out = [orgBoardHtml('Компания', top + (row.length ? '<div class="org-stem"></div>' + orgRowHtml(row) : ''))];
+    row.forEach(function (c) {
+      if (!(c.children || []).length && !c.crew) return;
+      /* голову доски рисуем, только когда она добавляет имя руководителя: иначе
+         карточка слово в слово повторяет заголовок доски прямо над ней */
+      var head = c.person ? '<div class="org-one">' + orgNodeHtml(c, true) + '</div>' +
+        ((c.children || []).length ? '<div class="org-stem"></div>' : '') : '';
+      out.push(orgBoardHtml(c.board || c.role || c.title,
+        head + ((c.children || []).length ? orgRowHtml(c.children, !!c.person) : '') + orgCrewHtml(c.crew)));
+    });
+    return out.join('');
+  }
+
+  /* Зоны ответственности: строка с плюсом, под ней — группы задач.
+     Открытое помним в state, чтобы ререндер не схлопывал то, что человек читает. */
+  function orgDutiesHtml(root) {
+    var order = [], seen = {};
+    (function walk(n) {
+      if (!n) return;
+      if (n.duties && !seen[n.duties]) { seen[n.duties] = 1; order.push(n); }
+      (n.children || []).forEach(walk);
+      if (n.crew) (n.crew.items || []).forEach(walk);
+    })(root);
+    var open = state.orgOpen || {};
+    var rows = order.map(function (n) {
+      var d = orgDuty(n.duties), cnt = orgCount(d), on = !!open[n.duties];
+      var gs = (d.groups || []).map(function (g, i) {
+        var items = (g.items || []).map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('');
+        return '<div class="org-g">' +
+          (g.title ? '<div class="org-gh"><i>' + (i + 1) + '</i>' + esc(g.title) + '</div>' : '') +
+          '<ul class="org-ul">' + items + '</ul></div>';
+      }).join('');
+      /* подпись строки — чем человек занимается, а не название документа: «Продюсеры»
+         над «Должностной инструкцией продюсера» пересказывает сам себя. Источник
+         нужен, но внизу раскрытия, рядом с тем, что из него перенесено. */
+      return '<div class="org-duty' + (on ? ' on' : '') + '" id="org-' + esc(n.duties) + '">' +
+        '<button type="button" class="org-drow" data-duty="' + esc(n.duties) + '"' +
+          ' aria-expanded="' + (on ? 'true' : 'false') + '" aria-controls="orgb-' + esc(n.duties) + '">' +
+          '<span class="org-plus">' + ic('plus', 13) + '</span>' +
+          '<span class="org-dt"><b>' + esc(n.dutyName || n.title) + '</b><small>' + esc(n.role || n.from || '') + '</small></span>' +
+          '<span class="org-dn">' + cnt + ' ' + plural(cnt, 'задача', 'задачи', 'задач') + '</span>' +
+        '</button>' +
+        '<div class="org-dbody" id="orgb-' + esc(n.duties) + '">' +
+          (d.lede ? '<p class="org-lede">' + esc(d.lede) + '</p>' : '') +
+          '<div class="org-gs">' + gs + '</div>' +
+          (d.source ? '<p class="org-src">Источник: ' + esc(d.source) + '</p>' : '') +
+        '</div></div>';
+    }).join('');
+    return '<div class="org-duties"><div class="po-lbl">Зоны ответственности и задачи</div>' + rows + '</div>';
+  }
+
+  function renderOrg(view) {
+    if (!state._org) { view.innerHTML = dashSkeleton(); fetchOrg(); return; }
+    if (state._org === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить структуру — обновите страницу.</div></div>';
+      return;
+    }
+    var d = state._org;
+    view.innerHTML = '<div class="org-wrap">' +
+      '<div class="org-top"><h2 class="org-h1">Структура компании</h2>' +
+        '<div class="org-sub">' + esc(d.lede || '') + '</div></div>' +
+      orgBoardsHtml(d.tree || {}) +
+      orgDutiesHtml(d.tree || {}) +
+      '<div class="org-foot">Обновлено ' + esc(d.updated || '') + '</div></div>';
+
+    view.querySelectorAll('[data-duty]').forEach(function (b) {
+      b.addEventListener('click', function () { orgToggle(b.getAttribute('data-duty')); });
+    });
+    view.querySelectorAll('[data-org]').forEach(function (b) {
+      b.addEventListener('click', function () { orgToggle(b.getAttribute('data-org'), true); });
+    });
+  }
+
+  /* Клик по узлу схемы и клик по строке — одно действие: открыть роль. Из схемы
+     еще и доводим до нее глазами, иначе человек жмет карточку, а экран внизу
+     молча меняется. */
+  function orgToggle(key, fromTree) {
+    if (!key) return;
+    state.orgOpen = state.orgOpen || {};
+    if (fromTree) state.orgOpen[key] = true;
+    else state.orgOpen[key] = !state.orgOpen[key];
+    renderView();
+    var box = el('org-' + key);
+    /* ререндер убивает кнопку вместе с фокусом, и следующий Tab начинает обход с
+       начала документа. На справочнике, который читают подряд с клавиатуры, это
+       главная поломка экрана — возвращаем фокус на ту же строку. */
+    var row = document.querySelector('.org-drow[data-duty="' + key + '"]');
+    if (row && !fromTree) row.focus();
+    if (box && fromTree) {
+      var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      box.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
   }
 
   /* ── ПРОДУКТОВЫЙ ПОРТАЛ — база знаний команды по продуктам ────────────────
