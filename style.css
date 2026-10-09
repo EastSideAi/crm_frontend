@@ -3361,6 +3361,15 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-step .sev { grid-column: 2; grid-row: 1 / span 2; }
 .tsk-nosteps { font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
 
+/* Быстрый шаг строкой: основной путь, большое окно рядом подписью. Поле на
+   всю ширину — шаг это предложение, а не ярлык. */
+.tsk-qstep { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.tsk-qstep .al-in { flex: 1; min-width: 0; }
+.tsk-qmore { flex: none; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  text-decoration: underline; text-underline-offset: 3px; transition: color .12s; }
+.tsk-qmore:hover { color: var(--blue); }
+.tsk-qhint { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
+
 /* Своей высоты у ленты нет намеренно: скроллится тело карточки, и колесо не
    застревает во вложенной области. */
 .tsk-feed { display: flex; flex-direction: column; gap: 2px; }
@@ -3369,9 +3378,46 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-ev-ic { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
   background: var(--fill); color: var(--ink-3); }
 .tsk-ev.cm .tsk-ev-ic { background: var(--blue-tint); color: var(--blue); }
-.tsk-ev-b { min-width: 0; }
-.tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word; }
-.tsk-ev-m { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.tsk-ev-b { min-width: 0; flex: 1; }
+.tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word;
+  white-space: pre-wrap; }
+.tsk-ev-t[hidden] { display: none; }
+.tsk-ev-m { display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px;
+  font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+.tsk-ev-ed { font-style: normal; color: var(--ink-3); margin-left: -6px; }
+.tsk-ev-ed::before { content: '·'; margin-right: 5px; }
+/* Действия у реплики — тихие подписи, а не кнопки: в ленте их по две на
+   строку, и нарисованные кнопки превратили бы обсуждение в панель. */
+.tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-3); transition: color .12s; }
+.tsk-ev.ed .tsk-evb { display: none; }
+.tsk-evb:hover { color: var(--blue); }
+.tsk-ev:hover .tsk-evb { color: var(--ink-2); }
+.tsk-ev:hover .tsk-evb:hover { color: var(--blue); }
+
+/* Ветка ответов. Отступ и линия слева — ровно столько, чтобы читалось «это
+   про реплику выше»: уровень один, вложенных лесенок тут не бывает. */
+.tsk-re { margin-left: 34px; padding-left: 12px; border-left: 2px solid var(--line); }
+.tsk-re .tsk-ev { padding: 7px 0; border-top: 1px solid var(--line); }
+.tsk-re .tsk-ev:first-child { border-top: none; }
+.tsk-re .tsk-ev-ic { width: 20px; height: 20px; border-radius: 6px; }
+.tsk-re .tsk-ev-t { font-size: 12.5px; }
+
+@media (max-width: 560px) {
+  /* На телефоне ветке хватает намека: 46 пикселей отступа съедали строку. */
+  .tsk-re { margin-left: 14px; padding-left: 10px; }
+}
+@media (max-width: 480px) {
+  /* Ввод от 16px: на меньшем кегле Safari зумит страницу при фокусе и карточка
+     уезжает из кадра. Тот же рецепт, что у поиска в выборе человека (.ss-q). */
+  .tsk-qstep .al-in.sm { font-size: 16px; padding: 10px 12px; }
+  .tsk-sayta { font-size: 16px; }
+}
+
+/* Правка реплики на месте текста. */
+.tsk-evedit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.tsk-evedit .al-ta { font-size: 13px; }
+.tsk-evedit-r { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.tsk-evedit-r .al-cancel { height: 34px; padding: 0 12px; font-size: 12.5px; }
 
 /* ── Общий чат задач (в окне «Бот задач») ────────────────────────────────────
    Блок про канал, а не про людей, поэтому стоит отдельной плашкой над списком
@@ -3903,8 +3949,20 @@ a.sc-chip.room:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(
 /* быстрые сроки в форме постановки — тот же сегмент, что в карточке лида */
 .al-f > .due-seg { align-self: flex-start; flex-wrap: wrap; }
 
-.tsk-say { display: flex; gap: 8px; align-items: center; }
+.tsk-say { display: flex; gap: 8px; align-items: flex-end; }
 .tsk-say .al-in { flex: 1; min-width: 0; }
+/* Поле реплики растет под текст (высоту ставит скрипт). resize выключен:
+   ручная тяга спорила бы с авторостом и оставляла поле в чужой высоте. */
+.tsk-sayta { resize: none; overflow-y: auto; min-height: 42px; max-height: 132px;
+  line-height: 1.45; padding-top: 11px; padding-bottom: 11px; }
+/* Кому отвечаем — плашка над полем. */
+.tsk-repl { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: 10px; background: var(--blue-tint); font-size: 12px; color: var(--navy); }
+.tsk-repl[hidden] { display: none; }
+.tsk-repl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsk-repl button { margin-left: auto; flex: none; font-size: 11.5px; font-weight: 700;
+  color: var(--blue-d); }
+.tsk-repl button:hover { color: var(--blue-d); }
 /* режим возврата: причину пишут в том же поле, что и комментарии — она и
    ложится в ленту рядом с ними. Отдельного окна для этого не нужно. */
 .tsk-ret { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); }
