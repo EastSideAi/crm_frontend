@@ -13392,6 +13392,12 @@
             '<input type="file" id="mu-file" multiple ' +
               'accept=".txt,.md,.markdown,.text,.log,.csv,.docx,.pdf" hidden>' +
           '</div>' +
+          // Ссылка на запись нужна там, где автоматический забор слеп: он видит
+          // только тот аккаунт Fathom, чей ключ у нас в секретах, а аккаунтов
+          // два. Плюс запись иногда присылают со стороны, и ключа к ней нет.
+          '<label class="al-f"><span class="al-l">Или ссылка на запись</span>' +
+            '<input id="mu-link" class="al-in" type="url" spellcheck="false" ' +
+              'placeholder="fathom.video/share/..."></label>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
               'placeholder="Скопируй протокол сюда, если файла нет"></textarea></label>' +
@@ -13460,7 +13466,8 @@
     // человека у экрана, и до сих пор к ним вела только ссылка из бота.
     var drafts = el('mu-drafts');
     var srcLabel = function (d) {
-      return d.source === 'fathom' ? 'Fathom' : d.source === 'text' ? 'текст' : 'файл';
+      return d.source === 'fathom' ? 'Fathom' : d.source === 'link' ? 'по ссылке'
+        : d.source === 'text' ? 'текст' : 'файл';
     };
     api('/admin/api/meetings?status=draft&limit=20').then(function (r) {
       var list = (r && r.imports) || [];
@@ -13496,15 +13503,22 @@
 
     go.addEventListener('click', function () {
       var text = (el('mu-text').value || '').trim();
-      if (!picked.length && text.length < 200) {
-        show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл или вставь текст', true);
+      var link = (el('mu-link').value || '').trim();
+      if (link && !/fathom\.video\/share\//i.test(link)) {
+        show('Жду ссылку на запись Fathom, вида fathom.video/share/...', true);
+        return;
+      }
+      if (!picked.length && !link && text.length < 200) {
+        show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл, вставь ссылку или текст', true);
         return;
       }
       go.disabled = true; go.classList.add('loading');
       // Файлы разбираем по очереди, а не пачкой в один запрос: каждый протокол
       // модель читает отдельно, и на общем куске она начинает путать, кто из
       // какой встречи. Плюс видно, на каком файле мы стоим.
-      var queue = picked.length ? picked.slice() : [{ text: text }];
+      var queue = picked.length ? picked.slice() : [];
+      if (link) queue.push({ link: link, name: 'запись по ссылке' });
+      if (!queue.length) queue.push({ text: text });
       var done = [], failed = [];
       var step = function (i) {
         if (i >= queue.length) {
@@ -13526,14 +13540,21 @@
         var f = queue[i];
         show(queue.length > 1
           ? 'Читаю ' + (i + 1) + ' из ' + queue.length + ': ' + f.name
+          : f.link ? 'Открываю запись и читаю расшифровку, это займет минуту'
           : 'Читаю протокол, это займет полминуты');
-        apiSend('/admin/api/meetings', 'POST',
-          f.data ? { name: f.name, data: f.data } : { text: f.text },
+        apiSend(f.link ? '/admin/api/meetings/from-link' : '/admin/api/meetings', 'POST',
+          f.link ? { url: f.link } : f.data ? { name: f.name, data: f.data } : { text: f.text },
           function (r) {
             if (r && r.import) done.push(r.import);
             step(i + 1);
           },
-          function () { failed.push(f.name || 'текст'); step(i + 1); });
+          // Причину отказа по ссылке говорим словами: «записи нет», «расшифровка
+          // еще не готова» и «не та ссылка» человек чинит по-разному.
+          function (code, e) {
+            var why = e && e.body && e.body.detail;
+            failed.push(f.link && why ? String(why) : (f.name || 'текст'));
+            step(i + 1);
+          });
       };
       step(0);
     });
