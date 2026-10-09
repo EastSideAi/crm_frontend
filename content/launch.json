@@ -1,0 +1,32 @@
+{
+ "updated": "09.10.2026",
+ "title": "Декомпозиция запуска: интенсив 24–25 октября 2026",
+ "lede": "Три плана и факт прошлого запуска. Подсвеченные поля — вводные, их правят руками; остальное считается. Колонка «факт 23–24.09» — выгрузка из базы по сентябрьскому интенсиву на 08.10.2026.",
+ "factLabel": "факт 23–24.09",
+ "warm": {
+  "title": "Тёплая база",
+  "note": "Наши каналы без платной рекламы: рассылки по базе, соцсети, амбассадоры.",
+  "in": {
+   "min": { "regGoal": 250, "amb": 30, "mail": 125, "crLand": 25, "crExt": 2, "crClean": 85, "crChan": 35, "crE1": 25, "crE2": 20, "crRec": 11, "crDiagStart": 60, "crDiagDone": 30, "crReq": 12, "crHeld": 90, "crBill": 30, "crPaid": 60, "check": 299990 },
+   "opt": { "regGoal": 300, "amb": 40, "mail": 148, "crLand": 35, "crExt": 3, "crClean": 90, "crChan": 45, "crE1": 35, "crE2": 25, "crRec": 13, "crDiagStart": 65, "crDiagDone": 35, "crReq": 14.5, "crHeld": 95, "crBill": 35, "crPaid": 65, "check": 299990 },
+   "max": { "regGoal": 350, "amb": 50, "mail": 171, "crLand": 50, "crExt": 4, "crClean": 95, "crChan": 55, "crE1": 37, "crE2": 27, "crRec": 14, "crDiagStart": 70, "crDiagDone": 40, "crReq": 15, "crHeld": 98, "crBill": 40, "crPaid": 70, "check": 299990 }
+  },
+  "fact": {
+   "regGoal": 290, "amb": 0, "mail": 97, "social": 74, "clicks": 173,
+   "ext": 4, "extRev": 2070, "clean": 224, "chan": 75,
+   "e1": 45, "e2": 26, "live": 62, "rec": 25, "watched": 74,
+   "diagStart": 126, "diagDone": 31, "btn": 20, "req": 11, "held": 11,
+   "sales": 3, "check": 299990, "contracts": 899970, "cash": 412070
+  }
+ },
+ "vk": {
+  "title": "Трафик ВК",
+  "note": "Платная реклама, старт 13.10.2026. Шаги те же, но своя цена регистрации и конверсии ниже: человек нас видит впервые. Факта нет — в сентябре рекламы не было.",
+  "in": {
+   "min": { "budget": 100000, "cpl": 1000, "crLand": 15, "crExt": 1, "crClean": 80, "crChan": 30, "crE1": 20, "crE2": 15, "crRec": 8, "crDiagStart": 25, "crDiagDone": 30, "crReq": 4, "crHeld": 60, "crBill": 20, "crPaid": 45, "check": 299990, "crWarm": 10 },
+   "opt": { "budget": 200000, "cpl": 700, "crLand": 20, "crExt": 1.5, "crClean": 85, "crChan": 40, "crE1": 25, "crE2": 20, "crRec": 10, "crDiagStart": 30, "crDiagDone": 35, "crReq": 6, "crHeld": 70, "crBill": 25, "crPaid": 55, "check": 299990, "crWarm": 12 },
+   "max": { "budget": 300000, "cpl": 500, "crLand": 25, "crExt": 2, "crClean": 90, "crChan": 50, "crE1": 30, "crE2": 25, "crRec": 13, "crDiagStart": 40, "crDiagDone": 40, "crReq": 7, "crHeld": 80, "crBill": 28, "crPaid": 58, "check": 299990, "crWarm": 15 }
+  },
+  "fact": { "budget": 5000 }
+ }
+}

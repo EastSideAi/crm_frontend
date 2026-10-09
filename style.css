@@ -10887,81 +10887,6 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .csw-acts .bp { width: 100%; }
 }
 
-/* ── Декомпозиция холодного трафика (Маркетинг → Декомпозиция) ──────────────
-   Экран-переговорка: слева вводные, ниже воронка и деньги когорты. Верстается
-   теми же кирпичами, что экономика портала (.po-tbl, .pay-board, .lad-row), свои
-   классы только там, где нужна сетка полей и плитки метрик. */
-/* вводные разложены группами: девять полей одной лентой на ноутбуке ужимались до
-   178px, подписи уезжали в две строки и ряд переставал читаться как ряд */
-/* ровно две колонки: auto-fit на мониторе от 1700px разворачивал группы в 3+1 и
-   возвращал тот самый одинокий ряд, ради которого раскладку и переделывали */
-.un-groups { display: grid; gap: 26px 30px; margin-top: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 1120px) { .un-groups { grid-template-columns: 1fr; } }
-.un-grp { min-width: 0; }
-.un-gt { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-  color: var(--ink-3); margin-bottom: 10px; }
-.un-form { display: grid; gap: 12px 14px;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); align-items: start; }
-.un-form2 { margin-top: 16px; }
-.un-form2 { grid-template-columns: repeat(auto-fit, minmax(200px, 240px)); }
-/* подпись под полем держит одну строку высоты, иначе соседние поля в группе
-   встают на разной высоте и сетка выглядит сломанной */
-.un-h { min-height: 16px; }
-.un-f { min-width: 0; }
-.un-h { font-size: 11.5px; color: var(--ink-3); line-height: 1.35; }
-.un-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
-.un-lbl { font-size: 11.5px; font-weight: 600; color: var(--ink-2); }
-/* доля продюсеров стоит в одной строке со схемой дележа: это одна мысль, и в сетке
-   вводных она оставляла бы дыру рядом с соседней группой */
-.un-inp { width: 74px; text-align: center; }
-/* второй клик по «Сбросить» подтверждает: цвет предупреждает, что дальше стирание */
-.bp.ghost.warn { color: var(--red-ink); border-color: var(--red-soft); background: var(--red-soft); }
-.un-share { margin-top: 18px; }
-.un-seg { margin: 0; }
-.un-metrics { display: grid; gap: 10px; margin-top: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-.un-m { background: var(--fill); border-radius: 12px; padding: 12px 14px; }
-.un-ml { font-size: 11.5px; color: var(--ink-2); }
-.un-mv { font-size: 17px; font-weight: 700; letter-spacing: -.02em; margin-top: 5px; }
-/* строка «Запуск N» в годовой таблице уже, чем статья в экономике: в ней два слова */
-.un-ytbl .po-rl { width: 128px; }
-.un-deal { display: grid; gap: 2px; margin-top: 4px; }
-.un-di { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 16px;
-  padding: 13px 0; border-top: 1px solid var(--line); }
-.un-di:first-child { border-top: 0; }
-.un-dt { font-size: 13.5px; font-weight: 700; color: var(--ink); }
-.un-dd { font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
-@media (max-width: 720px) {
-  .un-di { grid-template-columns: 1fr; gap: 4px; }
-  .un-row { align-items: flex-start; flex-direction: column; gap: 8px; }
-  /* на телефоне два поля в группе ужимаются до 150px, и длинная подпись уходит в
-     две строки только у одного из них: ряд снова «пляшет». Одна колонка честнее */
-  .un-form { grid-template-columns: 1fr; }
-  /* переключатели шире экрана: даем им уехать вбок, как тарифам в портале, а не
-     ломаем набор на две строки */
-  .un-seg { max-width: 100%; overflow-x: auto; }
-  .un-seg::-webkit-scrollbar { height: 0; }
-  .un-seg button { flex: none; }
-  .un-share .un-inp { width: 88px; }
-}
-/* накопительный столбец года: он и есть довод «работаем вдолгую», поэтому выделен */
-.un-cum { color: var(--blue-d); font-weight: 650; }
-/* откуда взялся процент расходов: строка стоит сразу под полями, чтобы на встрече
-   не пришлось объяснять голосом, что это цифра из экономики, а не прикидка */
-/* мера строки: на широком мониторе объяснение растягивалось на 1250px, и глазу
-   было некуда возвращаться в конце строки */
-.un-costnote { padding: 12px 14px; border-radius: 12px; background: var(--fill);
-  margin-top: 18px; max-width: 880px; }
-.un-groups ~ .po-note, .un-wnote { max-width: 880px; }
-/* у строки без шкалы серый рельс читается как «ноль» рядом с суммой */
-.lad-row.lad-norail .lad-track { background: none; }
-.un-cnt { font-size: 13px; font-weight: 650; color: var(--ink); }
-.un-cns { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; margin-top: 5px; }
-.un-costnote .lnk { border: 0; background: 0; padding: 0; font: inherit; font-weight: 650;
-  color: var(--blue); cursor: pointer; }
-.un-costnote .lnk:hover { text-decoration: underline; }
-
 /* План отделов: сводка «кто сдал план на период» (renderFinPlans). */
 .pl-list { padding: 6px 8px 10px; }
 .pl-row { display: flex; align-items: center; gap: 14px; padding: 13px 16px;
@@ -11917,4 +11842,44 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .org-plus, .org-cnt svg, .org-drow::before { transition: none; }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   ДЕКОМПОЗИЦИЯ ЗАПУСКА (вкладка «Маркетинг → Декомпозиция запуска»)
+   Таблица рабочего файла: показатель и три плана рядом, факт прошлого запуска
+   приглушенной колонкой справа. Вводные подсвечены как в файле — амбер значит
+   «это руками», и больше ничего. Рецепт строки системный (.trow), своя тут
+   только сетка колонок: четвертой колонкой идут цифры, а не действия.
+   ─────────────────────────────────────────────────────────────────────────── */
+.la-card { padding-bottom: 6px; }
+.la-note { padding: 16px 24px 4px; }
+.la-grid { grid-template-columns: minmax(0, 1fr) 124px 124px 124px 112px; gap: 12px;
+  height: auto; min-height: 46px; padding: 7px 24px; align-items: center; }
+.la-grid.thead { min-height: 38px; height: 38px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
+.la-grid.thead > * + * { text-align: right; }
+.la-l { font-size: 13px; line-height: 1.35; }
+.la-c { text-align: right; font-size: 13.5px; font-weight: 600; }
+.la-f { color: var(--ink-3); font-weight: 500; }
+.la-gh { padding: 18px 24px 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.la-input { background: #FEFCF8; }
+.la-input:hover { background: #FDF8EF; }
+.la-input .la-c { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.la-inp { width: 88px; text-align: right; border-color: #E8D9BC; background: #fff; }
+.la-inp:focus { border-color: var(--amber); box-shadow: none; }
+.la-u { font-size: 12px; color: var(--ink-3); width: 10px; }
+.la-foot { padding: 0 2px 18px; }
+
+/* на ноутбуке 1280 и уже факт прошлого запуска уходит: сравнивать планы между
+   собой важнее, чем держать пятую колонку ценой переносов в подписях */
+@media (max-width: 1240px) {
+  .la-grid { grid-template-columns: minmax(0, 1fr) 112px 112px 112px; }
+  .la-grid > :nth-child(5) { display: none; }
+}
+@media (max-width: 860px) {
+  .la-grid { grid-template-columns: minmax(0, 1fr) 92px; row-gap: 2px; padding: 9px 16px; }
+  .la-grid > :nth-child(2), .la-grid > :nth-child(3) { display: none; }
+  .la-gh { padding: 16px 16px 6px; }
+  .la-note { padding: 14px 16px 2px; }
+  .la-inp { width: 76px; }
 }
