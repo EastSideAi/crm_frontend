@@ -1978,6 +1978,14 @@ a { color: inherit; text-decoration: none; }
   background: var(--fill); border: 1px solid transparent; border-radius: 10px; padding: 11px 13px;
   appearance: none; -webkit-appearance: none; cursor: pointer; }
 .pay-form .ord-sel:focus { background: #fff; border-color: #DCE7FF; }
+/* Стрелка у селекта продукта — та же, что у остальных выпадашек (.al-selwrap).
+   Без неё поле со снятой системной стрелкой читается как обычный ввод, и
+   обязательный выбор пролистывают мимо. */
+.pay-selwrap { position: relative; display: block; }
+.pay-selwrap .ord-sel { width: 100%; padding-right: 34px; }
+.pay-selwrap::after { content: ''; position: absolute; right: 14px; top: 50%; width: 7px; height: 7px;
+  border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3);
+  transform: translateY(-65%) rotate(45deg); pointer-events: none; }
 .pay-grid input:disabled { opacity: .45; cursor: not-allowed; }
 /* Счет за уроки школы: кнопка тут длиннее «Добавить», в 150px она ломается на две строки */
 .pay-grid.sch { grid-template-columns: 1fr 150px 176px; }
