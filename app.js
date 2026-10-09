@@ -37338,9 +37338,18 @@
         ic(sct.icon, 17) + '<span>' + sct.label + '</span>' + extra + '</button>';
     }).join('');
 
+    /* Откуда человек: регистрация на запуск и состоявшийся разбор. Просьба продюсера
+       09.10.2026 — «хочу видеть по клиентам, что они по прошлому интенсиву прошли
+       диагностику у тьюторов». Берём последнюю регистрацию: их бывает несколько, а в
+       шапке место под одну строку, остальные видно на экране «Запуски». */
+    var lnch = (d && d.launches && d.launches[0]) || null;
     var subBits = [
       sevPill(lead || { crm: crm, booking: booking }),
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
+      (lnch ? '<span title="Человек зарегистрирован на этот запуск">' + esc(lnch.title) +
+        (lnch.minutes ? ', ' + lnch.minutes + ' мин эфира' : '') + '</span>' : ''),
+      (lnch && lnch.call_at
+        ? '<span title="Разбор с тьютором состоялся">разбор ' + fmtWhen(lnch.call_at) + '</span>' : ''),
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
     ].filter(Boolean).join('<span class="dot-sep"></span>') +
