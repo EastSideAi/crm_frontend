@@ -219,11 +219,14 @@ window.CROSSCUT = (function () {
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){ r.meetings += myCalls; r.meeting++; }
 
-        /* Деньги приходят двумя дорогами: счета CRM (сопровождение, «Теплый прием»)
-           и офферы (билет на интенсив, мини-продукты через кассу). Считать надо обе,
-           иначе экран не сойдется с кассой. */
+        /* Деньги приходят тремя дорогами: счета CRM (сопровождение, «Теплый прием»),
+           офферы (билет на интенсив, мини-продукты через кассу) и оплата строкой прямо
+           в карточке, без счета — так в CRM проводят сопровождение. Считать надо все
+           три, иначе экран не сойдется с кассой: до 09.10.2026 третьей не было, и
+           2,39 млн рублей с сентября на экран не попадали. */
         var allPays = (l.p || []).map(function(x){ return {d: x[0], v: x[1], prod: null}; })
-          .concat((l.op || []).map(function(x){ return {d: x[0], v: x[1], prod: x[2]}; }));
+          .concat((l.op || []).map(function(x){ return {d: x[0], v: x[1], prod: x[2]}; }))
+          .concat((l.pc || []).map(function(x){ return {d: x[0], v: x[1], prod: x[2]}; }));
         var myPay = 0, myRub = 0;
         allPays.forEach(function(x){
           if (!inP(x.d, a, b)) return;

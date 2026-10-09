@@ -548,6 +548,16 @@
      а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
      оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
   var CRM_HOME = 'https://crm.истсайд.рф/';
+  /* Боевые адреса CRM: всё остальное — превью ветки или локальный запуск. Нужно не
+     для красоты: кнопка «Ссылка» подставляет боевой домен и в превью тоже, поэтому
+     ссылка на раздел, которого в проде ещё нет, выглядит рабочей. Так 09.10.2026 по
+     чатам ушла ссылка на «Структуру» из чужой ветки, и у троих руководителей она
+     открыла их прошлый экран. */
+  var CRM_HOSTS = ['crm.xn--80aikf2bag.xn--p1ai', 'crm.истсайд.рф', 'crm.eastside.study'];
+  function isPreview() {
+    try { return CRM_HOSTS.indexOf(String(location.hostname || '').toLowerCase()) === -1; }
+    catch (e) { return false; }
+  }
   function leadUrl(id) {
     return CRM_HOME + '#lead/' + encodeURIComponent(id);
   }
@@ -2130,7 +2140,9 @@
     var tbl = el('tb-link');
     if (tbl) tbl.addEventListener('click', function () {
       copyText(screenUrl(), tbl);
-      showToast('Ссылка скопирована', 'у коллеги откроется ровно этот экран');
+      showToast('Ссылка скопирована', isPreview()
+        ? 'адрес боевой, а вы в рабочей копии: пока не нажали промоут, у коллег этого экрана может не быть'
+        : 'у коллеги откроется ровно этот экран');
     });
     var bugBtn = el('side-bug');
     if (bugBtn) bugBtn.addEventListener('click', function () { openBugPanel(); });
@@ -2226,14 +2238,14 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'team_view', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
-    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact'] },
+    head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'org'] },
     product_lead:  { label: 'Руководитель продукта', short: 'продукт и аналитика',  caps: ['dash', 'tasks', 'tasks_all', 'clients', 'path', 'analytics', 'products', 'students', 'templates', 'portal'] },
     sales_lead:    { label: 'Руководитель продаж',   short: 'продажи и деньги',     caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'portal', 'contractors', 'academy', 'planfact'] },
     sales_manager: { label: 'Менеджер продаж',       short: 'заявки и диалоги',     caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'portal', 'academy'] },
-    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review'] },
+    admin:         { label: 'Администратор',          short: 'операционка',          caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'students', 'templates', 'grants', 'products', 'portal', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'org'] },
     senior_tutor:  { label: 'Старший тьютор',        short: 'обучение',             caps: ['cabinet_invite', 'dash', 'inbox', 'tasks', 'tasks_all', 'clients', 'students', 'templates', 'portal', 'academy', 'zaezdy', 'zaezd_review'] },
     // Тьютор ведет учеников: карточки, обучение и переписка со СВОИМИ семьями
     // (`inbox_own`, Павел 17.09.2026). Полного инбокса с воронкой продаж и портала
@@ -2252,7 +2264,7 @@
     // продажам видит тоже. Маркетолог не видит заявки и сделки, руководитель продаж
     // не видит маркетинг, а «Руководитель» — это заодно зарплаты команды и документы
     // учеников. Ведомости нет вовсе: там ввод процентов и выплат людям.
-    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing'] },
+    marketing_lead: { label: 'Руководитель маркетинга', short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'finmodel_marketing', 'org'] },
     // Решение владельца от 2026-09-02: продюсер ведёт маркетинг и продажи запуска —
     // контроль, отчётность, планирование и переписки с клиентами. Набор прав сейчас
     // такой же, как у руководителя маркетинга: владелец просил роль без права менять
@@ -2260,7 +2272,7 @@
     // Просмотр-без-правки — второй шаг, там роли и разойдутся. Ведомости нет: процент
     // продюсера от чистой прибыли — отдельный расчётный лист. Зеркало ROLE_CAPS в
     // backend/app/routers/admin.py.
-    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'team_view'] },
+    producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'team_view', 'org'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
@@ -2370,7 +2382,7 @@
     /* «Структура» — кто кому подчиняется и что входит в роль. Рядом с «Порталом»
        намеренно: оба раздела отвечают на вопрос «как у нас устроено», только один
        про продукты, другой про людей. Видят все, cap dash есть у каждой роли. */
-    { id: 'org', label: 'Структура', icon: 'team', cap: 'dash' },
+    { id: 'org', label: 'Структура', icon: 'team', cap: 'org' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
     { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
@@ -12647,7 +12659,16 @@
       if (location.hash.indexOf('#task/') === 0) backToPageHash();
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
     };
-    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    /* Escape закрывает карточку — но не поверх набранного текста. Поле реплики
+       теперь многострочное, и потерять по Escape полдня переписки обиднее, чем
+       лишний раз нажать на крестик. Пустое поле карточку закрывает как раньше. */
+    var onKey = function (e) {
+      if (e.key !== 'Escape') return;
+      var a = document.activeElement;
+      if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT') &&
+          ov.contains(a) && (a.value || '').trim()) return;
+      close();
+    };
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
     try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
@@ -12704,12 +12725,35 @@
       // только сданное» снятие приемки не отменяет.
       if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
-      var feed = events.map(function (e) {
-        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
+      /* Лента: системные события и реплики людей вперемешку по времени. У
+         реплики могут быть ответы — они идут сразу под ней, а не в конце
+         ленты: иначе ответ на вопрос из середины через день уже не читается
+         (Павел 09.10.2026). Уровень ровно один, глубже сервер не пускает. */
+      var kids = {}, known = {};
+      events.forEach(function (e) { known[e.id] = 1; });
+      events.forEach(function (e) {
+        if (e.reply_to && known[e.reply_to]) (kids[e.reply_to] = kids[e.reply_to] || []).push(e);
+      });
+      var evHtml = function (e, inner) {
+        var mine = e.kind === 'comment' && me && e.actor_id === me;
+        // «Ответить» только у корневой реплики: ответ на ответ сервер все
+        // равно вернет в ту же ветку, и кнопка обещала бы несуществующее.
+        var acts = (e.kind === 'comment' && !inner
+                     ? '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' : '') +
+                   (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '');
+        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '" data-ev="' + e.id + '">' +
           '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
           '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
-          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) + '</div></div></div>';
-      }).join('');
+          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
+            (e.edited_at ? '<i class="tsk-ev-ed">изменено</i>' : '') + acts +
+          '</div></div></div>';
+      };
+      var feed = events.filter(function (e) { return !(e.reply_to && known[e.reply_to]); })
+        .map(function (e) {
+          return evHtml(e, false) + (kids[e.id]
+            ? '<div class="tsk-re">' + kids[e.id].map(function (r) { return evHtml(r, true); }).join('') + '</div>'
+            : '');
+        }).join('');
 
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head">' +
@@ -12864,7 +12908,7 @@
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
-              '<button class="tsk-addstep" id="tk-add">' + ic('plus', 12) + 'Добавить шаг</button></div>' +
+              '</div>' +
               (steps.length
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
@@ -12876,6 +12920,17 @@
                       '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
                   }).join('') + '</div>'
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
+              (t.status === 'cancel' ? '' :
+                '<div class="tsk-qstep"><input id="tk-qstep" class="al-in sm" maxlength="200" ' +
+                  'placeholder="Новый шаг: что сделать" aria-label="Новый шаг">' +
+                  '<button class="icobtn" id="tk-qstepb" title="Добавить шаг">' + ic('plus', 15) + '</button>' +
+                  '<button type="button" class="tsk-qmore" id="tk-add">подробно</button></div>' +
+                '<div class="tsk-qhint">' +
+                  (t.assignee_name
+                    ? 'Исполнитель и срок как у цели: ' + esc(t.assignee_name) +
+                      (t.due_at ? ', ' + esc(due.text) : '') + '. Другие — «подробно».'
+                    : 'У цели нет ответственного, поэтому шаг тоже будет ничей. Человека и срок задай через «подробно».') +
+                '</div>') +
             '</div>') +
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
           '<div class="tsk-ret" id="tk-ret" hidden>' +
@@ -12900,7 +12955,14 @@
               '<button class="bp" id="tk-resok">Сдать</button>' +
             '</div>' +
           '</div>' +
-          '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
+          // Кому отвечаем — плашкой над полем, а не догадкой по отступу: когда
+          // ветка уехала вверх за экран, иначе непонятно, куда уйдет текст.
+          '<div class="tsk-repl" id="tk-repl" hidden><span id="tk-repl-t"></span>' +
+            '<button type="button" id="tk-replx">не отвечать</button></div>' +
+          // Поле растет под текст: в одну строку не видно, что уже написал
+          // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
+          '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+            'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
             '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
         '</div>' +
         (acts.length ? '<div class="al-foot tsk-acts">' + acts.map(function (a) {
@@ -12930,8 +12992,52 @@
       });
       var add = el('tk-add');
       if (add) add.addEventListener('click', function () {
-        swap(function () { openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept }); });
+        // Набранное читаем сейчас, а не внутри swap: карточка уходит из DOM за
+        // 180мс, а колбэк swap срабатывает на 200мс — поля там уже не будет.
+        var typed = (el('tk-qstep') && el('tk-qstep').value.trim()) || '';
+        swap(function () {
+          openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept, title: typed });
+        });
       });
+
+      /* Быстрый шаг строкой. Под капотом это обычная задача со своим
+         исполнителем и сроком — иначе шаг никому не придет и ни в чью неделю
+         не встанет. Поэтому и человека, и срок молча берем у цели: в девяти
+         случаях из десяти они те же, а оставшийся закрывает «подробно». */
+      var qs = el('tk-qstep');
+      if (qs) {
+        var qsAdd = function () {
+          var title = (qs.value || '').trim();
+          if (!title) { qs.focus(); return; }
+          var btn = el('tk-qstepb');
+          qs.disabled = btn.disabled = true;
+          var body = { title: title, parent_id: t.id };
+          if (t.assignee_id) body.assignee_id = t.assignee_id;
+          if (t.due_at) body.due_at = t.due_at;
+          apiSend('/admin/api/tasks', 'POST', body, function () {
+            qs.value = '';
+            state.tasks = null; state.myweek = null; state.myboard = null;
+            state.stuck = null; state.mymonth = null;
+            api('/admin/api/tasks/' + id).then(function (r) {
+              draw(r);
+              // Фокус остается в поле: шаги почти всегда добавляют пачкой.
+              var again = el('tk-qstep');
+              if (again) again.focus();
+            }).catch(function () { close(); });
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            qs.disabled = btn.disabled = false;
+            qs.focus();
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 409 ? 'На этой неделе уже предел задач у человека'
+                                    : 'Шаг не завелся — проверь интернет'));
+          });
+        };
+        el('tk-qstepb').addEventListener('click', qsAdd);
+        qs.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); qsAdd(); }
+        });
+      }
       Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
         b.addEventListener('click', function () {
           var sid = +b.getAttribute('data-step');
@@ -13187,24 +13293,113 @@
         });
       };
 
+      // Поле растет под текст до пяти строк, дальше скроллится само: карточка
+      // не должна уезжать из-за длинной реплики.
+      var grow = function () {
+        say.style.height = 'auto';
+        say.style.height = Math.min(say.scrollHeight, 132) + 'px';
+      };
+      say.addEventListener('input', grow);
+      grow();
+
+      // Кому отвечаем. Держим id ветки, а не только подпись: после
+      // перерисовки ленты DOM другой, а ветка та же.
+      var replyTo = null;
+      var setReply = function (ev) {
+        replyTo = ev ? ev.id : null;
+        var bar = el('tk-repl');
+        bar.hidden = !ev;
+        if (ev) {
+          var cut = (ev.text || '').replace(/\s+/g, ' ');
+          el('tk-repl-t').textContent = 'Ответ · ' + (ev.actor_name || 'в ветку') + ': ' +
+            (cut.length > 60 ? cut.slice(0, 60) + '…' : cut);
+          say.focus();
+        }
+      };
+      el('tk-replx').addEventListener('click', function () { setReply(null); });
+
+      var redrawFeed = function (evs, keepAt) {
+        // Перерисовываем тем же составом данных: без steps и files карточка
+        // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
+        draw({ task: t, events: evs, steps: steps, files: files, me: me });
+        var again = ov.querySelector('.al-body');
+        if (!again) return;
+        // Новая реплика — вниз, ее человек и ждет. Правка старой — остаемся
+        // там, где читали: иначе поправил опечатку в середине и потерял место.
+        again.scrollTop = keepAt == null ? again.scrollHeight : keepAt;
+      };
+
       var send = function () {
         var text = (say.value || '').trim();
         if (!text) { if (retMode) say.focus(); return; }
         say.value = '';
+        grow();
         if (retMode) { setRet(false); setStatus('return', text); return; }
-        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
+        var body = { text: text };
+        if (replyTo) body.reply_to = replyTo;
+        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', body, function (r) {
           if (!r || !r.events) return;
-          // Перерисовываем тем же составом данных: без steps и files карточка
-          // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
-          draw({ task: t, events: r.events, steps: steps, files: files, me: me });
-          // Свое сообщение человек должен увидеть: карточка перерисовалась и
-          // прокрутка сбросилась наверх.
-          var again = ov.querySelector('.al-body');
-          if (again) again.scrollTop = again.scrollHeight;
+          redrawFeed(r.events);
         }, function () { showToast('Сообщение не ушло — проверь интернет'); });
       };
       el('tk-send').addEventListener('click', send);
-      say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+      say.addEventListener('keydown', function (e) {
+        // Shift+Ввод — перенос строки: реплика в задаче бывает и в два абзаца.
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+      });
+
+      var evById = function (eid) {
+        return events.filter(function (x) { return x.id === eid; })[0];
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-reply]'), function (b) {
+        b.addEventListener('click', function () { setReply(evById(+b.getAttribute('data-reply'))); });
+      });
+
+      /* Правка своей реплики. Поле открывается прямо на месте текста: уводить
+         опечатку в отдельное окно дороже, чем сама опечатка. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-cedit]'), function (b) {
+        b.addEventListener('click', function () {
+          var eid = +b.getAttribute('data-cedit');
+          var ev = evById(eid);
+          var row = ov.querySelector('[data-ev="' + eid + '"]');
+          if (!ev || !row || row.querySelector('.tsk-evedit')) return;
+          var slot = row.querySelector('.tsk-ev-t');
+          var box = document.createElement('div');
+          box.className = 'tsk-evedit';
+          box.innerHTML = '<textarea class="al-in al-ta" rows="2" maxlength="2000" ' +
+              'aria-label="Поправить свою реплику"></textarea>' +
+            '<div class="tsk-evedit-r"><button type="button" class="al-cancel">Отмена</button>' +
+            '<button type="button" class="bp sm">Сохранить</button></div>';
+          var ta = box.querySelector('textarea');
+          ta.value = ev.text || '';
+          slot.hidden = true;
+          row.classList.add('ed');
+          slot.parentNode.insertBefore(box, slot.nextSibling);
+          ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+          var off = function () { box.remove(); slot.hidden = false; row.classList.remove('ed'); };
+          box.querySelector('.al-cancel').addEventListener('click', off);
+          var save = function () {
+            var text = (ta.value || '').trim();
+            if (!text) { showToast('Пустая реплика — это удаление, а удалять мы не умеем'); ta.focus(); return; }
+            if (text === (ev.text || '')) { off(); return; }
+            var ok = box.querySelector('.bp');
+            ok.disabled = true;
+            var at = (ov.querySelector('.al-body') || {}).scrollTop || 0;
+            apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'PATCH', { text: text }, function (r) {
+              if (r && r.events) redrawFeed(r.events, at);
+            }, function (code) {
+              ok.disabled = false;
+              showToast(code === 403 ? 'Поправить можно только свою реплику' : 'Правка не сохранилась — проверь интернет');
+            });
+          };
+          box.querySelector('.bp').addEventListener('click', save);
+          ta.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); off(); }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+          });
+        });
+      });
 
       var wB = el('tk-watch');
       if (wB) wB.addEventListener('click', function () {
@@ -13545,6 +13740,9 @@
       el('nt-cancel').addEventListener('click', close);
       ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
       var ti = el('nt-title');
+      // Текст, уже набранный в быстрой строке шага, переезжает сюда: человек
+      // начал писать, понял, что нужен другой исполнитель, и нажал «подробно».
+      if (preset.title) ti.value = preset.title;
       setTimeout(function () { ti.focus(); }, 30);
       ti.addEventListener('input', function () { ti.classList.remove('al-err'); });
       // Быстрые сроки: руками дату ставят редко, а задача без срока — ровно та
@@ -30626,15 +30824,17 @@
      раскрываемые зоны ответственности под ней. Человек приходит сюда дважды —
      на онбординге («кто все эти люди») и за ответом «чья это работа», и оба
      вопроса закрываются без того, чтобы кого-то спрашивать.
-     Данные — content/org.json: роли и их задачи перенесены из должностных
-     инструкций дословно, в коде их нет. Поменялась инструкция — меняется json,
-     верстку под новую роль писать не надо.
-     Видят все (cap dash): структура компании закрытыми данными не является. */
+     Данные — ручка `GET /admin/api/org` (файл `app/data/org.json` в бэкенде):
+     роли и их задачи перенесены из должностных инструкций дословно, в коде их
+     нет. Поменялась инструкция — меняется файл в бэкенде, верстку под новую роль
+     писать не надо.
+     Раздел под cap `org` — админы и продюсеры (Вера 09.10.2026: «Давай закроем.
+     Оставим админам и продюсерам»). Сначала данные лежали файлом в этом
+     репозитории, а статика CRM раздается БЕЗ входа (§10.7): список всех людей
+     компании с обязанностями открывался по прямой ссылке. ФИО вместе с
+     должностью — персональные данные, и держать их открытыми нельзя. */
   function fetchOrg() {
-    /* путь относительный, как у портала: превью ветки живет по адресу с
-       префиксом /p/<оператор>__crm_frontend/, от корня файл бы не нашелся */
-    fetch('content/org.json', { cache: 'no-cache' })
-      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    api('/admin/api/org')
       .then(function (d) { state._org = d; if (state.page === 'org') renderView(); })
       .catch(function () { state._org = 'none'; if (state.page === 'org') renderView(); });
   }
@@ -33498,8 +33698,15 @@
     whatsapp: { label: 'WhatsApp', icon: 'wa' },
     instagram: { label: 'Instagram', icon: 'inst' },
   };
+  /* Клиент прохожим не бывает. Статус воронки говорит только о том, что человек не
+     оставил анкету на платформе, а семью заводят в CRM и руками — тогда у дела стоит
+     «клиент», но status остается visited, и карточка молча пропадала из «Людей»
+     (Мария 09.10.2026: закрепленная за тьютором Попова не показывалась ни в списке,
+     ни у ответственного; таких карточек на бою нашлось пять). Признак клиента тот же,
+     что у вкладки «Клиенты», — иначе вкладка показывала бы человека, которого нет в
+     списке людей. */
   function isProspect(l) {
-    return l.status === 'visited' && !l.paid && l.crm.status !== 'rejected';
+    return l.status === 'visited' && !isClient(l) && l.crm.status !== 'rejected';
   }
   function prAge(l) {
     var t = l.last_activity || l.created_at;
@@ -37212,9 +37419,18 @@
         ic(sct.icon, 17) + '<span>' + sct.label + '</span>' + extra + '</button>';
     }).join('');
 
+    /* Откуда человек: регистрация на запуск и состоявшийся разбор. Просьба продюсера
+       09.10.2026 — «хочу видеть по клиентам, что они по прошлому интенсиву прошли
+       диагностику у тьюторов». Берём последнюю регистрацию: их бывает несколько, а в
+       шапке место под одну строку, остальные видно на экране «Запуски». */
+    var lnch = (d && d.launches && d.launches[0]) || null;
     var subBits = [
       sevPill(lead || { crm: crm, booking: booking }),
       '<span>пришел ' + fmtWhen(base.created_at) + '</span>',
+      (lnch ? '<span title="Человек зарегистрирован на этот запуск">' + esc(lnch.title) +
+        (lnch.minutes ? ', ' + lnch.minutes + ' мин эфира' : '') + '</span>' : ''),
+      (lnch && lnch.call_at
+        ? '<span title="Разбор с тьютором состоялся">разбор ' + fmtWhen(lnch.call_at) + '</span>' : ''),
       (pos !== -1 ? '<span>' + (pos + 1) + ' из ' + list.length + '</span>' : ''),
       '<span class="sess">сессия ' + esc(String(id).slice(0, 8)) + '</span>',
     ].filter(Boolean).join('<span class="dot-sep"></span>') +
@@ -41109,7 +41325,14 @@
             '<div class="pay-form">' +
               '<span class="pay-seg" id="pay-st"><button data-v="paid" class="on">оплачен</button>' +
                 '<button data-v="pending">ожидается</button><button data-v="refunded">возврат</button></span>' +
-              '<input id="pay-title" placeholder="За что — например «Диагностика» или «Сопровождение»">' +
+              /* Продукт обязателен. Пока его не спрашивали, за что заплатили, знал
+                 только текст строки: из 26 сентябрьских оплат продукт стоял у одной,
+                 и ни лестница запуска, ни сквозная не могли сказать, сколько человек
+                 купили сопровождение. Строка названия остаётся: в ней номер договора
+                 и взнос, а продукт отвечает на вопрос «что продали». */
+              '<span class="pay-selwrap"><select class="ord-sel" id="pay-prod">' +
+                '<option value="">За что платят — выберите продукт</option></select></span>' +
+              '<input id="pay-title" placeholder="Строкой: например «Договор 57, первый платеж 50%»">' +
               '<div class="pay-grid">' +
                 '<input id="pay-amt" inputmode="numeric" placeholder="Сумма, ₽">' +
                 '<input id="pay-date" type="date" value="' + todayISO(0) + '">' +
@@ -42557,14 +42780,42 @@
           Array.prototype.forEach.call(payStEl.children, function (x) { x.classList.toggle('on', x === b); });
         });
       });
+      /* Список продуктов тот же, что на витрине клиента, с теми же группами. */
+      var prodSel = el('pay-prod');
+      if (prodSel) fetchCatalog(function (list) {
+        if (!list || !el('pay-prod')) return;
+        var by = {};
+        list.filter(function (p) { return p.is_active !== false; })
+            .forEach(function (p) { (by[p.category || 'service'] || (by[p.category || 'service'] = [])).push(p); });
+        var html = '<option value="">За что платят — выберите продукт</option>';
+        PRODUCT_CAT_ORDER.concat(Object.keys(by)).forEach(function (c) {
+          if (!by[c]) return;
+          html += '<optgroup label="' + esc(PRODUCT_CAT_RU[c] || c) + '">' +
+            by[c].map(function (p) {
+              return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>';
+            }).join('') + '</optgroup>';
+          delete by[c];
+        });
+        /* Последним — честный выход для того, чего в каталоге нет (оплата прошлого
+           сезона, доплата). Лучше явный выбор, чем пустое поле по умолчанию. */
+        html += '<option value="-">другое, продукта в каталоге нет</option>';
+        el('pay-prod').innerHTML = html;
+      });
       payBtn.addEventListener('click', function () {
         var title = (el('pay-title').value || '').trim();
         var amt = parseInt((el('pay-amt').value || '').replace(/\D/g, ''), 10) || 0;
         var date = el('pay-date') && el('pay-date').value ? el('pay-date').value : todayISO(0);
+        var prod = prodSel ? prodSel.value : '-';
+        if (!prod) {
+          showToast('Выберите, за что оплата — иначе продажа не попадет в аналитику');
+          prodSel.focus();
+          return;
+        }
         if (!title) { el('pay-title').focus(); return; }
         var incEl = el('pay-inc');
         var body = { title: title, amount_rub: amt, status: payStatus,
                      included: incEl ? !!incEl.checked : true };
+        if (prod && prod !== '-') body.product_id = prod;
         if (payStatus === 'paid' || payStatus === 'refunded') body.paid_at = date;
         var selA = el('pay-seller'), selB = el('pay-setter');
         if (selA && selA.value) body.seller_id = parseInt(selA.value, 10);
@@ -44169,7 +44420,17 @@
 
   function openPageFromHash() {
     var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
-    if (!pg || !navMeta(pg)) return;
+    if (!pg) return;
+    /* Раздела с таким именем нет вовсе — адрес набрали руками или он устарел.
+       Молчать тут нельзя: человек остается на своем прошлом экране и читает это
+       как «ссылка открыла не то» (Вера 09.10.2026: «у меня почему-то диалог с
+       Юлей открывается»). */
+    if (!navMeta(pg) || pageHidden(pg)) {
+      denyLink(String(pg).slice(0, 64), '',
+               'Раздела «' + esc(String(pg).slice(0, 24)) + '» здесь нет',
+               'он либо еще не выкачен, либо ссылка устарела. Спросите у того, кто ее прислал');
+      return;
+    }
     if (!can(pageCap(pg))) {
       denyLink(pg, navMeta(pg).label, 'Раздел «' + navMeta(pg).label + '» вам не открыт');
       return;
