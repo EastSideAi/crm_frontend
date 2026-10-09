@@ -548,6 +548,16 @@
      а не адрес текущего окна: из превью ветки уехала бы временная ссылка с именем
      оператора внутри. Домен кириллицей — punycode в переписке нечитаем. */
   var CRM_HOME = 'https://crm.истсайд.рф/';
+  /* Боевые адреса CRM: всё остальное — превью ветки или локальный запуск. Нужно не
+     для красоты: кнопка «Ссылка» подставляет боевой домен и в превью тоже, поэтому
+     ссылка на раздел, которого в проде ещё нет, выглядит рабочей. Так 09.10.2026 по
+     чатам ушла ссылка на «Структуру» из чужой ветки, и у троих руководителей она
+     открыла их прошлый экран. */
+  var CRM_HOSTS = ['crm.xn--80aikf2bag.xn--p1ai', 'crm.истсайд.рф', 'crm.eastside.study'];
+  function isPreview() {
+    try { return CRM_HOSTS.indexOf(String(location.hostname || '').toLowerCase()) === -1; }
+    catch (e) { return false; }
+  }
   function leadUrl(id) {
     return CRM_HOME + '#lead/' + encodeURIComponent(id);
   }
@@ -2130,7 +2140,9 @@
     var tbl = el('tb-link');
     if (tbl) tbl.addEventListener('click', function () {
       copyText(screenUrl(), tbl);
-      showToast('Ссылка скопирована', 'у коллеги откроется ровно этот экран');
+      showToast('Ссылка скопирована', isPreview()
+        ? 'адрес боевой, а вы в рабочей копии: пока не нажали промоут, у коллег этого экрана может не быть'
+        : 'у коллеги откроется ровно этот экран');
     });
     var bugBtn = el('side-bug');
     if (bugBtn) bugBtn.addEventListener('click', function () { openBugPanel(); });
@@ -44281,7 +44293,17 @@
 
   function openPageFromHash() {
     var parts = acRedirect(hashPageParts()[0], hashPageParts()[1]), pg = parts[0], seg = parts[1];
-    if (!pg || !navMeta(pg)) return;
+    if (!pg) return;
+    /* Раздела с таким именем нет вовсе — адрес набрали руками или он устарел.
+       Молчать тут нельзя: человек остается на своем прошлом экране и читает это
+       как «ссылка открыла не то» (Вера 09.10.2026: «у меня почему-то диалог с
+       Юлей открывается»). */
+    if (!navMeta(pg) || pageHidden(pg)) {
+      denyLink(String(pg).slice(0, 64), '',
+               'Раздела «' + esc(String(pg).slice(0, 24)) + '» здесь нет',
+               'он либо еще не выкачен, либо ссылка устарела. Спросите у того, кто ее прислал');
+      return;
+    }
     if (!can(pageCap(pg))) {
       denyLink(pg, navMeta(pg).label, 'Раздел «' + navMeta(pg).label + '» вам не открыт');
       return;
