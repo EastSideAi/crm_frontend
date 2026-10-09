@@ -12653,7 +12653,16 @@
       if (location.hash.indexOf('#task/') === 0) backToPageHash();
       setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180);
     };
-    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    /* Escape закрывает карточку — но не поверх набранного текста. Поле реплики
+       теперь многострочное, и потерять по Escape полдня переписки обиднее, чем
+       лишний раз нажать на крестик. Пустое поле карточку закрывает как раньше. */
+    var onKey = function (e) {
+      if (e.key !== 'Escape') return;
+      var a = document.activeElement;
+      if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT') &&
+          ov.contains(a) && (a.value || '').trim()) return;
+      close();
+    };
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
     try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
@@ -12710,12 +12719,35 @@
       // только сданное» снятие приемки не отменяет.
       if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
-      var feed = events.map(function (e) {
-        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '">' +
+      /* Лента: системные события и реплики людей вперемешку по времени. У
+         реплики могут быть ответы — они идут сразу под ней, а не в конце
+         ленты: иначе ответ на вопрос из середины через день уже не читается
+         (Павел 09.10.2026). Уровень ровно один, глубже сервер не пускает. */
+      var kids = {}, known = {};
+      events.forEach(function (e) { known[e.id] = 1; });
+      events.forEach(function (e) {
+        if (e.reply_to && known[e.reply_to]) (kids[e.reply_to] = kids[e.reply_to] || []).push(e);
+      });
+      var evHtml = function (e, inner) {
+        var mine = e.kind === 'comment' && me && e.actor_id === me;
+        // «Ответить» только у корневой реплики: ответ на ответ сервер все
+        // равно вернет в ту же ветку, и кнопка обещала бы несуществующее.
+        var acts = (e.kind === 'comment' && !inner
+                     ? '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' : '') +
+                   (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '');
+        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '" data-ev="' + e.id + '">' +
           '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
           '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
-          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) + '</div></div></div>';
-      }).join('');
+          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
+            (e.edited_at ? '<i class="tsk-ev-ed">изменено</i>' : '') + acts +
+          '</div></div></div>';
+      };
+      var feed = events.filter(function (e) { return !(e.reply_to && known[e.reply_to]); })
+        .map(function (e) {
+          return evHtml(e, false) + (kids[e.id]
+            ? '<div class="tsk-re">' + kids[e.id].map(function (r) { return evHtml(r, true); }).join('') + '</div>'
+            : '');
+        }).join('');
 
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head">' +
@@ -12870,7 +12902,7 @@
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
-              '<button class="tsk-addstep" id="tk-add">' + ic('plus', 12) + 'Добавить шаг</button></div>' +
+              '</div>' +
               (steps.length
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
@@ -12882,6 +12914,17 @@
                       '<span class="sev ' + sst.cls + '">' + sst.label + '</span></button>';
                   }).join('') + '</div>'
                 : '<div class="tsk-nosteps">Шагов нет. Большую задачу лучше разложить на шаги — тогда видно движение, а не только срок.</div>') +
+              (t.status === 'cancel' ? '' :
+                '<div class="tsk-qstep"><input id="tk-qstep" class="al-in sm" maxlength="200" ' +
+                  'placeholder="Новый шаг: что сделать" aria-label="Новый шаг">' +
+                  '<button class="icobtn" id="tk-qstepb" title="Добавить шаг">' + ic('plus', 15) + '</button>' +
+                  '<button type="button" class="tsk-qmore" id="tk-add">подробно</button></div>' +
+                '<div class="tsk-qhint">' +
+                  (t.assignee_name
+                    ? 'Исполнитель и срок как у цели: ' + esc(t.assignee_name) +
+                      (t.due_at ? ', ' + esc(due.text) : '') + '. Другие — «подробно».'
+                    : 'У цели нет ответственного, поэтому шаг тоже будет ничей. Человека и срок задай через «подробно».') +
+                '</div>') +
             '</div>') +
           '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
           '<div class="tsk-ret" id="tk-ret" hidden>' +
@@ -12906,7 +12949,14 @@
               '<button class="bp" id="tk-resok">Сдать</button>' +
             '</div>' +
           '</div>' +
-          '<div class="tsk-say"><input id="tk-say" class="al-in" placeholder="Написать по задаче" maxlength="2000">' +
+          // Кому отвечаем — плашкой над полем, а не догадкой по отступу: когда
+          // ветка уехала вверх за экран, иначе непонятно, куда уйдет текст.
+          '<div class="tsk-repl" id="tk-repl" hidden><span id="tk-repl-t"></span>' +
+            '<button type="button" id="tk-replx">не отвечать</button></div>' +
+          // Поле растет под текст: в одну строку не видно, что уже написал
+          // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
+          '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+            'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
             '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
         '</div>' +
         (acts.length ? '<div class="al-foot tsk-acts">' + acts.map(function (a) {
@@ -12936,8 +12986,52 @@
       });
       var add = el('tk-add');
       if (add) add.addEventListener('click', function () {
-        swap(function () { openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept }); });
+        // Набранное читаем сейчас, а не внутри swap: карточка уходит из DOM за
+        // 180мс, а колбэк swap срабатывает на 200мс — поля там уже не будет.
+        var typed = (el('tk-qstep') && el('tk-qstep').value.trim()) || '';
+        swap(function () {
+          openNewTask({ parent_id: t.id, parent_title: t.title, dept: t.dept, title: typed });
+        });
       });
+
+      /* Быстрый шаг строкой. Под капотом это обычная задача со своим
+         исполнителем и сроком — иначе шаг никому не придет и ни в чью неделю
+         не встанет. Поэтому и человека, и срок молча берем у цели: в девяти
+         случаях из десяти они те же, а оставшийся закрывает «подробно». */
+      var qs = el('tk-qstep');
+      if (qs) {
+        var qsAdd = function () {
+          var title = (qs.value || '').trim();
+          if (!title) { qs.focus(); return; }
+          var btn = el('tk-qstepb');
+          qs.disabled = btn.disabled = true;
+          var body = { title: title, parent_id: t.id };
+          if (t.assignee_id) body.assignee_id = t.assignee_id;
+          if (t.due_at) body.due_at = t.due_at;
+          apiSend('/admin/api/tasks', 'POST', body, function () {
+            qs.value = '';
+            state.tasks = null; state.myweek = null; state.myboard = null;
+            state.stuck = null; state.mymonth = null;
+            api('/admin/api/tasks/' + id).then(function (r) {
+              draw(r);
+              // Фокус остается в поле: шаги почти всегда добавляют пачкой.
+              var again = el('tk-qstep');
+              if (again) again.focus();
+            }).catch(function () { close(); });
+            if (state.page === 'tasks') renderView();
+          }, function (code, e) {
+            qs.disabled = btn.disabled = false;
+            qs.focus();
+            showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                      (code === 409 ? 'На этой неделе уже предел задач у человека'
+                                    : 'Шаг не завелся — проверь интернет'));
+          });
+        };
+        el('tk-qstepb').addEventListener('click', qsAdd);
+        qs.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); qsAdd(); }
+        });
+      }
       Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
         b.addEventListener('click', function () {
           var sid = +b.getAttribute('data-step');
@@ -13193,24 +13287,113 @@
         });
       };
 
+      // Поле растет под текст до пяти строк, дальше скроллится само: карточка
+      // не должна уезжать из-за длинной реплики.
+      var grow = function () {
+        say.style.height = 'auto';
+        say.style.height = Math.min(say.scrollHeight, 132) + 'px';
+      };
+      say.addEventListener('input', grow);
+      grow();
+
+      // Кому отвечаем. Держим id ветки, а не только подпись: после
+      // перерисовки ленты DOM другой, а ветка та же.
+      var replyTo = null;
+      var setReply = function (ev) {
+        replyTo = ev ? ev.id : null;
+        var bar = el('tk-repl');
+        bar.hidden = !ev;
+        if (ev) {
+          var cut = (ev.text || '').replace(/\s+/g, ' ');
+          el('tk-repl-t').textContent = 'Ответ · ' + (ev.actor_name || 'в ветку') + ': ' +
+            (cut.length > 60 ? cut.slice(0, 60) + '…' : cut);
+          say.focus();
+        }
+      };
+      el('tk-replx').addEventListener('click', function () { setReply(null); });
+
+      var redrawFeed = function (evs, keepAt) {
+        // Перерисовываем тем же составом данных: без steps и files карточка
+        // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
+        draw({ task: t, events: evs, steps: steps, files: files, me: me });
+        var again = ov.querySelector('.al-body');
+        if (!again) return;
+        // Новая реплика — вниз, ее человек и ждет. Правка старой — остаемся
+        // там, где читали: иначе поправил опечатку в середине и потерял место.
+        again.scrollTop = keepAt == null ? again.scrollHeight : keepAt;
+      };
+
       var send = function () {
         var text = (say.value || '').trim();
         if (!text) { if (retMode) say.focus(); return; }
         say.value = '';
+        grow();
         if (retMode) { setRet(false); setStatus('return', text); return; }
-        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', { text: text }, function (r) {
+        var body = { text: text };
+        if (replyTo) body.reply_to = replyTo;
+        apiSend('/admin/api/tasks/' + id + '/comment', 'POST', body, function (r) {
           if (!r || !r.events) return;
-          // Перерисовываем тем же составом данных: без steps и files карточка
-          // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
-          draw({ task: t, events: r.events, steps: steps, files: files, me: me });
-          // Свое сообщение человек должен увидеть: карточка перерисовалась и
-          // прокрутка сбросилась наверх.
-          var again = ov.querySelector('.al-body');
-          if (again) again.scrollTop = again.scrollHeight;
+          redrawFeed(r.events);
         }, function () { showToast('Сообщение не ушло — проверь интернет'); });
       };
       el('tk-send').addEventListener('click', send);
-      say.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); send(); } });
+      say.addEventListener('keydown', function (e) {
+        // Shift+Ввод — перенос строки: реплика в задаче бывает и в два абзаца.
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+      });
+
+      var evById = function (eid) {
+        return events.filter(function (x) { return x.id === eid; })[0];
+      };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-reply]'), function (b) {
+        b.addEventListener('click', function () { setReply(evById(+b.getAttribute('data-reply'))); });
+      });
+
+      /* Правка своей реплики. Поле открывается прямо на месте текста: уводить
+         опечатку в отдельное окно дороже, чем сама опечатка. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-cedit]'), function (b) {
+        b.addEventListener('click', function () {
+          var eid = +b.getAttribute('data-cedit');
+          var ev = evById(eid);
+          var row = ov.querySelector('[data-ev="' + eid + '"]');
+          if (!ev || !row || row.querySelector('.tsk-evedit')) return;
+          var slot = row.querySelector('.tsk-ev-t');
+          var box = document.createElement('div');
+          box.className = 'tsk-evedit';
+          box.innerHTML = '<textarea class="al-in al-ta" rows="2" maxlength="2000" ' +
+              'aria-label="Поправить свою реплику"></textarea>' +
+            '<div class="tsk-evedit-r"><button type="button" class="al-cancel">Отмена</button>' +
+            '<button type="button" class="bp sm">Сохранить</button></div>';
+          var ta = box.querySelector('textarea');
+          ta.value = ev.text || '';
+          slot.hidden = true;
+          row.classList.add('ed');
+          slot.parentNode.insertBefore(box, slot.nextSibling);
+          ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+          var off = function () { box.remove(); slot.hidden = false; row.classList.remove('ed'); };
+          box.querySelector('.al-cancel').addEventListener('click', off);
+          var save = function () {
+            var text = (ta.value || '').trim();
+            if (!text) { showToast('Пустая реплика — это удаление, а удалять мы не умеем'); ta.focus(); return; }
+            if (text === (ev.text || '')) { off(); return; }
+            var ok = box.querySelector('.bp');
+            ok.disabled = true;
+            var at = (ov.querySelector('.al-body') || {}).scrollTop || 0;
+            apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'PATCH', { text: text }, function (r) {
+              if (r && r.events) redrawFeed(r.events, at);
+            }, function (code) {
+              ok.disabled = false;
+              showToast(code === 403 ? 'Поправить можно только свою реплику' : 'Правка не сохранилась — проверь интернет');
+            });
+          };
+          box.querySelector('.bp').addEventListener('click', save);
+          ta.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); off(); }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+          });
+        });
+      });
 
       var wB = el('tk-watch');
       if (wB) wB.addEventListener('click', function () {
@@ -13551,6 +13734,9 @@
       el('nt-cancel').addEventListener('click', close);
       ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
       var ti = el('nt-title');
+      // Текст, уже набранный в быстрой строке шага, переезжает сюда: человек
+      // начал писать, понял, что нужен другой исполнитель, и нажал «подробно».
+      if (preset.title) ti.value = preset.title;
       setTimeout(function () { ti.focus(); }, 30);
       ti.addEventListener('input', function () { ti.classList.remove('al-err'); });
       // Быстрые сроки: руками дату ставят редко, а задача без срока — ровно та
