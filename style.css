@@ -11911,41 +11911,56 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   ДЕКОМПОЗИЦИЯ ЗАПУСКА (вкладка «Маркетинг → Декомпозиция запуска»)
+   ДЕКОМПОЗИЦИЯ ЗАПУСКА (вкладка «Маркетинг → Декомпозиция»)
    Таблица рабочего файла: показатель и три плана рядом, факт прошлого запуска
    приглушенной колонкой справа. Вводные подсвечены как в файле — амбер значит
    «это руками», и больше ничего. Рецепт строки системный (.trow), своя тут
    только сетка колонок: четвертой колонкой идут цифры, а не действия.
    ─────────────────────────────────────────────────────────────────────────── */
 .la-card { padding-bottom: 6px; }
-.la-note { padding: 16px 24px 4px; }
-.la-grid { grid-template-columns: minmax(0, 1fr) 124px 124px 124px 112px; gap: 12px;
-  height: auto; min-height: 46px; padding: 7px 24px; align-items: center; }
-.la-grid.thead { min-height: 38px; height: 38px; font-size: 12px; color: var(--ink-2); font-weight: 600; }
-.la-grid.thead > * + * { text-align: right; }
+.la-note { padding: 16px 24px 4px; max-width: 880px; }
+/* таблица живет в своей прокрутке: на узком экране лучше провести пальцем, чем
+   спрятать два плана из трех и колонку факта — ради их сравнения экран и есть */
+.la-tbl { overflow-x: auto; }
+/* общая .trow на узком экране прибита к трем колонкам через !important, поэтому
+   свою сетку задаем тем же весом — иначе пять числовых колонок схлопываются
+   в три и ячейки наезжают друг на друга */
+.trow.la-grid { grid-template-columns: minmax(232px, 1fr) 124px 124px 124px 112px !important;
+  gap: 12px; height: auto; min-height: 46px; padding: 7px 24px; align-items: center;
+  cursor: default; min-width: 764px; }
+.la-grid:hover::before { opacity: 0; }
+/* шапка едет со списком, но остается видимой: лист «Тёплая база» это 48 строк,
+   и ниже первого экрана пять числовых колонок без подписей неразличимы */
+.la-grid.thead { min-height: 36px; height: 36px; position: sticky; top: 0; z-index: 1; }
 .la-l { font-size: 13px; line-height: 1.35; }
 .la-c { text-align: right; font-size: 13.5px; font-weight: 600; }
-.la-f { color: var(--ink-3); font-weight: 500; }
+.la-f { color: var(--ink-2); font-weight: 500; }
 .la-gh { padding: 18px 24px 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
-.la-input { background: #FEFCF8; }
-.la-input:hover { background: #FDF8EF; }
+/* строка ввода: заливка из палитры, а не свой почти белый оттенок — иначе
+   «это правят руками» не читается с первого взгляда. Амбер разбавлен белым:
+   вводных строк на листе семнадцать, в полную силу они забивают экран и спорят
+   с единственным синим акцентом */
+.la-input { background: color-mix(in srgb, var(--amber-soft) 45%, #fff); }
+.la-input:hover { background: color-mix(in srgb, var(--amber-soft) 70%, #fff); }
 .la-input .la-c { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-.la-inp { width: 88px; text-align: right; border-color: #E8D9BC; background: #fff; }
-.la-inp:focus { border-color: var(--amber); box-shadow: none; }
-.la-u { font-size: 12px; color: var(--ink-3); width: 10px; }
-.la-foot { padding: 0 2px 18px; }
+.la-inp { width: 88px; text-align: right; background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(224, 146, 47, .4); }
+/* фокус остается системным: у .al-in нет рамки, и border-color тут не рисует
+   ничего, а box-shadow: none снял бы единственное кольцо на экране */
+.la-inp:focus { box-shadow: inset 0 0 0 1.5px var(--amber), 0 0 0 3px rgba(224,146,47,.14); }
+.la-u { font-size: 12px; color: var(--ink-2); width: 10px; }
+.la-foot { padding: 0 2px 18px; max-width: 880px; }
+.bp.ghost.warn { color: var(--amber-ink); background: var(--amber-soft); }
 
-/* на ноутбуке 1280 и уже факт прошлого запуска уходит: сравнивать планы между
-   собой важнее, чем держать пятую колонку ценой переносов в подписях */
-@media (max-width: 1240px) {
-  .la-grid { grid-template-columns: minmax(0, 1fr) 112px 112px 112px; }
-  .la-grid > :nth-child(5) { display: none; }
-}
+/* на телефоне длинный лид отрывает значок шапки от заголовка */
 @media (max-width: 860px) {
-  .la-grid { grid-template-columns: minmax(0, 1fr) 92px; row-gap: 2px; padding: 9px 16px; }
-  .la-grid > :nth-child(2), .la-grid > :nth-child(3) { display: none; }
+  /* на телефоне колонки поджимаются, чтобы рядом с названием строки влезал
+     хотя бы первый план: остальные доезжают боковой прокруткой */
+  .trow.la-grid { padding: 9px 16px;
+    grid-template-columns: minmax(168px, 1fr) 108px 108px 108px 96px !important;
+    gap: 10px; min-width: 628px; }
   .la-gh { padding: 16px 16px 6px; }
   .la-note { padding: 14px 16px 2px; }
-  .la-inp { width: 76px; }
+  .la-card .sec-head { align-items: flex-start; }
 }

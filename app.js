@@ -28506,11 +28506,18 @@
       o.cash = o.cashIn + o.extRev;
       o.payback = o.budget ? o.cash / o.budget : 0;
       o.warmSales = laPct(v.crWarm, o.held - o.sales);
-      o.cash2m = o.contracts + o.warmSales * laNum(v.check) * LA_HALF + o.extRev;
+      /* платят все двумя частями 50/50, и второй платеж приходит через 3-4 месяца
+         (Олеся 09.10.2026). Поэтому за два месяца в кассе лежат только ПЕРВЫЕ
+         платежи — запуска и догрева, — а вторые считаются отдельной строкой */
+      o.warmFirst = o.warmSales * laNum(v.check) * LA_HALF;
+      o.cash2m = o.first + o.warmFirst + o.extRev;
       o.payback2m = o.budget ? o.cash2m / o.budget : 0;
+      o.second = o.first + o.warmFirst;
       var dealsAll = o.held * o.crSale + o.held * (1 - o.crSale) * laNum(v.crWarm) / 100;
       o.perSale = dealsAll ? o.budget / dealsAll : 0;
       o.contractsAll = o.contracts + o.warmSales * laNum(v.check) + o.extRev;
+      o.cash34 = o.contractsAll;
+      o.payback34 = o.budget ? o.cash34 / o.budget : 0;
     } else {
       o = laFunnel(v, laNum(v.regGoal));
       o.amb = laNum(v.amb);
@@ -28518,6 +28525,8 @@
       o.social = o.reg - o.amb - o.mail;
       o.cash = o.cashIn + o.extRev;
       o.contractsAll = o.contracts + o.extRev;
+      o.second = o.first;
+      o.cash34 = o.contractsAll;
     }
     o.check = laNum(v.check);
     o.revPerReg = o.reg ? o.contractsAll / o.reg : 0;
@@ -28528,7 +28537,8 @@
   function laTotal(plan) {
     var w = laCalc('warm', plan), k = laCalc('vk', plan), o = {};
     ['clean', 'chan', 'e1', 'e2', 'live', 'rec', 'watched', 'diagStart', 'diagDone',
-     'req', 'held', 'sales', 'contracts', 'contractsAll', 'cash', 'extRev', 'first'
+     'req', 'held', 'sales', 'contracts', 'contractsAll', 'cash', 'extRev', 'first',
+     'second', 'cash34'
     ].forEach(function (f) { o[f] = (w[f] || 0) + (k[f] || 0); });
     o.reg = w.reg + k.reg;
     o.warmReg = w.reg;
@@ -28542,6 +28552,7 @@
     o.crReg = o.reg ? o.sales / o.reg : 0;
     o.cash2m = w.cash + k.cash2m;
     o.payback2m = o.budget ? o.cash2m / o.budget : 0;
+    o.payback34 = o.budget ? o.cash34 / o.budget : 0;
     o.revPerReg = o.reg ? o.contractsAll / o.reg : 0;
     return o;
   }
@@ -28581,8 +28592,11 @@
         { id: 'cash', l: 'Касса периода, ₽', u: 'rub' },
         { id: 'budget', l: 'Расход на рекламу, ₽', u: 'rub' } ] },
       { t: '5. Окупаемость запуска', rows: [
-        { id: 'cash2m', l: 'Поступит за 2 месяца всего, ₽', u: 'rub' },
+        { id: 'cash2m', l: 'Поступит за 2 месяца, первые платежи, ₽', u: 'rub' },
         { id: 'payback2m', l: 'Касса за 2 месяца к расходу на рекламу', u: 'x' },
+        { id: 'second', l: 'Вторые платежи 50%, придут на 3–4 месяце, ₽', u: 'rub' },
+        { id: 'cash34', l: 'Поступит за 3–4 месяца всего, ₽', u: 'rub' },
+        { id: 'payback34', l: 'Касса за 3–4 месяца к расходу на рекламу', u: 'x' },
         { id: 'revPerReg', l: 'Выручка на одну регистрацию, ₽', u: 'rub' } ] }
     ];
     var start = paid
@@ -28599,7 +28613,7 @@
       : { t: '1. Регистрации: цель, каналы и трафик на страницу', rows: [
           { id: 'regGoal', l: 'Регистраций, цель', k: 'in', step: 10 },
           { id: 'amb', l: 'Амбассадоры и партнёры, регистраций', k: 'in', step: 5 },
-          { id: 'mail', l: 'Регистраций из рассылок по базе', k: 'in', step: 5 },
+          { id: 'mail', l: 'Регистраций из рассылок по базе', k: 'in' },
           { id: 'social', l: 'Регистраций из соцсетей' },
           { id: 'crLand', l: 'CR переход на страницу регистрации → регистрация', k: 'in', u: 'pct' },
           { id: 'clicks', l: 'Нужно переходов на страницу регистрации' },
@@ -28638,7 +28652,7 @@
         { id: 'sales', l: 'Купили грант, шт' },
         { id: 'crSale', l: 'CR диагностика → купил грант', u: 'pctv' },
         { id: 'crReg', l: 'CR регистрация → оплата гранта', u: 'pctv' },
-        { id: 'check', l: 'Чек тарифа «Стандарт Плюс», ₽', k: 'in', u: 'rub', step: 10000 },
+        { id: 'check', l: 'Чек тарифа «Стандарт Плюс», ₽', k: 'in', u: 'rub', step: 10 },
         { id: 'contracts', l: 'Сумма договоров на гранты, ₽', u: 'rub' },
         { id: 'first', l: 'Первый платёж по правилу 50%, ₽', u: 'rub' } ] }
     ];
@@ -28647,8 +28661,11 @@
       { id: 'payback', l: 'Окупаемость в запуске', u: 'x' },
       { id: 'crWarm', l: 'CR догрева: не купили сразу → купили за 1–2 месяца', k: 'in', u: 'pct' },
       { id: 'warmSales', l: 'Продаж с догрева за 1–2 месяца, шт' },
-      { id: 'cash2m', l: 'Поступит за 2 месяца всего, ₽', u: 'rub' },
+      { id: 'cash2m', l: 'Поступит за 2 месяца, первые платежи, ₽', u: 'rub' },
       { id: 'payback2m', l: 'Окупаемость за 2 месяца', u: 'x' },
+      { id: 'second', l: 'Вторые платежи 50%, придут на 3–4 месяце, ₽', u: 'rub' },
+      { id: 'cash34', l: 'Поступит за 3–4 месяца всего, ₽', u: 'rub' },
+      { id: 'payback34', l: 'Окупаемость за 3–4 месяца', u: 'x' },
       { id: 'perSale', l: 'Сколько бюджета нужно на одну продажу, ₽', u: 'rub' },
       { id: 'contractsAll', l: 'Сумма договоров всего, ₽', u: 'rub' },
       { id: 'cash', l: 'Касса периода, ₽', u: 'rub' },
@@ -28656,6 +28673,8 @@
     else g.push({ t: '6. Итог по тёплой базе', rows: [
       { id: 'contractsAll', l: 'Сумма договоров всего, ₽', u: 'rub' },
       { id: 'cash', l: 'Касса периода, ₽', u: 'rub' },
+      { id: 'second', l: 'Вторые платежи 50%, придут на 3–4 месяце, ₽', u: 'rub' },
+      { id: 'cash34', l: 'Поступит за 3–4 месяца всего, ₽', u: 'rub' },
       { id: 'revPerReg', l: 'Выручка на одну регистрацию, ₽', u: 'rub' } ] });
     return g;
   }
@@ -28701,7 +28720,7 @@
   function renderMkPlan(view) {
     if (!state._launch) { view.innerHTML = dashSkeleton(); fetchLaunch(); return; }
     if (state._launch === 'none') {
-      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию — проверь сеть и обнови страницу. Если раздел закрыт правами, скажи руководителю.</div></div>';
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить декомпозицию. Обновите страницу; если раздел закрыт правами, скажите руководителю.</div></div>';
       return;
     }
     var d = state._launch;
@@ -28711,12 +28730,15 @@
       '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
         '<div><div class="t">' + esc(d.title) + '</div>' +
         '<div class="s">' + esc(d.lede) + '</div></div>' +
-        (laTouched() ? '<button class="bp ghost sm" id="la-reset" type="button">Вернуть план</button>' : '') +
+        /* кнопка стоит в разметке всегда: правка не перерисовывает экран, и
+           появиться по месту ей иначе неоткуда — laWire снимает hidden */
+        '<button class="bp ghost sm" id="la-reset" type="button"' +
+          (laTouched() ? '' : ' hidden') + '>Вернуть план</button>' +
       '</div>' +
       '<div class="pay-board po-board3">' +
         LA_PLANS.map(function (p, i) {
           return '<div class="pay-cell' + (i === 2 ? ' lead' : '') + '">' +
-            '<div class="pc-l">' + esc(p[1]) + '</div>' +
+            '<div class="pc-l">' + esc(p[1]) + ' · касса запуска</div>' +
             '<div class="pc-v num" data-lac="' + p[0] + ':cash"></div>' +
             '<div class="pc-s num" data-lac="' + p[0] + ':sub"></div></div>';
         }).join('') +
@@ -28731,9 +28753,9 @@
     var meta = src === 'total'
       ? { title: 'Всего', note: 'Тёплая база плюс трафик ВК: количества складываются, конверсии пересчитываются от сумм.' }
       : { title: d[src].title, note: d[src].note };
-    var head = '<div class="trow la-grid thead"><div>' + esc(meta.title) + '</div>' +
-      LA_PLANS.map(function (p) { return '<div>' + esc(p[1]) + '</div>'; }).join('') +
-      '<div>' + esc(d.factLabel) + '</div></div>';
+    var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
+      LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
+      '<div class="th r">' + esc(d.factLabel) + '</div></div>';
     var body = laScheme(src).map(function (g) {
       return '<div class="la-gh">' + esc(g.t) + '</div>' +
         g.rows.map(function (r) {
@@ -28742,6 +28764,7 @@
               var v = laIn(src, p[0])[r.id];
               return '<div class="la-c"><input class="al-in sm num la-inp" type="number" min="0"' +
                 ' step="' + (r.step || (r.u === 'pct' ? 0.5 : 1)) + '"' +
+                ' aria-label="' + esc(r.l + ' — ' + p[1]) + '"' +
                 ' data-la="' + src + '.' + p[0] + '.' + r.id + '" value="' + esc(String(v)) + '">' +
                 (r.u === 'pct' ? '<span class="la-u">%</span>' : r.u === 'rub' ? '<span class="la-u">₽</span>' : '') +
                 '</div>';
@@ -28759,10 +28782,10 @@
 
     view.innerHTML = top +
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
-        head + body + '</div>' +
+        '<div class="la-tbl">' + head + body + '</div></div>' +
       '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл запуска: люди округляются до целых, ' +
-        'поэтому продажи прыгают ступенькой. Правки живут в твоём браузере и ничего не меняют у остальных — ' +
-        'чтобы вернуть план из файла, нажми «Вернуть план».</div>';
+        'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
+        'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
     laWire(view);
     laPaint(view);
   }
@@ -28786,10 +28809,11 @@
       if (v) v.textContent = laFmt(tot.cash, 'rub');
       if (s) s.textContent = fmtMoney(tot.reg) + ' ' + plural(tot.reg, 'регистрация', 'регистрации', 'регистраций') +
         ' · ' + fmtMoney(tot.sales) + ' ' + plural(tot.sales, 'грант', 'гранта', 'грантов') +
-        (tot.budget ? ' · реклама ' + laFmt(laCalc('vk', p[0]).payback, 'x') : '');
+        (tot.budget ? ' · реклама окупается на ' + laFmt(laCalc('vk', p[0]).payback, 'x') : '');
     });
   }
   function laWire(view) {
+    var reset = view.querySelector('#la-reset');
     Array.prototype.forEach.call(view.querySelectorAll('[data-lasrc]'), function (b) {
       b.addEventListener('click', function () {
         state.laSrc = b.getAttribute('data-lasrc'); saveUi(); renderView();
@@ -28802,11 +28826,12 @@
         var key = inp.getAttribute('data-la');
         laEdits()[key] = laNum(inp.value);
         laSaveEdits();
+        if (reset) reset.hidden = false;
         laPaint(view);
       });
       inp.addEventListener('wheel', function (e) { if (document.activeElement === inp) inp.blur(); e.stopPropagation(); });
     });
-    var reset = view.querySelector('#la-reset'), armed = null;
+    var armed = null;
     if (reset) reset.addEventListener('click', function () {
       if (!armed) {
         reset.textContent = 'Точно вернуть?';
