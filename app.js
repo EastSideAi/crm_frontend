@@ -28431,6 +28431,7 @@
      на экране живет в localStorage того, кто крутит: это прикидка под разговор,
      а факт запуска считает соседняя вкладка «Запуски». */
   var LA_KEY = 'es_launch_plan_v1';
+  var LA_FOLD = 'es_launch_fold_v1';
   var LA_PLANS = [['min', 'План min'], ['opt', 'План opt'], ['max', 'План max']];
   var LA_SRC = [{ id: 'warm', label: 'Тёплая база' }, { id: 'vk', label: 'Трафик ВК' }, { id: 'total', label: 'Всего' }];
   var LA_EXT = 690;    // расширенный доступ к интенсиву
@@ -28453,6 +28454,17 @@
   }
   function laSaveEdits() { try { localStorage.setItem(LA_KEY, JSON.stringify(state._laEd || {})); } catch (e) {} }
   function laTouched() { return Object.keys(laEdits()).length > 0; }
+  /* свернутые этапы — привычка одного человека, а не настройка команды: лист
+     длинный, и каждый смотрит свой кусок. Поэтому в браузере, а не на сервере;
+     храним СВЕРНУТЫЕ, чтобы новый этап приезжал открытым, а не прятался */
+  function laFolds() {
+    if (state._laFold) return state._laFold;
+    var f = {};
+    try { f = JSON.parse(localStorage.getItem(LA_FOLD) || '{}') || {}; } catch (e) { f = {}; }
+    state._laFold = f;
+    return f;
+  }
+  function laFoldSave() { try { localStorage.setItem(LA_FOLD, JSON.stringify(state._laFold || {})); } catch (e) {} }
   /* вводные источника и плана: файл плюс то, что поправили руками */
   function laIn(srcId, plan) {
     var d = state._launch, base = ((d[srcId] || {}).in || {})[plan] || {}, out = {}, ed = laEdits();
@@ -28756,13 +28768,18 @@
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
       '<div class="th r">' + esc(d.factLabel) + '</div></div>';
-    var body = laScheme(src).map(function (g) {
+    var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
       var num = /^(\d+)\.\s*(.+)$/.exec(g.t);
-      return '<div class="la-sec"><div class="la-gh"><span class="la-ghi">' +
+      var key = src + ':' + (num ? num[1] : gi);
+      var fold = !!laFolds()[key];
+      return '<div class="la-sec' + (fold ? ' fold' : '') + '">' +
+        '<button type="button" class="la-gh" data-lafold="' + esc(key) + '"' +
+        ' aria-expanded="' + (fold ? 'false' : 'true') + '"><span class="la-ghi">' +
+        '<span class="la-plus">' + ic('plus', 13) + '</span>' +
         (num ? '<span class="la-n num">' + esc(num[1]) + '</span>' : '') +
-        esc(num ? num[2] : g.t) + '</span></div>' +
+        esc(num ? num[2] : g.t) + '</span></button>' +
         g.rows.map(function (r) {
           var cells = LA_PLANS.map(function (p) {
             if (r.k === 'in') {
@@ -28822,6 +28839,20 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-lasrc]'), function (b) {
       b.addEventListener('click', function () {
         state.laSrc = b.getAttribute('data-lasrc'); saveUi(); renderView();
+      });
+    });
+    /* сворачивание этапа тоже идет без ререндера: он выбил бы курсор из поля и
+       сбросил прокрутку таблицы вбок — человек свернул верхний этап, чтобы
+       добраться до нижнего, а не чтобы начать сначала */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lafold]'), function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-lafold');
+        var sec = b.parentNode;
+        var fold = !sec.classList.contains('fold');
+        sec.classList.toggle('fold', fold);
+        b.setAttribute('aria-expanded', fold ? 'false' : 'true');
+        if (fold) laFolds()[key] = true; else delete laFolds()[key];
+        laFoldSave();
       });
     });
     /* правка пересчитывает цифры, но экран не перестраивает: полный ререндер

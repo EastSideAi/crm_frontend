@@ -11907,7 +11907,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .org-crew-h { flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .org-plus, .org-cnt svg, .org-drow::before { transition: none; }
+  .org-plus, .org-cnt svg, .org-drow::before, .la-plus, .la-plus svg { transition: none; }
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -11941,10 +11941,25 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    таблицы, номер плашкой: нужный этап находится взглядом. Номер приглушенно-синий,
    а не акцентный — единственный синий на экране это карточка плана max. */
 .la-sec + .la-sec { margin-top: 10px; }
-.la-gh { min-width: 764px; background: var(--fill);
+.la-gh { display: block; width: 100%; min-width: 764px; text-align: left;
+  background: var(--fill); border: 0;
   border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
-  font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+  font: inherit; font-size: 13.5px; font-weight: 700; letter-spacing: -.01em;
+  color: var(--ink); cursor: pointer; transition: background .14s var(--ease); }
+.la-gh:hover { background: #EDEFF4; }
+.la-gh:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
 .la-sec:first-child .la-gh { border-top: none; }
+/* свернутый этап: видна одна полоса, плюс так и остается плюсом. Этапов пять-шесть,
+   и человек смотрит свой кусок — Олеся 10.10.2026 «сделай, чтобы каждый этап
+   раскрывался по нажатию» */
+.la-sec.fold .trow { display: none; }
+.la-plus { flex: none; width: 20px; height: 20px; border-radius: 6px; display: grid;
+  place-items: center; background: var(--card); border: 1px solid var(--line-2);
+  color: var(--ink-2); transition: .14s var(--ease); }
+.la-gh:hover .la-plus { color: var(--ink); border-color: var(--wire); }
+/* поворачивается значок, а не плашка: вместе с рамкой она превращалась бы в ромб */
+.la-plus svg { transition: transform .2s var(--ease); }
+.la-sec:not(.fold) .la-plus svg { transform: rotate(45deg); }
 /* название этапа прилипает к левому краю: таблица на телефоне едет вбок вместе с
    подписями строк, и без этого человек в середине прокрутки не знает, какой этап
    перед ним */
