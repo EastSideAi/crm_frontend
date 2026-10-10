@@ -28757,7 +28757,12 @@
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
       '<div class="th r">' + esc(d.factLabel) + '</div></div>';
     var body = laScheme(src).map(function (g) {
-      return '<div class="la-gh">' + esc(g.t) + '</div>' +
+      /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
+         находится взглядом, а не вычитывается из начала заголовка */
+      var num = /^(\d+)\.\s*(.+)$/.exec(g.t);
+      return '<div class="la-sec"><div class="la-gh"><span class="la-ghi">' +
+        (num ? '<span class="la-n num">' + esc(num[1]) + '</span>' : '') +
+        esc(num ? num[2] : g.t) + '</span></div>' +
         g.rows.map(function (r) {
           var cells = LA_PLANS.map(function (p) {
             if (r.k === 'in') {
@@ -28777,7 +28782,7 @@
             /* факт конверсии приходит долей (224 из 290), а вводная плана — числом
                процентов: формат у колонок разный, значение одно и то же */
             '<div class="la-c num la-f">' + (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u))) + '</div></div>';
-        }).join('');
+        }).join('') + '</div>';
     }).join('');
 
     view.innerHTML = top +

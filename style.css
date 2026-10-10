@@ -11935,8 +11935,25 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .la-l { font-size: 13px; line-height: 1.35; }
 .la-c { text-align: right; font-size: 13.5px; font-weight: 600; }
 .la-f { color: var(--ink-2); font-weight: 500; }
-.la-gh { padding: 18px 24px 7px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--ink-3); }
+/* Этап — отдельный блок, а не подпись над строками. Этапы шли одинаковыми
+   серыми микролейблами 11px и сливались в одну простыню на 48 строк (Олеся
+   10.10.2026: «выдели ярче этапы и раздели их визуально»). Полоса на всю ширину
+   таблицы, номер плашкой: нужный этап находится взглядом. Номер приглушенно-синий,
+   а не акцентный — единственный синий на экране это карточка плана max. */
+.la-sec + .la-sec { margin-top: 10px; }
+.la-gh { min-width: 764px; background: var(--fill);
+  border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2);
+  font-size: 13.5px; font-weight: 700; letter-spacing: -.01em; color: var(--ink); }
+.la-sec:first-child .la-gh { border-top: none; }
+/* название этапа прилипает к левому краю: таблица на телефоне едет вбок вместе с
+   подписями строк, и без этого человек в середине прокрутки не знает, какой этап
+   перед ним */
+.la-ghi { position: sticky; left: 0; display: inline-flex; align-items: center;
+  gap: 10px; padding: 12px 24px; }
+.la-n { flex: none; width: 22px; height: 22px; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--navy-soft); color: var(--navy);
+  font-size: 12px; font-weight: 700; letter-spacing: 0; }
 /* строка ввода: заливка из палитры, а не свой почти белый оттенок — иначе
    «это правят руками» не читается с первого взгляда. Амбер разбавлен белым:
    вводных строк на листе семнадцать, в полную силу они забивают экран и спорят
@@ -11960,7 +11977,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .trow.la-grid { padding: 9px 16px;
     grid-template-columns: minmax(168px, 1fr) 108px 108px 108px 96px !important;
     gap: 10px; min-width: 628px; }
-  .la-gh { padding: 16px 16px 6px; }
+  .la-gh { min-width: 628px; font-size: 13px; }
+  .la-ghi { padding: 11px 16px; }
+  .la-n { width: 20px; height: 20px; border-radius: 6px; font-size: 11.5px; }
   .la-note { padding: 14px 16px 2px; }
   .la-card .sec-head { align-items: flex-start; }
 }
