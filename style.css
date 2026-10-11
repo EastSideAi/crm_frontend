@@ -11929,6 +11929,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   gap: 12px; height: auto; min-height: 46px; padding: 7px 24px; align-items: center;
   cursor: default; min-width: 764px; }
 .la-grid:hover::before { opacity: 0; }
+/* лист без колонки факта («Диагностики и продажи»): колонок четыре, и ряд ужимается
+   вместе с полосой этапа — иначе полоса торчала бы шире самой таблицы */
+.la-tbl.nofact .trow.la-grid { grid-template-columns: minmax(232px, 1fr) 124px 124px 124px !important;
+  min-width: 652px; }
+.la-tbl.nofact .la-gh { min-width: 652px; }
 /* шапка едет со списком, но остается видимой: лист «Тёплая база» это 48 строк,
    и ниже первого экрана пять числовых колонок без подписей неразличимы */
 .la-grid.thead { min-height: 36px; height: 36px; position: sticky; top: 0; z-index: 1; }
@@ -11992,6 +11997,9 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .trow.la-grid { padding: 9px 16px;
     grid-template-columns: minmax(168px, 1fr) 108px 108px 108px 96px !important;
     gap: 10px; min-width: 628px; }
+  .la-tbl.nofact .trow.la-grid { grid-template-columns: minmax(168px, 1fr) 108px 108px 108px !important;
+    min-width: 520px; }
+  .la-tbl.nofact .la-gh { min-width: 520px; }
   .la-gh { min-width: 628px; font-size: 13px; }
   .la-ghi { padding: 11px 16px; }
   .la-n { width: 20px; height: 20px; border-radius: 6px; font-size: 11.5px; }

@@ -28433,7 +28433,11 @@
   var LA_KEY = 'es_launch_plan_v1';
   var LA_FOLD = 'es_launch_fold_v1';
   var LA_PLANS = [['min', 'План min'], ['opt', 'План opt'], ['max', 'План max']];
-  var LA_SRC = [{ id: 'warm', label: 'Тёплая база' }, { id: 'vk', label: 'Трафик ВК' }, { id: 'total', label: 'Всего' }];
+  /* Четвертый лист стоит рядом, но в «Всего» НЕ входит: там складываются тёплая
+     база и платный трафик одного запуска, а это месяц текущей работы без
+     интенсива — другая воронка и другой период (файл Олеси 11.10.2026). */
+  var LA_SRC = [{ id: 'warm', label: 'Тёплая база' }, { id: 'vk', label: 'Трафик ВК' },
+                { id: 'total', label: 'Всего' }, { id: 'month', label: 'Диагностики и продажи' }];
   var LA_EXT = 690;    // расширенный доступ к интенсиву
   var LA_UNIQ = 0.87;  // уникальные среди зрителей двух эфиров
   var LA_ONLYREC = 0.48; // из смотревших запись — те, кто не был живьем
@@ -28506,8 +28510,27 @@
     o.cashIn = o.first;
     return o;
   }
+  /* Месяц без интенсива: короткая воронка от записи к диагносту до оплаты.
+     Общий laFunnel тут не годится — он начинается с регистрации на эфир, а
+     эфиров в этом листе нет вовсе. Формулы и округления один в один из файла
+     Олеси (11.10.2026): целые люди на каждом шаге, конверсии долями. */
+  function laMonth(v) {
+    var o = { signups: laNum(v.signups) };
+    o.held = laPct(v.crHeld, o.signups);
+    o.bills = laPct(v.crBill, o.held);
+    o.sales = laPct(v.crPaid, o.bills);
+    o.crSale = laNum(v.crBill) * laNum(v.crPaid) / 10000;
+    o.crReg = o.signups ? o.sales / o.signups : 0;
+    o.check = laNum(v.check);
+    o.contracts = o.sales * o.check;
+    o.first = o.contracts * LA_HALF;
+    o.revPerReg = o.signups ? o.contracts / o.signups : 0;
+    return o;
+  }
+
   function laCalc(srcId, plan) {
     if (srcId === 'total') return laTotal(plan);
+    if (srcId === 'month') return laMonth(laIn(srcId, plan));
     var v = laIn(srcId, plan);
     var o;
     if (srcId === 'vk') {
@@ -28573,6 +28596,27 @@
      поэтому строка и расчет правятся в одном месте. k: 'in' — вводная. */
   function laScheme(srcId) {
     var paid = srcId === 'vk';
+    /* Подписи строк — дословно из файла Олеси, включая порядок и единицы:
+       по этой таблице договариваются, и переписанная «понятнее» строка читается
+       как другая цифра. Колонки факта у листа нет: месяц еще идет. */
+    if (srcId === 'month') return [
+      { t: '1. Записи на диагностику и сами диагностики', rows: [
+        { id: 'signups', l: 'Записались на диагностику, чел', k: 'in', step: 1 },
+        { id: 'crHeld', l: 'CR запись → диагностика проведена', k: 'in', u: 'pct' },
+        { id: 'held', l: 'Проведено диагностик, шт' } ] },
+      { t: '2. Счета и оплаты', rows: [
+        { id: 'crBill', l: 'CR диагностика → выставлен счёт', k: 'in', u: 'pct' },
+        { id: 'bills', l: 'Выставлено счетов, шт' },
+        { id: 'crPaid', l: 'CR счёт → оплачен', k: 'in', u: 'pct' },
+        { id: 'sales', l: 'Купили грант, шт' },
+        { id: 'crSale', l: 'CR диагностика → купил грант', u: 'pctv' },
+        { id: 'crReg', l: 'CR запись → оплата гранта', u: 'pctv' } ] },
+      { t: '3. Деньги', rows: [
+        { id: 'check', l: 'Чек тарифа «Стандарт Плюс», ₽', k: 'in', u: 'rub', step: 10000 },
+        { id: 'contracts', l: 'Сумма договоров, ₽', u: 'rub' },
+        { id: 'first', l: 'Первый платёж, 50%, ₽', u: 'rub' },
+        { id: 'revPerReg', l: 'Выручка на одну запись к диагносту, ₽', u: 'rub' } ] }
+    ];
     if (srcId === 'total') return [
       { t: '1. Сколько людей собрали', rows: [
         { id: 'reg', l: 'Регистраций всего, чел' },
@@ -28704,6 +28748,8 @@
      На листе «Всего» факт равен тёплой базе: рекламы в сентябре не было. */
   function laFact(srcId) {
     var d = state._launch;
+    /* у месяца факта нет вовсе: колонку ему не рисуем, а не заполняем прочерками */
+    if (srcId === 'month') return {};
     if (srcId === 'vk') return d.vk.fact || {};
     var f = {}, w = (d.warm || {}).fact || {};
     Object.keys(w).forEach(function (k) { f[k] = w[k]; });
@@ -28738,10 +28784,13 @@
     var d = state._launch;
     if (!LA_SRC.some(function (s) { return s.id === state.laSrc; })) state.laSrc = 'total';
     var src = state.laSrc;
+    /* у месяца свои заголовок и лид: шапка про интенсив 24–25 октября над листом,
+       где интенсива нет по определению, читается как ошибка экрана */
+    var mon = src === 'month', head1 = mon ? (d.month || {}) : d;
     var top = '<div class="card po-econtop">' +
       '<div class="sec-head"><span class="ic">' + ic('mega', 14) + '</span>' +
-        '<div><div class="t">' + esc(d.title) + '</div>' +
-        '<div class="s">' + esc(d.lede) + '</div></div>' +
+        '<div><div class="t">' + esc(head1.title) + '</div>' +
+        '<div class="s">' + esc(head1.lede) + '</div></div>' +
         /* кнопка стоит в разметке всегда: правка не перерисовывает экран, и
            появиться по месту ей иначе неоткуда — laWire снимает hidden */
         '<button class="bp ghost sm" id="la-reset" type="button"' +
@@ -28750,7 +28799,7 @@
       '<div class="pay-board po-board3">' +
         LA_PLANS.map(function (p, i) {
           return '<div class="pay-cell' + (i === 2 ? ' lead' : '') + '">' +
-            '<div class="pc-l">' + esc(p[1]) + ' · касса запуска</div>' +
+            '<div class="pc-l">' + esc(p[1]) + (mon ? ' · сумма договоров' : ' · касса запуска') + '</div>' +
             '<div class="pc-v num" data-lac="' + p[0] + ':cash"></div>' +
             '<div class="pc-s num" data-lac="' + p[0] + ':sub"></div></div>';
         }).join('') +
@@ -28767,7 +28816,7 @@
       : { title: d[src].title, note: d[src].note };
     var head = '<div class="trow la-grid thead"><div class="th">Показатель</div>' +
       LA_PLANS.map(function (p) { return '<div class="th r">' + esc(p[1]) + '</div>'; }).join('') +
-      '<div class="th r">' + esc(d.factLabel) + '</div></div>';
+      (mon ? '' : '<div class="th r">' + esc(d.factLabel) + '</div>') + '</div>';
     var body = laScheme(src).map(function (g, gi) {
       /* номер этапа идет отдельной плашкой, а не началом строки: нужный этап
          находится взглядом, а не вычитывается из начала заголовка */
@@ -28798,14 +28847,15 @@
             '<div class="la-l">' + esc(r.l) + '</div>' + cells +
             /* факт конверсии приходит долей (224 из 290), а вводная плана — числом
                процентов: формат у колонок разный, значение одно и то же */
-            '<div class="la-c num la-f">' + (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u))) + '</div></div>';
+            (mon ? '' : '<div class="la-c num la-f">' +
+              (f == null ? '—' : esc(laFmt(f, r.u === 'pct' ? 'pctv' : r.u))) + '</div>') + '</div>';
         }).join('') + '</div>';
     }).join('');
 
     view.innerHTML = top +
       '<div class="card listcard la-card"><div class="po-note la-note">' + esc(meta.note) + '</div>' +
-        '<div class="la-tbl">' + head + body + '</div></div>' +
-      '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл запуска: люди округляются до целых, ' +
+        '<div class="la-tbl' + (mon ? ' nofact' : '') + '">' + head + body + '</div></div>' +
+      '<div class="po-note la-foot">Цифры на этом экране повторяют рабочий файл: люди округляются до целых, ' +
         'поэтому продажи прыгают ступенькой. Правки живут в вашем браузере и у остальных ничего не меняют; ' +
         'вернуть цифры плана — кнопка «Вернуть план» в шапке.</div>';
     laWire(view);
@@ -28825,9 +28875,19 @@
       });
     });
     LA_PLANS.forEach(function (p) {
-      var tot = laCalc('total', p[0]);
       var v = view.querySelector('[data-lac="' + p[0] + ':cash"]');
       var s = view.querySelector('[data-lac="' + p[0] + ':sub"]');
+      /* на листе месяца карточки сверху считают его же, а не запуск: иначе
+         человек правит записи к диагносту, а крупная цифра не шевелится */
+      if (src === 'month') {
+        var m = calc[p[0]];
+        if (v) v.textContent = laFmt(m.contracts, 'rub');
+        if (s) s.textContent = fmtMoney(m.held) + ' ' + plural(m.held, 'диагностика', 'диагностики', 'диагностик') +
+          ' · ' + fmtMoney(m.sales) + ' ' + plural(m.sales, 'оплата', 'оплаты', 'оплат') +
+          ' · первый платёж ' + laFmt(m.first, 'rub');
+        return;
+      }
+      var tot = laCalc('total', p[0]);
       if (v) v.textContent = laFmt(tot.cash, 'rub');
       if (s) s.textContent = fmtMoney(tot.reg) + ' ' + plural(tot.reg, 'регистрация', 'регистрации', 'регистраций') +
         ' · ' + fmtMoney(tot.sales) + ' ' + plural(tot.sales, 'грант', 'гранта', 'грантов') +
