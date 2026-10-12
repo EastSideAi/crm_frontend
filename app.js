@@ -27307,10 +27307,12 @@
      обычной, некликабельной. Это тот же приём, что у плашек ступени: цифра, которую
      нельзя проверить глазами, команду не убеждает. */
   function flatRow(name, small, n, open) {
-    var can = !!(open && open.block);
+    var can = !!(open && (open.block || open.ebl));
+    var attr = open && open.ebl
+      ? ' data-ebl="' + esc(open.ebl) + '"'
+      : (can ? ' data-lblock="' + esc(open.block) + '" data-lvalue="' + esc(open.value || '') + '"' : '');
     return '<div class="lad-row gf-flat' + (can ? ' brk-open' : '') + '"' +
-      (can ? ' data-lblock="' + esc(open.block) + '" data-lvalue="' + esc(open.value || '') +
-             '" role="button" tabindex="0" title="Показать этих людей поимённо"' : '') +
+      (can ? attr + ' role="button" tabindex="0" title="Показать этих людей поимённо"' : '') +
       '><div class="lad-nm">' + esc(name) +
       (small ? '<small>' + esc(small) + '</small>' : '') + '</div>' +
       '<div class="lad-n num">' + n + '</div></div>';
@@ -27856,7 +27858,10 @@
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
         (p.note ? '<small>' + esc(p.note) + '</small>' : '') + '</span>' +
       '<span class="lp-ct">' + lpCell(p.contact) + '</span>' +
-      '<span class="lp-sr">' + lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+      /* Название ссылки длиннее колонки и обрезается многоточием: полное отдаём
+         подсказкой, иначе «Консультация · рассылка бота 12:…» ничего не говорит. */
+      '<span class="lp-sr"' + (src ? ' title="' + esc(src) + '"' : '') + '>' +
+        lpCell(src) + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
       '<span class="lp-dt">' + (p.registered_at ? esc(fmtWhen(p.registered_at)) : '<i class="lp-dash">—</i>') +
       '</span>' +
       /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
@@ -27952,7 +27957,11 @@
              оставив ни имени, ни телефона. Говорим об этом прямо в шапке, иначе
              пустые строки читаются как сбой. */
           : (p.kind === 'efir'
-              ? 'это те же люди, что посчитаны на плашке · зрители без регистрации идут строкой без имени'
+              /* «Дошли до бота» — список целиком именной: человек в боте известен.
+                 Общая оговорка про безымянный зал тут сбивала бы с толку. */
+              ? (p.block === 'bot'
+                  ? 'это те же люди, что посчитаны на плашке · пришли по ссылкам этого эфира и написали боту'
+                  : 'это те же люди, что посчитаны на плашке · зрители без регистрации идут строкой без имени')
               : 'это те же люди, что посчитаны на плашке')) + '</div>';
 
     /* Перерисовка сносит узел, на котором стоял фокус (innerHTML), и он уезжал на
@@ -29039,7 +29048,8 @@
           flatRow('Перешли на эфир', klik(perehody) + ' по ссылкам на ' + place, perehody) +
           flatRow('Перешли за записью', klik(zapis) + ' после эфира', zapis) +
           flatRow('Нажали «консультация»', klik(knopki) + ' по кнопкам записи', knopki) +
-          flatRow('Дошли до бота', 'единственная цифра про людей: вход в бота помнит метку', bot) +
+          flatRow('Дошли до бота', 'единственная цифра про людей: вход в бота помнит метку', bot,
+            bot ? { ebl: 'bot' } : null) +
         '</div></div>' +
       '<div class="grid">' +
         '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
