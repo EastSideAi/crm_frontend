@@ -12023,6 +12023,11 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* «Записались на консультацию» длиннее шестой доли ряда — переносим, а не режем */
 .pth-stats .stat .sl { white-space: normal; min-height: 2.6em; align-items: flex-start; line-height: 1.3; }
 .pth-rows { border-top: 1px solid var(--line); }
+/* разбивка ступени по каналам прихода: тихая строка между шапкой и списком */
+.pth-src { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 24px 16px; margin-top: -4px; }
+.pth-sc { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+  background: var(--fill); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.pth-sc b { color: var(--ink); font-weight: 700; }
 .pth-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 110px 30px; }
 .pth-x { display: flex; align-items: center; gap: 6px; justify-content: flex-end; min-width: 0; flex-wrap: wrap; }
 .pth-sum { font-size: 13px; font-weight: 700; color: var(--ink); margin-left: 4px; white-space: nowrap; }
@@ -12068,6 +12073,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pth-ps { grid-column: 2; grid-row: 1 / 3; }
   .pth-chev { grid-column: 3; grid-row: 1 / 3; }
   .pth-top .pth-head, .pth-list .sec-head, .pth-pay .sec-head, .pth-trend .sec-head { padding: 16px 14px 12px; }
+  .pth-src { padding: 0 14px 12px; }
 }
 /* при 900px .mkd-* прячет .hidem — анкета и заход уходят, остаются три главных шага */
 @media (max-width: 900px) {

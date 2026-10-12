@@ -3065,7 +3065,7 @@
     if (state.page === 'path' && !can('clients')) {
       html = '<div><h2>Путь по платформе</h2></div>';
     } else if (state.page === 'path' && state.pathGran !== 'lost') {
-      html = '<div><h2>Путь по платформе</h2>' +
+      html = '<div><h2>Путь до оплаты</h2>' +
         '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' +
         pathVerdict(pathRep()) + '</span></div></div>';
     } else if (state.page === 'path') {
@@ -34297,9 +34297,11 @@
   /* Строка человека. Справа от имени — что важно именно в этом списке: у оплаты это
      «новая покупка» или «взнос», тариф и сумма; у остальных шагов — класс и год. */
   function pathPersonRow(p, extra) {
+    /* канал прихода — в подстрочнике: «откуда этот человек» читается вместе с классом */
+    var sub = [p.src, p.sub].filter(Boolean).join(' · ');
     return '<div class="trow pth-row" data-id="' + esc(p.id) + '" tabindex="0" role="button">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(p.name) + '</div>' +
-        (p.sub ? '<div class="t-sub">' + esc(p.sub) + '</div>' : '') + '</div>' +
+        (sub ? '<div class="t-sub">' + esc(sub) + '</div>' : '') + '</div>' +
       '<div class="pth-x">' + (extra || '') + '</div>' +
       '<div class="t-when num">' + esc(pathWhen(p.at)) + '</div>' +
       '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
@@ -34363,6 +34365,10 @@
     var list = '<div class="card pth-list">' +
       '<div class="sec-head"><div><div class="t">' + esc(sel.label) + ' · ' + sel.n + '</div>' +
       '<div class="s">клик по имени открывает карточку</div></div></div>' +
+      /* откуда пришли люди этой ступени: бот по каналам, эфир, платформа, вручную */
+      ((sel.sources || []).length ? '<div class="pth-src">' + sel.sources.map(function (x) {
+        return '<span class="pth-sc">' + esc(x.label) + ' <b class="num">' + x.n + '</b></span>';
+      }).join('') + '</div>' : '') +
       '<div class="pth-rows">' + rows + '</div>' +
       (notes.length ? '<div class="brd-note">' + esc(notes.join(' ')) + '</div>' : '') + '</div>';
 
@@ -34449,7 +34455,7 @@
     if (g === 'week') { var e = new Date(d); e.setDate(e.getDate() + 6); return dm(d) + '–' + dm(e); }
     return ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()] + ' ' + d.getFullYear();
   }
-  var PATH_SHORT = { visited: 'Зашли', submitted: 'Анкета', diagnosed: 'Разбор', booked: 'Запись', consulted: 'Консультация', paid: 'Оплата' };
+  var PATH_SHORT = { visited: 'Новые', submitted: 'Анкета', diagnosed: 'Разбор', booked: 'Запись', consulted: 'Консультация', paid: 'Оплата' };
 
   function renderPathLost(view) {
     var steps = funnelData(state.pathPeriod);
