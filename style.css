@@ -11765,15 +11765,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Две колонки правки не влезают в обычное окно списка (720px): последняя уезжала
    за край. Поэтому окно со списком людей ступени шире — но только оно, у блоков
    правки нет и лишняя ширина им не нужна. */
-.mk-modal.wide.lp-wide { width: min(1000px, calc(100vw - 40px)); }
+.mk-modal.wide.lp-wide { width: min(1140px, calc(100vw - 40px)); }
 .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr {
   grid-template-columns: minmax(150px, 1.5fr) minmax(130px, 1.1fr) minmax(95px, .85fr)
-                         72px 112px minmax(130px, 1fr); }
+                         72px 112px minmax(120px, .9fr) minmax(130px, 1fr); }
 /* На узком экране колонок шесть и ужимать дальше некуда: отдаём таблицу в
    горизонтальную прокрутку целиком, вместе с шапкой. */
 @media (max-width: 860px) {
   .lp-tbl.edit { overflow-x: auto; }
-  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 700px; }
+  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 840px; }
 }
 .lp-tbl.edit .lp-th span:last-child { text-align: left; }
 .lp-fx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -11787,11 +11787,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   text-decoration: line-through; }
 /* «уже клиент» и «дубль» — не продажа и не отказ, а исключение строки из счета.
    Поэтому они тише обоих: заливки нет, только рамка пунктиром. */
-.lp-sold.client, .lp-sold.dup { background: transparent; border-style: dashed;
+.lp-sold.client, .lp-sold.dup, .lp-sold.team { background: transparent; border-style: dashed;
   border-color: var(--ink-3); color: var(--ink-2); }
 .lp-tr.lp-off { opacity: .52; }
 .lp-tr.lp-off:hover { opacity: 1; }
 .lp-twin { color: var(--amber-ink); }
+/* «Отметить разбор» — второстепенная отметка под полем карточки: тише кнопки
+   «купил», пока не нажата. */
+.lp-cons { font-size: 11px; padding: 3px 7px; font-weight: 500; }
 .lp-sold.busy, .lp-fx .al-in.busy { opacity: .5; pointer-events: none; }
 .lp-sold.err, .lp-fx .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }
 

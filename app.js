@@ -27880,11 +27880,16 @@
      они взаимоисключающие. «Купил» и «уже был клиентом» одновременно — это не
      продажа запуска, а старая сделка, и две независимые галочки позволили бы
      записать ее запуску в заслугу. */
-  var LP_SOLD_CYCLE = ['none', 'yes', 'no', 'client', 'dup'];
+  /* «Наш» (Лиана 12.10.2026: «убери оттуда нашу команду») в том же круге: своя
+     проверочная регистрация не продажа, не клиент и не дубль. В отличие от дубля
+     она уходит из ВСЕХ цифр запуска, а в этом списке тускнеет до закрытия окна,
+     чтобы ошибочную отметку было чем снять. */
+  var LP_SOLD_CYCLE = ['none', 'yes', 'no', 'client', 'dup', 'team'];
   var LP_SOLD_LABEL = { none: 'отметить', yes: 'купил', no: 'не купил',
-                        client: 'уже клиент', dup: 'дубль' };
+                        client: 'уже клиент', dup: 'дубль', team: 'наш / тест' };
 
   function lpSoldState(fx) {
+    if (fx.team) return 'team';
     if (fx.dup) return 'dup';
     if (fx.was_client) return 'client';
     return (fx.sold === true) ? 'yes' : (fx.sold === false ? 'no' : 'none');
@@ -27895,7 +27900,7 @@
      попал бы и в дубли, и в продажи разом. */
   function lpSoldPatch(st) {
     return { sold: st === 'yes' ? true : (st === 'no' ? false : null),
-             was_client: st === 'client', dup: st === 'dup' };
+             was_client: st === 'client', dup: st === 'dup', team: st === 'team' };
   }
 
   function lpSoldCell(p) {
@@ -27920,6 +27925,31 @@
       '</span>';
   }
 
+  /* Карточка CRM этого человека. Регистрация и карточка связываются сами только по
+     телефону и почте, а из MAX регистрируются без них: тогда консультация и оплата,
+     записанные менеджером в карточку, запуск не видит (Роговцева, 12.10.2026).
+     Вставляют ссылку на карточку целиком, id из нее достаем сами. Рядом «консультация
+     была» — для встречи, которую в карточку не записали. */
+  function lpCaseCell(p) {
+    var fx = p.fix || {};
+    var done = fx.consulted === true;
+    return '<span class="lp-fx">' +
+      '<input class="al-in lp-case" data-lp-case="' + esc(p.id) + '" maxlength="300" ' +
+        'placeholder="ссылка на карточку" value="' + esc(fx.case_id || '') + '">' +
+      '<button class="lp-sold lp-cons' + (done ? ' yes' : '') + '" data-lp-cons="' + esc(p.id) + '" ' +
+        'aria-pressed="' + done + '">' + (done ? 'консультация была' : '+ консультация') + '</button>' +
+      '</span>';
+  }
+
+  /* Ссылка вида https://crm…/#lead/<id> или голый id → id карточки. Пустое поле
+     снимает связь. null — в поле не id: такое на сервер не шлем. */
+  function lpCaseId(v) {
+    v = String(v || '').trim();
+    if (!v) return '';
+    var m = v.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return m ? m[0].toLowerCase() : null;
+  }
+
   function lpSrcCell(p) {
     var fx = p.fix || {};
     return '<span class="lp-fx"><input class="al-in lp-src" data-lp-src="' + esc(p.id) + '" ' +
@@ -27936,7 +27966,7 @@
     var fxs = edit && p.fix ? lpSoldState(p.fix) : 'none';
     /* Отмеченные дубли и старые клиенты остаются в списке, но тускнеют: убрать их
        совсем значило бы, что проверить отметку больше нельзя. */
-    var off = (fxs === 'dup' || fxs === 'client') ? ' lp-off' : '';
+    var off = (fxs === 'dup' || fxs === 'client' || fxs === 'team') ? ' lp-off' : '';
     return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
@@ -27948,8 +27978,9 @@
       /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
          нет id, которым её привязать, и кнопка молча не сработала бы. */
       (edit ? (p.id && p.id.indexOf('anon:') !== 0
-               ? lpSoldCell(p) + lpSrcCell(p)
+               ? lpSoldCell(p) + lpSrcCell(p) + lpCaseCell(p)
                : '<span class="lp-fx"><i class="lp-dash">—</i></span>' +
+                 '<span class="lp-fx"><i class="lp-dash">—</i></span>' +
                  '<span class="lp-fx"><i class="lp-dash">—</i></span>') : '') +
       '</div>';
   }
@@ -28003,7 +28034,7 @@
         : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
       /* В режиме правки колонок шесть, и «Регистрация» перестаёт помещаться в свою
          ширину — заголовок наезжал на соседний. В ней и так одна дата. */
-      if (edit) { cols[3] = 'Дата'; cols = cols.concat(['Купил', 'Источник по факту']); }
+      if (edit) { cols[3] = 'Дата'; cols = cols.concat(['Купил', 'Источник по факту', 'Карточка CRM']); }
       body = '<div class="lp-tbl' + (edit ? ' edit' : '') + '"><div class="lp-th">' +
         cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(function (r) { return launchPeopleRow(r, edit); }).join('') + '</div>';
@@ -28068,8 +28099,10 @@
        него первый же клик по галочке уводил бы со страницы. */
     function lpFixSend(regId, patch, node) {
       if (node) node.classList.add('busy');
+      /* Без Content-Type сервер не узнает в теле JSON и отвечает 422: до 12.10.2026
+         ни одна правка из этого окна не сохранялась. */
       api('/admin/api/marketing/launch/person-fix', {
-        method: 'POST',
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({ launch_slug: p.slug, reg_id: regId }, patch))
       }).then(function (r) {
         var cur = state._lpPeople;
@@ -28095,7 +28128,14 @@
         lpFixSend(b.getAttribute('data-lp-sold'), lpSoldPatch(next), b);
       });
     });
-    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src]'), function (inp) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-cons]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        lpFixSend(b.getAttribute('data-lp-cons'),
+                  { consulted: b.getAttribute('aria-pressed') !== 'true' }, b);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src],[data-lp-case]'), function (inp) {
       inp.addEventListener('click', function (e) { e.stopPropagation(); });
       inp.addEventListener('keydown', function (e) {
         e.stopPropagation();
@@ -28105,9 +28145,18 @@
          девятью запросами, и в базе осело бы «И». */
       inp.addEventListener('change', function () {
         var rub = inp.getAttribute('data-lp-rub');
+        var cs = inp.getAttribute('data-lp-case');
         if (rub) {
           var n = parseInt(String(inp.value).replace(/\D/g, ''), 10);
           lpFixSend(rub, { sold_rub: isNaN(n) ? 0 : n }, inp);
+        } else if (cs) {
+          var cid = lpCaseId(inp.value);
+          if (cid === null) {
+            inp.classList.add('err');
+            showToast('Вставьте ссылку на карточку клиента из CRM');
+            return;
+          }
+          lpFixSend(cs, { case_id: cid }, inp);
         } else {
           lpFixSend(inp.getAttribute('data-lp-src'), { real_source: inp.value }, inp);
         }
@@ -29360,7 +29409,7 @@
     var f = cur.fixes;
     if (!f) return '';
     var n = (f.dups || 0) + (f.clients || 0) + (f.sold || 0) + (f.not_sold || 0) +
-            (f.resourced || 0);
+            (f.resourced || 0) + (f.team || 0) + (f.linked || 0) + (f.consulted || 0);
     if (!n) return '';
     var reg = cur.registrations ? cur.registrations.total : 0;
     var clean = Math.max(0, reg - (f.dups || 0) - (f.clients || 0));
@@ -29371,6 +29420,11 @@
     if (f.clients) parts.push('уже были клиентами ' + f.clients);
     if (f.not_sold) parts.push('не купили ' + f.not_sold);
     if (f.resourced) parts.push('источник уточнён у ' + f.resourced);
+    if (f.linked) parts.push('связано с карточкой ' + f.linked);
+    if (f.consulted) parts.push('консультация отмечена у ' + f.consulted);
+    /* Наши регистрации уже вычтены из всех ступеней, поэтому в «чистую базу»
+       ниже их не вычитаем второй раз. */
+    if (f.team) parts.push('наших и тестовых убрано ' + f.team);
     return '<div class="card lfx" style="margin-bottom:16px">' +
       '<div class="lfx-t">Отмечено руками</div>' +
       '<div class="lfx-s">' + esc(parts.join(' · ')) + '</div>' +
