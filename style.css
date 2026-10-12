@@ -1125,6 +1125,11 @@ a { color: inherit; text-decoration: none; }
    не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
    (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
 .lad-row.gf-flat { cursor: default; }
+/* Плоский список ссылок: название ссылке пишет человек, и оно бывает длинным —
+   строке нужна высота по содержимому и две колонки, иначе вторая строка названия
+   наезжает на соседнюю строку (поймано на эфире в инстаграме 12.10.2026). */
+.lad-static.links .lad-row { grid-template-columns: minmax(0, 1fr) auto;
+  height: auto; min-height: 56px; padding-top: 12px; padding-bottom: 12px; }
 /* Ступень, за которой есть список: нажатие открывает тех, кто на ней стоит. */
 .lad-row.lad-go { cursor: pointer; }
 .lad-row.lad-go:hover { background: var(--blue-tint); }
@@ -7031,6 +7036,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    действие над строкой, а возможность убедиться своими глазами. */
 a.fin-rcp { text-decoration: none; display: inline-block; }
 a.fin-rcp.off:hover { text-decoration: underline; }
+/* Чеки без прихода: список внутри плашки, у каждого своя кнопка «разобрал». Строкой
+   через точку с запятой они читались как один длинный адрес, а кнопке там места нет. */
+.rcp-orph { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.rcp-o { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rcp-orph .fin-rcp.off, .rcp-seen .fin-rcp.off { opacity: .7; }
+.rcp-orph .fin-rcp.off:hover, .rcp-seen .fin-rcp.off:hover { opacity: 1; }
+/* Разобранные стоят под плашкой тихой строкой: вопрос по ним закрыт, но спрятаны они
+   не насовсем — видно причину и кнопку «вернуть». */
+.rcp-seen { margin: -8px 0 14px; padding: 0 2px;
+  font: 400 12px 'Manrope', sans-serif; color: var(--ink-2); }
+.rcp-seen b { font-weight: 700; color: var(--ink-2); }
+.rcp-seen .rcp-o { margin-top: 2px; }
 /* «Разбить» — разложить сумму строки листа на задания самозанятого (в «Финансах»). */
 .fin-brk { margin-left: 8px; border: 0; background: var(--blue-tint); color: var(--blue-d);
   font: 600 11.5px 'Manrope', sans-serif; border-radius: var(--r-pill); padding: 2px 10px;
