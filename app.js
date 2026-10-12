@@ -2488,6 +2488,10 @@
     { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    // Справочник банков: лимиты без комиссии и правила выплат по каждому банку. Это не
+    // ведомость периода, а правило, которое читают бухгалтер и агенты рядом с выплатами —
+    // поэтому своего периода у страницы нет (счетчик до лимита будет отдельной задачей).
+    { id: 'finbanks', label: 'Банки', icon: 'card', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
   ];
 
@@ -2935,6 +2939,9 @@
     } else if (state.page === 'fintax') {
       // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
+    } else if (state.page === 'finbanks') {
+      // Справочник банков не привязан к ведомости периода — только чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>правила по банкам</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -3394,7 +3401,8 @@
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finmetrics: 'Итоги периода',
-                     finplans: 'План отделов', finplandept: 'План отдела' };
+                     finplans: 'План отделов', finplandept: 'План отдела',
+                     finbanks: 'Банки и лимиты' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -3443,6 +3451,13 @@
         ph = 'Кто из руководителей внес план расходов на месяц. План отдела — плановые ' +
           'строки его расходов, план и факт стоят рядом. Считается по календарному ' +
           'месяцу, а не по расчетному периоду.';
+      }
+      // Справочник банков — правило, а не период: куда откуда платим и какой лимит без
+      // комиссии. Ветка до !per, иначе повисло бы «Загружаю ведомость».
+      else if (state.page === 'finbanks') {
+        ph = 'Откуда и кому платим по каждому банку и какой лимит без комиссии. Это ' +
+          'правило, чтобы не выйти за предел. Счетчик «сколько прошло за месяц» подключим ' +
+          'отдельно, когда банки отдадут факт.';
       }
       // План отдела без своего листа — тоже до !per, месяц календарный.
       else if (state.page === 'finplandept') {
@@ -3626,6 +3641,7 @@
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finbanks') renderFinBanks(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
     else if (state.page === 'finplan') renderFinPlan(view);
@@ -23383,6 +23399,56 @@
     if (s.unit === 'неделя') return 'раз в ' + n + ' ' + plural(n, 'неделю', 'недели', 'недель');
     if (s.unit === 'месяц') return 'раз в ' + n + ' ' + plural(n, 'месяц', 'месяца', 'месяцев');
     return 'раз в ' + n + ' ' + plural(n, 'год', 'года', 'лет');
+  }
+
+  /* Справочник банков: лимиты без комиссии и правила выплат по каждому банку. Данные
+     статичные (их утвердил Роман 12.10.2026), своего запроса к серверу у страницы нет —
+     это правило, а не период. Живой счетчик «сколько прошло за месяц» будет отдельно,
+     когда подключим факт из банков (API, отдельная задача): сейчас в CRM выплаты по
+     банкам не разложены, и половинчатый счетчик показал бы запас, которого нет. */
+  var FIN_BANKS = [
+    { name: 'ВТБ', limit: '30 платежей', unit: 'в месяц без комиссии',
+      use: 'Выплаты на ИП и ООО, выводы на карту ВТБ Виталия (фонды, дивиденды, мотивация).',
+      rules: [
+        'Первые 30 платежей в месяц идут без комиссии.',
+        'С карты ВТБ Виталия оплачиваются фонды, дивиденды и мотивация команды.',
+      ] },
+    { name: 'Сбер', limit: '500 000 ₽', unit: 'в месяц без комиссии',
+      use: 'Выплаты самозанятым и физическим лицам.',
+      rules: [
+        'До 500 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'Сверх лимита банк берет комиссию — следим, чтобы в него уложиться.',
+      ] },
+    { name: 'Альфа', limit: '1 000 000 ₽', unit: 'в месяц без комиссии',
+      use: 'Выплаты самозанятым и физическим лицам.',
+      rules: [
+        'До 1 000 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'Запас больше, чем у Сбера, — крупные выплаты удобнее вести отсюда.',
+      ] },
+  ];
+
+  function renderFinBanks(view) {
+    var tiles = FIN_BANKS.map(function (b) {
+      return { label: b.name, value: b.limit, sub: b.unit };
+    });
+    var cards = FIN_BANKS.map(function (b) {
+      return '<div class="fb-card">' +
+        '<div class="fb-top"><span class="fb-name">' + esc(b.name) + '</span>' +
+          '<span class="fb-lim">' + esc(b.limit) + ' · ' + esc(b.unit) + '</span></div>' +
+        '<div class="fb-for">' + esc(b.use) + '</div>' +
+        '<ul class="fb-rules">' + b.rules.map(function (r) {
+          return '<li>' + esc(r) + '</li>';
+        }).join('') + '</ul>' +
+      '</div>';
+    }).join('');
+    view.innerHTML =
+      '<div class="fb-wrap">' +
+        statBar(tiles) +
+        '<div class="fb-grid">' + cards + '</div>' +
+        '<p class="fb-note">Лимиты без комиссии по каждому банку. Счетчик «сколько уже ' +
+          'прошло за месяц и сколько осталось до лимита» подключим отдельно, когда банки ' +
+          'начнут отдавать факт по платежам.</p>' +
+      '</div>';
   }
 
   function renderFinRefs(view) {
