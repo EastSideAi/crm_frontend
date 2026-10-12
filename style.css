@@ -7138,6 +7138,10 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fb-rules { margin: 0; padding-left: 17px; display: flex; flex-direction: column;
   gap: 6px; font-size: 13px; color: var(--ink); line-height: 1.45; }
 .fb-rules li::marker { color: var(--ink-3); }
+.fb-rule { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink);
+  font-size: 12.5px; line-height: 1.45; }
+.fb-rule b { font-weight: 700; }
 .fb-note { margin: 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
 
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
