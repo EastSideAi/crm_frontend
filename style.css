@@ -11765,15 +11765,15 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 /* Две колонки правки не влезают в обычное окно списка (720px): последняя уезжала
    за край. Поэтому окно со списком людей ступени шире — но только оно, у блоков
    правки нет и лишняя ширина им не нужна. */
-.mk-modal.wide.lp-wide { width: min(1000px, calc(100vw - 40px)); }
+.mk-modal.wide.lp-wide { width: min(1140px, calc(100vw - 40px)); }
 .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr {
   grid-template-columns: minmax(150px, 1.5fr) minmax(130px, 1.1fr) minmax(95px, .85fr)
-                         72px 112px minmax(130px, 1fr); }
+                         72px 112px minmax(120px, .9fr) minmax(130px, 1fr); }
 /* На узком экране колонок шесть и ужимать дальше некуда: отдаём таблицу в
    горизонтальную прокрутку целиком, вместе с шапкой. */
 @media (max-width: 860px) {
   .lp-tbl.edit { overflow-x: auto; }
-  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 700px; }
+  .lp-tbl.edit .lp-th, .lp-tbl.edit .lp-tr { min-width: 840px; }
 }
 .lp-tbl.edit .lp-th span:last-child { text-align: left; }
 .lp-fx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -11787,11 +11787,14 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   text-decoration: line-through; }
 /* «уже клиент» и «дубль» — не продажа и не отказ, а исключение строки из счета.
    Поэтому они тише обоих: заливки нет, только рамка пунктиром. */
-.lp-sold.client, .lp-sold.dup { background: transparent; border-style: dashed;
+.lp-sold.client, .lp-sold.dup, .lp-sold.team { background: transparent; border-style: dashed;
   border-color: var(--ink-3); color: var(--ink-2); }
 .lp-tr.lp-off { opacity: .52; }
 .lp-tr.lp-off:hover { opacity: 1; }
 .lp-twin { color: var(--amber-ink); }
+/* «Отметить разбор» — второстепенная отметка под полем карточки: тише кнопки
+   «купил», пока не нажата. */
+.lp-cons { font-size: 11px; padding: 3px 7px; font-weight: 500; }
 .lp-sold.busy, .lp-fx .al-in.busy { opacity: .5; pointer-events: none; }
 .lp-sold.err, .lp-fx .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }
 
@@ -11803,6 +11806,28 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .lfx-s { font-size: 13px; color: var(--ink); }
 .lfx-n { font-size: 12.5px; color: var(--ink-2); }
 .lfx-n b { color: var(--ink); font-weight: 700; }
+
+/* Люди запуска без регистрации, добавленные руками по карточке CRM. Строка той же
+   тишины, что «отмечено руками»: это поправка к данным, а не метрика. */
+.lxr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  padding: 0 16px 14px; }
+.lxr-t { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); margin-right: 4px; }
+.lxr-e { font-size: 12.5px; color: var(--ink-3); }
+.lxr-p { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 9px;
+  border-radius: 99px; background: var(--fill); font-size: 12.5px; color: var(--ink); }
+.lxr-x { display: inline-flex; width: 20px; height: 20px; align-items: center;
+  justify-content: center; border: 0; border-radius: 99px; background: transparent;
+  color: var(--ink-3); cursor: pointer; }
+.lxr-x:hover { background: var(--line); color: var(--ink); }
+.lxr-x:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.lxr-add { display: inline-flex; gap: 6px; margin-left: auto; }
+.lxr-add .al-in { width: 220px; font-size: 12.5px; padding: 6px 9px; height: auto; }
+.lxr-add .al-in.err { box-shadow: inset 0 0 0 1.5px var(--red); }
+@media (max-width: 600px) {
+  .lxr-add { margin-left: 0; width: 100%; }
+  .lxr-add .al-in { flex: 1; width: auto; min-width: 0; }
+}
 
 /* ══════════════════ СТРУКТУРА КОМПАНИИ ══════════════════
    Доска-схема (кто кому подчиняется) и раскрываемые зоны ответственности под
@@ -12022,4 +12047,79 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .la-n { width: 20px; height: 20px; border-radius: 6px; font-size: 11.5px; }
   .la-note { padding: 14px 16px 2px; }
   .la-card .sec-head { align-items: flex-start; }
+}
+
+/* ════ ПУТЬ ПО ПЕРИОДАМ (день / неделя / месяц) ════
+   Плитки шагов, список людей шага, оплаты по продуктам и таблица по периодам.
+   Своих рецептов почти нет: плитки — .statbar, строки — .trow, таблица — .mkd-*,
+   навигация по периодам — .brd-nav задачника. Свое здесь только раскладка. */
+.pth-top .pth-head, .pth-list .sec-head, .pth-pay .sec-head, .pth-trend .sec-head { padding: 20px 24px 16px; }
+.pth-head { row-gap: 10px; }
+/* плитки живут внутри карточки с шапкой — второй рамки у них нет */
+.pth-stats { border-top: 1px solid var(--line); }
+/* выбранный шаг: та же заливка, что у ховера, число синим — это «открыто ниже» */
+.pth-stats .stat.on { background: var(--fill); }
+.pth-stats .stat.on::before, .pth-stats .stat.on + .stat::before { opacity: 0; }
+.pth-stats .stat.on .sv { color: var(--blue); }
+.pth-stats .stat.on .smut { color: var(--blue); font-weight: 600; }
+/* «Записались на консультацию» длиннее шестой доли ряда — переносим, а не режем */
+.pth-stats .stat .sl { white-space: normal; min-height: 2.6em; align-items: flex-start; line-height: 1.3; }
+.pth-rows { border-top: 1px solid var(--line); }
+/* разбивка ступени по каналам прихода: тихая строка между шапкой и списком */
+.pth-src { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 24px 16px; margin-top: -4px; }
+.pth-sc { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 8px;
+  background: var(--fill); font-size: 12px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.pth-sc b { color: var(--ink); font-weight: 700; }
+.pth-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 110px 30px; }
+.pth-x { display: flex; align-items: center; gap: 6px; justify-content: flex-end; min-width: 0; flex-wrap: wrap; }
+.pth-sum { font-size: 13px; font-weight: 700; color: var(--ink); margin-left: 4px; white-space: nowrap; }
+/* продукт: строка-кнопка, раскрывается списком людей */
+.pth-pay { overflow: hidden; }
+.pth-prod { border-top: 1px solid var(--line); }
+.pth-ph { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto 120px 24px; gap: 16px;
+  align-items: center; padding: 0 24px; height: 56px; text-align: left; position: relative;
+  transition: background .14s var(--ease); }
+.pth-ph:hover { background: #FBFBFC; }
+.pth-ph::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--green); opacity: 0; transition: opacity .14s var(--ease); }
+.pth-ph:hover::before, .pth-prod.open .pth-ph::before { opacity: 1; }
+.pth-pn { font-size: 14px; font-weight: 600; color: var(--ink); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pth-pc { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.pth-ps { font-size: 14px; font-weight: 700; color: var(--green-ink); text-align: right; white-space: nowrap; }
+.pth-chev { display: grid; place-items: center; color: var(--ink-3); transition: transform .18s var(--ease); }
+.pth-prod.open .pth-chev { transform: rotate(180deg); }
+.pth-prod .pth-rows { background: #FCFCFD; }
+/* таблица по периодам: название периода и пять шагов */
+.mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(120px, 1.4fr) repeat(6, minmax(56px, .6fr)); }
+.mkd-tr.pth-tr { cursor: pointer; height: 46px; }
+.mkd-tr.pth-tr.on { background: var(--blue-tint); }
+.mkd-tr.pth-tr.on::before { opacity: 1; }
+.pth-ls { display: none; }
+/* фокус с клавиатуры: строки и плитки ходят табом */
+.trow.pth-row:focus-visible, .mkd-tr.pth-tr:focus-visible, .pth-ph:focus-visible, .pth-stats .stat:focus-visible {
+  outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+@media (max-width: 960px) {
+  .pth-top .pth-head { flex-wrap: wrap; }
+  .pth-top .brd-nav { width: 100%; margin-left: 0; justify-content: space-between; }
+  .trow.pth-row { grid-template-columns: minmax(0, 1fr) auto !important; height: auto; min-height: 58px;
+    padding: 10px 14px; row-gap: 6px; }
+  .trow.pth-row .pth-x { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
+  .trow.pth-row .pth-x:empty { display: none; }
+  .pth-ph { grid-template-columns: minmax(0, 1fr) auto 20px; padding: 10px 14px; height: auto; min-height: 56px; row-gap: 4px; }
+  .pth-pc { grid-column: 1; grid-row: 2; white-space: normal; }
+  /* название продукта — то, что ищут в блоке: переносим, а не режем */
+  .pth-pn { white-space: normal; overflow: visible; }
+  /* иконка и заголовок одной строкой, на новую уходит только навигация */
+  .pth-head > div:not(.brd-nav) { flex: 1; min-width: 0; }
+  .pth-ps { grid-column: 2; grid-row: 1 / 3; }
+  .pth-chev { grid-column: 3; grid-row: 1 / 3; }
+  .pth-top .pth-head, .pth-list .sec-head, .pth-pay .sec-head, .pth-trend .sec-head { padding: 16px 14px 12px; }
+  .pth-src { padding: 0 14px 12px; }
+}
+/* при 900px .mkd-* прячет .hidem — анкета и заход уходят, остаются три главных шага */
+@media (max-width: 900px) {
+  .mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(44px, .5fr)); padding: 0 14px; }
+  .pth-lf { display: none; }
+  .pth-ls { display: inline; }
 }
