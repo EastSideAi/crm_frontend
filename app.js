@@ -2859,8 +2859,10 @@
           renderTopbar(); renderView();
         });
       });
+    } else if (state.page === 'path' && !can('clients')) {
+      // без права на клиентов «Путь» показывает заглушку — вкладкам периодов тут не место
+      tb.innerHTML = '';
     } else if (state.page === 'path') {
-    } else if (state.page === 'path' && can('clients')) {
       /* День / неделя / месяц — счет по дате, когда человек сделал шаг (pathReport).
          «Где теряем» — прежняя когорта зашедших: кто на каком шаге отвалился. */
       tb.innerHTML = '<nav class="tabs">' + PATH_GRANS.map(function (o) {
@@ -34291,7 +34293,7 @@
   /* Строка человека. Справа от имени — что важно именно в этом списке: у оплаты это
      «новая покупка» или «взнос», тариф и сумма; у остальных шагов — класс и год. */
   function pathPersonRow(p, extra) {
-    return '<div class="trow pth-row" data-id="' + esc(p.id) + '">' +
+    return '<div class="trow pth-row" data-id="' + esc(p.id) + '" tabindex="0" role="button">' +
       '<div class="t-cell"><div class="t-ttl">' + esc(p.name) + '</div>' +
         (p.sub ? '<div class="t-sub">' + esc(p.sub) + '</div>' : '') + '</div>' +
       '<div class="pth-x">' + (extra || '') + '</div>' +
@@ -34302,11 +34304,13 @@
   /* У оплаты есть только день (paid_at — дата), у остальных шагов точное время. */
   function pathWhen(at) {
     if (!at) return '—';
-    if (String(at).length === 10) { var d = new Date(at + 'T12:00:00'); return dayLabel(d.toISOString()); }
-    return fmtWhen(at);
+    if (String(at).length === 10) return dayLabel(new Date(at + 'T12:00:00').toISOString());
+    return dayLabel(at) + ', ' + fmtTime(at);
   }
-  function pathPayChips(p) {
-    return (p.kind === 'new' ? '<span class="sev n-ok">новая покупка</span>' : '<span class="sev">взнос</span>') +
+  /* Повторная оплата у пакета уроков — продление, у договора — очередной взнос. */
+  function pathPartWord(key) { return key === 'school' || key === 'zh-live' ? 'продление' : 'взнос'; }
+  function pathPayChips(p, key) {
+    return (p.kind === 'new' ? '<span class="sev n-ok">новая покупка</span>' : '<span class="sev">' + pathPartWord(key) + '</span>') +
       (p.tariff ? '<span class="sev">' + esc(p.tariff) + '</span>' : '') +
       (p.amount ? '<span class="pth-sum num">' + fmtMoney(p.amount) + ' ₽</span>' : '');
   }
@@ -34332,7 +34336,7 @@
 
     /* плитки шагов: число за период, клик — список людей ниже */
     var tiles = r.steps.map(function (s) {
-      return '<button class="stat go' + (s.key === selKey ? ' on' : '') + '" data-step="' + s.key + '">' +
+      return '<button class="stat go' + (s.key === selKey ? ' on' : '') + '" data-step="' + s.key + '" aria-pressed="' + (s.key === selKey ? 'true' : 'false') + '">' +
         '<div class="sl">' + esc(s.label) + '</div>' +
         '<div class="sv num">' + s.n + '</div>' +
         '<div class="sd"><span class="smut">' + (s.key === selKey ? 'список ниже' : 'показать кто') + '</span></div>' +
@@ -34363,28 +34367,31 @@
       var open = state.pathProd === pr.key;
       var cnt = [];
       if (pr.new) cnt.push(pr.new + ' ' + plural(pr.new, 'новая покупка', 'новые покупки', 'новых покупок'));
-      if (pr.part) cnt.push(pr.part + ' ' + plural(pr.part, 'взнос', 'взноса', 'взносов'));
+      if (pr.part) cnt.push(pr.part + ' ' + (pathPartWord(pr.key) === 'взнос' ? plural(pr.part, 'взнос', 'взноса', 'взносов') : plural(pr.part, 'продление', 'продления', 'продлений')));
       return '<div class="pth-prod' + (open ? ' open' : '') + '">' +
-        '<button class="pth-ph" data-prod="' + esc(pr.key) + '">' +
+        '<button class="pth-ph" data-prod="' + esc(pr.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
           '<span class="pth-pn">' + esc(pr.label) + '</span>' +
           '<span class="pth-pc">' + esc(cnt.join(' · ')) + '</span>' +
           (r.money ? '<span class="pth-ps num">' + fmtMoney(pr.sum) + ' ₽</span>' : '') +
           '<span class="pth-chev">' + chev() + '</span>' +
         '</button>' +
-        (open ? '<div class="pth-rows">' + pr.people.map(function (p) { return pathPersonRow(p, pathPayChips(p)); }).join('') + '</div>' : '') +
+        (open ? '<div class="pth-rows">' + pr.people.map(function (p) { return pathPersonRow(p, pathPayChips(p, pr.key)); }).join('') + '</div>' : '') +
       '</div>';
     }).join('') : '<div class="empty">Оплат за этот период нет.</div>';
     var pay = '<div class="card pth-pay">' +
       '<div class="sec-head"><div><div class="t">Оплаты по продуктам</div>' +
-      '<div class="s">новая покупка — первая оплата этого продукта; взнос — очередная часть уже купленного</div></div></div>' +
+      '<div class="s">новая покупка — первая оплата продукта; взнос и продление — очередная оплата уже купленного</div></div></div>' +
       prods + '</div>';
 
     /* динамика: те же шаги по соседним периодам, свежие сверху */
     var thead = '<div class="mkd-th pth-tr"><span>' + (g === 'day' ? 'День' : g === 'week' ? 'Неделя' : 'Месяц') + '</span>' +
-      r.steps.map(function (s, i) { return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + esc(PATH_SHORT[s.key]) + '</span>'; }).join('') + '</div>';
+      r.steps.map(function (s, i) {
+        return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + (s.key === 'diagnosed'
+          ? '<span class="pth-lf">Диагностика</span><span class="pth-ls">Диагн.</span>' : esc(PATH_SHORT[s.key])) + '</span>';
+      }).join('') + '</div>';
     var trows = r.trend.slice().reverse().map(function (t) {
-      return '<div class="mkd-tr pth-tr' + (t.shift === r.shift ? ' on' : '') + '" data-sh="' + t.shift + '">' +
-        '<span class="mkd-nm"><b>' + esc(t.label) + '</b></span>' +
+      return '<div class="mkd-tr pth-tr' + (t.shift === r.shift ? ' on' : '') + '" data-sh="' + t.shift + '" tabindex="0" role="button">' +
+        '<span class="mkd-nm"><b><span class="pth-lf">' + esc(t.label) + '</span><span class="pth-ls">' + esc(pathShortLabel(g, t.from)) + '</span></b></span>' +
         r.steps.map(function (s, i) {
           var v = t.counts[s.key] || 0;
           return '<span class="mkd-v' + (v ? '' : ' zero') + (i < 2 ? ' hidem' : '') + '">' + v + '</span>';
@@ -34408,18 +34415,35 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pth-tr[data-sh]'), function (n) {
       n.addEventListener('click', function () { pathGo(parseInt(n.getAttribute('data-sh'), 10)); });
+      pathKeys(n);
     });
     Array.prototype.forEach.call(view.querySelectorAll('.pth-rows'), function (box) {
       var ids = Array.prototype.map.call(box.querySelectorAll('.trow[data-id]'), function (n) { return n.getAttribute('data-id'); });
       Array.prototype.forEach.call(box.querySelectorAll('.trow[data-id]'), function (n) {
         n.addEventListener('click', function () { openDrawer(n.getAttribute('data-id'), ids); });
         n.addEventListener('mouseenter', function () { warm(n.getAttribute('data-id')); });
+        pathKeys(n);
       });
     });
     var pv = el('pth-prev'), nx = el('pth-next'), nw = el('pth-now');
     if (pv) pv.addEventListener('click', function () { pathGo((state.pathShift || 0) - 1); });
     if (nx) nx.addEventListener('click', function () { pathGo((state.pathShift || 0) + 1); });
     if (nw) nw.addEventListener('click', function () { pathGo(0); });
+  }
+  /* Строка-кнопка из div: Enter и пробел делают то же, что клик. */
+  function pathKeys(n) {
+    n.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); n.click(); }
+    });
+  }
+  /* Короткая подпись периода для телефона: «28.09–04.10», «окт 2026», «12.10». */
+  function pathShortLabel(g, from) {
+    if (!from) return '';
+    var d = new Date(from + 'T12:00:00'), p2 = function (x) { return (x < 10 ? '0' : '') + x; };
+    var dm = function (x) { return p2(x.getDate()) + '.' + p2(x.getMonth() + 1); };
+    if (g === 'day') return dm(d);
+    if (g === 'week') { var e = new Date(d); e.setDate(e.getDate() + 6); return dm(d) + '–' + dm(e); }
+    return ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()] + ' ' + d.getFullYear();
   }
   var PATH_SHORT = { visited: 'Зашли', submitted: 'Анкета', diagnosed: 'Диагностика', booked: 'Запись', paid: 'Оплата' };
 
