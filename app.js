@@ -23462,6 +23462,8 @@
     var tiles = FIN_BANKS.map(function (b) {
       return { label: b.name, value: b.limit, sub: b.unit };
     });
+    // три банка — раскладка statbar на 3 колонки (по умолчанию 4, тогда остаётся
+    // пустая ячейка и колонки уже, крупные цифры лимитов наезжают друг на друга).
     var cards = FIN_BANKS.map(function (b) {
       return '<div class="fb-card">' +
         '<div class="fb-top"><span class="fb-name">' + esc(b.name) + '</span>' +
@@ -23475,7 +23477,7 @@
     }).join('');
     view.innerHTML =
       '<div class="fb-wrap">' +
-        statBar(tiles) +
+        statBar(tiles, 'three') +
         '<div class="fb-grid">' + cards + '</div>' +
         '<p class="fb-note">Лимиты без комиссии по каждому банку. Счетчик «сколько уже ' +
           'прошло за месяц и сколько осталось до лимита» подключим отдельно, когда банки ' +

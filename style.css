@@ -7136,6 +7136,13 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   font-size: 12.5px; line-height: 1.45; }
 .fb-rule b { font-weight: 700; }
 .fb-note { margin: 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+/* На телефоне statbar.three встаёт в 2 колонки, а крупные суммы лимитов (500 000 ₽,
+   1 000 000 ₽) в половину ширины не влезают и наезжают — поэтому в плашке банков
+   на узком экране одна колонка. */
+@media (max-width: 480px) {
+  .fb-wrap .statbar.three { grid-template-columns: 1fr; }
+  .fb-wrap .statbar.three .stat:last-child { grid-column: auto; }
+}
 
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
    документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
