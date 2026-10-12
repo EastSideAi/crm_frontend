@@ -24769,6 +24769,11 @@
       parts.push('<div class="mx-h" id="mx-s-text">Расшифровка</div><div class="mx-text">' +
         esc(text).replace(/\n/g, '<br>') + '</div>');
     }
+    /* Запись из зума, которую автоматика не смогла отдать карточке: в зуме под общим
+       аккаунтом школы гость подписан одним именем, тезок в базе по несколько, и она
+       честно не угадывает. Привязать было негде, и такие записи копились — 30 штук к
+       12.10.2026, среди них настоящие диагностики (Вера 12.10.2026). */
+    var canTie = !c.session_id && m.key.charAt(0) === 'f' && can('clients');
     var acts = [];
     if (c.text_chars && !text) {
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
@@ -24790,6 +24795,10 @@
       acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
         ic('leads', 13) + 'Карточка ученика</button>');
     }
+    if (canTie) {
+      acts.push('<button type="button" class="qchip" data-mxtie="' + esc(m.key) + '">' +
+        ic('leads', 13) + 'Это консультация ученика</button>');
+    }
     if (!parts.length) {
       parts.push('<div class="mx-load">Ни конспекта, ни договоренностей по этой встрече пока нет. ' +
         'Конспект появляется после разбора записи.</div>');
@@ -24804,7 +24813,71 @@
         }).join('') + '</div>'
       : '';
     return '<div class="mx-card">' + nav + parts.join('') +
-      (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
+      (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') +
+      (canTie ? '<div class="mx-tie" id="mx-tie"></div>' : '') + '</div>';
+  }
+  /* Поиск ученика прямо во встрече: список лидов уже загружен на фронт целиком
+     (/admin/api/leads), поэтому ищем на месте, без второго запроса и без ожидания. */
+  function mxTieBox(m) {
+    var host = el('mx-tie');
+    if (!host) return;
+    host.innerHTML = '<div class="mx-tie-t">Чья это консультация?</div>' +
+      '<input id="mx-tie-q" class="al-in" placeholder="Имя ученика или родителя" ' +
+      'autocomplete="off" maxlength="60">' +
+      '<div class="int-rows" id="mx-tie-l"></div>';
+    var q = el('mx-tie-q');
+    function draw() {
+      var box = el('mx-tie-l');
+      if (!box) return;
+      var s2 = (q.value || '').trim().toLowerCase();
+      if (s2.length < 2) {
+        box.innerHTML = '<div class="field-empty">Начни вводить имя — покажу карточки.</div>';
+        return;
+      }
+      var hits = (state.leads || []).filter(function (l) {
+        var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' +
+          ((l.booking || {}).contact || '')).toLowerCase();
+        return hay.indexOf(s2) !== -1;
+      }).slice(0, 8);
+      if (!hits.length) {
+        box.innerHTML = '<div class="field-empty">Никого похожего. Проверь имя или завели ли карточку.</div>';
+        return;
+      }
+      box.innerHTML = hits.map(function (l) {
+        var st = (CRM[(l.crm || {}).status] || {}).label || '';
+        var sub = [st, l.grade || '', dayLabel(l.created_at)].filter(Boolean).join(' · ');
+        return '<div class="int-row"><div class="int-b">' +
+          '<div class="int-n">' + esc(l.name || 'Без имени') + '</div>' +
+          '<div class="int-m">' + esc(sub) + '</div></div>' +
+          '<button type="button" class="bp ghost sm" data-mxtieid="' + esc(l.id) + '">Это он</button></div>';
+      }).join('');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-mxtieid]'), function (b) {
+        b.addEventListener('click', function () { mxTie(m, b.getAttribute('data-mxtieid'), b); });
+      });
+    }
+    q.addEventListener('input', draw);
+    draw();
+    q.focus();
+  }
+  function mxTie(m, sessionId, btn) {
+    var was = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = 'Привязываю…';
+    api('/admin/api/meet/journal/' + encodeURIComponent(m.key) + '/lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    }).then(function (r) {
+      /* Конспект считается моделью уже после ответа, поэтому обещаем его, а не
+         показываем: иначе человек открывает карточку и не находит там ничего. */
+      showToast('Встреча в карточке ученика',
+        r && r.moved ? 'перенесли в другую карточку' : 'конспект и PDF появятся через минуту');
+      delete state.meetxCard[m.key];
+      loadMeetx();
+      if (state.page === 'meetx') renderView();
+    }).catch(function (e) {
+      btn.disabled = false; btn.innerHTML = was;
+      showToast('Не получилось привязать', e && e.message === '422'
+        ? 'у этой встречи не сохранилась расшифровка' : 'попробуй еще раз');
+    });
   }
   /* ── Раздел EastSide Meeting ───────────────────────────────────────────────
      Устроен как сервис встреч, а не как список записей: сверху два действия
@@ -25204,6 +25277,9 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtask]'), function (b) {
       b.addEventListener('click', function () { openTask(+b.getAttribute('data-mxtask')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtie]'), function (b) {
+      b.addEventListener('click', function () { b.disabled = true; mxTieBox(m); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxlead]'), function (b) {
       b.addEventListener('click', function () {

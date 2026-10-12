@@ -11317,6 +11317,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-text { max-height: 420px; overflow-y: auto; font-size: 13px; line-height: 1.6;
   color: var(--ink-2); background: var(--fill); border-radius: 12px; padding: 12px 14px; }
 .mx-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+/* Привязка записи к ученику: блок живет внутри карточки встречи и появляется по
+   кнопке, поэтому отделен от действий линией, а не воздухом — иначе на телефоне
+   поиск читается как продолжение ряда кнопок. */
+.mx-tie { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mx-tie-t { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+.mx-tie .int-rows { margin-top: 8px; }
 .mx-load { font-size: 13px; color: var(--ink-3); padding: 10px 0; }
 @media (max-width: 760px) {
   .mx-list { padding: 4px 12px 8px; }
