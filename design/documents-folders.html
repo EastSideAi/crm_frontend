@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Документы — папки по людям (показ без входа)</title>
+<!-- Показ раздела «Документы» с папками по людям для оператора: открывается без логина,
+     поэтому данные тут вымышленные. Имя файла начинается с подчеркивания намеренно —
+     `_*.html` стоит в --exclude боевой выкладки (.github/workflows/deploy-selectel.yml),
+     значит на crm.истсайд.рф эта страница не уедет и живет только на превью ветки.
+     Разметка повторяет то, что рисует renderCzDocs в app.js, и линкует настоящий
+     style.css: расходиться с продуктом ей нечем. -->
+<link rel="stylesheet" href="../style.css" />
+<style>
+  body { background: #E5E7EC; }
+  .demo-wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 70px; }
+  .demo-h { font-size: 27px; font-weight: 700; letter-spacing: -.03em; margin: 0 0 6px; }
+  .demo-note { font-size: 13px; color: var(--ink-2); margin: 0 0 18px; max-width: 70ch;
+    line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="demo-wrap">
+  <h1 class="demo-h">Документы</h1>
+  <p class="demo-note">Показ без входа в CRM. Люди, суммы и номера тут выдуманные,
+    верстка и поведение настоящие: нажимайте папки слева.</p>
+  <div class="dc-wrap" id="demo"></div>
+</div>
+
+<script>
+(function () {
+  var DOCS = [
+    { who: 'c1', name: 'Астахова Вера Сергеевна', inn: '770112345678', off: false,
+      title: 'Акт № 18 — Съемка и монтаж ролика', date: '23.09.2026', sum: '242 876 ₽',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c1', name: 'Астахова Вера Сергеевна', inn: '770112345678', off: false,
+      title: 'Договор возмездного оказания услуг', date: '07.04.2026', sum: '',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c1', name: 'Астахова Вера Сергеевна', inn: '770112345678', off: false,
+      title: 'Согласие на обработку персональных данных', date: '07.04.2026', sum: '',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c1', name: 'Астахова Вера Сергеевна', inn: '770112345678', off: false,
+      title: 'Соглашение о неразглашении', date: '07.04.2026', sum: '',
+      st: 'ct-wait', stt: 'Не подписан' },
+    { who: 'c2', name: 'Гринев Павел Олегович', inn: '771987654321', off: false,
+      title: 'Акт № 17 — Монтаж серии коротких видео', date: '10.09.2026', sum: '58 000 ₽',
+      st: 'ct-paid', stt: 'Оплачен' },
+    { who: 'c2', name: 'Гринев Павел Олегович', inn: '771987654321', off: false,
+      title: 'Акт № 12 — Обложки для канала, 8 штук', date: '24.08.2026', sum: '16 000 ₽',
+      st: 'ct-paid', stt: 'Оплачен' },
+    { who: 'c2', name: 'Гринев Павел Олегович', inn: '771987654321', off: false,
+      title: 'Договор возмездного оказания услуг', date: '12.04.2026', sum: '',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c3', name: 'Левицкая Марина Романовна', inn: '780345612789', off: false,
+      title: 'Акт № 16 — Сопровождение ученика, сентябрь', date: '30.09.2026', sum: '34 750 ₽',
+      st: 'ct-wait', stt: 'Ждет подписи' },
+    { who: 'c3', name: 'Левицкая Марина Романовна', inn: '780345612789', off: false,
+      title: 'Согласие на обработку персональных данных', date: '16.05.2026', sum: '',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c4', name: 'Сомова Ярослава', inn: '500987123456', off: true,
+      title: 'Акт № 09 — Ведение соцсетей, июль', date: '31.07.2026', sum: '45 000 ₽',
+      st: 'ct-paid', stt: 'Оплачен' },
+    { who: 'c4', name: 'Сомова Ярослава', inn: '500987123456', off: true,
+      title: 'Договор возмездного оказания услуг', date: '17.12.2025', sum: '',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c5', name: 'Юсупов Тимур Маратович', inn: '027654321098', off: false,
+      title: 'Акт № 15 — Пробные занятия, группа А', date: '23.09.2026', sum: '13 500 ₽',
+      st: 'ct-ok', stt: 'Подписан' },
+    { who: 'c5', name: 'Юсупов Тимур Маратович', inn: '027654321098', off: false,
+      title: 'Соглашение о неразглашении', date: '08.04.2026', sum: '',
+      st: 'ct-ok', stt: 'Подписан' }
+  ];
+
+  var who = '', whoName = '';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function short(name) {
+    var p = String(name || '').trim().split(/\s+/);
+    if (p.length < 2) return p[0] || '';
+    return p[0] + ' ' + p.slice(1, 3).map(function (w) {
+      return w.charAt(0).toUpperCase() + '.';
+    }).join(' ');
+  }
+
+  function people() {
+    var by = {}, out = [];
+    DOCS.forEach(function (d) {
+      if (!by[d.who]) {
+        by[d.who] = { id: d.who, name: d.name, off: d.off, n: 0 };
+        out.push(by[d.who]);
+      }
+      by[d.who].n++;
+    });
+    out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
+    return out;
+  }
+
+  function row(d) {
+    return '<div class="trow dc-grid">' +
+      '<span class="dc-main"><b>' + esc(d.title) + '</b></span>' +
+      '<span class="dc-who">' + esc(d.name) +
+        (d.off ? '<span class="dc-off">убран</span>' : '') +
+        '<span class="dc-inn">' + esc(d.inn) + '</span></span>' +
+      '<span class="dc-when">' + esc(d.date) + '</span>' +
+      '<span class="dc-sum">' + (d.sum ? '<b>' + esc(d.sum) + '</b>' : '—') + '</span>' +
+      '<span class="dc-state"><span class="ct-chip ' + d.st + '">' + esc(d.stt) +
+        '</span></span></div>';
+  }
+
+  function draw() {
+    var list = who ? DOCS.filter(function (d) { return d.who === who; }) : DOCS;
+    var folders = people().map(function (p) {
+      return '<button class="dcf' + (who === p.id ? ' on' : '') + '" data-who="' + p.id +
+        '" data-name="' + esc(p.name) + '" title="' + esc(p.name) + '">' +
+        '<span class="dcf-nm">' + esc(short(p.name)) + '</span>' +
+        (p.off ? '<span class="dc-off">убран</span>' : '') +
+        '<span class="dcf-n">' + p.n + '</span></button>';
+    }).join('');
+
+    var head = who
+      ? '<div class="dcf-head"><span class="dcf-h-nm">' + esc(whoName) + '</span>' +
+          '<button class="dcf-h-a">Карточка исполнителя</button>' +
+          '<button class="dcf-h-a" data-who="">Ко всем документам</button></div>'
+      : '';
+
+    var n = list.length;
+    var noun = n % 10 === 1 && n % 100 !== 11 ? 'документ'
+      : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? 'документа'
+      : 'документов';
+
+    document.getElementById('demo').innerHTML =
+      '<aside class="card dcf-box">' +
+        '<div class="dcf-lbl">Папки</div>' +
+        '<button class="dcf dcf-all' + (who ? '' : ' on') + '" data-who="">' +
+          '<span class="dcf-nm">Все документы</span>' +
+          '<span class="dcf-n">' + DOCS.length + '</span></button>' + folders +
+      '</aside>' +
+      '<div class="card listcard' + (who ? ' in-folder' : '') + '">' + head +
+        '<div class="list-tools">' +
+          '<div class="searchwrap">' +
+            '<input class="search" placeholder="Поиск по фамилии, ИНН, телефону или названию">' +
+          '</div>' +
+          '<span class="list-count"><b>' + n + '</b> ' + noun + '</span>' +
+        '</div>' +
+        '<div class="list-quick">' +
+          '<button class="qchip on">Все</button><button class="qchip">Акты</button>' +
+          '<button class="qchip">Чеки</button><button class="qchip">Договоры</button>' +
+          '<button class="qchip">Согласия на данные</button><button class="qchip">NDA</button>' +
+        '</div>' +
+        '<div class="trow dc-grid thead">' +
+          '<span class="th">Документ</span><span class="th">Исполнитель</span>' +
+          '<span class="th">Дата</span><span class="th">Сумма</span>' +
+          '<span class="th">Состояние</span>' +
+        '</div>' + list.map(row).join('') +
+      '</div>';
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-who]'), function (b) {
+        b.addEventListener('click', function () {
+          who = b.getAttribute('data-who') || '';
+          whoName = who ? (b.getAttribute('data-name') || whoName) : '';
+          draw();
+        });
+      });
+  }
+
+  draw();
+})();
+</script>
+</body>
+</html>
