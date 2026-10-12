@@ -34268,11 +34268,15 @@
     if (!r) return 'Считаю шаги за период.';
     if (r.error) return 'Отчет не загрузился. Обновите страницу.';
     var dg = pathStep(r, 'diagnosed'), bk = pathStep(r, 'booked'), pd = pathStep(r, 'paid');
+    var cs = pathStep(r, 'consulted') || { n: 0 };
     var lead = (r.is_now ? PATH_NOW[r.gran] : r.label.charAt(0).toUpperCase() + r.label.slice(1));
-    if (!dg.n && !bk.n && !pd.n) return lead + ': до диагностики, записи и оплаты пока никто не дошел.';
+    if (!dg.n && !bk.n && !cs.n && !pd.n) return lead + ': до разбора, консультации и оплаты пока никто не дошел.';
+    /* «Разбор» — AI на платформе, «консультация» — живой созвон с семьей. Слово
+       «диагностика» в команде значит и то и другое, поэтому здесь его нет. */
     var parts = [];
-    parts.push('<b>' + dg.n + '</b> ' + plural(dg.n, 'прошел', 'прошли', 'прошли') + ' диагностику');
-    parts.push('<b>' + bk.n + '</b> ' + plural(bk.n, 'записался', 'записались', 'записались') + ' на разбор');
+    parts.push('<b>' + dg.n + '</b> ' + plural(dg.n, 'разбор', 'разбора', 'разборов') + ' на платформе');
+    parts.push('<b>' + bk.n + '</b> ' + plural(bk.n, 'записался', 'записались', 'записались') + ' на консультацию');
+    parts.push('<b>' + cs.n + '</b> ' + plural(cs.n, 'консультация проведена', 'консультации проведены', 'консультаций проведено'));
     parts.push('<b>' + pd.n + '</b> ' + plural(pd.n, 'оплатил', 'оплатили', 'оплатили'));
     return lead + ': ' + parts.join(', ') + '.';
   }
@@ -34347,7 +34351,7 @@
         '<div><div class="t">Шаги за ' + (g === 'day' ? 'день' : g === 'week' ? 'неделю' : 'месяц') + '</div>' +
         '<div class="s">шаг считается в тот день, когда человек его сделал</div></div>' +
         pathNav(r) + '</div>' +
-      '<div class="statbar five pth-stats">' + tiles + '</div></div>';
+      '<div class="statbar ' + (r.steps.length === 6 ? 'six' : 'five') + ' pth-stats">' + tiles + '</div></div>';
 
     /* люди выбранного шага */
     var rows = sel.people.length ? sel.people.map(function (p) {
@@ -34386,8 +34390,8 @@
     /* динамика: те же шаги по соседним периодам, свежие сверху */
     var thead = '<div class="mkd-th pth-tr"><span>' + (g === 'day' ? 'День' : g === 'week' ? 'Неделя' : 'Месяц') + '</span>' +
       r.steps.map(function (s, i) {
-        return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + (s.key === 'diagnosed'
-          ? '<span class="pth-lf">Диагностика</span><span class="pth-ls">Диагн.</span>' : esc(PATH_SHORT[s.key])) + '</span>';
+        return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + (s.key === 'consulted'
+          ? '<span class="pth-lf">Консультация</span><span class="pth-ls">Конс.</span>' : esc(PATH_SHORT[s.key])) + '</span>';
       }).join('') + '</div>';
     var trows = r.trend.slice().reverse().map(function (t) {
       return '<div class="mkd-tr pth-tr' + (t.shift === r.shift ? ' on' : '') + '" data-sh="' + t.shift + '" tabindex="0" role="button">' +
@@ -34445,7 +34449,7 @@
     if (g === 'week') { var e = new Date(d); e.setDate(e.getDate() + 6); return dm(d) + '–' + dm(e); }
     return ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()] + ' ' + d.getFullYear();
   }
-  var PATH_SHORT = { visited: 'Зашли', submitted: 'Анкета', diagnosed: 'Диагностика', booked: 'Запись', paid: 'Оплата' };
+  var PATH_SHORT = { visited: 'Зашли', submitted: 'Анкета', diagnosed: 'Разбор', booked: 'Запись', consulted: 'Консультация', paid: 'Оплата' };
 
   function renderPathLost(view) {
     var steps = funnelData(state.pathPeriod);

@@ -12020,6 +12020,8 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pth-stats .stat.on::before, .pth-stats .stat.on + .stat::before { opacity: 0; }
 .pth-stats .stat.on .sv { color: var(--blue); }
 .pth-stats .stat.on .smut { color: var(--blue); font-weight: 600; }
+/* «Записались на консультацию» длиннее шестой доли ряда — переносим, а не режем */
+.pth-stats .stat .sl { white-space: normal; min-height: 2.6em; align-items: flex-start; line-height: 1.3; }
 .pth-rows { border-top: 1px solid var(--line); }
 .pth-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 110px 30px; }
 .pth-x { display: flex; align-items: center; gap: 6px; justify-content: flex-end; min-width: 0; flex-wrap: wrap; }
@@ -12042,7 +12044,7 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pth-prod.open .pth-chev { transform: rotate(180deg); }
 .pth-prod .pth-rows { background: #FCFCFD; }
 /* таблица по периодам: название периода и пять шагов */
-.mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(120px, 1.4fr) repeat(5, minmax(56px, .6fr)); }
+.mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(120px, 1.4fr) repeat(6, minmax(56px, .6fr)); }
 .mkd-tr.pth-tr { cursor: pointer; height: 46px; }
 .mkd-tr.pth-tr.on { background: var(--blue-tint); }
 .mkd-tr.pth-tr.on::before { opacity: 1; }
@@ -12066,13 +12068,10 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .pth-ps { grid-column: 2; grid-row: 1 / 3; }
   .pth-chev { grid-column: 3; grid-row: 1 / 3; }
   .pth-top .pth-head, .pth-list .sec-head, .pth-pay .sec-head, .pth-trend .sec-head { padding: 16px 14px 12px; }
-  /* оплата — главный шаг для «кто купил»: на всю ширину ряда, а не огрызком справа */
-  .pth-stats .stat:last-child { grid-column: 1 / -1; }
-  .pth-stats .stat .sl { white-space: normal; }
 }
 /* при 900px .mkd-* прячет .hidem — анкета и заход уходят, остаются три главных шага */
 @media (max-width: 900px) {
-  .mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(52px, .6fr)); padding: 0 14px; }
+  .mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(44px, .5fr)); padding: 0 14px; }
   .pth-lf { display: none; }
   .pth-ls { display: inline; }
 }
