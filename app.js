@@ -15668,7 +15668,12 @@
       (c.problems && c.problems.length
         ? '<ul class="cz-plist">' + c.problems.map(function (p) {
             return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
-        : '<div class="cz-ready-s">Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.</div>') +
+        /* У ИП договора нет и не будет (платим по счету), поэтому «документы подписаны»
+           про него неправда — вердикт называет то, что у него действительно проверено. */
+        : '<div class="cz-ready-s">' + (c.kind === 'ip'
+            ? 'ИП действует по данным налоговой, согласие и реквизиты есть — можно ставить задания. Платим по счету.'
+            : 'Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.') +
+          '</div>') +
       '</div>';
 
     /* 2. Ссылка на анкету. Для приглашенного это единственное действие оператора,
@@ -15878,7 +15883,13 @@
          время и адрес — это и есть доказательство. Кнопка «не отправлен» стерла бы его
          молча, поэтому здесь стоит отметка, а не сегмент. */
       var byPerson = CZ_SELF_DOCS.indexOf(dk[0]) !== -1 && d0.version;
-      return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + '</span>' +
+      /* У предпринимателя договор не требуется: договора под ИП у компании нет, а
+         работу закрывает оплата его счета. Переключатель оставляем (подпишем — отметим),
+         но строка должна сказать, что без него человек все равно готов работать, —
+         иначе оператор будет ждать бумагу, которой не будет. */
+      var optional = kind === 'ip' && dk[0] === 'contract'
+        ? '<span class="cz-doc-sub">Не обязателен: платим по счету</span>' : '';
+      return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + optional + '</span>' +
         (byPerson
           ? '<span class="cz-doc-fixed"><span class="sev cz-ok">Принято в анкете</span>' +
             (d0.signed_at ? '<span class="cz-doc-when">' + fmtWhen(d0.signed_at) + '</span>' : '') +
@@ -16767,7 +16778,12 @@
           : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>' +
             (t.act
               ? '<div class="ct-frozen">Если изменить сумму, акт аннулируется: он составлен на прежнюю.</div>'
-              : '')) +
+              : (t.invoice
+                /* У ИП акта нет, и сумму сверяет его счет. Менять деньги после счета
+                   можно, но платеж встанет до исправленного — об этом надо сказать
+                   здесь, а не на воротах выплаты. */
+                ? '<div class="ct-frozen">Если изменить сумму, счет перестанет совпадать с заданием — попросите исправленный.</div>'
+                : '')) ) +
       '</div>';
 
     /* Акт. Документ, а не отметка: у него свой номер, дата и снимок условий, и
@@ -16844,9 +16860,10 @@
               '</div>'
             : '<div class="ct-act">' +
                 '<div class="ct-act-h"><b>Счета еще нет</b></div>' +
-                '<div class="ct-act-why">Банку нужно основание платежа, поэтому без счета ' +
-                  'выплата не пройдет. Исполнителю ушла просьба прислать его в кабинете; ' +
-                  'если прислал в переписку — приложите сами.</div>' +
+                '<div class="ct-act-why">Счет — единственное основание платежа ИП: акта ' +
+                  'у него нет, работу закрывает оплата счета. Без счета выплата не ' +
+                  'пройдет. Исполнителю ушла просьба прислать его в кабинете; если ' +
+                  'прислал в переписку — приложите сами.</div>' +
                 '<div class="ct-acts"><button class="bp sm ghost" id="ct-inv-add">' +
                   'Приложить счет</button></div></div>') +
         '</div>';
@@ -16966,7 +16983,12 @@
                               amount: t.act ? t.act.amount : t.amount, act: t.act,
                               contractor: p });
         }
-        if (to === 'act_signed' && t.payout) return openPayCancel(t.payout.id);
+        /* Отмена выплаты: у самозанятого задание возвращается в «акт подписан», у ИП —
+           в «результат принят» (акта у него нет). Оба шага это отмена платежа, а не
+           шаг назад по цепочке. */
+        if (t.payout && (to === 'act_signed' || (to === 'approved' && !t.act))) {
+          return openPayCancel(t.payout.id);
+        }
         // Возврат из акта — это аннулирование документа, и оно всегда с причиной.
         if (to === 'approved' && t.act) {
           return openCtReason(t.id, to, 'Почему аннулируем акт?');
@@ -17705,9 +17727,13 @@
     }).catch(function () { PY.hist = PY.hist || []; if (state.page === 'czpay') renderAll(); });
   }
   function pyRows(tab) {
+    /* Дошло ли задание до денег, решает СЕРВЕР полем ready_stage: у самозанятого это
+       подписанный акт, у исполнителя-ИП — принятый результат (акта у него нет, платим
+       по счету). По имени статуса делить тут нельзя — это была бы вторая копия правила,
+       и «результат принят» у предпринимателя висел бы во «Ждут документов» навсегда. */
     var rows = (PY.reg && PY.reg.rows) || [];
     return rows.filter(function (r) {
-      return tab === 'ready' ? r.status === 'act_signed' : r.status !== 'act_signed';
+      return tab === 'ready' ? !!r.ready_stage : !r.ready_stage;
     });
   }
   /* Проверки в строке: пройденные молчат, непройденные объясняют себя. Семь зеленых
@@ -17939,7 +17965,7 @@
     return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) + '</span>';
   }
   function repRow(r) {
-    // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
+    // «К выплате» (принято документом, деньги еще не ушли) — самое действие: держим чипом
     // у имени, а не отдельной колонкой, чтобы таблица не разрослась.
     var due = r.due > 0
       ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
@@ -17951,7 +17977,7 @@
       '<span class="rep-name">' + esc(r.full_name) +
         (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') +
         flag + due + '</span>' +
-      repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
+      repCol('Назначено', r.plan) + repCol('Принято', r.acts) + repCol('Выплачено', r.paid) +
       '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
         repMoney(r.left) + '</span>' +
       '</div>';
@@ -17975,13 +18001,17 @@
       : (!rows.length
         ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
         : rows.map(function (r) { return repRow(r); }).join(''));
-    var hint = 'Назначено — сумма заданий, акты — подписанные акты, выплачено — проведенные ' +
-      'выплаты, остаток — назначено минус выплачено. Месяц режет факт по датам. Нажмите на ' +
-      'строку, чтобы открыть карточку исполнителя.';
+    /* «Принято» считает документ, которым закрыта работа: у самозанятого это подписанный
+       акт, у исполнителя-ИП — его счет (акта у него нет). Сервер складывает оба в одну
+       цифру: вопрос «сколько работы принято» один, а бумага под ней у видов разная. */
+    var hint = 'Назначено — сумма заданий, принято — закрытая документом работа ' +
+      '(акт у самозанятого, счет у ИП), выплачено — проведенные выплаты, остаток — ' +
+      'назначено минус выплачено. Месяц режет факт по датам. Нажмите на строку, чтобы ' +
+      'открыть карточку исполнителя.';
     view.innerHTML =
       '<div class="mo-stats">' +
         repTile('Назначено', t.plan) +
-        repTile('Принято актами', t.acts) +
+        repTile('Принято документом', t.acts) +
         repTile('Выплачено', t.paid) +
         repTile('Остаток', t.left, true) +
       '</div>' +
@@ -17992,7 +18022,7 @@
         '<div class="list-quick">' + chips + '</div>' +
         '<div class="trow rep-grid thead">' +
           '<span class="th">Исполнитель</span>' +
-          '<span class="th r">Назначено</span><span class="th r">Акты</span>' +
+          '<span class="th r">Назначено</span><span class="th r">Принято</span>' +
           '<span class="th r">Выплачено</span><span class="th r">Остаток</span>' +
         '</div>' + body +
       '</div>';
@@ -18562,7 +18592,7 @@
      Двум дверям в одну комнату нельзя проверять разное: под актом должна стоять его
      подпись под тем, что он действительно мог сделать. */
 
-  var MW = { sub: 'active', tasks: null, counts: null, err: '',
+  var MW = { sub: 'active', tasks: null, counts: null, err: '', kind: '',
              openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
              acts: null, actsErr: '', actFilter: 'sign',
              receipts: null, rcpErr: '',
@@ -18662,14 +18692,15 @@
     if (MW.counts || MW.err) return;
     MW.counts = {};   // чтобы не запросить дважды, пока идет ответ
     mwGet('').then(function (r) {
-      MW.counts = r.counts || {}; mwDone();
+      MW.counts = r.counts || {}; MW.kind = r.kind || ''; mwDone();
     }).catch(function (e) {
       MW.counts = null; MW.err = e.message; mwDone();
     });
   }
   function mwLoadHome() {
     mwGet('/home').then(function (r) {
-      MW.home = r; MW.counts = r.counts || MW.counts; MW.homeErr = ''; mwDone();
+      MW.home = r; MW.counts = r.counts || MW.counts; MW.kind = r.kind || MW.kind;
+      MW.homeErr = ''; mwDone();
     }).catch(function (e) {
       MW.home = { soon: [] }; MW.homeErr = e.message; mwDone();
     });
@@ -18957,7 +18988,9 @@
     view.innerHTML =
       (acts.length ? '<div class="card listcard"><div class="list-quick">' + af + '</div></div>' : '') +
       (!acts.length
-        ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
+        ? '<div class="card"><div class="empty">' + (MW.kind === 'ip'
+            ? 'Актов у вас не будет: мы платим по вашему счету, и его оплата и есть приемка работы. Счет прикладывается в самом задании.'
+            : 'Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.') + '</div></div>'
         : (!shown.length
           ? '<div class="card"><div class="empty">' + (MW.actFilter === 'sign'
               ? 'Все акты подписаны — от вас сейчас ничего не ждут.'
@@ -22318,15 +22351,16 @@
   }
 
   // Когда факт по листу привязан к самозанятому, сервер сам проводит выплату по его
-  // готовым заданиям (акт подписан) и отдаёт итог в r.settle. Показываем его человеку:
-  // «оплачено N» и «ждёт акт M» — иначе он не поймёт, что строка листа ещё и заплатила.
+  // готовым заданиям (у самозанятого акт подписан, у ИП есть счёт) и отдаёт итог в
+  // r.settle. Показываем его человеку: «оплачено N» и «ждут документа M» — иначе он не
+  // поймёт, что строка листа ещё и заплатила.
   function finSettleMsg(r, base) {
     var s = r && r.settle;
     if (!s) return base;
     var parts = [];
     if (s.paid) parts.push('оплачено заданий: ' + s.paid);
     if (s.pending && s.pending.length) parts.push('не прошло: ' + s.pending.length);
-    if (s.waiting_act) parts.push('ждут акта: ' + s.waiting_act);
+    if (s.waiting_act) parts.push('ждут документа: ' + s.waiting_act);
     return parts.length ? base + '. ' + parts.join(', ') : base;
   }
 

@@ -6136,6 +6136,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* документ, принятый самим человеком: отметка вместо переключателя — снять его нельзя */
 .cz-doc-fixed { flex: none; display: flex; align-items: center; gap: 10px; }
 .cz-doc-when { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+/* подпись под названием документа: «не обязателен» у договора с ИП. Отдельной строкой,
+   а не рядом с названием: на телефоне эти два текста в одну строку не влезают */
+.cz-doc-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
 
 .cz-foot { display: flex; align-items: center; gap: 8px; }
 .cz-foot .cz-save { margin-left: auto; }
