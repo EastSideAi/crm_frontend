@@ -76,7 +76,7 @@
     leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
+    pathSel: null, pathPeriod: '', pathGran: 'week', pathShift: 0, pathStep: 'diagnosed', pathProd: null, _pathRep: null, mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
     pfMonth: '', _pf: null, _pfAi: null, // план-факт: выбранный месяц, цифры, разбор
     laSrc: 'total', _launch: null, _laEd: null, // декомпозиция запуска: лист, данные файла, правки на экране
@@ -142,7 +142,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab', 'pathGran'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -158,6 +158,7 @@
         gtFrom: state.gtFrom || '', gtTo: state.gtTo || '',
         ganttOpen: state.ganttOpen || {},
         mxTab: state.mxTab || 'soon',
+        pathGran: state.pathGran || 'week',
       }));
     } catch (e) {}
   }
@@ -302,6 +303,18 @@
        не виден во вкладке «Клиенты» — она фильтрует по этому же признаку. */
     { key: 'client',    label: 'Стали клиентами',       hint: 'есть оплата в карточке',  test: function (l) { return !!l.paid; } },
   ];
+  /* Фильтр «Этап» в «Людях»: «дошел до шага», а не «стоит на нем сейчас». Статус
+     лида — последний шаг, и человек, прошедший диагностику и потом записавшийся,
+     из «прошел диагностику» выпадал: фильтр показывал меньше людей, чем было
+     (Лиана 12.10.2026). «Без анкеты» и «вручную» — состояния, а не шаги, их сверяем
+     как раньше. */
+  function funnelHit(l, f) {
+    var diag = l.status !== 'visited' && !!(l.stages && l.stages.diagnostics === 'done');
+    if (f === 'booked') return !!l.booking;
+    if (f === 'diagnosed') return diag;
+    if (f === 'submitted') return l.status === 'submitted' || l.status === 'diagnosed' || diag;
+    return l.status === f;
+  }
   function hasEv(l, t) { return (l.events || []).indexOf(t) !== -1; }
 
   /* ── иконки ───────────────────────────────────────────── */
@@ -962,7 +975,7 @@
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
       return true;
@@ -1210,7 +1223,7 @@
 
     var segArr = segBase(state.seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       return inPeriod(l, state.filters.period);
     });
     var total = segArr.length;
@@ -1295,7 +1308,7 @@
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       return inPeriod(l, state.filters.period);
     });
     var total = segArr.length, shown = segLeads(state.seg).length;
@@ -2848,14 +2861,18 @@
       });
     } else if (state.page === 'path') {
     } else if (state.page === 'path' && can('clients')) {
-      var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
-      tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
-        return '<a class="tab' + (state.pathPeriod === o[0] ? ' on' : '') + '" data-per="' + o[0] + '">' + o[1] + '</a>';
+      /* День / неделя / месяц — счет по дате, когда человек сделал шаг (pathReport).
+         «Где теряем» — прежняя когорта зашедших: кто на каком шаге отвалился. */
+      tb.innerHTML = '<nav class="tabs">' + PATH_GRANS.map(function (o) {
+        return '<a class="tab' + (state.pathGran === o[0] ? ' on' : '') + '" data-gran="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
-          state.pathPeriod = t.getAttribute('data-per');
-          renderTopbar(); renderView(); renderSide();
+          var g = t.getAttribute('data-gran');
+          if (g === state.pathGran) return;
+          state.pathGran = g; state.pathShift = 0; state.pathProd = null;
+          saveUi();
+          renderTopbar(); renderHead(); renderView(); renderSide();
         });
       });
     } else if (state.page === 'finance') {
@@ -3045,6 +3062,10 @@
     }
     if (state.page === 'path' && !can('clients')) {
       html = '<div><h2>Путь по платформе</h2></div>';
+    } else if (state.page === 'path' && state.pathGran !== 'lost') {
+      html = '<div><h2>Путь по платформе</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' +
+        pathVerdict(pathRep()) + '</span></div></div>';
     } else if (state.page === 'path') {
       var steps = funnelData(state.pathPeriod);
       var w2 = worstStep(steps);
@@ -34197,8 +34218,212 @@
   }
 
   /* ── ПУТЬ ─────────────────────────────────────────────── */
+  /* ── ПУТЬ ПО ПЕРИОДАМ ─────────────────────────────────────
+     Лиана, 12.10.2026: «почему в CRM не отображается подробная аналитика, кто прошел
+     диагностику, кто купил грант» и «мне нужно смотреть месяц, неделя, день в разрезе».
+     Прежний «Путь» считал когорту зашедших за период: человек, пришедший в сентябре и
+     прошедший диагностику вчера, во вчерашнем дне не появлялся вовсе. Здесь шаг идет в
+     период по дате, когда он случился, и у каждого шага есть список людей. Считает
+     сервер (GET /admin/api/path/report), в браузере ничего не досчитывается: списки
+     людей в state.leads ограничены выборкой и про оплаты по продуктам не знают.
+     Когорта осталась вкладкой «Где теряем» — она нужна, чтобы догонять ушедших. */
+  var PATH_GRANS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['lost', 'Где теряем']];
+  var PATH_NOW = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
+  var PATH_UNIT = { day: 'день', week: 'неделя', month: 'месяц' };
+  function pathGranOk() {
+    var g = state.pathGran;
+    return PATH_GRANS.some(function (o) { return o[0] === g; }) ? g : 'week';
+  }
+  function pathKey() { return pathGranOk() + ':' + (state.pathShift || 0); }
+  /* Отчет выбранного периода или null, пока он едет. Запрос один на период: ответ
+     чужого периода (человек успел щелкнуть дальше) выбрасывается. */
+  function pathRep() {
+    var r = state._pathRep;
+    return r && r.key === pathKey() ? r : null;
+  }
+  function pathLoad() {
+    var key = pathKey();
+    if (state._pathRep && state._pathRep.key === key) return;
+    if (state._pathBusy === key) return;
+    state._pathBusy = key;
+    var g = pathGranOk(), sh = state.pathShift || 0;
+    api('/admin/api/path/report?gran=' + g + '&shift=' + sh).then(function (r) {
+      if (state._pathBusy === key) state._pathBusy = null;
+      r.key = key;
+      if (key !== pathKey()) return;
+      state._pathRep = r;
+      if (state.page === 'path') { renderHead(); renderView(); }
+    }).catch(function (e) {
+      if (state._pathBusy === key) state._pathBusy = null;
+      if (key !== pathKey()) return;
+      state._pathRep = { key: key, error: (e && e.body && e.body.detail) || 'не удалось загрузить' };
+      if (state.page === 'path') renderView();
+    });
+  }
+  function pathStep(r, k) { return ((r && r.steps) || []).filter(function (s) { return s.key === k; })[0]; }
+  /* Строка под заголовком — ответ на вопрос «что было за период» одной фразой. */
+  function pathVerdict(r) {
+    if (!r) return 'Считаю шаги за период.';
+    if (r.error) return 'Отчет не загрузился. Обновите страницу.';
+    var dg = pathStep(r, 'diagnosed'), bk = pathStep(r, 'booked'), pd = pathStep(r, 'paid');
+    var lead = (r.is_now ? PATH_NOW[r.gran] : r.label.charAt(0).toUpperCase() + r.label.slice(1));
+    if (!dg.n && !bk.n && !pd.n) return lead + ': до диагностики, записи и оплаты пока никто не дошел.';
+    var parts = [];
+    parts.push('<b>' + dg.n + '</b> ' + plural(dg.n, 'прошел', 'прошли', 'прошли') + ' диагностику');
+    parts.push('<b>' + bk.n + '</b> ' + plural(bk.n, 'записался', 'записались', 'записались') + ' на разбор');
+    parts.push('<b>' + pd.n + '</b> ' + plural(pd.n, 'оплатил', 'оплатили', 'оплатили'));
+    return lead + ': ' + parts.join(', ') + '.';
+  }
+  function pathNav(r) {
+    var g = pathGranOk(), sh = state.pathShift || 0;
+    var label = r ? (r.is_now ? PATH_NOW[g] : r.label) : '';
+    return '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="pth-prev" title="Предыдущий ' + PATH_UNIT[g] + '">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(label) + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="pth-next"' + (sh >= 0 ? ' disabled' : '') + ' title="Следующий">' + ic('go', 15) + '</button>' +
+      (sh ? '<button class="qchip" id="pth-now">' + PATH_NOW[g] + '</button>' : '') +
+    '</div>';
+  }
+  function pathGo(sh) {
+    state.pathShift = Math.min(0, sh); state.pathProd = null;
+    renderHead(); renderView();
+  }
+  /* Строка человека. Справа от имени — что важно именно в этом списке: у оплаты это
+     «новая покупка» или «взнос», тариф и сумма; у остальных шагов — класс и год. */
+  function pathPersonRow(p, extra) {
+    return '<div class="trow pth-row" data-id="' + esc(p.id) + '">' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(p.name) + '</div>' +
+        (p.sub ? '<div class="t-sub">' + esc(p.sub) + '</div>' : '') + '</div>' +
+      '<div class="pth-x">' + (extra || '') + '</div>' +
+      '<div class="t-when num">' + esc(pathWhen(p.at)) + '</div>' +
+      '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
+    '</div>';
+  }
+  /* У оплаты есть только день (paid_at — дата), у остальных шагов точное время. */
+  function pathWhen(at) {
+    if (!at) return '—';
+    if (String(at).length === 10) { var d = new Date(at + 'T12:00:00'); return dayLabel(d.toISOString()); }
+    return fmtWhen(at);
+  }
+  function pathPayChips(p) {
+    return (p.kind === 'new' ? '<span class="sev n-ok">новая покупка</span>' : '<span class="sev">взнос</span>') +
+      (p.tariff ? '<span class="sev">' + esc(p.tariff) + '</span>' : '') +
+      (p.amount ? '<span class="pth-sum num">' + fmtMoney(p.amount) + ' ₽</span>' : '');
+  }
+  function pathSkeleton() {
+    return '<div class="dash">' +
+      '<div class="sk-statbar">' + shimStat() + shimStat() + shimStat() + shimStat() + '</div>' +
+      '<div class="grid"><div class="sp12">' + shimCard(5) + '</div></div></div>';
+  }
+
   function renderPath(view) {
     if (!can('clients')) { noClientsStub(view, 'path'); return; }
+    if (pathGranOk() === 'lost') { renderPathLost(view); return; }
+    var r = pathRep();
+    if (!r) { pathLoad(); view.innerHTML = pathSkeleton(); return; }
+    if (r.error) {
+      view.innerHTML = '<div class="card"><div class="empty">Отчет не загрузился: ' + esc(r.error) +
+        '. Обновите страницу, если не поможет — напишите в чат разработки.</div></div>';
+      return;
+    }
+    var g = r.gran;
+    var selKey = pathStep(r, state.pathStep) ? state.pathStep : 'diagnosed';
+    var sel = pathStep(r, selKey);
+
+    /* плитки шагов: число за период, клик — список людей ниже */
+    var tiles = r.steps.map(function (s) {
+      return '<button class="stat go' + (s.key === selKey ? ' on' : '') + '" data-step="' + s.key + '">' +
+        '<div class="sl">' + esc(s.label) + '</div>' +
+        '<div class="sv num">' + s.n + '</div>' +
+        '<div class="sd"><span class="smut">' + (s.key === selKey ? 'список ниже' : 'показать кто') + '</span></div>' +
+      '</button>';
+    }).join('');
+    var head = '<div class="card pth-top">' +
+      '<div class="sec-head wrap pth-head"><span class="ic">' + ic('path', 14) + '</span>' +
+        '<div><div class="t">Шаги за ' + (g === 'day' ? 'день' : g === 'week' ? 'неделю' : 'месяц') + '</div>' +
+        '<div class="s">шаг считается в тот день, когда человек его сделал</div></div>' +
+        pathNav(r) + '</div>' +
+      '<div class="statbar five pth-stats">' + tiles + '</div></div>';
+
+    /* люди выбранного шага */
+    var rows = sel.people.length ? sel.people.map(function (p) {
+      return pathPersonRow(p, '');
+    }).join('') : '<div class="empty">' + (sel.anon ? 'Только анонимные заходы — имени и контакта они не оставили.' : 'За этот период таких нет.') + '</div>';
+    var notes = [];
+    if (sel.anon && sel.people.length) notes.push('Еще ' + sel.anon + ' ' + plural(sel.anon, 'заход', 'захода', 'заходов') + ' без имени и контакта, в списке их нет.');
+    if (sel.cut) notes.push('Показаны первые ' + sel.people.length + '.');
+    var list = '<div class="card pth-list">' +
+      '<div class="sec-head"><div><div class="t">' + esc(sel.label) + ' · ' + sel.n + '</div>' +
+      '<div class="s">клик по имени открывает карточку</div></div></div>' +
+      '<div class="pth-rows">' + rows + '</div>' +
+      (notes.length ? '<div class="brd-note">' + esc(notes.join(' ')) + '</div>' : '') + '</div>';
+
+    /* оплаты по продуктам */
+    var prods = r.products.length ? r.products.map(function (pr) {
+      var open = state.pathProd === pr.key;
+      var cnt = [];
+      if (pr.new) cnt.push(pr.new + ' ' + plural(pr.new, 'новая покупка', 'новые покупки', 'новых покупок'));
+      if (pr.part) cnt.push(pr.part + ' ' + plural(pr.part, 'взнос', 'взноса', 'взносов'));
+      return '<div class="pth-prod' + (open ? ' open' : '') + '">' +
+        '<button class="pth-ph" data-prod="' + esc(pr.key) + '">' +
+          '<span class="pth-pn">' + esc(pr.label) + '</span>' +
+          '<span class="pth-pc">' + esc(cnt.join(' · ')) + '</span>' +
+          (r.money ? '<span class="pth-ps num">' + fmtMoney(pr.sum) + ' ₽</span>' : '') +
+          '<span class="pth-chev">' + chev() + '</span>' +
+        '</button>' +
+        (open ? '<div class="pth-rows">' + pr.people.map(function (p) { return pathPersonRow(p, pathPayChips(p)); }).join('') + '</div>' : '') +
+      '</div>';
+    }).join('') : '<div class="empty">Оплат за этот период нет.</div>';
+    var pay = '<div class="card pth-pay">' +
+      '<div class="sec-head"><div><div class="t">Оплаты по продуктам</div>' +
+      '<div class="s">новая покупка — первая оплата этого продукта; взнос — очередная часть уже купленного</div></div></div>' +
+      prods + '</div>';
+
+    /* динамика: те же шаги по соседним периодам, свежие сверху */
+    var thead = '<div class="mkd-th pth-tr"><span>' + (g === 'day' ? 'День' : g === 'week' ? 'Неделя' : 'Месяц') + '</span>' +
+      r.steps.map(function (s, i) { return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + esc(PATH_SHORT[s.key]) + '</span>'; }).join('') + '</div>';
+    var trows = r.trend.slice().reverse().map(function (t) {
+      return '<div class="mkd-tr pth-tr' + (t.shift === r.shift ? ' on' : '') + '" data-sh="' + t.shift + '">' +
+        '<span class="mkd-nm"><b>' + esc(t.label) + '</b></span>' +
+        r.steps.map(function (s, i) {
+          var v = t.counts[s.key] || 0;
+          return '<span class="mkd-v' + (v ? '' : ' zero') + (i < 2 ? ' hidem' : '') + '">' + v + '</span>';
+        }).join('') + '</div>';
+    }).join('');
+    var trend = '<div class="card pth-trend">' +
+      '<div class="sec-head"><div><div class="t">По ' + (g === 'day' ? 'дням' : g === 'week' ? 'неделям' : 'месяцам') + '</div>' +
+      '<div class="s">клик по строке открывает этот период</div></div></div>' +
+      '<div class="mkd-tbl">' + thead + trows + '</div></div>';
+
+    view.innerHTML = '<div class="dash">' + head + list + pay + trend + '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-stats .stat'), function (b) {
+      b.addEventListener('click', function () { state.pathStep = b.getAttribute('data-step'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-ph'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-prod');
+        state.pathProd = state.pathProd === k ? null : k; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-tr[data-sh]'), function (n) {
+      n.addEventListener('click', function () { pathGo(parseInt(n.getAttribute('data-sh'), 10)); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-rows'), function (box) {
+      var ids = Array.prototype.map.call(box.querySelectorAll('.trow[data-id]'), function (n) { return n.getAttribute('data-id'); });
+      Array.prototype.forEach.call(box.querySelectorAll('.trow[data-id]'), function (n) {
+        n.addEventListener('click', function () { openDrawer(n.getAttribute('data-id'), ids); });
+        n.addEventListener('mouseenter', function () { warm(n.getAttribute('data-id')); });
+      });
+    });
+    var pv = el('pth-prev'), nx = el('pth-next'), nw = el('pth-now');
+    if (pv) pv.addEventListener('click', function () { pathGo((state.pathShift || 0) - 1); });
+    if (nx) nx.addEventListener('click', function () { pathGo((state.pathShift || 0) + 1); });
+    if (nw) nw.addEventListener('click', function () { pathGo(0); });
+  }
+  var PATH_SHORT = { visited: 'Зашли', submitted: 'Анкета', diagnosed: 'Диагностика', booked: 'Запись', paid: 'Оплата' };
+
+  function renderPathLost(view) {
     var steps = funnelData(state.pathPeriod);
     if (!steps[0].n) {
       view.innerHTML = '<div class="card"><div class="empty">За этот период данных нет.</div></div>';
@@ -44659,6 +44884,13 @@
         state.acTab = s;
         if (s === 'courses' && state.ac) state.ac.course = null;
         return true;
+      },
+    },
+    path: {
+      get: pathGranOk,
+      set: function (s) {
+        if (!PATH_GRANS.some(function (o) { return o[0] === s; }) || s === pathGranOk()) return false;
+        state.pathGran = s; state.pathShift = 0; state.pathProd = null; return true;
       },
     },
     meetx: {
