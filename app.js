@@ -28996,6 +28996,68 @@
     return 'считаем с ' + d(w.from) + (w.to ? ' по ' + d(w.to) : ' по сегодня');
   }
 
+  /* Эфир на чужой площадке: инстаграм, ютуб, чужой канал.
+
+     Зала, минут и вопросов у такого эфира у нас нет — площадка их не отдает, и
+     нарисовать по ним нули нельзя: ноль читается как «никто не пришел», а правда
+     в том, что мы не считали. Поэтому экран другой: только то, что мы правда
+     считаем, и прямая строка о том, почему остального не будет. */
+  function efirElsewhereHtml(cur, tabs, tabsN) {
+    var sum = function (rows) { return (rows || []).reduce(function (n, r) { return n + r.n; }, 0); };
+    var perehody = sum(cur.links), zapis = sum(cur.rec_links), knopki = sum(cur.cta_links);
+    var invited = cur.invited || 0, mail = cur.invited_mail || 0;
+    var bot = cur.bot_people || 0;
+    var klik = function (n) { return n + ' ' + plural(n, 'переход', 'перехода', 'переходов'); };
+    var rows = function (list, empty) {
+      return (list || []).map(function (r) {
+        return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
+      }).join('') || '<div class="empty">' + empty + '</div>';
+    };
+    var place = esc(cur.place_title || 'чужой площадке');
+    return '<div class="dash">' +
+      (tabsN > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
+      statBar([
+        { label: 'Рассылки письма на эфир', value: invited, ebl: 'invited',
+          sub: mail ? 'и еще ' + mail + ' ' + plural(mail, 'адрес', 'адреса', 'адресов') + ' на почту'
+                    : 'живые адреса, без наших копий' },
+        { label: 'Перешли на эфир', value: perehody,
+          sub: 'клики по ссылкам, а не люди' },
+        { label: 'Перешли за записью', value: zapis,
+          sub: zapis ? 'ссылка на запись эфира' : 'ссылки на запись не было' },
+        { label: 'Нажали «консультация»', value: knopki,
+          sub: bot ? 'до бота дошло ' + bot : 'до бота никто не дошел' },
+      ]) +
+      '<div class="card" style="overflow:hidden"><div class="sec-head pad">' +
+        '<div><div class="t">Путь человека по эфиру</div><div class="s">' +
+          'эфир шел в ' + place + ', поэтому зала, минут и вопросов в чате тут нет: ' +
+          place + ' их не отдает. Считаем то, что считается у нас — кого позвали ' +
+          'письмами и сколько раз нажали наши ссылки' +
+        '</div></div></div>' +
+        '<div class="lad-static links" style="border-top:1px solid var(--line)">' +
+          flatRow('Позвали письмами', 'живые адреса в мессенджерах, без наших копий', invited) +
+          (mail ? flatRow('Письма на почту', 'адреса почты с людьми в базе не склеены', mail) : '') +
+          flatRow('Перешли на эфир', klik(perehody) + ' по ссылкам на ' + place, perehody) +
+          flatRow('Перешли за записью', klik(zapis) + ' после эфира', zapis) +
+          flatRow('Нажали «консультация»', klik(knopki) + ' по кнопкам записи', knopki) +
+          flatRow('Дошли до бота', 'единственная цифра про людей: вход в бота помнит метку', bot) +
+        '</div></div>' +
+      '<div class="grid">' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Ссылки на эфир</div><div class="s">' +
+            'по ним люди уходили смотреть и возвращались за записью</div></div></div>' +
+          '<div class="lad-static links" style="border-top:1px solid var(--line)">' +
+            rows((cur.links || []).concat(cur.rec_links || []), 'Ссылок на эфир не заводили.') +
+          '</div></div>' +
+        '<div class="card sp6" style="overflow:hidden"><div class="sec-head pad">' +
+          '<div><div class="t">Кнопки «записаться на консультацию»</div><div class="s">' +
+            (knopki ? klik(knopki) + ' во всех каналах' : 'кнопок по этому эфиру не было') +
+          '</div></div></div>' +
+          '<div class="lad-static links" style="border-top:1px solid var(--line)">' +
+            rows(cur.cta_links, 'Кнопок по этому эфиру не заводили.') +
+          '</div></div>' +
+      '</div></div>';
+  }
+
   function renderMkEfir(view) {
     if (!state._mkEfir) { view.innerHTML = dashSkeleton(); fetchMkEfir(); return; }
     if (state._mkEfir === 'none') {
@@ -29005,6 +29067,15 @@
     var all = state._mkEfir.efiry;
     var idx = Math.min(state._mkEfirIdx == null ? all.length - 1 : state._mkEfirIdx, all.length - 1);
     var cur = all[idx];
+    var tabs = all.map(function (e, i) {
+      return '<a class="tab' + (i === idx ? ' on' : '') + '" data-efir="' + i + '">' + esc(e.title) + '</a>';
+    }).join('');
+    /* Эфир шел не в нашей комнате — у него другой экран и другие цифры. */
+    if (cur.place) {
+      view.innerHTML = efirElsewhereHtml(cur, tabs, all.length);
+      efirBindClicks(view, cur);
+      return;
+    }
     var c = cur.counts, m = cur.money;
     var pct = function (n, base) { return base ? Math.round(n / base * 100) : 0; };
     var conv = function (txt) { return '<span class="lad-conv num">' + txt + '</span>'; };
@@ -29098,10 +29169,6 @@
       return flatRow(r.title, 'ссылка go.истсайд.рф/' + r.code, r.n);
     }).join('') || '<div class="empty">Ссылок в соцсети по этому эфиру не было.</div>';
 
-    var tabs = all.map(function (e, i) {
-      return '<a class="tab' + (i === idx ? ' on' : '') + '" data-efir="' + i + '">' + esc(e.title) + '</a>';
-    }).join('');
-
     view.innerHTML = '<div class="dash">' +
       (all.length > 1 ? '<nav class="tabs" style="margin-bottom:14px">' + tabs + '</nav>' : '') +
       statBar([
@@ -29167,9 +29234,14 @@
           '<div class="lad-static" style="border-top:1px solid var(--line)">' + ctaRows + '</div></div>' +
       '</div></div>';
 
-    /* Клик по плашке или ступени открывает тех же людей, что она посчитала. Цифра,
-       которую нельзя развернуть в людей, команду не убеждает — ее перепроверяют в
-       своей табличке и перестают смотреть на экран. */
+    efirBindClicks(view, cur);
+  }
+
+  /* Клик по плашке или ступени открывает тех же людей, что она посчитала. Цифра,
+     которую нельзя развернуть в людей, команду не убеждает — ее перепроверяют в
+     своей табличке и перестают смотреть на экран. Вкладки эфиров живут тут же:
+     обработчики общие для обоих экранов, нашего и чужой площадки. */
+  function efirBindClicks(view, cur) {
     Array.prototype.forEach.call(view.querySelectorAll('[data-ebl]'), function (n) {
       var open = function () {
         var block = n.getAttribute('data-ebl');

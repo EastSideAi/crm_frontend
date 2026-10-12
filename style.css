@@ -1125,6 +1125,11 @@ a { color: inherit; text-decoration: none; }
    не должен обещать то, чего нет. Строка подарка — та же анатомия, что у лестницы
    (имя · шкала · число · итог справа), чтобы два экрана читались одним движением. */
 .lad-row.gf-flat { cursor: default; }
+/* Плоский список ссылок: название ссылке пишет человек, и оно бывает длинным —
+   строке нужна высота по содержимому и две колонки, иначе вторая строка названия
+   наезжает на соседнюю строку (поймано на эфире в инстаграме 12.10.2026). */
+.lad-static.links .lad-row { grid-template-columns: minmax(0, 1fr) auto;
+  height: auto; min-height: 56px; padding-top: 12px; padding-bottom: 12px; }
 /* Ступень, за которой есть список: нажатие открывает тех, кто на ней стоит. */
 .lad-row.lad-go { cursor: pointer; }
 .lad-row.lad-go:hover { background: var(--blue-tint); }
