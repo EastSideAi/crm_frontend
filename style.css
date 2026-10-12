@@ -6073,6 +6073,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .cz-h.ok .cz-h-t   { color: var(--green-ink); }
 .cz-h.bad .cz-h-t  { color: var(--red-ink); font-weight: 600; }
 .cz-h.mute .cz-h-t { color: var(--ink-3); }
+/* На телефоне подпись проверки («ЕГРИП · автоматически») не помещается рядом с текстом
+   и налезает на него: строка складывается в два яруса, подпись уходит под ответ
+   реестра. Переносить нечего — она короткая, а дату с источником читают после текста. */
+@media (max-width: 560px) {
+  .cz-h { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .cz-h-d { white-space: normal; }
+}
 
 .cz-year-v { font-size: 30px; font-weight: 700; letter-spacing: -.035em; }
 .cz-year .strack.wide { max-width: none; width: 100%; height: 8px; margin-top: 10px; display: block; }
