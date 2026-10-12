@@ -26429,7 +26429,7 @@
      говорит и выглядит как чужая система (спросил владелец 22.09). Добавляем сюда ВСЕ
      метки, которые реально встречаются в ссылках и регистрациях. */
   var MK_SOURCE_NAMES = {
-    direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
+    manual: 'Добавлен руками', direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
     instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
@@ -29435,6 +29435,60 @@
       '</div>';
   }
 
+  /* Люди запуска без регистрации (Лиана 12.10.2026: «все равно относи их к
+     интенсиву»). Пришли с эфира, но формы не заполняли, и строки в регистрациях у
+     них нет — отметить продажу было не на чем. Добавляются ссылкой на карточку CRM,
+     дальше идут по ступеням как все: консультации и оплаты из карточки, продажа
+     отметкой в списке людей (ступень «Пришли из бота без контактов»). */
+  function launchExtraLine(cur) {
+    var xs = cur.extras;
+    if (!xs) return '';   /* старый бэкенд без этого блока: молчим */
+    return '<div class="lxr">' +
+      '<span class="lxr-t">Без регистрации</span>' +
+      (xs.length
+        ? xs.map(function (x) {
+            return '<span class="lxr-p">' + esc(x.name || 'Без имени') +
+              '<button class="lxr-x" data-lxr-del="' + esc(x.id) + '" title="Убрать из запуска" ' +
+              'aria-label="Убрать ' + esc(x.name || '') + ' из запуска">' + ic('x', 11) + '</button></span>';
+          }).join('')
+        : '<span class="lxr-e">пришли с эфира, но формы не заполняли — добавьте по ссылке на карточку</span>') +
+      '<span class="lxr-add"><input class="al-in" id="lxr-in" maxlength="300" ' +
+        'placeholder="ссылка на карточку" aria-label="Ссылка на карточку клиента">' +
+      '<button class="bp ghost sm" id="lxr-go">Добавить</button></span>' +
+      '</div>';
+  }
+
+  function launchExtraWire(view, cur) {
+    var inp = view.querySelector('#lxr-in'), go = view.querySelector('#lxr-go');
+    var reload = function () { state._mkLaunch = null; renderView(); };
+    var add = function () {
+      var cid = lpCaseId(inp.value);
+      if (!cid) { inp.classList.add('err'); showToast('Вставьте ссылку на карточку клиента из CRM'); return; }
+      go.disabled = true;
+      api('/admin/api/marketing/launch/extra', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ launch_slug: cur.slug, case_id: cid })
+      }).then(reload).catch(function () {
+        go.disabled = false;
+        showToast('Не удалось добавить — проверьте ссылку на карточку');
+      });
+    };
+    if (go) go.addEventListener('click', add);
+    if (inp) inp.addEventListener('keydown', function (e) {
+      inp.classList.remove('err');
+      if (e.key === 'Enter') { e.preventDefault(); add(); }
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lxr-del]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        api('/admin/api/marketing/launch/extra/' + encodeURIComponent(b.getAttribute('data-lxr-del')),
+            { method: 'DELETE' }).then(reload).catch(function () {
+          b.disabled = false; showToast('Не удалось убрать — попробуйте еще раз');
+        });
+      });
+    });
+  }
+
   function renderMkLaunch(view) {
     launchAutoStart();
     if (!state._mkLaunch) { view.innerHTML = dashSkeleton(); fetchMkLaunch(); return; }
@@ -29618,7 +29672,7 @@
             ? ' · ступени просмотра — только за выбранный вечер, остальные за весь запуск'
             : '') +
         '</div></div>' + launchDays(cur) + '</div>' +
-        launchFixLine(cur) +
+        launchFixLine(cur) + launchExtraLine(cur) +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
       launchMoney(cur) +
@@ -29684,6 +29738,7 @@
         if (again) { try { again.focus(); } catch (e) {} }
       });
     }
+    launchExtraWire(view, cur);
     /* Плашка ступени → поимённый список людей за этой цифрой. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
       var openIt = function () {
