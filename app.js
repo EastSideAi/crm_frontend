@@ -2504,6 +2504,10 @@
     { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    // Справочник банков: лимиты без комиссии и правила выплат по каждому банку. Это не
+    // ведомость периода, а правило, которое читают бухгалтер и агенты рядом с выплатами —
+    // поэтому своего периода у страницы нет (счетчик до лимита будет отдельной задачей).
+    { id: 'finbanks', label: 'Банки', icon: 'card', cap: 'finmodel', space: 'fin' },
     { id: 'team', label: 'Команда', icon: 'team', cap: 'team|team_view' },
   ];
 
@@ -2957,6 +2961,9 @@
     } else if (state.page === 'fintax') {
       // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
+    } else if (state.page === 'finbanks') {
+      // Справочник банков не привязан к ведомости периода — только чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>правила по банкам</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -3420,7 +3427,8 @@
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
                      finprograms: 'Программы', finmetrics: 'Итоги периода',
-                     finplans: 'План отделов', finplandept: 'План отдела' };
+                     finplans: 'План отделов', finplandept: 'План отдела',
+                     finbanks: 'Банки и лимиты' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -3469,6 +3477,13 @@
         ph = 'Кто из руководителей внес план расходов на месяц. План отдела — плановые ' +
           'строки его расходов, план и факт стоят рядом. Считается по календарному ' +
           'месяцу, а не по расчетному периоду.';
+      }
+      // Справочник банков — правило, а не период: куда откуда платим и какой лимит без
+      // комиссии. Ветка до !per, иначе повисло бы «Загружаю ведомость».
+      else if (state.page === 'finbanks') {
+        ph = 'Откуда и кому платим по каждому банку и какой лимит без комиссии. Это ' +
+          'правило, чтобы не выйти за предел. Счетчик «сколько прошло за месяц» подключим ' +
+          'отдельно, когда банки отдадут факт.';
       }
       // План отдела без своего листа — тоже до !per, месяц календарный.
       else if (state.page === 'finplandept') {
@@ -3653,6 +3668,7 @@
     else if (state.page === 'finspend') renderFinSpend(view);
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
+    else if (state.page === 'finbanks') renderFinBanks(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
     else if (state.page === 'finplan') renderFinPlan(view);
@@ -15656,7 +15672,12 @@
       (c.problems && c.problems.length
         ? '<ul class="cz-plist">' + c.problems.map(function (p) {
             return '<li>' + esc(p) + '</li>'; }).join('') + '</ul>'
-        : '<div class="cz-ready-s">Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.</div>') +
+        /* У ИП договора нет и не будет (платим по счету), поэтому «документы подписаны»
+           про него неправда — вердикт называет то, что у него действительно проверено. */
+        : '<div class="cz-ready-s">' + (c.kind === 'ip'
+            ? 'ИП действует по данным налоговой, согласие и реквизиты есть — можно ставить задания. Платим по счету.'
+            : 'Статус в налоговой подтвержден, документы подписаны, реквизиты есть — можно ставить задания.') +
+          '</div>') +
       '</div>';
 
     /* 2. Ссылка на анкету. Для приглашенного это единственное действие оператора,
@@ -15789,6 +15810,9 @@
           var cls = ch.status === 'active' ? 'ok' : ch.status === 'inactive' ? 'bad' : 'mute';
           return '<div class="cz-h ' + cls + '"><span class="cz-h-t">' + esc(ch.message || '') + '</span>' +
             '<span class="cz-h-d">' + fmtWhen(ch.created_at) +
+            // какой реестр спрашивали: лента одна, а реестры разные, и у человека,
+            // сменившего вид, в ней лежит и то и другое
+            (ch.kind === 'ip' ? ' · ЕГРИП' : ' · реестр самозанятых') +
             // откуда пришла проверка: сам человек в анкете, утренний обход или кнопка
             (ch.source === 'auto' ? ' · автоматически'
               : ch.source === 'invite' ? ' · из анкеты' : ' · вручную') + '</span></div>';
@@ -15863,7 +15887,13 @@
          время и адрес — это и есть доказательство. Кнопка «не отправлен» стерла бы его
          молча, поэтому здесь стоит отметка, а не сегмент. */
       var byPerson = CZ_SELF_DOCS.indexOf(dk[0]) !== -1 && d0.version;
-      return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + '</span>' +
+      /* У предпринимателя договор не требуется: договора под ИП у компании нет, а
+         работу закрывает оплата его счета. Переключатель оставляем (подпишем — отметим),
+         но строка должна сказать, что без него человек все равно готов работать, —
+         иначе оператор будет ждать бумагу, которой не будет. */
+      var optional = kind === 'ip' && dk[0] === 'contract'
+        ? '<span class="cz-doc-sub">Не обязателен: платим по счету</span>' : '';
+      return '<div class="cz-doc"><span class="cz-doc-n">' + esc(dk[1]) + optional + '</span>' +
         (byPerson
           ? '<span class="cz-doc-fixed"><span class="sev cz-ok">Принято в анкете</span>' +
             (d0.signed_at ? '<span class="cz-doc-when">' + fmtWhen(d0.signed_at) + '</span>' : '') +
@@ -15904,12 +15934,11 @@
            этого одна строка: кто он и откуда взялся. */
         (c.inn && kind !== 'foreign'
           ? '<div class="m-sec"><div class="m-sec-h">Статус в налоговой' +
-              /* Кнопка спрашивает реестр САМОЗАНЯТЫХ, поэтому у предпринимателя ее нет:
-                 она записала бы ему в карточку «не является плательщиком НПД» — правду
-                 про чужой реестр, которая про него самого не говорит ничего. Проверка по
-                 ЕГРИП появится отдельной кнопкой, когда будет на чем ее проверить. */
-              (kind === 'ip' ? '' :
-                '<button class="hr" id="cz-check">Проверить сейчас</button>') + '</div>' +
+              /* Кнопка одна, а реестр за ней свой у каждого вида: у самозанятого
+                 реестр плательщиков НПД, у предпринимателя ЕГРИП. Какую ручку звать,
+                 решает вид карточки (czCheckNow), а не две разные кнопки рядом: для
+                 оператора это одно и то же действие — спросить налоговую. */
+              '<button class="hr" id="cz-check">Проверить сейчас</button>' + '</div>' +
               '<div class="ab">' + czRow2('Сейчас', npdChip) +
                 czRow2('Вид исполнителя', esc(CZ_KIND[kind] || 'Самозанятый')) +
                 (kind === 'ip' ? czRow2('ОГРНИП', c.ogrnip ? esc(c.ogrnip) : '—') : '') +
@@ -15939,6 +15968,18 @@
                  kind === 'foreign' ? 'Российских документов с него не ждем'
                    : kind === 'ip' ? 'Проверяем ЕГРИП, чек «Мой налог» не нужен'
                    : 'Проверяем статус НПД и ждем чек «Мой налог»') +
+          /* Запасной путь для статуса ИП. Реестр ЕГРИП неофициальный: он умеет просить
+             капчу и молчать сутками, а пока статуса нет, предпринимателю нельзя ни
+             предложить задание, ни провести выплату. Поэтому отметка руками остается —
+             но стоит после вида и подписана так, чтобы ее не путали с ответом реестра.
+             Самозанятому этого поля нет: его статус отдает ФНС и отметка со слов там
+             означала бы «я решил, что он самозанятый». */
+          (kind === 'ip'
+            ? czPick('ip_status', 'Статус ИП отметкой', c.ip_status || 'unknown',
+                     [['unknown', 'Не проверяли'], ['active', 'Действует'],
+                      ['inactive', 'Не действует']],
+                     'Нужно только когда реестр молчит: обычно статус приходит из ЕГРИП сам')
+            : '') +
           czField('job', 'Должность', c.job, 'Ассистент, СММ, Видео, Тьюторство') +
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
@@ -16208,13 +16249,19 @@
       .then(function (r) { czAfter(r); })
       .catch(function (e) { showToast(e.message); });
   }
+  /* Одна кнопка, два реестра. У самозанятого спрашиваем реестр плательщиков НПД, у
+     предпринимателя — ЕГРИП: это разные ручки и разные ответы, и спросить про человека
+     в чужом реестре нельзя (сервер на это отвечает 409). Вид берем из открытой
+     карточки, а не из кнопки: кнопка про действие, карточка про человека. */
   function czCheckNow() {
     var id = CZ.openId;
     var btn = el('cz-check');
     if (!id || CZ.busy) return;
+    var det = CZ.detail[id];
+    var isIp = !!(det && det.contractor && det.contractor.kind === 'ip');
     CZ.busy = true;
     if (btn) btn.textContent = 'Спрашиваем налоговую…';
-    czSend('/admin/api/contractors/' + id + '/npd-check', 'POST')
+    czSend('/admin/api/contractors/' + id + (isIp ? '/ip-check' : '/npd-check'), 'POST')
       .then(function (r) {
         CZ.busy = false;
         // историю перечитываем целиком: в ней появилась новая строка
@@ -16227,7 +16274,14 @@
           // «ограничила частоту запросов» требуют разных действий от человека
           showToast(r.check && r.check.status === 'error'
             ? (r.check.message || 'Налоговая не ответила — попробуйте позже')
-            : (r.contractor.npd_status === 'active' ? 'Статус подтвержден' : 'Статуса самозанятого нет'));
+            : isIp
+              /* У предпринимателя ответ бывает третьим: реестр ответил, но по этому ИНН
+                 в нем другой человек. Говорить тогда «ИП не действует» нельзя — с ИП
+                 все в порядке, вопрос к ИНН в карточке, и ответ реестра дословно. */
+              ? (r.contractor.ip_status === 'active' ? 'ИП действует'
+                : r.contractor.ip_status === 'inactive' ? 'ИП не действует по данным ЕГРИП'
+                : (r.contractor.ip_message || 'Реестр ответил не про этого человека'))
+              : (r.contractor.npd_status === 'active' ? 'Статус подтвержден' : 'Статуса самозанятого нет'));
         });
       })
       .catch(function (e) {
@@ -16252,10 +16306,21 @@
           '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Пригласить исполнителя</div></div>' +
           '<button class="al-x" id="cza-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.</div>' +
+        '<div class="al-sub" id="cza-sub">Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">ФИО <i>*</i></span>' +
             '<input id="cza-name" class="al-in" placeholder="Как обращаетесь к человеку" autocomplete="off" maxlength="120"></label>' +
+          /* Вид выбирается ЗДЕСЬ, а не потом в карточке: от него зависит, что анкета у
+             человека спросит. У предпринимателя она сводится к согласию на обработку
+             данных — ИНН и реквизиты приедут с его счетом, — и узнать это надо до того,
+             как он откроет ссылку. */
+          '<label class="al-f"><span class="al-l">Кто он по оформлению</span>' +
+            '<select id="cza-kind" class="al-in">' +
+              '<option value="self_employed">Самозанятый — платим по акту, нужен чек «Мой налог»</option>' +
+              '<option value="ip">ИП — платим по его счету, договора и акта нет</option>' +
+              '<option value="foreign">Вне РФ — платим переводом, российских документов нет</option>' +
+            '</select>' +
+            '<div class="al-hint" id="cza-kind-h">Самозанятый заполнит полную анкету: паспорт, ИНН и реквизиты.</div></label>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Телефон</span>' +
               '<input id="cza-phone" class="al-in" placeholder="+7 900 000-00-00" autocomplete="off" maxlength="30"></label>' +
@@ -16286,6 +16351,24 @@
     ov2.addEventListener('mousedown', function (e) { if (e.target === ov2) close(); });
     var nameI = el('cza-name');
     setTimeout(function () { nameI.focus(); }, 30);
+    /* Подсказка под выбором меняется вместе с ним: человек должен понимать, что именно
+       уедет по ссылке, до того как ее отправит. */
+    var kindHints = {
+      self_employed: 'Самозанятый заполнит полную анкету: паспорт, ИНН и реквизиты.',
+      ip: 'У ИП спросим только согласие на обработку данных. ИНН и реквизиты система прочитает из его счета.',
+      foreign: 'Человеку вне РФ налоговые вопросы не задаем — нужно только, куда платить.',
+    };
+    /* Подзаголовок обещает анкету с ИНН и реквизитами, а у предпринимателя ее нет — для
+       него текст свой, иначе оператор обещает человеку то, чего тот не увидит. */
+    var kindSubs = {
+      self_employed: 'Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.',
+      ip: 'Вы даете имя и контакт. По ссылке человек только подтвердит согласие на обработку данных — ИНН и реквизиты мы прочитаем из его счета.',
+      foreign: 'Вы даете имя и контакт — остальное человек заполнит сам по ссылке. Налоговых вопросов ему не задаем, нужно только, куда платить.',
+    };
+    el('cza-kind').addEventListener('change', function () {
+      el('cza-kind-h').textContent = kindHints[this.value] || kindHints.self_employed;
+      el('cza-sub').textContent = kindSubs[this.value] || kindSubs.self_employed;
+    });
     var save = el('cza-save');
     var submit = function () {
       var name = (nameI.value || '').trim();
@@ -16296,6 +16379,7 @@
         phone: (el('cza-phone').value || '').trim() || null,
         email: (el('cza-mail').value || '').trim() || null,
         note: (el('cza-note').value || '').trim() || null,
+        employment: el('cza-kind').value,
       }).then(function (r) {
         var cid = r.contractor.id;
         CZ.list = null;
@@ -16728,7 +16812,12 @@
           : '<button class="bp sm ghost" id="ct-fix">Уточнить объем и сумму</button>' +
             (t.act
               ? '<div class="ct-frozen">Если изменить сумму, акт аннулируется: он составлен на прежнюю.</div>'
-              : '')) +
+              : (t.invoice
+                /* У ИП акта нет, и сумму сверяет его счет. Менять деньги после счета
+                   можно, но платеж встанет до исправленного — об этом надо сказать
+                   здесь, а не на воротах выплаты. */
+                ? '<div class="ct-frozen">Если изменить сумму, счет перестанет совпадать с заданием — попросите исправленный.</div>'
+                : '')) ) +
       '</div>';
 
     /* Акт. Документ, а не отметка: у него свой номер, дата и снимок условий, и
@@ -16805,9 +16894,10 @@
               '</div>'
             : '<div class="ct-act">' +
                 '<div class="ct-act-h"><b>Счета еще нет</b></div>' +
-                '<div class="ct-act-why">Банку нужно основание платежа, поэтому без счета ' +
-                  'выплата не пройдет. Исполнителю ушла просьба прислать его в кабинете; ' +
-                  'если прислал в переписку — приложите сами.</div>' +
+                '<div class="ct-act-why">Счет — единственное основание платежа ИП: акта ' +
+                  'у него нет, работу закрывает оплата счета. Без счета выплата не ' +
+                  'пройдет. Исполнителю ушла просьба прислать его в кабинете; если ' +
+                  'прислал в переписку — приложите сами.</div>' +
                 '<div class="ct-acts"><button class="bp sm ghost" id="ct-inv-add">' +
                   'Приложить счет</button></div></div>') +
         '</div>';
@@ -16927,7 +17017,12 @@
                               amount: t.act ? t.act.amount : t.amount, act: t.act,
                               contractor: p });
         }
-        if (to === 'act_signed' && t.payout) return openPayCancel(t.payout.id);
+        /* Отмена выплаты: у самозанятого задание возвращается в «акт подписан», у ИП —
+           в «результат принят» (акта у него нет). Оба шага это отмена платежа, а не
+           шаг назад по цепочке. */
+        if (t.payout && (to === 'act_signed' || (to === 'approved' && !t.act))) {
+          return openPayCancel(t.payout.id);
+        }
         // Возврат из акта — это аннулирование документа, и оно всегда с причиной.
         if (to === 'approved' && t.act) {
           return openCtReason(t.id, to, 'Почему аннулируем акт?');
@@ -17018,22 +17113,30 @@
      Сумму подставляем из акта: платят ровно то, что подписано, и расхождение видно
      сразу под полями, а не на воротах выплаты. */
   function openCtInvoice(t, inv) {
-    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
-    var today = new Date().toISOString().slice(0, 10);
+    /* С чем сверяем сумму. У самозанятого это акт, у ИП акта нет вовсе — там
+       согласованная цифра живет в задании, и ее же спрашивают ворота выплаты. */
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100
+                    : (Number(t.amount) > 0 ? Math.round(Number(t.amount) * 100) / 100 : null);
     openSheet(inv ? 'Исправить счет' : 'Счет от ИП',
-      'Номер и дату берем из самого счета: по ним бухгалтер сделает платежку, и по ним ' +
-      'же потом искать платеж в выписке.', [
-      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
-      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
-      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      'Приложите файл счета — номер, дату и сумму система прочитает из него сама. ' +
+      'Поля ниже заполняйте, только если в файле их не разобрать или надо поправить.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
       var num = (v.num || '').trim();
       var sum = Number(v.sum);
-      if (!num) return 'Укажите номер счета';
-      if (!v.date) return 'Укажите дату счета';
-      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
-      var body = { number: num, issued_on: v.date, amount: sum };
+      /* Без файла читать нечего — тогда поля обязательны, как раньше. С файлом хватает
+         его одного: чего в нем не нашлось, сервер назовет словами. */
+      if (!v.file && !(inv && inv.has_file)) {
+        if (!num) return 'Приложите файл счета или впишите его номер';
+        if (!v.date) return 'Укажите дату счета';
+        if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      }
+      if (v.sum && !(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num || null, issued_on: v.date || null,
+                   amount: sum > 0 ? sum : null };
       if (v.file) {
         body.file_name = v.file.name;
         body.file_mime = v.file.mime;
@@ -17049,12 +17152,14 @@
         .catch(function (e) { el('sh-err').textContent = e.message; });
       return null;
     }, function (v) {
-      // расхождение с актом показываем под полями: на воротах выплаты оно станет
-      // отказом, и узнать о нем лучше сейчас
+      // расхождение показываем под полями: на воротах выплаты оно станет отказом, и
+      // узнать о нем лучше сейчас. Поле пустое — молчим: сумму еще прочитает сервер.
       var s = Math.round(Number(v.sum || 0) * 100) / 100;
-      if (due === null) return '';
-      return s === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
-        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽. Платить будем по акту';
+      if (due === null || !v.sum) return '';
+      var what = t.act ? 'актом' : 'заданием';
+      return s === due ? 'Сходится с ' + what + ': <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с ' + what + '</b>: там ' + ctMoney(due) + ' ₽. ' +
+          (t.act ? 'Платить будем по акту' : 'На такой счет выплата не пройдет');
     }, 'Самозанятые', inv ? 'Сохранить' : 'Приложить');
   }
 
@@ -17267,8 +17372,11 @@
      отправляют, а не рассматривают в интерфейсе CRM. */
   var DC = { items: null, err: '', q: '', kind: 'all', archived: false,
              who: '', whoName: '', _t: null };
-  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['receipt', 'Чеки'],
-                  ['contract', 'Договоры'],
+  /* Счета стоят рядом с актами, а не в конце: у исполнителя-ИП ни договора, ни акта
+     нет вовсе, и счет для него единственная бумага, доказывающая расход. Без вкладки
+     раздел по такому человеку выглядел бы пустым, хотя деньги ему уходили. */
+  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['invoice', 'Счета'],
+                  ['receipt', 'Чеки'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
   // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
@@ -17276,8 +17384,9 @@
   var RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
                 signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off',
-                none: 'ct-draft', sent: 'ct-wait' };
-  var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc' };
+                none: 'ct-draft', sent: 'ct-wait', live: 'ct-wait' };
+  var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc',
+                  invoice: 'coins' };
 
   function rcpLoad(cb) {
     api('/admin/api/contractor-receipts').then(function (r) {
@@ -17666,9 +17775,13 @@
     }).catch(function () { PY.hist = PY.hist || []; if (state.page === 'czpay') renderAll(); });
   }
   function pyRows(tab) {
+    /* Дошло ли задание до денег, решает СЕРВЕР полем ready_stage: у самозанятого это
+       подписанный акт, у исполнителя-ИП — принятый результат (акта у него нет, платим
+       по счету). По имени статуса делить тут нельзя — это была бы вторая копия правила,
+       и «результат принят» у предпринимателя висел бы во «Ждут документов» навсегда. */
     var rows = (PY.reg && PY.reg.rows) || [];
     return rows.filter(function (r) {
-      return tab === 'ready' ? r.status === 'act_signed' : r.status !== 'act_signed';
+      return tab === 'ready' ? !!r.ready_stage : !r.ready_stage;
     });
   }
   /* Проверки в строке: пройденные молчат, непройденные объясняют себя. Семь зеленых
@@ -17900,7 +18013,7 @@
     return '<span class="rep-num" data-l="' + label + '">' + repMoney(val) + '</span>';
   }
   function repRow(r) {
-    // «К выплате» (принято актом, деньги еще не ушли) — самое действие: держим чипом
+    // «К выплате» (принято документом, деньги еще не ушли) — самое действие: держим чипом
     // у имени, а не отдельной колонкой, чтобы таблица не разрослась.
     var due = r.due > 0
       ? '<span class="rep-due">к выплате ' + repMoney(r.due) + '</span>' : '';
@@ -17912,7 +18025,7 @@
       '<span class="rep-name">' + esc(r.full_name) +
         (r.job ? '<span class="rep-job">' + esc(r.job) + '</span>' : '') +
         flag + due + '</span>' +
-      repCol('Назначено', r.plan) + repCol('Акты', r.acts) + repCol('Выплачено', r.paid) +
+      repCol('Назначено', r.plan) + repCol('Принято', r.acts) + repCol('Выплачено', r.paid) +
       '<span class="rep-num rep-left' + (r.left > 0 ? ' hot' : '') + '" data-l="Остаток">' +
         repMoney(r.left) + '</span>' +
       '</div>';
@@ -17936,13 +18049,17 @@
       : (!rows.length
         ? '<div class="empty">Исполнителей пока нет. Отчет наполнится, когда заведете людей, начнете ставить задания, подписывать акты и платить.</div>'
         : rows.map(function (r) { return repRow(r); }).join(''));
-    var hint = 'Назначено — сумма заданий, акты — подписанные акты, выплачено — проведенные ' +
-      'выплаты, остаток — назначено минус выплачено. Месяц режет факт по датам. Нажмите на ' +
-      'строку, чтобы открыть карточку исполнителя.';
+    /* «Принято» считает документ, которым закрыта работа: у самозанятого это подписанный
+       акт, у исполнителя-ИП — его счет (акта у него нет). Сервер складывает оба в одну
+       цифру: вопрос «сколько работы принято» один, а бумага под ней у видов разная. */
+    var hint = 'Назначено — сумма заданий, принято — закрытая документом работа ' +
+      '(акт у самозанятого, счет у ИП), выплачено — проведенные выплаты, остаток — ' +
+      'назначено минус выплачено. Месяц режет факт по датам. Нажмите на строку, чтобы ' +
+      'открыть карточку исполнителя.';
     view.innerHTML =
       '<div class="mo-stats">' +
         repTile('Назначено', t.plan) +
-        repTile('Принято актами', t.acts) +
+        repTile('Принято документом', t.acts) +
         repTile('Выплачено', t.paid) +
         repTile('Остаток', t.left, true) +
       '</div>' +
@@ -17953,7 +18070,7 @@
         '<div class="list-quick">' + chips + '</div>' +
         '<div class="trow rep-grid thead">' +
           '<span class="th">Исполнитель</span>' +
-          '<span class="th r">Назначено</span><span class="th r">Акты</span>' +
+          '<span class="th r">Назначено</span><span class="th r">Принято</span>' +
           '<span class="th r">Выплачено</span><span class="th r">Остаток</span>' +
         '</div>' + body +
       '</div>';
@@ -18523,7 +18640,7 @@
      Двум дверям в одну комнату нельзя проверять разное: под актом должна стоять его
      подпись под тем, что он действительно мог сделать. */
 
-  var MW = { sub: 'active', tasks: null, counts: null, err: '',
+  var MW = { sub: 'active', tasks: null, counts: null, err: '', kind: '',
              openId: null, detail: {}, busy: false, period: 'week', plan: null, planErr: '',
              acts: null, actsErr: '', actFilter: 'sign',
              receipts: null, rcpErr: '',
@@ -18623,14 +18740,15 @@
     if (MW.counts || MW.err) return;
     MW.counts = {};   // чтобы не запросить дважды, пока идет ответ
     mwGet('').then(function (r) {
-      MW.counts = r.counts || {}; mwDone();
+      MW.counts = r.counts || {}; MW.kind = r.kind || ''; mwDone();
     }).catch(function (e) {
       MW.counts = null; MW.err = e.message; mwDone();
     });
   }
   function mwLoadHome() {
     mwGet('/home').then(function (r) {
-      MW.home = r; MW.counts = r.counts || MW.counts; MW.homeErr = ''; mwDone();
+      MW.home = r; MW.counts = r.counts || MW.counts; MW.kind = r.kind || MW.kind;
+      MW.homeErr = ''; mwDone();
     }).catch(function (e) {
       MW.home = { soon: [] }; MW.homeErr = e.message; mwDone();
     });
@@ -18918,7 +19036,9 @@
     view.innerHTML =
       (acts.length ? '<div class="card listcard"><div class="list-quick">' + af + '</div></div>' : '') +
       (!acts.length
-        ? '<div class="card"><div class="empty">Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.</div></div>'
+        ? '<div class="card"><div class="empty">' + (MW.kind === 'ip'
+            ? 'Актов у вас не будет: мы платим по вашему счету, и его оплата и есть приемка работы. Счет прикладывается в самом задании.'
+            : 'Актов пока нет. Акт появляется, когда менеджер принял результат задания: вы подписываете его кодом с рабочей почты, и после обеих подписей идет выплата.') + '</div></div>'
         : (!shown.length
           ? '<div class="card"><div class="empty">' + (MW.actFilter === 'sign'
               ? 'Все акты подписаны — от вас сейчас ничего не ждут.'
@@ -19162,21 +19282,26 @@
      ручка та же с точностью до двери (`/admin/api/my/cz/...`): правила приема счета
      живут на сервере в одном месте, иначе две двери начнут проверять разное. */
   function openMwInvoice(t, inv) {
-    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
-    var today = new Date().toISOString().slice(0, 10);
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100
+                    : (Number(t.amount) > 0 ? Math.round(Number(t.amount) * 100) / 100 : null);
     openSheet(inv ? 'Исправить счет' : 'Счет на оплату',
-      'Номер и дату берем из вашего счета — по ним пройдет платеж.', [
-      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
-      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
-      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      'Пришлите файл счета — номер, дату и сумму мы прочитаем из него сами. Поля ниже ' +
+      'нужны, только если в файле их не разобрать.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
       var num = (v.num || '').trim();
       var sum = Number(v.sum);
-      if (!num) return 'Укажите номер счета';
-      if (!v.date) return 'Укажите дату счета';
-      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
-      var body = { number: num, issued_on: v.date, amount: sum };
+      if (!v.file && !(inv && inv.has_file)) {
+        if (!num) return 'Приложите файл счета или впишите его номер';
+        if (!v.date) return 'Укажите дату счета';
+        if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      }
+      if (v.sum && !(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num || null, issued_on: v.date || null,
+                   amount: sum > 0 ? sum : null };
       if (v.file) {
         body.file_name = v.file.name;
         body.file_mime = v.file.mime;
@@ -19192,9 +19317,10 @@
       return null;
     }, function (v) {
       var sm = Math.round(Number(v.sum || 0) * 100) / 100;
-      if (due === null) return '';
-      return sm === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
-        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽';
+      if (due === null || !v.sum) return '';
+      var what = t.act ? 'актом' : 'заданием';
+      return sm === due ? 'Сходится с ' + what + ': <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с ' + what + '</b>: там ' + ctMoney(due) + ' ₽';
     }, 'Моя работа', inv ? 'Сохранить' : 'Отправить');
   }
 
@@ -22279,15 +22405,16 @@
   }
 
   // Когда факт по листу привязан к самозанятому, сервер сам проводит выплату по его
-  // готовым заданиям (акт подписан) и отдаёт итог в r.settle. Показываем его человеку:
-  // «оплачено N» и «ждёт акт M» — иначе он не поймёт, что строка листа ещё и заплатила.
+  // готовым заданиям (у самозанятого акт подписан, у ИП есть счёт) и отдаёт итог в
+  // r.settle. Показываем его человеку: «оплачено N» и «ждут документа M» — иначе он не
+  // поймёт, что строка листа ещё и заплатила.
   function finSettleMsg(r, base) {
     var s = r && r.settle;
     if (!s) return base;
     var parts = [];
     if (s.paid) parts.push('оплачено заданий: ' + s.paid);
     if (s.pending && s.pending.length) parts.push('не прошло: ' + s.pending.length);
-    if (s.waiting_act) parts.push('ждут акта: ' + s.waiting_act);
+    if (s.waiting_act) parts.push('ждут документа: ' + s.waiting_act);
     return parts.length ? base + '. ' + parts.join(', ') : base;
   }
 
@@ -23431,6 +23558,66 @@
     if (s.unit === 'неделя') return 'раз в ' + n + ' ' + plural(n, 'неделю', 'недели', 'недель');
     if (s.unit === 'месяц') return 'раз в ' + n + ' ' + plural(n, 'месяц', 'месяца', 'месяцев');
     return 'раз в ' + n + ' ' + plural(n, 'год', 'года', 'лет');
+  }
+
+  /* Справочник банков: лимиты без комиссии и правила выплат по каждому банку. Данные
+     статичные (их утвердил Роман 12.10.2026), своего запроса к серверу у страницы нет —
+     это правило, а не период. Живой счетчик «сколько прошло за месяц» будет отдельно,
+     когда подключим факт из банков (API, отдельная задача): сейчас в CRM выплаты по
+     банкам не разложены, и половинчатый счетчик показал бы запас, которого нет. */
+  var FIN_BANKS = [
+    { name: 'ВТБ', limit: '30 платежей', unit: 'в месяц без комиссии',
+      use: 'Выплаты на ИП и ООО, выводы на карту ВТБ Виталия (фонды, дивиденды, мотивация).',
+      rules: [
+        'Первые 30 платежей в месяц идут без комиссии.',
+        'С карты ВТБ Виталия оплачиваются фонды, дивиденды и мотивация команды.',
+      ],
+      over: '60 ₽ за каждый платеж сверх 30 в месяц.' },
+    { name: 'Сбер', limit: '500 000 ₽', unit: 'в месяц без комиссии',
+      use: 'Выплаты самозанятым и физическим лицам.',
+      rules: [
+        'До 500 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'С 1 октября пакет «Лёгкий старт»: обслуживание бесплатное при поступлениях ' +
+          'от 50 000 ₽ в месяц, иначе 490 ₽ в месяц.',
+      ],
+      over: '2,5% на платежи в Сбер, 3,5% на платежи в другие банки.',
+      note: 'Каждый месяц заводим <b>50 000 ₽ с ВТБ на Сбер</b> — чтобы поступлений ' +
+        'набралось от 50 000 ₽ и не было абонентской платы 490 ₽.' },
+    { name: 'Альфа', limit: '1 000 000 ₽', unit: 'в месяц без комиссии',
+      use: 'Выплаты самозанятым и физическим лицам.',
+      rules: [
+        'До 1 000 000 ₽ в месяц переводов самозанятым и физлицам без комиссии.',
+        'Запас больше, чем у Сбера, — крупные выплаты удобнее вести отсюда.',
+      ],
+      over: '2,5% + 99 ₽ внутри Альфы, 2,8% + 99 ₽ на платежи в другие банки.' },
+  ];
+
+  function renderFinBanks(view) {
+    var tiles = FIN_BANKS.map(function (b) {
+      return { label: b.name, value: b.limit, sub: b.unit };
+    });
+    // три банка — раскладка statbar на 3 колонки (по умолчанию 4, тогда остаётся
+    // пустая ячейка и колонки уже, крупные цифры лимитов наезжают друг на друга).
+    var cards = FIN_BANKS.map(function (b) {
+      return '<div class="fb-card">' +
+        '<div class="fb-top"><span class="fb-name">' + esc(b.name) + '</span>' +
+          '<span class="fb-lim">' + esc(b.limit) + ' · ' + esc(b.unit) + '</span></div>' +
+        '<div class="fb-for">' + esc(b.use) + '</div>' +
+        '<ul class="fb-rules">' + b.rules.map(function (r) {
+          return '<li>' + esc(r) + '</li>';
+        }).join('') + '</ul>' +
+        (b.over ? '<div class="fb-over"><span>Сверх лимита</span> ' + esc(b.over) + '</div>' : '') +
+        (b.note ? '<div class="fb-rule">' + b.note + '</div>' : '') +
+      '</div>';
+    }).join('');
+    view.innerHTML =
+      '<div class="fb-wrap">' +
+        statBar(tiles, 'three') +
+        '<div class="fb-grid">' + cards + '</div>' +
+        '<p class="fb-note">Лимиты без комиссии по каждому банку. Счетчик «сколько уже ' +
+          'прошло за месяц и сколько осталось до лимита» подключим отдельно, когда банки ' +
+          'начнут отдавать факт по платежам.</p>' +
+      '</div>';
   }
 
   function renderFinRefs(view) {
