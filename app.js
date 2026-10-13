@@ -3495,9 +3495,8 @@
       // База знаний — тоже правило, а не период: ветка до !per, иначе повисло бы
       // «Загружаю ведомость».
       else if (state.page === 'finkb') {
-        ph = 'Правила, по которым ведем ведомость: как считаем налог, когда пополняем ' +
-          'фонд, чего не допускать перед закрытием. Отсюда же их читает агент-финансист, ' +
-          'поэтому правка видна и людям, и ему сразу.';
+        ph = 'Правила, по которым ведем ведомость. Отсюда же их читает ' +
+          'агент-финансист, поэтому правка видна сразу и команде, и ему.';
       }
       // План отдела без своего листа — тоже до !per, месяц календарный.
       else if (state.page === 'finplandept') {
@@ -3602,6 +3601,8 @@
   function renderViewBody() {
     var view = el('view');
     if (!view) return;
+    /* Режим чтения правила живет только на экране базы знаний (см. renderFinKb). */
+    if (state.page !== 'finkb') document.body.classList.remove('fkb-reading');
     if (noSections()) {
       view.innerHTML = '<div class="card"><div class="empty">Разделов для вашей учетки пока нет. ' +
         'Напишите руководителю — доступ выдают в разделе «Команда».</div></div>';
@@ -23727,9 +23728,11 @@
      статья целиком. Список карточек тут был бы хуже — правило читают подряд и
      ссылаются на соседнее, а карточки заставляют возвращаться в общий список
      после каждой главы. */
-  var KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false };
+  /* pane — какая половина книги занимает телефон. На широком экране обе видны
+     всегда, и это поле там ни на что не влияет. */
+  var KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false, pane: 'list' };
 
-  function kbReset() { KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false }; }
+  function kbReset() { KB = { items: null, cur: null, q: '', err: false, edit: null, hist: null, busy: false, pane: 'list' }; }
 
   function kbLoad() {
     var q = KB.q;
@@ -23737,28 +23740,35 @@
       .then(function (r) {
         KB.items = r.items || [];
         KB.err = false;
-        /* Открываем первую главу сама: пустая правая половина на входе читается
-           как «тут ничего нет», хотя база знаний полна. */
-        if (!KB.cur && KB.items.length && !q) kbOpen(KB.items[0].slug);
+        /* Открываем первую главу сами — но только на широком экране, где рядом
+           стоит правая половина: пустая, она читается как «тут ничего нет». На
+           узком половина одна, и подкрашенная строка означала бы, что человек
+           уже куда-то заходил. Граница та же, что у верстки (style.css). */
+        if (!KB.cur && KB.items.length && !q && window.innerWidth > 960) kbOpen(KB.items[0].slug, true);
         else renderAll();
       })
       .catch(function () { KB.err = true; KB.items = []; renderAll(); });
   }
 
-  function kbOpen(slug) {
+  /* quiet — открыть главу, не уводя телефон из оглавления: так подхватывается
+     первая глава на входе, чтобы на широком экране правая половина не пустовала. */
+  function kbOpen(slug, quiet) {
     KB.edit = null; KB.hist = null;
     api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=finance')
       .then(function (r) {
-        KB.cur = r.article; renderAll();
-        /* На телефоне оглавление и текст идут друг под другом: без прокрутки клик
-           по главе выглядит так, будто ничего не произошло — статья открылась под
-           списком, за экраном. */
-        if (window.innerWidth <= 760) {
-          var m = document.querySelector('.kb-main');
-          if (m) m.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        KB.cur = r.article;
+        if (!quiet) { KB.pane = 'doc'; kbTop(); }
+        renderAll();
       })
       .catch(function () { KB.cur = null; renderAll(); });
+  }
+
+  /* Телефон: половины подменяют друг друга на месте, поэтому страницу надо
+     вернуть к началу — иначе статья открывается с середины прошлого списка. */
+  function kbTop() {
+    var sc = document.querySelector('.list-body');
+    if (sc) sc.scrollTop = 0;
+    if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
   }
 
   /* Разметка статьи. Берем ту же легкую разметку, что в чате (mdMsg), но статье
@@ -23773,20 +23783,20 @@
       if (!line.trim()) { if (list) { out.push('</' + list + '>'); list = null; } return; }
       if ((m = line.match(/^\s{0,3}(#{2,4})\s+(.+)$/))) {
         if (list) { out.push('</' + list + '>'); list = null; }
-        out.push('<h4 class="kb-h">' + esc(m[2]) + '</h4>'); return;
+        out.push('<h4 class="fkb-h">' + esc(m[2]) + '</h4>'); return;
       }
       if ((m = line.match(/^\s{0,3}>\s?(.+)$/))) {
         if (list) { out.push('</' + list + '>'); list = null; }
-        out.push('<div class="kb-rule">' + kbInline(m[1]) + '</div>'); return;
+        out.push('<div class="fkb-rule">' + kbInline(m[1]) + '</div>'); return;
       }
       if ((m = line.match(/^\s{0,3}\d+[.)]\s+(.+)$/))) {
         if (list && list !== 'ol') { out.push('</' + list + '>'); list = null; }
-        if (!list) { out.push('<ol class="kb-ol">'); list = 'ol'; }
+        if (!list) { out.push('<ol class="fkb-ol">'); list = 'ol'; }
         out.push('<li>' + kbInline(m[1]) + '</li>'); return;
       }
       if ((m = line.match(/^\s{0,3}[-*•]\s+(.+)$/))) {
         if (list && list !== 'ul') { out.push('</' + list + '>'); list = null; }
-        if (!list) { out.push('<ul class="kb-ul">'); list = 'ul'; }
+        if (!list) { out.push('<ul class="fkb-ul">'); list = 'ul'; }
         out.push('<li>' + kbInline(m[1]) + '</li>'); return;
       }
       if (list) { out.push('</' + list + '>'); list = null; }
@@ -23829,7 +23839,10 @@
   function kbArchive(id, on) {
     api('/admin/api/kb/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ archived: on }) })
-      .then(function () { KB.cur = null; KB.items = null; kbLoad(); showToast(on ? 'Убрал в архив' : 'Вернул в работу'); })
+      .then(function () {
+        KB.cur = null; KB.items = null; KB.pane = 'list';
+        kbLoad(); showToast(on ? 'Убрал в архив' : 'Вернул в работу');
+      })
       .catch(function () { showToast('Не получилось, попробуй еще раз'); });
   }
 
@@ -23839,84 +23852,111 @@
       .catch(function () { showToast('История не открылась'); });
   }
 
+  /* Ожидание рисуем каркасом этого экрана: общий dashSkeleton обещает четыре
+     плитки метрик, которых тут не бывает, а на телефоне сплющивает их в полосу. */
+  function kbSkeleton() {
+    var rows = '';
+    for (var i = 0; i < 7; i++) {
+      rows += '<div class="fkb-sk-i"><span class="shim"></span><span class="shim"></span></div>';
+    }
+    return '<div class="fkb-wrap on-list"><div class="fkb-nav">' + rows + '</div>' +
+      '<div class="fkb-main"><div class="fkb-sk-t shim"></div><div class="fkb-sk-p shim"></div>' +
+      '<div class="fkb-sk-p shim"></div><div class="fkb-sk-p short shim"></div></div></div>';
+  }
+
   function renderFinKb(view) {
-    if (KB.items === null) { view.innerHTML = dashSkeleton(); kbLoad(); return; }
+    /* Подстрочник раздела на телефоне съедает треть экрана над текстом правила,
+       а во время чтения он уже не нужен — прячем его на время статьи (стиль
+       .kb-reading), на широком экране он остается всегда. */
+    document.body.classList.toggle('fkb-reading', KB.pane === 'doc');
+    if (KB.items === null) { view.innerHTML = kbSkeleton(); kbLoad(); return; }
     var canEdit = can('finmodel_edit');
 
     var nav = KB.items.map(function (a) {
       var on = KB.cur && KB.cur.slug === a.slug;
-      return '<button class="kb-nav-i' + (on ? ' on' : '') + '" data-kb="' + esc(a.slug) + '">' +
-        '<span class="kb-nav-t">' + esc(a.title) + '</span>' +
-        (a.summary ? '<span class="kb-nav-s">' + esc(a.summary) + '</span>' : '') +
+      return '<button class="fkb-nav-i' + (on ? ' on' : '') + '" data-kb="' + esc(a.slug) + '">' +
+        '<span class="fkb-nav-t">' + esc(a.title) + '</span>' +
+        (a.summary ? '<span class="fkb-nav-s">' + esc(a.summary) + '</span>' : '') +
       '</button>';
     }).join('');
     if (!KB.items.length) {
-      nav = '<div class="kb-nav-empty">' +
-        (KB.q ? 'По запросу ничего нет' : 'Правил пока нет') + '</div>';
+      /* Текст отказа живет и здесь: в одноколоночном режиме правая половина
+         спрятана, и «сервер не ответил» читалось бы как «правил нет». */
+      nav = '<div class="fkb-nav-empty">' +
+        (KB.err ? 'База знаний не отвечает. Обновите страницу.'
+                : (KB.q ? 'По запросу ничего нет' : 'Правил пока нет')) + '</div>';
     }
 
     var right;
     if (KB.edit) {
       right =
-        '<div class="kb-edit">' +
-          '<input id="kb-title" class="al-in kb-in-t" maxlength="200" placeholder="Заголовок правила" value="' +
+        '<div class="fkb-edit">' +
+          '<input id="kb-title" class="al-in fkb-in-t" maxlength="200" placeholder="Заголовок правила" value="' +
             esc(KB.edit.title || '') + '">' +
-          '<input id="kb-sum" class="al-in kb-in-s" maxlength="400" placeholder="Одной строкой: о чем это правило" value="' +
+          '<input id="kb-sum" class="al-in" maxlength="400" placeholder="Одной строкой: о чем это правило" value="' +
             esc(KB.edit.summary || '') + '">' +
-          '<textarea id="kb-body" class="note-ta kb-in-b" rows="22" placeholder="Текст правила. ' +
+          '<textarea id="kb-body" class="note-ta fkb-in-b" rows="22" placeholder="Текст правила. ' +
             'Пустая строка — абзац, ## — подзаголовок, - — список, > — выноска">' +
             esc(KB.edit.body || '') + '</textarea>' +
-          '<div class="kb-edit-act">' +
+          '<div class="fkb-edit-act">' +
             '<button class="bp" id="kb-save">Сохранить</button>' +
             '<button class="bp ghost" id="kb-cancel">Отмена</button>' +
-            '<span class="kb-hint">Правка видна команде и агенту сразу. Прошлая редакция останется в истории.</span>' +
+            '<span class="fkb-hint">Правка видна команде и агенту сразу. Прошлая редакция останется в истории.</span>' +
           '</div>' +
         '</div>';
     } else if (!KB.cur) {
-      right = '<div class="kb-doc"><div class="empty">' +
-        (KB.err ? 'База знаний не отвечает. Обнови страницу.' : 'Выбери правило слева') +
+      right = '<div class="fkb-doc"><div class="empty">' +
+        (KB.err ? 'База знаний не отвечает. Обновите страницу.'
+                : 'Выберите правило в оглавлении') +
         '</div></div>';
     } else {
       var a = KB.cur;
       var hist = '';
       if (KB.hist) {
-        hist = '<div class="kb-hist"><div class="kb-cap">Прошлые редакции</div>' +
+        hist = '<div class="fkb-hist"><div class="fkb-cap">Прошлые редакции</div>' +
           (KB.hist.length ? KB.hist.map(function (h) {
-            return '<div class="kb-hist-i"><div class="kb-hist-m">' + fmtWhen(h.at) +
+            return '<div class="fkb-hist-i"><div class="fkb-hist-m">' + fmtWhen(h.at) +
               (h.by_name ? ' · ' + esc(h.by_name) : '') + '</div>' +
-              '<div class="kb-hist-b">' + kbMd(h.body) + '</div></div>';
-          }).join('') : '<div class="kb-hist-m">Правок еще не было</div>') +
+              '<div class="fkb-hist-b">' + kbMd(h.body) + '</div></div>';
+          }).join('') : '<div class="fkb-hist-m">Правок еще не было</div>') +
         '</div>';
       }
       right =
-        '<div class="kb-doc">' +
-          '<div class="kb-doc-h">' +
-            '<h3 class="kb-t">' + esc(a.title) + '</h3>' +
-            (canEdit ? '<div class="kb-doc-act">' +
+        '<div class="fkb-doc">' +
+          '<div class="fkb-doc-h">' +
+            '<h3 class="fkb-t">' + esc(a.title) + '</h3>' +
+            (canEdit ? '<div class="fkb-doc-act">' +
               '<button class="qchip" id="kb-ed">Править</button>' +
               '<button class="qchip" id="kb-hi">История</button>' +
               '<button class="qchip" id="kb-arch">' + (a.archived ? 'Вернуть' : 'В архив') + '</button>' +
             '</div>' : '') +
           '</div>' +
-          (a.summary ? '<div class="kb-sum">' + esc(a.summary) + '</div>' : '') +
-          '<div class="kb-body">' + kbMd(a.body) + '</div>' +
-          '<div class="kb-meta">Последняя правка ' + fmtWhen(a.updated_at) +
+          (a.summary ? '<div class="fkb-sum">' + esc(a.summary) + '</div>' : '') +
+          '<div class="fkb-body">' + kbMd(a.body) + '</div>' +
+          '<div class="fkb-meta">Последняя правка ' + fmtWhen(a.updated_at) +
             (a.updated_by_name ? ' · ' + esc(a.updated_by_name) : '') + '</div>' +
           hist +
         '</div>';
     }
 
     view.innerHTML =
-      '<div class="kb-wrap">' +
-        '<div class="kb-nav">' +
-          '<div class="kb-search">' +
+      '<div class="fkb-wrap' + (KB.pane === 'doc' ? ' on-doc' : ' on-list') + '">' +
+        '<div class="fkb-nav">' +
+          '<div class="fkb-search">' +
             '<input id="kb-q" class="al-in" placeholder="Найти правило" value="' + esc(KB.q) + '">' +
           '</div>' +
-          (canEdit ? '<button class="qchip kb-add" id="kb-new">+ правило</button>' : '') +
-          '<div class="kb-cap">Главы</div>' +
+          (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ правило</button>' : '') +
+          '<div class="fkb-cap">Главы</div>' +
           nav +
         '</div>' +
-        '<div class="kb-main">' + right + '</div>' +
+        '<div class="fkb-main">' +
+          /* Во время правки возврата нет: это самая заметная кнопка над формой, и
+             одним касанием она стирала бы набранный черновик. Выход из правки —
+             «Сохранить» или «Отмена». */
+          (KB.edit ? '' :
+            '<button class="bp sm ghost fkb-back" id="kb-back">' + ic('go', 13) + 'Все главы</button>') +
+          right +
+        '</div>' +
       '</div>';
 
     var q = el('kb-q');
@@ -23927,21 +23967,38 @@
         KB.qTimer = setTimeout(function () {
           var v = q.value.trim();
           if (v === KB.q) return;
-          KB.q = v; KB.items = null; kbLoad();
+          KB.q = v; KB.items = null; KB.focusQ = true; kbLoad();
         }, 300);
       };
+      /* Ответ сервера перерисовывает половину целиком, и поле исчезает вместе с
+         кареткой — человек на телефоне теряет и клавиатуру посреди слова. Тот же
+         прием, что у поиска по вложениям (#acc-q). */
+      if (KB.focusQ) {
+        KB.focusQ = false;
+        q.focus(); q.setSelectionRange(q.value.length, q.value.length);
+      }
     }
     view.querySelectorAll('[data-kb]').forEach(function (b) {
       b.onclick = function () { kbOpen(b.getAttribute('data-kb')); };
     });
-    if (el('kb-new')) el('kb-new').onclick = function () { KB.edit = { title: '', summary: '', body: '' }; renderAll(); };
+    if (el('fkb-back')) el('fkb-back').onclick = function () { KB.pane = 'list'; KB.edit = null; kbTop(); renderAll(); };
+    if (el('kb-new')) el('kb-new').onclick = function () {
+      KB.edit = { title: '', summary: '', body: '' }; KB.pane = 'doc'; kbTop(); renderAll();
+    };
     if (el('kb-ed')) el('kb-ed').onclick = function () {
-      KB.edit = { id: KB.cur.id, title: KB.cur.title, summary: KB.cur.summary, body: KB.cur.body }; renderAll();
+      KB.edit = { id: KB.cur.id, title: KB.cur.title, summary: KB.cur.summary, body: KB.cur.body };
+      KB.pane = 'doc'; renderAll();
     };
     if (el('kb-hi')) el('kb-hi').onclick = function () { kbHistory(KB.cur.id); };
     if (el('kb-arch')) el('kb-arch').onclick = function () { kbArchive(KB.cur.id, !KB.cur.archived); };
     if (el('kb-save')) el('kb-save').onclick = kbSave;
-    if (el('kb-cancel')) el('kb-cancel').onclick = function () { KB.edit = null; renderAll(); };
+    if (el('kb-cancel')) el('kb-cancel').onclick = function () {
+      /* После «+ правило» открытой главы нет, и остаться в половине статьи значит
+         упереться в пустой экран — возвращаем в оглавление. */
+      KB.edit = null;
+      if (!KB.cur) { KB.pane = 'list'; kbTop(); }
+      renderAll();
+    };
   }
 
   function renderFinBanks(view) {
