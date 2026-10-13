@@ -76,7 +76,7 @@
     leads: [], page: 'dash', seg: 'queue', prSeg: 'all', viewMode: 'table',
     q: '', sort: null, filters: { funnel: '', period: '' }, quick: '',
     dashPeriod: '', dashFrom: '', dashTo: '',
-    pathSel: null, pathPeriod: '', mkDays: 30, gfDays: 0,
+    pathSel: null, pathPeriod: '', pathGran: 'week', pathShift: 0, pathStep: 'diagnosed', pathProd: null, _pathRep: null, mkDays: 30, gfDays: 0,
     mkTab: 'dash', _mkDash: null, // дашборд маркетинга: вкладка и кэш ответа
     pfMonth: '', _pf: null, _pfAi: null, // план-факт: выбранный месяц, цифры, разбор
     laSrc: 'total', _launch: null, _laEd: null, // декомпозиция запуска: лист, данные файла, правки на экране
@@ -142,7 +142,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab', 'pathGran'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -158,6 +158,7 @@
         gtFrom: state.gtFrom || '', gtTo: state.gtTo || '',
         ganttOpen: state.ganttOpen || {},
         mxTab: state.mxTab || 'soon',
+        pathGran: state.pathGran || 'week',
       }));
     } catch (e) {}
   }
@@ -302,6 +303,18 @@
        не виден во вкладке «Клиенты» — она фильтрует по этому же признаку. */
     { key: 'client',    label: 'Стали клиентами',       hint: 'есть оплата в карточке',  test: function (l) { return !!l.paid; } },
   ];
+  /* Фильтр «Этап» в «Людях»: «дошел до шага», а не «стоит на нем сейчас». Статус
+     лида — последний шаг, и человек, прошедший диагностику и потом записавшийся,
+     из «прошел диагностику» выпадал: фильтр показывал меньше людей, чем было
+     (Лиана 12.10.2026). «Без анкеты» и «вручную» — состояния, а не шаги, их сверяем
+     как раньше. */
+  function funnelHit(l, f) {
+    var diag = l.status !== 'visited' && !!(l.stages && l.stages.diagnostics === 'done');
+    if (f === 'booked') return !!l.booking;
+    if (f === 'diagnosed') return diag;
+    if (f === 'submitted') return l.status === 'submitted' || l.status === 'diagnosed' || diag;
+    return l.status === f;
+  }
   function hasEv(l, t) { return (l.events || []).indexOf(t) !== -1; }
 
   /* ── иконки ───────────────────────────────────────────── */
@@ -962,7 +975,7 @@
     var qp = quickPred();
     var arr = segBase(seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       if (!inPeriod(l, state.filters.period)) return false;
       if (!qp(l)) return false;
       return true;
@@ -1210,7 +1223,7 @@
 
     var segArr = segBase(state.seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       return inPeriod(l, state.filters.period);
     });
     var total = segArr.length;
@@ -1295,7 +1308,7 @@
     if (!node) return;
     var segArr = segBase(state.seg).filter(function (l) {
       if (!state.showBlank && isBlankVisit(l)) return false;
-      if (state.filters.funnel && l.status !== state.filters.funnel) return false;
+      if (state.filters.funnel && !funnelHit(l, state.filters.funnel)) return false;
       return inPeriod(l, state.filters.period);
     });
     var total = segArr.length, shown = segLeads(state.seg).length;
@@ -2846,16 +2859,22 @@
           renderTopbar(); renderView();
         });
       });
+    } else if (state.page === 'path' && !can('clients')) {
+      // без права на клиентов «Путь» показывает заглушку — вкладкам периодов тут не место
+      tb.innerHTML = '';
     } else if (state.page === 'path') {
-    } else if (state.page === 'path' && can('clients')) {
-      var opts = [['', 'За все время'], ['month', '30 дней'], ['week', '7 дней']];
-      tb.innerHTML = '<nav class="tabs">' + opts.map(function (o) {
-        return '<a class="tab' + (state.pathPeriod === o[0] ? ' on' : '') + '" data-per="' + o[0] + '">' + o[1] + '</a>';
+      /* День / неделя / месяц — счет по дате, когда человек сделал шаг (pathReport).
+         «Где теряем» — прежняя когорта зашедших: кто на каком шаге отвалился. */
+      tb.innerHTML = '<nav class="tabs">' + PATH_GRANS.map(function (o) {
+        return '<a class="tab' + (state.pathGran === o[0] ? ' on' : '') + '" data-gran="' + o[0] + '">' + o[1] + '</a>';
       }).join('') + '</nav>';
       Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
         t.addEventListener('click', function () {
-          state.pathPeriod = t.getAttribute('data-per');
-          renderTopbar(); renderView(); renderSide();
+          var g = t.getAttribute('data-gran');
+          if (g === state.pathGran) return;
+          state.pathGran = g; state.pathShift = 0; state.pathProd = null;
+          saveUi();
+          renderTopbar(); renderHead(); renderView(); renderSide();
         });
       });
     } else if (state.page === 'finance') {
@@ -3045,6 +3064,10 @@
     }
     if (state.page === 'path' && !can('clients')) {
       html = '<div><h2>Путь по платформе</h2></div>';
+    } else if (state.page === 'path' && state.pathGran !== 'lost') {
+      html = '<div><h2>Путь до оплаты</h2>' +
+        '<div class="verdict"><span class="vspark">' + ic('spark', 13) + '</span><span>' +
+        pathVerdict(pathRep()) + '</span></div></div>';
     } else if (state.page === 'path') {
       var steps = funnelData(state.pathPeriod);
       var w2 = worstStep(steps);
@@ -14133,6 +14156,12 @@
             '<input type="file" id="mu-file" multiple ' +
               'accept=".txt,.md,.markdown,.text,.log,.csv,.docx,.pdf" hidden>' +
           '</div>' +
+          // Ссылка на запись нужна там, где автоматический забор слеп: он видит
+          // только тот аккаунт Fathom, чей ключ у нас в секретах, а аккаунтов
+          // два. Плюс запись иногда присылают со стороны, и ключа к ней нет.
+          '<label class="al-f"><span class="al-l">Или ссылка на запись</span>' +
+            '<input id="mu-link" class="al-in" type="url" spellcheck="false" ' +
+              'placeholder="fathom.video/share/..."></label>' +
           '<label class="al-f"><span class="al-l">Или вставь текст</span>' +
             '<textarea id="mu-text" class="al-in al-ta" rows="4" ' +
               'placeholder="Скопируй протокол сюда, если файла нет"></textarea></label>' +
@@ -14201,7 +14230,8 @@
     // человека у экрана, и до сих пор к ним вела только ссылка из бота.
     var drafts = el('mu-drafts');
     var srcLabel = function (d) {
-      return d.source === 'fathom' ? 'Fathom' : d.source === 'text' ? 'текст' : 'файл';
+      return d.source === 'fathom' ? 'Fathom' : d.source === 'link' ? 'по ссылке'
+        : d.source === 'text' ? 'текст' : 'файл';
     };
     api('/admin/api/meetings?status=draft&limit=20').then(function (r) {
       var list = (r && r.imports) || [];
@@ -14237,15 +14267,22 @@
 
     go.addEventListener('click', function () {
       var text = (el('mu-text').value || '').trim();
-      if (!picked.length && text.length < 200) {
-        show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл или вставь текст', true);
+      var link = (el('mu-link').value || '').trim();
+      if (link && !/fathom\.video\/share\//i.test(link)) {
+        show('Жду ссылку на запись Fathom, вида fathom.video/share/...', true);
+        return;
+      }
+      if (!picked.length && !link && text.length < 200) {
+        show(text ? 'Текста мало, разбирать нечего' : 'Выбери файл, вставь ссылку или текст', true);
         return;
       }
       go.disabled = true; go.classList.add('loading');
       // Файлы разбираем по очереди, а не пачкой в один запрос: каждый протокол
       // модель читает отдельно, и на общем куске она начинает путать, кто из
       // какой встречи. Плюс видно, на каком файле мы стоим.
-      var queue = picked.length ? picked.slice() : [{ text: text }];
+      var queue = picked.length ? picked.slice() : [];
+      if (link) queue.push({ link: link, name: 'запись по ссылке' });
+      if (!queue.length) queue.push({ text: text });
       var done = [], failed = [];
       var step = function (i) {
         if (i >= queue.length) {
@@ -14267,14 +14304,21 @@
         var f = queue[i];
         show(queue.length > 1
           ? 'Читаю ' + (i + 1) + ' из ' + queue.length + ': ' + f.name
+          : f.link ? 'Открываю запись и читаю расшифровку, это займет минуту'
           : 'Читаю протокол, это займет полминуты');
-        apiSend('/admin/api/meetings', 'POST',
-          f.data ? { name: f.name, data: f.data } : { text: f.text },
+        apiSend(f.link ? '/admin/api/meetings/from-link' : '/admin/api/meetings', 'POST',
+          f.link ? { url: f.link } : f.data ? { name: f.name, data: f.data } : { text: f.text },
           function (r) {
             if (r && r.import) done.push(r.import);
             step(i + 1);
           },
-          function () { failed.push(f.name || 'текст'); step(i + 1); });
+          // Причину отказа по ссылке говорим словами: «записи нет», «расшифровка
+          // еще не готова» и «не та ссылка» человек чинит по-разному.
+          function (code, e) {
+            var why = e && e.body && e.body.detail;
+            failed.push(f.link && why ? String(why) : (f.name || 'текст'));
+            step(i + 1);
+          });
       };
       step(0);
     });
@@ -21022,19 +21066,55 @@
     // Это либо не занесенные деньги, либо чек не на ту сумму — других способов это
     // заметить у нас нет вовсе.
     var orph = R.orphans || [];
+    var canRcp = can('finmodel_edit');
     if (orph.length) {
       out += '<div class="dc-alert warn"><span class="ic">' + ic('alert', 16) + '</span>' +
         '<span><b>' + orph.length + '</b> ' + plural(orph.length, 'чек', 'чека', 'чеков') +
         ' пробит' + (orph.length > 1 ? 'ы' : '') + ' в кассе, а прихода под ' +
-        (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет: ' +
-        orph.slice(0, 3).map(function (o) {
-          return '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' +
-            esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
-            (o.name ? ', ' + esc(o.name) : '') + '</a>';
-        }).join('; ') + (orph.length > 3 ? ' и еще ' + (orph.length - 3) : '') +
-        '. Либо деньги не занесены, либо чек на другую сумму.</span></div>';
+        (orph.length > 1 ? 'них' : 'него') + ' в ведомости нет. Либо деньги не занесены, ' +
+        'либо чек на другую сумму.' +
+        '<span class="rcp-orph">' + orph.map(function (o) {
+          return '<span class="rcp-o"><a href="' + esc(o.url) + '" target="_blank" ' +
+            'rel="noopener">' + esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
+            (o.name ? ', ' + esc(o.name) : '') + '</a>' +
+            (canRcp ? '<button class="fin-rcp off" data-rcporph="' + esc(o.id) +
+              '">разобрал</button>' : '') + '</span>';
+        }).join('') + '</span></span></div>';
+    }
+    // Разобранные руками не исчезают совсем: иначе отметка «чека нет прихода, и так
+    // надо» со временем спрячет настоящие несведенные деньги. Строка тихая — вопрос по
+    // ним уже закрыт, — но причина и кнопка «вернуть» на месте.
+    var oseen = R.orphans_seen || [];
+    if (oseen.length) {
+      out += '<div class="rcp-seen"><b>' + oseen.length + '</b> ' +
+        plural(oseen.length, 'чек', 'чека', 'чеков') + ' без прихода ' +
+        plural(oseen.length, 'отмечен', 'отмечены', 'отмечены') + ' разобранными: ' +
+        oseen.map(function (o) {
+          return '<span class="rcp-o"><a href="' + esc(o.url) + '" target="_blank" ' +
+            'rel="noopener">' + esc(finDate(o.date)) + ' на ' + esc(finRub(o.amount)) +
+            (o.name ? ', ' + esc(o.name) : '') + '</a>' +
+            (o.note ? ' — ' + esc(o.note) : '') +
+            (canRcp ? '<button class="fin-rcp off" data-rcporph="' + esc(o.id) +
+              '" data-rcpback="1">вернуть</button>' : '') + '</span>';
+        }).join('') + '</div>';
     }
     return out;
+  }
+
+  /* Чек, под который прихода в ведомости нет. Кнопка не правит ни одной цифры — она
+     закрывает вопрос «а где эти деньги», поэтому причину спрашиваем словами. */
+  function finOrphanMark(cid, back) {
+    if (!cid) return;
+    var url = '/admin/api/fin/receipts/orphan/' + encodeURIComponent(cid);
+    if (back) return finDo(url, 'POST', { seen: false }, 'Вернул чек на экран');
+    openSheet('Чек без прихода', 'Отметка не меняет цифры ведомости',
+      [['why', 'text', 'Почему прихода под этот чек нет', '']],
+      function (v, close) {
+        var why = (v.why || '').trim();
+        if (!why) return 'Напишите причину — например, деньги уже учтены строкой Юкассы';
+        close();
+        finDo(url, 'POST', { seen: true, note: why }, 'Отметил: чек разобран');
+      }, null, 'Чек', 'Разобрал');
   }
 
   function finReceiptMark(id, st, cur) {
@@ -21292,9 +21372,15 @@
         finRcpSend(n.getAttribute('data-rcpsend'));
       });
     });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-rcporph]'), function (n) {
+      n.addEventListener('click', function (e) {
+        e.stopPropagation();
+        finOrphanMark(n.getAttribute('data-rcporph'), n.getAttribute('data-rcpback'));
+      });
+    });
     // Ссылка на чек лежит внутри строки, а клик по строке открывает карточку клиента:
     // без этого человек вместо чека попадал бы в карточку.
-    Array.prototype.forEach.call(view.querySelectorAll('.rcp-l a'), function (n) {
+    Array.prototype.forEach.call(view.querySelectorAll('.rcp-l a, .rcp-o a'), function (n) {
       n.addEventListener('click', function (e) { e.stopPropagation(); });
     });
     if (planSec) finWirePlanBlock(view, planSec);
@@ -26419,7 +26505,7 @@
      говорит и выглядит как чужая система (спросил владелец 22.09). Добавляем сюда ВСЕ
      метки, которые реально встречаются в ссылках и регистрациях. */
   var MK_SOURCE_NAMES = {
-    direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
+    manual: 'Добавлен руками', direct: 'Кодовое слово', vk: 'ВКонтакте', instagram: 'Instagram', youtube: 'YouTube',
     instagram_comment: 'Instagram, комментарий',
     tiktok: 'TikTok', telegram: 'Telegram', telegram_bot: 'Бот EastSide',
     whatsapp: 'WhatsApp', dzen: 'Дзен', other: 'Другое',
@@ -27870,11 +27956,16 @@
      они взаимоисключающие. «Купил» и «уже был клиентом» одновременно — это не
      продажа запуска, а старая сделка, и две независимые галочки позволили бы
      записать ее запуску в заслугу. */
-  var LP_SOLD_CYCLE = ['none', 'yes', 'no', 'client', 'dup'];
+  /* «Наш» (Лиана 12.10.2026: «убери оттуда нашу команду») в том же круге: своя
+     проверочная регистрация не продажа, не клиент и не дубль. В отличие от дубля
+     она уходит из ВСЕХ цифр запуска, а в этом списке тускнеет до закрытия окна,
+     чтобы ошибочную отметку было чем снять. */
+  var LP_SOLD_CYCLE = ['none', 'yes', 'no', 'client', 'dup', 'team'];
   var LP_SOLD_LABEL = { none: 'отметить', yes: 'купил', no: 'не купил',
-                        client: 'уже клиент', dup: 'дубль' };
+                        client: 'уже клиент', dup: 'дубль', team: 'наш / тест' };
 
   function lpSoldState(fx) {
+    if (fx.team) return 'team';
     if (fx.dup) return 'dup';
     if (fx.was_client) return 'client';
     return (fx.sold === true) ? 'yes' : (fx.sold === false ? 'no' : 'none');
@@ -27885,7 +27976,7 @@
      попал бы и в дубли, и в продажи разом. */
   function lpSoldPatch(st) {
     return { sold: st === 'yes' ? true : (st === 'no' ? false : null),
-             was_client: st === 'client', dup: st === 'dup' };
+             was_client: st === 'client', dup: st === 'dup', team: st === 'team' };
   }
 
   function lpSoldCell(p) {
@@ -27910,6 +28001,31 @@
       '</span>';
   }
 
+  /* Карточка CRM этого человека. Регистрация и карточка связываются сами только по
+     телефону и почте, а из MAX регистрируются без них: тогда консультация и оплата,
+     записанные менеджером в карточку, запуск не видит (Роговцева, 12.10.2026).
+     Вставляют ссылку на карточку целиком, id из нее достаем сами. Рядом «консультация
+     была» — для встречи, которую в карточку не записали. */
+  function lpCaseCell(p) {
+    var fx = p.fix || {};
+    var done = fx.consulted === true;
+    return '<span class="lp-fx">' +
+      '<input class="al-in lp-case" data-lp-case="' + esc(p.id) + '" maxlength="300" ' +
+        'placeholder="ссылка на карточку" value="' + esc(fx.case_id || '') + '">' +
+      '<button class="lp-sold lp-cons' + (done ? ' yes' : '') + '" data-lp-cons="' + esc(p.id) + '" ' +
+        'aria-pressed="' + done + '">' + (done ? 'консультация была' : '+ консультация') + '</button>' +
+      '</span>';
+  }
+
+  /* Ссылка вида https://crm…/#lead/<id> или голый id → id карточки. Пустое поле
+     снимает связь. null — в поле не id: такое на сервер не шлем. */
+  function lpCaseId(v) {
+    v = String(v || '').trim();
+    if (!v) return '';
+    var m = v.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return m ? m[0].toLowerCase() : null;
+  }
+
   function lpSrcCell(p) {
     var fx = p.fix || {};
     return '<span class="lp-fx"><input class="al-in lp-src" data-lp-src="' + esc(p.id) + '" ' +
@@ -27926,7 +28042,7 @@
     var fxs = edit && p.fix ? lpSoldState(p.fix) : 'none';
     /* Отмеченные дубли и старые клиенты остаются в списке, но тускнеют: убрать их
        совсем значило бы, что проверить отметку больше нельзя. */
-    var off = (fxs === 'dup' || fxs === 'client') ? ' lp-off' : '';
+    var off = (fxs === 'dup' || fxs === 'client' || fxs === 'team') ? ' lp-off' : '';
     return '<div class="lp-tr' + (id ? ' go' : '') + off + '"' +
       (id ? ' data-lp-lead="' + esc(id) + '" role="button" tabindex="0" title="Открыть карточку человека"' : '') +
       '><span class="lp-nm">' + esc(p.name || 'Без имени') +
@@ -27938,8 +28054,9 @@
       /* Правка только у людей с карточкой регистрации: у зрителя без регистрации
          нет id, которым её привязать, и кнопка молча не сработала бы. */
       (edit ? (p.id && p.id.indexOf('anon:') !== 0
-               ? lpSoldCell(p) + lpSrcCell(p)
+               ? lpSoldCell(p) + lpSrcCell(p) + lpCaseCell(p)
                : '<span class="lp-fx"><i class="lp-dash">—</i></span>' +
+                 '<span class="lp-fx"><i class="lp-dash">—</i></span>' +
                  '<span class="lp-fx"><i class="lp-dash">—</i></span>') : '') +
       '</div>';
   }
@@ -27993,7 +28110,7 @@
         : ['Человек', 'Контакт', 'Откуда пришёл', 'Регистрация'];
       /* В режиме правки колонок шесть, и «Регистрация» перестаёт помещаться в свою
          ширину — заголовок наезжал на соседний. В ней и так одна дата. */
-      if (edit) { cols[3] = 'Дата'; cols = cols.concat(['Купил', 'Источник по факту']); }
+      if (edit) { cols[3] = 'Дата'; cols = cols.concat(['Купил', 'Источник по факту', 'Карточка CRM']); }
       body = '<div class="lp-tbl' + (edit ? ' edit' : '') + '"><div class="lp-th">' +
         cols.map(function (c) { return '<span>' + c + '</span>'; }).join('') + '</div>' +
         p.rows.map(function (r) { return launchPeopleRow(r, edit); }).join('') + '</div>';
@@ -28058,8 +28175,10 @@
        него первый же клик по галочке уводил бы со страницы. */
     function lpFixSend(regId, patch, node) {
       if (node) node.classList.add('busy');
+      /* Без Content-Type сервер не узнает в теле JSON и отвечает 422: до 12.10.2026
+         ни одна правка из этого окна не сохранялась. */
       api('/admin/api/marketing/launch/person-fix', {
-        method: 'POST',
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({ launch_slug: p.slug, reg_id: regId }, patch))
       }).then(function (r) {
         var cur = state._lpPeople;
@@ -28085,7 +28204,14 @@
         lpFixSend(b.getAttribute('data-lp-sold'), lpSoldPatch(next), b);
       });
     });
-    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src]'), function (inp) {
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-cons]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        lpFixSend(b.getAttribute('data-lp-cons'),
+                  { consulted: b.getAttribute('aria-pressed') !== 'true' }, b);
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-lp-rub],[data-lp-src],[data-lp-case]'), function (inp) {
       inp.addEventListener('click', function (e) { e.stopPropagation(); });
       inp.addEventListener('keydown', function (e) {
         e.stopPropagation();
@@ -28095,9 +28221,18 @@
          девятью запросами, и в базе осело бы «И». */
       inp.addEventListener('change', function () {
         var rub = inp.getAttribute('data-lp-rub');
+        var cs = inp.getAttribute('data-lp-case');
         if (rub) {
           var n = parseInt(String(inp.value).replace(/\D/g, ''), 10);
           lpFixSend(rub, { sold_rub: isNaN(n) ? 0 : n }, inp);
+        } else if (cs) {
+          var cid = lpCaseId(inp.value);
+          if (cid === null) {
+            inp.classList.add('err');
+            showToast('Вставьте ссылку на карточку клиента из CRM');
+            return;
+          }
+          lpFixSend(cs, { case_id: cid }, inp);
         } else {
           lpFixSend(inp.getAttribute('data-lp-src'), { real_source: inp.value }, inp);
         }
@@ -29350,7 +29485,7 @@
     var f = cur.fixes;
     if (!f) return '';
     var n = (f.dups || 0) + (f.clients || 0) + (f.sold || 0) + (f.not_sold || 0) +
-            (f.resourced || 0);
+            (f.resourced || 0) + (f.team || 0) + (f.linked || 0) + (f.consulted || 0);
     if (!n) return '';
     var reg = cur.registrations ? cur.registrations.total : 0;
     var clean = Math.max(0, reg - (f.dups || 0) - (f.clients || 0));
@@ -29361,6 +29496,11 @@
     if (f.clients) parts.push('уже были клиентами ' + f.clients);
     if (f.not_sold) parts.push('не купили ' + f.not_sold);
     if (f.resourced) parts.push('источник уточнён у ' + f.resourced);
+    if (f.linked) parts.push('связано с карточкой ' + f.linked);
+    if (f.consulted) parts.push('консультация отмечена у ' + f.consulted);
+    /* Наши регистрации уже вычтены из всех ступеней, поэтому в «чистую базу»
+       ниже их не вычитаем второй раз. */
+    if (f.team) parts.push('наших и тестовых убрано ' + f.team);
     return '<div class="card lfx" style="margin-bottom:16px">' +
       '<div class="lfx-t">Отмечено руками</div>' +
       '<div class="lfx-s">' + esc(parts.join(' · ')) + '</div>' +
@@ -29369,6 +29509,60 @@
           '</b> вместо ' + fmtMoney(reg) + ': дубли и прежние клиенты не в счёт</div>'
         : '') +
       '</div>';
+  }
+
+  /* Люди запуска без регистрации (Лиана 12.10.2026: «все равно относи их к
+     интенсиву»). Пришли с эфира, но формы не заполняли, и строки в регистрациях у
+     них нет — отметить продажу было не на чем. Добавляются ссылкой на карточку CRM,
+     дальше идут по ступеням как все: консультации и оплаты из карточки, продажа
+     отметкой в списке людей (ступень «Пришли из бота без контактов»). */
+  function launchExtraLine(cur) {
+    var xs = cur.extras;
+    if (!xs) return '';   /* старый бэкенд без этого блока: молчим */
+    return '<div class="lxr">' +
+      '<span class="lxr-t">Без регистрации</span>' +
+      (xs.length
+        ? xs.map(function (x) {
+            return '<span class="lxr-p">' + esc(x.name || 'Без имени') +
+              '<button class="lxr-x" data-lxr-del="' + esc(x.id) + '" title="Убрать из запуска" ' +
+              'aria-label="Убрать ' + esc(x.name || '') + ' из запуска">' + ic('x', 11) + '</button></span>';
+          }).join('')
+        : '<span class="lxr-e">пришли с эфира, но формы не заполняли — добавьте по ссылке на карточку</span>') +
+      '<span class="lxr-add"><input class="al-in" id="lxr-in" maxlength="300" ' +
+        'placeholder="ссылка на карточку" aria-label="Ссылка на карточку клиента">' +
+      '<button class="bp ghost sm" id="lxr-go">Добавить</button></span>' +
+      '</div>';
+  }
+
+  function launchExtraWire(view, cur) {
+    var inp = view.querySelector('#lxr-in'), go = view.querySelector('#lxr-go');
+    var reload = function () { state._mkLaunch = null; renderView(); };
+    var add = function () {
+      var cid = lpCaseId(inp.value);
+      if (!cid) { inp.classList.add('err'); showToast('Вставьте ссылку на карточку клиента из CRM'); return; }
+      go.disabled = true;
+      api('/admin/api/marketing/launch/extra', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ launch_slug: cur.slug, case_id: cid })
+      }).then(reload).catch(function () {
+        go.disabled = false;
+        showToast('Не удалось добавить — проверьте ссылку на карточку');
+      });
+    };
+    if (go) go.addEventListener('click', add);
+    if (inp) inp.addEventListener('keydown', function (e) {
+      inp.classList.remove('err');
+      if (e.key === 'Enter') { e.preventDefault(); add(); }
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-lxr-del]'), function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        api('/admin/api/marketing/launch/extra/' + encodeURIComponent(b.getAttribute('data-lxr-del')),
+            { method: 'DELETE' }).then(reload).catch(function () {
+          b.disabled = false; showToast('Не удалось убрать — попробуйте еще раз');
+        });
+      });
+    });
   }
 
   function renderMkLaunch(view) {
@@ -29554,7 +29748,7 @@
             ? ' · ступени просмотра — только за выбранный вечер, остальные за весь запуск'
             : '') +
         '</div></div>' + launchDays(cur) + '</div>' +
-        launchFixLine(cur) +
+        launchFixLine(cur) + launchExtraLine(cur) +
         '<div class="pad" style="border-top:1px solid var(--line)">' +
           launchPlates(cur.path || []) + '</div></div>' +
       launchMoney(cur) +
@@ -29620,6 +29814,7 @@
         if (again) { try { again.focus(); } catch (e) {} }
       });
     }
+    launchExtraWire(view, cur);
     /* Плашка ступени → поимённый список людей за этой цифрой. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-lstep]'), function (n) {
       var openIt = function () {
@@ -34419,8 +34614,244 @@
   }
 
   /* ── ПУТЬ ─────────────────────────────────────────────── */
+  /* ── ПУТЬ ПО ПЕРИОДАМ ─────────────────────────────────────
+     Лиана, 12.10.2026: «почему в CRM не отображается подробная аналитика, кто прошел
+     диагностику, кто купил грант» и «мне нужно смотреть месяц, неделя, день в разрезе».
+     Прежний «Путь» считал когорту зашедших за период: человек, пришедший в сентябре и
+     прошедший диагностику вчера, во вчерашнем дне не появлялся вовсе. Здесь шаг идет в
+     период по дате, когда он случился, и у каждого шага есть список людей. Считает
+     сервер (GET /admin/api/path/report), в браузере ничего не досчитывается: списки
+     людей в state.leads ограничены выборкой и про оплаты по продуктам не знают.
+     Когорта осталась вкладкой «Где теряем» — она нужна, чтобы догонять ушедших. */
+  var PATH_GRANS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['lost', 'Где теряем']];
+  var PATH_NOW = { day: 'Сегодня', week: 'Эта неделя', month: 'Этот месяц' };
+  var PATH_UNIT = { day: 'день', week: 'неделя', month: 'месяц' };
+  function pathGranOk() {
+    var g = state.pathGran;
+    return PATH_GRANS.some(function (o) { return o[0] === g; }) ? g : 'week';
+  }
+  function pathKey() { return pathGranOk() + ':' + (state.pathShift || 0); }
+  /* Отчет выбранного периода или null, пока он едет. Запрос один на период: ответ
+     чужого периода (человек успел щелкнуть дальше) выбрасывается. */
+  function pathRep() {
+    var r = state._pathRep;
+    return r && r.key === pathKey() ? r : null;
+  }
+  function pathLoad() {
+    var key = pathKey();
+    if (state._pathRep && state._pathRep.key === key) return;
+    if (state._pathBusy === key) return;
+    state._pathBusy = key;
+    var g = pathGranOk(), sh = state.pathShift || 0;
+    api('/admin/api/path/report?gran=' + g + '&shift=' + sh).then(function (r) {
+      if (state._pathBusy === key) state._pathBusy = null;
+      r.key = key;
+      if (key !== pathKey()) return;
+      state._pathRep = r;
+      if (state.page === 'path') { renderHead(); renderView(); }
+    }).catch(function (e) {
+      if (state._pathBusy === key) state._pathBusy = null;
+      if (key !== pathKey()) return;
+      state._pathRep = { key: key, error: (e && e.body && e.body.detail) || 'не удалось загрузить' };
+      if (state.page === 'path') renderView();
+    });
+  }
+  function pathStep(r, k) { return ((r && r.steps) || []).filter(function (s) { return s.key === k; })[0]; }
+  /* Строка под заголовком — ответ на вопрос «что было за период» одной фразой. */
+  function pathVerdict(r) {
+    if (!r) return 'Считаю шаги за период.';
+    if (r.error) return 'Отчет не загрузился. Обновите страницу.';
+    var dg = pathStep(r, 'diagnosed'), bk = pathStep(r, 'booked'), pd = pathStep(r, 'paid');
+    var cs = pathStep(r, 'consulted') || { n: 0 };
+    var lead = (r.is_now ? PATH_NOW[r.gran] : r.label.charAt(0).toUpperCase() + r.label.slice(1));
+    if (!dg.n && !bk.n && !cs.n && !pd.n) return lead + ': до разбора, консультации и оплаты пока никто не дошел.';
+    /* «Разбор» — AI на платформе, «консультация» — живой созвон с семьей. Слово
+       «диагностика» в команде значит и то и другое, поэтому здесь его нет. */
+    var parts = [];
+    parts.push('<b>' + dg.n + '</b> ' + plural(dg.n, 'разбор', 'разбора', 'разборов') + ' на платформе');
+    parts.push('<b>' + bk.n + '</b> ' + plural(bk.n, 'записался', 'записались', 'записались') + ' на консультацию');
+    parts.push('<b>' + cs.n + '</b> ' + plural(cs.n, 'консультация проведена', 'консультации проведены', 'консультаций проведено'));
+    parts.push('<b>' + pd.n + '</b> ' + plural(pd.n, 'оплатил', 'оплатили', 'оплатили'));
+    return lead + ': ' + parts.join(', ') + '.';
+  }
+  function pathNav(r) {
+    var g = pathGranOk(), sh = state.pathShift || 0;
+    var label = r ? (r.is_now ? PATH_NOW[g] : r.label) : '';
+    return '<div class="brd-nav">' +
+      '<button class="icobtn sm brd-arrow prev" id="pth-prev" title="Предыдущий ' + PATH_UNIT[g] + '">' + ic('go', 15) + '</button>' +
+      '<span class="brd-label">' + esc(label) + '</span>' +
+      '<button class="icobtn sm brd-arrow" id="pth-next"' + (sh >= 0 ? ' disabled' : '') + ' title="Следующий">' + ic('go', 15) + '</button>' +
+      (sh ? '<button class="qchip" id="pth-now">' + PATH_NOW[g] + '</button>' : '') +
+    '</div>';
+  }
+  function pathGo(sh) {
+    state.pathShift = Math.min(0, sh); state.pathProd = null;
+    renderHead(); renderView();
+  }
+  /* Строка человека. Справа от имени — что важно именно в этом списке: у оплаты это
+     «новая покупка» или «взнос», тариф и сумма; у остальных шагов — класс и год. */
+  function pathPersonRow(p, extra) {
+    /* канал прихода — в подстрочнике: «откуда этот человек» читается вместе с классом */
+    var sub = [p.src, p.sub].filter(Boolean).join(' · ');
+    return '<div class="trow pth-row" data-id="' + esc(p.id) + '" tabindex="0" role="button">' +
+      '<div class="t-cell"><div class="t-ttl">' + esc(p.name) + '</div>' +
+        (sub ? '<div class="t-sub">' + esc(sub) + '</div>' : '') + '</div>' +
+      '<div class="pth-x">' + (extra || '') + '</div>' +
+      '<div class="t-when num">' + esc(pathWhen(p.at)) + '</div>' +
+      '<div class="t-go hidem">' + ic('go', 13) + '</div>' +
+    '</div>';
+  }
+  /* У оплаты есть только день (paid_at — дата), у остальных шагов точное время. */
+  function pathWhen(at) {
+    if (!at) return '—';
+    if (String(at).length === 10) return dayLabel(new Date(at + 'T12:00:00').toISOString());
+    return dayLabel(at) + ', ' + fmtTime(at);
+  }
+  /* Повторная оплата у пакета уроков — продление, у договора — очередной взнос. */
+  function pathPartWord(key) { return key === 'school' || key === 'zh-live' ? 'продление' : 'взнос'; }
+  function pathPayChips(p, key) {
+    return (p.kind === 'new' ? '<span class="sev n-ok">новая покупка</span>' : '<span class="sev">' + pathPartWord(key) + '</span>') +
+      (p.tariff ? '<span class="sev">' + esc(p.tariff) + '</span>' : '') +
+      (p.amount ? '<span class="pth-sum num">' + fmtMoney(p.amount) + ' ₽</span>' : '');
+  }
+  function pathSkeleton() {
+    return '<div class="dash">' +
+      '<div class="sk-statbar">' + shimStat() + shimStat() + shimStat() + shimStat() + '</div>' +
+      '<div class="grid"><div class="sp12">' + shimCard(5) + '</div></div></div>';
+  }
+
   function renderPath(view) {
     if (!can('clients')) { noClientsStub(view, 'path'); return; }
+    if (pathGranOk() === 'lost') { renderPathLost(view); return; }
+    var r = pathRep();
+    if (!r) { pathLoad(); view.innerHTML = pathSkeleton(); return; }
+    if (r.error) {
+      view.innerHTML = '<div class="card"><div class="empty">Отчет не загрузился: ' + esc(r.error) +
+        '. Обновите страницу, если не поможет — напишите в чат разработки.</div></div>';
+      return;
+    }
+    var g = r.gran;
+    var selKey = pathStep(r, state.pathStep) ? state.pathStep : 'diagnosed';
+    var sel = pathStep(r, selKey);
+
+    /* плитки шагов: число за период, клик — список людей ниже */
+    var tiles = r.steps.map(function (s) {
+      return '<button class="stat go' + (s.key === selKey ? ' on' : '') + '" data-step="' + s.key + '" aria-pressed="' + (s.key === selKey ? 'true' : 'false') + '">' +
+        '<div class="sl">' + esc(s.label) + '</div>' +
+        '<div class="sv num">' + s.n + '</div>' +
+        '<div class="sd"><span class="smut">' + (s.key === selKey ? 'список ниже' : 'показать кто') + '</span></div>' +
+      '</button>';
+    }).join('');
+    var head = '<div class="card pth-top">' +
+      '<div class="sec-head wrap pth-head"><span class="ic">' + ic('path', 14) + '</span>' +
+        '<div><div class="t">Шаги за ' + (g === 'day' ? 'день' : g === 'week' ? 'неделю' : 'месяц') + '</div>' +
+        '<div class="s">шаг считается в тот день, когда человек его сделал</div></div>' +
+        pathNav(r) + '</div>' +
+      '<div class="statbar ' + (r.steps.length === 6 ? 'six' : 'five') + ' pth-stats">' + tiles + '</div></div>';
+
+    /* люди выбранного шага */
+    var rows = sel.people.length ? sel.people.map(function (p) {
+      return pathPersonRow(p, '');
+    }).join('') : '<div class="empty">' + (sel.anon ? 'Только анонимные заходы — имени и контакта они не оставили.' : 'За этот период таких нет.') + '</div>';
+    var notes = [];
+    if (sel.anon && sel.people.length) notes.push('Еще ' + sel.anon + ' ' + plural(sel.anon, 'заход', 'захода', 'заходов') + ' без имени и контакта, в списке их нет.');
+    if (sel.cut) notes.push('Показаны первые ' + sel.people.length + '.');
+    var list = '<div class="card pth-list">' +
+      '<div class="sec-head"><div><div class="t">' + esc(sel.label) + ' · ' + sel.n + '</div>' +
+      '<div class="s">клик по имени открывает карточку</div></div></div>' +
+      /* откуда пришли люди этой ступени: бот по каналам, эфир, платформа, вручную */
+      ((sel.sources || []).length ? '<div class="pth-src">' + sel.sources.map(function (x) {
+        return '<span class="pth-sc">' + esc(x.label) + ' <b class="num">' + x.n + '</b></span>';
+      }).join('') + '</div>' : '') +
+      '<div class="pth-rows">' + rows + '</div>' +
+      (notes.length ? '<div class="brd-note">' + esc(notes.join(' ')) + '</div>' : '') + '</div>';
+
+    /* оплаты по продуктам */
+    var prods = r.products.length ? r.products.map(function (pr) {
+      var open = state.pathProd === pr.key;
+      var cnt = [];
+      if (pr.new) cnt.push(pr.new + ' ' + plural(pr.new, 'новая покупка', 'новые покупки', 'новых покупок'));
+      if (pr.part) cnt.push(pr.part + ' ' + (pathPartWord(pr.key) === 'взнос' ? plural(pr.part, 'взнос', 'взноса', 'взносов') : plural(pr.part, 'продление', 'продления', 'продлений')));
+      return '<div class="pth-prod' + (open ? ' open' : '') + '">' +
+        '<button class="pth-ph" data-prod="' + esc(pr.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<span class="pth-pn">' + esc(pr.label) + '</span>' +
+          '<span class="pth-pc">' + esc(cnt.join(' · ')) + '</span>' +
+          (r.money ? '<span class="pth-ps num">' + fmtMoney(pr.sum) + ' ₽</span>' : '') +
+          '<span class="pth-chev">' + chev() + '</span>' +
+        '</button>' +
+        (open ? '<div class="pth-rows">' + pr.people.map(function (p) { return pathPersonRow(p, pathPayChips(p, pr.key)); }).join('') + '</div>' : '') +
+      '</div>';
+    }).join('') : '<div class="empty">Оплат за этот период нет.</div>';
+    var pay = '<div class="card pth-pay">' +
+      '<div class="sec-head"><div><div class="t">Оплаты по продуктам</div>' +
+      '<div class="s">новая покупка — первая оплата продукта; взнос и продление — очередная оплата уже купленного</div></div></div>' +
+      prods + '</div>';
+
+    /* динамика: те же шаги по соседним периодам, свежие сверху */
+    var thead = '<div class="mkd-th pth-tr"><span>' + (g === 'day' ? 'День' : g === 'week' ? 'Неделя' : 'Месяц') + '</span>' +
+      r.steps.map(function (s, i) {
+        return '<span' + (i < 2 ? ' class="hidem"' : '') + '>' + (s.key === 'consulted'
+          ? '<span class="pth-lf">Консультация</span><span class="pth-ls">Конс.</span>' : esc(PATH_SHORT[s.key])) + '</span>';
+      }).join('') + '</div>';
+    var trows = r.trend.slice().reverse().map(function (t) {
+      return '<div class="mkd-tr pth-tr' + (t.shift === r.shift ? ' on' : '') + '" data-sh="' + t.shift + '" tabindex="0" role="button">' +
+        '<span class="mkd-nm"><b><span class="pth-lf">' + esc(t.label) + '</span><span class="pth-ls">' + esc(pathShortLabel(g, t.from)) + '</span></b></span>' +
+        r.steps.map(function (s, i) {
+          var v = t.counts[s.key] || 0;
+          return '<span class="mkd-v' + (v ? '' : ' zero') + (i < 2 ? ' hidem' : '') + '">' + v + '</span>';
+        }).join('') + '</div>';
+    }).join('');
+    var trend = '<div class="card pth-trend">' +
+      '<div class="sec-head"><div><div class="t">По ' + (g === 'day' ? 'дням' : g === 'week' ? 'неделям' : 'месяцам') + '</div>' +
+      '<div class="s">клик по строке открывает этот период</div></div></div>' +
+      '<div class="mkd-tbl">' + thead + trows + '</div></div>';
+
+    view.innerHTML = '<div class="dash">' + head + list + pay + trend + '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-stats .stat'), function (b) {
+      b.addEventListener('click', function () { state.pathStep = b.getAttribute('data-step'); renderView(); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-ph'), function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-prod');
+        state.pathProd = state.pathProd === k ? null : k; renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-tr[data-sh]'), function (n) {
+      n.addEventListener('click', function () { pathGo(parseInt(n.getAttribute('data-sh'), 10)); });
+      pathKeys(n);
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('.pth-rows'), function (box) {
+      var ids = Array.prototype.map.call(box.querySelectorAll('.trow[data-id]'), function (n) { return n.getAttribute('data-id'); });
+      Array.prototype.forEach.call(box.querySelectorAll('.trow[data-id]'), function (n) {
+        n.addEventListener('click', function () { openDrawer(n.getAttribute('data-id'), ids); });
+        n.addEventListener('mouseenter', function () { warm(n.getAttribute('data-id')); });
+        pathKeys(n);
+      });
+    });
+    var pv = el('pth-prev'), nx = el('pth-next'), nw = el('pth-now');
+    if (pv) pv.addEventListener('click', function () { pathGo((state.pathShift || 0) - 1); });
+    if (nx) nx.addEventListener('click', function () { pathGo((state.pathShift || 0) + 1); });
+    if (nw) nw.addEventListener('click', function () { pathGo(0); });
+  }
+  /* Строка-кнопка из div: Enter и пробел делают то же, что клик. */
+  function pathKeys(n) {
+    n.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); n.click(); }
+    });
+  }
+  /* Короткая подпись периода для телефона: «28.09–04.10», «окт 2026», «12.10». */
+  function pathShortLabel(g, from) {
+    if (!from) return '';
+    var d = new Date(from + 'T12:00:00'), p2 = function (x) { return (x < 10 ? '0' : '') + x; };
+    var dm = function (x) { return p2(x.getDate()) + '.' + p2(x.getMonth() + 1); };
+    if (g === 'day') return dm(d);
+    if (g === 'week') { var e = new Date(d); e.setDate(e.getDate() + 6); return dm(d) + '–' + dm(e); }
+    return ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'][d.getMonth()] + ' ' + d.getFullYear();
+  }
+  var PATH_SHORT = { visited: 'Новые', submitted: 'Анкета', diagnosed: 'Разбор', booked: 'Запись', consulted: 'Консультация', paid: 'Оплата' };
+
+  function renderPathLost(view) {
     var steps = funnelData(state.pathPeriod);
     if (!steps[0].n) {
       view.innerHTML = '<div class="card"><div class="empty">За этот период данных нет.</div></div>';
@@ -44881,6 +45312,13 @@
         state.acTab = s;
         if (s === 'courses' && state.ac) state.ac.course = null;
         return true;
+      },
+    },
+    path: {
+      get: pathGranOk,
+      set: function (s) {
+        if (!PATH_GRANS.some(function (o) { return o[0] === s; }) || s === pathGranOk()) return false;
+        state.pathGran = s; state.pathShift = 0; state.pathProd = null; return true;
       },
     },
     meetx: {
