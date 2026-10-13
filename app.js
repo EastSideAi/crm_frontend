@@ -2407,6 +2407,9 @@
     { id: 'analytics', label: 'Аналитика бота', icon: 'chart', cap: 'analytics' },
     // Подарки — те же данные бота, но под другим углом: что взяли и где встали.
     // Свой cap не заводим: смотрит тот же, кто отвечает за маркетинг.
+    // Кейсы выпускников — то, что бот собрал в телеграме. Рядом с маркетингом:
+    // это материал для сайта и рассылок, а не работа с конкретным клиентом.
+    { id: 'stories', label: 'Кейсы', icon: 'cap', cap: 'marketing' },
     { id: 'gifts', label: 'Подарки', icon: 'gift', cap: 'marketing' },
     // Рассылки — журнал отправок бота: кому писали и что ответила площадка.
     { id: 'broadcasts', label: 'Рассылки', icon: 'send', cap: 'marketing' },
@@ -3627,6 +3630,7 @@
     else if (state.page === 'templates') renderTemplates(view);
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'planfact') renderPlanFact(view);
+    else if (state.page === 'stories') renderStories(view);
     else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'broadcasts') renderBroadcasts(view);
     else if (state.page === 'social') renderSocial(view);
@@ -25030,6 +25034,11 @@
       parts.push('<div class="mx-h" id="mx-s-text">Расшифровка</div><div class="mx-text">' +
         esc(text).replace(/\n/g, '<br>') + '</div>');
     }
+    /* Запись из зума, которую автоматика не смогла отдать карточке: в зуме под общим
+       аккаунтом школы гость подписан одним именем, тезок в базе по несколько, и она
+       честно не угадывает. Привязать было негде, и такие записи копились — 30 штук к
+       12.10.2026, среди них настоящие диагностики (Вера 12.10.2026). */
+    var canTie = !c.session_id && m.key.charAt(0) === 'f' && can('clients');
     var acts = [];
     if (c.text_chars && !text) {
       acts.push('<button type="button" class="qchip" data-mxtext="' + esc(m.key) + '">' +
@@ -25051,6 +25060,10 @@
       acts.push('<button type="button" class="qchip" data-mxlead="' + esc(c.session_id) + '">' +
         ic('leads', 13) + 'Карточка ученика</button>');
     }
+    if (canTie) {
+      acts.push('<button type="button" class="qchip" data-mxtie="' + esc(m.key) + '">' +
+        ic('leads', 13) + 'Это консультация ученика</button>');
+    }
     if (!parts.length) {
       parts.push('<div class="mx-load">Ни конспекта, ни договоренностей по этой встрече пока нет. ' +
         'Конспект появляется после разбора записи.</div>');
@@ -25065,7 +25078,71 @@
         }).join('') + '</div>'
       : '';
     return '<div class="mx-card">' + nav + parts.join('') +
-      (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') + '</div>';
+      (acts.length ? '<div class="mx-acts">' + acts.join('') + '</div>' : '') +
+      (canTie ? '<div class="mx-tie" id="mx-tie"></div>' : '') + '</div>';
+  }
+  /* Поиск ученика прямо во встрече: список лидов уже загружен на фронт целиком
+     (/admin/api/leads), поэтому ищем на месте, без второго запроса и без ожидания. */
+  function mxTieBox(m) {
+    var host = el('mx-tie');
+    if (!host) return;
+    host.innerHTML = '<div class="mx-tie-t">Чья это консультация?</div>' +
+      '<input id="mx-tie-q" class="al-in" placeholder="Имя ученика или родителя" ' +
+      'autocomplete="off" maxlength="60">' +
+      '<div class="int-rows" id="mx-tie-l"></div>';
+    var q = el('mx-tie-q');
+    function draw() {
+      var box = el('mx-tie-l');
+      if (!box) return;
+      var s2 = (q.value || '').trim().toLowerCase();
+      if (s2.length < 2) {
+        box.innerHTML = '<div class="field-empty">Начни вводить имя — покажу карточки.</div>';
+        return;
+      }
+      var hits = (state.leads || []).filter(function (l) {
+        var hay = ((l.name || '') + ' ' + (l.email || '') + ' ' +
+          ((l.booking || {}).contact || '')).toLowerCase();
+        return hay.indexOf(s2) !== -1;
+      }).slice(0, 8);
+      if (!hits.length) {
+        box.innerHTML = '<div class="field-empty">Никого похожего. Проверь имя или завели ли карточку.</div>';
+        return;
+      }
+      box.innerHTML = hits.map(function (l) {
+        var st = (CRM[(l.crm || {}).status] || {}).label || '';
+        var sub = [st, l.grade || '', dayLabel(l.created_at)].filter(Boolean).join(' · ');
+        return '<div class="int-row"><div class="int-b">' +
+          '<div class="int-n">' + esc(l.name || 'Без имени') + '</div>' +
+          '<div class="int-m">' + esc(sub) + '</div></div>' +
+          '<button type="button" class="bp ghost sm" data-mxtieid="' + esc(l.id) + '">Это он</button></div>';
+      }).join('');
+      Array.prototype.forEach.call(box.querySelectorAll('[data-mxtieid]'), function (b) {
+        b.addEventListener('click', function () { mxTie(m, b.getAttribute('data-mxtieid'), b); });
+      });
+    }
+    q.addEventListener('input', draw);
+    draw();
+    q.focus();
+  }
+  function mxTie(m, sessionId, btn) {
+    var was = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = 'Привязываю…';
+    api('/admin/api/meet/journal/' + encodeURIComponent(m.key) + '/lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    }).then(function (r) {
+      /* Конспект считается моделью уже после ответа, поэтому обещаем его, а не
+         показываем: иначе человек открывает карточку и не находит там ничего. */
+      showToast('Встреча в карточке ученика',
+        r && r.moved ? 'перенесли в другую карточку' : 'конспект и PDF появятся через минуту');
+      delete state.meetxCard[m.key];
+      loadMeetx();
+      if (state.page === 'meetx') renderView();
+    }).catch(function (e) {
+      btn.disabled = false; btn.innerHTML = was;
+      showToast('Не получилось привязать', e && e.message === '422'
+        ? 'у этой встречи не сохранилась расшифровка' : 'попробуй еще раз');
+    });
   }
   /* ── Раздел EastSide Meeting ───────────────────────────────────────────────
      Устроен как сервис встреч, а не как список записей: сверху два действия
@@ -25465,6 +25542,9 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxtask]'), function (b) {
       b.addEventListener('click', function () { openTask(+b.getAttribute('data-mxtask')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxtie]'), function (b) {
+      b.addEventListener('click', function () { b.disabled = true; mxTieBox(m); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxlead]'), function (b) {
       b.addEventListener('click', function () {
@@ -31103,6 +31183,232 @@
         if (!confirm('Разделить обратно? Уроки и оплаты вернутся на свою карточку.')) return;
         send('/admin/api/intensive/duplicates/unmerge',
              { merge_id: +b.getAttribute('data-iunmerge') }, 'Разделили обратно');
+      });
+    });
+  }
+
+  /* ── Кейсы выпускников ────────────────────────────────────────────────────
+     Бот собирает истории поступивших (четыре вопроса, видео, фото, согласие), и
+     до 13.10.2026 все это лежало в базе без единого экрана: Вера спрашивала,
+     «куда все данные с бота стекаются», и ответить было нечем. Раздел показывает
+     и готовые кейсы, и брошенные на середине — вторых больше, и дожать их важнее,
+     чем перечитать первые. */
+  var ST_CHIP = {
+    approved: 'n-ok', published: 'n-ok', awaiting_review: 'n-wait',
+    in_progress: 's-new', declined: 'n-off'
+  };
+
+  function fetchStories(cb) {
+    api('/admin/api/stories').then(function (r) {
+      state._cs = r;
+      if (cb) cb(); else if (state.page === 'stories') renderView();
+    }).catch(function (e) {
+      if (e.message !== '403') { state._cs = 'none'; if (state.page === 'stories') renderView(); }
+    });
+  }
+
+  function csOpen(id) {
+    /* Карточку держим в state, а не перерисовываем список: открыли один кейс —
+       читают его целиком, остальные в это время не меняются. */
+    if (state._csOpen === id) { state._csOpen = null; state._csCard = null; renderView(); return; }
+    state._csOpen = id; state._csCard = null; renderView();
+    api('/admin/api/stories/' + id).then(function (r) {
+      state._csCard = r;
+      if (state.page === 'stories') renderView();
+    }).catch(function () {
+      state._csCard = 'none';
+      if (state.page === 'stories') renderView();
+    });
+  }
+
+  function csNudge(id, btn) {
+    btn.disabled = true;
+    api('/admin/api/stories/' + id + '/nudge', { method: 'POST' }).then(function () {
+      showToast('Напомнили', 'бот написал в телеграм');
+      fetchStories();
+    }).catch(function (e) {
+      btn.disabled = false;
+      /* Причину сервер пишет по-русски сам (routers/stories.py): «сегодня уже
+         напоминали», «кейс собирается только в телеграме», «нет доступа к боту».
+         Код лежит в e.status, текст — в e.body.detail (см. api() выше). */
+      var detail = e && e.body && e.body.detail;
+      showToast('Не вышло', detail || 'не отправилось, попробуй ещё раз');
+    });
+  }
+
+  function csMediaTag(story, m, who) {
+    var src = API + '/admin/api/stories/' + story + '/media/' + m.idx + '?k=' + encodeURIComponent(getKey());
+    if (m.kind === 'video') {
+      /* playsinline: без него айфон уводит ролик в полный экран, и человек теряет
+         карточку, из которой смотрел. */
+      return '<video class="cs-media" src="' + src + '" controls playsinline preload="metadata"></video>';
+    }
+    if (m.kind !== 'photo') {
+      // Документ картинкой не нарисуешь: даем ссылку, а не битую иконку.
+      return '<a class="cs-file" href="' + src + '" target="_blank" rel="noopener">' +
+        ic('doc', 14) + 'Файл из рассказа</a>';
+    }
+    /* Ссылка живет по ключу, и он протухает вместе с сессией: не загрузилось —
+       показываем словами, а не сломанной картинкой (правило продукта 19.09.2026). */
+    return '<img class="cs-media" src="' + src + '" alt="Фото из истории: ' + esc(who || '') +
+      '" loading="lazy" onerror="this.outerHTML=\'<span class=&quot;cs-file gone&quot;>Фото не открылось</span>\'">';
+  }
+
+  function csCard(d) {
+    if (d === 'none') {
+      return '<div class="cs-card"><div class="empty">Не удалось открыть кейс — проверь сеть.' +
+        '<button class="bp ghost cs-retry" data-csretry="1">Попробовать снова</button></div></div>';
+    }
+    if (!d) return '<div class="cs-card">' + dashSkeleton() + '</div>';
+
+    /* fear+q1 и easier+q2 — это один рассказ, разбитый ботом на кнопку и строку
+       (см. STEPS в eastside-bot/app/cases.py). В столбце одинаковых блоков они
+       читались как два independent-ответа, поэтому пары стоят теснее. */
+    var PAIR = { q1: 'fear', q2: 'easier' };
+    var answers = (d.answers || []).filter(function (a) { return a.text; }).map(function (a) {
+      return '<div class="cs-q' + (PAIR[a.key] ? ' tail' : '') + '">' +
+        '<div class="cs-qt">' + esc(a.question) + '</div>' +
+        '<div class="cs-qa">' + esc(a.text) + '</div></div>';
+    }).join('') || '<div class="empty">Ответов пока нет.</div>';
+
+    var media = (d.media || []).length
+      ? '<div class="cs-medias">' + d.media.map(function (m) { return csMediaTag(d.id, m, d.who); }).join('') + '</div>'
+      : '';
+
+    /* Согласие — не украшение карточки, а условие публикации: без него историю
+       нельзя показывать нигде, поэтому строка стоит до текста, а не в подвале. */
+    var consent = d.consent_at
+      ? '<span class="sev n-ok">согласие есть</span><span class="cs-cond">' +
+        esc(d.publicity_ru || 'как подписывать — не указано') +
+        (d.consent_by === 'parent' ? ' · дал родитель' : '') + '</span>'
+      : '<span class="sev n-wait">согласия нет</span><span class="cs-cond">' +
+        (d.status === 'awaiting_review'
+          ? 'бот спросил согласие, ответа пока нет'
+          : 'публиковать нельзя') + '</span>';
+
+    /* Кому уже писали — видно на экране, иначе после перезагрузки человек жмет
+       кнопку второй раз и упирается в отказ «сегодня уже напоминали». */
+    var reminded = d.reminded_at
+      ? '<span class="sev n-ok">напомнили ' + fmtWhen(d.reminded_at) + '</span>'
+      : '';
+
+    var parent = d.parent && d.parent.status !== 'none'
+      ? '<div class="cs-parent"><div class="cs-qt">Родитель</div>' +
+        '<div class="cs-qa">' + esc(d.parent.status_ru) +
+        (d.parent.text ? ': ' + esc(d.parent.text) : '') + '</div></div>'
+      : '';
+
+    var draft = d.draft
+      ? '<div class="cs-draft"><div class="cs-qt">Собранная карточка</div>' +
+        '<div class="cs-qa">' + esc(d.draft) + '</div></div>'
+      : '';
+
+    /* Кейс собирается только в телеграме: в других каналах нечем принять голос и
+       видео, и кнопка обещала бы то, чего сервер не сделает. */
+    var nudge = (d.status === 'in_progress' || d.status === 'declined')
+                && (d.channel || 'telegram') === 'telegram'
+      ? '<button class="bp ghost cs-nudge" data-nudge="' + d.id + '">' +
+        (d.reminded_at ? 'Напомнить ещё раз' : 'Напомнить в телеграм') + '</button>'
+      : '';
+
+    return '<div class="cs-card">' +
+      '<div class="cs-head">' + consent + reminded + nudge + '</div>' +
+      media + answers + draft + parent +
+    '</div>';
+  }
+
+  function renderStories(view) {
+    if (!state._cs) { view.innerHTML = dashSkeleton(); fetchStories(); return; }
+    if (state._cs === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить кейсы — проверь сеть или доступ.' +
+        '<button class="bp ghost cs-retry" data-csreload="1">Попробовать снова</button></div></div>';
+      var again = view.querySelector('[data-csreload]');
+      if (again) again.addEventListener('click', function () { state._cs = null; renderView(); });
+      return;
+    }
+    var all = state._cs.items || [];
+    var f = state.csFilter || 'all';
+    var items = f === 'all' ? all : all.filter(function (i) {
+      return f === 'ready' ? (i.status === 'approved' || i.status === 'published')
+           : f === 'wait'  ? i.status === 'awaiting_review'
+           : i.status === 'in_progress' || i.status === 'declined';
+    });
+
+    var counts = {
+      all: all.length,
+      ready: all.filter(function (i) { return i.status === 'approved' || i.status === 'published'; }).length,
+      wait: all.filter(function (i) { return i.status === 'awaiting_review'; }).length,
+      half: all.filter(function (i) { return i.status === 'in_progress' || i.status === 'declined'; }).length
+    };
+    var tabs = [['all', 'Все'], ['ready', 'Готовы'], ['wait', 'Ждут ответа'], ['half', 'Не закончили']]
+      .map(function (t) {
+        return '<button class="qchip' + (f === t[0] ? ' on' : '') + '" data-csf="' + t[0] + '">' +
+          t[1] + '<span class="qn num">' + counts[t[0]] + '</span></button>';
+      }).join('');
+
+    var rows = items.length ? items.map(function (i) {
+      var media = [];
+      if (i.video) media.push(i.video + ' видео');
+      if (i.photo) media.push(i.photo + ' фото');
+      var open = state._csOpen === i.id;
+      return '<div class="cs-item' + (open ? ' open' : '') + '">' +
+        '<div class="trow cs-row" data-cs="' + i.id + '" role="button" tabindex="0"' +
+          ' aria-expanded="' + (open ? 'true' : 'false') + '">' +
+          '<div class="t-cell"><div class="t-ttl">' + esc(i.who) +
+            (i.username ? ' <span class="cs-dim">@' + esc(i.username) + '</span>' : '') + '</div>' +
+            '<div class="t-sub">' + (i.preview ? esc(i.preview) : 'Рассказ не начат') + '</div></div>' +
+          '<div class="cs-meta">' +
+            '<span class="sev ' + (ST_CHIP[i.status] || 's-new') + '">' + esc(i.status_ru) + '</span>' +
+            '<span class="cs-dim num">' + i.answered + ' из ' + i.questions_total +
+              (media.length ? ' · ' + media.join(', ') : '') + '</span>' +
+          '</div>' +
+          '<div class="t-when num">' + fmtWhen(i.updated_at) + '</div>' +
+        '</div>' +
+        (open ? csCard(state._csCard) : '') +
+      '</div>';
+    }).join('') : '<div class="empty">' + ({
+      all: 'Бот ещё не собрал ни одной истории.',
+      ready: 'Готовых кейсов пока нет: истории есть, но согласия на публикацию ещё нет.',
+      wait: 'Никто не ждёт подтверждения.',
+      half: 'Все, кто начинал, дошли до конца.'
+    }[f] || 'Тут пока пусто.') + '</div>';
+
+    view.innerHTML = '<div class="grid">' +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head cs-head-top"><span class="ic">' + ic('cap', 14) + '</span>' +
+        '<div><div class="t">Кейсы выпускников</div>' +
+        '<div class="s">истории, которые бот собрал в телеграме: ответы, видео и согласие на публикацию</div></div></div>' +
+        '<div class="cs-tabs">' + tabs + '</div>' +
+        '<div class="cs-list">' + rows + '</div>' +
+      '</div>' +
+    '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-csf]'), function (b) {
+      b.addEventListener('click', function () {
+        state.csFilter = b.getAttribute('data-csf');
+        state._csOpen = null; state._csCard = null;
+        renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cs]'), function (row) {
+      var open = function () { csOpen(parseInt(row.getAttribute('data-cs'), 10)); };
+      row.addEventListener('click', open);
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-csretry]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = state._csOpen;
+        state._csCard = null; renderView();
+        if (id) { state._csOpen = null; csOpen(id); }
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-nudge]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        csNudge(parseInt(b.getAttribute('data-nudge'), 10), b);
       });
     });
   }

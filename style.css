@@ -11372,6 +11372,12 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .mx-text { max-height: 420px; overflow-y: auto; font-size: 13px; line-height: 1.6;
   color: var(--ink-2); background: var(--fill); border-radius: 12px; padding: 12px 14px; }
 .mx-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+/* Привязка записи к ученику: блок живет внутри карточки встречи и появляется по
+   кнопке, поэтому отделен от действий линией, а не воздухом — иначе на телефоне
+   поиск читается как продолжение ряда кнопок. */
+.mx-tie { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mx-tie-t { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+.mx-tie .int-rows { margin-top: 8px; }
 .mx-load { font-size: 13px; color: var(--ink-3); padding: 10px 0; }
 @media (max-width: 760px) {
   .mx-list { padding: 4px 12px 8px; }
@@ -12165,4 +12171,82 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mkd-th.pth-tr, .mkd-tr.pth-tr { grid-template-columns: minmax(0, 1.2fr) repeat(4, minmax(44px, .5fr)); padding: 0 14px; }
   .pth-lf { display: none; }
   .pth-ls { display: inline; }
+}
+
+/* ════ КЕЙСЫ ВЫПУСКНИКОВ ══════════════════════════════════════════════════════
+   Список историй, которые бот собрал в телеграме. Строка открывает карточку прямо
+   под собой, а не уводит на отдельный экран: кейсы читают подряд и сравнивают, и
+   возврат к списку тут был бы лишним кликом на каждом. */
+.cs-head-top { padding: 20px 24px 14px; }
+.cs-tabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 24px 16px; }
+.cs-list { border-top: 1px solid var(--line); }
+.cs-item + .cs-item { border-top: 1px solid var(--line); }
+/* .trow держит ровную высоту 58px: в списке кейсов строка выше (под цитатой), и
+   высоту тут задаем своим контентом, иначе строки налезают друг на друга. */
+.cs-row { display: grid; grid-template-columns: minmax(0, 1fr) 236px 92px; gap: 16px;
+  align-items: center; height: auto; min-height: 58px; padding: 14px 24px; cursor: pointer;
+  border-bottom: none; }
+/* Ховер и раскрытие — разные состояния: первый светлее фона карточки, второе
+   заливает строку и ставит сапфировую метку слева (язык .trow). */
+.cs-row:hover { background: #FBFBFC; }
+.cs-row:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.cs-item.open .cs-row { background: var(--fill); }
+.cs-item.open .cs-row::before { background: var(--blue); opacity: 1; }
+.cs-row .t-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-meta { display: flex; align-items: center; gap: 10px; }
+.cs-dim { color: var(--ink-3); font-size: 12px; }
+/* Условие публикации — не подпись к чипу, а ответ на вопрос «что можно показывать»:
+   светлее счетчика файлов ему быть нельзя. */
+.cs-cond { color: var(--ink-2); font-size: 13px; }
+/* Карточка кейса: воздуха внутри меньше, чем между ней и соседней строкой —
+   так видно, что это раскрытая часть строки, а не новый блок. */
+.cs-card { padding: 4px 24px 22px; background: var(--fill); }
+.cs-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0 16px; }
+.cs-head .bp { margin-left: auto; }
+.cs-q + .cs-q, .cs-draft, .cs-parent { margin-top: 20px; }
+/* Кнопка и дописанная к ней строка — один ответ: внутри пары воздуха меньше, чем
+   между темами. */
+.cs-q + .cs-q.tail { margin-top: 8px; }
+.cs-qt { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 4px; }
+.cs-qa { font-size: 14px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+/* Собранная карточка — то, что уедет на сайт: это итог кейса, а не седьмой ответ. */
+.cs-draft { margin-top: 22px; padding: 14px 16px; background: var(--card);
+  border-radius: var(--r-lg); }
+.cs-draft .cs-qa { font-size: 15px; }
+.cs-parent { padding-top: 16px; border-top: 1px solid var(--line-2); }
+.cs-medias { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px;
+  margin-bottom: 18px; }
+/* Фиксированная плитка, а не размер исходника: кадры приезжают вертикальные и
+   горизонтальные вперемешку, и ряд из них иначе прыгает по высоте. */
+.cs-media { width: 190px; height: 250px; border-radius: var(--r-lg); object-fit: cover; }
+.cs-file { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px;
+  background: var(--card); border-radius: var(--r-lg); font-size: 13.5px; color: var(--ink-2); }
+.cs-file.gone { color: var(--ink-3); }
+.cs-retry { margin-top: 12px; }
+/* Черная подложка нужна только видео: у вертикального ролика поля все равно будут,
+   а фото на ней выглядело бы как в рамке. */
+video.cs-media { background: #000; }
+@media (max-width: 760px) {
+  .cs-head-top { padding: 18px 14px 12px; }
+  .cs-tabs { padding: 0 14px 14px; }
+  .cs-row { grid-template-columns: minmax(0, 1fr) auto; height: auto; padding: 12px 14px;
+    /* на телефоне колонки считаются по контенту: фиксированные 236px не влезают */
+    row-gap: 8px; align-items: start; }
+  /* Имя с цитатой занимают всю ширину, дата уходит вниз к статусу: в колонке рядом
+     с датой цитата обрывалась на третьем слове. */
+  .cs-row .t-cell { grid-column: 1 / -1; grid-row: 1; }
+  .cs-meta { grid-column: 1; grid-row: 2; flex-wrap: wrap; gap: 8px; }
+  /* «4 из 6 · 1 видео» на телефоне убираем: то же самое говорит статус, а строка
+     из-за него ломалась на две. Подробности видны в раскрытой карточке. */
+  .cs-meta .cs-dim { display: none; }
+  .cs-row .t-when { grid-column: 2; grid-row: 2; align-self: center; }
+  /* На узком экране режем цитату, а не имя: по имени кейс узнают, по цитате только
+     вспоминают. Две строки цитаты для этого достаточно. */
+  .cs-row .t-ttl { white-space: normal; overflow: visible; }
+  .cs-row .t-sub { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; }
+  .cs-card { padding: 4px 14px 18px; }
+  .cs-head .bp { margin-left: 0; width: 100%; }
+  .cs-media { width: calc(50% - 6px); height: 190px; }
 }
