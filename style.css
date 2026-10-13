@@ -12295,7 +12295,10 @@ video.cs-media { background: #000; }
 .kb-nav { background: var(--card); border: 1px solid var(--line); border-radius: 20px;
   padding: 14px; position: sticky; top: 12px; max-height: calc(100vh - 90px);
   overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.kb-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
 .kb-nav .kb-cap { margin: 6px 0 2px 4px; }
+.kb-hist .kb-cap { margin-bottom: 4px; }
 .kb-add { align-self: flex-start; }
 .kb-nav-i { display: block; width: 100%; text-align: left; padding: 9px 11px;
   border-radius: 12px; transition: background .12s var(--ease), color .12s var(--ease); }
@@ -12352,4 +12355,8 @@ video.cs-media { background: #000; }
   .kb-nav { position: static; max-height: none; }
   .kb-main { padding: 20px 16px 24px; }
   .kb-t { font-size: 20px; }
+  /* Кнопки уходят под заголовок: рядом они сжимали его в три строки, а третья
+     («В архив») не влезала в ширину телефона вовсе. */
+  .kb-doc-h { flex-direction: column; gap: 12px; }
+  .kb-doc-act { width: 100%; }
 }

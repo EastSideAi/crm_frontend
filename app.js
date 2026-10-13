@@ -23748,7 +23748,16 @@
   function kbOpen(slug) {
     KB.edit = null; KB.hist = null;
     api('/admin/api/kb/article/' + encodeURIComponent(slug) + '?section=finance')
-      .then(function (r) { KB.cur = r.article; renderAll(); })
+      .then(function (r) {
+        KB.cur = r.article; renderAll();
+        /* На телефоне оглавление и текст идут друг под другом: без прокрутки клик
+           по главе выглядит так, будто ничего не произошло — статья открылась под
+           списком, за экраном. */
+        if (window.innerWidth <= 760) {
+          var m = document.querySelector('.kb-main');
+          if (m) m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      })
       .catch(function () { KB.cur = null; renderAll(); });
   }
 
@@ -23871,7 +23880,7 @@
       var a = KB.cur;
       var hist = '';
       if (KB.hist) {
-        hist = '<div class="kb-hist"><div class="cap">Прошлые редакции</div>' +
+        hist = '<div class="kb-hist"><div class="kb-cap">Прошлые редакции</div>' +
           (KB.hist.length ? KB.hist.map(function (h) {
             return '<div class="kb-hist-i"><div class="kb-hist-m">' + fmtWhen(h.at) +
               (h.by_name ? ' · ' + esc(h.by_name) : '') + '</div>' +
@@ -23904,7 +23913,7 @@
             '<input id="kb-q" class="al-in" placeholder="Найти правило" value="' + esc(KB.q) + '">' +
           '</div>' +
           (canEdit ? '<button class="qchip kb-add" id="kb-new">+ правило</button>' : '') +
-          '<div class="cap kb-cap">Главы</div>' +
+          '<div class="kb-cap">Главы</div>' +
           nav +
         '</div>' +
         '<div class="kb-main">' + right + '</div>' +
