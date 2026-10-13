@@ -581,7 +581,14 @@
   function dialogUrl(id) { return CRM_HOME + '#dialog/' + encodeURIComponent(id); }
   function hashDialogId() { return hashRouteId('dialog'); }
   /* #task/<id> — прямая ссылка на задачу: по такой ссылке ведет кнопка из бота. */
-  function hashTaskId() { return hashRouteId('task'); }
+  /* #task/<id> — карточка задачи. #task/<id>/c<eventId> — она же, но с якорем на
+     конкретную реплику обсуждения: такую ссылку копирует кнопка «Ссылка» под
+     репликой (Павел 13.10.2026, «чтобы когда делиться, комментарий выделялся»). */
+  function hashTaskId() { return String(hashRouteId('task') || '').split('/')[0]; }
+  function hashTaskComment() {
+    var tail = String(hashRouteId('task') || '').split('/')[1] || '';
+    return /^c[0-9]+$/.test(tail) ? +tail.slice(1) : 0;
+  }
   /* #page/<id> — ссылка на раздел целиком (кнопка «Открыть задачи» в сводке бота). */
   function hashPageId() { return hashRouteId('page'); }
   /* id из адреса: #lead/<id> или #dialog/<id>. Имя намеренно не hashId — так уже зовётся
@@ -12686,7 +12693,7 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
-  function openTask(id) {
+  function openTask(id, focusEv) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
@@ -12714,7 +12721,12 @@
     };
     document.addEventListener('keydown', onKey);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-    try { history.replaceState(null, '', '#task/' + id); } catch (e) {}
+    // Адрес всегда показывает открытую карточку. Якорь на реплику из входящей
+    // ссылки сохраняем: ее могут переслать дальше прямо из строки браузера.
+    var anchorDone = false;
+    try {
+      history.replaceState(null, '', '#task/' + id + (focusEv ? '/c' + focusEv : ''));
+    } catch (e) {}
 
     var draw = function (data) {
       var t = data.task, events = data.events || [], steps = data.steps || [];
@@ -12777,13 +12789,34 @@
       events.forEach(function (e) {
         if (e.reply_to && known[e.reply_to]) (kids[e.reply_to] = kids[e.reply_to] || []).push(e);
       });
+      // Чужую реплику убирает только верхняя роль. Руководитель с tasks_all
+      // видит задачу целиком, но чужие слова из обсуждения не стирает — то же
+      // правило держит сервер.
+      var iAmTop = state.role === 'super_admin' || state.role === 'owner';
       var evHtml = function (e, inner) {
         var mine = e.kind === 'comment' && me && e.actor_id === me;
+        /* Удаленная реплика остается в ленте пометкой: «в истории задачи следы
+           пусть остаются» (Павел 13.10.2026). Текста у нее нет — сервер его не
+           отдает, — а кнопок нет и быть не может: отвечать и править уже
+           нечего, ссылка на пустое место тоже не нужна. */
+        if (e.deleted) {
+          return '<div class="tsk-ev cm gone" data-ev="' + e.id + '">' +
+            '<span class="tsk-ev-ic">' + ic(EVENT_IC.comment, 12) + '</span>' +
+            '<div class="tsk-ev-b"><div class="tsk-ev-t">реплика удалена</div>' +
+            '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
+              (e.deleted_by_name
+                ? '<i class="tsk-ev-ed">убрал ' + esc(e.deleted_by_name) + '</i>' : '') +
+            '</div></div></div>';
+        }
         // «Ответить» только у корневой реплики: ответ на ответ сервер все
         // равно вернет в ту же ветку, и кнопка обещала бы несуществующее.
         var acts = (e.kind === 'comment' && !inner
                      ? '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' : '') +
-                   (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '');
+                   (e.kind === 'comment'
+                     ? '<button type="button" class="tsk-evb" data-clink="' + e.id + '">Ссылка</button>' : '') +
+                   (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '') +
+                   (e.kind === 'comment' && (mine || iAmTop)
+                     ? '<button type="button" class="tsk-evb tsk-evdel" data-cdel="' + e.id + '">Удалить</button>' : '');
         return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '" data-ev="' + e.id + '">' +
           '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
           '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
@@ -13424,7 +13457,7 @@
           box.querySelector('.al-cancel').addEventListener('click', off);
           var save = function () {
             var text = (ta.value || '').trim();
-            if (!text) { showToast('Пустая реплика — это удаление, а удалять мы не умеем'); ta.focus(); return; }
+            if (!text) { showToast('Пустая реплика ничего не меняет — чтобы убрать, жми «Удалить»'); ta.focus(); return; }
             if (text === (ev.text || '')) { off(); return; }
             var ok = box.querySelector('.bp');
             ok.disabled = true;
@@ -13443,6 +13476,57 @@
           });
         });
       });
+
+      /* Ссылка на реплику. Копируем боевой адрес, а не адрес текущей вкладки:
+         ссылку отправляют коллеге, у которого ни превью, ни зеркала не открыто. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-clink]'), function (b) {
+        b.addEventListener('click', function () {
+          copyText(CRM_HOME + '#task/' + id + '/c' + b.getAttribute('data-clink'), b);
+        });
+      });
+
+      /* Удаление реплики: свою убирает автор, любую — супер-админ. Спрашиваем
+         до запроса, потому что вернуть текст нельзя: он уходит из карточки
+         навсегда, в ленте остается только пометка. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-cdel]'), function (b) {
+        b.addEventListener('click', function () {
+          var eid = +b.getAttribute('data-cdel');
+          var ev = evById(eid);
+          var own = !!(ev && me && ev.actor_id === me);
+          if (!window.confirm(own
+                ? 'Удалить свою реплику? Текст пропадет, в ленте останется пометка «реплика удалена».'
+                : 'Удалить чужую реплику? Текст пропадет, в ленте останется пометка и ваше имя.')) return;
+          var at = (ov.querySelector('.al-body') || {}).scrollTop || 0;
+          b.disabled = true;
+          apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'DELETE', null, function (r) {
+            if (r && r.events) redrawFeed(r.events, at);
+          }, function (code) {
+            b.disabled = false;
+            showToast(code === 403 ? 'Удалить можно только свою реплику'
+                                   : 'Не удалилось — проверь интернет');
+          });
+        });
+      });
+
+      /* Пришли по ссылке на реплику: прокручиваем ленту к ней и подсвечиваем.
+         Ровно один раз за открытие карточки — после правки или новой реплики
+         лента перерисовывается, и повторная вспышка сбивала бы с толку. */
+      if (focusEv && !anchorDone) {
+        anchorDone = true;
+        var aRow = ov.querySelector('[data-ev="' + focusEv + '"]');
+        var aBody = ov.querySelector('.al-body');
+        if (aRow && aBody) {
+          // Считаем сами, а не scrollIntoView: он прокручивает заодно и страницу
+          // под карточкой, и после закрытия человек оказывается не там, где был.
+          aBody.scrollTop += aRow.getBoundingClientRect().top -
+            aBody.getBoundingClientRect().top - aBody.clientHeight / 2 +
+            aRow.offsetHeight / 2;
+          aRow.classList.add('hl');
+          setTimeout(function () { aRow.classList.remove('hl'); }, 2400);
+        } else if (!aRow) {
+          showToast('Этой реплики в задаче нет — возможно, ссылка от другой задачи');
+        }
+      }
 
       var wB = el('tk-watch');
       if (wB) wB.addEventListener('click', function () {
@@ -45549,7 +45633,7 @@
       denyLink('task', 'Задачи', 'Задача вам не открыта', 'раздела «Задачи» нет в вашем доступе');
       return;
     }
-    openTask(+tid);
+    openTask(+tid, hashTaskComment());
   }
   /* #meeting/<id> — разбор протокола встречи. На эту ссылку ведет ответ бота
      на присланный файл: человек жмет и попадает сразу в список на проверку. */
