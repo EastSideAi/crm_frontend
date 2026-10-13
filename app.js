@@ -12821,7 +12821,8 @@
           '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
           '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
           '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
-            (e.edited_at ? '<i class="tsk-ev-ed">изменено</i>' : '') + acts +
+            (e.edited_at ? '<i class="tsk-ev-ed">изменено</i>' : '') +
+            (acts ? '<span class="tsk-evacts">' + acts + '</span>' : '') +
           '</div></div></div>';
       };
       var feed = events.filter(function (e) { return !(e.reply_to && known[e.reply_to]); })
@@ -13526,6 +13527,16 @@
         } else if (!aRow) {
           showToast('Этой реплики в задаче нет — возможно, ссылка от другой задачи');
         }
+      }
+
+      /* Тело карточки уезжает под шапку, и до ссылок на реплику прокрученное
+         открытие было редкостью. Теперь это обычный заход, а срез без линии
+         читается как сбой отрисовки (на телефоне линию рисует style.css). */
+      var bodyEl = ov.querySelector('.al-body');
+      if (bodyEl) {
+        var shade = function () { bodyEl.classList.toggle('scr', bodyEl.scrollTop > 2); };
+        bodyEl.addEventListener('scroll', shade);
+        shade();
       }
 
       var wB = el('tk-watch');
