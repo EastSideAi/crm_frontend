@@ -16306,7 +16306,7 @@
           '<div><div class="al-eyebrow">Самозанятые</div><div class="al-title">Пригласить исполнителя</div></div>' +
           '<button class="al-x" id="cza-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.</div>' +
+        '<div class="al-sub" id="cza-sub">Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.</div>' +
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">ФИО <i>*</i></span>' +
             '<input id="cza-name" class="al-in" placeholder="Как обращаетесь к человеку" autocomplete="off" maxlength="120"></label>' +
@@ -16358,8 +16358,16 @@
       ip: 'У ИП спросим только согласие на обработку данных. ИНН и реквизиты система прочитает из его счета.',
       foreign: 'Человеку вне РФ налоговые вопросы не задаем — нужно только, куда платить.',
     };
+    /* Подзаголовок обещает анкету с ИНН и реквизитами, а у предпринимателя ее нет — для
+       него текст свой, иначе оператор обещает человеку то, чего тот не увидит. */
+    var kindSubs = {
+      self_employed: 'Вы даете имя и контакт — остальное человек заполнит сам по ссылке: ИНН, реквизиты и согласие на обработку данных. Вписывать это за него мы не имеем права.',
+      ip: 'Вы даете имя и контакт. По ссылке человек только подтвердит согласие на обработку данных — ИНН и реквизиты мы прочитаем из его счета.',
+      foreign: 'Вы даете имя и контакт — остальное человек заполнит сам по ссылке. Налоговых вопросов ему не задаем, нужно только, куда платить.',
+    };
     el('cza-kind').addEventListener('change', function () {
       el('cza-kind-h').textContent = kindHints[this.value] || kindHints.self_employed;
+      el('cza-sub').textContent = kindSubs[this.value] || kindSubs.self_employed;
     });
     var save = el('cza-save');
     var submit = function () {
@@ -17113,7 +17121,7 @@
       'Приложите файл счета — номер, дату и сумму система прочитает из него сама. ' +
       'Поля ниже заполняйте, только если в файле их не разобрать или надо поправить.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
-      ['num', 'line', 'Номер счета (если не из файла)', inv ? inv.number : ''],
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
       ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
       ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
@@ -17364,8 +17372,11 @@
      отправляют, а не рассматривают в интерфейсе CRM. */
   var DC = { items: null, err: '', q: '', kind: 'all', archived: false,
              who: '', whoName: '', _t: null };
-  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['receipt', 'Чеки'],
-                  ['contract', 'Договоры'],
+  /* Счета стоят рядом с актами, а не в конце: у исполнителя-ИП ни договора, ни акта
+     нет вовсе, и счет для него единственная бумага, доказывающая расход. Без вкладки
+     раздел по такому человеку выглядел бы пустым, хотя деньги ему уходили. */
+  var DC_KINDS = [['all', 'Все'], ['act', 'Акты'], ['invoice', 'Счета'],
+                  ['receipt', 'Чеки'], ['contract', 'Договоры'],
                   ['pdn', 'Согласия на данные'], ['nda', 'NDA']];
   // Чеки (этап 7) — отдельный источник: они привязаны к выплате, а не к человеку, и
   // живут своей ручкой. RCP держит их и сводку долгов для полосы вверху «Документов».
@@ -17373,8 +17384,9 @@
   var RCP_ST = { ok: 'ct-ok', awaiting: 'ct-check', debt: 'ct-bad' };
   var DC_ST = { wait_both: 'ct-wait', wait_co: 'ct-wait', wait_ct: 'ct-wait',
                 signed: 'ct-ok', paid: 'ct-paid', void: 'ct-off',
-                none: 'ct-draft', sent: 'ct-wait' };
-  var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc' };
+                none: 'ct-draft', sent: 'ct-wait', live: 'ct-wait' };
+  var DC_ICON = { act: 'doc', contract: 'doc', pdn: 'badge', nda: 'doc',
+                  invoice: 'coins' };
 
   function rcpLoad(cb) {
     api('/admin/api/contractor-receipts').then(function (r) {
@@ -19276,7 +19288,7 @@
       'Пришлите файл счета — номер, дату и сумму мы прочитаем из него сами. Поля ниже ' +
       'нужны, только если в файле их не разобрать.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
-      ['num', 'line', 'Номер счета (если не из файла)', inv ? inv.number : ''],
+      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
       ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
       ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
