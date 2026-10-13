@@ -16306,6 +16306,17 @@
         '<div class="al-body">' +
           '<label class="al-f"><span class="al-l">ФИО <i>*</i></span>' +
             '<input id="cza-name" class="al-in" placeholder="Как обращаетесь к человеку" autocomplete="off" maxlength="120"></label>' +
+          /* Вид выбирается ЗДЕСЬ, а не потом в карточке: от него зависит, что анкета у
+             человека спросит. У предпринимателя она сводится к согласию на обработку
+             данных — ИНН и реквизиты приедут с его счетом, — и узнать это надо до того,
+             как он откроет ссылку. */
+          '<label class="al-f"><span class="al-l">Кто он по оформлению</span>' +
+            '<select id="cza-kind" class="al-in">' +
+              '<option value="self_employed">Самозанятый — платим по акту, нужен чек «Мой налог»</option>' +
+              '<option value="ip">ИП — платим по его счету, договора и акта нет</option>' +
+              '<option value="foreign">Вне РФ — платим переводом, российских документов нет</option>' +
+            '</select>' +
+            '<div class="al-hint" id="cza-kind-h">Самозанятый заполнит полную анкету: паспорт, ИНН и реквизиты.</div></label>' +
           '<div class="al-row">' +
             '<label class="al-f"><span class="al-l">Телефон</span>' +
               '<input id="cza-phone" class="al-in" placeholder="+7 900 000-00-00" autocomplete="off" maxlength="30"></label>' +
@@ -16336,6 +16347,16 @@
     ov2.addEventListener('mousedown', function (e) { if (e.target === ov2) close(); });
     var nameI = el('cza-name');
     setTimeout(function () { nameI.focus(); }, 30);
+    /* Подсказка под выбором меняется вместе с ним: человек должен понимать, что именно
+       уедет по ссылке, до того как ее отправит. */
+    var kindHints = {
+      self_employed: 'Самозанятый заполнит полную анкету: паспорт, ИНН и реквизиты.',
+      ip: 'У ИП спросим только согласие на обработку данных. ИНН и реквизиты система прочитает из его счета.',
+      foreign: 'Человеку вне РФ налоговые вопросы не задаем — нужно только, куда платить.',
+    };
+    el('cza-kind').addEventListener('change', function () {
+      el('cza-kind-h').textContent = kindHints[this.value] || kindHints.self_employed;
+    });
     var save = el('cza-save');
     var submit = function () {
       var name = (nameI.value || '').trim();
@@ -16346,6 +16367,7 @@
         phone: (el('cza-phone').value || '').trim() || null,
         email: (el('cza-mail').value || '').trim() || null,
         note: (el('cza-note').value || '').trim() || null,
+        employment: el('cza-kind').value,
       }).then(function (r) {
         var cid = r.contractor.id;
         CZ.list = null;
@@ -17079,22 +17101,30 @@
      Сумму подставляем из акта: платят ровно то, что подписано, и расхождение видно
      сразу под полями, а не на воротах выплаты. */
   function openCtInvoice(t, inv) {
-    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
-    var today = new Date().toISOString().slice(0, 10);
+    /* С чем сверяем сумму. У самозанятого это акт, у ИП акта нет вовсе — там
+       согласованная цифра живет в задании, и ее же спрашивают ворота выплаты. */
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100
+                    : (Number(t.amount) > 0 ? Math.round(Number(t.amount) * 100) / 100 : null);
     openSheet(inv ? 'Исправить счет' : 'Счет от ИП',
-      'Номер и дату берем из самого счета: по ним бухгалтер сделает платежку, и по ним ' +
-      'же потом искать платеж в выписке.', [
-      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
-      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
-      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      'Приложите файл счета — номер, дату и сумму система прочитает из него сама. ' +
+      'Поля ниже заполняйте, только если в файле их не разобрать или надо поправить.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+      ['num', 'line', 'Номер счета (если не из файла)', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
       var num = (v.num || '').trim();
       var sum = Number(v.sum);
-      if (!num) return 'Укажите номер счета';
-      if (!v.date) return 'Укажите дату счета';
-      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
-      var body = { number: num, issued_on: v.date, amount: sum };
+      /* Без файла читать нечего — тогда поля обязательны, как раньше. С файлом хватает
+         его одного: чего в нем не нашлось, сервер назовет словами. */
+      if (!v.file && !(inv && inv.has_file)) {
+        if (!num) return 'Приложите файл счета или впишите его номер';
+        if (!v.date) return 'Укажите дату счета';
+        if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      }
+      if (v.sum && !(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num || null, issued_on: v.date || null,
+                   amount: sum > 0 ? sum : null };
       if (v.file) {
         body.file_name = v.file.name;
         body.file_mime = v.file.mime;
@@ -17110,12 +17140,14 @@
         .catch(function (e) { el('sh-err').textContent = e.message; });
       return null;
     }, function (v) {
-      // расхождение с актом показываем под полями: на воротах выплаты оно станет
-      // отказом, и узнать о нем лучше сейчас
+      // расхождение показываем под полями: на воротах выплаты оно станет отказом, и
+      // узнать о нем лучше сейчас. Поле пустое — молчим: сумму еще прочитает сервер.
       var s = Math.round(Number(v.sum || 0) * 100) / 100;
-      if (due === null) return '';
-      return s === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
-        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽. Платить будем по акту';
+      if (due === null || !v.sum) return '';
+      var what = t.act ? 'актом' : 'заданием';
+      return s === due ? 'Сходится с ' + what + ': <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с ' + what + '</b>: там ' + ctMoney(due) + ' ₽. ' +
+          (t.act ? 'Платить будем по акту' : 'На такой счет выплата не пройдет');
     }, 'Самозанятые', inv ? 'Сохранить' : 'Приложить');
   }
 
@@ -19234,21 +19266,26 @@
      ручка та же с точностью до двери (`/admin/api/my/cz/...`): правила приема счета
      живут на сервере в одном месте, иначе две двери начнут проверять разное. */
   function openMwInvoice(t, inv) {
-    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100 : null;
-    var today = new Date().toISOString().slice(0, 10);
+    var due = t.act ? Math.round(Number(t.act.amount) * 100) / 100
+                    : (Number(t.amount) > 0 ? Math.round(Number(t.amount) * 100) / 100 : null);
     openSheet(inv ? 'Исправить счет' : 'Счет на оплату',
-      'Номер и дату берем из вашего счета — по ним пройдет платеж.', [
-      ['num', 'line', 'Номер счета', inv ? inv.number : ''],
-      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : today],
-      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : (due || ''))],
+      'Пришлите файл счета — номер, дату и сумму мы прочитаем из него сами. Поля ниже ' +
+      'нужны, только если в файле их не разобрать.', [
       ['file', 'file', inv && inv.has_file ? 'Заменить файл (не обязательно)' : 'Файл счета', ''],
+      ['num', 'line', 'Номер счета (если не из файла)', inv ? inv.number : ''],
+      ['date', 'date', 'Дата счета', inv && inv.issued_on ? inv.issued_on.slice(0, 10) : ''],
+      ['sum', 'number', 'Сумма по счету, ₽', String(inv ? inv.amount : '')],
     ], function (v, close) {
       var num = (v.num || '').trim();
       var sum = Number(v.sum);
-      if (!num) return 'Укажите номер счета';
-      if (!v.date) return 'Укажите дату счета';
-      if (!(sum > 0)) return 'Сумма должна быть больше нуля';
-      var body = { number: num, issued_on: v.date, amount: sum };
+      if (!v.file && !(inv && inv.has_file)) {
+        if (!num) return 'Приложите файл счета или впишите его номер';
+        if (!v.date) return 'Укажите дату счета';
+        if (!(sum > 0)) return 'Сумма должна быть больше нуля';
+      }
+      if (v.sum && !(sum > 0)) return 'Сумма должна быть больше нуля';
+      var body = { number: num || null, issued_on: v.date || null,
+                   amount: sum > 0 ? sum : null };
       if (v.file) {
         body.file_name = v.file.name;
         body.file_mime = v.file.mime;
@@ -19264,9 +19301,10 @@
       return null;
     }, function (v) {
       var sm = Math.round(Number(v.sum || 0) * 100) / 100;
-      if (due === null) return '';
-      return sm === due ? 'Сходится с актом: <b>' + ctMoney(due) + ' ₽</b>'
-        : '<b>Не сходится с актом</b>: в акте ' + ctMoney(due) + ' ₽';
+      if (due === null || !v.sum) return '';
+      var what = t.act ? 'актом' : 'заданием';
+      return sm === due ? 'Сходится с ' + what + ': <b>' + ctMoney(due) + ' ₽</b>'
+        : '<b>Не сходится с ' + what + '</b>: там ' + ctMoney(due) + ' ₽';
     }, 'Моя работа', inv ? 'Сохранить' : 'Отправить');
   }
 
