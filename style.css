@@ -7175,6 +7175,39 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
+   в строке это деталь, а не действие экрана. */
+.fsp-bill { color: var(--ink-2); text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px; }
+.fsp-bill:hover { color: var(--blue); text-decoration-color: var(--blue); }
+
+/* Строка расхода: справа до трех пометок сразу (стадия, чем платили, флаг ИП по
+   счету). В общие 150px они налезают друг на друга, поэтому колонка шире и умеет
+   перенос: пометки важнее, чем лишние 110px под название контрагента. */
+.trow.fsp-row { grid-template-columns: 92px 1.5fr 150px 260px; }
+.fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
+
+/* Поле файла в форме ведомости: плашка по мере .al-in, внутри спрятан input.
+   Браузерная кнопка «Choose File» приходит с английской подписью и чужой
+   типографикой — на экране про деньги это читается как сбой верстки. */
+.fin-file { display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: var(--fill); border-radius: 11px; padding: 7px 8px 7px 9px;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); transition: box-shadow .15s; }
+.fin-file:hover { box-shadow: inset 0 0 0 1px rgba(17,21,31,.14); }
+.fin-file:focus-within { background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); }
+.fin-file-b { flex: none; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border-radius: 8px; padding: 7px 12px;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.09); }
+.fin-file-n { font-size: 12.5px; color: var(--ink-3); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.fin-file-n.on { color: var(--ink); font-weight: 600; }
+
+/* «ИП не действует» — единственный красный в строке расхода: платеж снявшемуся с
+   учета предпринимателю это выплата физлицу, с НДФЛ и взносами на нас. Семья чипов
+   та же, что у статусов (.sev), свой класс нужен только из-за места в строке. */
+.fsp-ip { color: var(--red-ink); background: var(--red-soft); font-size: 11.5px;
+  padding: 3px 9px; }
 /* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
 .fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
 .fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }

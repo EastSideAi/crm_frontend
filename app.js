@@ -21906,8 +21906,11 @@
           ' · ' + finDate(h.date) +
           '<span class="rsk-hit-hint">' + h.count + ' раза</span></li>';
       }
+      // Подсказка строки — дословный ответ реестра или цифра из счета. Своими
+      // словами их не пересказываем: спорить будут именно про них.
       return '<li><b>' + esc(h.what || '—') + '</b> · ' + finRub(h.amount) +
-        ' · ' + finDate(h.date) + '</li>';
+        ' · ' + finDate(h.date) +
+        (h.note ? '<span class="rsk-hit-hint">' + esc(h.note) + '</span>' : '') + '</li>';
     }).join('');
     return '<ul class="rsk-hits">' + li + '</ul>';
   }
@@ -21983,17 +21986,49 @@
 
     var cards = arts.map(function (a) {
       var rows = a.items.map(function (it) {
+        // Номер счета идет во вторую строку к названию, а не чипом в колонку статуса:
+        // там уже стоят стадия и «чем платили», и четвертый элемент выдавливает их за
+        // край. Эта строка и отвечает на вопрос «за что ушли деньги».
+        // Поле `bill`, а не `invoice`: под `meta.invoice` бот расходов метит строку
+        // «счет к оплате», и это другой смысл.
+        var inv = it.bill || null;
+        var invLbl = inv && inv.number
+          ? 'счет № ' + inv.number + (inv.issued_on ? ' от ' + finDate(inv.issued_on) : '')
+          : '';
         var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
+        // Сам документ лежит у нас, и номер счета — ссылка на него: вопрос «за что
+        // ушли деньги» без бумаги не закрывается, а искать ее потом негде.
+        if (invLbl) {
+          var lnk = it.doc && it.doc.file
+            ? '<a class="fsp-bill" href="' + API + '/admin/api/fin/operation/' +
+              encodeURIComponent(it.id) + '/doc-file?k=' + encodeURIComponent(getKey()) +
+              '" download>' + esc(invLbl) + '</a>'
+            : esc(invLbl);
+          sub = sub ? sub + ' · ' + lnk : lnk;
+        }
         var act = '';
         if (it.state === 'подтвержден' && it.doc) {
-          act = '<span class="fsp-doc" title="' + esc(it.doc.name) + '">' +
-            ic('check', 11) + esc(it.doc.name) + '</span>';
+          // Имя файла показываем только там, где номера счета нет: «scan_13-10.pdf»
+          // человеку не говорит ничего.
+          if (!invLbl) {
+            act = '<span class="fsp-doc" title="' + esc(it.doc.name) + '">' +
+              ic('check', 11) + esc(it.doc.name) + '</span>';
+          }
+          // Красный чип стоит там, где деньги: платеж человеку без действующего ИП
+          // это выплата физлицу (НДФЛ, взносы, штраф). Пишем следствие, а не причину:
+          // причин три (снят с учета, нет в реестре, опечатка в ИНН), и все они в
+          // подсказке дословно от реестра. Остальные его ответы остаются информатору
+          // сверху: в строке они только шумели бы.
+          if (inv && inv.ip && inv.ip.status === 'inactive') {
+            act += '<span class="qchip fsp-ip" title="' +
+              esc(inv.ip.message || '') + '">платить как ИП нельзя</span>';
+          }
         } else if (it.state === 'проведен' && canFix) {
           act = '<button class="qchip fsp-add" data-spdoc="' + esc(it.id) + '">' +
             ic('plus', 11) + 'документ</button>';
         }
-        return '<div class="trow fin-grid fe-grid">' +
+        return '<div class="trow fin-grid fe-grid fsp-row">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
           '<span class="fo-what"><b>' + esc(it.counterparty || it.item || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
@@ -22038,20 +22073,95 @@
   function spendDocForm(id) {
     var m = finModal({
       eyebrow: 'Расход', title: 'Приложить документ', ok: 'Приложить',
-      body: finField('Название документа',
+      sub: 'Счет в PDF разберу сам: номер, дату, сумму и ИНН. Если это скан или ' +
+           'фотография, текста в файле нет — впишите номер и сумму руками.',
+      body: finField('Файл счета или другого документа',
+              // Голый input type=file рисует кнопку «Choose File» по-английски и
+              // силой браузера — на денежном экране это выглядит как чужая деталь.
+              // Поэтому своя плашка по мере поля, а сам input спрятан внутри нее.
+              '<label class="fin-file"><input type="file" id="sp-file" hidden ' +
+              'accept=".pdf,.jpg,.jpeg,.png">' +
+              '<span class="fin-file-b">Выбрать файл</span>' +
+              '<span class="fin-file-n" id="sp-filen">PDF, скан или фотография</span>' +
+              '</label>') +
+            '<div class="al-row">' +
+            finField('Номер счета', '<input id="sp-num" class="al-in" maxlength="60" ' +
+              'placeholder="например 77">') +
+            finField('Дата счета', '<input id="sp-date" class="al-in" type="date">') +
+            '</div>' +
+            finField('Сумма по счету',
+              '<input id="sp-sum" class="al-in" inputmode="decimal" ' +
+              'placeholder="как в документе">') +
+            finField('Название документа',
               '<input id="sp-name" class="al-in" maxlength="200" ' +
               'placeholder="Чек, квитанция, счет, накладная">') +
             finField('Ссылка, если есть',
               '<input id="sp-link" class="al-in" maxlength="500" placeholder="https://...">'),
     });
     if (!m) return;
-    el('fm-ok').addEventListener('click', function () {
-      var name = finVal('sp-name');
-      if (!name) { m.err.textContent = 'Впишите название документа.'; return; }
-      m.close();
-      finDo('/admin/api/fin/operation/' + id + '/doc', 'POST',
-        { name: name, link: finVal('sp-link') }, 'Документ приложен, расход подтвержден.');
+    // Имя выбранного файла показываем сразу: без него плашка после выбора выглядит
+    // так же, как до него, и человек жмет «Выбрать файл» второй раз.
+    el('sp-file').addEventListener('change', function () {
+      var pick = this.files && this.files[0];
+      el('sp-filen').textContent = pick ? pick.name : 'PDF, скан или фотография';
+      el('sp-filen').classList.toggle('on', !!pick);
     });
+    el('fm-ok').addEventListener('click', function () {
+      var f = el('sp-file'), file = f && f.files && f.files[0] ? f.files[0] : null;
+      var name = finVal('sp-name');
+      // Без файла это прежняя отметка документа названием и ссылкой: ее оставляем —
+      // чек из магазина прикладывать файлом не всегда есть чем.
+      if (!file) {
+        if (!name) { m.err.textContent = 'Приложите файл или впишите название документа.'; return; }
+        m.close();
+        finDo('/admin/api/fin/operation/' + id + '/doc', 'POST',
+          { name: name, link: finVal('sp-link') }, 'Документ приложен, расход подтвержден.');
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        m.err.textContent = 'Файл больше 8 МБ. Пришлите сам счет, а не подшивку.';
+        return;
+      }
+      var sum = finVal('sp-sum').replace(/\s/g, '').replace(',', '.');
+      if (sum && isNaN(Number(sum))) { m.err.textContent = 'Сумма по счету — число.'; return; }
+      var btn = el('fm-ok');
+      btn.disabled = true; btn.textContent = 'Читаю счет…';
+      var fr = new FileReader();
+      fr.onerror = function () {
+        btn.disabled = false; btn.textContent = 'Приложить';
+        m.err.textContent = 'Файл не прочитался. Попробуйте выбрать его заново.';
+      };
+      fr.onload = function () {
+        m.close();
+        finDo('/admin/api/fin/operation/' + id + '/invoice', 'POST', {
+          name: name || file.name, data: String(fr.result), mime: file.type || null,
+          number: finVal('sp-num') || null, issued_on: finVal('sp-date') || null,
+          amount: sum ? Number(sum) : null,
+        }, null, function (res) { showToast(spendInvToast(res)); });
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+  /* Что сказать человеку после разбора счета. Главное тут не «готово», а что именно
+     система прочитала и что ответил реестр: по этим цифрам пойдут деньги. */
+  function spendInvToast(res) {
+    var inv = (res && res.bill) || {};
+    var read = (res && res.read) || {};
+    var out = [];
+    // «№ 77 от 13.10.2026» — это одна мысль, запятая внутри нее читается как сбой.
+    var num = (inv.number ? '№ ' + inv.number : '') +
+      (inv.issued_on ? (inv.number ? ' ' : '') + 'от ' + finDate(inv.issued_on) : '');
+    if (num) out.push(num);
+    if (inv.amount) out.push(finRub(inv.amount));
+    var head = out.length ? 'Счет приложен: ' + out.join(', ') + '.'
+      : 'Файл приложен, но прочитать из него нечего: это скан. Номер и сумму впишите руками.';
+    var ip = inv.ip || null;
+    if (ip && ip.status === 'inactive') {
+      head += ' Платить как предпринимателю нельзя: ' + (ip.message || 'ИП не действует') + '.';
+    } else if (ip && ip.status === 'active') head += ' ' + (ip.message || 'ИП действует по ЕГРИП') + '.';
+    else if (ip) head += ' ' + (ip.message || 'ИП не проверен') + '.';
+    else if (read.inn_many) head += ' В счете несколько разных ИНН, в ЕГРИП не ходил.';
+    return head;
   }
 
   /* Дата новой строки — сегодня, но только если сегодня внутри ведомости. Иначе
