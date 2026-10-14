@@ -11069,6 +11069,31 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pl-go { cursor: pointer; transition: background .12s var(--ease); }
 .pl-go:hover { background: #FAFBFC; }
 
+/* Напоминания о плане: кто отвечает за отдел и в каком состоянии его задача.
+   Своей карточки не изобретает — те же .pl-row, что в сводке выше, плюс поле
+   выбора человека. Строка тут не кликается целиком: клик по ней означал бы
+   «провалиться в лист», а здесь в строке живет выбор ответственного. */
+.rem-card { margin-top: 14px; }
+.rem-row { gap: 10px; }
+.rem-row .pl-nm { flex: 1 1 140px; }
+.rem-who, .rem-row .ss-wrap { flex: 0 1 220px; max-width: 220px; }
+.rem-who-t { flex: 0 1 220px; font-size: 13px; color: var(--ink-2); text-align: right; }
+.rem-when { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Рубильник всего цикла отбит от пары «последний понедельник / 20-го»: это выбор
+   не расписания, а того, работает ли процесс вообще. */
+.rem-off { margin-left: 10px; color: var(--ink-2); }
+/* «Ждет такого-то» — состояние всех строк до дня рассылки, то есть обычный
+   рабочий текст, а не тихая сноска: .pl-badge.na для него слишком бледна. */
+.rem-wait { color: var(--ink-2); background: var(--fill); }
+
+@media (max-width: 760px) {
+  /* На телефоне отдел и его состояние стоят строкой, а выбор человека — под ними:
+     рядом они сжимали select до неработоспособной ширины. */
+  .rem-row { flex-wrap: wrap; }
+  .rem-who, .rem-who-t, .rem-row .ss-wrap { flex: 1 1 100%; max-width: none; order: 3;
+    text-align: left; }
+}
+
 /* ── Блок «План на месяц» в расчётном листе + форма плановой строки ── */
 .plm-card { padding: 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
 .plm-head { display: flex; align-items: flex-start; justify-content: space-between;
