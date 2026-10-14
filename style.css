@@ -3447,17 +3447,23 @@ button.tr-crumb:hover { color: var(--blue); }
    наведению и по фокусу с клавиатуры — тот же прием, что у .tg-acts и .dn-undo.
    На тач-экранах наведения нет, там они видны всегда. */
 @media (hover: hover) {
-  .tsk-evacts { opacity: 0; transition: opacity .12s var(--ease); }
+  /* Место под ряд держим всегда: если убирать его из потока, лента дергалась бы
+     на каждом наведении. А вот нажать невидимое нельзя — pointer-events снимаем
+     вместе с видимостью. Фокус с клавиатуры при этом работает, поэтому не
+     visibility: hidden. */
+  .tsk-evacts { opacity: 0; pointer-events: none; transition: opacity .12s var(--ease); }
   .tsk-msg:hover .tsk-evacts,
-  .tsk-evacts:focus-within { opacity: 1; }
+  .tsk-evacts:focus-within { opacity: 1; pointer-events: auto; }
 }
 .tsk-msg.out .tsk-evacts { justify-content: flex-end; }
 .tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-2); transition: color .12s;
   display: inline-flex; align-items: center; gap: 4px; }
 .tsk-msg.ed .tsk-evb { display: none; }
 .tsk-evb:hover { color: var(--blue); }
+/* Кольцо фокуса на строке в 17 пикселей ложится прямо на буквы — отодвигаем его
+   отступом и гасим отступ отрицательным полем, чтобы ряд не разъехался. */
 .tsk-evb:focus-visible, .tsk-quote:focus-visible { outline: none; border-radius: 6px;
-  box-shadow: inset 0 0 0 1.5px var(--blue); }
+  box-shadow: inset 0 0 0 1.5px var(--blue); padding: 2px 5px; margin: -2px -5px; }
 /* «Удалить» уводит в красный только под курсором: в спокойном состоянии это
    такая же тихая подпись, как остальные, иначе лента пестрит предупреждением. */
 .tsk-evb.tsk-evdel:hover { color: var(--red-ink); }
