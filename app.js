@@ -159,6 +159,7 @@
         ganttOpen: state.ganttOpen || {},
         mxTab: state.mxTab || 'soon',
         pathGran: state.pathGran || 'week',
+        pfLens: state.pfLens || 'month',
       }));
     } catch (e) {}
   }
@@ -29993,6 +29994,55 @@
     renderView();
   }
 
+  /* Линза раздела: месяц (план компании) или неделя (РНП отдела продаж).
+     Планы хранятся только по месяцам, недельный план считает сервер долей от
+     месячного — см. комментарий в app/routers/planfact.py. */
+  function pfLens() { return state.pfLens === 'week' ? 'week' : 'month'; }
+
+  function pfIso(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function pfWeek() {
+    if (!state.pfWeek) {
+      var d = new Date();
+      var shift = (d.getDay() + 6) % 7;            // понедельник = 0
+      d.setDate(d.getDate() - shift);
+      state.pfWeek = pfIso(d);
+    }
+    return state.pfWeek;
+  }
+
+  function pfWeekShift(step) {
+    var p = pfWeek().split('-');
+    var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+    d.setDate(d.getDate() + step * 7);
+    state.pfWeek = pfIso(d);
+    state._pfw = null;
+    renderView();
+  }
+
+  function fetchPfWeek() {
+    var w = pfWeek();
+    api('/admin/api/planfact/week?week=' + w).then(function (r) {
+      if (pfWeek() !== w) return;    // пока ходили, переключили неделю
+      state._pfw = r || 'none';
+      if (state.page === 'planfact') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      if (pfWeek() !== w) return;
+      state._pfw = 'none';
+      if (state.page === 'planfact') renderView();
+    });
+  }
+
+  function pfLensSeg() {
+    var at = pfLens();
+    return '<div class="due-seg mt-lens pf-lens">' +
+      '<button type="button" class="' + (at === 'month' ? 'on' : '') + '" data-pflens="month">Месяц</button>' +
+      '<button type="button" class="' + (at === 'week' ? 'on' : '') + '" data-pflens="week">Неделя</button></div>';
+  }
+
   function fetchPf() {
     var m = pfMonth();
     api('/admin/api/planfact?month=' + m).then(function (r) {
@@ -30012,8 +30062,10 @@
     return money ? fmtMoney(n) + ' ₽' : fmtMoney(n);
   }
 
-  function pfRow(r, started) {
+  function pfRow(r, started, scope) {
     r.started = started;
+    var per = scope === 'week' ? 'неделю' : 'месяц';
+    var till = scope === 'week' ? 'к концу недели ' : 'к концу месяца ';
     var money = r.kind === 'money';
     var words = r.lower_better ? PF_ST_LOW : PF_ST;
     var plan = r.plan
@@ -30031,7 +30083,7 @@
       bar = '<div class="pf-track"><span class="pf-fill ' + esc(r.state) + '" style="width:' + w + '%"></span>' +
         '<span class="pf-due" style="left:' + due + '%" title="где должны быть сегодня"></span></div>';
     } else {
-      bar = '<div class="pf-noplan">плана на месяц нет</div>';
+      bar = '<div class="pf-noplan">плана на ' + per + ' нет</div>';
     }
 
     var right;
@@ -30041,10 +30093,10 @@
     } else if (r.plan) {
       // План стоит, а состояния нет: месяц еще не начался или расход не внесен.
       // Зеленое «в рамках» на пустом кабинете было бы враньем в свою пользу.
-      right = '<span class="pf-fc">' + (r.lower_better && r.started ? 'расход за месяц не внесен'
-        : (r.started ? 'цифр пока нет' : 'месяц еще не начался')) + '</span>';
+      right = '<span class="pf-fc">' + (r.lower_better && r.started ? 'расход за ' + per + ' не внесен'
+        : (r.started ? 'цифр пока нет' : per === 'неделю' ? 'неделя еще не началась' : 'месяц еще не начался')) + '</span>';
     } else {
-      right = '<span class="pf-fc">к концу месяца ' + pfNum(r.forecast, money) + '</span>';
+      right = '<span class="pf-fc">' + till + pfNum(r.forecast, money) + '</span>';
     }
 
     return '<div class="pf-row">' +
@@ -30078,7 +30130,100 @@
     return { t: 'Идем к плану', s: 'все метрики с планом держат темп', cls: 'ok' };
   }
 
+  /* Неделя: тот же раздел другой линзой. Отдельной страницей это было бы два
+     места с цифрами воронки, которые однажды разойдутся между собой. */
+  function renderPfWeek(view) {
+    if (!state._pfw) { view.innerHTML = dashSkeleton(); fetchPfWeek(); return; }
+    if (state._pfw === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить неделю — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._pfw;
+    var passed = d.days_passed || 0;
+    var v = pfVerdict({ rows: d.rows, days_passed: passed, month: d.week });
+
+    var head = '<div class="card pf-head pf-head-w">' +
+      pfLensSeg() +
+      '<div class="brd-nav">' +
+        '<button class="icobtn sm brd-arrow prev" data-pfweek="-1" title="Прошлая неделя">' + ic('go', 15) + '</button>' +
+        '<span class="brd-label">' + esc(d.label) + '</span>' +
+        '<button class="icobtn sm brd-arrow" data-pfweek="1" title="Следующая неделя">' + ic('go', 15) + '</button>' +
+        (d.current ? '' : '<button class="qchip" data-pfweek="now">Эта неделя</button>') +
+        // Шкалы дней тут нет намеренно: в неделе их семь, и полоса прогресса
+        // рядом с подписью словами была бы вторым способом сказать одно и то же.
+        '<div class="pf-wdays">' + (d.current
+          ? 'идет, прошло ' + passed + ' ' + plural(passed, 'день', 'дня', 'дней') + ' из 7'
+          : 'неделя закрыта') + '</div>' +
+      '</div>' +
+      '<div class="pf-verdict' + (v.cls ? ' ' + v.cls : '') + '">' +
+        '<div class="pf-vt">' + esc(v.t) + '</div>' +
+        '<div class="pf-vs">' + esc(v.s) + '</div>' +
+      '</div>' +
+    '</div>';
+
+    var derived = (d.derived || []).map(function (r) {
+      return { label: r.label, value: r.fact == null ? '—' : pfNum(r.fact, true),
+               sub: 'за неделю' };
+    });
+
+    view.innerHTML = '<div class="dash">' + head +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head pf-sec" style="padding:20px 24px 16px"><span class="ic">' + ic('target', 14) + '</span>' +
+        '<div><div class="t">Метрики недели</div>' +
+        '<div class="s">план недели — доля месячного по дням</div></div></div>' +
+        '<div class="pf-tbl">' + (d.rows || []).map(function (r) {
+          return pfRow(r, passed > 0, 'week');
+        }).join('') + '</div>' +
+      '</div>' +
+      (derived.length ? statBar(derived, derived.length === 3 ? '' : 'five') : '') +
+      '<div class="card sp12" style="overflow:hidden">' +
+        '<div class="sec-head pf-sec" style="padding:20px 24px 16px"><span class="ic">' + ic('bolt', 14) + '</span>' +
+        '<div><div class="t">Воронка продаж</div>' +
+        '<div class="s">рядом — та же строка на прошлой неделе (' + esc(d.prev_label) + ')</div></div></div>' +
+        '<div class="pf-tbl">' + (d.funnel || []).map(pfnRow).join('') + '</div>' +
+      '</div>' +
+    '</div>';
+
+    pfBind(view);
+    animBars(view);
+  }
+
+  /* Строка воронки. Плана тут нет намеренно: это места потерь, а не цели месяца,
+     и смысл цифры дает соседняя неделя, а не процент выполнения. */
+  function pfnRow(r) {
+    var val = pfnVal(r.fact, r.kind);
+    var was = pfnVal(r.prev, r.kind);
+    var delta = '';
+    if (r.fact != null && r.prev != null) {
+      var diff = r.fact - r.prev;
+      if (!diff) delta = '<span class="pf-fc">как на прошлой</span>';
+      else {
+        // Для времени ответа и доли лидов без метки рост — плохая новость,
+        // поэтому цвет берем не по знаку, а по смыслу строки.
+        var good = r.lower_better ? diff < 0 : diff > 0;
+        var sign = diff > 0 ? '+' : '−';
+        delta = '<span class="sev pf-' + (good ? 'ok' : 'miss') + '">' + sign +
+          esc(pfnVal(Math.abs(diff), r.kind)) + '</span>';
+      }
+    }
+    return '<div class="pf-row pfn-row">' +
+      '<div class="pf-nm">' + esc(r.label) +
+        (r.hint ? '<small>' + esc(r.hint) + '</small>' : '') + '</div>' +
+      '<div class="pf-fact num">' + esc(val) + '</div>' +
+      '<div class="pf-fc pfn-was">было ' + esc(was) + '</div>' +
+      '<div class="pf-right">' + delta + '</div>' +
+    '</div>';
+  }
+
+  function pfnVal(n, kind) {
+    if (n == null) return '—';
+    if (kind === 'pct') return n + '%';
+    if (kind === 'hours') return n < 1 ? Math.round(n * 60) + ' мин' : n + ' ч';
+    return fmtMoney(n);
+  }
+
   function renderPlanFact(view) {
+    if (pfLens() === 'week') return renderPfWeek(view);
     if (!state._pf) { view.innerHTML = dashSkeleton(); fetchPf(); return; }
     if (state._pf === 'none') {
       view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить план-факт — проверь сеть или доступ.</div></div>';
@@ -30093,7 +30238,8 @@
     // второй способ листать период в одной CRM читался бы как другой продукт.
     var now = new Date();
     var isNow = d.month === now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
-    var head = '<div class="card pf-head">' +
+    var head = '<div class="card pf-head pf-head-w">' +
+      pfLensSeg() +
       '<div class="brd-nav">' +
         '<button class="icobtn sm brd-arrow prev" data-pfmon="-1" title="Прошлый месяц">' + ic('go', 15) + '</button>' +
         '<span class="brd-label">' + esc(pfMonthTitle(d.month)) + '</span>' +
@@ -30171,6 +30317,22 @@
   }
 
   function pfBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pflens]'), function (b) {
+      b.addEventListener('click', function () {
+        state.pfLens = b.getAttribute('data-pflens');
+        saveUi();
+        renderView();
+      });
+    });
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pfweek]'), function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-pfweek');
+        if (v === 'now') { state.pfWeek = ''; state._pfw = null; renderView(); return; }
+        pfWeekShift(parseInt(v, 10));
+      });
+    });
+
     Array.prototype.forEach.call(view.querySelectorAll('[data-pfmon]'), function (b) {
       b.addEventListener('click', function () {
         var v = b.getAttribute('data-pfmon');

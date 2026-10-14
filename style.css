@@ -11059,6 +11059,31 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
    «сделано 40%» десятого числа читается как провал, а двадцать пятого — как успех.
    Рецепты общие: строка-лестница (.lad-row), чип по формуле -soft/-ink, шкала с
    ростом .9s. Своих цветов не заводим. */
+/* Шапка с линзой: сегмент «Месяц / Неделя» встает первой колонкой, листалка
+   периода и вердикт сдвигаются вправо. Отдельной шапки для недели нет — иначе
+   один раздел выглядел бы как два разных продукта. */
+.pf-head-w { grid-template-columns: auto auto 1fr minmax(160px, 220px); }
+/* Неделя: трех колонок хватает, шкалы дней в ней нет — подпись словами стоит
+   под листалкой периода. */
+.pf-head-w.pf-head-week { grid-template-columns: auto 1fr auto; }
+.pf-head-week .brd-nav { flex-wrap: wrap; justify-content: center; }
+.pf-wdays { flex-basis: 100%; text-align: center; font-size: 11.5px; font-weight: 500;
+  color: var(--ink-3); margin-top: 6px; }
+.pf-lens { align-self: center; }
+/* Строка воронки: плана и шкалы нет, поэтому сетка своя — название, цифра,
+   прошлая неделя, дельта. */
+.pfn-row { grid-template-columns: 1fr 108px 150px 110px; }
+.pfn-was { text-align: right; align-self: center; }
+@media (max-width: 900px) {
+  /* Специфичность тут не ниже, чем у .pf-head-w.pf-head-week выше, иначе на
+     телефоне шапка осталась бы в три колонки и вердикт уезжал бы за край. */
+  .pf-head-w, .pf-head-w.pf-head-week { grid-template-columns: 1fr; }
+  .pf-head-week .brd-nav { justify-content: flex-start; }
+  .pf-wdays { text-align: left; }
+  .pfn-row { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .pfn-was { text-align: left; }
+}
+
 .pf-head { display: grid; grid-template-columns: auto 1fr minmax(160px, 220px);
   gap: 24px; align-items: center; padding: 18px 24px; }
 .pf-verdict .pf-vt { font-size: 21px; font-weight: 700; letter-spacing: -.03em; }
