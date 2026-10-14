@@ -3387,71 +3387,126 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-qmore:hover { color: var(--blue); }
 .tsk-qhint { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
 
-/* Своей высоты у ленты нет намеренно: скроллится тело карточки, и колесо не
-   застревает во вложенной области. */
-.tsk-feed { display: flex; flex-direction: column; gap: 2px; }
-.tsk-ev { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-.tsk-ev:first-child { border-top: none; }
-.tsk-ev-ic { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
-  background: var(--fill); color: var(--ink-3); }
-.tsk-ev.cm .tsk-ev-ic { background: var(--blue-tint); color: var(--blue); }
-.tsk-ev-b { min-width: 0; flex: 1; }
-.tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word;
-  white-space: pre-wrap; }
-.tsk-ev-t[hidden] { display: none; }
-.tsk-ev-m { display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px;
-  font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
-.tsk-ev-ed { font-style: normal; color: var(--ink-3); margin-left: -6px; }
-.tsk-ev-ed::before { content: '·'; margin-right: 5px; }
+/* ── Карточка задачи: задача слева, разговор справа ────────────────────────
+   Обсуждение лежало в подвале одной длинной колонки, и до него не долистывали
+   (Павел 13.10.2026). Теперь карточка раскладывается на две колонки, а ширину
+   выбирает человек кнопкой в шапке — выбор запоминается на устройстве.
+   Базовые правила ниже — одна колонка: так выглядит компактный вид и телефон.
+   Широкий режим включается отдельным медиа-блоком. */
+.tsk-cols { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.tsk-card .tsk-cols > .al-body { overflow: visible; }
+.tsk-chat { display: flex; flex-direction: column; min-height: 0; }
+.tsk-chat-h { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 24px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tsk-chat-n { font-size: 11px; font-weight: 700; color: var(--ink-2); }
+.tsk-thread { display: flex; flex-direction: column; gap: 10px; padding: 14px;
+  margin: 0 24px; background: #F3F5F8; border-radius: 14px; }
+.tsk-chat-f { flex: none; padding: 10px 24px 4px; display: flex; flex-direction: column; gap: 8px; }
+.tsk-chat-empty { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); padding: 6px 2px; }
+
+/* Сообщение в задаче — тот же компонент, что в «Диалогах» (.tg-msg/.tg-bub):
+   второй вид чата в системе заводить незачем. Отличия только те, что нужны
+   задаче: ширина пузыря больше (тут пишут абзацами, а не «ок»), под пузырем
+   подпись и действия. */
+.tsk-msg { max-width: 86%; }
+.tsk-msg .tg-bub { white-space: normal; }
+.tsk-msg .tsk-ev-t { white-space: pre-wrap; word-wrap: break-word; }
+.tsk-msg .tsk-ev-t[hidden] { display: none; }
+/* В «Диалогах» имя собеседника синее — там это ярлык канала. В задаче автор
+   пишется под каждым пузырем, и синий ряд подписей перебивал бы сами реплики. */
+.tsk-chat .tg-msg .tg-by, .tsk-chat .tg-msg.in .tg-by,
+.tsk-chat .tg-msg.out .tg-by { color: var(--ink-3); font-weight: 600; }
+.tsk-headx { display: flex; align-items: center; gap: 8px; flex: none; }
+.tsk-msg.ed .tg-bub { display: none; }
+
+/* Системное событие — не чья-то реплика, а отметка на ленте времени: тонкая
+   строка по центру, как разделитель дня в переписке (.tg-day). */
+.tsk-sys { display: flex; justify-content: center; margin: 2px 0; }
+.tsk-sys span { font-size: 11px; font-weight: 600; color: var(--ink-2); background: #fff;
+  border-radius: var(--r-pill); padding: 3px 12px; text-align: center; }
+
+/* Цитата в пузыре вместо лесенки отступов: в колонке 420px ветка отступом
+   съедала бы половину строки, а так видно, на что отвечают, и по клику
+   прыгаешь к оригиналу. */
+.tsk-quote { display: block; width: 100%; text-align: left; font-size: 11.5px; line-height: 1.4;
+  color: var(--ink-2); background: rgba(17,21,31,.05); border-radius: 8px;
+  padding: 5px 8px; margin-bottom: 5px; }
+.tsk-quote i { display: block; font-style: normal; font-weight: 700; color: var(--blue); }
+.tsk-quote:hover { background: rgba(17,21,31,.09); }
+.tsk-msg.out .tsk-quote { background: rgba(255,255,255,.18); color: rgba(255,255,255,.88); }
+.tsk-msg.out .tsk-quote i { color: #fff; }
+.tsk-msg.out .tsk-quote:hover { background: rgba(255,255,255,.26); }
+
 /* Действия у реплики — тихие подписи, а не кнопки: нарисованные кнопки
-   превратили бы обсуждение в панель. Но подписей стало четыре, и в одном цвете
-   с «имя · время» они читались как продолжение подписи автора, а не как то, что
-   можно нажать. Поэтому у них свой цвет (ink-2, контраст 4.9:1) и своя группа с
-   отрывом от метаданных. inline-flex — чтобы галочка «Скопировано» вставала в
-   строку, а не вторым этажом: svg в продукте блочный. */
-.tsk-evacts { display: inline-flex; align-items: center; flex-wrap: wrap;
-  gap: 0 14px; margin-left: 4px; }
+   превратили бы обсуждение в панель. Цвет ink-2 (контраст 4.9:1), своя группа
+   под пузырем. inline-flex — чтобы галочка «Скопировано» вставала в строку, а
+   не вторым этажом: svg в продукте блочный. */
+.tsk-evacts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 14px; margin-top: 1px; }
+.tsk-msg.out .tsk-evacts { justify-content: flex-end; }
 .tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-2); transition: color .12s;
   display: inline-flex; align-items: center; gap: 4px; }
-.tsk-ev.ed .tsk-evb { display: none; }
+.tsk-msg.ed .tsk-evb { display: none; }
 .tsk-evb:hover { color: var(--blue); }
 /* «Удалить» уводит в красный только под курсором: в спокойном состоянии это
    такая же тихая подпись, как остальные, иначе лента пестрит предупреждением. */
-.tsk-evb.tsk-evdel:hover, .tsk-ev:hover .tsk-evb.tsk-evdel:hover { color: var(--red-ink); }
+.tsk-evb.tsk-evdel:hover { color: var(--red-ink); }
 
-/* Удаленная реплика: место в ленте осталось, текста нет (Павел 13.10.2026 —
-   «в истории задачи следы пусть остаются»). Иконка уходит из синего в серый,
-   текст приглушен: строка должна читаться как след, а не как сообщение. */
-.tsk-ev.gone .tsk-ev-ic { background: var(--fill); color: var(--ink-3); }
-.tsk-ev.gone .tsk-ev-t { color: var(--ink-3); font-size: 12px; }
+/* След удаленной реплики: место в разговоре осталось, текста нет (Павел
+   13.10.2026 — «в истории задачи следы пусть остаются»). Пузырь гаснет до
+   нейтрального, чтобы след не читался как чье-то сообщение. */
+.tsk-msg.gone .tg-bub { background: transparent; color: var(--ink-3); font-size: 12px;
+  box-shadow: inset 0 0 0 1px var(--line-2); }
+.tsk-msg.out.gone .tg-bub { background: transparent; color: var(--ink-3); }
 
 /* Переход по ссылке на реплику: подсветка на пару секунд, чтобы в длинном
-   обсуждении было видно, о какой именно речь. Фон, а не рамка: рамка сдвинула
-   бы соседние строки. Отрицательные поля компенсируют появившиеся отступы —
-   текст при вспышке остается на месте. */
-.tsk-ev { transition: background .4s var(--ease); }
-.tsk-ev.hl { background: var(--blue-tint); border-radius: 10px;
-  padding: 8px; margin: 0 -8px; border-top-color: transparent; }
-.tsk-re .tsk-ev.hl { padding: 7px 8px; }
-
-/* Ветка ответов. Отступ и линия слева — ровно столько, чтобы читалось «это
-   про реплику выше»: уровень один, вложенных лесенок тут не бывает. */
-.tsk-re { margin-left: 34px; padding-left: 12px; border-left: 2px solid var(--line); }
-.tsk-re .tsk-ev { padding: 7px 0; border-top: 1px solid var(--line); }
-.tsk-re .tsk-ev:first-child { border-top: none; }
-.tsk-re .tsk-ev-ic { width: 20px; height: 20px; border-radius: 6px; }
-.tsk-re .tsk-ev-t { font-size: 12.5px; }
+   разговоре было видно, о какой именно речь. */
+.tsk-msg .tg-bub, .tsk-sys span { transition: box-shadow .4s var(--ease), background .4s var(--ease); }
+.tsk-msg.hl .tg-bub { box-shadow: inset 0 0 0 2px var(--blue); }
+.tsk-sys.hl span { background: var(--blue-tint); }
 
 @media (max-width: 560px) {
-  /* На телефоне ветке хватает намека: 46 пикселей отступа съедали строку. */
-  .tsk-re { margin-left: 14px; padding-left: 10px; }
+  .tsk-chat-h { padding-left: 18px; padding-right: 18px; }
+  .tsk-thread { margin: 0 18px; }
+  .tsk-chat-f { padding-left: 18px; padding-right: 18px; }
+  .tsk-msg { max-width: 94%; }
   /* Подпись высотой в строку текста — мишень в 17 пикселей, а крайняя из них
-     стирает реплику навсегда. Поднимаем до 32px и разводим действия шире;
-     отрицательный margin держит высоту самой ленты прежней. */
-  .tsk-evb { min-height: 32px; margin: -7px 0; }
+     стирает реплику навсегда. Поднимаем до 32px и разводим действия шире. */
+  .tsk-evb { min-height: 32px; }
   .tsk-evacts { gap: 0 18px; }
   .tsk-evdel { margin-left: 6px; }
 }
+
+/* На узком экране выбора ширины нет: две колонки туда не помещаются, и кнопка
+   обещала бы несуществующее. */
+@media (max-width: 980px) { .al-x.tk-wide { display: none; } }
+
+/* Широкий режим: две колонки. Только там, где они реально помещаются. */
+@media (min-width: 981px) {
+  .al-ov .al-card.tsk-card.wide { max-width: 1320px; width: calc(100vw - 56px);
+    height: calc(100vh - 56px); max-height: none; }
+  .tsk-card.wide .tsk-cols { display: flex; overflow: hidden; }
+  .tsk-card.wide .tsk-cols > .al-body { flex: 1 1 auto; min-width: 0; min-height: 0;
+    overflow-y: auto; overscroll-behavior: contain; }
+  /* Строка описания в тысячу пикселей не читается: держим блоки задачи в
+     комфортной мере, а не растягиваем на всю освободившуюся ширину. */
+  .tsk-card.wide .tsk-cols > .al-body > * { max-width: 780px; }
+  /* Колонка разговора: своя прокрутка и свое поле ввода внизу. Читать
+     обсуждение и листать описание — два разных движения, одна общая прокрутка
+     заставляла терять место в каждом. */
+  .tsk-card.wide .tsk-chat { width: 420px; flex: none; background: #F3F5F8;
+    box-shadow: inset 1px 0 0 var(--line); }
+  .tsk-card.wide .tsk-chat-h { padding: 16px 20px 6px; }
+  .tsk-card.wide .tsk-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    margin: 0; padding: 6px 20px 14px; background: transparent; border-radius: 0; }
+  .tsk-card.wide .tsk-thread::-webkit-scrollbar { width: 7px; }
+  .tsk-card.wide .tsk-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
+  .tsk-card.wide .tsk-chat-f { padding: 12px 20px 14px; background: #fff;
+    box-shadow: inset 0 1px 0 var(--line); }
+  /* Кнопки задачи — под задачей, то есть слева. Прижатые вправо, они вставали
+     под колонкой разговора и читались как действия над перепиской. */
+  .tsk-card.wide > .al-foot { justify-content: flex-start; }
+}
+
 @media (max-width: 480px) {
   /* Ввод от 16px: на меньшем кегле Safari зумит страницу при фокусе и карточка
      уезжает из кадра. Тот же рецепт, что у поиска в выборе человека (.ss-q). */
@@ -3460,7 +3515,9 @@ button.tr-crumb:hover { color: var(--blue); }
 }
 
 /* Правка реплики на месте текста. */
-.tsk-evedit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+/* Правка реплики — на месте пузыря, а не внутри него: textarea в синем пузыре
+   выглядит как ошибка верстки. */
+.tsk-evedit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; min-width: 260px; }
 .tsk-evedit .al-ta { font-size: 13px; }
 .tsk-evedit-r { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .tsk-evedit-r .al-cancel { height: 34px; padding: 0 12px; font-size: 12.5px; }

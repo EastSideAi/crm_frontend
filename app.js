@@ -66,6 +66,10 @@
   // «не больше N» прячем. Число совпадает с max у PUT /rhythm/caps.
   var WK_CAP_OFF = 50;
   var SEEN_LS = 'eastside_crm_seen';
+  /* Во весь экран или компактно — выбор человека, а не режим системы (Павел
+     13.10.2026). По умолчанию широко: обсуждение сбоку читают, в подвале
+     длинной колонки — нет. */
+  var TSK_WIDE_LS = 'eastside_task_wide';
   var DC_PREF = 'eastside_crm_d_';
   var UI_LS = 'eastside_crm_ui3';
   var root = document.getElementById('root');
@@ -363,6 +367,8 @@
       wa: '<path d="M10 3a7 7 0 0 0-6 10.6L3 17l3.5-1A7 7 0 1 0 10 3z"/><path d="M7.5 7.5c0 3 2 5 5 5"/>',
       vk: '<rect x="3" y="4" width="14" height="12" rx="3"/><path d="M6.5 8c.3 2.2 1.6 3.6 3 3.6V8M9.5 9.8c1-.2 1.7-1 2-1.8M11.5 11.6c-.3-.9-1-1.6-2-1.8"/>',
       max: '<rect x="3" y="4" width="14" height="12" rx="3.5"/><path d="M7 12.3V7.9l3 3 3-3v4.4"/>',
+      expand: '<path d="M8 3.5H5a1.5 1.5 0 0 0-1.5 1.5v3M12 3.5h3A1.5 1.5 0 0 1 16.5 5v3M8 16.5H5A1.5 1.5 0 0 1 3.5 15v-3M12 16.5h3a1.5 1.5 0 0 0 1.5-1.5v-3"/>',
+      shrink: '<path d="M3.5 7.5h3A1 1 0 0 0 7.5 6.5v-3M16.5 7.5h-3a1 1 0 0 1-1-1v-3M3.5 12.5h3a1 1 0 0 1 1 1v3M16.5 12.5h-3a1 1 0 0 0-1 1v3"/>',
       inst: '<rect x="3.4" y="3.4" width="13.2" height="13.2" rx="4.2"/><circle cx="10" cy="10" r="3.3"/><path d="M13.7 6.3h.01"/>',
       hand: '<path d="M7 9V4.5a1.3 1.3 0 0 1 2.6 0V9M9.6 9V3.7a1.3 1.3 0 0 1 2.6 0V9M12.2 9V5.2a1.3 1.3 0 0 1 2.6 0V12a5 5 0 0 1-5 5h-1a4 4 0 0 1-3-1.4L4 13s-.8-1 .2-1.8 2 .3 2 .3L7 13"/>',
       funnel: '<path d="M3.5 5h13l-5 6v4.5l-3 1.5V11L3.5 5z"/>',
@@ -12697,7 +12703,8 @@
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
-    ov.innerHTML = '<div class="al-card tsk-card" role="dialog" aria-modal="true">' +
+    var wide = lsGet(TSK_WIDE_LS) !== '0';
+    ov.innerHTML = '<div class="al-card tsk-card' + (wide ? ' wide' : '') + '" role="dialog" aria-modal="true">' +
       '<div class="tsk-load"><div class="loaddot"></div><div class="loaddot"></div><div class="loaddot"></div></div></div>';
     document.body.appendChild(ov);
     requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -12780,57 +12787,76 @@
       // только сданное» снятие приемки не отменяет.
       if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
 
-      /* Лента: системные события и реплики людей вперемешку по времени. У
-         реплики могут быть ответы — они идут сразу под ней, а не в конце
-         ленты: иначе ответ на вопрос из середины через день уже не читается
-         (Павел 09.10.2026). Уровень ровно один, глубже сервер не пускает. */
-      var kids = {}, known = {};
-      events.forEach(function (e) { known[e.id] = 1; });
-      events.forEach(function (e) {
-        if (e.reply_to && known[e.reply_to]) (kids[e.reply_to] = kids[e.reply_to] || []).push(e);
-      });
+      /* Лента задачи — это разговор, и выглядеть должна разговором. Реплики
+         людей идут пузырями тем же компонентом, что в «Диалогах» (.tg-msg /
+         .tg-bub): свои справа синим, чужие слева белым. Системные события —
+         завели, сдвинули срок, приняли — остаются в той же хронологии, но
+         тонкой строкой по центру: раньше они стояли вровень с репликами и
+         разговор в них тонул (Павел 13.10.2026, «сливаются и непонятно»).
+
+         Ответ больше не показывается отступом ветки: в пузыре стоит цитата
+         той реплики, на которую отвечают, и по ней прыгаешь к оригиналу. В
+         колонке шириной 420px лесенка отступов съедала бы половину строки. */
+      var byId = {};
+      events.forEach(function (e) { byId[e.id] = e; });
+      var cmCount = events.filter(function (e) { return e.kind === 'comment' && !e.deleted; }).length;
+      var cut = function (x, n) {
+        x = String(x || '').replace(/\s+/g, ' ').trim();
+        return x.length > n ? x.slice(0, n) + '…' : x;
+      };
       // Чужую реплику убирает только верхняя роль. Руководитель с tasks_all
       // видит задачу целиком, но чужие слова из обсуждения не стирает — то же
       // правило держит сервер.
       var iAmTop = state.role === 'super_admin' || state.role === 'owner';
-      var evHtml = function (e, inner) {
-        var mine = e.kind === 'comment' && me && e.actor_id === me;
-        /* Удаленная реплика остается в ленте пометкой: «в истории задачи следы
-           пусть остаются» (Павел 13.10.2026). Текста у нее нет — сервер его не
-           отдает, — а кнопок нет и быть не может: отвечать и править уже
-           нечего, ссылка на пустое место тоже не нужна. */
-        if (e.deleted) {
-          return '<div class="tsk-ev cm gone" data-ev="' + e.id + '">' +
-            '<span class="tsk-ev-ic">' + ic(EVENT_IC.comment, 12) + '</span>' +
-            '<div class="tsk-ev-b"><div class="tsk-ev-t">реплика удалена</div>' +
-            '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
-              (e.deleted_by_name
-                ? '<i class="tsk-ev-ed">убрал ' + esc(e.deleted_by_name) + '</i>' : '') +
-            '</div></div></div>';
-        }
-        // «Ответить» только у корневой реплики: ответ на ответ сервер все
-        // равно вернет в ту же ветку, и кнопка обещала бы несуществующее.
-        var acts = (e.kind === 'comment' && !inner
-                     ? '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' : '') +
-                   (e.kind === 'comment'
-                     ? '<button type="button" class="tsk-evb" data-clink="' + e.id + '">Ссылка</button>' : '') +
-                   (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '') +
-                   (e.kind === 'comment' && (mine || iAmTop)
-                     ? '<button type="button" class="tsk-evb tsk-evdel" data-cdel="' + e.id + '">Удалить</button>' : '');
-        return '<div class="tsk-ev' + (e.kind === 'comment' ? ' cm' : '') + '" data-ev="' + e.id + '">' +
-          '<span class="tsk-ev-ic">' + ic(EVENT_IC[e.kind] || 'note', 12) + '</span>' +
-          '<div class="tsk-ev-b"><div class="tsk-ev-t">' + esc(e.text || '') + '</div>' +
-          '<div class="tsk-ev-m">' + esc(e.actor_name || 'система') + ' · ' + esc(fmtWhen(e.at)) +
-            (e.edited_at ? '<i class="tsk-ev-ed">изменено</i>' : '') +
-            (acts ? '<span class="tsk-evacts">' + acts + '</span>' : '') +
-          '</div></div></div>';
+
+      var sysHtml = function (e) {
+        // «Заведена» приходит с названием задачи — в разговоре это не событие, а
+        // эхо заголовка, который и так висит в шапке карточки.
+        var txt = e.kind === 'created' ? 'задачу завели' : (e.text || '');
+        return '<div class="tsk-sys" data-ev="' + e.id + '"><span>' + esc(txt) +
+          (e.actor_name ? ' · ' + esc(e.actor_name) : '') + ' · ' + esc(fmtWhen(e.at)) +
+          '</span></div>';
       };
-      var feed = events.filter(function (e) { return !(e.reply_to && known[e.reply_to]); })
-        .map(function (e) {
-          return evHtml(e, false) + (kids[e.id]
-            ? '<div class="tsk-re">' + kids[e.id].map(function (r) { return evHtml(r, true); }).join('') + '</div>'
-            : '');
-        }).join('');
+
+      var cmHtml = function (e) {
+        var mine = me != null && e.actor_id === me;
+        var side = mine ? 'out' : 'in';
+        /* След удаленной реплики: место в разговоре остается, текста нет. Пузыря
+           тоже нет — иначе пустая цитата выглядит как чье-то сообщение. */
+        if (e.deleted) {
+          return '<div class="tg-msg tsk-msg gone ' + side + '" data-ev="' + e.id + '">' +
+            '<div class="tg-bub">реплика удалена</div>' +
+            '<div class="tg-by">' + esc(e.actor_name || '') + ' · ' + esc(fmtWhen(e.at)) +
+              (e.deleted_by_name ? ' · убрал ' + esc(e.deleted_by_name) : '') + '</div></div>';
+        }
+        var root = e.reply_to ? byId[e.reply_to] : null;
+        var quote = root
+          ? '<button type="button" class="tsk-quote" data-goto="' + root.id + '">' +
+              '<i>' + esc(root.actor_name || 'реплика') + '</i>' +
+              esc(root.deleted ? 'реплика удалена' : cut(root.text, 70)) + '</button>'
+          : '';
+        var acts = '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' +
+          '<button type="button" class="tsk-evb" data-clink="' + e.id + '">Ссылка</button>' +
+          (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '') +
+          ((mine || iAmTop)
+            ? '<button type="button" class="tsk-evb tsk-evdel" data-cdel="' + e.id + '">Удалить</button>' : '');
+        return '<div class="tg-msg tsk-msg ' + side + '" data-ev="' + e.id + '">' +
+          '<div class="tg-bub">' + quote +
+            '<span class="tsk-ev-t">' + esc(e.text || '') + '</span>' +
+            '<span class="tg-mt">' + esc(fmtTime(e.at)) + '</span></div>' +
+          // Время уже стоит в пузыре — под ним только имя автора (у своих и его
+          // не нужно) и пометка о правке.
+          ((mine && !e.edited_at) ? ''
+            : '<div class="tg-by">' + (mine ? '' : esc(e.actor_name || '')) +
+              (e.edited_at ? (mine ? '' : ' · ') + 'изменено' : '') + '</div>') +
+          '<div class="tsk-evacts">' + acts + '</div>' +
+        '</div>';
+      };
+
+      var feed = events.map(function (e) {
+        return e.kind === 'comment' ? cmHtml(e) : sysHtml(e);
+      }).join('') || '<div class="tsk-chat-empty">Пока тихо. Напиши первым: что сделано, ' +
+        'что мешает, что нужно от других.</div>';
 
       ov.querySelector('.al-card').innerHTML =
         '<div class="al-head">' +
@@ -12848,10 +12874,20 @@
              хотела отправить коллеге задачу и смогла прислать только адрес
              системы целиком. Кнопка рядом с закрытием — там же, где «скопировать»
              живет на других экранах. */
+          // Кнопки шапки держим группой: в широкой карточке space-between
+          // растаскивал их по всей ширине экрана.
+          '<div class="tsk-headx">' +
           '<button class="al-x tk-link" id="tk-link" ' +
             'title="Скопировать ссылку на ' + (t.is_goal ? 'цель' : 'задачу') + '" ' +
             'aria-label="Скопировать ссылку">' + ic('copy', 16) + '</button>' +
+          // Широко или компактно — выбор человека. На узком экране кнопки нет:
+          // две колонки туда не помещаются, и выбор был бы пустым обещанием.
+          '<button class="al-x tk-wide" id="tk-wide" ' +
+            'title="' + (wide ? 'Свернуть карточку' : 'Развернуть во весь экран') + '" ' +
+            'aria-label="' + (wide ? 'Свернуть карточку' : 'Развернуть во весь экран') + '">' +
+            ic(wide ? 'shrink' : 'expand', 16) + '</button>' +
           '<button class="al-x" id="tk-x" title="Закрыть">' + ic('x', 16) + '</button>' +
+          '</div>' +
         '</div>' +
         '<div class="tsk-meta">' +
           '<span class="sev ' + st.cls + '">' + st.label + '</span>' +
@@ -12904,6 +12940,12 @@
           // карточка цели.
           (t.parent_id ? '<button class="tsk-mwho tsk-up" id="tk-up">' + ic('target', 12) + esc(t.parent_title || 'к цели') + '</button>' : '') +
         '</div>' +
+        /* Карточка шире и разложена на две колонки: слева сама задача, справа
+           разговор по ней. Раньше обсуждение лежало в самом низу одной длинной
+           колонки, и до него надо было долистать мимо описания, результата и
+           шагов — на живых задачах его просто не читали (Павел 13.10.2026).
+           На узком экране колонки схлопываются обратно в одну. */
+        '<div class="tsk-cols">' +
         '<div class="al-body">' +
           // Редактор стоит у самого текста, который правит, а не в конце ленты.
           '<div class="tsk-resform tsk-editform" id="tk-editf" hidden>' +
@@ -13009,13 +13051,6 @@
                     : 'У цели нет ответственного, поэтому шаг тоже будет ничей. Человека и срок задай через «подробно».') +
                 '</div>') +
             '</div>') +
-          '<div class="tsk-sec"><div class="tsk-l">История и обсуждение</div><div class="tsk-feed">' + feed + '</div></div>' +
-          '<div class="tsk-ret" id="tk-ret" hidden>' +
-            (t.status === 'done'
-              ? '<b>Снимаем с готово.</b> Напиши, что не так — исполнитель увидит это в задаче.'
-              : '<b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.') +
-            '<button type="button" id="tk-retx">' +
-              (t.status === 'done' ? 'не снимать' : 'не возвращать') + '</button></div>' +
           // Сдача с артефактом. Отдельной панелью, а не полем в ленте: сдать —
           // это событие, и текст «что сделано» с файлом должны уехать вместе,
           // иначе постановщик принимает на слово.
@@ -13032,21 +13067,49 @@
               '<button class="bp" id="tk-resok">Сдать</button>' +
             '</div>' +
           '</div>' +
-          // Кому отвечаем — плашкой над полем, а не догадкой по отступу: когда
-          // ветка уехала вверх за экран, иначе непонятно, куда уйдет текст.
-          '<div class="tsk-repl" id="tk-repl" hidden><span id="tk-repl-t"></span>' +
-            '<button type="button" id="tk-replx">не отвечать</button></div>' +
-          // Поле растет под текст: в одну строку не видно, что уже написал
-          // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
-          '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
-            'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
-            '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+        '</div>' +
+        /* Колонка разговора. Своя прокрутка и свое поле ввода внизу: читать
+           обсуждение и листать описание задачи — два разных движения, и одна
+           общая прокрутка заставляла терять место в каждом из них. */
+        '<aside class="tsk-chat">' +
+          '<div class="tsk-chat-h">Обсуждение' +
+            (cmCount ? '<span class="tsk-chat-n num">' + cmCount + '</span>' : '') + '</div>' +
+          '<div class="tsk-thread" id="tk-thread">' + feed + '</div>' +
+          '<div class="tsk-chat-f">' +
+            '<div class="tsk-ret" id="tk-ret" hidden>' +
+              (t.status === 'done'
+                ? '<b>Снимаем с готово.</b> Напиши, что не так — исполнитель увидит это в задаче.'
+                : '<b>Возврат.</b> Напиши, что доделать — исполнитель увидит это в задаче.') +
+              '<button type="button" id="tk-retx">' +
+                (t.status === 'done' ? 'не снимать' : 'не возвращать') + '</button></div>' +
+            // Кому отвечаем — плашкой над полем, а не догадкой по отступу: когда
+            // ветка уехала вверх за экран, иначе непонятно, куда уйдет текст.
+            '<div class="tsk-repl" id="tk-repl" hidden><span id="tk-repl-t"></span>' +
+              '<button type="button" id="tk-replx">не отвечать</button></div>' +
+            // Поле растет под текст: в одну строку не видно, что уже написал
+            // (Павел 09.10.2026). Ввод отправляет, Shift+Ввод переносит строку.
+            '<div class="tsk-say"><textarea id="tk-say" class="al-in tsk-sayta" rows="1" ' +
+              'placeholder="Написать по задаче" maxlength="2000" aria-describedby="tk-repl-t"></textarea>' +
+              '<button class="icobtn" id="tk-send" title="Отправить">' + ic('send', 15) + '</button></div>' +
+          '</div>' +
+        '</aside>' +
         '</div>' +
         (acts.length ? '<div class="al-foot tsk-acts">' + acts.map(function (a) {
           return '<button class="' + a[2] + '" data-act="' + a[0] + '">' + esc(a[1]) + '</button>';
         }).join('') + '</div>' : '');
 
       el('tk-x').addEventListener('click', close);
+      el('tk-wide') && el('tk-wide').addEventListener('click', function () {
+        wide = !wide;
+        try { localStorage.setItem(TSK_WIDE_LS, wide ? '1' : '0'); } catch (e) {}
+        // Перерисовываем теми же данными: в разметке ничего не меняется, кроме
+        // класса и подписи кнопки, а лишний запрос в карточке не нужен.
+        var keep = (ov.querySelector('.tsk-thread') || {}).scrollTop || 0;
+        ov.querySelector('.al-card').classList.toggle('wide', wide);
+        draw(data);
+        var th = ov.querySelector('.tsk-thread');
+        if (th) th.scrollTop = keep || th.scrollHeight;
+      });
       el('tk-link') && el('tk-link').addEventListener('click', function () {
         copyText(CRM_HOME + '#task/' + id, this);
         showToast('Ссылка скопирована',
@@ -13129,12 +13192,14 @@
       // комментарий, поэтому пишется в том же поле, а не в системном окне
       // поверх карточки.
       var retMode = false;
+      var thread = function () { return ov.querySelector('.tsk-thread'); };
+      var toEnd = function () { var th = thread(); if (th) th.scrollTop = th.scrollHeight; };
       var setRet = function (on) {
         retMode = on;
         retBar.hidden = !on;
         ov.querySelector('.tsk-say').classList.toggle('ret', on);
         say.placeholder = on ? 'Что доделать?' : 'Написать по задаче';
-        if (on) { say.focus(); body.scrollTop = body.scrollHeight; }
+        if (on) { say.focus(); toEnd(); }
       };
       el('tk-retx').addEventListener('click', function () { setRet(false); });
 
@@ -13399,7 +13464,7 @@
         // Перерисовываем тем же составом данных: без steps и files карточка
         // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
         draw({ task: t, events: evs, steps: steps, files: files, me: me });
-        var again = ov.querySelector('.al-body');
+        var again = thread();
         if (!again) return;
         // Новая реплика — вниз, ее человек и ждет. Правка старой — остаемся
         // там, где читали: иначе поправил опечатку в середине и потерял место.
@@ -13440,7 +13505,7 @@
           var ev = evById(eid);
           var row = ov.querySelector('[data-ev="' + eid + '"]');
           if (!ev || !row || row.querySelector('.tsk-evedit')) return;
-          var slot = row.querySelector('.tsk-ev-t');
+          var slot = row.querySelector('.tg-bub');
           var box = document.createElement('div');
           box.className = 'tsk-evedit';
           box.innerHTML = '<textarea class="al-in al-ta" rows="2" maxlength="2000" ' +
@@ -13462,7 +13527,7 @@
             if (text === (ev.text || '')) { off(); return; }
             var ok = box.querySelector('.bp');
             ok.disabled = true;
-            var at = (ov.querySelector('.al-body') || {}).scrollTop || 0;
+            var at = (thread() || {}).scrollTop || 0;
             apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'PATCH', { text: text }, function (r) {
               if (r && r.events) redrawFeed(r.events, at);
             }, function (code) {
@@ -13497,7 +13562,7 @@
           if (!window.confirm(own
                 ? 'Удалить свою реплику? Текст пропадет, в ленте останется пометка «реплика удалена».'
                 : 'Удалить чужую реплику? Текст пропадет, в ленте останется пометка и ваше имя.')) return;
-          var at = (ov.querySelector('.al-body') || {}).scrollTop || 0;
+          var at = (thread() || {}).scrollTop || 0;
           b.disabled = true;
           apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'DELETE', null, function (r) {
             if (r && r.events) redrawFeed(r.events, at);
@@ -13512,22 +13577,35 @@
       /* Пришли по ссылке на реплику: прокручиваем ленту к ней и подсвечиваем.
          Ровно один раз за открытие карточки — после правки или новой реплики
          лента перерисовывается, и повторная вспышка сбивала бы с толку. */
+      var goTo = function (evId, warn) {
+        var aRow = ov.querySelector('[data-ev="' + evId + '"]');
+        var aBody = thread();
+        if (!aRow || !aBody) {
+          if (warn) showToast('Этой реплики в задаче нет — возможно, ссылка от другой задачи');
+          return;
+        }
+        // Считаем сами, а не scrollIntoView: он прокручивает заодно и страницу
+        // под карточкой, и после закрытия человек оказывается не там, где был.
+        aBody.scrollTop += aRow.getBoundingClientRect().top -
+          aBody.getBoundingClientRect().top - aBody.clientHeight / 2 +
+          aRow.offsetHeight / 2;
+        aRow.classList.add('hl');
+        setTimeout(function () { aRow.classList.remove('hl'); }, 2400);
+      };
       if (focusEv && !anchorDone) {
         anchorDone = true;
-        var aRow = ov.querySelector('[data-ev="' + focusEv + '"]');
-        var aBody = ov.querySelector('.al-body');
-        if (aRow && aBody) {
-          // Считаем сами, а не scrollIntoView: он прокручивает заодно и страницу
-          // под карточкой, и после закрытия человек оказывается не там, где был.
-          aBody.scrollTop += aRow.getBoundingClientRect().top -
-            aBody.getBoundingClientRect().top - aBody.clientHeight / 2 +
-            aRow.offsetHeight / 2;
-          aRow.classList.add('hl');
-          setTimeout(function () { aRow.classList.remove('hl'); }, 2400);
-        } else if (!aRow) {
-          showToast('Этой реплики в задаче нет — возможно, ссылка от другой задачи');
-        }
+        goTo(focusEv, true);
+      } else if (!anchorDone) {
+        // Разговор открывается на последнем сообщении, как любой чат: читать
+        // его начинают с конца, а не с «задачу завели» полугодовой давности.
+        anchorDone = true;
+        toEnd();
       }
+      /* Цитата в пузыре ведет к оригиналу: ветку отступом мы больше не рисуем,
+         и без перехода было бы непонятно, где та реплика, на которую отвечали. */
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-goto]'), function (b) {
+        b.addEventListener('click', function () { goTo(+b.getAttribute('data-goto')); });
+      });
 
       /* Тело карточки уезжает под шапку, и до ссылок на реплику прокрученное
          открытие было редкостью. Теперь это обычный заход, а срез без линии
