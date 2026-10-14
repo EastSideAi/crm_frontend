@@ -3408,14 +3408,14 @@ button.tr-crumb:hover { color: var(--blue); }
    второй вид чата в системе заводить незачем. Отличия только те, что нужны
    задаче: ширина пузыря больше (тут пишут абзацами, а не «ок»), под пузырем
    подпись и действия. */
-.tsk-msg { max-width: 86%; }
+.tsk-chat .tg-msg.tsk-msg { max-width: 86%; }
 .tsk-msg .tg-bub { white-space: normal; }
 .tsk-msg .tsk-ev-t { white-space: pre-wrap; word-wrap: break-word; }
 .tsk-msg .tsk-ev-t[hidden] { display: none; }
 /* В «Диалогах» имя собеседника синее — там это ярлык канала. В задаче автор
    пишется под каждым пузырем, и синий ряд подписей перебивал бы сами реплики. */
 .tsk-chat .tg-msg .tg-by, .tsk-chat .tg-msg.in .tg-by,
-.tsk-chat .tg-msg.out .tg-by { color: var(--ink-3); font-weight: 600; }
+.tsk-chat .tg-msg.out .tg-by { color: var(--ink-2); font-weight: 600; font-size: 11px; }
 .tsk-headx { display: flex; align-items: center; gap: 8px; flex: none; }
 .tsk-msg.ed .tg-bub { display: none; }
 
@@ -3442,11 +3442,22 @@ button.tr-crumb:hover { color: var(--blue); }
    под пузырем. inline-flex — чтобы галочка «Скопировано» вставала в строку, а
    не вторым этажом: svg в продукте блочный. */
 .tsk-evacts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 14px; margin-top: 1px; }
+/* Там, где есть курсор, служебные подписи не висят под каждой репликой: иначе
+   столбец «Ответить · Ссылка · Удалить» перебивает сам разговор. Приходят по
+   наведению и по фокусу с клавиатуры — тот же прием, что у .tg-acts и .dn-undo.
+   На тач-экранах наведения нет, там они видны всегда. */
+@media (hover: hover) {
+  .tsk-evacts { opacity: 0; transition: opacity .12s var(--ease); }
+  .tsk-msg:hover .tsk-evacts,
+  .tsk-evacts:focus-within { opacity: 1; }
+}
 .tsk-msg.out .tsk-evacts { justify-content: flex-end; }
 .tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-2); transition: color .12s;
   display: inline-flex; align-items: center; gap: 4px; }
 .tsk-msg.ed .tsk-evb { display: none; }
 .tsk-evb:hover { color: var(--blue); }
+.tsk-evb:focus-visible, .tsk-quote:focus-visible { outline: none; border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--blue); }
 /* «Удалить» уводит в красный только под курсором: в спокойном состоянии это
    такая же тихая подпись, как остальные, иначе лента пестрит предупреждением. */
 .tsk-evb.tsk-evdel:hover { color: var(--red-ink); }
@@ -3454,9 +3465,13 @@ button.tr-crumb:hover { color: var(--blue); }
 /* След удаленной реплики: место в разговоре осталось, текста нет (Павел
    13.10.2026 — «в истории задачи следы пусть остаются»). Пузырь гаснет до
    нейтрального, чтобы след не читался как чье-то сообщение. */
-.tsk-msg.gone .tg-bub { background: transparent; color: var(--ink-3); font-size: 12px;
-  box-shadow: inset 0 0 0 1px var(--line-2); }
-.tsk-msg.out.gone .tg-bub { background: transparent; color: var(--ink-3); }
+/* В «Диалогах» отозванное сообщение зачеркнуто и приглушено до .55 — там оно
+   лежит рядом с живым текстом и так честнее. Здесь текста нет вовсе, зачеркивать
+   нечего, а приглушение поверх серого давало контраст 1.5:1 — след переставал
+   читаться. Поэтому рецепт переопределяем, а не наследуем. */
+.tsk-chat .tg-msg.gone .tg-bub { background: transparent; color: var(--ink-2); font-size: 12px;
+  opacity: 1; text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tsk-chat .tg-msg.out.gone .tg-bub { background: transparent; color: var(--ink-2); }
 
 /* Переход по ссылке на реплику: подсветка на пару секунд, чтобы в длинном
    разговоре было видно, о какой именно речь. */
@@ -3468,7 +3483,7 @@ button.tr-crumb:hover { color: var(--blue); }
   .tsk-chat-h { padding-left: 18px; padding-right: 18px; }
   .tsk-thread { margin: 0 18px; }
   .tsk-chat-f { padding-left: 18px; padding-right: 18px; }
-  .tsk-msg { max-width: 94%; }
+  .tsk-chat .tg-msg.tsk-msg { max-width: 94%; }
   /* Подпись высотой в строку текста — мишень в 17 пикселей, а крайняя из них
      стирает реплику навсегда. Поднимаем до 32px и разводим действия шире. */
   .tsk-evb { min-height: 32px; }
@@ -3483,7 +3498,8 @@ button.tr-crumb:hover { color: var(--blue); }
 /* Широкий режим: две колонки. Только там, где они реально помещаются. */
 @media (min-width: 981px) {
   .al-ov .al-card.tsk-card.wide { max-width: 1320px; width: calc(100vw - 56px);
-    height: calc(100vh - 56px); max-height: none; }
+    height: auto; min-height: min(560px, calc(100vh - 56px));
+    max-height: calc(100vh - 56px); }
   .tsk-card.wide .tsk-cols { display: flex; overflow: hidden; }
   .tsk-card.wide .tsk-cols > .al-body { flex: 1 1 auto; min-width: 0; min-height: 0;
     overflow-y: auto; overscroll-behavior: contain; }
@@ -3498,6 +3514,9 @@ button.tr-crumb:hover { color: var(--blue); }
   .tsk-card.wide .tsk-chat-h { padding: 16px 20px 6px; }
   .tsk-card.wide .tsk-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto;
     margin: 0; padding: 6px 20px 14px; background: transparent; border-radius: 0; }
+  /* Лента открывается прокрученной (на последнем сообщении или на реплике из
+     ссылки) — без признака среза верх читается как сбой отрисовки. */
+  .tsk-card.wide .tsk-thread.scr { box-shadow: inset 0 1px 0 var(--line-2); }
   .tsk-card.wide .tsk-thread::-webkit-scrollbar { width: 7px; }
   .tsk-card.wide .tsk-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
   .tsk-card.wide .tsk-chat-f { padding: 12px 20px 14px; background: #fff;

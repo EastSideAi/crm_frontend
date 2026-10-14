@@ -12818,7 +12818,7 @@
           '</span></div>';
       };
 
-      var cmHtml = function (e) {
+      var cmHtml = function (e, sameAuthor) {
         var mine = me != null && e.actor_id === me;
         var side = mine ? 'out' : 'in';
         /* След удаленной реплики: место в разговоре остается, текста нет. Пузыря
@@ -12835,26 +12835,40 @@
               '<i>' + esc(root.actor_name || 'реплика') + '</i>' +
               esc(root.deleted ? 'реплика удалена' : cut(root.text, 70)) + '</button>'
           : '';
-        var acts = '<button type="button" class="tsk-evb" data-reply="' + e.id + '">Ответить</button>' +
-          '<button type="button" class="tsk-evb" data-clink="' + e.id + '">Ссылка</button>' +
-          (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id + '">Поправить</button>' : '') +
+        // Кому принадлежит реплика — в подписи каждой кнопки: с клавиатуры и
+        // в скринридере десять одинаковых «Ответить» ничего не говорят.
+        var whose = esc((mine ? 'свою реплику' : 'реплику ' + (e.actor_name || '')) +
+          ' от ' + fmtWhen(e.at));
+        var acts = '<button type="button" class="tsk-evb" data-reply="' + e.id +
+            '" aria-label="Ответить на ' + whose + '">Ответить</button>' +
+          '<button type="button" class="tsk-evb" data-clink="' + e.id +
+            '" aria-label="Скопировать ссылку на ' + whose + '">Ссылка</button>' +
+          (mine ? '<button type="button" class="tsk-evb" data-cedit="' + e.id +
+            '" aria-label="Поправить ' + whose + '">Поправить</button>' : '') +
           ((mine || iAmTop)
-            ? '<button type="button" class="tsk-evb tsk-evdel" data-cdel="' + e.id + '">Удалить</button>' : '');
+            ? '<button type="button" class="tsk-evb tsk-evdel" data-cdel="' + e.id +
+              '" aria-label="Удалить ' + whose + '">Удалить</button>' : '');
         return '<div class="tg-msg tsk-msg ' + side + '" data-ev="' + e.id + '">' +
           '<div class="tg-bub">' + quote +
             '<span class="tsk-ev-t">' + esc(e.text || '') + '</span>' +
             '<span class="tg-mt">' + esc(fmtTime(e.at)) + '</span></div>' +
           // Время уже стоит в пузыре — под ним только имя автора (у своих и его
           // не нужно) и пометка о правке.
-          ((mine && !e.edited_at) ? ''
-            : '<div class="tg-by">' + (mine ? '' : esc(e.actor_name || '')) +
-              (e.edited_at ? (mine ? '' : ' · ') + 'изменено' : '') + '</div>') +
+          (((mine || sameAuthor) && !e.edited_at) ? ''
+            : '<div class="tg-by">' + ((mine || sameAuthor) ? '' : esc(e.actor_name || '')) +
+              (e.edited_at ? ((mine || sameAuthor) ? '' : ' · ') + 'изменено' : '') + '</div>') +
           '<div class="tsk-evacts">' + acts + '</div>' +
         '</div>';
       };
 
+      // Подряд идущие реплики одного человека не повторяют его имя: пять
+      // «Марк Шевченко» подряд читаются как шум, а не как подпись.
+      var prevSaid = null;
       var feed = events.map(function (e) {
-        return e.kind === 'comment' ? cmHtml(e) : sysHtml(e);
+        if (e.kind !== 'comment') { prevSaid = null; return sysHtml(e); }
+        var same = prevSaid === e.actor_id;
+        prevSaid = e.actor_id;
+        return cmHtml(e, same);
       }).join('') || '<div class="tsk-chat-empty">Пока тихо. Напиши первым: что сделано, ' +
         'что мешает, что нужно от других.</div>';
 
@@ -13193,7 +13207,17 @@
       // поверх карточки.
       var retMode = false;
       var thread = function () { return ov.querySelector('.tsk-thread'); };
-      var toEnd = function () { var th = thread(); if (th) th.scrollTop = th.scrollHeight; };
+      /* Скроллер ленты зависит от режима: в широкой карточке прокручивается сама
+         колонка разговора, в компактной и на телефоне — общее тело карточки.
+         Без этой проверки ссылка на реплику и прокрутка к новому сообщению
+         молча ничего не делали на телефоне: scrollTop у непрокручиваемого
+         элемента не двигается. */
+      var scroller = function () {
+        var th = thread();
+        if (th && th.scrollHeight > th.clientHeight + 4) return th;
+        return ov.querySelector('.tsk-cols') || th;
+      };
+      var toEnd = function () { var sc = scroller(); if (sc) sc.scrollTop = sc.scrollHeight; };
       var setRet = function (on) {
         retMode = on;
         retBar.hidden = !on;
@@ -13464,7 +13488,7 @@
         // Перерисовываем тем же составом данных: без steps и files карточка
         // после реплики теряла бы шаги и приложенные файлы до перезагрузки.
         draw({ task: t, events: evs, steps: steps, files: files, me: me });
-        var again = thread();
+        var again = scroller();
         if (!again) return;
         // Новая реплика — вниз, ее человек и ждет. Правка старой — остаемся
         // там, где читали: иначе поправил опечатку в середине и потерял место.
@@ -13527,7 +13551,7 @@
             if (text === (ev.text || '')) { off(); return; }
             var ok = box.querySelector('.bp');
             ok.disabled = true;
-            var at = (thread() || {}).scrollTop || 0;
+            var at = (scroller() || {}).scrollTop || 0;
             apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'PATCH', { text: text }, function (r) {
               if (r && r.events) redrawFeed(r.events, at);
             }, function (code) {
@@ -13562,7 +13586,7 @@
           if (!window.confirm(own
                 ? 'Удалить свою реплику? Текст пропадет, в ленте останется пометка «реплика удалена».'
                 : 'Удалить чужую реплику? Текст пропадет, в ленте останется пометка и ваше имя.')) return;
-          var at = (thread() || {}).scrollTop || 0;
+          var at = (scroller() || {}).scrollTop || 0;
           b.disabled = true;
           apiSend('/admin/api/tasks/' + id + '/comment/' + eid, 'DELETE', null, function (r) {
             if (r && r.events) redrawFeed(r.events, at);
@@ -13579,7 +13603,7 @@
          лента перерисовывается, и повторная вспышка сбивала бы с толку. */
       var goTo = function (evId, warn) {
         var aRow = ov.querySelector('[data-ev="' + evId + '"]');
-        var aBody = thread();
+        var aBody = scroller();
         if (!aRow || !aBody) {
           if (warn) showToast('Этой реплики в задаче нет — возможно, ссылка от другой задачи');
           return;
@@ -13596,10 +13620,12 @@
         anchorDone = true;
         goTo(focusEv, true);
       } else if (!anchorDone) {
-        // Разговор открывается на последнем сообщении, как любой чат: читать
-        // его начинают с конца, а не с «задачу завели» полугодовой давности.
         anchorDone = true;
-        toEnd();
+        /* В широкой карточке разговор живет отдельной колонкой и открывается на
+           последнем сообщении, как любой чат. В одной колонке так делать нельзя:
+           там прокрутится вся карточка, и человек, открывший задачу, увидит
+           вместо нее хвост переписки. */
+        if (scroller() === thread()) toEnd();
       }
       /* Цитата в пузыре ведет к оригиналу: ветку отступом мы больше не рисуем,
          и без перехода было бы непонятно, где та реплика, на которую отвечали. */
@@ -13615,6 +13641,12 @@
         var shade = function () { bodyEl.classList.toggle('scr', bodyEl.scrollTop > 2); };
         bodyEl.addEventListener('scroll', shade);
         shade();
+      }
+      var thEl = thread();
+      if (thEl) {
+        var thShade = function () { thEl.classList.toggle('scr', thEl.scrollTop > 2); };
+        thEl.addEventListener('scroll', thShade);
+        thShade();
       }
 
       var wB = el('tk-watch');
