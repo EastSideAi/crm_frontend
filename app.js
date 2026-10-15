@@ -14170,64 +14170,84 @@
      заведение встречи и ссылка — все остальное происходит на самой странице
      комнаты (backend web/meet.html). Запись, расшифровка и черновик задач
      приходят потом в тот же «Импорт встречи», что и сейчас. */
-  function openMeetRoom(mode) {
+  function openMeetRoom(mode, room) {
     if (document.querySelector('.al-ov')) return;
+    /* Правка уже назначенной встречи — та же форма, что и заведение: поля те
+       же, и держать рядом две почти одинаковые формы дороже, чем один раз
+       разложить по ним текущие значения. Меняется только шапка, кнопка и то,
+       куда уходит запрос. «Кто заходит» в правке не показываем: ссылка уже
+       разослана, и менять режим доступа задним числом — это молча переделать
+       смысл той ссылки, что лежит у людей в телеграме. */
+    var edit = mode === 'edit' && room;
     var ov = document.createElement('div');
     ov.className = 'al-ov';
     ov.innerHTML =
       '<div class="al-card" role="dialog" aria-modal="true">' +
         '<div class="al-head">' +
           '<div><div class="al-eyebrow">EastSide Meeting</div><div class="al-title">' +
-            (mode === 'plan' ? 'Запланировать встречу' : 'Своя встреча') + '</div></div>' +
+            (edit ? 'Изменить встречу'
+                  : mode === 'plan' ? 'Запланировать встречу' : 'Своя встреча') + '</div></div>' +
           '<button class="al-x" id="mr-x" title="Закрыть">' + ic('x', 16) + '</button>' +
         '</div>' +
-        '<div class="al-sub">Заведу комнату и дам ссылку. Заходят из браузера, ' +
-          'ставить ничего не надо. Запись и черновик задач придут сюда же после встречи.</div>' +
+        '<div class="al-sub">' + (edit
+          ? 'Ссылка на встречу не меняется. Кого добавите — позову, кого уберете — ' +
+            'скажу, что встреча без него. Если сдвинете время, предупрежу всех.'
+          : 'Заведу комнату и дам ссылку. Заходят из браузера, ' +
+            'ставить ничего не надо. Запись и черновик задач придут сюда же после встречи.') +
+        '</div>' +
         '<div class="al-body" id="mr-body">' +
           '<label class="al-f"><span class="al-l">Название</span>' +
             '<input id="mr-title" class="al-in" type="text" maxlength="120" ' +
-              'placeholder="Планерка команды"></label>' +
+              'placeholder="Планерка команды" value="' +
+              (edit ? esc(room.title || '') : '') + '"></label>' +
           // От этого выбора зависит, кого комната пустит внутрь, поэтому он тут,
           // а не в настройках: внутреннюю встречу открывает только команда, а на
           // разговор с семьей человек со стороны заходит по ссылке.
+          (edit ? '' :
           '<div class="al-f"><span class="al-l">Кто заходит</span>' +
             '<div class="due-seg" id="mr-kind">' +
               '<button type="button" class="on" data-kind="team">Только команда</button>' +
               '<button type="button" data-kind="sales">Ученик или клиент</button>' +
             '</div></div>' +
-          '<div class="al-hint" id="mr-kindnote"></div>' +
+          '<div class="al-hint" id="mr-kindnote"></div>') +
           // Направление нужно, чтобы встреча легла в свой отдел в разделе
           // «Ближайшие». Не обязательное: у общей планерки отдела нет.
           '<label class="al-f"><span class="al-l">Направление</span>' +
             '<span class="al-selwrap"><select id="mr-dept" class="al-sel">' +
               '<option value="">Без направления</option>' +
               MX_DEPTS.map(function (d) {
+                var now = edit ? (room.dept || '') : state.meetxDept;
                 return '<option value="' + d + '"' +
-                  (state.meetxDept === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
+                  (now === d ? ' selected' : '') + '>' + esc(DEPTS[d]) + '</option>';
               }).join('') +
             '</select></span></label>' +
           /* Когда. «Сейчас» — обычный случай и стоит первым; «Назначить» достает
              дату и время, и только тогда появляется смысл звать людей заранее. */
+          (edit ? '' :
           '<div class="al-f"><span class="al-l">Когда</span>' +
             '<div class="due-seg" id="mr-when">' +
               '<button type="button" class="on" data-when="now">Сейчас</button>' +
               '<button type="button" data-when="plan">Назначить</button>' +
-            '</div></div>' +
+            '</div></div>') +
+          (edit && !room.starts_at ? '' :
           '<div class="al-f mr-at" id="mr-at" hidden>' +
             '<span class="al-l">Дата и время</span>' +
             '<div class="mr-atrow">' +
               '<input id="mr-date" class="al-in" type="date">' +
               '<input id="mr-time" class="al-in" type="time" step="900" value="11:00">' +
-            '</div></div>' +
+            '</div></div>') +
           '<div class="al-f"><span class="al-l">Кого позвать</span>' +
             '<div id="mr-who"></div>' +
-            '<span class="al-hint">Ссылку отправлю им ботом сразу. ' +
-              'Назначенную встречу напомню за сутки и за час.</span></div>' +
+            '<span class="al-hint">' + (edit
+              ? 'Добавленным отправлю ссылку ботом, убранным скажу, что встреча без них.'
+              : 'Ссылку отправлю им ботом сразу. ' +
+                'Назначенную встречу напомню за сутки и за час.') + '</span></div>' +
           '<div class="al-ai-note" id="mr-note"></div>' +
         '</div>' +
         '<div class="al-foot" id="mr-foot">' +
           '<button class="al-cancel" id="mr-cancel">Отмена</button>' +
-          '<button class="bp al-save" id="mr-go">' + ic('plus', 14) + 'Создать</button>' +
+          '<button class="bp al-save" id="mr-go">' +
+            (edit ? ic('check', 14) + 'Сохранить' : ic('plus', 14) + 'Создать') + '</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(ov);
@@ -14250,34 +14270,50 @@
       note.className = 'al-ai-note' + (ask ? ' ask' : '');
       note.textContent = t || '';
     };
-    var kind = 'team';
-    var kindNote = function () {
-      el('mr-kindnote').textContent = kind === 'team'
-        ? 'Войдут только свои: чужой по пересланной ссылке не попадет.'
-        : 'Войдет любой по ссылке — она и есть пропуск. Не пересылайте ее дальше.';
-    };
-    kindNote();
-    Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () {
-        kind = b.getAttribute('data-kind');
-        Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (x) {
-          x.classList.toggle('on', x === b);
+    var kind = edit ? (room.kind || 'team') : 'team';
+    if (!edit) {
+      var kindNote = function () {
+        el('mr-kindnote').textContent = kind === 'team'
+          ? 'Войдут только свои: чужой по пересланной ссылке не попадет.'
+          : 'Войдет любой по ссылке — она и есть пропуск. Не пересылайте ее дальше.';
+      };
+      kindNote();
+      Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () {
+          kind = b.getAttribute('data-kind');
+          Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (x) {
+            x.classList.toggle('on', x === b);
+          });
+          kindNote();
         });
-        kindNote();
       });
-    });
+    }
 
-    var when = mode === 'plan' ? 'plan' : 'now';
-    if (when === 'plan') {
+    var when = (mode === 'plan' || (edit && room.starts_at)) ? 'plan' : 'now';
+    if (edit) {
+      // Поля даты у встречи «сейчас» в правке нет вовсе — показывать нечего.
+      if (el('mr-at')) el('mr-at').hidden = false;
+    }
+    if (edit && room.starts_at) {
+      var at = new Date(room.starts_at);
+      el('mr-date').value = at.getFullYear() + '-' +
+        ('0' + (at.getMonth() + 1)).slice(-2) + '-' + ('0' + at.getDate()).slice(-2);
+      el('mr-time').value = ('0' + at.getHours()).slice(-2) + ':' +
+        ('0' + at.getMinutes()).slice(-2);
+    }
+    if (when === 'plan' && !edit) {
       Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
         x.classList.toggle('on', x.getAttribute('data-when') === 'plan');
       });
       el('mr-at').hidden = false;
-      var d0 = new Date(Date.now() + 86400000);
-      el('mr-date').value = d0.getFullYear() + '-' +
-        ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
+      if (!el('mr-date').value) {
+        var d0 = new Date(Date.now() + 86400000);
+        el('mr-date').value = d0.getFullYear() + '-' +
+          ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
+      }
     }
-    Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (b) {
+    Array.prototype.forEach.call((el('mr-when') || { querySelectorAll: function () { return []; } })
+        .querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () {
         when = b.getAttribute('data-when');
         Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
@@ -14296,7 +14332,8 @@
     var pick = null;
     loadTaskPeople(function (people) {
       var box = el('mr-who');
-      if (box) pick = peoplePick(box, [], people, { word: 'участник' });
+      if (box) pick = peoplePick(box, edit ? (room.invited || []) : [], people,
+                                 { word: 'участник' });
     });
 
     setTimeout(function () { var t = el('mr-title'); if (t) t.focus(); }, 60);
@@ -14310,12 +14347,27 @@
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
       var body = { title: title, kind: kind, dept: (el('mr-dept') || {}).value || '',
                    invite: pick ? pick.get() : [] };
-      if (when === 'plan') {
+      if (when === 'plan' && el('mr-date')) {
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
         body.starts_at = day + 'T' + hm + ':00';
       }
       go.disabled = true; go.classList.add('loading');
+      if (edit) {
+        /* kind в правке не шлем вовсе: сервер меняет только то, что пришло, а
+           режим доступа мы здесь не показываем и менять не даем. */
+        delete body.kind;
+        apiSend('/admin/api/meet/rooms/' + room.id + '/edit', 'POST', body,
+          function (r) { saved(r); },
+          function (code, e) {
+            go.disabled = false; go.classList.remove('loading');
+            var why = e && e.body && e.body.detail;
+            show(why || (code === 409 ? 'Эту встречу уже не изменить'
+              : code === 403 ? 'Это чужая встреча'
+              : 'Не получилось сохранить, попробуй еще раз'), true);
+          });
+        return;
+      }
       apiSend('/admin/api/meet/rooms', 'POST', body,
         function (r) { ready(r); },
         function (code, e) {
@@ -14327,6 +14379,22 @@
               : 'Не получилось завести встречу, попробуй еще раз', true);
         });
     });
+
+    /* После правки окно закрываем сразу: ссылка та же, показывать нечего, а
+       человек пришел сюда поменять строчку, а не читать подтверждение. Что
+       именно ушло людям, говорит тост — это единственное, чего он не видит. */
+    function saved(r) {
+      var t = r && r.told || {};
+      var says = [];
+      if (t.added) says.push('позвал ' + t.added);
+      if (t.gone) says.push('убрал ' + t.gone);
+      if (t.updated) says.push('предупредил об изменении ' + t.updated);
+      close();
+      state.meetRooms = null; loadMeetRooms();
+      state.meetx = null;
+      if (state.page === 'meetx') renderView();
+      showToast('Встреча изменена', says.join(', '));
+    }
 
     // Готово: показываем ссылку и одну кнопку. Человеку сейчас нужно только
     // скопировать ее в чат, поэтому поля ввода убираем совсем.
@@ -26103,7 +26171,11 @@
          вышли, и все это время выглядит живой. */
       (live
         ? '<button type="button" class="qchip mx-end" data-mxend="' + r.id + '">Завершить</button>'
-        : '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
+        /* Ольга 15.10.2026: раньше ошибся в названии или забыл кого-то позвать —
+           заводи встречу заново, а старую отменяй. Людям при этом приходило два
+           сообщения подряд: отбой и приглашение на ту же самую встречу. */
+        : '<button type="button" class="qchip mx-edit" data-mxedit="' + r.id + '">Изменить</button>' +
+          '<button type="button" class="qchip mx-cancel" data-mxcancel="' + r.id + '">Отменить</button>') +
     '</div>';
   }
   function renderMeetxSoon(view) {
@@ -26362,6 +26434,13 @@
     mxWireTop(view);
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxlink]'), function (b) {
       b.addEventListener('click', function () { copyText(b.getAttribute('data-mxlink'), b); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxedit]'), function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-mxedit');
+        var room = mxSoonList().filter(function (x) { return x.id === id; })[0];
+        if (room) openMeetRoom('edit', room);
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mxcancel]'), function (b) {
       b.addEventListener('click', function () {
