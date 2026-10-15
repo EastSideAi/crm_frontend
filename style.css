@@ -1485,6 +1485,24 @@ a { color: inherit; text-decoration: none; }
 .cns-note { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
 .cns-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .cns-empty { font-size: 13px; color: var(--ink-3); padding: 22px 0; text-align: center; line-height: 1.5; }
+/* Разбивка оплаты консультации: отделена от строки тонкой линией, внутри плотнее. */
+.cns-split { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px; }
+.cns-split-h { display: flex; align-items: center; gap: 10px; font-size: 12px;
+  font-weight: 600; color: var(--ink-2); }
+.cns-5050 { margin-left: auto; }
+.cns-split-f { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
+.cns-split-f .al-in { width: 120px; margin-left: auto; }
+.cns-sched { display: flex; flex-direction: column; gap: 8px; }
+.cns-sched-row { display: flex; align-items: center; gap: 8px; }
+.cns-sched-row .al-in[type="date"] { width: 150px; }
+.cns-sched-row .al-in.num { flex: 1; min-width: 90px; }
+.cns-sched-del { flex: none; border: 0; background: transparent; color: var(--ink-3);
+  cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: inline-flex;
+  align-items: center; justify-content: center; }
+.cns-sched-del:hover { color: var(--red); background: var(--fill); }
+.cns-split-acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cns-split-save { margin-left: auto; }
 
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 22px; background: #fff;
   display: flex; gap: 10px; justify-content: flex-end; }
@@ -7290,6 +7308,12 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* «Попросить счет» у плановой строки: действие, но тихое — акцент на экране один,
+   и он у информатора проблем сверху. Уже попросили — на месте кнопки отметка. */
+.fsp-ask { color: var(--ink-2); cursor: pointer; }
+.fsp-ask svg { opacity: .8; }
+.fsp-ask:hover { color: var(--blue); }
+.fsp-asked { color: var(--ink-3); font-size: 11.5px; padding: 3px 9px; }
 /* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
    в строке это деталь, а не действие экрана. */
 .fsp-bill { color: var(--ink-2); text-decoration: underline;
@@ -12438,6 +12462,9 @@ video.cs-media { background: #000; }
 .fkb-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
 .fkb-nav .fkb-cap { margin: 6px 0 2px 4px; }
+/* Заголовок второй пачки отбивается от предыдущего списка сильнее, чем строки
+   внутри пачки: иначе «Справочник» читается как еще одно правило. */
+.fkb-nav .fkb-nav-i + .fkb-cap { margin-top: 16px; }
 .fkb-hist .fkb-cap { margin-bottom: 4px; }
 .fkb-add { align-self: flex-start; }
 .fkb-nav-i { display: block; width: 100%; text-align: left; padding: 9px 11px;
