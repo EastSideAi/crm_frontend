@@ -22472,8 +22472,9 @@
             finField('Нужен до',
               '<input id="sa-due" class="al-in" type="date" value="' +
               esc(it.date || '') + '">') +
-            '<div class="fin-note">Сумма в письме: ' + finRub(it.amount || 0) +
-            ' — как в этой строке.</div>',
+            // Тихая плашка, а не амберная: это факт, а не предупреждение.
+            '<div class="fin-note calm">Сумма в письме: ' + finRub(it.amount || 0) +
+            ', как в этой строке.</div>',
     });
     if (!m) return;
     el('fm-ok').addEventListener('click', function () {
