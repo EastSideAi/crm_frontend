@@ -24194,9 +24194,23 @@
     if (KB.items === null) { view.innerHTML = kbSkeleton(); kbLoad(); return; }
     var canEdit = can('finmodel_edit');
 
+    /* Оглавление делится на две пачки: процессы (их проходят по шагам) и справки
+       (в них подсматривают по ходу). Группа видна по слагу, а не по отдельному
+       полю: правило заводят из CRM, и лишнее поле в форме пришлось бы объяснять
+       каждому, кто пишет правило. Слаг у новых правил ставит сам автор, и если
+       он не попал в эти две пачки — правило просто ляжет в «Главы». */
+    var kbGroup = function (slug) {
+      if (/^process-/.test(slug)) return 'Процессы';
+      if (/^spravka-/.test(slug)) return 'Справочник';
+      return 'Главы';
+    };
+    var prevGroup = null;
     var nav = KB.items.map(function (a) {
       var on = KB.cur && KB.cur.slug === a.slug;
-      return '<button class="fkb-nav-i' + (on ? ' on' : '') + '" data-kb="' + esc(a.slug) + '">' +
+      var g = kbGroup(a.slug);
+      var cap = g === prevGroup ? '' : '<div class="fkb-cap">' + esc(g) + '</div>';
+      prevGroup = g;
+      return cap + '<button class="fkb-nav-i' + (on ? ' on' : '') + '" data-kb="' + esc(a.slug) + '">' +
         '<span class="fkb-nav-t">' + esc(a.title) + '</span>' +
         (a.summary ? '<span class="fkb-nav-s">' + esc(a.summary) + '</span>' : '') +
       '</button>';
@@ -24268,7 +24282,6 @@
             '<input id="kb-q" class="al-in" placeholder="Найти правило" value="' + esc(KB.q) + '">' +
           '</div>' +
           (canEdit ? '<button class="qchip fkb-add" id="kb-new">+ правило</button>' : '') +
-          '<div class="fkb-cap">Главы</div>' +
           nav +
         '</div>' +
         '<div class="fkb-main">' +
