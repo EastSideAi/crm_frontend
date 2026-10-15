@@ -7308,6 +7308,12 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* «Попросить счет» у плановой строки: действие, но тихое — акцент на экране один,
+   и он у информатора проблем сверху. Уже попросили — на месте кнопки отметка. */
+.fsp-ask { color: var(--ink-2); cursor: pointer; }
+.fsp-ask svg { opacity: .8; }
+.fsp-ask:hover { color: var(--blue); }
+.fsp-asked { color: var(--ink-3); font-size: 11.5px; padding: 3px 9px; }
 /* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
    в строке это деталь, а не действие экрана. */
 .fsp-bill { color: var(--ink-2); text-decoration: underline;
@@ -12456,6 +12462,9 @@ video.cs-media { background: #000; }
 .fkb-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
 .fkb-nav .fkb-cap { margin: 6px 0 2px 4px; }
+/* Заголовок второй пачки отбивается от предыдущего списка сильнее, чем строки
+   внутри пачки: иначе «Справочник» читается как еще одно правило. */
+.fkb-nav .fkb-nav-i + .fkb-cap { margin-top: 16px; }
 .fkb-hist .fkb-cap { margin-bottom: 4px; }
 .fkb-add { align-self: flex-start; }
 .fkb-nav-i { display: block; width: 100%; text-align: left; padding: 9px 11px;
