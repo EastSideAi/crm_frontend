@@ -14223,21 +14223,25 @@
             '</select></span></label>' +
           /* Когда. «Сейчас» — обычный случай и стоит первым; «Назначить» достает
              дату и время, и только тогда появляется смысл звать людей заранее. */
+          (edit ? '' :
           '<div class="al-f"><span class="al-l">Когда</span>' +
             '<div class="due-seg" id="mr-when">' +
               '<button type="button" class="on" data-when="now">Сейчас</button>' +
               '<button type="button" data-when="plan">Назначить</button>' +
-            '</div></div>' +
+            '</div></div>') +
+          (edit && !room.starts_at ? '' :
           '<div class="al-f mr-at" id="mr-at" hidden>' +
             '<span class="al-l">Дата и время</span>' +
             '<div class="mr-atrow">' +
               '<input id="mr-date" class="al-in" type="date">' +
               '<input id="mr-time" class="al-in" type="time" step="900" value="11:00">' +
-            '</div></div>' +
+            '</div></div>') +
           '<div class="al-f"><span class="al-l">Кого позвать</span>' +
             '<div id="mr-who"></div>' +
-            '<span class="al-hint">Ссылку отправлю им ботом сразу. ' +
-              'Назначенную встречу напомню за сутки и за час.</span></div>' +
+            '<span class="al-hint">' + (edit
+              ? 'Добавленным отправлю ссылку ботом, убранным скажу, что встреча без них.'
+              : 'Ссылку отправлю им ботом сразу. ' +
+                'Назначенную встречу напомню за сутки и за час.') + '</span></div>' +
           '<div class="al-ai-note" id="mr-note"></div>' +
         '</div>' +
         '<div class="al-foot" id="mr-foot">' +
@@ -14286,6 +14290,10 @@
     }
 
     var when = (mode === 'plan' || (edit && room.starts_at)) ? 'plan' : 'now';
+    if (edit) {
+      // Поля даты у встречи «сейчас» в правке нет вовсе — показывать нечего.
+      if (el('mr-at')) el('mr-at').hidden = false;
+    }
     if (edit && room.starts_at) {
       var at = new Date(room.starts_at);
       el('mr-date').value = at.getFullYear() + '-' +
@@ -14293,7 +14301,7 @@
       el('mr-time').value = ('0' + at.getHours()).slice(-2) + ':' +
         ('0' + at.getMinutes()).slice(-2);
     }
-    if (when === 'plan') {
+    if (when === 'plan' && !edit) {
       Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
         x.classList.toggle('on', x.getAttribute('data-when') === 'plan');
       });
@@ -14304,7 +14312,8 @@
           ('0' + (d0.getMonth() + 1)).slice(-2) + '-' + ('0' + d0.getDate()).slice(-2);
       }
     }
-    Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (b) {
+    Array.prototype.forEach.call((el('mr-when') || { querySelectorAll: function () { return []; } })
+        .querySelectorAll('button'), function (b) {
       b.addEventListener('click', function () {
         when = b.getAttribute('data-when');
         Array.prototype.forEach.call(el('mr-when').querySelectorAll('button'), function (x) {
@@ -14338,7 +14347,7 @@
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
       var body = { title: title, kind: kind, dept: (el('mr-dept') || {}).value || '',
                    invite: pick ? pick.get() : [] };
-      if (when === 'plan') {
+      if (when === 'plan' && el('mr-date')) {
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
         body.starts_at = day + 'T' + hm + ':00';
@@ -14378,8 +14387,8 @@
       var t = r && r.told || {};
       var says = [];
       if (t.added) says.push('позвал ' + t.added);
-      if (t.gone) says.push('сказал об отмене ' + t.gone);
-      if (t.updated) says.push('предупредил ' + t.updated);
+      if (t.gone) says.push('убрал ' + t.gone);
+      if (t.updated) says.push('предупредил об изменении ' + t.updated);
       close();
       state.meetRooms = null; loadMeetRooms();
       state.meetx = null;
