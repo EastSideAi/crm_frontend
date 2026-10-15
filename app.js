@@ -22316,6 +22316,15 @@
         } else if (it.state === 'проведен' && canFix) {
           act = '<button class="qchip fsp-add" data-spdoc="' + esc(it.id) + '">' +
             ic('plus', 11) + 'документ</button>';
+        } else if (it.state === 'запланирован' && canFix && !inv) {
+          // Счет просим ТОЛЬКО по плану: по проведенной строке деньги уже ушли.
+          // Уже попросили — вместо кнопки стоит отметка: вторая просьба в тот же
+          // день читается поставщиком как «нам некогда ждать».
+          act = it.ask
+            ? '<span class="qchip fsp-asked" title="' + esc(it.ask.email) + '">' +
+              'счет запросили ' + finDate(it.ask.at) + '</span>'
+            : '<button class="qchip fsp-ask" data-spask="' + esc(it.id) + '">' +
+              ic('mail', 11) + 'попросить счет</button>';
         }
         return '<div class="trow fin-grid fe-grid fsp-row">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -22345,6 +22354,9 @@
     view.innerHTML = bar + inf + cards;
     Array.prototype.forEach.call(view.querySelectorAll('[data-spdoc]'), function (b) {
       b.addEventListener('click', function () { spendDocForm(b.getAttribute('data-spdoc')); });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spask]'), function (b) {
+      b.addEventListener('click', function () { spendAskForm(b.getAttribute('data-spask')); });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
       b.addEventListener('click', function () {
@@ -22431,6 +22443,49 @@
       fr.readAsDataURL(file);
     });
   }
+  /* Строка расходов по id — форме просьбы нужны сумма, назначение и адрес, а второго
+     запроса ради трех полей, которые уже лежат на экране, делать незачем. */
+  function spendRow(id) {
+    var arts = (FIN.spend && FIN.spend !== 'none' && FIN.spend.articles) || [];
+    for (var i = 0; i < arts.length; i++) {
+      var items = arts[i].items || [];
+      for (var j = 0; j < items.length; j++) if (items[j].id === id) return items[j];
+    }
+    return null;
+  }
+
+  /* Попросить у поставщика счет письмом. Телеграм писать первым не дает, пока человек
+     не нажал «Старт», и для планового расхода почта — единственная дверь. Адрес, если
+     поставщик нам уже присылал счет, подставлен; вписанный тут сильнее прочитанного. */
+  function spendAskForm(id) {
+    var it = spendRow(id) || {};
+    var m = finModal({
+      eyebrow: 'Расход', title: 'Попросить счет', ok: 'Отправить письмо',
+      sub: 'Уйдет письмо: за что, сколько и до какого числа нужен счет. Ответ с PDF ' +
+           'вернется сюда же, к этой строке.',
+      body: finField('Почта поставщика',
+              '<input id="sa-mail" class="al-in" maxlength="200" type="email" ' +
+              'placeholder="buh@postavshik.ru" value="' + esc(it.payee_email || '') + '">') +
+            finField('За что просим',
+              '<input id="sa-what" class="al-in" maxlength="300" value="' +
+              esc(it.item || it.comment || '') + '">') +
+            finField('Нужен до',
+              '<input id="sa-due" class="al-in" type="date" value="' +
+              esc(it.date || '') + '">') +
+            '<div class="fin-note">Сумма в письме: ' + finRub(it.amount || 0) +
+            ' — как в этой строке.</div>',
+    });
+    if (!m) return;
+    el('fm-ok').addEventListener('click', function () {
+      var mail = finVal('sa-mail').trim();
+      if (mail.indexOf('@') < 1) { m.err.textContent = 'Впишите почту поставщика.'; return; }
+      m.close();
+      finDo('/admin/api/fin/operation/' + id + '/ask-bill', 'POST', {
+        email: mail, what: finVal('sa-what'), due_on: finVal('sa-due') || null,
+      }, 'Письмо ушло на ' + mail + '. Счет придет сюда же.');
+    });
+  }
+
   /* Что сказать человеку после разбора счета. Главное тут не «готово», а что именно
      система прочитала и что ответил реестр: по этим цифрам пойдут деньги. */
   function spendInvToast(res) {
