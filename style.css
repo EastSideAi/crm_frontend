@@ -1485,6 +1485,24 @@ a { color: inherit; text-decoration: none; }
 .cns-note { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
 .cns-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .cns-empty { font-size: 13px; color: var(--ink-3); padding: 22px 0; text-align: center; line-height: 1.5; }
+/* Разбивка оплаты консультации: отделена от строки тонкой линией, внутри плотнее. */
+.cns-split { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px; }
+.cns-split-h { display: flex; align-items: center; gap: 10px; font-size: 12px;
+  font-weight: 600; color: var(--ink-2); }
+.cns-5050 { margin-left: auto; }
+.cns-split-f { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
+.cns-split-f .al-in { width: 120px; margin-left: auto; }
+.cns-sched { display: flex; flex-direction: column; gap: 8px; }
+.cns-sched-row { display: flex; align-items: center; gap: 8px; }
+.cns-sched-row .al-in[type="date"] { width: 150px; }
+.cns-sched-row .al-in.num { flex: 1; min-width: 90px; }
+.cns-sched-del { flex: none; border: 0; background: transparent; color: var(--ink-3);
+  cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: inline-flex;
+  align-items: center; justify-content: center; }
+.cns-sched-del:hover { color: var(--red); background: var(--fill); }
+.cns-split-acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cns-split-save { margin-left: auto; }
 
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 22px; background: #fff;
   display: flex; gap: 10px; justify-content: flex-end; }

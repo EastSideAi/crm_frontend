@@ -24738,14 +24738,16 @@
     var items = r.items || [];
     var sales = items.filter(function (x) { return x.kind === 'продажа'; });
     var receiv = items.filter(function (x) { return x.kind === 'дебиторка'; });
-    var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки
+    var autoReceiv = r.receivables_auto || [];   // дебиторка из графиков рассрочки и консультаций
+    var salesAuto = r.sales_auto || [];          // новые продажи из консультаций (первый взнос)
     var planFact = t.planned_revenue > 0
       ? Math.round(t.income_fact / t.planned_revenue * 100) + '% от плана уже пришло'
       : (t.income_fact > 0 ? 'план не заведен, показан факт' : 'факта по этой ведомости еще нет');
 
     var bar = statBar([
       { label: 'Ждем с новых продаж', value: finRub(t.sales_expected),
-        sub: sales.length + ' ' + plural(sales.length, 'сделка', 'сделки', 'сделок') },
+        sub: (sales.length + salesAuto.length) + ' ' +
+          plural(sales.length + salesAuto.length, 'сделка', 'сделки', 'сделок') },
       { label: 'Ждем с дебиторки', value: finRub(t.receivables_expected),
         sub: (receiv.length + autoReceiv.length) + ' ' +
           plural(receiv.length + autoReceiv.length, 'долг клиента', 'долга клиентов', 'долгов клиентов') },
@@ -24757,7 +24759,7 @@
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
-        'кого закрываем и на сколько — то, что ждем получить') + '</div>' +
+        'кого закрываем и на сколько — записанные консультации собираются сами', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
     '</div>';
@@ -24860,15 +24862,19 @@
     // правят — клик ведёт в карточку клиента, а не в форму. Просроченный взнос помечен.
     var todayIso = '';
     try { todayIso = new Date().toISOString().slice(0, 10); } catch (e) { todayIso = ''; }
+    var isSaleCard = (kind === 'продажа');
     var autoBody = (autoRows || []).map(function (x) {
       var over = x.due_on && todayIso && x.due_on < todayIso;
-      var chip = over ? '<span class="sev mini cz-bad">просрочен</span>'
-                      : '<span class="sev mini cz-wait">рассрочка</span>';
+      var chip = isSaleCard
+        ? '<span class="sev mini cz-wait">из консультации</span>'
+        : (over ? '<span class="sev mini cz-bad">просрочен</span>'
+                : '<span class="sev mini cz-wait">рассрочка</span>');
       var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
         .filter(Boolean).map(esc).join(' · ');
       return '<div class="fl-row fl-2 rp-row click" data-lead="' + esc(x.case_id) + '">' +
         '<div class="fl-main"><span class="fl-name">' + (esc(x.client) || '—') + ' ' + chip +
-          '</span><span class="fl-sub">' + (line || 'рассрочка') + '</span></div>' +
+          '</span><span class="fl-sub">' + (line || (isSaleCard ? 'ожидаемая продажа' : 'рассрочка')) +
+          '</span></div>' +
         '<div class="fl-v num">' + finRub(x.amount) + '</div></div>';
     }).join('');
     return '<div class="card listcard">' +
@@ -43018,6 +43024,41 @@
     '</div>';
   }
 
+  // Одна строка графика остатка: дата платежа + сумма. Пустые/кривые строки на
+  // сохранении отбрасываются, в план попадают только дата с суммой больше нуля.
+  function schedRowHtml(x) {
+    var due = (x && x.due) ? String(x.due).slice(0, 10) : '';
+    var amt = (x && x.amount != null) ? x.amount : '';
+    return '<div class="cns-sched-row">' +
+      '<input type="date" class="al-in sm" data-sdue value="' + esc(due) + '">' +
+      '<input type="text" inputmode="numeric" class="al-in sm num" data-samt value="' +
+        esc(String(amt)) + '" placeholder="сумма ₽">' +
+      '<button class="cns-sched-del" data-sched-del title="Убрать">' + ic('x', 12) + '</button>' +
+    '</div>';
+  }
+
+  // Разбивка ожидаемой сделки. Первый взнос сейчас — это «новая продажа» периода,
+  // каждый платёж графика — «дебиторка» того периода, куда падает его дата. Пусто —
+  // бэк считает первым взносом весь чек. Кнопка «50 / 50» делит пополам: половину
+  // сейчас, половину через 3 месяца (так чаще всего и платят, Олеся 09.10.2026).
+  function consultSplitHtml(c) {
+    var sched = Array.isArray(c.pay_schedule) ? c.pay_schedule : [];
+    return '<div class="cns-split" data-split="' + c.id + '">' +
+      '<div class="cns-split-h">Как платит<button class="bp sm ghost cns-5050" ' +
+        'data-5050="' + c.id + '">50 / 50</button></div>' +
+      '<label class="cns-split-f">Первый взнос сейчас' +
+        '<input type="text" inputmode="numeric" class="al-in sm num" data-firstpay="' + c.id +
+        '" value="' + esc(c.first_pay_rub != null ? String(c.first_pay_rub) : '') +
+        '" placeholder="весь чек"></label>' +
+      '<div class="cns-sched" data-sched="' + c.id + '">' +
+        sched.map(schedRowHtml).join('') + '</div>' +
+      '<div class="cns-split-acts">' +
+        '<button class="bp sm ghost cns-sched-add" data-sched-add="' + c.id + '">+ платёж остатка</button>' +
+        '<button class="bp sm cns-split-save" data-split-save="' + c.id + '">Сохранить</button>' +
+      '</div>' +
+    '</div>';
+  }
+
   function consultRowHtml(c) {
     var st = CNS_STATUS[c.status] || CNS_STATUS.booked;
     var role = c.lead_name ? '<span class="cns-role">' + esc(c.lead_name) + '</span>' : '';
@@ -43057,6 +43098,10 @@
       '</div>' +
       (c.note ? '<div class="cns-note">' + esc(c.note) + '</div>' : '') +
       (acts ? '<div class="cns-acts">' + acts + '</div>' : '') +
+      // Разбивку показываем у «думает» с чеком: только тут есть сумма, которую есть
+      // смысл делить на взнос сейчас и остаток в рассрочку.
+      (c.status === 'held' && c.result === 'thinking' && c.amount_rub
+        ? consultSplitHtml(c) : '') +
     '</div>';
   }
 
@@ -43136,6 +43181,53 @@
         var cid = inp.getAttribute('data-amount');
         var n = parseInt(inp.value.replace(/\D/g, ''), 10);
         consultPatch(id, cid, { amount_rub: isNaN(n) ? 0 : n });
+      });
+    });
+    // «+ платёж остатка» дописывает строку графика прямо в DOM — без перерисовки, иначе
+    // слетели бы уже введённые суммы и дата соседних строк.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-sched-add]'), function (b) {
+      b.addEventListener('click', function () {
+        var box = host.querySelector('[data-sched="' + b.getAttribute('data-sched-add') + '"]');
+        if (!box) return;
+        var wrap = document.createElement('div');
+        wrap.innerHTML = schedRowHtml({});
+        var row = wrap.firstChild;
+        box.appendChild(row);
+        var del = row.querySelector('[data-sched-del]');
+        if (del) del.addEventListener('click', function () { row.remove(); });
+      });
+    });
+    Array.prototype.forEach.call(host.querySelectorAll('[data-sched-del]'), function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.cns-sched-row'); if (row) row.remove();
+      });
+    });
+    // «50 / 50»: половину сейчас, половину через 3 месяца. Дату можно поправить руками.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-5050]'), function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-5050');
+        var c = (CONSULT[id] || []).filter(function (x) { return String(x.id) === String(cid); })[0];
+        if (!c || !c.amount_rub) { showToast('Сначала укажи ожидаемый чек'); return; }
+        var first = Math.round(c.amount_rub / 2), rest = c.amount_rub - first;
+        var dt = new Date(); dt.setMonth(dt.getMonth() + 3);
+        var iso = dt.toISOString().slice(0, 10);
+        consultPatch(id, cid, { first_pay_rub: first, pay_schedule: [{ due: iso, amount: rest }] });
+      });
+    });
+    // «Сохранить» собирает взнос и весь график из полей блока и шлёт одним PATCH.
+    Array.prototype.forEach.call(host.querySelectorAll('[data-split-save]'), function (b) {
+      b.addEventListener('click', function () {
+        var cid = b.getAttribute('data-split-save');
+        var block = host.querySelector('[data-split="' + cid + '"]'); if (!block) return;
+        var fp = block.querySelector('[data-firstpay]');
+        var fpn = fp ? parseInt(fp.value.replace(/\D/g, ''), 10) : NaN;
+        var sched = [];
+        Array.prototype.forEach.call(block.querySelectorAll('.cns-sched-row'), function (row) {
+          var due = (row.querySelector('[data-sdue]') || {}).value || '';
+          var amt = parseInt(((row.querySelector('[data-samt]') || {}).value || '').replace(/\D/g, ''), 10);
+          if (due && !isNaN(amt) && amt > 0) sched.push({ due: due, amount: amt });
+        });
+        consultPatch(id, cid, { first_pay_rub: isNaN(fpn) ? null : fpn, pay_schedule: sched });
       });
     });
   }
