@@ -22465,7 +22465,12 @@
            'вернется сюда же, к этой строке.',
       body: finField('Почта поставщика',
               '<input id="sa-mail" class="al-in" maxlength="200" type="email" ' +
-              'placeholder="buh@postavshik.ru" value="' + esc(it.payee_email || '') + '">') +
+              'placeholder="buh@postavshik.ru" value="' + esc(it.payee_email || '') + '">' +
+              // Адрес из присланного счета и вписанный человеком в поле выглядят
+              // одинаково, а доверия к ним разное: письмо присылает кто угодно.
+              (it.payee_email && it.payee_source === 'письмо'
+                ? '<span class="al-hint">адрес узнали из присланного счета, сверьте ' +
+                  'с договором</span>' : '')) +
             finField('За что просим',
               '<input id="sa-what" class="al-in" maxlength="300" value="' +
               esc(it.item || it.comment || '') + '">') +
