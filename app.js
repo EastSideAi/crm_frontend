@@ -23275,8 +23275,14 @@
         : (c.payable
             ? '<span class="fst ok">к выплате</span>'
             : '<span class="fst wait">' + (c.rule ? 'нет оплат' : 'ставка не задана') + '</span>');
+      // Имя клиента — ссылка в его карточку (case_id бэкенд отдаёт только под cap
+      // clients, тот же гейт, что у строки дохода). Без case_id — обычный текст.
+      var nm = c.case_id
+        ? '<b class="fin-lead" data-lead="' + esc(c.case_id) + '">' +
+            esc(c.name || 'клиент без имени') + '</b>'
+        : '<b>' + esc(c.name || 'клиент без имени') + '</b>';
       return '<div class="trow fpt-crow' + (c.paid ? ' muted' : '') + '">' +
-        '<span class="fo-what"><b>' + esc(c.name || 'клиент без имени') + '</b>' +
+        '<span class="fo-what">' + nm +
           (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
         '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
         '<span class="fo-st">' + st + '</span>' +
@@ -23348,6 +23354,13 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-cancel]'), function (b) {
       b.addEventListener('click', function () {
         finPartnerCancelForm(b.getAttribute('data-cancel'), b.getAttribute('data-pname'));
+      });
+    });
+    // Клик по имени клиента ведёт в его карточку новой вкладкой (как в Доходах).
+    Array.prototype.forEach.call(view.querySelectorAll('.fin-lead[data-lead]'), function (n) {
+      n.addEventListener('click', function () {
+        var cid = n.getAttribute('data-lead');
+        if (cid) openLeadTab(cid);
       });
     });
     pageAnim(view);
