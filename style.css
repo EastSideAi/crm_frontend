@@ -7425,7 +7425,9 @@ button.fsp-via { cursor: pointer; }
    Строка клиента: имя, начислено, статус. Своя сетка, а не fin-grid — у начисления
    нет даты, и колонка даты пустой тратила бы левый край. */
 .fpt-crow { grid-template-columns: 1.7fr 150px 210px; }
-.fpt-crow.muted { opacity: .55; }
+/* Выплаченную строку гасим в имени и сумме, но НЕ в статусе: там живёт кнопка
+   «отменить» — действующий контрол, под общим opacity её контраст просел бы. */
+.fpt-crow.muted .fo-what, .fpt-crow.muted .fo-sum { opacity: .5; }
 .fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 .fpt-right { margin-left: auto; }
 .fpt-req { color: var(--ink-3); font-weight: 600; }
