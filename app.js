@@ -2480,7 +2480,11 @@
     /* Проверка перед выплатами преподам: наработал по табелю школы против выплаченного
        в ведомости, остаток горит красным. Повод — Ховисон (задача 6879): заработок
        прошлого периода не перенёсся в выплату и потерялся. Плюс журнал расхождений. */
-    { id: 'finpaycheck', label: 'Проверка выплат', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    // Проверка выплат преподавателям живёт вкладкой в «Расчётных листах» (Роман
+    // 16.10.2026: «чтобы не плодить много разных отдельных»). Пункта меню нет (hidden),
+    // запись остаётся ради старых прямых ссылок #page/finpaycheck и привязки cap/space.
+    { id: 'finpaycheck', label: 'Проверка выплат преподавателям', icon: 'clock',
+      cap: 'finmodel', space: 'fin', hidden: true },
     /* Сводка «кто из руководителей сдал план на период». План отдела = плановые строки
        его расходов в расчетном листе; экран показывает с одного взгляда, где план есть,
        а где нет. Для того, кто собирает план (владелец, финансист) — cap finmodel. */
@@ -21357,6 +21361,9 @@
      блоками, выплата с фонда — кнопка на странице фонда. */
   var FIN_SHEET_IDS = { 'лист-продаж': 1, 'лист-маркетинга': 1, 'лист-продукта': 1,
                         'лист-краткосрочки': 1, 'лист-безопасности': 1 };
+  // Псевдо-вкладка «Проверка выплат преподавателям» в ряду листов расчётных листов:
+  // не форма ввода, а сверка — рисуется своим рендером (finRenderPayCheckTab).
+  var FIN_PCK_FORM = '__paycheck__';
   function finFormsForPage(page) {
     if (page === 'finincome') return FIN_FORMS.filter(function (f) { return f[0] === 'доход'; });
     return FIN_FORMS.filter(function (f) { return FIN_SHEET_IDS[f[0]]; });
@@ -21651,6 +21658,12 @@
 
   function finLinesScreen(view, page) {
     var forms = finMyFormsForPage(page);
+    // «Проверка выплат преподавателям» — вкладка внутри расчётных листов, а не свой пункт
+    // меню (Роман 16.10.2026). Видит её тот, кто видит ведомость; ставим в КОНЕЦ ряда,
+    // чтобы по умолчанию открывался первый лист, а не проверка.
+    if (page === 'finedit' && can('finmodel')) {
+      forms = forms.concat([[FIN_PCK_FORM, 'Проверка выплат преподавателям', '', 'finmodel']]);
+    }
     // Доход сюда пускает право смотреть ведомость; лист — свое листовое право. Нет ни
     // одного — экрана для этой роли нет.
     if (!forms.length) return finErrView(view);
@@ -21659,6 +21672,9 @@
     var inSet = false;
     for (var j = 0; j < forms.length; j++) if (forms[j][0] === FIN.form) inSet = true;
     if (!inSet) { FIN.form = forms[0][0]; FIN.lines = null; }
+    // Вкладка проверки — свой рендер: у неё своя загрузка (teacher-check) и нет строк
+    // листа, поэтому до finLoadLines не доходим.
+    if (page === 'finedit' && FIN.form === FIN_PCK_FORM) return finRenderPayCheckTab(view, forms);
     if (!FIN.lines) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadLines(); return;
@@ -24842,22 +24858,12 @@
 
   function finPckDate(s) { return finDate(String(s || '').slice(0, 10)); }
 
-  function renderFinPayCheck(view) {
-    if (!FIN.teachercheck) {
-      if (FIN.err) return finErrView(view);
-      view.innerHTML = dashSkeleton(); finLoadTeacherCheck(); return;
-    }
-    if (FIN.teachercheck === 'none') return finErrView(view);
+  // Куски проверки выплат одним местом: их делят отдельный экран (устаревшие прямые
+  // ссылки #page/finpaycheck) и вкладка «Проверка выплат преподавателям» в «Расчётных
+  // листах». Зовётся, когда FIN.teachercheck загружен и T.available — состояния
+  // «грузится / none / недоступно» разбирают вызывающие.
+  function finPayCheckData() {
     var T = FIN.teachercheck, canFix = can('finmodel_edit');
-
-    // Нет школьного модуля (превью/локаль) — считать нечего, это не ошибка.
-    if (!T.available) {
-      view.innerHTML = '<div class="fb-wrap"><div class="card listcard">' +
-        '<div class="fin-note calm">' + ic('info', 15) +
-        '<span>Школьный модуль в этой базе недоступен — сверять нечего. Проверка работает ' +
-        'на боевой версии, где есть табель преподавателей.</span></div></div></div>';
-      return;
-    }
 
     var rows = T.rows || [];
     var debtors = rows.filter(function (r) { return r.debt >= 1; });
@@ -24877,7 +24883,7 @@
     ];
 
     // Полоса готовности: якорь-предупреждение, пока есть остаток, иначе тихая справка.
-    var banner = '<div class="card listcard"><div class="fin-note ' +
+    var bannerInner = '<div class="fin-note ' +
       (T.ready ? 'calm ' : '') + 'pck-foot">' + ic(T.ready ? 'check' : 'alert', 15) +
       '<span>' + (T.ready
         ? 'Все преподаватели закрыты выплатами — можно формировать выплаты.'
@@ -24885,7 +24891,7 @@
           'готова: доплатите или проверьте, не потерялся ли перенос с прошлого периода.') +
       '</span>' + (canFix
         ? '<button class="qchip pck-right" id="pck-sync">Записать в журнал</button>' : '') +
-      '</div></div>';
+      '</div>';
 
     var head = '<div class="trow pck-grid pck-head">' +
       '<span>Преподаватель</span><span class="num">наработал</span>' +
@@ -24900,11 +24906,6 @@
           (debt ? finRub(r.debt) : '—') + '</span>' +
       '</div>';
     }).join('');
-    var tableCard = '<div class="card listcard">' +
-      '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
-      '<div><div class="t">Наработал против выплачено</div>' +
-      '<div class="s">накопительно: весь заработок по табелю против всех выплат в ведомости</div>' +
-      '</div></div>' + head + body + '</div>';
 
     var unm = T.unmatched || [];
     var unmCard = unm.length ? '<div class="card listcard">' +
@@ -24938,11 +24939,81 @@
       }).join('') : '<div class="pck-empty">Журнал пуст — расхождений не записано.</div>') +
       '</div>';
 
-    view.innerHTML = statBar(tiles) + banner + tableCard + unmCard + jrCard;
+    return { statbar: statBar(tiles), bannerInner: bannerInner,
+             head: head, body: body, unmCard: unmCard, jrCard: jrCard };
+  }
 
+  // Нет школьного модуля (превью/локаль) — считать нечего, это не ошибка. Одна заметка на
+  // оба места; вызывающий сам оборачивает её в карточку.
+  function finPayCheckNoteInner() {
+    return '<div class="fin-note calm">' + ic('info', 15) +
+      '<span>Школьный модуль в этой базе недоступен — сверять нечего. Проверка работает ' +
+      'на боевой версии, где есть табель преподавателей.</span></div>';
+  }
+
+  // Отдельный экран для устаревших прямых ссылок (#page/finpaycheck); в меню его больше
+  // нет — проверка живёт вкладкой в «Расчётных листах» (Роман 16.10.2026).
+  function renderFinPayCheck(view) {
+    if (!FIN.teachercheck) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadTeacherCheck(); return;
+    }
+    if (FIN.teachercheck === 'none') return finErrView(view);
+    if (!FIN.teachercheck.available) {
+      view.innerHTML = '<div class="fb-wrap"><div class="card listcard">' +
+        finPayCheckNoteInner() + '</div></div>';
+      return;
+    }
+    var d = finPayCheckData();
+    var tableCard = '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+      '<div><div class="t">Наработал против выплачено</div>' +
+      '<div class="s">накопительно: весь заработок по табелю против всех выплат в ведомости</div>' +
+      '</div></div>' + d.head + d.body + '</div>';
+    view.innerHTML = d.statbar + '<div class="card listcard">' + d.bannerInner + '</div>' +
+      tableCard + d.unmCard + d.jrCard;
     var sb = el('pck-sync');
     if (sb) sb.addEventListener('click', function () { finPayCheckSync(); });
     pageAnim(view);
+  }
+
+  // Та же проверка вкладкой внутри «Расчётных листов»: сверху ряд чипов (листы плюс
+  // активная «Проверка выплат преподавателям»), под ними — сама сверка одной карточкой.
+  function finRenderPayCheckTab(view, forms) {
+    if (!FIN.teachercheck) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadTeacherCheck(); return;
+    }
+    if (FIN.teachercheck === 'none') return finErrView(view);
+    var chips = forms.map(function (f) {
+      return '<button class="qchip' + (FIN.form === f[0] ? ' on' : '') +
+        '" data-fform="' + f[0] + '">' + esc(f[1]) + '</button>';
+    }).join('');
+    var headTools = '<div class="list-tools"><div>' +
+      '<div class="t fe-t">Проверка выплат преподавателям</div>' +
+      '<div class="s fe-s">накопительно: весь заработок по табелю против всех выплат</div>' +
+      '</div></div><div class="list-quick">' + chips + '</div>';
+    if (!FIN.teachercheck.available) {
+      view.innerHTML = '<div class="card listcard">' + headTools +
+        finPayCheckNoteInner() + '</div>';
+      finPayChipsWire(view);
+      return;
+    }
+    var d = finPayCheckData();
+    var card = '<div class="card listcard">' + headTools +
+      d.bannerInner + d.head + d.body + '</div>';
+    view.innerHTML = d.statbar + card + d.unmCard + d.jrCard;
+    finPayChipsWire(view);
+    var sb = el('pck-sync');
+    if (sb) sb.addEventListener('click', function () { finPayCheckSync(); });
+    pageAnim(view);
+  }
+
+  // Клики по чипам-вкладкам на экране проверки переключают лист/проверку как обычно.
+  function finPayChipsWire(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fform]'), function (b) {
+      b.addEventListener('click', function () { finSetForm(b.getAttribute('data-fform')); });
+    });
   }
 
   /* ПОСТАВЩИКИ — у кого система вообще просит счет.
