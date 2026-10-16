@@ -19955,7 +19955,9 @@
   function finPct(v) { return finNum(v, 1) + '%'; }
   function finDate(s) {
     if (!s) return '—';
-    var p = String(s).split('-');
+    // Отметка времени приходит и целым ISO («2026-10-16T10:12:00+03:00» у просьбы
+    // счета): без отсечки часов день собирался как «16T10:12:00+03:00.10.2026».
+    var p = String(s).split('T')[0].split('-');
     return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : s;
   }
   function finErrText(e) {
@@ -22346,6 +22348,14 @@
               'счет запросили ' + finDate(it.ask.at) + '</span>'
             : '<button class="qchip fsp-ask" data-spask="' + esc(it.id) + '">' +
               ic('mail', 11) + 'попросить счет</button>';
+        } else if (it.state === 'запланирован' && canFix && !inv && it.ask_need) {
+          // Похоже на покупку у поставщика, но кто он — система не знает: ИНН не
+          // подтвержден реестром. Молчание тут читается как поломка экрана, поэтому
+          // говорим словами и ровно там, где это новость (сервер, поле ask_need —
+          // по зарплате и налогу подписи нет вовсе). Роман 16.10.2026: «попадет в ИП
+          // тот, кто не ИП» — значит без подтверждения не просим вообще.
+          act = '<span class="fsp-noask" title="' + esc(it.ask_why || '') + '">' +
+            'счет не просим' + '</span>';
         }
         return '<div class="trow fin-grid fe-grid fsp-row">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -25697,6 +25707,24 @@
 
   /* Сервис: название, сумма, срок и периодичность. Все остальное ведомость делает
      сама — строку в периоде, автопроставление по сроку, перенос даты вперед. */
+  // Зачем в карточке сервиса ИНН и почта: по ним система просит счет сама, не
+  // дожидаясь, пока поставщик однажды пришлет его первым. Постоянные сервисы
+  // (Селектел, Тензор, Рег.Ру, РКО ВТБ) счет не присылают — его забирают из кабинета,
+  // и ИНН взять больше неоткуда. Правило просьбы живет на сервере, фронт только
+  // пересказывает человеку ответ реестра (правка Романа 16.10.2026).
+  function svcPayeeNote(s) {
+    if ((s.ip || '') === 'org') {
+      return 'Это организация: счет выставит, просьба уходит сама за три дня до ' +
+        'списания.';
+    }
+    if ((s.ip || '') === 'active') return esc(s.ip_note || 'ИП действует по ЕГРИП.');
+    if (s.ip === 'inactive' || s.ip === 'error') {
+      return '<b class="sv-bad">' + esc(s.ip_note || 'Реестр ИП не подтвердил') +
+        '</b>. Пока так, счет по этому сервису система не просит.';
+    }
+    return 'Впишите один раз — и система будет просить счет сама за три дня до ' +
+      'списания. Без ИНН она молчит: мы не знаем, выставляет ли он счета.';
+  }
   function finServiceForm(svc) {
     var isNew = !svc;
     var s = svc || { name: '', counterparty: '', amount: '', next_on: '', every: 1,
@@ -25727,6 +25755,13 @@
               '>' + u[1] + '</option>';
           }).join('') + '</select>') +
         '</div>' +
+        '<div class="al-row">' +
+          finField('ИНН поставщика', '<input id="sv-inn" class="al-in" maxlength="20" ' +
+            'value="' + esc(s.inn || '') + '" placeholder="7704211201">') +
+          finField('Почта для счетов', '<input id="sv-mail" class="al-in" maxlength="200" ' +
+            'value="' + esc(s.email || '') + '" placeholder="schet@postavshik.ru">') +
+        '</div>' +
+        '<div class="sv-why">' + svcPayeeNote(s) + '</div>' +
         '<label class="al-f sv-onoff top"><input type="checkbox" id="sv-on"' +
           (s.active === false ? '' : ' checked') + '>' +
           '<span>Сервис в работе. Снимите галочку, чтобы он перестал появляться строкой ' +
@@ -25747,6 +25782,7 @@
         counterparty: finVal('sv-who'), amount: finVal('sv-sum'),
         next_on: finVal('sv-next') || null, every: Number(finVal('sv-every')) || 1,
         unit: finVal('sv-unit') || null, active: el('sv-on').checked,
+        inn: finVal('sv-inn'), email: finVal('sv-mail'),
       }, isNew ? 'Сервис заведен' : 'Сервис поправлен');
     });
     var del = el('fm-del');
