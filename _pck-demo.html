@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка выплат преподавателям — демо</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { margin: 0; background: var(--bg); }
+  .demo { max-width: 1000px; margin: 0 auto; padding: 22px 22px 48px; }
+  .demo-h { font: 800 22px 'Manrope', sans-serif; color: var(--ink); letter-spacing: -.02em; margin: 0 0 2px; }
+  .demo-s { font: 500 12.5px 'Manrope', sans-serif; color: var(--ink-3); margin: 0 0 18px; }
+  .demo-note { font: 500 12px 'Manrope', sans-serif; color: var(--ink-3); margin: 10px 2px 0; }
+  .pck-ic { display:inline-flex; vertical-align:-3px; }
+  .sheet-ph { padding: 28px 22px; color: var(--ink-3); font: 500 13px 'Manrope', sans-serif; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="demo">
+  <div class="demo-h">Расчетные листы</div>
+  <div class="demo-s">демо экрана без входа · данные боевые, фамилии прикрыты · жми вкладки</div>
+
+  <!-- статплитки -->
+  <div class="card statbar">
+    <button class="stat"><div class="sl">К доплате</div><div class="sv num">3 000,00 ₽</div><div class="sd"><span class="smut">наработано, не выплачено</span></div></button>
+    <button class="stat"><div class="sl">С остатком</div><div class="sv num">1</div><div class="sd"><span class="smut">преподаватель</span></div></button>
+    <button class="stat"><div class="sl">К выплатам</div><div class="sv num">не готово</div><div class="sd"><span class="smut">есть незакрытые</span></div></button>
+    <button class="stat"><div class="sl">Окно сверки</div><div class="sv num">2026-08</div><div class="sd"><span class="smut">с первой выплаты преподам</span></div></button>
+  </div>
+
+  <div class="card listcard">
+    <div class="list-tools"><div>
+      <div class="t fe-t" id="card-title">Проверка выплат преподавателям</div>
+      <div class="s fe-s" id="card-sub">накопительно: весь заработок по табелю против всех выплат</div>
+    </div></div>
+    <div class="list-quick">
+      <button class="qchip" data-tab="sheet">Лист продаж</button>
+      <button class="qchip" data-tab="sheet">Лист маркетинга</button>
+      <button class="qchip" data-tab="sheet">Лист продукта</button>
+      <button class="qchip" data-tab="sheet">Лист краткосрочки</button>
+      <button class="qchip" data-tab="sheet">Лист безопасности</button>
+      <button class="qchip on" data-tab="pck"><span class="pck-ic"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4.4l2.8 1.6"/></svg></span>Проверка выплат преподавателям</button>
+    </div>
+
+    <!-- вкладка проверки -->
+    <div id="pck-block">
+      <div class="fin-note pck-foot" style="margin:14px 0 4px;">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.2 17.8 16.5a1 1 0 0 1-.9 1.5H3.1a1 1 0 0 1-.9-1.5L10 3.2z"/><path d="M10 8v3.6M10 14.3v.01"/></svg>
+        <span>Есть преподаватели с незакрытым остатком. Пока он есть, ведомость к выплатам не готова: доплатите или проверьте, не потерялся ли перенос с прошлого периода.</span>
+        <button class="qchip pck-right">Записать в журнал</button>
+      </div>
+      <div class="trow pck-grid pck-head"><span>Преподаватель</span><span class="num">наработал</span><span class="num">выплачено</span><span class="num">остаток</span></div>
+      <div class="trow pck-grid warn"><span class="fo-what"><b>Хов***</b></span><span class="num">15 000,00 ₽</span><span class="num">12 000,00 ₽</span><span class="num pck-debt on">3 000,00 ₽</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Ков***</b></span><span class="num">6 000,00 ₽</span><span class="num">6 000,00 ₽</span><span class="num pck-debt">—</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Лит***</b></span><span class="num">19 500,00 ₽</span><span class="num">19 500,00 ₽</span><span class="num pck-debt">—</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Коз***</b></span><span class="num">10 400,00 ₽</span><span class="num">10 400,00 ₽</span><span class="num pck-debt">—</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Гол***</b></span><span class="num">23 250,00 ₽</span><span class="num">23 250,00 ₽</span><span class="num pck-debt">—</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Син***</b></span><span class="num">1 300,00 ₽</span><span class="num">1 300,00 ₽</span><span class="num pck-debt">—</span></div>
+      <div class="trow pck-grid"><span class="fo-what"><b>Мит***</b></span><span class="num">6 750,00 ₽</span><span class="num">6 750,00 ₽</span><span class="num pck-debt">—</span></div>
+    </div>
+
+    <!-- вкладка листа (в демо без строк) -->
+    <div id="sheet-block" class="sheet-ph" hidden>Это лист ввода. В демо он пустой — на бою тут строки расходов или выплат по этому листу. Вернись на вкладку «Проверка выплат преподавателям», чтобы увидеть сверку.</div>
+  </div>
+
+  <!-- журнал расхождений -->
+  <div class="card listcard" id="jr-card">
+    <div class="list-tools sec-head"><span class="ic"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 6v4.4l2.8 1.6"/></svg></span>
+      <div><div class="t">Журнал расхождений</div><div class="s">что всплывало и когда закрыли — видно, где процесс дырявит</div></div></div>
+    <div class="pck-empty">Журнал пуст — расхождений не записано.</div>
+  </div>
+
+  <div class="demo-note">Это демо-копия экрана, без входа и без изменения данных. На бою он живет вкладкой в «Финансы → Расчетные листы».</div>
+</div>
+
+<script>
+  var chips = document.querySelectorAll('.qchip[data-tab]');
+  var pckBlock = document.getElementById('pck-block');
+  var sheetBlock = document.getElementById('sheet-block');
+  var jrCard = document.getElementById('jr-card');
+  var title = document.getElementById('card-title');
+  var sub = document.getElementById('card-sub');
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].addEventListener('click', function () {
+      for (var j = 0; j < chips.length; j++) chips[j].classList.remove('on');
+      this.classList.add('on');
+      var isPck = this.getAttribute('data-tab') === 'pck';
+      pckBlock.hidden = !isPck;
+      sheetBlock.hidden = isPck;
+      jrCard.hidden = !isPck;
+      title.textContent = isPck ? 'Проверка выплат преподавателям' : this.textContent;
+      sub.textContent = isPck
+        ? 'накопительно: весь заработок по табелю против всех выплат'
+        : 'лист ввода расчетных листов';
+    });
+  }
+</script>
+</body>
+</html>

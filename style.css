@@ -7473,6 +7473,33 @@ button.fsp-via { cursor: pointer; }
   .fpt-foot .fpt-right { margin-left: 0; }
 }
 
+/* ── Проверка выплат преподам (наработал против выплачено) ────────────────────
+   Повод — Ховисон (задача 6879): заработок прошлого периода не перенёсся в выплату.
+   Своя сетка: имя + три суммы, даты у строки нет. */
+.pck-grid { grid-template-columns: 1.7fr 140px 140px 140px; }
+.pck-head { height: 38px; }
+.pck-head:hover { background: none; }
+.pck-head span { font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  text-transform: uppercase; color: var(--ink-3); }
+.pck-debt { color: var(--ink-3); }
+/* Остаток — единственный акцент строки: красным, табличными цифрами. */
+.pck-debt.on { color: var(--red); font-weight: 700; }
+.pck-grid.warn, .pck-grid.warn:hover { background: var(--red-soft); }
+.pck-foot { flex-wrap: wrap; row-gap: 8px; }
+.pck-right { margin-left: auto; }
+.pck-urow, .pck-jrow { grid-template-columns: 1fr auto; }
+.pck-jrow .fo-st { display: flex; justify-content: flex-end; align-items: center; }
+.pck-empty { padding: 16px 24px; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 760px) {
+  /* На телефоне оставляем имя и остаток — ради него и заходят; наработал и выплачено
+     целиком не влезают в четыре колонки. */
+  .trow.pck-grid { grid-template-columns: 1fr auto; height: auto; padding: 11px 16px; }
+  .pck-grid .num:not(.pck-debt) { display: none; }
+  .pck-head { display: none; }
+  .pck-foot { flex-direction: column; align-items: flex-start; }
+  .pck-foot .pck-right { margin-left: 0; }
+}
+
 /* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
    Клик по нему помечает продажу полученной, не открывая форму — как чек-лист.
    Строкам даём боковые поля под шапку (16px): иначе кружок липнет к краю, а сумма
