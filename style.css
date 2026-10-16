@@ -7321,8 +7321,13 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 /* «Счет не просим» — не отказ экрана, а состояние знания: про этого получателя мы
    не знаем, выставляет ли он счета. Самая тихая пометка в строке (без фона, цветом
    подписи), потому что действия она не требует; причина дословно в подсказке. */
+/* «В поставщики» — тихое действие у строки, которой система не пишет: поставщика
+   нет в списке, и завести его можно отсюда. Акцент экрана один и он у информатора
+   проблем сверху, поэтому это призрачный чип, а не кнопка. */
 .fsp-noask { color: var(--ink-3); font-size: 11.5px; padding: 3px 0;
-  border-bottom: 1px dashed rgba(17,21,31,.2); cursor: help; }
+  border: 0; background: none; cursor: pointer;
+  border-bottom: 1px dashed rgba(17,21,31,.2); }
+.fsp-noask:hover { color: var(--blue); border-bottom-color: var(--blue); }
 /* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
    в строке это деталь, а не действие экрана. */
 .fsp-bill { color: var(--ink-2); text-decoration: underline;
@@ -7368,6 +7373,15 @@ button.fsp-via { cursor: pointer; }
 
 /* Сервис: дату следующего списания правим прямо в строке (пункт 5). Поле не тянется
    на всю строку — оно справочное, рядом с суммой. */
+/* ПОСТАВЩИКИ — у кого система просит счет. Та же строка справочника, что у сервисов,
+   плюс колонка состояния: «просим» или «не просим» одним взглядом. */
+.fl-row.sup-row { grid-template-columns: 1fr auto; gap: 14px; }
+.sup-flag { display: flex; justify-content: flex-end; }
+.sup-how { padding: 4px 18px 18px; color: var(--ink-2); font-size: 12.5px;
+  line-height: 1.55; }
+.sup-how p { margin: 0 0 10px; }
+.sup-how p:last-child { margin-bottom: 0; }
+
 .fl-row.fsv-row { grid-template-columns: 1fr auto auto; gap: 14px; }
 .fsv-date { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2);
   border: 1px solid var(--line-2); border-radius: 9px; padding: 5px 9px;
@@ -7457,6 +7471,33 @@ button.fsp-via { cursor: pointer; }
      экране иначе налезает на длинные реквизиты. */
   .fpt-foot { flex-direction: column; align-items: flex-start; }
   .fpt-foot .fpt-right { margin-left: 0; }
+}
+
+/* ── Проверка выплат преподам (наработал против выплачено) ────────────────────
+   Повод — Ховисон (задача 6879): заработок прошлого периода не перенёсся в выплату.
+   Своя сетка: имя + три суммы, даты у строки нет. */
+.pck-grid { grid-template-columns: 1.7fr 140px 140px 140px; }
+.pck-head { height: 38px; }
+.pck-head:hover { background: none; }
+.pck-head span { font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  text-transform: uppercase; color: var(--ink-3); }
+.pck-debt { color: var(--ink-3); }
+/* Остаток — единственный акцент строки: красным, табличными цифрами. */
+.pck-debt.on { color: var(--red); font-weight: 700; }
+.pck-grid.warn, .pck-grid.warn:hover { background: var(--red-soft); }
+.pck-foot { flex-wrap: wrap; row-gap: 8px; }
+.pck-right { margin-left: auto; }
+.pck-urow, .pck-jrow { grid-template-columns: 1fr auto; }
+.pck-jrow .fo-st { display: flex; justify-content: flex-end; align-items: center; }
+.pck-empty { padding: 16px 24px; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 760px) {
+  /* На телефоне оставляем имя и остаток — ради него и заходят; наработал и выплачено
+     целиком не влезают в четыре колонки. */
+  .trow.pck-grid { grid-template-columns: 1fr auto; height: auto; padding: 11px 16px; }
+  .pck-grid .num:not(.pck-debt) { display: none; }
+  .pck-head { display: none; }
+  .pck-foot { flex-direction: column; align-items: flex-start; }
+  .pck-foot .pck-right { margin-left: 0; }
 }
 
 /* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.

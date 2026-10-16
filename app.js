@@ -2477,6 +2477,10 @@
        человека это единственный раздел «Финансов». */
     { id: 'finedit', label: 'Расчетные листы', icon: 'doc', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales|finmodel_marketing|finmodel_product' },
+    /* Проверка перед выплатами преподам: наработал по табелю школы против выплаченного
+       в ведомости, остаток горит красным. Повод — Ховисон (задача 6879): заработок
+       прошлого периода не перенёсся в выплату и потерялся. Плюс журнал расхождений. */
+    { id: 'finpaycheck', label: 'Проверка выплат', icon: 'clock', cap: 'finmodel', space: 'fin' },
     /* Сводка «кто из руководителей сдал план на период». План отдела = плановые строки
        его расходов в расчетном листе; экран показывает с одного взгляда, где план есть,
        а где нет. Для того, кто собирает план (владелец, финансист) — cap finmodel. */
@@ -2524,6 +2528,10 @@
     { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
     { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
     { id: 'finref', label: 'Сервисы и долги', icon: 'clock', cap: 'finmodel', space: 'fin' },
+    // Список поставщиков — единственное, что решает, просит ли система счет
+    // (Роман 16.10.2026: «может просто заведем базу с ИП?»). Правило из правил
+    // стало видимым справочником, который человек правит сам.
+    { id: 'finsup', label: 'Поставщики', icon: 'team', cap: 'finmodel', space: 'fin' },
     // Справочник банков: лимиты без комиссии и правила выплат по каждому банку. Это не
     // ведомость периода, а правило, которое читают бухгалтер и агенты рядом с выплатами —
     // поэтому своего периода у страницы нет (счетчик до лимита будет отдельной задачей).
@@ -2991,9 +2999,16 @@
     } else if (state.page === 'finbanks') {
       // Справочник банков не привязан к ведомости периода — только чип раздела.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>правила по банкам</div>';
+    } else if (state.page === 'finpaycheck') {
+      // Сверка накопительная (весь заработок против всех выплат), не по периоду — чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('clock', 11) + '</span>проверка перед выплатами</div>';
     } else if (state.page === 'finkb') {
       // База знаний живет вне периода: это правила, а не цифры ведомости.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('doc', 11) + '</span>правила работы</div>';
+    } else if (state.page === 'finsup') {
+      // Поставщики живут вне ведомости: у кого просим счет — правило, а не цифра
+      // периода.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('team', 11) + '</span>у кого просим счет</div>';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
@@ -3459,7 +3474,8 @@
                      finprograms: 'Программы', finpartners: 'Партнёрские выплаты',
                      finmetrics: 'Итоги периода',
                      finplans: 'План отделов', finplandept: 'План отдела',
-                     finbanks: 'Банки и лимиты', finkb: 'База знаний' };
+                     finbanks: 'Банки и лимиты', finkb: 'База знаний',
+                     finsup: 'Поставщики' };
       var ph;
       // Ошибку объясняет карточка в центре экрана; дублировать ее в подстрочнике незачем.
       if (FIN.err) ph = '';
@@ -3522,6 +3538,20 @@
         ph = 'Откуда и кому платим по каждому банку и какой лимит без комиссии. Это ' +
           'правило, чтобы не выйти за предел. Счетчик «сколько прошло за месяц» подключим ' +
           'отдельно, когда банки отдадут факт.';
+      }
+      // Проверка выплат преподам считается накопительно по табелю и ведомости, поперёк
+      // периодов — ветка до !per, иначе повисло бы «Загружаю ведомость».
+      else if (state.page === 'finpaycheck') {
+        ph = 'Перед тем как платить преподавателям — сверка: сколько человек наработал по ' +
+          'табелю школы и сколько ему уже выплачено. Остаток горит красным, и пока он есть, ' +
+          'ведомость к выплатам не готова. Всё, что всплыло, пишется в журнал.';
+      }
+      // Поставщики — тоже правило, а не цифра периода: у кого вообще просим счет.
+      // Ветка до !per, иначе повисло бы «Загружаю ведомость».
+      else if (state.page === 'finsup') {
+        ph = 'У кого система просит счет сама. Галочка в строке — единственное правило: ' +
+          'стоит, значит за три дня до платежа ему уходит письмо, и присланный счет ' +
+          'ложится в ту же строку расхода. Приславший счет попадает в список сам.';
       }
       // База знаний — тоже правило, а не период: ветка до !per, иначе повисло бы
       // «Загружаю ведомость».
@@ -3716,6 +3746,8 @@
     else if (state.page === 'finmetrics') renderFinMetrics(view);
     else if (state.page === 'finref') renderFinRefs(view);
     else if (state.page === 'finbanks') renderFinBanks(view);
+    else if (state.page === 'finpaycheck') renderFinPayCheck(view);
+    else if (state.page === 'finsup') renderFinSuppliers(view);
     else if (state.page === 'finkb') renderFinKb(view);
     else if (state.page === 'finplans') renderFinPlans(view);
     else if (state.page === 'finplandept') renderFinPlanDept(view);
@@ -22349,13 +22381,14 @@
             : '<button class="qchip fsp-ask" data-spask="' + esc(it.id) + '">' +
               ic('mail', 11) + 'попросить счет</button>';
         } else if (it.state === 'запланирован' && canFix && !inv && it.ask_need) {
-          // Похоже на покупку у поставщика, но кто он — система не знает: ИНН не
-          // подтвержден реестром. Молчание тут читается как поломка экрана, поэтому
-          // говорим словами и ровно там, где это новость (сервер, поле ask_need —
-          // по зарплате и налогу подписи нет вовсе). Роман 16.10.2026: «попадет в ИП
-          // тот, кто не ИП» — значит без подтверждения не просим вообще.
-          act = '<span class="fsp-noask" title="' + esc(it.ask_why || '') + '">' +
-            'счет не просим' + '</span>';
+          // Похоже на покупку у поставщика, но его нет в списке тех, у кого мы просим
+          // счет. Молчание тут читается как поломка экрана, поэтому говорим словами и
+          // сразу даем действие: завести его в список прямо отсюда, не уходя в раздел
+          // (Роман 16.10.2026: «может просто заведем базу с ИП?»). Подписи нет вовсе
+          // там, где счета не бывает — зарплата, налог, самозанятый (поле ask_need).
+          act = '<button class="qchip fsp-noask" data-spsup="' +
+            esc(it.counterparty || '') + '" title="' + esc(it.ask_why || '') + '">' +
+            'в поставщики' + '</button>';
         }
         return '<div class="trow fin-grid fe-grid fsp-row">' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
@@ -22388,6 +22421,12 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spask]'), function (b) {
       b.addEventListener('click', function () { spendAskForm(b.getAttribute('data-spask')); });
+    });
+    // Завести поставщика прямо из строки: имя уже известно, остается почта и галочка.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-spsup]'), function (b) {
+      b.addEventListener('click', function () {
+        finSupplierForm(null, b.getAttribute('data-spsup'));
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-spvia]'), function (b) {
       b.addEventListener('click', function () {
@@ -24784,6 +24823,291 @@
           'прошло за месяц и сколько осталось до лимита» подключим отдельно, когда банки ' +
           'начнут отдавать факт по платежам.</p>' +
       '</div>';
+  }
+
+  function finLoadTeacherCheck() {
+    finBusy('teachercheck', function (done) {
+      api('/admin/api/fin/teacher-check').then(function (r) {
+        FIN.teachercheck = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'teachercheck'); }).then(done);
+    });
+  }
+
+  function finPayCheckSync() {
+    // Пересчитать сверку и записать расхождения в журнал (POST, cap finmodel_edit).
+    finDo('/admin/api/fin/teacher-check/sync', 'POST', {}, 'Журнал обновлён',
+      function (res) { FIN.teachercheck = res; });
+  }
+
+  function finPckDate(s) { return finDate(String(s || '').slice(0, 10)); }
+
+  function renderFinPayCheck(view) {
+    if (!FIN.teachercheck) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadTeacherCheck(); return;
+    }
+    if (FIN.teachercheck === 'none') return finErrView(view);
+    var T = FIN.teachercheck, canFix = can('finmodel_edit');
+
+    // Нет школьного модуля (превью/локаль) — считать нечего, это не ошибка.
+    if (!T.available) {
+      view.innerHTML = '<div class="fb-wrap"><div class="card listcard">' +
+        '<div class="fin-note calm">' + ic('info', 15) +
+        '<span>Школьный модуль в этой базе недоступен — сверять нечего. Проверка работает ' +
+        'на боевой версии, где есть табель преподавателей.</span></div></div></div>';
+      return;
+    }
+
+    var rows = T.rows || [];
+    var debtors = rows.filter(function (r) { return r.debt >= 1; });
+    var totalDebt = 0;
+    debtors.forEach(function (r) { totalDebt += r.debt; });
+
+    var tiles = [
+      { label: 'К доплате', value: finRub(totalDebt),
+        sub: debtors.length ? 'наработано, не выплачено' : 'всё закрыто' },
+      { label: 'С остатком', value: String(debtors.length),
+        sub: debtors.length
+          ? plural(debtors.length, 'преподаватель', 'преподавателя', 'преподавателей')
+          : 'долгов нет' },
+      { label: 'К выплатам', value: T.ready ? 'готово' : 'не готово',
+        sub: T.ready ? 'остатков нет' : 'есть незакрытые' },
+      { label: 'Окно сверки', value: T.floor_month || '—', sub: 'с первой выплаты преподам' },
+    ];
+
+    // Полоса готовности: якорь-предупреждение, пока есть остаток, иначе тихая справка.
+    var banner = '<div class="card listcard"><div class="fin-note ' +
+      (T.ready ? 'calm ' : '') + 'pck-foot">' + ic(T.ready ? 'check' : 'alert', 15) +
+      '<span>' + (T.ready
+        ? 'Все преподаватели закрыты выплатами — можно формировать выплаты.'
+        : 'Есть преподаватели с незакрытым остатком. Пока он есть, ведомость к выплатам не ' +
+          'готова: доплатите или проверьте, не потерялся ли перенос с прошлого периода.') +
+      '</span>' + (canFix
+        ? '<button class="qchip pck-right" id="pck-sync">Записать в журнал</button>' : '') +
+      '</div></div>';
+
+    var head = '<div class="trow pck-grid pck-head">' +
+      '<span>Преподаватель</span><span class="num">наработал</span>' +
+      '<span class="num">выплачено</span><span class="num">остаток</span></div>';
+    var body = rows.map(function (r) {
+      var debt = r.debt >= 1;
+      return '<div class="trow pck-grid' + (debt ? ' warn' : '') + '">' +
+        '<span class="fo-what"><b>' + esc(r.name) + '</b></span>' +
+        '<span class="num">' + finRub(r.earned) + '</span>' +
+        '<span class="num">' + finRub(r.paid) + '</span>' +
+        '<span class="num pck-debt' + (debt ? ' on' : '') + '">' +
+          (debt ? finRub(r.debt) : '—') + '</span>' +
+      '</div>';
+    }).join('');
+    var tableCard = '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+      '<div><div class="t">Наработал против выплачено</div>' +
+      '<div class="s">накопительно: весь заработок по табелю против всех выплат в ведомости</div>' +
+      '</div></div>' + head + body + '</div>';
+
+    var unm = T.unmatched || [];
+    var unmCard = unm.length ? '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+      '<div><div class="t">Выплаты без распознанного преподавателя</div>' +
+      '<div class="s">эти суммы не легли ни на кого — проверьте имя получателя в ведомости</div>' +
+      '</div></div>' + unm.map(function (u) {
+        var why = u.reason === 'ambiguous'
+          ? 'совпали фамилии: ' + (u.teachers || []).join(', ')
+          : 'получатель не найден среди преподавателей';
+        return '<div class="trow pck-urow">' +
+          '<span class="fo-what"><b>' + esc(u.counterparty || '—') + '</b>' +
+            '<i>' + esc(why) + '</i></span>' +
+          '<span class="num">' + finRub(u.amount) + '</span></div>';
+      }).join('') + '</div>' : '';
+
+    var jr = T.journal || [];
+    var jrCard = '<div class="card listcard">' +
+      '<div class="list-tools sec-head"><span class="ic">' + ic('clock', 14) + '</span>' +
+      '<div><div class="t">Журнал расхождений</div>' +
+      '<div class="s">что всплывало и когда закрыли — видно, где процесс дырявит</div>' +
+      '</div></div>' + (jr.length ? jr.map(function (j) {
+        var done = !!j.resolved;
+        return '<div class="trow pck-jrow' + (done ? ' muted' : '') + '">' +
+          '<span class="fo-what"><b>' + esc(j.teacher) + '</b>' +
+            '<i>' + (done ? 'закрыто ' + finPckDate(j.resolved) : 'с ' + finPckDate(j.first_seen)) +
+            ' · наработал ' + finRub(j.earned) + ' · выплачено ' + finRub(j.paid) + '</i></span>' +
+          '<span class="fo-st">' + (done
+            ? '<span class="fst doc">' + ic('check', 11) + 'закрыто</span>'
+            : '<span class="fst wait">остаток ' + finRub(j.debt) + '</span>') + '</span></div>';
+      }).join('') : '<div class="pck-empty">Журнал пуст — расхождений не записано.</div>') +
+      '</div>';
+
+    view.innerHTML = statBar(tiles) + banner + tableCard + unmCard + jrCard;
+
+    var sb = el('pck-sync');
+    if (sb) sb.addEventListener('click', function () { finPayCheckSync(); });
+    pageAnim(view);
+  }
+
+  /* ПОСТАВЩИКИ — у кого система вообще просит счет.
+
+     Роман 16.10.2026, после двух версий угадывающего правила: «какая то хрень, может
+     просто заведем базу с ИП?». База была и раньше, но жила внутри сервера, и экран
+     расходов выглядел магией: у одной строки кнопка есть, у соседней нет. Теперь это
+     обычный справочник, и правило читается одной фразой — стоит галочка «просим счет»,
+     значит пишем, не стоит, значит молчим.
+
+     Наполняется он сам: приславший счет попадает сюда с ИНН, почтой и уже с галочкой.
+     Руками заводят тех, кто счет сам не шлет (Селектел, Тензор — их забирают из
+     кабинета). */
+  function finLoadSup() {
+    finBusy('sup', function (done) {
+      api('/admin/api/fin/suppliers').then(function (r) {
+        FIN.sup = r.suppliers || []; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'sup'); }).then(done);
+    });
+  }
+
+  /* Что система думает про поставщика. Ответ реестра показываем дословно: «ИП
+     прекращен 12.03.2026» человек понимает, а наше «не подтвержден» читается как
+     поломка экрана. */
+  function supWhy(x) {
+    if (!x.bill) return 'счет у него не просим';
+    if (x.ip === 'inactive') {
+      return '<b class="sv-bad">' + esc(x.ip_note || 'реестр не подтвердил ИП') + '</b>';
+    }
+    if (!x.email) return 'нет почты — писать некуда';
+    return 'просим счет за три дня до платежа';
+  }
+
+  function renderFinSuppliers(view) {
+    if (!FIN.sup) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadSup(); return;
+    }
+    var canFix = can('finmodel_edit');
+    var all = FIN.sup, ask = all.filter(function (x) { return x.bill && x.email; });
+    var bar = statBar([
+      { label: 'Просим счет', value: String(ask.length),
+        sub: 'им письмо уходит само' },
+      { label: 'Всего в списке', value: String(all.length),
+        sub: 'остальные просто известны' },
+      { label: 'Просьб ушло', value: String(all.reduce(function (n, x) {
+        return n + (x.asks || 0); }, 0)), sub: 'за все время' },
+    ], 'three');
+
+    var rows = all.map(function (x) {
+      var sub = [];
+      if (x.inn) sub.push('ИНН ' + esc(x.inn));
+      if (x.email) sub.push(esc(x.email));
+      sub.push(supWhy(x));
+      if (x.asks) sub.push('просили ' + x.asks + ' ' +
+        plural(x.asks, 'раз', 'раза', 'раз'));
+      return '<div class="fl-row sup-row' + (x.bill ? '' : ' muted') +
+        (canFix ? ' click' : '') + '" data-sup="' + esc(x.key) + '">' +
+        '<div class="fl-main"><span class="fl-name">' + esc(x.name) + '</span>' +
+          '<span class="fl-sub">' + sub.join(' · ') + '</span></div>' +
+        '<div class="sup-flag">' + (x.bill
+          ? '<span class="fst ok">просим счет</span>'
+          : '<span class="fst wait">не просим</span>') + '</div></div>';
+    }).join('');
+
+    view.innerHTML = bar + '<div class="grid"><div class="sp8">' +
+      '<div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('team', 14) + '</span>' +
+          '<div><div class="t">Кому пишем за счетом</div>' +
+          '<div class="s">галочка у поставщика — единственное правило: стоит, значит ' +
+          'система просит счет сама за три дня до платежа</div></div>' +
+          (canFix ? '<button class="qchip add" id="sup-add">' + ic('plus', 12) +
+            'Поставщик</button>' : '') + '</div>' +
+        '<div class="fin-list">' + (rows ||
+          '<div class="empty">Список пуст. Заведите поставщика руками или дождитесь ' +
+          'первого счета — приславший его попадет сюда сам.</div>') + '</div>' +
+      '</div></div>' +
+      '<div class="sp4"><div class="card listcard">' +
+        '<div class="list-tools sec-head"><span class="ic">' + ic('doc', 14) + '</span>' +
+          '<div><div class="t">Как это работает</div></div></div>' +
+        '<div class="sup-how">' +
+          '<p>Счет просим только у того, кто есть в этом списке с галочкой. У всех ' +
+          'остальных строка расхода молчит, и в ней написано почему.</p>' +
+          '<p>Кто прислал нам счет хоть раз — письмом, в бота или файлом к строке ' +
+          'расхода — попадает сюда сам, с ИНН и почтой, и сразу с галочкой.</p>' +
+          '<p>Руками заводят тех, кто счет не присылает: Селектел, Тензор, Рег.Ру. ' +
+          'Там же, в карточке сервиса, галочка и почта.</p>' +
+          '<p>Своим — зарплата, самозанятые, налоги, фонды — система не пишет никогда, ' +
+          'даже если человек попал в список.</p>' +
+        '</div></div></div></div>';
+
+    var add = el('sup-add');
+    if (add) add.addEventListener('click', function () { finSupplierForm(null); });
+    if (canFix) {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-sup]'), function (n) {
+        n.addEventListener('click', function () {
+          var key = n.getAttribute('data-sup');
+          all.forEach(function (x) { if (x.key === key) finSupplierForm(x); });
+        });
+      });
+    }
+  }
+
+  /* Карточка поставщика. Имя — это ключ (по нему строка расхода и сводится), поэтому
+     у заведенного его не правим: переименование завело бы вторую запись, а первая
+     осталась бы с галочкой. */
+  function finSupplierForm(sup, preset) {
+    var isNew = !sup;
+    var x = sup || { name: preset || '', inn: '', email: '', bill: true };
+    var m = finModal({
+      eyebrow: 'Поставщик', title: isNew ? 'Новый поставщик' : esc(x.name),
+      sub: 'Пока стоит галочка, система сама просит у него счет за три дня до ' +
+        'планового платежа и присланный счет кладет в ту же строку расхода.',
+      del: isNew ? '' : 'Убрать из списка',
+      body:
+        '<div class="al-row">' +
+          finField('Кому платим <i>*</i>', isNew
+            ? '<input id="sup-name" class="al-in" maxlength="200" value="' +
+                esc(x.name) + '" placeholder="ООО Вектор">'
+            : '<input id="sup-name" class="al-in" value="' + esc(x.name) + '" readonly>') +
+          finField('ИНН', '<input id="sup-inn" class="al-in" maxlength="20" value="' +
+            esc(x.inn || '') + '" placeholder="7704211201">') +
+        '</div>' +
+        '<div class="al-row">' +
+          finField('Почта для счетов', '<input id="sup-mail" class="al-in" maxlength="200" ' +
+            'value="' + esc(x.email || '') + '" placeholder="schet@postavshik.ru">') +
+        '</div>' +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="sup-bill"' +
+          (x.bill ? ' checked' : '') + '>' +
+          '<span>Просим у него счет. Снимите галочку, если он выставляет счет сам ' +
+          'или списывает деньги с карты — тогда система писать ему не будет</span></label>' +
+        '<div class="sv-why" id="sup-why">' + supWhy(x) + '</div>' +
+        (x.ip_note ? '<div class="sv-why">Реестр: ' + esc(x.ip_note) + '</div>' : ''),
+    });
+    if (!m) return;
+    var repaint = function () {
+      var why = el('sup-why');
+      if (why) {
+        why.innerHTML = supWhy({ bill: el('sup-bill').checked, ip: x.ip,
+                                 ip_note: x.ip_note, email: finVal('sup-mail') });
+      }
+    };
+    el('sup-bill').addEventListener('change', repaint);
+    el('sup-mail').addEventListener('input', repaint);
+    el('fm-ok').addEventListener('click', function () {
+      var name = finVal('sup-name');
+      if (name.length < 2) { m.err.textContent = 'Впишите, кому платим'; return; }
+      m.close();
+      finDo('/admin/api/fin/supplier', 'POST', {
+        name: name, inn: finVal('sup-inn'), email: finVal('sup-mail'),
+        bill: el('sup-bill').checked,
+      }, isNew ? 'Поставщик заведен' : 'Поправил', function () { FIN.sup = null; });
+    });
+    var del = el('fm-del');
+    if (del) del.addEventListener('click', function () {
+      m.close();
+      finConfirm('Убрать поставщика?',
+        'Запись пропадет из списка, и счет у него система просить перестанет. ' +
+        'Отправленные письма останутся в журнале.',
+        'Убрать', function () {
+          finDo('/admin/api/fin/supplier?key=' + encodeURIComponent(x.key), 'DELETE',
+            null, 'Убрал из списка', function () { FIN.sup = null; });
+        });
+    });
   }
 
   function renderFinRefs(view) {
