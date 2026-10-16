@@ -7321,8 +7321,13 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 /* «Счет не просим» — не отказ экрана, а состояние знания: про этого получателя мы
    не знаем, выставляет ли он счета. Самая тихая пометка в строке (без фона, цветом
    подписи), потому что действия она не требует; причина дословно в подсказке. */
+/* «В поставщики» — тихое действие у строки, которой система не пишет: поставщика
+   нет в списке, и завести его можно отсюда. Акцент экрана один и он у информатора
+   проблем сверху, поэтому это призрачный чип, а не кнопка. */
 .fsp-noask { color: var(--ink-3); font-size: 11.5px; padding: 3px 0;
-  border-bottom: 1px dashed rgba(17,21,31,.2); cursor: help; }
+  border: 0; background: none; cursor: pointer;
+  border-bottom: 1px dashed rgba(17,21,31,.2); }
+.fsp-noask:hover { color: var(--blue); border-bottom-color: var(--blue); }
 /* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
    в строке это деталь, а не действие экрана. */
 .fsp-bill { color: var(--ink-2); text-decoration: underline;
@@ -7368,6 +7373,15 @@ button.fsp-via { cursor: pointer; }
 
 /* Сервис: дату следующего списания правим прямо в строке (пункт 5). Поле не тянется
    на всю строку — оно справочное, рядом с суммой. */
+/* ПОСТАВЩИКИ — у кого система просит счет. Та же строка справочника, что у сервисов,
+   плюс колонка состояния: «просим» или «не просим» одним взглядом. */
+.fl-row.sup-row { grid-template-columns: 1fr auto; gap: 14px; }
+.sup-flag { display: flex; justify-content: flex-end; }
+.sup-how { padding: 4px 18px 18px; color: var(--ink-2); font-size: 12.5px;
+  line-height: 1.55; }
+.sup-how p { margin: 0 0 10px; }
+.sup-how p:last-child { margin-bottom: 0; }
+
 .fl-row.fsv-row { grid-template-columns: 1fr auto auto; gap: 14px; }
 .fsv-date { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2);
   border: 1px solid var(--line-2); border-radius: 9px; padding: 5px 9px;
