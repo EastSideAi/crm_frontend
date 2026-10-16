@@ -6753,6 +6753,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    как чужой абзац: галочка держится верхней строки. */
 .sv-onoff.top { align-items: flex-start; }
 .sv-onoff.top input { margin-top: 2px; flex: none; }
+/* Зачем в карточке сервиса ИНН и почта: строка объяснения под полями. Мера строки
+   держится шириной формы, цвет подписи — это пояснение, а не предупреждение. */
+.sv-why { margin: -2px 0 2px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+.sv-why .sv-bad { color: var(--red-ink); font-weight: 700; }
 /* Что у человека сейчас — в карточке исполнителя. Строки тихие: это контекст, а
    решения принимают на своих экранах. Задание кликабельно, пункт плана нет. */
 .cz-work { display: flex; flex-direction: column; }
@@ -7314,6 +7318,11 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-ask svg { opacity: .8; }
 .fsp-ask:hover { color: var(--blue); }
 .fsp-asked { color: var(--ink-3); font-size: 11.5px; padding: 3px 9px; }
+/* «Счет не просим» — не отказ экрана, а состояние знания: про этого получателя мы
+   не знаем, выставляет ли он счета. Самая тихая пометка в строке (без фона, цветом
+   подписи), потому что действия она не требует; причина дословно в подсказке. */
+.fsp-noask { color: var(--ink-3); font-size: 11.5px; padding: 3px 0;
+  border-bottom: 1px dashed rgba(17,21,31,.2); cursor: help; }
 /* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
    в строке это деталь, а не действие экрана. */
 .fsp-bill { color: var(--ink-2); text-decoration: underline;
@@ -7419,6 +7428,35 @@ button.fsp-via { cursor: pointer; }
 @media (max-width: 760px) {
   .trow.fe-grid { grid-template-columns: 1fr auto !important; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
+}
+
+/* ── Партнёрские выплаты ──────────────────────────────────────────────────────
+   Строка клиента: имя, начислено, статус. Своя сетка, а не fin-grid — у начисления
+   нет даты, и колонка даты пустой тратила бы левый край. */
+.fpt-crow { grid-template-columns: 1.7fr 150px 210px; }
+/* Выплаченную строку гасим в имени и сумме, но НЕ в статусе: там живёт кнопка
+   «отменить» — действующий контрол, под общим opacity её контраст просел бы. */
+.fpt-crow.muted .fo-what, .fpt-crow.muted .fo-sum { opacity: .5; }
+.fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.fpt-right { margin-left: auto; }
+.fpt-req { color: var(--ink-3); font-weight: 600; }
+/* Нижняя полоса карточки (реквизиты + кнопка выплаты) переносится, когда в строку не
+   влезает: иначе кнопка «Выплатить» уезжает за край на узком экране. */
+.fpt-foot { flex-wrap: wrap; row-gap: 8px; }
+/* Кнопка «отменить» у выплаченной строки — тихая и мелкая: это редкий откат, а не
+   второе действие наравне с выплатой. */
+.fpt-cancel { font-size: 11px; padding: 2px 8px; color: var(--ink-3); }
+.fpt-cancel:hover { color: var(--red); background: var(--red-soft); }
+@media (max-width: 760px) {
+  .trow.fpt-crow { grid-template-columns: 1fr auto !important; height: auto;
+    padding: 11px 16px; gap: 3px 12px; }
+  .fpt-crow .fo-what { grid-column: 1; grid-row: 1; }
+  .fpt-crow .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
+  .fpt-crow .fo-st { grid-column: 1 / span 2; grid-row: 2; justify-content: flex-start; }
+  /* Футер стопкой: реквизиты строкой, кнопка под ними слева — кнопка на узком
+     экране иначе налезает на длинные реквизиты. */
+  .fpt-foot { flex-direction: column; align-items: flex-start; }
+  .fpt-foot .fpt-right { margin-left: 0; }
 }
 
 /* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
