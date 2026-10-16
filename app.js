@@ -3536,8 +3536,9 @@
       // Ветка до !per, иначе повисло бы «Загружаю ведомость».
       else if (state.page === 'finsup') {
         ph = 'У кого система просит счет сама. Галочка в строке — единственное правило: ' +
-          'стоит, значит за три дня до платежа ему уходит письмо, и присланный счет ' +
-          'ложится в ту же строку расхода. Приславший счет попадает в список сам.';
+          'стоит, значит за три дня до платежа ему уходит просьба — в телеграм, если ' +
+          'он нам писал, иначе письмом, — и присланный счет ложится в ту же строку ' +
+          'расхода. Приславший счет попадает в список сам.';
       }
       // База знаний — тоже правило, а не период: ветка до !per, иначе повисло бы
       // «Загружаю ведомость».
@@ -20236,7 +20237,10 @@
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
-    FIN.receipts = null; FIN.partners = null;
+    FIN.receipts = null; FIN.partners = null; FIN.sup = null;
+    // Справочник получателей для пикера формы: новая строка расхода заводит в нем
+    // запись, и без сброса нового получателя не выбрать до перезагрузки страницы.
+    FIN_SUPS = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -22361,9 +22365,11 @@
           // «Не все у нас ИП»). Уже попросили — вместо кнопки стоит отметка: вторая
           // просьба в тот же день читается поставщиком как «нам некогда ждать».
           act = it.ask
-            ? '<span class="qchip fsp-asked" title="' + esc(it.ask.email) + '">' +
+            ? '<span class="qchip fsp-asked" title="' +
+              esc(it.ask.channel === 'bot' ? 'в телеграм' : (it.ask.email || '')) + '">' +
               'счет запросили ' + finDate(it.ask.at) + '</span>'
-            : '<button class="qchip fsp-ask" data-spask="' + esc(it.id) + '">' +
+            : '<button class="qchip fsp-ask" data-spask="' + esc(it.id) + '" title="' +
+              (it.payee_bot ? 'напишем в телеграм' : 'напишем на почту') + '">' +
               ic('mail', 11) + 'попросить счет</button>';
         } else if (it.state === 'запланирован' && canFix && !inv && it.ask_need) {
           // Похоже на покупку у поставщика, но его нет в списке тех, у кого мы просим
@@ -22509,23 +22515,34 @@
     return null;
   }
 
-  /* Попросить у поставщика счет письмом. Телеграм писать первым не дает, пока человек
-     не нажал «Старт», и для планового расхода почта — единственная дверь. Адрес, если
-     поставщик нам уже присылал счет, подставлен; вписанный тут сильнее прочитанного. */
+  /* Попросить у поставщика счет. Каналов два, и выбираем не мы: писал нам в бота —
+     просим там (мессенджер читают в тот же день), иначе письмом. Телеграм боту первым
+     начать разговор не дает, поэтому для того, кто нам ни разу не писал, почта
+     остается единственной дверью. Адрес подставлен из прошлого счета; вписанный тут
+     сильнее прочитанного и сильнее телеграма — человек выбрал, куда писать. */
   function spendAskForm(id) {
     var it = spendRow(id) || {};
+    var viaBot = !!it.payee_bot;
     var m = finModal({
-      eyebrow: 'Расход', title: 'Попросить счет', ok: 'Отправить письмо',
-      sub: 'Уйдет письмо: за что, сколько и до какого числа нужен счет. Ответ с PDF ' +
-           'вернется сюда же, к этой строке.',
-      body: finField('Почта поставщика',
+      eyebrow: 'Расход', title: 'Попросить счет',
+      ok: viaBot ? 'Написать в телеграм' : 'Отправить письмо',
+      sub: (viaBot
+             ? 'Уйдет сообщение в телеграм, тем же диалогом, которым он прислал нам ' +
+               'счет в прошлый раз: за что, сколько и до какого числа. '
+             : 'Уйдет письмо: за что, сколько и до какого числа нужен счет. ') +
+           'Ответ с PDF вернется сюда же, к этой строке.',
+      body: finField(viaBot ? 'Почта, если писать не в телеграм' : 'Почта поставщика',
               '<input id="sa-mail" class="al-in" maxlength="200" type="email" ' +
-              'placeholder="buh@postavshik.ru" value="' + esc(it.payee_email || '') + '">' +
-              // Адрес из присланного счета и вписанный человеком в поле выглядят
-              // одинаково, а доверия к ним разное: письмо присылает кто угодно.
-              (it.payee_email && it.payee_source === 'письмо'
-                ? '<span class="al-hint">адрес узнали из присланного счета, сверьте ' +
-                  'с договором</span>' : '')) +
+              'placeholder="buh@postavshik.ru" value="' +
+              esc(viaBot ? '' : (it.payee_email || '')) + '">' +
+              (viaBot
+                ? '<span class="al-hint">пусто — напишем в телеграм; впишете адрес — ' +
+                  'уйдет письмо на него</span>'
+                // Адрес из присланного счета и вписанный человеком в поле выглядят
+                // одинаково, а доверия к ним разное: письмо присылает кто угодно.
+                : (it.payee_email && it.payee_source === 'письмо'
+                    ? '<span class="al-hint">адрес узнали из присланного счета, сверьте ' +
+                      'с договором</span>' : ''))) +
             finField('За что просим',
               '<input id="sa-what" class="al-in" maxlength="300" value="' +
               esc(it.item || it.comment || '') + '">') +
@@ -22539,11 +22556,17 @@
     if (!m) return;
     el('fm-ok').addEventListener('click', function () {
       var mail = finVal('sa-mail').trim();
-      if (mail.indexOf('@') < 1) { m.err.textContent = 'Впишите почту поставщика.'; return; }
+      if (!viaBot && mail.indexOf('@') < 1) {
+        m.err.textContent = 'Впишите почту поставщика.'; return;
+      }
+      if (mail && mail.indexOf('@') < 1) {
+        m.err.textContent = 'Проверьте адрес: в нем нет собачки.'; return;
+      }
       m.close();
       finDo('/admin/api/fin/operation/' + id + '/ask-bill', 'POST', {
         email: mail, what: finVal('sa-what'), due_on: finVal('sa-due') || null,
-      }, 'Письмо ушло на ' + mail + '. Счет придет сюда же.');
+      }, mail ? 'Письмо ушло на ' + mail + '. Счет придет сюда же.'
+              : 'Написали в телеграм. Счет придет сюда же.');
     });
   }
 
@@ -22590,6 +22613,21 @@
     return czSend('/admin/api/fin/payees', 'GET').then(function (r) {
       FIN_PAYEES = (r && r.payees) || [];
       return FIN_PAYEES;
+    }).catch(function () { return []; });
+  }
+
+  /* Получатели, которым мы уже платили: справочник поставщиков (eastside.fin_payees).
+     Нужен в форме строки вторым источником к самозанятым — чтобы имя контрагента
+     ВЫБИРАЛИ, а не набирали. Опечатка в имени заводит второго получателя-призрака, и
+     система молча перестает узнавать того, у кого просит счет (Роман 16.10.2026). Кэш
+     на сессию и мягкий отказ: у листового права ручки нет, и форма из-за этого падать
+     не должна — пикер просто остается со свободным вводом. */
+  var FIN_SUPS = null;
+  function finSups() {
+    if (FIN_SUPS) return Promise.resolve(FIN_SUPS);
+    return czSend('/admin/api/fin/suppliers', 'GET').then(function (r) {
+      FIN_SUPS = (r && r.suppliers) || [];
+      return FIN_SUPS;
     }).catch(function () { return []; });
   }
 
@@ -22694,7 +22732,7 @@
         '</div>' +
         '<div class="al-row">' +
           f('Получатель <i>*</i>', payeeInput('fl-who', v(s.counterparty),
-            'имя самозанятого или свободно')) +
+            'выберите из списка или впишите')) +
           f('За что', '<input id="fl-item" class="al-in" maxlength="200" value="' +
             v(s.item) + '" placeholder="роль или основание">') +
         '</div>' +
@@ -22718,7 +22756,7 @@
       // «Сотрудник»/«Получатель» — выбор самозанятого из списка (связь по карточке), но со
       // свободным вводом: не всякий тут самозанятый (оклад приходит из табеля школы, сервис —
       // это компания). Пикер во всех листах, где платим людям (Роман 28.09.2026).
-      var whoInner = payeeInput('fl-who', v(s.counterparty), 'имя самозанятого или свободно');
+      var whoInner = payeeInput('fl-who', v(s.counterparty), 'выберите из списка или впишите');
       body =
         '<div class="al-row">' +
           f(whoLabel, whoInner) +
@@ -22800,35 +22838,67 @@
       recalc();
     }
 
-    // Автоподбор самозанятого в поле-получателе. Выбрал из списка — храним id карточки;
-    // печатает свободно — id снимается, сумма пойдет по имени, как раньше.
+    // Поле-получатель: выбор из двух списков сразу — самозанятые (связь по карточке) и
+    // получатели, которым мы уже платили (справочник поставщиков). Выбрал самозанятого —
+    // храним id карточки; выбрал поставщика — в поле встает его ТОЧНОЕ имя из справочника,
+    // то самое, по которому система узнает, просить ли у него счет. Свободный ввод остался:
+    // нового получателя иначе не завести, он запомнится сам при сохранении строки.
     if (payeeFieldId) {
       var whoIn = el(payeeFieldId), menu = el(payeeFieldId + '-menu'),
           hint = el(payeeFieldId + '-hint');
-      var payees = [];
+      var payees = [], sups = [];
       var norm = function (x) { return (x || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+      var supBy = function (nm) {
+        return sups.filter(function (x) { return norm(x.name) === norm(nm); })[0] || null;
+      };
       var setHint = function () {
-        hint.textContent = pickedCid ? 'связано с карточкой самозанятого'
-          : (whoIn.value.trim() ? 'не из списка — сумма подтянется по имени' : '');
-        hint.className = 'flp-hint' + (pickedCid ? ' on' : '');
+        var txt = '', on = false;
+        var typed = whoIn.value.trim();
+        if (pickedCid) { txt = 'связано с карточкой самозанятого'; on = true; }
+        else if (typed) {
+          var sup = supBy(typed);
+          if (sup) {
+            txt = sup.bill ? 'есть в списке поставщиков, счет у него просим'
+                           : 'есть в списке получателей, счет не просим';
+            on = !!sup.bill;
+          } else {
+            txt = 'нового получателя запомню под этим именем';
+          }
+        }
+        hint.textContent = txt;
+        hint.className = 'flp-hint' + (on ? ' on' : '');
       };
       var hideMenu = function () { menu.hidden = true; menu.innerHTML = ''; };
-      var showMenu = function () {
-        var q = norm(whoIn.value);
-        var list = payees.filter(function (p) {
+      var options = function (q) {
+        var out = payees.filter(function (p) {
           return !q || norm(p.name).indexOf(q) >= 0 ||
             (p.payroll_name && norm(p.payroll_name).indexOf(q) >= 0);
-        }).slice(0, 8);
+        }).map(function (p) {
+          return { nm: p.name, cid: p.id,
+                   alt: p.payroll_name ? 'в листе: ' + p.payroll_name : 'самозанятый' };
+        });
+        var seen = {};
+        out.forEach(function (o) { seen[norm(o.nm)] = 1; });
+        sups.filter(function (x) {
+          return (!q || norm(x.name).indexOf(q) >= 0) && !seen[norm(x.name)];
+        }).forEach(function (x) {
+          out.push({ nm: x.name, cid: '',
+                     alt: supAsks(x) ? 'поставщик, счет просим' : 'платили раньше' });
+        });
+        return out.slice(0, 8);
+      };
+      var showMenu = function () {
+        var list = options(norm(whoIn.value));
         if (!list.length) { hideMenu(); return; }
-        menu.innerHTML = list.map(function (p) {
-          return '<button type="button" class="flp-opt" data-cid="' + esc(p.id) +
-            '" data-nm="' + esc(p.name) + '">' + esc(p.name) +
-            (p.payroll_name ? '<span class="flp-alt">в листе: ' + esc(p.payroll_name) +
-              '</span>' : '') + '</button>';
+        menu.innerHTML = list.map(function (o) {
+          return '<button type="button" class="flp-opt" data-cid="' + esc(o.cid) +
+            '" data-nm="' + esc(o.nm) + '">' + esc(o.nm) +
+            '<span class="flp-alt">' + esc(o.alt) + '</span></button>';
         }).join('');
         menu.hidden = false;
       };
       finPayees().then(function (ps) { payees = ps; setHint(); });
+      finSups().then(function (xs) { sups = xs; setHint(); });
       whoIn.addEventListener('focus', showMenu);
       whoIn.addEventListener('input', function () {
         // Ручная правка = отвязка, пока снова не выберут из списка. Точное совпадение с
@@ -24833,13 +24903,23 @@
   /* Что система думает про поставщика. Ответ реестра показываем дословно: «ИП
      прекращен 12.03.2026» человек понимает, а наше «не подтвержден» читается как
      поломка экрана. */
+  /* Уйдет ли просьба на самом деле. Галочка это намерение, а не итог: писать некуда
+     без адреса, и мертвый ИП сильнее галочки — платить снявшемуся с учета значит
+     платить физлицу, с НДФЛ и взносами на нас. Зеленый чип по одной галочке обещал бы
+     письмо, которого не будет. */
+  function supAsks(x) {
+    return !!x.bill && x.ip !== 'inactive' && !!(x.email || x.bot);
+  }
+
   function supWhy(x) {
     if (!x.bill) return 'счет у него не просим';
     if (x.ip === 'inactive') {
       return '<b class="sv-bad">' + esc(x.ip_note || 'реестр не подтвердил ИП') + '</b>';
     }
-    if (!x.email) return 'нет почты — писать некуда';
-    return 'просим счет за три дня до платежа';
+    if (!x.email && !x.bot) return 'нет почты — писать некуда';
+    // Куда уйдет просьба, решает не человек, а то, где поставщик с нами говорил:
+    // писал нам в бота — пишем туда, мессенджер читают в тот же день.
+    return 'просим счет за три дня до платежа, ' + (x.bot ? 'в телеграм' : 'на почту');
   }
 
   function renderFinSuppliers(view) {
@@ -24848,30 +24928,43 @@
       view.innerHTML = dashSkeleton(); finLoadSup(); return;
     }
     var canFix = can('finmodel_edit');
-    var all = FIN.sup, ask = all.filter(function (x) { return x.bill && x.email; });
+    var all = FIN.sup, ask = all.filter(supAsks);
+    // Два среза одного списка. По умолчанию — те, у кого просим: справочник заодно
+    // копит КАЖДОГО получателя строки расхода (чтобы имя выбиралось, а не набиралось),
+    // и вперемешку с ними поставщики читались бы как свалка.
+    var tab = FIN.supTab === 'all' ? 'all' : 'ask';
+    var shown = tab === 'all' ? all : ask;
     var bar = statBar([
       { label: 'Просим счет', value: String(ask.length),
-        sub: 'им письмо уходит само' },
+        sub: 'им просьба уходит сама' },
       { label: 'Всего в списке', value: String(all.length),
         sub: 'остальные просто известны' },
       { label: 'Просьб ушло', value: String(all.reduce(function (n, x) {
         return n + (x.asks || 0); }, 0)), sub: 'за все время' },
     ], 'three');
 
-    var rows = all.map(function (x) {
+    var tabs = [['ask', 'Просим счет', ask.length], ['all', 'Все получатели', all.length]]
+      .map(function (t) {
+        return '<button class="qchip' + (tab === t[0] ? ' on' : '') +
+          '" data-suptab="' + t[0] + '">' + esc(t[1]) +
+          '<span class="qn">' + t[2] + '</span></button>';
+      }).join('');
+
+    var rows = shown.map(function (x) {
       var sub = [];
       if (x.inn) sub.push('ИНН ' + esc(x.inn));
       if (x.email) sub.push(esc(x.email));
       sub.push(supWhy(x));
       if (x.asks) sub.push('просили ' + x.asks + ' ' +
         plural(x.asks, 'раз', 'раза', 'раз'));
-      return '<div class="fl-row sup-row' + (x.bill ? '' : ' muted') +
+      return '<div class="fl-row sup-row' + (supAsks(x) ? '' : ' muted') +
         (canFix ? ' click' : '') + '" data-sup="' + esc(x.key) + '">' +
         '<div class="fl-main"><span class="fl-name">' + esc(x.name) + '</span>' +
           '<span class="fl-sub">' + sub.join(' · ') + '</span></div>' +
-        '<div class="sup-flag">' + (x.bill
+        '<div class="sup-flag">' + (supAsks(x)
           ? '<span class="fst ok">просим счет</span>'
-          : '<span class="fst wait">не просим</span>') + '</div></div>';
+          : '<span class="fst wait">' +
+            (x.bill ? 'пока не просим' : 'не просим') + '</span>') + '</div></div>';
     }).join('');
 
     view.innerHTML = bar + '<div class="grid"><div class="sp8">' +
@@ -24882,9 +24975,14 @@
           'система просит счет сама за три дня до платежа</div></div>' +
           (canFix ? '<button class="qchip add" id="sup-add">' + ic('plus', 12) +
             'Поставщик</button>' : '') + '</div>' +
-        '<div class="fin-list">' + (rows ||
-          '<div class="empty">Список пуст. Заведите поставщика руками или дождитесь ' +
-          'первого счета — приславший его попадет сюда сам.</div>') + '</div>' +
+        '<div class="list-quick">' + tabs + '</div>' +
+        '<div class="fin-list">' + (rows || '<div class="empty">' + (tab === 'ask'
+          ? (all.length
+              ? 'Счет пока не просим ни у кого. Откройте «Все получатели» и поставьте ' +
+                'галочку тем, кто счет выставляет.'
+              : 'Список пуст. Заведите поставщика руками или дождитесь первого счета — ' +
+                'приславший его попадет сюда сам.')
+          : 'Мы еще никому не платили из этой ведомости.') + '</div>') + '</div>' +
       '</div></div>' +
       '<div class="sp4"><div class="card listcard">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('doc', 14) + '</span>' +
@@ -24894,6 +24992,9 @@
           'остальных строка расхода молчит, и в ней написано почему.</p>' +
           '<p>Кто прислал нам счет хоть раз — письмом, в бота или файлом к строке ' +
           'расхода — попадает сюда сам, с ИНН и почтой, и сразу с галочкой.</p>' +
+          '<p>Пишем туда, где он говорил с нами: прислал счет в телеграм — просим ' +
+          'там, знаем только почту — письмом. Телеграм боту первым начать разговор ' +
+          'не дает, поэтому незнакомому уходит письмо.</p>' +
           '<p>Руками заводят тех, кто счет не присылает: Селектел, Тензор, Рег.Ру. ' +
           'Там же, в карточке сервиса, галочка и почта.</p>' +
           '<p>Своим — зарплата, самозанятые, налоги, фонды — система не пишет никогда, ' +
@@ -24902,6 +25003,11 @@
 
     var add = el('sup-add');
     if (add) add.addEventListener('click', function () { finSupplierForm(null); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-suptab]'), function (n) {
+      n.addEventListener('click', function () {
+        FIN.supTab = n.getAttribute('data-suptab'); renderAll();
+      });
+    });
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-sup]'), function (n) {
         n.addEventListener('click', function () {
@@ -24941,13 +25047,17 @@
           '<span>Просим у него счет. Снимите галочку, если он выставляет счет сам ' +
           'или списывает деньги с карты — тогда система писать ему не будет</span></label>' +
         '<div class="sv-why" id="sup-why">' + supWhy(x) + '</div>' +
+        // Диалог в боте не поле формы, а факт: он появляется сам, когда поставщик
+        // присылает нам счет в бота. Руками его не вписать — номер диалога знает бот.
+        (x.bot ? '<div class="sv-why">Писал нам в телеграм — просьба уйдет туда. ' +
+          'Впишите почту, если удобнее письмом.</div>' : '') +
         (x.ip_note ? '<div class="sv-why">Реестр: ' + esc(x.ip_note) + '</div>' : ''),
     });
     if (!m) return;
     var repaint = function () {
       var why = el('sup-why');
       if (why) {
-        why.innerHTML = supWhy({ bill: el('sup-bill').checked, ip: x.ip,
+        why.innerHTML = supWhy({ bill: el('sup-bill').checked, ip: x.ip, bot: x.bot,
                                  ip_note: x.ip_note, email: finVal('sup-mail') });
       }
     };
