@@ -999,6 +999,28 @@ a { color: inherit; text-decoration: none; }
 .cvc-p { font-size: 13px; color: var(--ink-3); text-align: right; white-space: nowrap; }
 .cvc-row.weak .cvc-p { color: var(--coral); font-weight: 600; }
 
+/* ── Рабочее окно менеджера продаж: очередь «Сейчас», метка источника, навигация ── */
+.dq-band { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); padding: 14px 24px 6px; }
+.dq-band.over { color: var(--red-ink); }
+.dq-src { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: var(--r-pill); background: var(--blue-tint); color: var(--blue-d);
+  vertical-align: middle; }
+.dq-hint { margin-top: 14px; background: var(--amber-soft); color: var(--amber-ink);
+  font-size: 12.5px; font-weight: 600; padding: 11px 13px; border-radius: var(--r-lg); line-height: 1.45; }
+.dq-nav .sec-head { margin-bottom: 0; }
+.dq-nrow { display: flex; align-items: center; gap: 13px; padding: 12px 0;
+  border-top: 1px solid var(--line); cursor: pointer; }
+.dq-nrow:first-of-type { border-top: none; }
+.dq-nico { width: 32px; height: 32px; border-radius: 9px; background: var(--blue-tint);
+  flex: none; display: flex; align-items: center; justify-content: center; color: var(--blue-d); }
+.dq-ntxt { flex: 1; min-width: 0; }
+.dq-nt1 { font-size: 14px; font-weight: 700; color: var(--ink); }
+.dq-nt2 { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
+.dq-chev { color: var(--ink-3); display: flex; }
+.dq-nrow:hover .dq-nt1 { color: var(--blue); }
+.dq-nrow:focus-visible { outline: none; box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); border-radius: 10px; }
+
 /* ── Соцстатистика ── */
 .soc-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .soc-seg { display: inline-flex; background: var(--fill); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 3px; }

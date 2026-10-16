@@ -35978,6 +35978,91 @@
       '</div></div>';
   }
 
+  /* Источник лида для метки в окне менеджера. Ставится на входе (utm-ссылка или
+     канал бота); пока размечено не всё — где источника нет, метку не рисуем, а не
+     придумываем. Это и есть смысл «метки на входе» из блока 1. */
+  function leadSrcChip(l) {
+    var s = (l && (l.source || l.channel)) || '';
+    if (!s) return '';
+    return '<span class="dq-src">' + esc(mkSourceName(s)) + '</span>';
+  }
+
+  /* Рабочее окно менеджера продаж: очередь «Сейчас» (просроченное -> сегодня),
+     мои лиды по этапам с узким местом и навигация. Собрано на реальных сигналах —
+     статус-рисках, задачах по лидам, горячих заявках. */
+  function salesHomeHtml(c, convClient, saleRowsHtml, convSale, weakest, saleSteps) {
+    var risks = allRisks();   /* уже отсортированы по важности убыванием */
+    var gt = groupTasks();
+    var over = [], today = [], seen = {};
+    /* один лид = одна строка: берём самый важный сигнал по нему, не дублируем */
+    risks.forEach(function (r) {
+      if (seen[r.lead.id]) return;
+      seen[r.lead.id] = 1;
+      (r.sev >= 2 ? over : today).push({ lead: r.lead, sub: esc(r.label), when: '' });
+    });
+    gt.today.forEach(function (t) {
+      if (seen[t.lead.id]) return;
+      seen[t.lead.id] = 1;
+      today.push({ lead: t.lead, sub: 'на сегодня: ' + esc(t.task.text), when: 'сегодня' });
+    });
+    /* свежие горячие заявки (до 24ч) в риски ещё не попали — добавим в «сегодня» */
+    state.leads.forEach(function (l) {
+      if (seen[l.id]) return;
+      if (l.booking && l.crm.status === 'new' && hoursSince(l.booking.at || l.created_at) <= 24) {
+        seen[l.id] = 1;
+        today.push({ lead: l, sub: 'заявка ждёт связи', when: ago(l.booking.at || l.created_at) });
+      }
+    });
+    var qTotal = over.length + today.length;
+    function qrow(it) {
+      return '<div class="trow ar-grid" data-id="' + it.lead.id + '">' + sevPill(it.lead) +
+        '<div class="t-cell"><div class="t-ttl">' + esc(leadName(it.lead)) + '</div>' +
+        '<div class="t-sub">' + it.sub + leadSrcChip(it.lead) + '</div></div>' +
+        '<div class="t-when num">' + esc(it.when || '') + '</div>' +
+        '<div class="t-go">' + ic('go', 13) + '</div></div>';
+    }
+    var queueBody = (over.length ? '<div class="dq-band over">Просрочено</div>' + over.map(qrow).join('') : '') +
+      (today.length ? '<div class="dq-band">Сегодня</div>' + today.map(qrow).join('') : '') +
+      (qTotal ? '' : '<div class="empty" style="padding:22px 24px">Очередь пуста — всё разобрано. Спокойно.</div>');
+    var queueCard = '<div class="card" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('flame', 14) + '</span>' +
+      '<div><div class="t">Сейчас</div><div class="s">очередь по приоритету: сначала просроченное, нажми на строку — откроется карточка</div></div>' +
+      '<span class="cnt num">' + qTotal + '</span></div>' +
+      '<div style="border-top:1px solid var(--line)">' + queueBody + '</div></div>';
+
+    var hint = (weakest > 0 && saleSteps[weakest]) ?
+      '<div class="dq-hint">Узкое место — «' + esc(CRM[saleSteps[weakest]].label) + '». Здесь теряешь больше всего, займись в первую очередь.</div>' : '';
+    var funCard = '<div class="card" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span><div class="t">Мои лиды по этапам</div>' +
+      '<span class="cnt num">' + convSale + '% в клиента</span></div>' +
+      '<div class="cvc-rows" style="margin-top:12px">' + saleRowsHtml + '</div>' + hint + '</div>';
+
+    function navRow(page, icon, t1, t2) {
+      return '<div class="dq-nrow" data-nav="' + page + '" role="button" tabindex="0">' +
+        '<span class="dq-nico">' + ic(icon, 16) + '</span>' +
+        '<div class="dq-ntxt"><div class="dq-nt1">' + t1 + '</div><div class="dq-nt2">' + t2 + '</div></div>' +
+        '<span class="dq-chev">' + ic('go', 14) + '</span></div>';
+    }
+    var navCard = '<div class="card dq-nav" style="padding:22px 26px">' +
+      '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
+      '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
+      navRow('inbox', 'dialogs', 'Диалоги', 'переписки с клиентами') +
+      navRow('leads', 'leads', 'Люди', 'все мои клиенты и карточки') +
+      navRow('tasks', 'task', 'Задачи', 'что поставлено и на мне') + '</div>';
+
+    return '<div class="dash">' +
+      statBar([
+        { tint: 'blue', label: 'К действию', value: qTotal, sub: over.length ? 'из них просрочено ' + over.length : 'на сегодня' },
+        { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'queue', sub: over.length ? 'закрыть сегодня' : 'чисто' },
+        { tint: 'navy', label: 'Ждут связи', value: c.hot, go: 'queue', sub: c.hot ? 'новые заявки' : 'разобрано' },
+        { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
+      ]) +
+      '<div class="grid">' +
+        '<div class="sp7 vstack">' + queueCard + '</div>' +
+        '<div class="sp5 vstack">' + funCard + navCard + '</div>' +
+      '</div></div>';
+  }
+
   function renderDash(view) {
     if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
@@ -36043,6 +36128,10 @@
       '<div class="cvc-rows" style="margin-top:12px">' + saleRows + '</div></div>';
 
     if (!can('path')) {
+      if (state.role === 'sales_manager' || state.role === 'manager') {
+        /* ── рабочее окно менеджера продаж ── */
+        view.innerHTML = salesHomeHtml(c, convClient, saleRows, convSale, weakest, saleSteps);
+      } else {
       /* ── без доступа к воронке/пути: компактный дашборд «что делать» ── */
       view.innerHTML = '<div class="dash">' +
         statBar([
@@ -36056,6 +36145,7 @@
           '<div class="sp5 vstack">' + funnelCard + '</div>' +
         '</div>' +
       '</div>';
+      }
     } else {
       /* ── ВЛАДЕЛЕЦ: картина бизнеса + где дыры ── */
       var days = [];
@@ -36136,6 +36226,11 @@
     });
     var gp = el('go-path');
     if (gp) gp.addEventListener('click', function () { setPage('path'); });
+    Array.prototype.forEach.call(view.querySelectorAll('.dq-nrow[data-nav]'), function (n) {
+      function go() { setPage(n.getAttribute('data-nav')); }
+      n.addEventListener('click', go);
+      n.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
     animBars(view);
   }
 
