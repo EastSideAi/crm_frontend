@@ -2499,6 +2499,13 @@
        которым процент не начислен (нет ответственного или он из сервисной роли). */
     { id: 'finsales', label: 'Начисления продаж', icon: 'coins', space: 'fin',
       cap: 'finmodel_edit|finmodel_sales' },
+    /* Партнёрские выплаты: по каждому партнёру видно, сколько ему начислено и за каких
+       клиентов (начисление считает партнёрская программа), команда заносит реквизиты и
+       по кнопке проводит выплату — она падает расходом в фонд маркетинга строкой на
+       клиента. Так в ведомости видно «кому и за кого», а не одна непрозрачная строка.
+       Право то же, что на запись строки в ведомость, — finmodel_edit (деньги + реквизиты). */
+    { id: 'finpartners', label: 'Партнёрские выплаты', icon: 'card', space: 'fin',
+      cap: 'finmodel_edit' },
     /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
        (сервисы, административное), но всю ведомость с зарплатами не видит. У кого есть
        ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
@@ -2975,6 +2982,9 @@
     } else if (state.page === 'finprograms') {
       // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
+    } else if (state.page === 'finpartners') {
+      // Партнёр ведет клиента сквозь периоды — начисление не привязано к ведомости, чип раздела.
+      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>партнёрские выплаты</div>';
     } else if (state.page === 'fintax') {
       // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
       tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
@@ -3446,7 +3456,8 @@
                      finspend: 'Расходы', finpayouts: 'Выплаты подрядчикам',
                      finopex: 'Операционные расходы', fintax: 'Плановый налог',
                      finplan: 'План выручки', fincalendar: 'Платежный календарь',
-                     finprograms: 'Программы', finmetrics: 'Итоги периода',
+                     finprograms: 'Программы', finpartners: 'Партнёрские выплаты',
+                     finmetrics: 'Итоги периода',
                      finplans: 'План отделов', finplandept: 'План отдела',
                      finbanks: 'Банки и лимиты', finkb: 'База знаний' };
       var ph;
@@ -3485,6 +3496,13 @@
             finRub(pg.total.profit) + '</b>' +
             (pg.total.margin != null ? ' при марже <b>' + pg.total.margin + '%</b>' : '') + '.'
           : 'Считаю программы по чекам…';
+      }
+      // Партнёрские выплаты идут сквозь периоды: начисление считает партнёрская
+      // программа, период тут не контекст — ветка до !per, иначе повисло бы «Загружаю».
+      else if (state.page === 'finpartners') {
+        ph = 'Кому и сколько начислено по партнёрской программе и за каких клиентов. ' +
+          'Выплата по кнопке падает расходом в фонд маркетинга строкой на клиента — ' +
+          'видно, кому и за кого ушло. Ставку (процент или фикс за клиента) задаете тут же.';
       }
       // Налог считается за год из строк дохода, а не по ведомости — ветка до !per.
       else if (state.page === 'fintax') {
@@ -3691,6 +3709,7 @@
     else if (state.page === 'findirect') renderFinDirect(view);
     else if (state.page === 'finpayouts') renderFinPayouts(view);
     else if (state.page === 'finsales') renderFinSales(view);
+    else if (state.page === 'finpartners') renderFinPartners(view);
     else if (state.page === 'finopex') renderFinOpex(view);
     else if (state.page === 'fintax') renderFinTax(view);
     else if (state.page === 'finspend') renderFinSpend(view);
@@ -20200,7 +20219,7 @@
     FIN.revplan = null; FIN.calendar = null; FIN.programs = null; FIN.spend = null;
     FIN.forecast = null; FIN.payouts = null; FIN.opex = null; FIN.tax = null;
     FIN.salesSheet = null; FIN.planstatus = null; FIN.planlines = null;
-    FIN.receipts = null;
+    FIN.receipts = null; FIN.partners = null;
     if (!keepPeriods) FIN.periods = null;
   }
 
@@ -23171,6 +23190,255 @@
 
     view.innerHTML = statBar(tiles) + head + body;
     pageAnim(view);
+  }
+
+  /* ── Партнёрские выплаты (мост партнёрка → ведомость) ───────────────────────
+     Партнёрская программа давно считает, кто чей клиент и сколько оплат ему
+     засчитано. Чего не было — финансовой части: кто-то заводил в фонде маркетинга
+     строку «выплата партнёрских начислений» без расшифровки, и было непонятно, кому
+     и за кого ушло (жалоба Виталия 16.10.2026). Этот экран замыкает круг: по каждому
+     партнёру видно, сколько начислено и за каких клиентов, команда заносит реквизиты
+     и по кнопке проводит выплату — она падает расходом в фонд маркетинга СТРОКОЙ НА
+     КЛИЕНТА, то есть в ведомости видно «кому и за кого».
+
+     Начисление = ставка × оплаты клиента; ставку (5% от оплат по умолчанию или фикс
+     за клиента) задают прямо тут. Считает вознаграждение сервер — своей копии правила
+     во фронте нет. Экран сквозной: партнёр ведёт клиента не один период, своей полосы
+     периодов тут нет (как у «Программ»). */
+  function finLoadPartners() {
+    finBusy('partners', function (done) {
+      api('/admin/api/partners/payouts').then(function (r) {
+        FIN.partners = r; FIN.err = '';
+        if (curSpace() === 'fin') renderAll();
+      }).catch(function (e) { finFail(e, 'partners'); }).then(done);
+    });
+  }
+
+  function finPartnerDefRate(P) {
+    var def = null;
+    (P.rates || []).forEach(function (r) { if (!r.product_id) def = r; });
+    return def;
+  }
+  function finRateLabel(def) {
+    if (!def) return 'не задана';
+    if (def.fixed_rub !== null && def.fixed_rub !== undefined)
+      return finRub(def.fixed_rub) + ' за клиента';
+    if (def.percent !== null && def.percent !== undefined)
+      return finNum(def.percent, def.percent % 1 ? 1 : 0) + '% от оплат';
+    return 'не задана';
+  }
+
+  function renderFinPartners(view) {
+    if (!FIN.partners) {
+      if (FIN.err) return finErrView(view);
+      view.innerHTML = dashSkeleton(); finLoadPartners(); return;
+    }
+    if (FIN.partners === 'none') return finErrView(view);
+    var P = FIN.partners;
+    // Партнёры без засчитанных клиентов — шум: показываем только тех, по кому есть
+    // начисления или уже прошли выплаты.
+    var partners = (P.partners || []).filter(function (p) {
+      return (p.clients || []).length > 0;
+    });
+    var def = finPartnerDefRate(P);
+
+    var totalDue = 0, clientsDue = 0;
+    partners.forEach(function (p) {
+      totalDue += p.due || 0;
+      (p.clients || []).forEach(function (c) {
+        if (c.payable && !c.paid) clientsDue += 1;
+      });
+    });
+    var waiting = partners.filter(function (p) { return (p.due || 0) > 0; }).length;
+
+    var tiles = [
+      { label: 'К выплате', value: finRub(totalDue), sub: 'начислено, не выплачено' },
+      { label: 'Партнёров', value: String(waiting),
+        sub: waiting ? 'ждут выплаты' : 'к оплате никого' },
+      { label: 'Клиентов', value: String(clientsDue), sub: 'приведено, к оплате' },
+      { label: 'Ставка', value: finRateLabel(def), sub: 'вознаграждение партнёра' },
+    ];
+
+    // Полоса ставки: якорь-предупреждение, пока ставка не задана (без неё начисления
+    // не считаются вовсе), иначе тихая справка с кнопкой «изменить».
+    var rateBar = !P.rate_set
+      ? '<div class="card listcard"><div class="fin-note fpt-foot">' + ic('alert', 15) +
+          '<span>Ставка вознаграждения не задана — начисления не считаются. ' +
+          'Задайте, сколько платим партнёру за клиента.</span>' +
+          '<button class="qchip add fpt-right" id="fpt-rate">' +
+            ic('plus', 12) + 'Задать ставку</button></div></div>'
+      : '<div class="card listcard"><div class="fin-note calm fpt-foot">' + ic('coins', 15) +
+          '<span>Ставка: <b>' + esc(finRateLabel(def)) + '</b>. ' +
+          'Начисляется с каждой оплаты приведённого клиента.</span>' +
+          '<button class="qchip fpt-right" id="fpt-rate">изменить</button></div></div>';
+
+    var ruleLabel = { percent: 'процент от оплат', fixed: 'фикс за клиента' };
+    var clientRow = function (c) {
+      var sub = [
+        c.rule ? ruleLabel[c.rule] : 'ставка не задана',
+        (c.rule === 'percent' && c.gross) ? 'с ' + finRub(c.gross) : '',
+      ].filter(Boolean).map(esc).join(' · ');
+      var st = c.paid
+        ? '<span class="fst doc">' + ic('check', 11) + 'выплачено</span>' +
+          '<button class="qchip fpt-cancel" data-cancel="' + esc(c.payout_id) +
+            '" data-pname="' + esc(c.name || 'клиент') + '">отменить</button>'
+        : (c.payable
+            ? '<span class="fst ok">к выплате</span>'
+            : '<span class="fst wait">' + (c.rule ? 'нет оплат' : 'ставка не задана') + '</span>');
+      return '<div class="trow fpt-crow' + (c.paid ? ' muted' : '') + '">' +
+        '<span class="fo-what"><b>' + esc(c.name || 'клиент без имени') + '</b>' +
+          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+        '<span class="num fo-sum">' + finRub(c.amount) + '</span>' +
+        '<span class="fo-st">' + st + '</span>' +
+      '</div>';
+    };
+
+    var cards = partners.map(function (p) {
+      var reqTail = p.requisites && p.requisites.account
+        ? '…' + String(p.requisites.account).slice(-4) : '';
+      var reqBits = [];
+      if (p.requisites && p.requisites.receiver) reqBits.push(p.requisites.receiver);
+      if (reqTail) reqBits.push('счёт ' + reqTail);
+      // Нижняя полоса карточки: либо кнопка выплаты (есть к оплате и есть реквизиты),
+      // либо амбер «некуда платить» с кнопкой реквизитов — это и есть «горит красным».
+      var foot;
+      if ((p.due || 0) > 0 && !p.has_requisites) {
+        foot = '<div class="fin-note fpt-foot">' + ic('alert', 15) +
+          '<span>К выплате ' + finRub(p.due) + ', но реквизиты не заданы — некуда платить.</span>' +
+          '<button class="qchip add fpt-right" data-req="' + p.id + '">' +
+            ic('plus', 12) + 'Куда платить</button></div>';
+      } else {
+        var reqLine = reqBits.length
+          ? '<span class="fin-count fpt-req">' + esc(reqBits.join(' · ')) + '</span>'
+          : '<span class="fin-count fpt-req">реквизиты не заданы</span>';
+        var payBtn = (p.due || 0) > 0
+          ? '<button class="qchip add fpt-right" data-pay="' + p.id + '" data-due="' + p.due +
+              '" data-pname="' + esc(p.name) + '">' +
+              ic('card', 12) + 'Выплатить ' + finRub(p.due) + '</button>'
+          : '';
+        foot = '<div class="fin-note calm fpt-foot">' +
+          '<button class="qchip" data-req="' + p.id + '">Реквизиты</button>' +
+          reqLine + payBtn + '</div>';
+      }
+      return '<div class="card listcard fs-seller">' +
+        '<div class="list-tools">' +
+          '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
+            '<div class="s fe-s">код ' + esc(p.ref_code || '—') + ' · ' +
+              (p.clients.length) + ' ' +
+              plural(p.clients.length, 'клиент', 'клиента', 'клиентов') + '</div></div>' +
+          '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
+        '</div>' +
+        p.clients.map(clientRow).join('') +
+        foot +
+      '</div>';
+    }).join('');
+
+    var body = cards ||
+      '<div class="card listcard"><div class="empty">Партнёрских начислений пока нет. ' +
+      'Как партнёр приведёт клиента и тот оплатит — строка появится здесь сама.</div></div>';
+
+    // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
+    // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
+    view.innerHTML = statBar(tiles) + rateBar + body;
+
+    var rb = el('fpt-rate');
+    if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
+      b.addEventListener('click', function () {
+        var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
+        if (p) finPartnerReqForm(p);
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-pay]'), function (b) {
+      b.addEventListener('click', function () {
+        finPartnerPay(b.getAttribute('data-pay'), b.getAttribute('data-pname'),
+                      Number(b.getAttribute('data-due')));
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cancel]'), function (b) {
+      b.addEventListener('click', function () {
+        finPartnerCancelForm(b.getAttribute('data-cancel'), b.getAttribute('data-pname'));
+      });
+    });
+    pageAnim(view);
+  }
+
+  function finPartnerReqForm(p) {
+    var r = p.requisites || {};
+    openSheet('Реквизиты партнёра',
+      'Куда перечисляем вознаграждение. Кто и когда менял — сохраняется: подмена счёта это способ увода выплат.',
+      [['receiver', 'line', 'Получатель (ФИО или ИП)', r.receiver || ''],
+       ['account', 'line', 'Расчётный счёт', r.account || ''],
+       ['bic', 'line', 'БИК', r.bic || ''],
+       ['bank', 'line', 'Банк', r.bank || ''],
+       ['inn', 'line', 'ИНН', r.inn || '']],
+      function (v, close) {
+        if (!String(v.account || '').trim())
+          return 'Впишите расчётный счёт — без него платить некуда';
+        czSend('/admin/api/partners/' + p.id + '/requisites', 'PUT', {
+          receiver: v.receiver, account: v.account, bic: v.bic, bank: v.bank, inn: v.inn,
+        }).then(function () {
+          close(); FIN.partners = null; renderAll(); showToast('Реквизиты сохранены');
+        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', 'Сохранить');
+  }
+
+  function finPartnerRateForm(def) {
+    openSheet('Ставка вознаграждения',
+      'Сколько платим партнёру за приведённого клиента. По умолчанию 5% от оплаченной суммы.',
+      [['kind', 'pick', 'Как считаем',
+        [['percent', 'Процент от оплат'], ['fixed', 'Фикс за клиента']]],
+       ['value', 'number', 'Значение (% или ₽)',
+        def ? String(def.fixed_rub !== null && def.fixed_rub !== undefined
+              ? def.fixed_rub : (def.percent != null ? def.percent : 5)) : '5']],
+      function (v, close) {
+        var value = Number(v.value);
+        if (!(value >= 0)) return 'Впишите число';
+        if (v.kind === 'percent' && value > 100) return 'Процент бывает от 0 до 100';
+        var body = v.kind === 'percent'
+          ? { percent: value } : { fixed_rub: Math.round(value) };
+        czSend('/admin/api/partners/rate', 'PUT', body).then(function () {
+          close(); FIN.partners = null; renderAll(); showToast('Ставка сохранена');
+        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', 'Сохранить');
+    // Если ставка уже фикс — переставим выбор: openSheet по умолчанию встаёт на первый.
+    if (def && def.fixed_rub !== null && def.fixed_rub !== undefined) {
+      var sel = el('sh-kind'); if (sel) sel.value = 'fixed';
+    }
+  }
+
+  function finPartnerPay(pid, pname, due) {
+    finConfirm('Выплатить партнёру',
+      'Начислено ' + finRub(due) + ' партнёру ' + (pname || '') +
+      '. Это станет расходом фонда маркетинга — по строке на каждого клиента. ' +
+      'Отчисления в фонды пересчитаются.',
+      'Выплатить', function () {
+        if (FIN.payBusy) return;
+        FIN.payBusy = true;
+        czSend('/admin/api/partners/' + pid + '/payout', 'POST')
+          .then(function (r) {
+            // Выплата меняет фонд маркетинга и каскад — сбрасываем всю ведомость.
+            finForget(true); renderAll();
+            showToast('Выплачено ' + finRub((r && r.total) || due));
+          })
+          .catch(function (e) { showToast(finLineErr(e)); })
+          .then(function () { FIN.payBusy = false; });
+      });
+  }
+
+  function finPartnerCancelForm(payoutId, pname) {
+    openSheet('Отменить выплату',
+      'Строка расхода уйдёт из ведомости, клиент ' + (pname || '') +
+      ' снова станет к оплате. Причина обязательна — это движение денег назад.',
+      [['reason', 'text', 'Причина отмены', '']],
+      function (v, close) {
+        var reason = String(v.reason || '').trim();
+        if (!reason) return 'Напишите причину отмены';
+        czSend('/admin/api/partner-payouts/' + payoutId + '/cancel', 'POST', { reason: reason })
+          .then(function () {
+            close(); finForget(true); renderAll(); showToast('Выплата отменена');
+          }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', 'Отменить выплату');
   }
 
   function finPayoutForm(line, opts) {
