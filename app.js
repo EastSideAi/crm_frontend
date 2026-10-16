@@ -25848,6 +25848,13 @@
   // и ИНН взять больше неоткуда. Правило просьбы живет на сервере, фронт только
   // пересказывает человеку ответ реестра (правка Романа 16.10.2026).
   function svcPayeeNote(s) {
+    // Галочка «выставляет счет» тут главнее ИНН: без нее сервис считается
+    // автосписанием, и просьба не уходит, как бы хорошо мы поставщика ни знали.
+    if (!s.bill) {
+      return 'Сейчас система считает, что сервис списывается сам — с карты или со ' +
+        'счета, — и счет по нему не просит. Закрывающие по таким берем в личном ' +
+        'кабинете или по ЭДО.';
+    }
     if ((s.ip || '') === 'org') {
       return 'Это организация: счет выставит, просьба уходит сама за три дня до ' +
         'списания.';
@@ -25857,8 +25864,7 @@
       return '<b class="sv-bad">' + esc(s.ip_note || 'Реестр ИП не подтвердил') +
         '</b>. Пока так, счет по этому сервису система не просит.';
     }
-    return 'Впишите один раз — и система будет просить счет сама за три дня до ' +
-      'списания. Без ИНН она молчит: мы не знаем, выставляет ли он счета.';
+    return 'Просьба уходит сама за три дня до списания на эту почту.';
   }
   function finServiceForm(svc) {
     var isNew = !svc;
@@ -25896,6 +25902,11 @@
           finField('Почта для счетов', '<input id="sv-mail" class="al-in" maxlength="200" ' +
             'value="' + esc(s.email || '') + '" placeholder="schet@postavshik.ru">') +
         '</div>' +
+        '<label class="al-f sv-onoff top"><input type="checkbox" id="sv-bill"' +
+          (s.bill ? ' checked' : '') + '>' +
+          '<span>Этот сервис выставляет счет. Поставьте галочку, если счет приходит ' +
+          'от поставщика и его надо оплачивать вручную — тогда система попросит его ' +
+          'сама за три дня до списания</span></label>' +
         '<div class="sv-why">' + svcPayeeNote(s) + '</div>' +
         '<label class="al-f sv-onoff top"><input type="checkbox" id="sv-on"' +
           (s.active === false ? '' : ' checked') + '>' +
@@ -25904,6 +25915,20 @@
         (isNew ? '' : '<div id="sv-hist" class="fin-hist">Загружаю историю…</div>'),
     });
     if (!m) return;
+    // Подпись под галочкой говорит, что система сейчас думает про этот сервис, и
+    // меняться должна вместе с галочкой: иначе человек ставит ее и читает прежний
+    // текст «счет по нему не просим».
+    var billBox = el('sv-bill');
+    if (billBox) {
+      billBox.addEventListener('change', function () {
+        var why = document.querySelector('.sv-why');
+        if (why) {
+          why.innerHTML = svcPayeeNote({
+            ip: s.ip, ip_note: s.ip_note, bill: billBox.checked,
+          });
+        }
+      });
+    }
     if (!isNew) finLoadSvcHistory(s.id);
     el('fm-ok').addEventListener('click', function () {
       var name = finVal('sv-name');
@@ -25917,7 +25942,7 @@
         counterparty: finVal('sv-who'), amount: finVal('sv-sum'),
         next_on: finVal('sv-next') || null, every: Number(finVal('sv-every')) || 1,
         unit: finVal('sv-unit') || null, active: el('sv-on').checked,
-        inn: finVal('sv-inn'), email: finVal('sv-mail'),
+        inn: finVal('sv-inn'), email: finVal('sv-mail'), bill: el('sv-bill').checked,
       }, isNew ? 'Сервис заведен' : 'Сервис поправлен');
     });
     var del = el('fm-del');
