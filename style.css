@@ -7421,6 +7421,33 @@ button.fsp-via { cursor: pointer; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
 }
 
+/* ── Партнёрские выплаты ──────────────────────────────────────────────────────
+   Строка клиента: имя, начислено, статус. Своя сетка, а не fin-grid — у начисления
+   нет даты, и колонка даты пустой тратила бы левый край. */
+.fpt-crow { grid-template-columns: 1.7fr 150px 210px; }
+.fpt-crow.muted { opacity: .55; }
+.fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.fpt-right { margin-left: auto; }
+.fpt-req { color: var(--ink-3); font-weight: 600; }
+/* Нижняя полоса карточки (реквизиты + кнопка выплаты) переносится, когда в строку не
+   влезает: иначе кнопка «Выплатить» уезжает за край на узком экране. */
+.fpt-foot { flex-wrap: wrap; row-gap: 8px; }
+/* Кнопка «отменить» у выплаченной строки — тихая и мелкая: это редкий откат, а не
+   второе действие наравне с выплатой. */
+.fpt-cancel { font-size: 11px; padding: 2px 8px; color: var(--ink-3); }
+.fpt-cancel:hover { color: var(--red); background: var(--red-soft); }
+@media (max-width: 760px) {
+  .trow.fpt-crow { grid-template-columns: 1fr auto !important; height: auto;
+    padding: 11px 16px; gap: 3px 12px; }
+  .fpt-crow .fo-what { grid-column: 1; grid-row: 1; }
+  .fpt-crow .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
+  .fpt-crow .fo-st { grid-column: 1 / span 2; grid-row: 2; justify-content: flex-start; }
+  /* Футер стопкой: реквизиты строкой, кнопка под ними слева — кнопка на узком
+     экране иначе налезает на длинные реквизиты. */
+  .fpt-foot { flex-direction: column; align-items: flex-start; }
+  .fpt-foot .fpt-right { margin-left: 0; }
+}
+
 /* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
    Клик по нему помечает продажу полученной, не открывая форму — как чек-лист.
    Строкам даём боковые поля под шапку (16px): иначе кружок липнет к краю, а сумма
