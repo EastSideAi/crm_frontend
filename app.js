@@ -10197,8 +10197,7 @@
       b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
     });
     /* Ссылка на свою запись живет полчаса и подписана, поэтому ее берут в
-       момент нажатия. Открываем в новой вкладке: файл начнет скачиваться, а
-       CRM останется на месте. */
+       момент нажатия. Файл уходит сразу в «Загрузки», CRM остается на месте. */
     Array.prototype.forEach.call(view.querySelectorAll('[data-mrec]'), function (b) {
       b.addEventListener('click', function () {
         if (b.classList.contains('loading')) return;
@@ -10206,7 +10205,7 @@
         api('/admin/api/meet/rooms/' + b.getAttribute('data-mrec') + '/video')
           .then(function (r) {
             b.classList.remove('loading');
-            if (r && r.url) window.open(r.url, '_blank', 'noopener');
+            if (r && r.url) recGrab(r.url);
             else showToast('Записи нет');
           })
           .catch(function (e) {
@@ -27274,6 +27273,16 @@
     return 'rasshifrovka-' + ymd + '-' +
       ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2) + '.txt';
   }
+  /* Скачать запись встречи. Сервер отдает mp4 с именем «дата, какая встреча,
+     с кем» и просьбой сохранить, поэтому обычная ссылка кладет файл в
+     «Загрузки» и со страницы не уводит. Раньше тут был window.open: он на
+     миг открывал пустую вкладку, и это читалось как «ничего не произошло». */
+  function recGrab(url) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   function mxSaveText(m, text) {
     /* В файле дата полная, а не «Сегодня»: его откроют через месяц, и слово
        «сегодня» в шапке будет врать. */
@@ -27498,7 +27507,7 @@
         api('/admin/api/meet/rooms/' + b.getAttribute('data-mxrec') + '/video')
           .then(function (r) {
             b.classList.remove('loading');
-            if (r && r.url) window.open(r.url, '_blank', 'noopener');
+            if (r && r.url) recGrab(r.url);
             else showToast('Записи нет');
           })
           .catch(function (e2) {
