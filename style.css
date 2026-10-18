@@ -11505,6 +11505,35 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pb-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .pb-nav .pb-topm { flex: 1 1 auto; justify-content: center; }
 
+/* «Моя мотивация» — герой экрана тьютора: круг + разбор + строка агента */
+.mh { display: grid; grid-template-columns: auto 1fr; gap: 26px; padding: 22px 24px; align-items: center; }
+.mh-ring { width: 172px; height: 172px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  background: conic-gradient(var(--green) 0 var(--mp, 0%), var(--line-2) var(--mp, 0%) 100%); }
+.mh-hole { width: 128px; height: 128px; border-radius: 999px; background: var(--card);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.mh-hole b { font-size: 29px; font-weight: 800; letter-spacing: -.04em; color: var(--ink); line-height: 1; }
+.mh-hole span { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.mh-right { display: flex; flex-direction: column; gap: 14px; }
+.mh-legend { display: flex; flex-direction: column; gap: 11px; }
+.mh-leg { display: flex; align-items: baseline; gap: 11px; }
+.mh-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; position: relative; top: 1px; }
+.mh-dot.g { background: var(--green); }
+.mh-dot.n { background: var(--line-2); }
+.mh-lt { flex: 1; font-size: 14px; color: var(--ink); display: flex; flex-direction: column; }
+.mh-lt i { font-style: normal; font-size: 12px; color: var(--ink-2); }
+.mh-leg b { font-size: 15px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); white-space: nowrap; }
+.mh-leg b.mh-g { color: var(--green-ink); }
+.mh-due { font-size: 13px; color: var(--ink-2); }
+.mh-due b { color: var(--ink); }
+.mh-praise { display: flex; gap: 11px; align-items: flex-start; background: var(--blue-tint);
+  border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.mh-ai { width: 24px; height: 24px; border-radius: 7px; background: var(--blue); color: #fff; font-size: 11px;
+  font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+@media (max-width: 720px) {
+  .mh { grid-template-columns: 1fr; justify-items: center; gap: 18px; }
+  .mh-right { width: 100%; }
+}
+
 .pb-stu { padding: 0; margin-top: 12px; }
 .pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }

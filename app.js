@@ -2392,7 +2392,7 @@
     // Право `clients`, а не `zaezdy`: раздел показывает учеников и их чек-листы, и
     // ручка доски закрыта тем же правом. У преподавателя `zaezdy` есть, а клиентов
     // нет — он увидел бы пункт меню, который отвечает ему отказом.
-    { id: 'points', label: 'Сопровождение', icon: 'target', cap: 'clients' },
+    { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
@@ -46392,6 +46392,56 @@
       '</div>';
   }
 
+  /* «Моя мотивация» — герой экрана тьютора: круг (заработано против впереди),
+     что идет в ближайшую выплату, и живая строка от агента. Все числа — из того же
+     ответа сервера, что и список: earned и ahead по каждому ученику, due_now в payout.
+     Второй копии правила отсечки 10/20 тут нет, только сумма готовых полей. */
+  function pbHero(box) {
+    var studs = box.students || [];
+    var earned = 0, ahead = 0, closed = 0;
+    studs.forEach(function (s) {
+      earned += (s.money && s.money.earned) || 0;
+      ahead += (s.money && s.money.ahead) || 0;
+      (s.points || []).forEach(function (p) { if (p.closedAt) closed++; });
+    });
+    var planned = earned + ahead;
+    var pct = planned > 0 ? Math.round(earned / planned * 100) : 0;
+    var due = (box.payout && box.payout.amount) || 0;
+    var payDate = box.payout && box.payout.date ? fmtDay(box.payout.date) : '';
+
+    var praise;
+    if (!studs.length) {
+      praise = 'Как появятся ученики, тут будет видно, сколько ты заработаешь и за что.';
+    } else if (closed === 0) {
+      praise = 'Пока закрытых задач нет. Закрой первую по любому ученику ниже — и сумма появится здесь.';
+    } else {
+      praise = 'Красавчик, закрыто ' + closed + ' ' + plural(closed, 'задача', 'задачи', 'задач') +
+        ' на ' + fmtMoney(earned) + ' ₽.' +
+        (due > 0 ? ' В ближайшую выплату ' + payDate + ' идет ' + fmtMoney(due) + ' ₽.' : '') +
+        (ahead > 0 ? ' Впереди еще ' + fmtMoney(ahead) + ' ₽ по открытым задачам.' : '');
+    }
+
+    return '<div class="card mh">' +
+      '<div class="mh-ringbox">' +
+        '<div class="mh-ring" style="--mp:' + pct + '%"><div class="mh-hole">' +
+          '<b class="num">' + fmtMoney(planned) + '</b><span>всего по ученикам</span>' +
+        '</div></div>' +
+      '</div>' +
+      '<div class="mh-right">' +
+        '<div class="mh-legend">' +
+          '<div class="mh-leg"><span class="mh-dot g"></span>' +
+            '<span class="mh-lt">Заработано<i>закрытые задачи</i></span>' +
+            '<b class="num mh-g">' + fmtMoney(earned) + ' ₽</b></div>' +
+          '<div class="mh-leg"><span class="mh-dot n"></span>' +
+            '<span class="mh-lt">Впереди<i>открытые задачи по плану</i></span>' +
+            '<b class="num">' + fmtMoney(ahead) + ' ₽</b></div>' +
+        '</div>' +
+        (due > 0 ? '<div class="mh-due">В ближайшую выплату ' + esc(payDate) +
+          ': <b class="num">' + fmtMoney(due) + ' ₽</b></div>' : '') +
+        '<div class="mh-praise"><span class="mh-ai">ИИ</span><span>' + esc(praise) + '</span></div>' +
+      '</div></div>';
+  }
+
   function renderPointsBoard(view) {
     var seg = pbSeg();
     if (seg === 'pay') return renderPayouts(view);
@@ -46418,7 +46468,8 @@
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
-    view.innerHTML = pbTabs() + head + list;
+    var top = seg === 'my' ? pbHero(box) : head;
+    view.innerHTML = pbTabs() + top + list;
     pbWire(view);
   }
 
