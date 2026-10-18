@@ -2730,6 +2730,10 @@ a { color: inherit; text-decoration: none; }
 /* поле, которое в текущем режиме формы не спрашивают (например направление у
    шага цели — он берет его у цели) */
 .al-f.hid { display: none; }
+/* Та же грабля, что у .al-foot ниже: свой display у .al-f переигрывает атрибут
+   hidden, и поле «Дата и время» висело в форме встречи даже при выборе
+   «Сейчас» — пустое и непонятно зачем (18.10.2026). */
+.al-f[hidden] { display: none; }
 .al-l { font-size: 11.5px; font-weight: 600; color: var(--ink-2); letter-spacing: .01em; }
 .al-l i { color: var(--blue); font-style: normal; }
 /* border: 0 — иначе браузер рисует свою серую рамку поверх нашей inset-обводки,

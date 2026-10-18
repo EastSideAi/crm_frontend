@@ -8242,7 +8242,14 @@
       right = '<span class="sev n-off">разбирается</span>';
     }
     // Запись — кнопкой, а не словом в подписи: за ней ходят чаще всего (Павел 08.09.2026).
-    var rec = m.url ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>' : '';
+    // У своей встречи прямой ссылки нет: она подписана и живет полчаса, поэтому
+    // берем ее по нажатию, иначе к вечеру кнопка вела бы в никуда.
+    var rec = m.url
+      ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>'
+      : (m.video_ready && m.room_id
+          ? '<button type="button" class="qchip mt-rec" data-mrec="' + m.room_id + '">' +
+              ic('play', 12) + 'Запись</button>'
+          : '');
     var tasks = m.tasks || [];
     var open = !!state.meetOpen[m.key];
     var fold = tasks.length
@@ -10183,6 +10190,25 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mcard]'), function (b) {
       b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
+    });
+    /* Ссылка на свою запись живет полчаса и подписана, поэтому ее берут в
+       момент нажатия. Открываем в новой вкладке: файл начнет скачиваться, а
+       CRM останется на месте. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mrec]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.classList.contains('loading')) return;
+        b.classList.add('loading');
+        api('/admin/api/meet/rooms/' + b.getAttribute('data-mrec') + '/video')
+          .then(function (r) {
+            b.classList.remove('loading');
+            if (r && r.url) window.open(r.url, '_blank', 'noopener');
+            else showToast('Записи нет');
+          })
+          .catch(function (e) {
+            b.classList.remove('loading');
+            showToast((e && e.body && e.body.detail) || 'Запись не отдалась, попробуй еще раз');
+          });
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mfold]'), function (b) {
       b.addEventListener('click', function () {
@@ -14260,7 +14286,17 @@
               '<button type="button" class="on" data-kind="team">Только команда</button>' +
               '<button type="button" data-kind="sales">Ученик или клиент</button>' +
             '</div></div>' +
-          '<div class="al-hint" id="mr-kindnote"></div>') +
+          '<div class="al-hint" id="mr-kindnote"></div>' +
+          /* Запись картинкой. У разговора с учеником включена сразу: его запись
+             ученик пересматривает, а тьютор без нее не закроет выплату. У
+             планерки выключена — час картинки это гигабайт, и внутренняя кухня
+             потом никому не нужна. Звук пишется всегда, из него конспект. */
+          '<div class="al-f"><span class="al-l">Запись</span>' +
+            '<div class="due-seg" id="mr-vid">' +
+              '<button type="button" data-vid="0">Только звук</button>' +
+              '<button type="button" data-vid="1">Звук и видео</button>' +
+            '</div></div>' +
+          '<div class="al-hint" id="mr-vidnote"></div>') +
           // Направление нужно, чтобы встреча легла в свой отдел в разделе
           // «Ближайшие». Не обязательное: у общей планерки отдела нет.
           '<label class="al-f"><span class="al-l">Направление</span>' +
@@ -14322,13 +14358,26 @@
       note.textContent = t || '';
     };
     var kind = edit ? (room.kind || 'team') : 'team';
+    var video = false;
     if (!edit) {
+      var vidNote = function () {
+        var seg = el('mr-vid');
+        Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+          x.classList.toggle('on', x.getAttribute('data-vid') === (video ? '1' : '0'));
+        });
+        el('mr-vidnote').textContent = video
+          ? 'Запишу картинку целиком: камеры и показ экрана. Час весит около гигабайта, ' +
+            'скачать можно из карточки встречи.'
+          : 'Запишу только речь — из нее соберу конспект и задачи. Видео не будет.';
+      };
       var kindNote = function () {
         el('mr-kindnote').textContent = kind === 'team'
           ? 'Войдут только свои: чужой по пересланной ссылке не попадет.'
           : 'Войдет любой по ссылке — она и есть пропуск. Не пересылайте ее дальше.';
       };
       kindNote();
+      video = kind !== 'team';
+      vidNote();
       Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (b) {
         b.addEventListener('click', function () {
           kind = b.getAttribute('data-kind');
@@ -14336,6 +14385,16 @@
             x.classList.toggle('on', x === b);
           });
           kindNote();
+          // Сменил вид встречи — переставляем и запись: консультацию пишем,
+          // планерку нет. Руками переключить можно сразу после этого.
+          video = kind !== 'team';
+          vidNote();
+        });
+      });
+      Array.prototype.forEach.call(el('mr-vid').querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () {
+          video = b.getAttribute('data-vid') === '1';
+          vidNote();
         });
       });
     }
@@ -14398,6 +14457,7 @@
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
       var body = { title: title, kind: kind, dept: (el('mr-dept') || {}).value || '',
                    invite: pick ? pick.get() : [] };
+      if (!edit) body.video = video;
       if (when === 'plan' && el('mr-date')) {
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
@@ -26522,6 +26582,13 @@
       marks += '<a class="mx-tag mx-tagb" href="' + esc(m.url) + '" target="_blank" rel="noopener"' +
         ' aria-label="' + esc(m.title || 'Встреча') + ': смотреть запись">' +
         ic('play', 11) + 'запись</a>';
+    } else if (m.video_ready && m.room_id && m.state !== 'live') {
+      /* Своя запись лежит у нас, и ссылка на нее подписана и живет полчаса.
+         Поэтому не ссылка, а кнопка: адрес берется в момент нажатия, иначе к
+         вечеру он уже никуда не ведет. */
+      marks += '<button type="button" class="mx-tag mx-tagb" data-mxrec="' + m.room_id + '"' +
+        ' aria-label="' + esc(m.title || 'Встреча') + ': скачать запись">' +
+        ic('play', 11) + 'запись</button>';
     }
     var sub = [];
     if (m.by) sub.push(esc(m.by));
@@ -27240,6 +27307,24 @@
         state.meetxJump = b.getAttribute('data-mxat');
         state.meetxOpen = b.getAttribute('data-mxopen');
         renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxrec]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (b.classList.contains('loading')) return;
+        b.classList.add('loading');
+        api('/admin/api/meet/rooms/' + b.getAttribute('data-mxrec') + '/video')
+          .then(function (r) {
+            b.classList.remove('loading');
+            if (r && r.url) window.open(r.url, '_blank', 'noopener');
+            else showToast('Записи нет');
+          })
+          .catch(function (e2) {
+            b.classList.remove('loading');
+            showToast((e2 && e2.body && e2.body.detail) ||
+              'Запись не отдалась, попробуй еще раз');
+          });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
