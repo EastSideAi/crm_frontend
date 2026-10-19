@@ -2476,9 +2476,12 @@
     /* Дашборд выплат подрядчикам: админ вносит выплату (получатель, реквизиты, чек/акт),
        и та же запись падает расходом фонда подрядчиков в ведомость — ручного переноса
        из дашборда в ведомость больше нет. Отдельного объекта «выплата» нет: выплата и
-       есть строка расхода фонда. */
+       есть строка расхода фонда. Отдельный дашборд для всех, у кого есть финансы, плюс
+       та же запись видна на карточке фонда подрядчиков — две двери, одна касса (владелец
+       19.10.2026: админам нужен единый экран как расчётные листы, в ведомость не лазить;
+       отменяет сокрытие от сентября, когда выплаты увели только внутрь Фондов). */
     { id: 'finpayouts', label: 'Выплаты подрядчикам', icon: 'card', space: 'fin',
-      cap: 'finmodel|finmodel_contractors', hideCap: 'finmodel' },
+      cap: 'finmodel|finmodel_contractors' },
     /* Операционные расходы: узкий экран для того, кто вносит хозяйственные траты
        (сервисы, административное), но всю ведомость с зарплатами не видит. У кого есть
        ведомость целиком — вносит их на «Прямых расходах», поэтому пункт ему скрыт. */
@@ -19981,6 +19984,7 @@
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
               calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
+              payHist: null, payScope: 'period',
               opex: null, opexBusy: false, tax: null, taxYear: null,
               scope: 'all', opsScope: 'all', src: '', kind: '', q: '', err: '', _t: null };
 
@@ -23076,6 +23080,19 @@
     });
   }
 
+  // Вся история выплат подрядчикам — за все ведомости одной лентой, новое сверху.
+  // Отдельная ручка без периода: дашборд по умолчанию за ведомость, историю человек
+  // открывает сам, чтобы видеть «когда какая выплата была» и не прыгать по периодам.
+  function finLoadPayHist() {
+    finBusy('payHist', function (done) {
+      api('/admin/api/fin/payouts/history')
+        .then(function (r) {
+          FIN.payHist = r; FIN.err = '';
+          if (curSpace() === 'fin') renderAll();
+        }).catch(function (e) { finFail(e, 'payHist'); }).then(done);
+    });
+  }
+
   // Короткая сводка реквизитов для строки: получатель по счёту и хвост счёта. Полный
   // счёт в списке не светим — он виден в самой выплате.
   function finPayoutReq(p) {
@@ -23087,17 +23104,87 @@
     return bits.join(' · ');
   }
 
+  // Одна строка истории/периода выплат: дата, получатель с подстрочником, сумма,
+  // статус и чип документа. Подстрочник собираем снаружи (в истории туда ещё идёт
+  // ведомость), поэтому берём его аргументом.
+  function finPayoutRow(it, sub, clickable) {
+    var docChip = it.doc
+      ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
+      : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
+    return '<div class="trow fin-grid fe-grid"' +
+      (clickable ? ' data-payout="' + it.id + '"' : '') + '>' +
+      '<span class="num fo-date">' + finDate(it.date) + '</span>' +
+      '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
+        (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+      '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
+      '<span class="fo-st">' +
+        '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
+          esc(it.status) + '</span>' + docChip +
+      '</span>' +
+    '</div>';
+  }
+
   function renderFinPayouts(view) {
+    // Вносит и правит выплаты финансист (finmodel_edit) ИЛИ ответственный за выплаты
+    // (finmodel_contractors). Тот, у кого ведомость только на просмотр (finmodel),
+    // список видит, но кнопок ввода нет.
+    var canFix = can('finmodel_edit|finmodel_contractors');
+    // Охват: по умолчанию выплаты за выбранную ведомость, «Вся история» — за все
+    // ведомости одной лентой, чтобы видеть когда какая выплата была и не прыгать по
+    // периодам (как в карте операций). История только на просмотр: вносят в ведомость.
+    var scopeChips = [['period', 'Эта ведомость'], ['all', 'Вся история']].map(function (sc) {
+      return '<button class="qchip' + (FIN.payScope === sc[0] ? ' on' : '') +
+        '" data-pscope="' + sc[0] + '">' + sc[1] + '</button>';
+    }).join('');
+    var bindScope = function () {
+      Array.prototype.forEach.call(view.querySelectorAll('[data-pscope]'), function (b) {
+        b.addEventListener('click', function () {
+          FIN.payScope = b.getAttribute('data-pscope'); renderAll();
+        });
+      });
+    };
+
+    if (FIN.payScope === 'all') {
+      if (!FIN.payHist) {
+        if (FIN.err) return finErrView(view);
+        view.innerHTML = dashSkeleton(); finLoadPayHist(); return;
+      }
+      if (FIN.payHist === 'none') return finErrView(view);
+      var H = FIN.payHist, hitems = H.items || [];
+      var hFactN = hitems.filter(function (i) { return i.status === 'факт'; }).length;
+      var htiles = [
+        { label: 'Выплачено всего', value: finRub(H.total), sub: 'фактом за все ведомости' },
+        { label: 'Выплат', value: String(hFactN), sub: 'проведено фактом' },
+      ];
+      var hrows = hitems.map(function (it) {
+        var sub = [it.item, finPayoutReq(it.payout),
+                   it.period_name ? 'ведомость ' + it.period_name : '',
+                   it.comment || ''].filter(Boolean).map(esc).join(' · ');
+        return finPayoutRow(it, sub, false);
+      }).join('');
+      view.innerHTML = statBar(htiles) +
+        '<div class="card listcard">' +
+          '<div class="list-tools">' +
+            '<div><div class="t fe-t">Выплаты подрядчикам</div>' +
+              '<div class="s fe-s">вся история выплат за все ведомости, новое сверху</div></div>' +
+            '<span class="list-count fin-count"><b>' + hitems.length + '</b> ' +
+              plural(hitems.length, 'выплата', 'выплаты', 'выплат') +
+              ' · всего <b>' + finRub(H.total) + '</b></span>' +
+          '</div>' +
+          '<div class="list-quick">' + scopeChips + '</div>' +
+          (hrows || '<div class="empty">Выплат подрядчикам пока нет.</div>') +
+        '</div>';
+      bindScope();
+      pageAnim(view);
+      return;
+    }
+
     if (!FIN.payouts) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadPayouts(); return;
     }
     if (FIN.payouts === 'none') return finErrView(view);
     var L = FIN.payouts, items = L.items || [], per = finPeriod();
-    // Вносит и правит выплаты финансист (finmodel_edit) ИЛИ ответственный за выплаты
-    // (finmodel_contractors). Тот, у кого ведомость только на просмотр (finmodel),
-    // список видит, но кнопок ввода нет.
-    var canFix = can('finmodel_edit|finmodel_contractors');
     var fact = 0, plan = 0, factN = 0, biggest = 0, noDoc = 0;
     items.forEach(function (i) {
       if (i.status === 'план') plan += i.amount;
@@ -23118,22 +23205,7 @@
         finPayoutReq(it.payout),
         it.comment || '',
       ].filter(Boolean).map(esc).join(' · ');
-      // Документ — не второй статус, а подтверждение: тихий чип с зелёной галочкой,
-      // чтобы он не спорил с зелёным «факт». Громким остаётся только амбер «нет
-      // документа» — это и есть то, на что смотрят перед закрытием.
-      var docChip = it.doc
-        ? '<span class="fst doc">' + ic('check', 11) + esc(it.doc.name || 'документ') + '</span>'
-        : (it.status === 'факт' ? '<span class="fst wait">нет документа</span>' : '');
-      return '<div class="trow fin-grid fe-grid" data-payout="' + it.id + '">' +
-        '<span class="num fo-date">' + finDate(it.date) + '</span>' +
-        '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
-          (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
-        '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
-        '<span class="fo-st">' +
-          '<span class="fst ' + (it.status === 'факт' ? 'ok' : 'wait') + '">' +
-            esc(it.status) + '</span>' + docChip +
-        '</span>' +
-      '</div>';
+      return finPayoutRow(it, sub, true);
     }).join('');
 
     var addBtn = canFix
@@ -23151,11 +23223,13 @@
             (plan ? ' · план <b>' + finRub(plan) + '</b>' : '') + '</span>' +
           addBtn +
         '</div>' +
+        '<div class="list-quick">' + scopeChips + '</div>' +
         (rows ||
           '<div class="empty">Выплат подрядчикам в этой ведомости ещё нет. ' +
           (canFix ? 'Нажмите «Добавить выплату».' : 'Вносит их финансист.') + '</div>') +
       '</div>';
 
+    bindScope();
     var add = el('pp-add');
     if (add) add.addEventListener('click', function () { finPayoutForm(null); });
     if (canFix) {
