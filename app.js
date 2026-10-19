@@ -2547,8 +2547,13 @@
        Право то же, что на запись строки в ведомость, — finmodel_edit (деньги + реквизиты). */
     { id: 'finpartners', label: 'Партнёрские выплаты', icon: 'card', space: 'fin',
       cap: 'finmodel_edit' },
-    { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin' },
-    { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin' },
+    // Операции сложены под P&L (итог сверху — детали снизу, владелец 19.10.2026): лента
+    // операций это и есть строки, из которых P&L складывается, отдельного пункта меню нет.
+    // Запись скрыта ради cap и прямой ссылки #page/finops.
+    { id: 'finops', label: 'Операции', icon: 'rows', cap: 'finmodel', space: 'fin', hidden: true },
+    // Итоги подняты в Ведомость (оба про один период — вердикт периода сверху каскада,
+    // владелец 19.10.2026). Своего пункта меню нет; запись скрыта ради cap и ссылки.
+    { id: 'finmetrics', label: 'Итоги', icon: 'chart', cap: 'finmodel', space: 'fin', hidden: true },
     // ─── АНАЛИТИКА ───
     { id: 'finpnl', label: 'P&L', icon: 'chart', cap: 'finmodel', space: 'fin' },
     { id: 'finprograms', label: 'Программы', icon: 'globe', cap: 'finmodel', space: 'fin' },
@@ -3606,7 +3611,8 @@
         var vtbAcc = null;
         (sh.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtbAcc = a; });
         ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
-          '. К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
+          '. Сверху итоги периода, ниже каскад ведомости. ' +
+          'К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
           finRub(vtbAcc ? vtbAcc.live : (sh.metrics ? sh.metrics.on_vtb : 0)) + '</b>.' +
           ((sh.warnings || []).length
             ? ' Перед закрытием сверьте остатки — что не сошлось, показано в карточке ' +
@@ -3614,7 +3620,8 @@
             : '');
       } else if (state.page === 'finpnl') {
         ph = 'Нарастающим итогом. Доходы и расходы — только факт, отчисления в фонды — ' +
-          'по расчету периода, даже пока они планом.';
+          'по расчету периода, даже пока они планом. Ниже — лента операций, из которых ' +
+          'цифры сложились.';
       } else if (state.page === 'finincome') {
         ph = 'Что пришло на расчетный счет за ведомость <b>' + esc(per.name) + '</b>. ' +
           'Дубль платежа из кассы снимите галочкой «в доход» — строка останется видна, ' +
@@ -20705,9 +20712,21 @@
         : '') +
     '</div>';
 
+    // Итоги периода — сверху Ведомости (владелец 19.10.2026: вердикт по периоду и
+    // каскад про один период, их свели на один экран). Рисуются из той же функции, что
+    // страница finmetrics, в свой контейнер #sheet-metrics ниже.
+    var metricsHead = '<div class="sec-head fin-metrics-head" style="margin:2px 4px 10px"><span class="ic">' + ic('chart', 14) + '</span>' +
+      '<div><div class="t">Итоги периода</div>' +
+      '<div class="s">вердикт по этой ведомости: сколько заработали и хватает ли денег ее закрыть</div>' +
+      '</div></div>';
+    var sheetHead = '<div class="sec-head fin-sheet-head" style="margin:26px 4px 10px"><span class="ic">' + ic('coins', 14) + '</span>' +
+      '<div><div class="t">Ведомость периода</div>' +
+      '<div class="s">каскад распределения, фонды и остатки по счетам</div>' +
+      '</div></div>';
     // «Плановая позиция периода» — справа от каскада (Роман 25.09): верхом правой
     // колонки, вёрсткой повторяет каскад слева.
-    view.innerHTML = bar + head + '<div class="grid">' +
+    view.innerHTML = metricsHead + '<div id="sheet-metrics"></div>' + sheetHead +
+      bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
       // Главное правой колонки наверх (владелец 19.10.2026): фонды и остатки по счетам —
       // то, на что смотрят каждый раз; плановая позиция, кэшфлоу, EBITDA и налог — ниже.
@@ -20742,6 +20761,9 @@
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
+    // Итоги периода сверху — после того как каркас Ведомости в DOM (контейнер существует).
+    var mBox = el('sheet-metrics');
+    if (mBox) renderFinMetricsInto(mBox);
     pageAnim(view);
   }
 
@@ -21293,6 +21315,13 @@
         }).join('') + '</div></div>'
       : '';
 
+    // Под P&L — лента операций: те самые движения, из которых цифры сложились (владелец
+    // 19.10.2026: итог сверху, детали снизу, отдельного пункта «Операции» больше нет).
+    // Рисуется из той же функции, что и страница finops, в свой контейнер #pnl-ops.
+    var opsHead = '<div class="sec-head fin-ops-head" style="margin:22px 4px 10px"><span class="ic">' + ic('rows', 14) + '</span>' +
+      '<div><div class="t">Операции</div>' +
+      '<div class="s">все движения, из которых сложились цифры выше — новое сверху, можно фильтровать</div>' +
+      '</div></div>';
     view.innerHTML = '<div class="grid">' +
       '<div class="sp7">' + lad + '</div>' +
       '<div class="sp5">' +
@@ -21300,8 +21329,11 @@
           '<div><div class="t">Статьи</div><div class="s">из чего сложились цифры слева</div></div></div>' +
           '<div class="fin-groups">' + (groups || '<div class="empty">Операций за этот отрезок нет.</div>') + '</div></div>' +
         offers +
-      '</div></div>';
+      '</div></div>' +
+      opsHead + '<div id="pnl-ops"></div>';
     pageAnim(view);
+    var opsBox = el('pnl-ops');
+    if (opsBox) renderFinOpsInto(opsBox);
   }
 
   /* Точка безубыточности — последняя строка структуры отчета, как владелец ее
@@ -21321,12 +21353,15 @@
   }
 
   /* Карта операций: все, что внесено, одной лентой. Новое сверху. */
-  function renderFinOps(view) {
+  function renderFinOps(view) { return renderFinOpsInto(view); }
+  // Лента операций в контейнер: отдельная страница finops (view) и блок под P&L рисуют
+  // из одной функции, обработчики вешаются внутри переданного контейнера.
+  function renderFinOpsInto(container) {
     if (!FIN.ops) {
-      if (FIN.err) return finErrView(view);
-      view.innerHTML = dashSkeleton(); finLoadOps(); return;
+      if (FIN.err) return finErrView(container);
+      container.innerHTML = dashSkeleton(); finLoadOps(); return;
     }
-    if (FIN.ops === 'none') return finErrView(view);
+    if (FIN.ops === 'none') return finErrView(container);
     var o = FIN.ops;
     /* Лента по умолчанию за все ведомости: операции не исчезают из истории, когда
        открывается новый период. Одной ведомостью человек ограничивает сам. */
@@ -21364,7 +21399,7 @@
       '</div>';
     }).join('');
 
-    view.innerHTML = '<div class="card listcard">' +
+    container.innerHTML = '<div class="card listcard">' +
       '<div class="list-tools">' +
         '<div class="searchwrap' + (FIN.q ? ' has-val' : '') + '">' + ic('search', 16) +
           '<input class="search" id="fo-q" placeholder="Поиск по контрагенту, статье или комментарию" value="' + esc(FIN.q) + '">' +
@@ -21400,15 +21435,15 @@
     }
     var qx = el('fo-qx');
     if (qx) qx.addEventListener('click', function () { FIN.q = ''; finLoadOps(); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-fops]'), function (b) {
+    Array.prototype.forEach.call(container.querySelectorAll('[data-fops]'), function (b) {
       b.addEventListener('click', function () {
         FIN.opsScope = b.getAttribute('data-fops'); finLoadOps();
       });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-fkind]'), function (b) {
+    Array.prototype.forEach.call(container.querySelectorAll('[data-fkind]'), function (b) {
       b.addEventListener('click', function () { FIN.kind = b.getAttribute('data-fkind'); finLoadOps(); });
     });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-fsrc]'), function (b) {
+    Array.prototype.forEach.call(container.querySelectorAll('[data-fsrc]'), function (b) {
       b.addEventListener('click', function () {
         var v = b.getAttribute('data-fsrc');
         FIN.src = FIN.src === v ? '' : v;
@@ -21417,13 +21452,13 @@
     });
     // Строка дохода с клиентом — кнопка в карточку (openLeadTab открывает её в новой
     // вкладке, как из ленты фондов). Без case_id строки этого обработчика не получают.
-    Array.prototype.forEach.call(view.querySelectorAll('[data-lead]'), function (n) {
+    Array.prototype.forEach.call(container.querySelectorAll('[data-lead]'), function (n) {
       n.addEventListener('click', function () {
         var cid = n.getAttribute('data-lead');
         if (cid) openLeadTab(cid);
       });
     });
-    pageAnim(view);
+    pageAnim(container);
   }
 
   /* ── Внесение строк ведомости ──────────────────────────────────────────────
@@ -26644,12 +26679,15 @@
      делись деньги со счета (движение). Последнее — главное недоразумение
      ведомости: остаток на счете и прибыль не равны, и экран обязан объяснить
      разницу словами, а не оставлять человека с двумя разными числами. */
-  function renderFinMetrics(view) {
+  function renderFinMetrics(view) { return renderFinMetricsInto(view); }
+  // Итоги периода в контейнер: своя страница finmetrics (view) и блок сверху Ведомости
+  // рисуют из одной функции. Обработчиков тут нет — только верстка.
+  function renderFinMetricsInto(container) {
     if (!FIN.sheet) {
-      if (FIN.err) return finErrView(view);
-      view.innerHTML = dashSkeleton(); finLoadSheet(); return;
+      if (FIN.err) return finErrView(container);
+      container.innerHTML = dashSkeleton(); finLoadSheet(); return;
     }
-    if (FIN.sheet === 'none') return finErrView(view);
+    if (FIN.sheet === 'none') return finErrView(container);
     if (!FIN.pnlp) finLoadPnlPeriod();
     var s = FIN.sheet, m = s.metrics || {}, cash = s.cash || {}, dist = s.distribution || {};
     var c = s.cascade;
@@ -26757,10 +26795,10 @@
         'Фонды уже вычтены из прибыли — они не делятся, а лежат на своих счетах.</div>' +
     '</div>';
 
-    view.innerHTML = bar + '<div class="grid">' +
+    container.innerHTML = bar + '<div class="grid">' +
       '<div class="sp7">' + (bridge || kpi) + flow + '</div>' +
       '<div class="sp5">' + (bridge ? kpi : '') + split + '</div></div>';
-    pageAnim(view);
+    pageAnim(container);
   }
 
   /* ── Команда и роли (Super Admin) ── */
