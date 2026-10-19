@@ -12734,3 +12734,103 @@ video.cs-media { background: #000; }
      дописывает правило в уехавшей верстке. */
   .fkb-search .al-in, .fkb-edit .al-in, .fkb-in-b { font-size: 16px; }
 }
+
+/* ════ УПРАВЛЕНИЕ · РНП (раздел manage) ════
+   Неделя руководителей и отделов. Порядок карточек — порядок встречи: проверка
+   прошлой недели, цифры, гипотезы, решения встреч. Якорь экрана — цифры недели
+   (кегль 20/700 у факта); остальное тихие списки на рецепте .dy-row: строка,
+   подпись людей под ней, чип статуса справа. Своих цветов нет: факт против плана
+   красится -ink тройкой (ok / risk / miss), просрочка — red-ink. */
+.mg-head { display: flex; align-items: center; gap: 16px; padding: 14px 20px; flex-wrap: wrap; }
+.mg-head .list-quick, .mg-nl { padding: 0; border: 0; }
+.mg-head .mg-depts { flex-basis: 100%; border-top: 1px solid var(--line); padding-top: 12px; }
+.mg-card { overflow: hidden; }
+.mg-note { padding: 0 24px 20px; font-size: 13px; color: var(--ink-2); line-height: 1.5; max-width: 72ch; }
+.mg-pad { padding: 0 24px 20px; display: grid; gap: 10px; }
+.mg-pad .shim { height: 34px; }
+.mg .sk-list { padding: 20px 24px; display: grid; gap: 10px; }
+.mg .sk-list .shim { height: 44px; }
+
+/* цифры недели */
+.mg-tbl { padding: 0 8px 8px; }
+.mg-tr { display: grid; grid-template-columns: minmax(0, 1fr) 90px 110px 90px 64px; gap: 12px;
+  align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); }
+.mg-tbl.noplan .mg-tr { grid-template-columns: minmax(0, 1fr) 110px 90px 64px; }
+.mg-tr.th { border-top: none; padding-top: 0; padding-bottom: 8px; font-size: 11px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.mg-tr .r { text-align: right; }
+.mg-l { font-size: 14px; font-weight: 600; letter-spacing: -.01em; min-width: 0; }
+.mg-l small { display: block; font-size: 12px; font-weight: 500; color: var(--ink-3); margin-top: 2px; letter-spacing: 0; }
+.mg-tr .num.big { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
+.mg-tr .mute { color: var(--ink-3); font-weight: 600; }
+.mg-tr .ok { color: var(--green-ink); } .mg-tr .risk { color: var(--amber-ink); } .mg-tr .miss { color: var(--red-ink); }
+.mg-d { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 7px;
+  background: var(--fill); color: var(--ink-2); }
+.mg-d.up { background: var(--green-soft); color: var(--green-ink); }
+.mg-d.down { background: var(--red-soft); color: var(--red-ink); }
+
+/* гипотезы и решения */
+.mg-list { border-top: 1px solid var(--line); }
+.mg-hyp, .mg-dec, .mg-lead { display: flex; align-items: center; gap: 14px; padding: 13px 24px;
+  border-bottom: 1px solid var(--line); position: relative; transition: background .12s var(--ease); }
+.mg-hyp:last-child, .mg-dec:last-child, .mg-lead:last-child { border-bottom: none; }
+.mg-hyp[role="button"], .mg-dec[role="button"] { cursor: pointer; }
+.mg-hyp:hover, .mg-dec:hover { background: #FBFBFC; }
+.mg-hyp:hover::before, .mg-dec:hover::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--blue); }
+.mg-hyp:focus-visible, .mg-dec:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--blue); }
+.mg-hyp.sub, .mg-dec.sub { padding-left: 52px; }
+.mg-n { flex: none; min-width: 40px; font-size: 12px; font-weight: 800; color: var(--blue);
+  background: var(--blue-tint); border-radius: 8px; padding: 4px 7px; text-align: center; }
+.mg-hyp.sub .mg-n { background: var(--fill); color: var(--ink-2); }
+.mg-hb { flex: 1; min-width: 0; }
+.mg-ht { font-size: 14px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
+.mg-ht a { color: inherit; text-decoration: none; }
+.mg-ht a:hover { color: var(--blue); }
+.mg-hm { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
+.mg-hm b { color: var(--ink-2); font-weight: 500; }
+.mg-hm b.ok, .mg-hm b.miss { font-weight: 600; }
+.mg-hm b.ok { color: var(--green-ink); } .mg-hm b.miss { color: var(--red-ink); }
+.mg-hw { font-size: 12px; color: var(--ink-3); margin-top: 3px; font-weight: 500; }
+.mg-hw .miss { color: var(--red-ink); font-weight: 600; }
+.mg-hyp .sev, .mg-dec .sev { flex: none; }
+.sev.mg-late { color: var(--red-ink); background: var(--red-soft); }
+.sev.mg-fail { color: var(--ink-2); }
+.mg-hyp .bp.sm { flex: none; width: 64px; justify-content: center; }
+/* место кнопки «Итог» держим и без нее: иначе чипы статусов гуляют по строкам */
+.mg-btnph { flex: none; width: 64px; }
+.mg-new { color: var(--blue); font-weight: 600; }
+.mg-tr .num { white-space: nowrap; }
+.mg-prev .sec-head .ic { background: var(--amber-soft); color: var(--amber-ink); }
+
+.mg-raw { padding: 0 24px 16px; display: grid; gap: 8px; }
+.mg-rawr { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 13px; font-weight: 600; }
+.mg-rawr span { flex: 1; }
+
+/* чистка лидов */
+.mg-lead { flex-wrap: wrap; }
+.mg-lead.off .mg-ht { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--line-2); }
+.mg-hint { color: var(--amber-ink); font-weight: 600; }
+.mg-nl { margin: 0; gap: 6px; }
+.mg-nl .qchip { padding: 6px 11px; }
+/* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */
+.mg-nl .qchip.hint { box-shadow: inset 0 0 0 1px var(--amber); color: var(--amber-ink); }
+
+@media (max-width: 760px) {
+  .mg-tr, .mg-tbl.noplan .mg-tr { grid-template-columns: minmax(0, 1fr) 78px 70px; gap: 8px; padding: 10px 12px; }
+  .mg-btnph { display: none; }
+  .mg-tr .c-pl, .mg-tr .c-dl { display: none; }
+  .mg-tr .num.big { font-size: 17px; }
+  .mg-hyp, .mg-dec, .mg-lead { padding: 12px 16px; flex-wrap: wrap; }
+  .mg-hyp.sub, .mg-dec.sub { padding-left: 32px; }
+  /* Текст гипотезы на всю ширину, статус и «Итог» уходят строкой ниже под текст:
+     в одну строку им на 390px достается колонка в пять слов. */
+  .mg-hyp { align-items: flex-start; row-gap: 10px; }
+  .mg-hyp .mg-hb { flex: 1 1 calc(100% - 60px); }
+  .mg-hyp > .sev { margin-left: 54px; }
+  .mg-dec .mg-hb, .mg-lead .mg-hb { flex-basis: 100%; }
+  .mg-note, .mg-raw { padding-left: 16px; padding-right: 16px; }
+  .mg-head { padding: 12px 14px; }
+  .mg-head .brd-nav { margin-left: 0; }
+}
