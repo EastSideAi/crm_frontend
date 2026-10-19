@@ -23852,9 +23852,8 @@
       '</div>';
     }).join('');
 
-    var canFix = can('finmodel_edit');
     // Партнёры без клиентов — компактной карточкой: имя, код и кнопка скопировать ссылку,
-    // чтобы завёл и сразу отдал партнёру его реф-ссылку.
+    // чтобы было видно, кому ещё не капало, и под рукой была его реф-ссылка.
     var idleCards = idle.map(function (p) {
       return '<div class="card listcard fs-seller"><div class="list-tools">' +
         '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
@@ -23872,23 +23871,16 @@
 
     var body = (cards || idleCards)
       ? cards + idleBlock
-      : '<div class="card listcard"><div class="empty">Партнёров пока нет. ' +
-        (canFix ? 'Нажмите «Добавить партнёра».' : 'Заводит их команда.') + '</div></div>';
-
-    // Кнопка завести партнёра — кабинет регистрации демо, поэтому заводим здесь.
-    var addBar = canFix
-      ? '<div class="list-quick" style="margin:2px 4px 10px"><button class="qchip add" id="fpt-add">' +
-        ic('plus', 12) + 'Добавить партнёра</button></div>'
-      : '';
+      : '<div class="card listcard"><div class="empty">Партнёров пока нет.</div></div>';
 
     // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
-    view.innerHTML = statBar(tiles) + rateBar + addBar + body;
+    // Завести партнёра здесь нельзя: это делается отдельно (кабинет партнёра), в финансах
+    // только выплата. Поэтому экран показывает начисления и выплаты, а не заведение.
+    view.innerHTML = statBar(tiles) + rateBar + body;
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
-    var pAdd = el('fpt-add');
-    if (pAdd) pAdd.addEventListener('click', function () { finPartnerAddForm(); });
     Array.prototype.forEach.call(view.querySelectorAll('[data-copylink]'), function (b) {
       b.addEventListener('click', function () { copyText(b.getAttribute('data-copylink'), b); });
     });
@@ -23917,32 +23909,6 @@
       });
     });
     pageAnim(view);
-  }
-
-  function finPartnerAddForm() {
-    openSheet('Добавить партнёра',
-      'Заводим партнёра и выдаём ему код — из него соберётся реф-ссылка, её отдадите партнёру. ' +
-      'Как он приведёт клиента и тот оплатит, начисление появится здесь само.',
-      [['first_name', 'line', 'Имя', ''],
-       ['last_name', 'line', 'Фамилия', ''],
-       ['email', 'line', 'Почта', ''],
-       ['phone', 'line', 'Телефон (необязательно)', '']],
-      function (v, close) {
-        if (!String(v.first_name || '').trim() || !String(v.last_name || '').trim())
-          return 'Впишите имя и фамилию партнёра';
-        var email = String(v.email || '').trim();
-        if (email.indexOf('@') < 0 || email.indexOf('.') < 0)
-          return 'Впишите корректную почту';
-        czSend('/admin/api/partners', 'POST', {
-          first_name: v.first_name, last_name: v.last_name, email: email, phone: v.phone,
-        }).then(function (resp) {
-          close(); FIN.partners = null; renderAll();
-          // Сразу кладём ссылку в буфер — чаще всего следующим шагом её и отправляют партнёру.
-          var link = MK_GO + encodeURIComponent(resp.ref_code || '');
-          copyText(link);
-          showToast('Партнёр заведён, ссылка скопирована: ' + link);
-        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
-      }, false, 'Партнёрские выплаты', 'Завести');
   }
 
   function finPartnerReqForm(p) {
