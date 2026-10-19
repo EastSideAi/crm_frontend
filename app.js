@@ -47164,6 +47164,23 @@
      правила отсечки 10/20 числа в браузере нет намеренно. */
   var PB = { my: null, all: null, pay: null, busy: false };
 
+  /* Личная мотивация менеджера продаж: его заработок за месяц из /motivation/my.
+     У тьютора мотивация — точки по ученикам, у менеджера — процент со своих сделок. */
+  var MM = { my: null, busy: false };
+  function mmLoad(force) {
+    if (MM.my && !force) return;
+    if (MM.busy) return;
+    MM.busy = true;
+    api('/admin/api/motivation/my').then(function (r) {
+      MM.my = r; MM.busy = false;
+      if (state.page === 'points') renderView();
+    }).catch(function () {
+      MM.my = { failed: true }; MM.busy = false;
+      if (state.page === 'points') renderView();
+    });
+  }
+  function isSalesManager() { return state.role === 'sales_manager' || state.role === 'manager'; }
+
   var PB_SEGS = [
     { id: 'my', label: 'Мои ученики' },
     { id: 'all', label: 'Все ученики', cap: 'zaezd_review' },
@@ -47342,6 +47359,7 @@
   }
 
   function renderPointsBoard(view) {
+    if (isSalesManager()) return renderManagerMot(view);
     var seg = pbSeg();
     if (seg === 'pay') return renderPayouts(view);
     var box = PB[seg];
@@ -47370,6 +47388,67 @@
     var top = seg === 'my' ? pbHero(box) : head;
     view.innerHTML = pbTabs() + top + list;
     pbWire(view);
+  }
+
+  /* Экран мотивации менеджера продаж: круг заработка за месяц + из чего он сложился.
+     Заработано — процент с пришедших оплат (и смены/бонусы руками); в работе — счета
+     на оплате. Стрик по скорости ответа появится, когда подключим чаты (бота). */
+  function renderManagerMot(view) {
+    var box = MM.my;
+    if (!box) { mmLoad(); view.innerHTML = '<div class="card"><div class="empty">Считаем твою мотивацию…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = '<div class="card"><div class="empty">Не загрузилось — похоже, отвалилась сеть. Обнови страницу.</div></div>';
+      return;
+    }
+    var earned = box.earned || 0, ahead = box.ahead || 0;
+    var planned = earned + ahead;
+    var pct = planned > 0 ? Math.round(earned / planned * 100) : 0;
+
+    var praise;
+    if (!earned && !ahead) praise = 'Как пойдут оплаты по твоим сделкам, тут появится заработок за месяц.';
+    else if (!earned) praise = 'Пока оплат нет, но в работе уже ' + fmtMoney(ahead) + ' ₽. Доведи сделки до оплаты — и они станут твоими.';
+    else praise = 'Красавчик, ' + fmtMoney(earned) + ' ₽ за месяц уже твои' +
+      (box.deals ? ' по ' + box.deals + ' ' + plural(box.deals, 'сделке', 'сделкам', 'сделкам') : '') + '.' +
+      (ahead > 0 ? ' В работе еще ' + fmtMoney(ahead) + ' ₽.' : '');
+
+    var hero = '<div class="card mh">' +
+      '<div class="mh-ringbox"><div class="mh-ring" style="--mp:' + pct + '%"><div class="mh-hole">' +
+        '<b class="num">' + fmtMoney(planned) + '</b><span>за месяц</span></div></div></div>' +
+      '<div class="mh-right">' +
+        '<div class="mh-legend">' +
+          '<div class="mh-leg"><span class="mh-dot g"></span>' +
+            '<span class="mh-lt">Заработано<i>оплаты и начисления</i></span>' +
+            '<b class="num mh-g">' + fmtMoney(earned) + ' ₽</b></div>' +
+          '<div class="mh-leg"><span class="mh-dot n"></span>' +
+            '<span class="mh-lt">В работе<i>счета на оплате</i></span>' +
+            '<b class="num">' + fmtMoney(ahead) + ' ₽</b></div>' +
+        '</div>' +
+        '<div class="mh-praise"><span class="mh-ai">ИИ</span><span>' + esc(praise) + '</span></div>' +
+      '</div></div>';
+
+    function roleWord(role) {
+      return role === 'closer' ? 'провел консультацию' : role === 'setter' ? 'довел в чате' : 'продал и довел';
+    }
+    function dealRow(ln, done) {
+      var sub = (ln.title ? esc(ln.title) : 'Оплата') + ' · ' + roleWord(ln.role) +
+        (ln.kind === 'refunded' ? ' · возврат' : '');
+      return '<div class="mm-row"><div class="mm-main"><div class="mm-nm">' + esc(ln.client || 'Клиент') + '</div>' +
+        '<div class="mm-what">' + sub + '</div></div>' +
+        '<div class="mm-sum"><b class="num ' + (done ? 'mm-earned' : 'mm-ahead') + '">' + fmtMoney(ln.rub) + ' ₽</b>' +
+        '<span>' + (done ? 'процент с оплаты' : 'впереди') + '</span></div></div>';
+    }
+    var lines = box.lines || [], pending = box.pending || [];
+    var earnedBlock = lines.length
+      ? '<div class="mm-h">Заработано</div><div class="mm-list">' + lines.map(function (l) { return dealRow(l, true); }).join('') + '</div>'
+      : '';
+    var aheadBlock = pending.length
+      ? '<div class="mm-h">В работе</div><div class="mm-list">' + pending.map(function (l) { return dealRow(l, false); }).join('') + '</div>'
+      : '';
+    var empty = (!lines.length && !pending.length)
+      ? '<div class="card"><div class="empty">Сделок за этот месяц пока нет. Как появятся оплаты — они встанут сюда.</div></div>'
+      : '';
+
+    view.innerHTML = hero + earnedBlock + aheadBlock + empty;
   }
 
   function renderPayouts(view) {
