@@ -20452,8 +20452,11 @@
        движение за период (пришло минус ушло), без остатка с прошлого. Пока остаток
        ВТБ равен нулю, обе цифры совпадают — и разойдутся ровно в тот день, когда
        остаток счета внесут. Подпись «сколько реально на ВТБ» обязана быть правдой. */
-    var vtb = null;
-    (s.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtb = a; });
+    var vtb = null, accById = {};
+    (s.accounts || []).forEach(function (a) {
+      accById[a.id] = a;
+      if (a.id === 'vtb') vtb = a;
+    });
     var bar = statBar([
       { label: 'Доход к зачислению', value: finRub(c.income), sub: 'уже за вычетом комиссии' },
       { label: 'Дивиденды', value: finRub(c.dividends), sub: 'после всех отчислений' },
@@ -20495,11 +20498,20 @@
         (editable ? '. Правило фонда меняется по клику на строке' : '') + '</div></div></div>' +
       '<div class="fc-rows">' + rows.map(function (r) {
         var live = editable && r.rule;
-        return '<div class="fc-row ' + r.cls + (live ? ' click' : '') + '"' +
+        /* Отчисление в фонд до закрытия ведомости стоит планом, а деньги переводят в
+           банке посреди периода. Кнопка «Пополнили фонд» записывает этот перевод, и
+           строка красится зелёным — видно, по каким фондам деньги уже ушли. Сумма от
+           нажатия не меняется: остаток фонда и кэшфлоу считают план и факт одинаково. */
+        var mv = r.rule && (r.rule.moved_plan > 0 || r.rule.moved_done > 0) ? r.rule : null;
+        var filled = mv && mv.moved_done > 0;
+        var left = mv ? mv.moved_plan : 0;
+        return '<div class="fc-row ' + r.cls + (live ? ' click' : '') +
+          (filled && left <= 0 ? ' filled' : '') + '"' +
           (live ? ' data-frule="' + esc(r.rule.account_id) + '"' : '') + '>' +
           '<div class="fc-l"><span class="fc-name">' + esc(r.name) +
             (live ? '<span class="fc-pen">' + ic('pen', 11) + '</span>' : '') + '</span>' +
-            (r.why ? '<span class="fc-why">' + esc(r.why) + '</span>' : '') + '</div>' +
+            (r.why ? '<span class="fc-why">' + esc(r.why) + '</span>' : '') +
+            (mv ? finFillLine(mv, filled, left, editable) : '') + '</div>' +
           '<div class="fc-v num' + (r.v < 0 && r.cls !== 'out' ? ' neg' : '') + '">' + finRub(r.v) + '</div></div>';
       }).join('') + '</div></div>';
 
@@ -20524,7 +20536,11 @@
       '<div class="fin-funds">' + (s.funds || []).filter(function (f) {
         return f.kind === 'фонд';
       }).map(function (f) {
-        return '<div class="ff-row' + (f.alert ? ' warn' : '') + '">' +
+        var bank = accById[f.account_id];
+        var bdiff = (bank && bank.actual !== null && bank.actual !== undefined)
+          ? bank.actual - bank.closing : null;
+        return '<div class="ff-row' + (f.alert ? ' warn' : '') +
+          (bdiff !== null && Math.abs(bdiff) < 0.01 ? ' matched' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(f.name) + '</span>' +
             '<span class="ff-v num">' + finRub(f.next) + '</span></div>' +
           /* «Отложили за период» вынесено из серой строки мелочей в заметную плашку
@@ -20535,6 +20551,7 @@
             (f.added > 0 ? '+' : '') + finRub(f.added) + '</b></div>' +
           '<div class="ff-sub"><span>было ' + finNum(f.opening) + '</span>' +
             '<span>потратили ' + finNum(f.spent) + '</span></div>' +
+          finBankLine(accById[f.account_id], editable) +
           /* Сервер говорит «фонд ушел в минус», сравнивая с остатком ДО отложений
              этого периода. Рядом с положительным итогом такая фраза читается как
              ошибка, поэтому показываем ту самую цифру, о которой речь. */
@@ -20764,6 +20781,40 @@
           (s.accounts || []).forEach(function (a) { if (a.id === id) finActualForm(a); });
         });
       });
+      // Кнопки внутри строк каскада и фондов: сама строка каскада открывает правило
+      // фонда, поэтому клик по кнопке до нее доходить не должен.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-ffill]'), function (n) {
+        n.addEventListener('click', function (e) {
+          e.stopPropagation();
+          finDo('/admin/api/fin/fund/settle', 'POST',
+                { period_id: FIN.id, account_id: n.getAttribute('data-ffill') },
+                'Фонд пополнен');
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-funfill]'), function (n) {
+        n.addEventListener('click', function (e) {
+          e.stopPropagation();
+          finDo('/admin/api/fin/fund/settle', 'POST',
+                { period_id: FIN.id, account_id: n.getAttribute('data-funfill'),
+                  undo: true },
+                'Отметка снята, отчисление снова в плане');
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-fmatch]'), function (n) {
+        n.addEventListener('click', function (e) {
+          e.stopPropagation();
+          finDo('/admin/api/fin/account/match', 'POST',
+                { period_id: FIN.id, account_id: n.getAttribute('data-fmatch') },
+                'Сверено с банком');
+        });
+      });
+      Array.prototype.forEach.call(view.querySelectorAll('[data-fother]'), function (n) {
+        n.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = n.getAttribute('data-fother');
+          (s.accounts || []).forEach(function (a) { if (a.id === id) finActualForm(a); });
+        });
+      });
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
@@ -20771,6 +20822,63 @@
     var mBox = el('sheet-metrics');
     if (mBox) renderFinMetricsInto(mBox, true);
     pageAnim(view);
+  }
+
+  /* Сверка остатка фонда с банком — прямо в строке фонда (Роман 19.10.2026: кнопка
+     «Сошлось с банком», строка красится). «Сошлось» значит, что в выписке ровно
+     столько, сколько насчитала ведомость, и сумму для этого берет сервер: вписывать
+     ее руками нужно только когда НЕ сошлось. */
+  function finBankLine(acc, editable) {
+    if (!acc) return '';
+    var diff = (acc.actual === null || acc.actual === undefined)
+      ? null : acc.actual - acc.closing;
+    var when = acc.actual_at ? finDate(String(acc.actual_at).slice(0, 10)) : '';
+    var other = editable
+      ? '<button type="button" class="ff-other" data-fother="' + esc(acc.id) +
+        '">' + (diff === null ? 'другая сумма' : 'поправить') + '</button>'
+      : '';
+    if (diff !== null && Math.abs(diff) < 0.01) {
+      return '<div class="ff-bank"><span class="ff-ok">' + ic('check', 11) +
+        'Сошлось с банком' + (when ? ' ' + when : '') + '</span>' + other + '</div>';
+    }
+    var btn = editable
+      ? '<button type="button" class="qchip ff-match" data-fmatch="' + esc(acc.id) +
+        '">' + ic('check', 12) + 'Сошлось с банком</button>'
+      : '';
+    if (diff !== null) {
+      return '<div class="ff-bank"><span class="ff-gap">' +
+        (diff > 0 ? 'в банке больше на ' + finRub(diff)
+                  : 'в банке меньше на ' + finRub(-diff)) + '</span>' + btn + other + '</div>';
+    }
+    return editable
+      ? '<div class="ff-bank">' + btn + other + '</div>'
+      : '<div class="ff-bank"><span class="ff-gap">с банком не сверяли</span></div>';
+  }
+
+  /* Строка про перевод в фонд под подписью правила в каскаде. Отметку о переводе
+     видно всем — это факт; кнопку только тому, кто ведет ведомость. Частичный случай
+     (доход вырос после перевода) говорит, сколько фонду еще должны: иначе человек
+     видит зеленую отметку и думает, что с этим фондом закончено. */
+  function finFillLine(rule, filled, left, editable) {
+    var when = rule.moved_at ? finDate(String(rule.moved_at).slice(0, 10)) : '';
+    var who = rule.moved_by ? ' · ' + rule.moved_by : '';
+    var mark = '<span class="fc-fill done">' + ic('check', 11) +
+      'Пополнен' + (when ? ' ' + when : '') + esc(who) +
+      (editable ? '<button type="button" class="fc-undo" data-funfill="' +
+        esc(rule.account_id) + '">отменить</button>' : '') + '</span>';
+    if (filled && left <= 0) return mark;
+    if (filled) {
+      return '<span class="fc-fill part">' + ic('check', 11) + 'Переведено ' +
+        finRub(rule.moved_done) + ', фонду должны еще ' + finRub(left) +
+        (editable ? '<button type="button" class="fc-undo" data-funfill="' +
+          esc(rule.account_id) + '">отменить</button>' : '') + '</span>' +
+        (editable ? '<button type="button" class="qchip fc-fillbtn" data-ffill="' +
+          esc(rule.account_id) + '">' + ic('wallet', 12) + 'Перевели остаток</button>' : '');
+    }
+    return editable
+      ? '<button type="button" class="qchip fc-fillbtn" data-ffill="' +
+        esc(rule.account_id) + '">' + ic('wallet', 12) + 'Пополнили фонд</button>'
+      : '';
   }
 
   /* Остатки по счетам: что насчитала ведомость и что показывает банк. Пока остаток

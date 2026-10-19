@@ -6930,8 +6930,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   color: var(--ink-3); max-width: 46ch; }
 .fc-v { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap;
   letter-spacing: -.02em; }
-/* Вычитания тише прибавлений: глаз должен цепляться за итоги, а не за каждую строку. */
-.fc-row.out .fc-v { color: var(--ink-2); font-weight: 600; }
+/* Вычитания тише прибавлений ВЕСОМ, а не цветом: серая цифра на светлой карточке
+   читается как выключенная (Роман 19.10.2026: «цифры серые, надо чтобы нормальные»). */
+.fc-row.out .fc-v { color: var(--ink); font-weight: 600; }
 /* Промежуточный итог — заливкой во всю ширину карточки, без рамки. */
 .fc-row.sum { margin: 0 -24px; padding: 14px 24px; background: var(--fill);
   border-bottom-color: var(--line-2); }
@@ -7103,7 +7104,7 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .ff-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .ff-v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
 .ff-sub { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px;
-  font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+  font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
 .ff-warn { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink);
   background: var(--amber-soft); padding: 6px 10px; border-radius: 9px; }
 /* «Отложили в период» — заметная строка, а не серая мелочь (владелец 19.10.2026).
@@ -7116,6 +7117,37 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   color: var(--green-ink); background: var(--green-soft);
   padding: 3px 10px; border-radius: var(--r-pill); }
 .ff-set-v.zero { color: var(--ink-3); background: var(--fill); }
+/* «Пополнили фонд» в каскаде и «Сошлось с банком» в фондах (Роман 19.10.2026).
+   Проведенная строка красится мягкой зеленой заливкой во всю ширину карточки — тем
+   же приемом, что промежуточный итог, только цветом состояния, а не нейтральным.
+   Зеленый тут значит одно: деньги реально ушли по этой строке. */
+.fc-row.filled { margin: 0 -24px; padding-left: 24px; padding-right: 24px;
+  background: var(--green-soft); border-bottom-color: #D3EDDF; }
+.fc-fill { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+  font-size: 12px; font-weight: 600; color: var(--green-ink); }
+.fc-fill svg { width: 12px; height: 12px; }
+.fc-fill.part { color: var(--amber-ink); }
+.fc-undo { margin-left: 8px; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  background: none; border: 0; padding: 0; cursor: pointer;
+  border-bottom: 1px dashed var(--line-2); }
+.fc-undo:hover { color: var(--ink-2); }
+.fc-fillbtn { margin-top: 8px; }
+.fc-fillbtn svg { color: var(--green); }
+
+.ff-row.matched { margin: 0 -24px; padding-left: 24px; padding-right: 24px;
+  background: var(--green-soft); border-bottom-color: #D3EDDF; }
+.ff-bank { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+  margin-top: 8px; }
+.ff-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  font-weight: 600; color: var(--green-ink); }
+.ff-ok svg { width: 12px; height: 12px; }
+.ff-gap { font-size: 12px; font-weight: 600; color: var(--amber-ink); }
+.ff-match { padding: 6px 12px; }
+.ff-match svg { color: var(--green); }
+.ff-other { font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); background: none;
+  border: 0; padding: 0; cursor: pointer; border-bottom: 1px dashed var(--line-2); }
+.ff-other:hover { color: var(--ink-2); }
+
 /* Правка остатка фонда. Кнопка живет в строке мелочей, а не отдельным блоком:
    это редкое действие финансиста, а не то, ради чего люди открывают экран. */
 .ff-fix { font: 600 11.5px 'Manrope', sans-serif; color: var(--blue); background: none;
