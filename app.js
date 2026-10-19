@@ -20763,7 +20763,7 @@
     }
     // Итоги периода сверху — после того как каркас Ведомости в DOM (контейнер существует).
     var mBox = el('sheet-metrics');
-    if (mBox) renderFinMetricsInto(mBox);
+    if (mBox) renderFinMetricsInto(mBox, true);
     pageAnim(view);
   }
 
@@ -21322,15 +21322,10 @@
       '<div><div class="t">Операции</div>' +
       '<div class="s">все движения, из которых сложились цифры выше — новое сверху, можно фильтровать</div>' +
       '</div></div>';
-    view.innerHTML = '<div class="grid">' +
-      '<div class="sp7">' + lad + '</div>' +
-      '<div class="sp5">' +
-        '<div class="card fin-block"><div class="sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
-          '<div><div class="t">Статьи</div><div class="s">из чего сложились цифры слева</div></div></div>' +
-          '<div class="fin-groups">' + (groups || '<div class="empty">Операций за этот отрезок нет.</div>') + '</div></div>' +
-        offers +
-      '</div></div>' +
-      opsHead + '<div id="pnl-ops"></div>';
+    // Лестница P&L во всю ширину — это якорь экрана; блок «Статьи» убран, его роль
+    // (из чего сложились цифры) теперь играет лента операций ниже, иначе одно и то же
+    // в двух видах. «По услугам» оставляем — это разрез, которого в ленте нет.
+    view.innerHTML = lad + offers + opsHead + '<div id="pnl-ops"></div>';
     pageAnim(view);
     var opsBox = el('pnl-ops');
     if (opsBox) renderFinOpsInto(opsBox);
@@ -26682,7 +26677,7 @@
   function renderFinMetrics(view) { return renderFinMetricsInto(view); }
   // Итоги периода в контейнер: своя страница finmetrics (view) и блок сверху Ведомости
   // рисуют из одной функции. Обработчиков тут нет — только верстка.
-  function renderFinMetricsInto(container) {
+  function renderFinMetricsInto(container, compact) {
     if (!FIN.sheet) {
       if (FIN.err) return finErrView(container);
       container.innerHTML = dashSkeleton(); finLoadSheet(); return;
@@ -26795,7 +26790,9 @@
         'Фонды уже вычтены из прибыли — они не делятся, а лежат на своих счетах.</div>' +
     '</div>';
 
-    container.innerHTML = bar + '<div class="grid">' +
+    // compact — Итоги сверху Ведомости: статбар убираем, у Ведомости свой наверху,
+    // а те же четыре цифры дублируются в «Здоровье центра». Остается вердикт без полосы.
+    container.innerHTML = (compact ? '' : bar) + '<div class="grid">' +
       '<div class="sp7">' + (bridge || kpi) + flow + '</div>' +
       '<div class="sp5">' + (bridge ? kpi : '') + split + '</div></div>';
     pageAnim(container);
