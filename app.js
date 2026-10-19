@@ -2392,7 +2392,7 @@
     // Право `clients`, а не `zaezdy`: раздел показывает учеников и их чек-листы, и
     // ручка доски закрыта тем же правом. У преподавателя `zaezdy` есть, а клиентов
     // нет — он увидел бы пункт меню, который отвечает ему отказом.
-    { id: 'points', label: 'Сопровождение', icon: 'target', cap: 'clients' },
+    { id: 'points', label: 'Мотивация', icon: 'target', cap: 'clients' },
     { id: 'zaezdy', label: 'Заезды', icon: 'flight', cap: 'zaezdy' },
     { id: 'templates', label: 'Шаблоны', icon: 'box', cap: 'templates' },
     { id: 'path', label: 'Путь', icon: 'path', cap: 'path' },
@@ -8256,7 +8256,14 @@
       right = '<span class="sev n-off">разбирается</span>';
     }
     // Запись — кнопкой, а не словом в подписи: за ней ходят чаще всего (Павел 08.09.2026).
-    var rec = m.url ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>' : '';
+    // У своей встречи прямой ссылки нет: она подписана и живет полчаса, поэтому
+    // берем ее по нажатию, иначе к вечеру кнопка вела бы в никуда.
+    var rec = m.url
+      ? '<a class="qchip mt-rec" href="' + esc(m.url) + '" target="_blank" rel="noopener">' + ic('play', 12) + 'Запись</a>'
+      : (m.video_ready && m.room_id
+          ? '<button type="button" class="qchip mt-rec" data-mrec="' + m.room_id + '">' +
+              ic('play', 12) + 'Запись</button>'
+          : '');
     var tasks = m.tasks || [];
     var open = !!state.meetOpen[m.key];
     var fold = tasks.length
@@ -10197,6 +10204,24 @@
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mcard]'), function (b) {
       b.addEventListener('click', function () { var id = b.getAttribute('data-mcard'); if (id) openDrawer(id); });
+    });
+    /* Ссылка на свою запись живет полчаса и подписана, поэтому ее берут в
+       момент нажатия. Файл уходит сразу в «Загрузки», CRM остается на месте. */
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mrec]'), function (b) {
+      b.addEventListener('click', function () {
+        if (b.classList.contains('loading')) return;
+        b.classList.add('loading');
+        api('/admin/api/meet/rooms/' + b.getAttribute('data-mrec') + '/video')
+          .then(function (r) {
+            b.classList.remove('loading');
+            if (r && r.url) recGrab(r.url);
+            else showToast('Записи нет');
+          })
+          .catch(function (e) {
+            b.classList.remove('loading');
+            showToast((e && e.body && e.body.detail) || 'Запись не отдалась, попробуй еще раз');
+          });
+      });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mfold]'), function (b) {
       b.addEventListener('click', function () {
@@ -14274,7 +14299,17 @@
               '<button type="button" class="on" data-kind="team">Только команда</button>' +
               '<button type="button" data-kind="sales">Ученик или клиент</button>' +
             '</div></div>' +
-          '<div class="al-hint" id="mr-kindnote"></div>') +
+          '<div class="al-hint" id="mr-kindnote"></div>' +
+          /* Запись картинкой. У разговора с учеником включена сразу: его запись
+             ученик пересматривает, а тьютор без нее не закроет выплату. У
+             планерки выключена — час картинки это гигабайт, и внутренняя кухня
+             потом никому не нужна. Звук пишется всегда, из него конспект. */
+          '<div class="al-f"><span class="al-l">Запись</span>' +
+            '<div class="due-seg" id="mr-vid">' +
+              '<button type="button" data-vid="0">Только звук</button>' +
+              '<button type="button" data-vid="1">Звук и видео</button>' +
+            '</div></div>' +
+          '<div class="al-hint" id="mr-vidnote"></div>') +
           // Направление нужно, чтобы встреча легла в свой отдел в разделе
           // «Ближайшие». Не обязательное: у общей планерки отдела нет.
           '<label class="al-f"><span class="al-l">Направление</span>' +
@@ -14336,13 +14371,26 @@
       note.textContent = t || '';
     };
     var kind = edit ? (room.kind || 'team') : 'team';
+    var video = false;
     if (!edit) {
+      var vidNote = function () {
+        var seg = el('mr-vid');
+        Array.prototype.forEach.call(seg.querySelectorAll('button'), function (x) {
+          x.classList.toggle('on', x.getAttribute('data-vid') === (video ? '1' : '0'));
+        });
+        el('mr-vidnote').textContent = video
+          ? 'Запишу картинку целиком: камеры и показ экрана. Час весит около гигабайта, ' +
+            'скачать можно из карточки встречи.'
+          : 'Запишу только речь — из нее соберу конспект и задачи. Видео не будет.';
+      };
       var kindNote = function () {
         el('mr-kindnote').textContent = kind === 'team'
           ? 'Войдут только свои: чужой по пересланной ссылке не попадет.'
           : 'Войдет любой по ссылке — она и есть пропуск. Не пересылайте ее дальше.';
       };
       kindNote();
+      video = kind !== 'team';
+      vidNote();
       Array.prototype.forEach.call(el('mr-kind').querySelectorAll('button'), function (b) {
         b.addEventListener('click', function () {
           kind = b.getAttribute('data-kind');
@@ -14350,6 +14398,16 @@
             x.classList.toggle('on', x === b);
           });
           kindNote();
+          // Сменил вид встречи — переставляем и запись: консультацию пишем,
+          // планерку нет. Руками переключить можно сразу после этого.
+          video = kind !== 'team';
+          vidNote();
+        });
+      });
+      Array.prototype.forEach.call(el('mr-vid').querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () {
+          video = b.getAttribute('data-vid') === '1';
+          vidNote();
         });
       });
     }
@@ -14412,6 +14470,7 @@
       if (title.length < 2) { show('Назови встречу, чтобы в списке было видно, какая это', true); return; }
       var body = { title: title, kind: kind, dept: (el('mr-dept') || {}).value || '',
                    invite: pick ? pick.get() : [] };
+      if (!edit) body.video = video;
       if (when === 'plan' && el('mr-date')) {
         var day = el('mr-date').value, hm = el('mr-time').value;
         if (!day || !hm) { show('Поставь дату и время встречи', true); return; }
@@ -26790,6 +26849,13 @@
       marks += '<a class="mx-tag mx-tagb" href="' + esc(m.url) + '" target="_blank" rel="noopener"' +
         ' aria-label="' + esc(m.title || 'Встреча') + ': смотреть запись">' +
         ic('play', 11) + 'запись</a>';
+    } else if (m.video_ready && m.room_id && m.state !== 'live') {
+      /* Своя запись лежит у нас, и ссылка на нее подписана и живет полчаса.
+         Поэтому не ссылка, а кнопка: адрес берется в момент нажатия, иначе к
+         вечеру он уже никуда не ведет. */
+      marks += '<button type="button" class="mx-tag mx-tagb" data-mxrec="' + m.room_id + '"' +
+        ' aria-label="' + esc(m.title || 'Встреча') + ': скачать запись">' +
+        ic('play', 11) + 'запись</button>';
     }
     var sub = [];
     if (m.by) sub.push(esc(m.by));
@@ -27294,6 +27360,16 @@
     return 'rasshifrovka-' + ymd + '-' +
       ('0' + d.getHours()).slice(-2) + ('0' + d.getMinutes()).slice(-2) + '.txt';
   }
+  /* Скачать запись встречи. Сервер отдает mp4 с именем «дата, какая встреча,
+     с кем» и просьбой сохранить, поэтому обычная ссылка кладет файл в
+     «Загрузки» и со страницы не уводит. Раньше тут был window.open: он на
+     миг открывал пустую вкладку, и это читалось как «ничего не произошло». */
+  function recGrab(url) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   function mxSaveText(m, text) {
     /* В файле дата полная, а не «Сегодня»: его откроют через месяц, и слово
        «сегодня» в шапке будет врать. */
@@ -27508,6 +27584,24 @@
         state.meetxJump = b.getAttribute('data-mxat');
         state.meetxOpen = b.getAttribute('data-mxopen');
         renderView();
+      });
+    });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-mxrec]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (b.classList.contains('loading')) return;
+        b.classList.add('loading');
+        api('/admin/api/meet/rooms/' + b.getAttribute('data-mxrec') + '/video')
+          .then(function (r) {
+            b.classList.remove('loading');
+            if (r && r.url) recGrab(r.url);
+            else showToast('Записи нет');
+          })
+          .catch(function (e2) {
+            b.classList.remove('loading');
+            showToast((e2 && e2.body && e2.body.detail) ||
+              'Запись не отдалась, попробуй еще раз');
+          });
       });
     });
     Array.prototype.forEach.call(view.querySelectorAll('[data-mx]'), function (r) {
@@ -36246,6 +36340,91 @@
       '</div></div>';
   }
 
+  /* Источник лида для метки в окне менеджера. Ставится на входе (utm-ссылка или
+     канал бота); пока размечено не всё — где источника нет, метку не рисуем, а не
+     придумываем. Это и есть смысл «метки на входе» из блока 1. */
+  function leadSrcChip(l) {
+    var s = (l && (l.source || l.channel)) || '';
+    if (!s) return '';
+    return '<span class="dq-src">' + esc(mkSourceName(s)) + '</span>';
+  }
+
+  /* Рабочее окно менеджера продаж: очередь «Сейчас» (просроченное -> сегодня),
+     мои лиды по этапам с узким местом и навигация. Собрано на реальных сигналах —
+     статус-рисках, задачах по лидам, горячих заявках. */
+  function salesHomeHtml(c, convClient, saleRowsHtml, convSale, weakest, saleSteps) {
+    var risks = allRisks();   /* уже отсортированы по важности убыванием */
+    var gt = groupTasks();
+    var over = [], today = [], seen = {};
+    /* один лид = одна строка: берём самый важный сигнал по нему, не дублируем */
+    risks.forEach(function (r) {
+      if (seen[r.lead.id]) return;
+      seen[r.lead.id] = 1;
+      (r.sev >= 2 ? over : today).push({ lead: r.lead, sub: esc(r.label), when: '' });
+    });
+    gt.today.forEach(function (t) {
+      if (seen[t.lead.id]) return;
+      seen[t.lead.id] = 1;
+      today.push({ lead: t.lead, sub: 'на сегодня: ' + esc(t.task.text), when: 'сегодня' });
+    });
+    /* свежие горячие заявки (до 24ч) в риски ещё не попали — добавим в «сегодня» */
+    state.leads.forEach(function (l) {
+      if (seen[l.id]) return;
+      if (l.booking && l.crm.status === 'new' && hoursSince(l.booking.at || l.created_at) <= 24) {
+        seen[l.id] = 1;
+        today.push({ lead: l, sub: 'заявка ждёт связи', when: ago(l.booking.at || l.created_at) });
+      }
+    });
+    var qTotal = over.length + today.length;
+    function qrow(it) {
+      return '<div class="trow ar-grid" data-id="' + it.lead.id + '">' + sevPill(it.lead) +
+        '<div class="t-cell"><div class="t-ttl">' + esc(leadName(it.lead)) + '</div>' +
+        '<div class="t-sub">' + it.sub + leadSrcChip(it.lead) + '</div></div>' +
+        '<div class="t-when num">' + esc(it.when || '') + '</div>' +
+        '<div class="t-go">' + ic('go', 13) + '</div></div>';
+    }
+    var queueBody = (over.length ? '<div class="dq-band over">Просрочено</div>' + over.map(qrow).join('') : '') +
+      (today.length ? '<div class="dq-band">Сегодня</div>' + today.map(qrow).join('') : '') +
+      (qTotal ? '' : '<div class="empty" style="padding:22px 24px">Очередь пуста — всё разобрано. Спокойно.</div>');
+    var queueCard = '<div class="card" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('flame', 14) + '</span>' +
+      '<div><div class="t">Сейчас</div><div class="s">очередь по приоритету: сначала просроченное, нажми на строку — откроется карточка</div></div>' +
+      '<span class="cnt num">' + qTotal + '</span></div>' +
+      '<div style="border-top:1px solid var(--line)">' + queueBody + '</div></div>';
+
+    var hint = (weakest > 0 && saleSteps[weakest]) ?
+      '<div class="dq-hint">Узкое место — «' + esc(CRM[saleSteps[weakest]].label) + '». Здесь теряешь больше всего, займись в первую очередь.</div>' : '';
+    var funCard = '<div class="card" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('funnel', 14) + '</span><div class="t">Мои лиды по этапам</div>' +
+      '<span class="cnt num">' + convSale + '% в клиента</span></div>' +
+      '<div class="cvc-rows" style="margin-top:12px">' + saleRowsHtml + '</div>' + hint + '</div>';
+
+    function navRow(page, icon, t1, t2) {
+      return '<div class="dq-nrow" data-nav="' + page + '" role="button" tabindex="0">' +
+        '<span class="dq-nico">' + ic(icon, 16) + '</span>' +
+        '<div class="dq-ntxt"><div class="dq-nt1">' + t1 + '</div><div class="dq-nt2">' + t2 + '</div></div>' +
+        '<span class="dq-chev">' + ic('go', 14) + '</span></div>';
+    }
+    var navCard = '<div class="card dq-nav" style="padding:22px 26px">' +
+      '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
+      '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
+      navRow('inbox', 'dialogs', 'Диалоги', 'переписки с клиентами') +
+      navRow('leads', 'leads', 'Люди', 'все мои клиенты и карточки') +
+      navRow('tasks', 'task', 'Задачи', 'что поставлено и на мне') + '</div>';
+
+    return '<div class="dash">' +
+      statBar([
+        { tint: 'blue', label: 'К действию', value: qTotal, sub: over.length ? 'из них просрочено ' + over.length : 'на сегодня' },
+        { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'queue', sub: over.length ? 'закрыть сегодня' : 'чисто' },
+        { tint: 'navy', label: 'Ждут связи', value: c.hot, go: 'queue', sub: c.hot ? 'новые заявки' : 'разобрано' },
+        { tint: 'green', label: 'Клиенты', value: c.clients, go: 'clients', delta: convClient ? convClient + '% из заявок' : '', deltaCls: 'good' },
+      ]) +
+      '<div class="grid">' +
+        '<div class="sp7 vstack">' + queueCard + '</div>' +
+        '<div class="sp5 vstack">' + funCard + navCard + '</div>' +
+      '</div></div>';
+  }
+
   function renderDash(view) {
     if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
@@ -36311,6 +36490,10 @@
       '<div class="cvc-rows" style="margin-top:12px">' + saleRows + '</div></div>';
 
     if (!can('path')) {
+      if (state.role === 'sales_manager' || state.role === 'manager') {
+        /* ── рабочее окно менеджера продаж ── */
+        view.innerHTML = salesHomeHtml(c, convClient, saleRows, convSale, weakest, saleSteps);
+      } else {
       /* ── без доступа к воронке/пути: компактный дашборд «что делать» ── */
       view.innerHTML = '<div class="dash">' +
         statBar([
@@ -36324,6 +36507,7 @@
           '<div class="sp5 vstack">' + funnelCard + '</div>' +
         '</div>' +
       '</div>';
+      }
     } else {
       /* ── ВЛАДЕЛЕЦ: картина бизнеса + где дыры ── */
       var days = [];
@@ -36404,6 +36588,11 @@
     });
     var gp = el('go-path');
     if (gp) gp.addEventListener('click', function () { setPage('path'); });
+    Array.prototype.forEach.call(view.querySelectorAll('.dq-nrow[data-nav]'), function (n) {
+      function go() { setPage(n.getAttribute('data-nav')); }
+      n.addEventListener('click', go);
+      n.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
     animBars(view);
   }
 
@@ -46290,6 +46479,56 @@
       '</div>';
   }
 
+  /* «Моя мотивация» — герой экрана тьютора: круг (заработано против впереди),
+     что идет в ближайшую выплату, и живая строка от агента. Все числа — из того же
+     ответа сервера, что и список: earned и ahead по каждому ученику, due_now в payout.
+     Второй копии правила отсечки 10/20 тут нет, только сумма готовых полей. */
+  function pbHero(box) {
+    var studs = box.students || [];
+    var earned = 0, ahead = 0, closed = 0;
+    studs.forEach(function (s) {
+      earned += (s.money && s.money.earned) || 0;
+      ahead += (s.money && s.money.ahead) || 0;
+      (s.points || []).forEach(function (p) { if (p.closedAt) closed++; });
+    });
+    var planned = earned + ahead;
+    var pct = planned > 0 ? Math.round(earned / planned * 100) : 0;
+    var due = (box.payout && box.payout.amount) || 0;
+    var payDate = box.payout && box.payout.date ? fmtDay(box.payout.date) : '';
+
+    var praise;
+    if (!studs.length) {
+      praise = 'Как появятся ученики, тут будет видно, сколько ты заработаешь и за что.';
+    } else if (closed === 0) {
+      praise = 'Пока закрытых задач нет. Закрой первую по любому ученику ниже — и сумма появится здесь.';
+    } else {
+      praise = 'Красавчик, закрыто ' + closed + ' ' + plural(closed, 'задача', 'задачи', 'задач') +
+        ' на ' + fmtMoney(earned) + ' ₽.' +
+        (due > 0 ? ' В ближайшую выплату ' + payDate + ' идет ' + fmtMoney(due) + ' ₽.' : '') +
+        (ahead > 0 ? ' Впереди еще ' + fmtMoney(ahead) + ' ₽ по открытым задачам.' : '');
+    }
+
+    return '<div class="card mh">' +
+      '<div class="mh-ringbox">' +
+        '<div class="mh-ring" style="--mp:' + pct + '%"><div class="mh-hole">' +
+          '<b class="num">' + fmtMoney(planned) + '</b><span>всего по ученикам</span>' +
+        '</div></div>' +
+      '</div>' +
+      '<div class="mh-right">' +
+        '<div class="mh-legend">' +
+          '<div class="mh-leg"><span class="mh-dot g"></span>' +
+            '<span class="mh-lt">Заработано<i>закрытые задачи</i></span>' +
+            '<b class="num mh-g">' + fmtMoney(earned) + ' ₽</b></div>' +
+          '<div class="mh-leg"><span class="mh-dot n"></span>' +
+            '<span class="mh-lt">Впереди<i>открытые задачи по плану</i></span>' +
+            '<b class="num">' + fmtMoney(ahead) + ' ₽</b></div>' +
+        '</div>' +
+        (due > 0 ? '<div class="mh-due">В ближайшую выплату ' + esc(payDate) +
+          ': <b class="num">' + fmtMoney(due) + ' ₽</b></div>' : '') +
+        '<div class="mh-praise"><span class="mh-ai">ИИ</span><span>' + esc(praise) + '</span></div>' +
+      '</div></div>';
+  }
+
   function renderPointsBoard(view) {
     var seg = pbSeg();
     if (seg === 'pay') return renderPayouts(view);
@@ -46316,7 +46555,8 @@
           ? 'За вами пока не закреплен ни один ученик. Ответственного ставит руководитель в карточке клиента.'
           : 'Учеников с заведенными точками пока нет.') + '</div></div>';
 
-    view.innerHTML = pbTabs() + head + list;
+    var top = seg === 'my' ? pbHero(box) : head;
+    view.innerHTML = pbTabs() + top + list;
     pbWire(view);
   }
 
