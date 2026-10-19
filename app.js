@@ -21222,10 +21222,10 @@
     var opsCard = '<div class="card fin-block">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('rows', 14) + '</span>' +
         '<div><div class="t">' + (isContractors ? 'Выплаты подрядчикам' : 'Расходы фонда') +
-          (fper ? ' · ' + esc(fper) : '') +
           '</div><div class="s">' + (isContractors
-            ? 'выплаты этой ведомости, с реквизитами и чеком/актом'
-            : 'траты этой ведомости, новое сверху') + '</div></div>' +
+            ? 'выплаты с реквизитами и чеком/актом'
+            : 'траты, новое сверху') +
+            (fper ? ' · ' + esc(fper) : '') + '</div></div>' +
         (canPay ? '<button class="qchip add" id="ff-pay">' + ic('plus', 12) +
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
@@ -22467,18 +22467,21 @@
         // подстрочник, только если оно вправду другое, а не дубль имени.
         var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
+        // Откуда строка — пометка к описанию, а не действие: в колонке действий
+        // она стояла третьей и выдавливала сумму на метку «оплачен».
+        var src = finDirectBadge(it.origin, it.role);
         return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') +
           (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
           '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
-            (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
+            (sub || src ? '<i>' + src + (sub && src ? ' · ' : '') + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
             finPaidCell(it.id, it.status, canFix) +
-            finDirectBadge(it.origin, it.role) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
-              '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>' : '') +
+              '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>'
+              : '<span class="fd-del ghost" aria-hidden="true"></span>') +
           '</span>' +
         '</div>';
       }).join('');
@@ -25302,7 +25305,7 @@
     var cards = FIN_BANKS.map(function (b) {
       return '<div class="fb-card">' +
         '<div class="fb-top"><span class="fb-name">' + esc(b.name) + '</span>' +
-          '<span class="fb-lim">' + esc(b.limit) + ' · ' + esc(b.unit) + '</span></div>' +
+          '<span class="fb-lim">' + esc(b.limit) + '</span></div>' +
         '<div class="fb-for">' + esc(b.use) + '</div>' +
         '<ul class="fb-rules">' + b.rules.map(function (r) {
           return '<li>' + esc(r) + '</li>';
@@ -25802,10 +25805,10 @@
           ' · всего ' + finRub(o.principal) + ' · погашено ' + finRub(o.paid) +
           (o.payment > 0 ? ' · по ' + finRub(o.payment) + ' за ведомость' : ' · все разом') +
           (o.interest > 0 ? ' · проценты ' + finRub(o.interest) : '') + '</span>' +
-          // Погашенному полоса не нужна: она всегда полная и читается как разделитель.
-          (done ? '' : '<div class="obl-bar"><i style="width:' + w + '%"></i></div>') +
           '</div>' +
-        '<div class="fl-v num">' + finRub(o.remaining) + '</div></div>';
+        '<div class="fl-v num">' + finRub(o.remaining) + '</div>' +
+        (done ? '' : '<div class="obl-bar"><i style="width:' + w + '%"></i></div>') +
+        '</div>';
     }).join('');
 
     var oblPay = orows.map(function (x) {
@@ -36953,6 +36956,7 @@
   function svFit(s) {
     var plain = String(s.value == null ? '' : s.value).replace(/<[^>]*>/g, '').trim();
     var word = s.word != null ? s.word : /[А-Яа-яA-Za-z]{3,}/.test(plain);
+    if (!word && plain.length >= 13) return ' word long';
     if (word || plain.length >= 10) return ' word';
     return plain.length >= 7 ? ' tight' : '';
   }
