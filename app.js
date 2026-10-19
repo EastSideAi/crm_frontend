@@ -46385,7 +46385,8 @@
           (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
           (pbSeg() === 'all' ? who : '') + '</div>' +
         pbRail(st, p.key) +
-        '<div class="pb-sum"><b class="num">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+        '<div class="pb-sum"><b class="num pb-earned">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+          (st.money.ahead > 0 ? '<span class="pb-ahead">впереди ' + fmtMoney(st.money.ahead) + ' ₽</span>' : '') +
           '<span>' + done + ' из 5 закрыто</span></div>' +
       '</div>' +
       pbPoint(st, p, n, pbPaid(st)) +
