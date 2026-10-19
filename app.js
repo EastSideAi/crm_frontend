@@ -20861,9 +20861,11 @@
      видит зеленую отметку и думает, что с этим фондом закончено. */
   function finFillLine(rule, filled, left, editable) {
     var when = rule.moved_at ? finDate(String(rule.moved_at).slice(0, 10)) : '';
-    var who = rule.moved_by ? ' · ' + rule.moved_by : '';
+    /* Имени того, кто нажал, на экране нет вовсе (Роман 19.10.2026: «не надо имя»).
+       В истории операции оно остается — строка ведомости отвечает на вопрос «перевод
+       сделан или нет», а не «кто его сделал». */
     var mark = '<span class="fc-fill done">' + ic('check', 11) +
-      'Пополнен' + (when ? ' ' + when : '') + esc(who) +
+      'Пополнен' + (when ? ' ' + when : '') +
       (editable ? '<button type="button" class="fc-undo" data-funfill="' +
         esc(rule.account_id) + '">отменить</button>' : '') + '</span>';
     if (filled && left <= 0) return mark;
