@@ -20824,6 +20824,35 @@
     pageAnim(view);
   }
 
+  /* «Оплачен» на строке расхода (Роман 19.10.2026: «на каждый расход добавить кнопку
+     Оплачен, который подсвечивает любой расход»). Это тот же переход ведомости
+     «запланирован → проведен», которым живет экран «Расходы», только одной кнопкой
+     вместо формы правки. Проведенная строка зеленая, у плановой стоит кнопка.
+     Строка расхода часто сама кликабельна (правка), поэтому обработчик гасит
+     всплытие — иначе нажатие открывало бы форму поверх проводки. */
+  function finPaidCell(id, status, canFix) {
+    if (status === 'факт') {
+      return '<span class="fpaid done">' + ic('check', 11) + 'оплачен' +
+        (canFix ? '<button type="button" class="fpaid-undo" data-fpaid="' + esc(id) +
+          '" data-undo="1">отменить</button>' : '') + '</span>';
+    }
+    return canFix
+      ? '<button type="button" class="qchip fpaid-btn" data-fpaid="' + esc(id) + '">' +
+        ic('check', 12) + 'Оплачен</button>'
+      : '';
+  }
+  function finPaidBind(view) {
+    Array.prototype.forEach.call(view.querySelectorAll('[data-fpaid]'), function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var undo = b.getAttribute('data-undo') === '1';
+        finDo('/admin/api/fin/operation/' + b.getAttribute('data-fpaid') + '/paid', 'POST',
+              { undo: undo },
+              undo ? 'Отметка снята, расход снова в плане' : 'Расход отмечен оплаченным');
+      });
+    });
+  }
+
   /* Сверка остатка фонда с банком — прямо в строке фонда (Роман 19.10.2026: кнопка
      «Сошлось с банком», строка красится). «Сошлось» значит, что в выписке ровно
      столько, сколько насчитала ведомость, и сумму для этого берет сервер: вписывать
@@ -21208,12 +21237,16 @@
               : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
                     esc(o.doc.name || 'документ') + '</span>'
                  : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
-            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') + '"' +
+            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') +
+              (o.status === 'факт' ? ' paid' : '') + '"' +
               (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
-              (o.offering ? ' · ' + esc(o.offering) : '') +
-              (o.status !== 'факт' ? ' · ' + esc(o.status) : '') + docChip + '</span></div>' +
+              (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
+              // Трата с фонда — такой же расход ведомости, и отмечается так же
+              // (Роман 19.10.2026: «внутри фондов тоже на расходах можно поставить
+              // оплачено»). Правка период-ом не этой ведомости сюда не приезжает.
+              '<div class="fl-act">' + finPaidCell(o.id, o.status, canPay) + '</div></div>' +
               '<div class="fl-v num">' + finRub(o.amount) + '</div></div>';
           }).join('') + '</div>'
         : '<div class="empty">' + (isContractors
@@ -21294,6 +21327,7 @@
       if (isContractors) finPayoutForm(null, { period_id: openP && openP.id });
       else finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
+    finPaidBind(view);
     // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
     // в ведомости той строки (period_id), а не в текущей выбранной.
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
@@ -22433,14 +22467,15 @@
         // подстрочник, только если оно вправду другое, а не дубль имени.
         var sub = [it.item && it.item !== it.counterparty ? it.item : '', it.comment || '']
           .filter(Boolean).map(esc).join(' · ');
-        return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') + '"' +
+        return '<div class="trow fin-grid fe-grid' + (editable ? ' click' : '') +
+          (it.status === 'факт' ? ' paid' : '') + '"' +
           (editable ? ' data-dline="' + it.id + '"' : '') + '>' +
           '<span class="num fo-date">' + finDate(it.date) + '</span>' +
           '<span class="fo-what"><b>' + esc(it.counterparty || '—') + '</b>' +
             (sub ? '<i>' + sub + '</i>' : '') + '</span>' +
           '<span class="num fo-sum">' + finRub(it.amount) + '</span>' +
           '<span class="fo-st">' +
-            (it.status === 'план' ? '<span class="fst wait">план</span>' : '') +
+            finPaidCell(it.id, it.status, canFix) +
             finDirectBadge(it.origin, it.role) +
             (editable ? '<button class="fd-del" data-ddel="' + it.id +
               '" title="Удалить строку" aria-label="Удалить">' + ic('x', 12) + '</button>' : '') +
@@ -22460,6 +22495,7 @@
 
     view.innerHTML = bar + cards;
 
+    finPaidBind(view);
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-dadd]'), function (btn) {
         btn.addEventListener('click', function () {
@@ -25740,7 +25776,7 @@
             : (Math.abs(diff) >= 0.01
                 ? (diff > 0 ? '+' : '−') + finRub(Math.abs(diff)) + ' к плану'
                 : 'как в плане'));
-      return '<div class="trow fin-grid fsv-grid' + (x.fact !== null ? ' done' : '') +
+      return '<div class="trow fin-grid fsv-grid' + (x.fact !== null ? ' done paid' : '') +
         (x.auto ? ' warn' : '') + '">' +
         '<span class="sv-what"><b>' + esc(x.name) + '</b>' +
           (x.counterparty ? '<i>' + esc(x.counterparty) + '</i>' : '') + '</span>' +
@@ -25753,7 +25789,14 @@
             'step="0.01" min="0" placeholder="—" data-svfact="' + x.id + '" value="' +
             (x.fact !== null ? x.fact.toFixed(2) : '') + '" title="Факт: сколько списалось">'
           : '<span class="num">' + (x.fact !== null ? finRub(x.fact) : '—') + '</span>') + '</span>' +
-        '<span class="sv-hint">' + esc(hint) + '</span>' +
+        // Оплаченный сервис зеленый, неоплаченному — кнопка (Роман 19.10.2026).
+        // Факт тут можно вписать суммой в соседнем поле: кнопка нужна тем, у кого
+        // списалось ровно по плану, а это обычный случай.
+        '<span class="sv-hint">' + esc(hint) +
+          (canFix && open
+            ? '<span class="sv-paid">' +
+              finPaidCell(x.id, x.fact === null ? 'план' : 'факт', true) + '</span>'
+            : '') + '</span>' +
       '</div>';
     }).join('');
 
@@ -25801,7 +25844,7 @@
 
     var oblPay = orows.map(function (x) {
       var done = x.status === 'факт';
-      return '<div class="trow fin-grid op-grid' + (done ? ' done' : '') + '">' +
+      return '<div class="trow fin-grid op-grid' + (done ? ' done paid' : '') + '">' +
         '<span class="sv-what"><b>' + esc(x.name) + '</b>' +
           '<i>' + esc(x.counterparty || '') + (x.counterparty ? ' · ' : '') +
           (x.part === 'interest' ? 'проценты — идут в P&L' : 'тело — мимо P&L') + '</i></span>' +
@@ -25853,6 +25896,7 @@
         '</div>' +
       '</div></div>';
 
+    finPaidBind(view);
     var add = el('sv-add');
     if (add) add.addEventListener('click', function () { finServiceForm(null); });
     var oadd = el('ob-add');

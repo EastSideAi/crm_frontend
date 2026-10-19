@@ -7117,6 +7117,26 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   color: var(--green-ink); background: var(--green-soft);
   padding: 3px 10px; border-radius: var(--r-pill); }
 .ff-set-v.zero { color: var(--ink-3); background: var(--fill); }
+/* «Оплачен» на строке расхода (Роман 19.10.2026): проведенная строка зеленая,
+   плановой даем кнопку. Заливка мягкая и без рамки — строк расхода на экране
+   десятки, и насыщенный зеленый превратил бы список в светофор. */
+.trow.paid, .fl-row.paid { background: var(--green-soft); }
+.trow.paid:hover, .fl-row.paid:hover { background: #DCF2E6; }
+.fpaid { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  font-weight: 700; color: var(--green-ink); white-space: nowrap; }
+.fpaid svg { width: 12px; height: 12px; }
+.fpaid-undo { font: 600 11px 'Manrope', sans-serif; color: var(--ink-3); background: none;
+  border: 0; padding: 0 0 0 6px; cursor: pointer; }
+.fpaid-undo:hover { color: var(--ink-2); text-decoration: underline; }
+.fpaid-btn { padding: 5px 11px; font-size: 11.5px; }
+.fpaid-btn svg { color: var(--green); }
+/* Строка трат фонда: действие под подписью, а не в колонке суммы — колонка узкая,
+   и кнопка выдавливала бы цифру на вторую строку. */
+.fl-act { margin-top: 6px; }
+.fl-act:empty { display: none; }
+.sv-paid { display: inline-flex; }
+.trow.fsv-grid { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+
 /* «Пополнили фонд» в каскаде и «Сошлось с банком» в фондах (Роман 19.10.2026).
    Проведенная строка красится мягкой зеленой заливкой во всю ширину карточки — тем
    же приемом, что промежуточный итог, только цветом состояния, а не нейтральным.
@@ -7639,7 +7659,11 @@ button.fsp-via { cursor: pointer; }
   font-feature-settings: 'tnum'; transition: border-color .15s var(--ease); }
 .sv-num:focus { outline: 0; border-color: var(--blue); }
 .sv-num.is-fact { color: var(--green-ink); border-color: var(--green-soft); }
-.sv-hint { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+/* Подсказка и под ней кнопка «Оплачен», обе по правому краю. Высота строки у
+   .trow фиксирована (58px), поэтому списаниям она отпущена: иначе кнопка вылезает
+   за край строки и ложится на соседнюю. */
+.sv-hint { display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  min-width: 0; font-size: 11.5px; color: var(--ink-3); text-align: right; }
 .trow.fsv-grid.warn .sv-hint { color: var(--amber-ink); font-weight: 600; }
 .trow.fsv-grid.done .sv-what b, .trow.op-grid.done .sv-what b { color: var(--ink-2); }
 .op-sum { text-align: right; font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; }
