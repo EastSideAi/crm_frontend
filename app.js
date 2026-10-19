@@ -23598,12 +23598,14 @@
     }
     if (FIN.partners === 'none') return finErrView(view);
     var P = FIN.partners;
-    // Партнёры без засчитанных клиентов — шум: показываем только тех, по кому есть
-    // начисления или уже прошли выплаты.
-    var partners = (P.partners || []).filter(function (p) {
-      return (p.clients || []).length > 0;
-    });
+    var allPartners = P.partners || [];
+    // С начислениями — полной карточкой (кому и за кого платим). Без клиентов — заведён,
+    // но ещё никого не привёл: показываем компактно, чтобы можно было скопировать ссылку
+    // и отдать партнёру (раньше таких прятали как шум, но теперь партнёров заводим здесь же).
+    var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
+    var idle = allPartners.filter(function (p) { return (p.clients || []).length === 0; });
     var def = finPartnerDefRate(P);
+    var partnerLink = function (code) { return MK_GO + encodeURIComponent(code || ''); };
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -23696,22 +23698,54 @@
               (p.clients.length) + ' ' +
               plural(p.clients.length, 'клиент', 'клиента', 'клиентов') + '</div></div>' +
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
+          '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
+            '">' + ic('card', 12) + 'Ссылка</button>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
         foot +
       '</div>';
     }).join('');
 
-    var body = cards ||
-      '<div class="card listcard"><div class="empty">Партнёрских начислений пока нет. ' +
-      'Как партнёр приведёт клиента и тот оплатит — строка появится здесь сама.</div></div>';
+    var canFix = can('finmodel_edit');
+    // Партнёры без клиентов — компактной карточкой: имя, код и кнопка скопировать ссылку,
+    // чтобы завёл и сразу отдал партнёру его реф-ссылку.
+    var idleCards = idle.map(function (p) {
+      return '<div class="card listcard fs-seller"><div class="list-tools">' +
+        '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
+          '<div class="s fe-s">код ' + esc(p.ref_code || '—') + ' · пока не привёл клиентов</div></div>' +
+        '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
+          '">' + ic('card', 12) + 'Скопировать ссылку</button>' +
+      '</div></div>';
+    }).join('');
+    var idleBlock = idleCards
+      ? '<div class="sec-head" style="margin:22px 4px 10px"><span class="ic">' + ic('team', 14) +
+        '</span><div><div class="t">Заведены, ждут клиентов</div>' +
+        '<div class="s">скопируйте ссылку и отдайте партнёру — как приведёт клиента, он поднимется наверх</div>' +
+        '</div></div>' + idleCards
+      : '';
+
+    var body = (cards || idleCards)
+      ? cards + idleBlock
+      : '<div class="card listcard"><div class="empty">Партнёров пока нет. ' +
+        (canFix ? 'Нажмите «Добавить партнёра».' : 'Заводит их команда.') + '</div></div>';
+
+    // Кнопка завести партнёра — кабинет регистрации демо, поэтому заводим здесь.
+    var addBar = canFix
+      ? '<div class="list-quick" style="margin:2px 4px 10px"><button class="qchip add" id="fpt-add">' +
+        ic('plus', 12) + 'Добавить партнёра</button></div>'
+      : '';
 
     // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
-    view.innerHTML = statBar(tiles) + rateBar + body;
+    view.innerHTML = statBar(tiles) + rateBar + addBar + body;
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
+    var pAdd = el('fpt-add');
+    if (pAdd) pAdd.addEventListener('click', function () { finPartnerAddForm(); });
+    Array.prototype.forEach.call(view.querySelectorAll('[data-copylink]'), function (b) {
+      b.addEventListener('click', function () { copyText(b.getAttribute('data-copylink'), b); });
+    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
@@ -23737,6 +23771,32 @@
       });
     });
     pageAnim(view);
+  }
+
+  function finPartnerAddForm() {
+    openSheet('Добавить партнёра',
+      'Заводим партнёра и выдаём ему код — из него соберётся реф-ссылка, её отдадите партнёру. ' +
+      'Как он приведёт клиента и тот оплатит, начисление появится здесь само.',
+      [['first_name', 'line', 'Имя', ''],
+       ['last_name', 'line', 'Фамилия', ''],
+       ['email', 'line', 'Почта', ''],
+       ['phone', 'line', 'Телефон (необязательно)', '']],
+      function (v, close) {
+        if (!String(v.first_name || '').trim() || !String(v.last_name || '').trim())
+          return 'Впишите имя и фамилию партнёра';
+        var email = String(v.email || '').trim();
+        if (email.indexOf('@') < 0 || email.indexOf('.') < 0)
+          return 'Впишите корректную почту';
+        czSend('/admin/api/partners', 'POST', {
+          first_name: v.first_name, last_name: v.last_name, email: email, phone: v.phone,
+        }).then(function (resp) {
+          close(); FIN.partners = null; renderAll();
+          // Сразу кладём ссылку в буфер — чаще всего следующим шагом её и отправляют партнёру.
+          var link = MK_GO + encodeURIComponent(resp.ref_code || '');
+          copyText(link);
+          showToast('Партнёр заведён, ссылка скопирована: ' + link);
+        }).catch(function (e) { el('sh-err').textContent = finLineErr(e); });
+      }, false, 'Партнёрские выплаты', 'Завести');
   }
 
   function finPartnerReqForm(p) {
