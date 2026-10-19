@@ -36338,6 +36338,86 @@
       '</div></div>';
   }
 
+  /* ── рабочее окно тьютора: что сделать сегодня по ученикам ──
+     Та же логика, что у менеджера, но единица работы — ученик, а не сделка.
+     Ученики и заработок берём из доски мотивации (PB.my), задачи — из groupTasks. */
+  function tutorHomeHtml(c) {
+    var board = PB.my && !PB.my.failed ? PB.my : null;
+    var loaded = !!board;
+    var gt = groupTasks();
+    var over = gt.over, today = gt.today;
+    var qTotal = over.length + today.length;
+    var students = board ? (board.students || []) : [];
+    var pupils = students.length;
+    var earned = 0;
+    students.forEach(function (s) { earned += (s.money && s.money.earned) || 0; });
+    var tday = todayISO(0);
+
+    function tTag(l) {
+      var d = (Array.isArray(l.directions) && l.directions[0]) || '';
+      return '<span class="pb-tar">' + esc(d || 'ученик') + '</span>';
+    }
+    function qrow(it) {
+      return '<div class="trow ar-grid" data-id="' + it.lead.id + '">' + tTag(it.lead) +
+        '<div class="t-cell"><div class="t-ttl">' + esc(leadName(it.lead)) + '</div>' +
+        '<div class="t-sub">' + esc(it.task.text) + agMark(it.task, false) + '</div></div>' +
+        '<div class="t-when num">' + (it.task.due === tday ? 'сегодня' : '') + '</div>' +
+        '<div class="t-go">' + ic('go', 13) + '</div></div>';
+    }
+    var queueBody =
+      (over.length ? '<div class="dq-band over">Просрочено</div>' + over.map(qrow).join('') : '') +
+      (today.length ? '<div class="dq-band">Сегодня</div>' + today.map(qrow).join('') : '') +
+      (qTotal ? '' : '<div class="empty" style="padding:22px 24px">На сегодня по ученикам задач нет. Спокойно.</div>');
+    var queueCard = '<div class="card" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('flame', 14) + '</span>' +
+      '<div><div class="t">Сейчас</div><div class="s">что сделать по ученикам: сначала просроченное, нажми на строку — откроется карточка</div></div>' +
+      '<span class="cnt num">' + qTotal + '</span></div>' +
+      '<div style="border-top:1px solid var(--line)">' + queueBody + '</div></div>';
+
+    var stuBody;
+    if (!loaded) stuBody = '<div class="empty" style="padding:18px 2px">Собираю учеников…</div>';
+    else if (!students.length) stuBody = '<div class="empty" style="padding:18px 2px">Учеников пока нет.</div>';
+    else stuBody = '<div class="th-list">' + students.slice(0, 10).map(function (s) {
+      var pts = s.points || [];
+      var done = pts.filter(function (p) { return p.closedAt; }).length;
+      var nextKey = s.next && s.next.key;
+      var rail = '<div class="pb-rail th-rail">' + pts.map(function (p, i) {
+        return '<span class="pb-dot' + (p.closedAt ? ' done' : '') + (p.key === nextKey ? ' on' : '') + '">' + (i + 1) + '</span>';
+      }).join('') + '</div>';
+      return '<div class="th-row"><div class="th-nm">' + esc(s.name) +
+        (s.tariff ? '<span class="pb-tar">' + esc(s.tariff) + '</span>' : '') + '</div>' +
+        rail + '<div class="th-pr num">' + done + '/5</div></div>';
+    }).join('') + '</div>';
+    var stuCard = '<div class="card" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div class="t">Мои ученики</div>' +
+      '<span class="cnt num">' + (loaded ? pupils : '') + '</span></div>' + stuBody + '</div>';
+
+    function navRow(page, icon, t1, t2) {
+      return '<div class="dq-nrow" data-nav="' + page + '" role="button" tabindex="0">' +
+        '<span class="dq-nico">' + ic(icon, 16) + '</span>' +
+        '<div class="dq-ntxt"><div class="dq-nt1">' + t1 + '</div><div class="dq-nt2">' + t2 + '</div></div>' +
+        '<span class="dq-chev">' + ic('go', 14) + '</span></div>';
+    }
+    var navCard = '<div class="card dq-nav" style="padding:22px 26px">' +
+      '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
+      '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
+      navRow('leads', 'cap', 'Ученики', 'карточки и сопровождение') +
+      navRow('tasks', 'task', 'Задачи', 'что на сегодня по ученикам') +
+      navRow('points', 'target', 'Мотивация', 'заработок за месяц и по ученикам') + '</div>';
+
+    return '<div class="dash">' +
+      statBar([
+        { label: 'Ученики', value: loaded ? pupils : '—', sub: 'ведёшь' },
+        { tint: 'blue', label: 'Задачи сегодня', value: today.length, go: 'tasks', sub: today.length ? 'закрыть' : 'нет' },
+        { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'tasks', sub: over.length ? 'вернуться сегодня' : 'чисто' },
+        { tint: 'green', label: 'Заработок месяца', value: loaded ? (fmtMoney(earned) + ' ₽') : '—', go: 'points', sub: 'в этом месяце' },
+      ]) +
+      '<div class="grid">' +
+        '<div class="sp7 vstack">' + queueCard + '</div>' +
+        '<div class="sp5 vstack">' + stuCard + navCard + '</div>' +
+      '</div></div>';
+  }
+
   function renderDash(view) {
     if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
@@ -36406,6 +36486,10 @@
       if (state.role === 'sales_manager' || state.role === 'manager') {
         /* ── рабочее окно менеджера продаж ── */
         view.innerHTML = salesHomeHtml(c, convClient, saleRows, convSale, weakest, saleSteps);
+      } else if (state.role === 'tutor' || state.role === 'tutor_sales') {
+        /* ── рабочее окно тьютора: что сделать сегодня по ученикам ── */
+        pbLoad();   // доска мотивации (scope my) — ученики и заработок месяца
+        view.innerHTML = tutorHomeHtml(c);
       } else {
       /* ── без доступа к воронке/пути: компактный дашборд «что делать» ── */
       view.innerHTML = '<div class="dash">' +
@@ -46289,10 +46373,10 @@
       : '/admin/api/tutor-points/board?scope=' + seg;
     api(url).then(function (r) {
       PB[key] = r; PB.busy = false;
-      if (state.page === 'points') renderView();
+      if (state.page === 'points' || state.page === 'dash') renderView();
     }).catch(function () {
       PB[key] = { failed: true }; PB.busy = false;
-      if (state.page === 'points') renderView();
+      if (state.page === 'points' || state.page === 'dash') renderView();
     });
   }
 
