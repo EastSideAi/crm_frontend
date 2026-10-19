@@ -1485,6 +1485,24 @@ a { color: inherit; text-decoration: none; }
 .cns-note { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
 .cns-acts { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .cns-empty { font-size: 13px; color: var(--ink-3); padding: 22px 0; text-align: center; line-height: 1.5; }
+/* Разбивка оплаты консультации: отделена от строки тонкой линией, внутри плотнее. */
+.cns-split { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px; }
+.cns-split-h { display: flex; align-items: center; gap: 10px; font-size: 12px;
+  font-weight: 600; color: var(--ink-2); }
+.cns-5050 { margin-left: auto; }
+.cns-split-f { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); }
+.cns-split-f .al-in { width: 120px; margin-left: auto; }
+.cns-sched { display: flex; flex-direction: column; gap: 8px; }
+.cns-sched-row { display: flex; align-items: center; gap: 8px; }
+.cns-sched-row .al-in[type="date"] { width: 150px; }
+.cns-sched-row .al-in.num { flex: 1; min-width: 90px; }
+.cns-sched-del { flex: none; border: 0; background: transparent; color: var(--ink-3);
+  cursor: pointer; width: 28px; height: 28px; border-radius: 8px; display: inline-flex;
+  align-items: center; justify-content: center; }
+.cns-sched-del:hover { color: var(--red); background: var(--fill); }
+.cns-split-acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cns-split-save { margin-left: auto; }
 
 .m-foot { flex: none; border-top: 1px solid var(--line); padding: 12px 22px; background: #fff;
   display: flex; gap: 10px; justify-content: flex-end; }
@@ -3336,6 +3354,10 @@ button.tr-crumb:hover { color: var(--blue); }
 .pp-add { width: auto; min-width: 120px; min-height: 28px; padding: 5px 28px 5px 10px;
   font-size: 12.5px; line-height: 1.45; }
 .tsk-card .al-body { overflow-y: auto; gap: 16px; padding-bottom: 16px; }
+/* Карточку теперь открывают прокрученной — по ссылке на реплику. Без признака
+   прокрутки верхний блок выглядит просто обрезанным (тот же случай, что на
+   телефоне ниже, там линия стоит всегда). */
+.tsk-card .al-body.scr { box-shadow: inset 0 1px 0 var(--line-2); }
 .tsk-sec { display: flex; flex-direction: column; gap: 7px; }
 .tsk-l { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
 .tsk-p { font-size: 13.5px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
@@ -3383,42 +3405,151 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-qmore:hover { color: var(--blue); }
 .tsk-qhint { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
 
-/* Своей высоты у ленты нет намеренно: скроллится тело карточки, и колесо не
-   застревает во вложенной области. */
-.tsk-feed { display: flex; flex-direction: column; gap: 2px; }
-.tsk-ev { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-.tsk-ev:first-child { border-top: none; }
-.tsk-ev-ic { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
-  background: var(--fill); color: var(--ink-3); }
-.tsk-ev.cm .tsk-ev-ic { background: var(--blue-tint); color: var(--blue); }
-.tsk-ev-b { min-width: 0; flex: 1; }
-.tsk-ev-t { font-size: 13px; line-height: 1.45; color: var(--ink); word-wrap: break-word;
-  white-space: pre-wrap; }
-.tsk-ev-t[hidden] { display: none; }
-.tsk-ev-m { display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px;
-  font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
-.tsk-ev-ed { font-style: normal; color: var(--ink-3); margin-left: -6px; }
-.tsk-ev-ed::before { content: '·'; margin-right: 5px; }
-/* Действия у реплики — тихие подписи, а не кнопки: в ленте их по две на
-   строку, и нарисованные кнопки превратили бы обсуждение в панель. */
-.tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-3); transition: color .12s; }
-.tsk-ev.ed .tsk-evb { display: none; }
-.tsk-evb:hover { color: var(--blue); }
-.tsk-ev:hover .tsk-evb { color: var(--ink-2); }
-.tsk-ev:hover .tsk-evb:hover { color: var(--blue); }
+/* ── Карточка задачи: задача слева, разговор справа ────────────────────────
+   Обсуждение лежало в подвале одной длинной колонки, и до него не долистывали
+   (Павел 13.10.2026). Теперь карточка раскладывается на две колонки, а ширину
+   выбирает человек кнопкой в шапке — выбор запоминается на устройстве.
+   Базовые правила ниже — одна колонка: так выглядит компактный вид и телефон.
+   Широкий режим включается отдельным медиа-блоком. */
+.tsk-cols { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.tsk-card .tsk-cols > .al-body { overflow: visible; }
+.tsk-chat { display: flex; flex-direction: column; min-height: 0; }
+.tsk-chat-h { flex: none; display: flex; align-items: center; gap: 8px; padding: 14px 24px 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tsk-chat-n { font-size: 11px; font-weight: 700; color: var(--ink-2); }
+.tsk-thread { display: flex; flex-direction: column; gap: 10px; padding: 14px;
+  margin: 0 24px; background: #F3F5F8; border-radius: 14px; }
+.tsk-chat-f { flex: none; padding: 10px 24px 4px; display: flex; flex-direction: column; gap: 8px; }
+.tsk-chat-empty { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); padding: 6px 2px; }
 
-/* Ветка ответов. Отступ и линия слева — ровно столько, чтобы читалось «это
-   про реплику выше»: уровень один, вложенных лесенок тут не бывает. */
-.tsk-re { margin-left: 34px; padding-left: 12px; border-left: 2px solid var(--line); }
-.tsk-re .tsk-ev { padding: 7px 0; border-top: 1px solid var(--line); }
-.tsk-re .tsk-ev:first-child { border-top: none; }
-.tsk-re .tsk-ev-ic { width: 20px; height: 20px; border-radius: 6px; }
-.tsk-re .tsk-ev-t { font-size: 12.5px; }
+/* Сообщение в задаче — тот же компонент, что в «Диалогах» (.tg-msg/.tg-bub):
+   второй вид чата в системе заводить незачем. Отличия только те, что нужны
+   задаче: ширина пузыря больше (тут пишут абзацами, а не «ок»), под пузырем
+   подпись и действия. */
+.tsk-chat .tg-msg.tsk-msg { max-width: 86%; }
+.tsk-msg .tg-bub { white-space: normal; }
+.tsk-msg .tsk-ev-t { white-space: pre-wrap; word-wrap: break-word; }
+.tsk-msg .tsk-ev-t[hidden] { display: none; }
+/* В «Диалогах» имя собеседника синее — там это ярлык канала. В задаче автор
+   пишется под каждым пузырем, и синий ряд подписей перебивал бы сами реплики. */
+.tsk-chat .tg-msg .tg-by, .tsk-chat .tg-msg.in .tg-by,
+.tsk-chat .tg-msg.out .tg-by { color: var(--ink-2); font-weight: 600; font-size: 11px; }
+.tsk-headx { display: flex; align-items: center; gap: 8px; flex: none; }
+.tsk-msg.ed .tg-bub { display: none; }
+
+/* Системное событие — не чья-то реплика, а отметка на ленте времени: тонкая
+   строка по центру, как разделитель дня в переписке (.tg-day). */
+.tsk-sys { display: flex; justify-content: center; margin: 2px 0; }
+.tsk-sys span { font-size: 11px; font-weight: 600; color: var(--ink-2); background: #fff;
+  border-radius: var(--r-pill); padding: 3px 12px; text-align: center; }
+
+/* Цитата в пузыре вместо лесенки отступов: в колонке 420px ветка отступом
+   съедала бы половину строки, а так видно, на что отвечают, и по клику
+   прыгаешь к оригиналу. */
+.tsk-quote { display: block; width: 100%; text-align: left; font-size: 11.5px; line-height: 1.4;
+  color: var(--ink-2); background: rgba(17,21,31,.05); border-radius: 8px;
+  padding: 5px 8px; margin-bottom: 5px; }
+.tsk-quote i { display: block; font-style: normal; font-weight: 700; color: var(--blue); }
+.tsk-quote:hover { background: rgba(17,21,31,.09); }
+.tsk-msg.out .tsk-quote { background: rgba(255,255,255,.18); color: rgba(255,255,255,.88); }
+.tsk-msg.out .tsk-quote i { color: #fff; }
+.tsk-msg.out .tsk-quote:hover { background: rgba(255,255,255,.26); }
+
+/* Действия у реплики — тихие подписи, а не кнопки: нарисованные кнопки
+   превратили бы обсуждение в панель. Цвет ink-2 (контраст 4.9:1), своя группа
+   под пузырем. inline-flex — чтобы галочка «Скопировано» вставала в строку, а
+   не вторым этажом: svg в продукте блочный. */
+.tsk-evacts { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 14px; margin-top: 1px; }
+/* Там, где есть курсор, служебные подписи не висят под каждой репликой: иначе
+   столбец «Ответить · Ссылка · Удалить» перебивает сам разговор. Приходят по
+   наведению и по фокусу с клавиатуры — тот же прием, что у .tg-acts и .dn-undo.
+   На тач-экранах наведения нет, там они видны всегда. */
+@media (hover: hover) {
+  /* Место под ряд держим всегда: если убирать его из потока, лента дергалась бы
+     на каждом наведении. А вот нажать невидимое нельзя — pointer-events снимаем
+     вместе с видимостью. Фокус с клавиатуры при этом работает, поэтому не
+     visibility: hidden. */
+  .tsk-evacts { opacity: 0; pointer-events: none; transition: opacity .12s var(--ease); }
+  .tsk-msg:hover .tsk-evacts,
+  .tsk-evacts:focus-within { opacity: 1; pointer-events: auto; }
+}
+.tsk-msg.out .tsk-evacts { justify-content: flex-end; }
+.tsk-evb { font-size: 11.5px; font-weight: 600; color: var(--ink-2); transition: color .12s;
+  display: inline-flex; align-items: center; gap: 4px; }
+.tsk-msg.ed .tsk-evb { display: none; }
+.tsk-evb:hover { color: var(--blue); }
+/* Кольцо фокуса на строке в 17 пикселей ложится прямо на буквы — отодвигаем его
+   отступом и гасим отступ отрицательным полем, чтобы ряд не разъехался. */
+.tsk-evb:focus-visible, .tsk-quote:focus-visible { outline: none; border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--blue); padding: 2px 5px; margin: -2px -5px; }
+/* «Удалить» уводит в красный только под курсором: в спокойном состоянии это
+   такая же тихая подпись, как остальные, иначе лента пестрит предупреждением. */
+.tsk-evb.tsk-evdel:hover { color: var(--red-ink); }
+
+/* След удаленной реплики: место в разговоре осталось, текста нет (Павел
+   13.10.2026 — «в истории задачи следы пусть остаются»). Пузырь гаснет до
+   нейтрального, чтобы след не читался как чье-то сообщение. */
+/* В «Диалогах» отозванное сообщение зачеркнуто и приглушено до .55 — там оно
+   лежит рядом с живым текстом и так честнее. Здесь текста нет вовсе, зачеркивать
+   нечего, а приглушение поверх серого давало контраст 1.5:1 — след переставал
+   читаться. Поэтому рецепт переопределяем, а не наследуем. */
+.tsk-chat .tg-msg.gone .tg-bub { background: transparent; color: var(--ink-2); font-size: 12px;
+  opacity: 1; text-decoration: none; box-shadow: inset 0 0 0 1px var(--line-2); }
+.tsk-chat .tg-msg.out.gone .tg-bub { background: transparent; color: var(--ink-2); }
+
+/* Переход по ссылке на реплику: подсветка на пару секунд, чтобы в длинном
+   разговоре было видно, о какой именно речь. */
+.tsk-msg .tg-bub, .tsk-sys span { transition: box-shadow .4s var(--ease), background .4s var(--ease); }
+.tsk-msg.hl .tg-bub { box-shadow: inset 0 0 0 2px var(--blue); }
+.tsk-sys.hl span { background: var(--blue-tint); }
 
 @media (max-width: 560px) {
-  /* На телефоне ветке хватает намека: 46 пикселей отступа съедали строку. */
-  .tsk-re { margin-left: 14px; padding-left: 10px; }
+  .tsk-chat-h { padding-left: 18px; padding-right: 18px; }
+  .tsk-thread { margin: 0 18px; }
+  .tsk-chat-f { padding-left: 18px; padding-right: 18px; }
+  .tsk-chat .tg-msg.tsk-msg { max-width: 94%; }
+  /* Подпись высотой в строку текста — мишень в 17 пикселей, а крайняя из них
+     стирает реплику навсегда. Поднимаем до 32px и разводим действия шире. */
+  .tsk-evb { min-height: 32px; }
+  .tsk-evacts { gap: 0 18px; }
+  .tsk-evdel { margin-left: 6px; }
 }
+
+/* На узком экране выбора ширины нет: две колонки туда не помещаются, и кнопка
+   обещала бы несуществующее. */
+@media (max-width: 980px) { .al-x.tk-wide { display: none; } }
+
+/* Широкий режим: две колонки. Только там, где они реально помещаются. */
+@media (min-width: 981px) {
+  .al-ov .al-card.tsk-card.wide { max-width: 1320px; width: calc(100vw - 56px);
+    height: auto; min-height: min(560px, calc(100vh - 56px));
+    max-height: calc(100vh - 56px); }
+  .tsk-card.wide .tsk-cols { display: flex; overflow: hidden; }
+  .tsk-card.wide .tsk-cols > .al-body { flex: 1 1 auto; min-width: 0; min-height: 0;
+    overflow-y: auto; overscroll-behavior: contain; }
+  /* Строка описания в тысячу пикселей не читается: держим блоки задачи в
+     комфортной мере, а не растягиваем на всю освободившуюся ширину. */
+  .tsk-card.wide .tsk-cols > .al-body > * { max-width: 780px; }
+  /* Колонка разговора: своя прокрутка и свое поле ввода внизу. Читать
+     обсуждение и листать описание — два разных движения, одна общая прокрутка
+     заставляла терять место в каждом. */
+  .tsk-card.wide .tsk-chat { width: 420px; flex: none; background: #F3F5F8;
+    box-shadow: inset 1px 0 0 var(--line); }
+  .tsk-card.wide .tsk-chat-h { padding: 16px 20px 6px; }
+  .tsk-card.wide .tsk-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    margin: 0; padding: 6px 20px 14px; background: transparent; border-radius: 0; }
+  /* Лента открывается прокрученной (на последнем сообщении или на реплике из
+     ссылки) — без признака среза верх читается как сбой отрисовки. */
+  .tsk-card.wide .tsk-thread.scr { box-shadow: inset 0 1px 0 var(--line-2); }
+  .tsk-card.wide .tsk-thread::-webkit-scrollbar { width: 7px; }
+  .tsk-card.wide .tsk-thread::-webkit-scrollbar-thumb { background: #DFE2E8; border-radius: 99px; }
+  .tsk-card.wide .tsk-chat-f { padding: 12px 20px 14px; background: #fff;
+    box-shadow: inset 0 1px 0 var(--line); }
+  /* Кнопки задачи — под задачей, то есть слева. Прижатые вправо, они вставали
+     под колонкой разговора и читались как действия над перепиской. */
+  .tsk-card.wide > .al-foot { justify-content: flex-start; }
+}
+
 @media (max-width: 480px) {
   /* Ввод от 16px: на меньшем кегле Safari зумит страницу при фокусе и карточка
      уезжает из кадра. Тот же рецепт, что у поиска в выборе человека (.ss-q). */
@@ -3427,7 +3558,9 @@ button.tr-crumb:hover { color: var(--blue); }
 }
 
 /* Правка реплики на месте текста. */
-.tsk-evedit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+/* Правка реплики — на месте пузыря, а не внутри него: textarea в синем пузыре
+   выглядит как ошибка верстки. */
+.tsk-evedit { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; min-width: 260px; }
 .tsk-evedit .al-ta { font-size: 13px; }
 .tsk-evedit-r { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .tsk-evedit-r .al-cancel { height: 34px; padding: 0 12px; font-size: 12.5px; }
@@ -6073,6 +6206,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .cz-h.ok .cz-h-t   { color: var(--green-ink); }
 .cz-h.bad .cz-h-t  { color: var(--red-ink); font-weight: 600; }
 .cz-h.mute .cz-h-t { color: var(--ink-3); }
+/* На телефоне подпись проверки («ЕГРИП · автоматически») не помещается рядом с текстом
+   и налезает на него: строка складывается в два яруса, подпись уходит под ответ
+   реестра. Переносить нечего — она короткая, а дату с источником читают после текста. */
+@media (max-width: 560px) {
+  .cz-h { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .cz-h-d { white-space: normal; }
+}
 
 .cz-year-v { font-size: 30px; font-weight: 700; letter-spacing: -.035em; }
 .cz-year .strack.wide { max-width: none; width: 100%; height: 8px; margin-top: 10px; display: block; }
@@ -6129,6 +6269,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* документ, принятый самим человеком: отметка вместо переключателя — снять его нельзя */
 .cz-doc-fixed { flex: none; display: flex; align-items: center; gap: 10px; }
 .cz-doc-when { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+/* подпись под названием документа: «не обязателен» у договора с ИП. Отдельной строкой,
+   а не рядом с названием: на телефоне эти два текста в одну строку не влезают */
+.cz-doc-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
 
 .cz-foot { display: flex; align-items: center; gap: 8px; }
 .cz-foot .cz-save { margin-left: auto; }
@@ -6610,6 +6753,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    как чужой абзац: галочка держится верхней строки. */
 .sv-onoff.top { align-items: flex-start; }
 .sv-onoff.top input { margin-top: 2px; flex: none; }
+/* Зачем в карточке сервиса ИНН и почта: строка объяснения под полями. Мера строки
+   держится шириной формы, цвет подписи — это пояснение, а не предупреждение. */
+.sv-why { margin: -2px 0 2px; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+.sv-why .sv-bad { color: var(--red-ink); font-weight: 700; }
 /* Что у человека сейчас — в карточке исполнителя. Строки тихие: это контекст, а
    решения принимают на своих экранах. Задание кликабельно, пункт плана нет. */
 .cz-work { display: flex; flex-direction: column; }
@@ -7114,6 +7261,39 @@ a.fin-rcp.off:hover { text-decoration: underline; }
   .tx-head span:nth-child(2) { display: none; }
 }
 
+/* Справочник банков (finbanks): карточка на банк с лимитом без комиссии и правилами. */
+.fb-wrap { display: flex; flex-direction: column; gap: 16px; }
+.fb-grid { display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); }
+.fb-card { background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 16px 18px; }
+.fb-top { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 9px; }
+.fb-name { font: 700 16px 'Manrope', sans-serif; color: var(--ink);
+  letter-spacing: -.01em; }
+.fb-lim { font: 600 12.5px 'Manrope', sans-serif; color: var(--blue);
+  text-align: right; }
+.fb-for { font-size: 13px; color: var(--ink-2); margin-bottom: 11px;
+  line-height: 1.45; }
+.fb-rules { margin: 0; padding-left: 17px; display: flex; flex-direction: column;
+  gap: 6px; font-size: 13px; color: var(--ink); line-height: 1.45; }
+.fb-rules li::marker { color: var(--ink-3); }
+.fb-rule { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink);
+  font-size: 12.5px; line-height: 1.45; }
+.fb-rule b { font-weight: 700; }
+.fb-over { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+.fb-over span { color: var(--red-ink); font-weight: 700; }
+.fb-note { margin: 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+/* На телефоне statbar.three встаёт в 2 колонки, а крупные суммы лимитов (500 000 ₽,
+   1 000 000 ₽) в половину ширины не влезают и наезжают — поэтому в плашке банков
+   на узком экране одна колонка. */
+@media (max-width: 480px) {
+  .fb-wrap .statbar.three { grid-template-columns: 1fr; }
+  .fb-wrap .statbar.three .stat:last-child { grid-column: auto; }
+}
+
 /* Расходы: информатор проблем (переиспользует карточки .rsk-check рисков) и метки
    документа у строки. Сумма проблемы прижата вправо в шапке карточки. */
 .fsp-inf { padding: 0; overflow: hidden; }
@@ -7132,6 +7312,55 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .fsp-doc svg { color: var(--green); flex: none; }
 .fsp-add { color: var(--ink-2); }
 .fsp-add svg { opacity: .8; }
+/* «Попросить счет» у плановой строки: действие, но тихое — акцент на экране один,
+   и он у информатора проблем сверху. Уже попросили — на месте кнопки отметка. */
+.fsp-ask { color: var(--ink-2); cursor: pointer; }
+.fsp-ask svg { opacity: .8; }
+.fsp-ask:hover { color: var(--blue); }
+.fsp-asked { color: var(--ink-3); font-size: 11.5px; padding: 3px 9px; }
+/* «Счет не просим» — не отказ экрана, а состояние знания: про этого получателя мы
+   не знаем, выставляет ли он счета. Самая тихая пометка в строке (без фона, цветом
+   подписи), потому что действия она не требует; причина дословно в подсказке. */
+/* «В поставщики» — тихое действие у строки, которой система не пишет: поставщика
+   нет в списке, и завести его можно отсюда. Акцент экрана один и он у информатора
+   проблем сверху, поэтому это призрачный чип, а не кнопка. */
+.fsp-noask { color: var(--ink-3); font-size: 11.5px; padding: 3px 0;
+  border: 0; background: none; cursor: pointer;
+  border-bottom: 1px dashed rgba(17,21,31,.2); }
+.fsp-noask:hover { color: var(--blue); border-bottom-color: var(--blue); }
+/* Номер счета во второй строке — ссылка на сам документ. Подчеркивание тихое:
+   в строке это деталь, а не действие экрана. */
+.fsp-bill { color: var(--ink-2); text-decoration: underline;
+  text-decoration-color: rgba(17,21,31,.22); text-underline-offset: 2px; }
+.fsp-bill:hover { color: var(--blue); text-decoration-color: var(--blue); }
+
+/* Строка расхода: справа до трех пометок сразу (стадия, чем платили, флаг ИП по
+   счету). В общие 150px они налезают друг на друга, поэтому колонка шире и умеет
+   перенос: пометки важнее, чем лишние 110px под название контрагента. */
+.trow.fsp-row { grid-template-columns: 92px 1.5fr 150px 260px; }
+.fsp-row .fo-st { flex-wrap: wrap; row-gap: 5px; }
+
+/* Поле файла в форме ведомости: плашка по мере .al-in, внутри спрятан input.
+   Браузерная кнопка «Choose File» приходит с английской подписью и чужой
+   типографикой — на экране про деньги это читается как сбой верстки. */
+.fin-file { display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: var(--fill); border-radius: 11px; padding: 7px 8px 7px 9px;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.07); transition: box-shadow .15s; }
+.fin-file:hover { box-shadow: inset 0 0 0 1px rgba(17,21,31,.14); }
+.fin-file:focus-within { background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 3px rgba(47,107,255,.1); }
+.fin-file-b { flex: none; font: 600 12.5px 'Manrope', sans-serif; color: var(--ink);
+  background: #fff; border-radius: 8px; padding: 7px 12px;
+  box-shadow: inset 0 0 0 1px rgba(17,21,31,.09); }
+.fin-file-n { font-size: 12.5px; color: var(--ink-3); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.fin-file-n.on { color: var(--ink); font-weight: 600; }
+
+/* «ИП не действует» — единственный красный в строке расхода: платеж снявшемуся с
+   учета предпринимателю это выплата физлицу, с НДФЛ и взносами на нас. Семья чипов
+   та же, что у статусов (.sev), свой класс нужен только из-за места в строке. */
+.fsp-ip { color: var(--red-ink); background: var(--red-soft); font-size: 11.5px;
+  padding: 3px 9px; }
 /* Чем платили: тихая пометка «с Р/С», карточная — амбером как место возврата Виталию. */
 .fsp-via { color: var(--ink-2); font-size: 11.5px; padding: 3px 9px; }
 .fsp-via.card { color: var(--amber-ink); background: var(--amber-soft); }
@@ -7144,6 +7373,15 @@ button.fsp-via { cursor: pointer; }
 
 /* Сервис: дату следующего списания правим прямо в строке (пункт 5). Поле не тянется
    на всю строку — оно справочное, рядом с суммой. */
+/* ПОСТАВЩИКИ — у кого система просит счет. Та же строка справочника, что у сервисов,
+   плюс колонка состояния: «просим» или «не просим» одним взглядом. */
+.fl-row.sup-row { grid-template-columns: 1fr auto; gap: 14px; }
+.sup-flag { display: flex; justify-content: flex-end; }
+.sup-how { padding: 4px 18px 18px; color: var(--ink-2); font-size: 12.5px;
+  line-height: 1.55; }
+.sup-how p { margin: 0 0 10px; }
+.sup-how p:last-child { margin-bottom: 0; }
+
 .fl-row.fsv-row { grid-template-columns: 1fr auto auto; gap: 14px; }
 .fsv-date { font: 600 12.5px 'Manrope', sans-serif; color: var(--ink-2);
   border: 1px solid var(--line-2); border-radius: 9px; padding: 5px 9px;
@@ -7204,6 +7442,62 @@ button.fsp-via { cursor: pointer; }
 @media (max-width: 760px) {
   .trow.fe-grid { grid-template-columns: 1fr auto !important; }
   .fe-grid .fo-st { grid-column: 2; grid-row: 3; }
+}
+
+/* ── Партнёрские выплаты ──────────────────────────────────────────────────────
+   Строка клиента: имя, начислено, статус. Своя сетка, а не fin-grid — у начисления
+   нет даты, и колонка даты пустой тратила бы левый край. */
+.fpt-crow { grid-template-columns: 1.7fr 150px 210px; }
+/* Выплаченную строку гасим в имени и сумме, но НЕ в статусе: там живёт кнопка
+   «отменить» — действующий контрол, под общим opacity её контраст просел бы. */
+.fpt-crow.muted .fo-what, .fpt-crow.muted .fo-sum { opacity: .5; }
+.fpt-crow .fo-st { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+.fpt-right { margin-left: auto; }
+.fpt-req { color: var(--ink-3); font-weight: 600; }
+/* Нижняя полоса карточки (реквизиты + кнопка выплаты) переносится, когда в строку не
+   влезает: иначе кнопка «Выплатить» уезжает за край на узком экране. */
+.fpt-foot { flex-wrap: wrap; row-gap: 8px; }
+/* Кнопка «отменить» у выплаченной строки — тихая и мелкая: это редкий откат, а не
+   второе действие наравне с выплатой. */
+.fpt-cancel { font-size: 11px; padding: 2px 8px; color: var(--ink-3); }
+.fpt-cancel:hover { color: var(--red); background: var(--red-soft); }
+@media (max-width: 760px) {
+  .trow.fpt-crow { grid-template-columns: 1fr auto !important; height: auto;
+    padding: 11px 16px; gap: 3px 12px; }
+  .fpt-crow .fo-what { grid-column: 1; grid-row: 1; }
+  .fpt-crow .fo-sum { grid-column: 2; grid-row: 1; text-align: right; }
+  .fpt-crow .fo-st { grid-column: 1 / span 2; grid-row: 2; justify-content: flex-start; }
+  /* Футер стопкой: реквизиты строкой, кнопка под ними слева — кнопка на узком
+     экране иначе налезает на длинные реквизиты. */
+  .fpt-foot { flex-direction: column; align-items: flex-start; }
+  .fpt-foot .fpt-right { margin-left: 0; }
+}
+
+/* ── Проверка выплат преподам (наработал против выплачено) ────────────────────
+   Повод — Ховисон (задача 6879): заработок прошлого периода не перенёсся в выплату.
+   Своя сетка: имя + три суммы, даты у строки нет. */
+.pck-grid { grid-template-columns: 1.7fr 140px 140px 140px; }
+.pck-head { height: 38px; }
+.pck-head:hover { background: none; }
+.pck-head span { font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  text-transform: uppercase; color: var(--ink-3); }
+.pck-debt { color: var(--ink-3); }
+/* Остаток — единственный акцент строки: красным, табличными цифрами. */
+.pck-debt.on { color: var(--red); font-weight: 700; }
+.pck-grid.warn, .pck-grid.warn:hover { background: var(--red-soft); }
+.pck-foot { flex-wrap: wrap; row-gap: 8px; }
+.pck-right { margin-left: auto; }
+.pck-urow, .pck-jrow { grid-template-columns: 1fr auto; }
+.pck-jrow .fo-st { display: flex; justify-content: flex-end; align-items: center; }
+.pck-empty { padding: 16px 24px; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 760px) {
+  /* На телефоне оставляем имя и остаток — ради него и заходят; наработал и выплачено
+     целиком не влезают в четыре колонки. */
+  .trow.pck-grid { grid-template-columns: 1fr auto; height: auto; padding: 11px 16px; }
+  .pck-grid .num:not(.pck-debt) { display: none; }
+  .pck-head { display: none; }
+  .pck-foot { flex-direction: column; align-items: flex-start; }
+  .pck-foot .pck-right { margin-left: 0; }
 }
 
 /* Быстрая отметка «деньги пришли» на строке плана выручки: кружок-галочка слева.
@@ -10993,6 +11287,31 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pl-go { cursor: pointer; transition: background .12s var(--ease); }
 .pl-go:hover { background: #FAFBFC; }
 
+/* Напоминания о плане: кто отвечает за отдел и в каком состоянии его задача.
+   Своей карточки не изобретает — те же .pl-row, что в сводке выше, плюс поле
+   выбора человека. Строка тут не кликается целиком: клик по ней означал бы
+   «провалиться в лист», а здесь в строке живет выбор ответственного. */
+.rem-card { margin-top: 14px; }
+.rem-row { gap: 10px; }
+.rem-row .pl-nm { flex: 1 1 140px; }
+.rem-who, .rem-row .ss-wrap { flex: 0 1 220px; max-width: 220px; }
+.rem-who-t { flex: 0 1 220px; font-size: 13px; color: var(--ink-2); text-align: right; }
+.rem-when { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Рубильник всего цикла отбит от пары «последний понедельник / 20-го»: это выбор
+   не расписания, а того, работает ли процесс вообще. */
+.rem-off { margin-left: 10px; color: var(--ink-2); }
+/* «Ждет такого-то» — состояние всех строк до дня рассылки, то есть обычный
+   рабочий текст, а не тихая сноска: .pl-badge.na для него слишком бледна. */
+.rem-wait { color: var(--ink-2); background: var(--fill); }
+
+@media (max-width: 760px) {
+  /* На телефоне отдел и его состояние стоят строкой, а выбор человека — под ними:
+     рядом они сжимали select до неработоспособной ширины. */
+  .rem-row { flex-wrap: wrap; }
+  .rem-who, .rem-who-t, .rem-row .ss-wrap { flex: 1 1 100%; max-width: none; order: 3;
+    text-align: left; }
+}
+
 /* ── Блок «План на месяц» в расчётном листе + форма плановой строки ── */
 .plm-card { padding: 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
 .plm-head { display: flex; align-items: flex-start; justify-content: space-between;
@@ -12206,4 +12525,147 @@ video.cs-media { background: #000; }
   .cs-card { padding: 4px 14px 18px; }
   .cs-head .bp { margin-left: 0; width: 100%; }
   .cs-media { width: calc(50% - 6px); height: 190px; }
+}
+
+/* ── БАЗА ЗНАНИЙ ФИНАНСОВ (.fkb-*) ─────────────────────────────────────────
+   Книга, а не таблица: слева оглавление, справа одна статья целиком. Своего
+   рецепта карточки и полей не заводит — панель как везде (белое + 1px --line,
+   без тени), поля .al-in и .note-ta, кнопки .bp / .qchip.
+   Колонка оглавления уже обычной панели: главу узнают по заголовку, а место
+   нужно самому тексту — его читают, а не просматривают. */
+.fkb-wrap { display: grid; grid-template-columns: 296px minmax(0, 1fr); gap: 16px;
+  align-items: start; }
+.fkb-nav { background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 14px; position: sticky; top: 12px; max-height: calc(100vh - 90px);
+  overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.fkb-cap { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.fkb-nav .fkb-cap { margin: 6px 0 2px 4px; }
+/* Заголовок второй пачки отбивается от предыдущего списка сильнее, чем строки
+   внутри пачки: иначе «Справочник» читается как еще одно правило. */
+.fkb-nav .fkb-nav-i + .fkb-cap { margin-top: 16px; }
+.fkb-hist .fkb-cap { margin-bottom: 4px; }
+.fkb-add { align-self: flex-start; }
+.fkb-nav-i { display: block; width: 100%; text-align: left; padding: 9px 11px;
+  border-radius: 12px; transition: background .12s var(--ease), color .12s var(--ease); }
+.fkb-nav-i:hover { background: var(--fill); }
+.fkb-nav-i:active { background: var(--line); }
+.fkb-nav-i.on { background: var(--blue-tint); }
+.fkb-nav-t { display: block; font: 600 13.5px/1.35 'Manrope', sans-serif; color: var(--ink); }
+.fkb-nav-i.on .fkb-nav-t { color: var(--blue); }
+/* Подпись главы — две строки максимум: оглавление должно оставаться оглавлением. */
+.fkb-nav-s { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; margin-top: 3px; font: 500 12px/1.4 'Manrope', sans-serif;
+  color: var(--ink-2); }
+.fkb-nav-empty { padding: 10px 11px; font-size: 13px; color: var(--ink-3); }
+
+.fkb-main { background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+  padding: 26px 30px 30px; }
+.fkb-doc-h { display: flex; align-items: flex-start; gap: 16px; }
+.fkb-t { flex: 1; font: 700 23px/1.25 'Manrope', sans-serif; letter-spacing: -.03em;
+  color: var(--ink); margin: 0; text-wrap: balance; }
+.fkb-doc-act { display: flex; gap: 6px; flex: none; }
+.fkb-sum { margin-top: 10px; font: 500 14.5px/1.55 'Manrope', sans-serif; color: var(--ink-2); }
+/* Текст правила читают подряд, поэтому строка тут длиннее обычной админской и
+   ограничена по ширине: через весь широкий экран глаз теряет начало строки. */
+.fkb-body { margin-top: 18px; max-width: 70ch; font: 400 14.5px/1.65 'Manrope', sans-serif;
+  color: var(--ink); }
+.fkb-body p { margin: 0 0 12px; }
+.fkb-body .fkb-h { margin: 22px 0 8px; font: 700 15.5px/1.35 'Manrope', sans-serif;
+  letter-spacing: -.01em; color: var(--ink); }
+.fkb-body .fkb-ul, .fkb-body .fkb-ol { margin: 0 0 12px; padding-left: 20px; }
+.fkb-body li { margin-bottom: 5px; }
+.fkb-body code { font: 600 12.5px 'Manrope', monospace; background: var(--fill);
+  border-radius: 6px; padding: 1px 5px; }
+.fkb-body a { color: var(--blue); }
+/* Выноска-правило: единственная заливка на экране, как .rh-how у отчетов периода —
+   это предупреждение, а не текст, и разница должна читаться сразу. */
+.fkb-body .fkb-rule { margin: 0 0 14px; padding: 12px 15px; border-radius: 13px;
+  background: var(--blue-tint); font-weight: 500; }
+.fkb-meta { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--ink-3); }
+
+.fkb-hist { margin-top: 18px; }
+.fkb-hist-i { padding: 12px 0; border-top: 1px solid var(--line); }
+.fkb-hist-m { font-size: 12px; color: var(--ink-3); }
+.fkb-hist-b { margin-top: 6px; font: 400 13.5px/1.6 'Manrope', sans-serif; color: var(--ink-2); }
+.fkb-hist-b p { margin: 0 0 8px; }
+
+/* Ожидание: тот же каркас, что и у готового экрана — строки оглавления слева,
+   заголовок и абзацы справа. Мерцание берем общее (.shim), оно уже умеет
+   выключаться при prefers-reduced-motion. */
+.fkb-sk-i { padding: 11px 12px; border-top: 1px solid var(--line); }
+.fkb-sk-i:first-child { border-top: 0; }
+.fkb-sk-i span { display: block; height: 11px; }
+.fkb-sk-i span + span { width: 72%; height: 9px; margin-top: 7px; }
+.fkb-sk-t { height: 21px; width: 54%; margin-bottom: 20px; }
+.fkb-sk-p { height: 11px; margin-bottom: 10px; }
+.fkb-sk-p.short { width: 38%; }
+
+.fkb-edit { display: flex; flex-direction: column; gap: 10px; }
+.fkb-in-t { font-weight: 700; font-size: 17px; }
+.fkb-in-b { min-height: 420px; font-family: 'Manrope', sans-serif; }
+.fkb-edit-act { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fkb-hint { font-size: 12.5px; color: var(--ink-3); }
+
+/* Узкий ноутбук: две колонки еще нужны, но заголовок и три кнопки в одну строку
+   уже не встают — заголовок ломался по слогам, а «В архив» уезжал за край панели.
+   Кнопки встают под заголовок, оглавление ужимается. */
+@media (min-width: 961px) and (max-width: 1200px) {
+  .fkb-wrap { grid-template-columns: 250px minmax(0, 1fr); }
+  .fkb-doc-h { flex-direction: column; gap: 10px; }
+  .fkb-main { padding: 22px 22px 26px; }
+}
+
+/* Кнопка «Все главы» существует только на телефоне: на широком экране
+   оглавление и так стоит рядом, возвращаться некуда. */
+.fkb-back { display: none; }
+
+/* Узкий экран. Две половины книги не влезают рядом, и ставить их друг под друга
+   нельзя: оглавление из восемнадцати глав — это два экрана прокрутки до первой
+   строчки текста. Поэтому половины подменяют друг друга, как в читалке: сперва
+   главы, тап — статья целиком, сверху возврат.
+   Граница 960px — та же, на которой вся CRM переходит в телефонный вид (нижний
+   таббар вместо бокового меню). Разъехались бы границы — на планшете человек
+   видел бы таббар снизу и при этом сплющенную в три строки шапку статьи. */
+@media (max-width: 960px) {
+  .fkb-wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .fkb-wrap.on-list .fkb-main { display: none; }
+  .fkb-wrap.on-doc .fkb-nav { display: none; }
+
+  .fkb-nav { position: static; max-height: none; padding: 10px 10px 14px; gap: 6px;
+    border-radius: 18px; }
+  /* Поиск держится под рукой, пока палец идет вниз по главам. */
+  .fkb-search { position: sticky; top: -2px; z-index: 2; background: var(--card);
+    padding: 4px 0 6px; margin: -4px 0 0; }
+  .fkb-nav .fkb-cap { margin: 8px 0 0 4px; }
+  /* Глава на телефоне — строка списка, а не карточка: подпись в одну строку,
+     шеврон справа говорит, что по ней тапают. */
+  .fkb-nav-i { position: relative; padding: 11px 30px 11px 12px; border-radius: 0; }
+  .fkb-nav-i + .fkb-nav-i { border-top: 1px solid var(--line); }
+  .fkb-nav-i::after { content: '›'; position: absolute; right: 12px; top: 50%;
+    transform: translateY(-52%); font-size: 17px; line-height: 1; color: var(--ink-3); }
+  .fkb-nav-t { font-size: 14.5px; }
+  .fkb-nav-s { -webkit-line-clamp: 1; margin-top: 2px; }
+
+  .fkb-main { padding: 14px 16px 24px; border-radius: 18px; }
+  .fkb-back { display: inline-flex; margin-bottom: 14px; }
+  .fkb-back svg { transform: rotate(180deg); }
+  /* Пока читают правило, подстрочник раздела только отодвигает текст вниз. */
+  body.fkb-reading .verdict { display: none; }
+  .fkb-t { font-size: 21px; }
+  /* Кнопки уходят в конец статьи. Рядом с заголовком они сжимали его в три
+     строки, а под ним отодвигали текст на полэкрана — при том что на телефоне в
+     базу знаний приходят читать, а правят куда реже и уже дочитав. */
+  .fkb-doc { display: flex; flex-direction: column; }
+  .fkb-doc-h { display: contents; }
+  .fkb-doc-act { order: 9; width: 100%; margin-top: 16px; }
+  /* Строка короче, поэтому интерлиньяж больше: так длинный текст с телефона
+     читается без усилия. */
+  .fkb-body { font-size: 15px; line-height: 1.7; }
+  .fkb-body .fkb-h { margin-top: 20px; font-size: 16px; }
+  .fkb-in-b { min-height: 300px; }
+  /* Поле мельче 16px заставляет Safari зумить страницу при фокусе, и человек
+     дописывает правило в уехавшей верстке. */
+  .fkb-search .al-in, .fkb-edit .al-in, .fkb-in-b { font-size: 16px; }
 }
