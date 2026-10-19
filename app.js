@@ -2498,7 +2498,12 @@
     /* План выручки — прогноз (новые продажи и дебиторка), платежный календарь сводит
        ожидаемый приход с плановым расходом. Раздел старого сайта, вернули 18.08.2026. */
     { id: 'finplan', label: 'План выручки', icon: 'target', cap: 'finmodel', space: 'fin' },
-    { id: 'fincalendar', label: 'Платежный календарь', icon: 'cal', cap: 'finmodel', space: 'fin' },
+    // Платёжный календарь сложен под «План выручки» (итог сверху — детали снизу, владелец
+    // 19.10.2026): раскладка плана по срокам живёт вкладкой-блоком на той же странице.
+    // Своего пункта меню нет (hidden), запись остаётся ради cap/пространства и прямой
+    // ссылки #page/fincalendar.
+    { id: 'fincalendar', label: 'Платежный календарь', icon: 'cal', cap: 'finmodel', space: 'fin',
+      hidden: true },
     /* Сводка «кто из руководителей сдал план на период». План отдела = плановые строки
        его расходов в расчетном листе; экран показывает с одного взгляда, где план есть,
        а где нет. Для того, кто собирает план (владелец, финансист) — cap finmodel. */
@@ -3654,7 +3659,8 @@
       } else if (state.page === 'finplan') {
         ph = 'Прогноз выручки по ведомости <b>' + esc(per.name) + '</b>: новые продажи и ' +
           'дебиторка. Это ожидание, не факт — в доход и отчисления план не идет. Экран ' +
-          'сравнивает план с тем, что уже пришло.';
+          'сравнивает план с тем, что уже пришло, а ниже — платёжный календарь: раскладка ' +
+          'ожидаемого прихода против плановых выплат по срокам.';
       } else if (state.page === 'fincalendar') {
         ph = 'Плановая позиция: ожидаемый приход из плана выручки против плановых выплат ' +
           'ведомости <b>' + esc(per.name) + '</b>. Остаток на счете не равен прибыли — ' +
@@ -25786,13 +25792,22 @@
       { label: 'Факт дохода', value: finRub(t.income_fact), sub: planFact },
     ]);
 
+    // Под Планом выручки — Платёжный календарь: раскладка плана по датам (приход против
+    // плановых выплат). Владелец 19.10.2026: итог сверху, детали снизу, отдельного пункта
+    // «Платёжный календарь» в меню больше нет. Рисуется из той же функции, что и страница
+    // fincalendar, в свой контейнер #plan-cal (без своего статбара — он уже выше у Плана).
+    var calHead = '<div class="sec-head fin-cal-head" style="margin:22px 4px 10px"><span class="ic">' + ic('cal', 14) + '</span>' +
+      '<div><div class="t">Платёжный календарь</div>' +
+      '<div class="s">ожидаемый приход против планового расхода — раскладка плана по срокам</div>' +
+      '</div></div>';
     view.innerHTML = bar + finPlanFactCard(t.planned_revenue || 0, t.income_fact || 0) +
       '<div class="grid">' +
       '<div class="sp6">' + finRevCard('Новые продажи', 'продажа', sales, canFix,
         'кого закрываем и на сколько — записанные консультации собираются сами', salesAuto) + '</div>' +
       '<div class="sp6">' + finRevCard('Дебиторка', 'дебиторка', receiv, canFix,
         'кто уже должен и за что — рассрочка клиентов собирается сама', autoReceiv) + '</div>' +
-    '</div>';
+    '</div>' +
+    calHead + '<div id="plan-cal"></div>';
 
     if (canFix) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-rpadd]'), function (b) {
@@ -25833,6 +25848,11 @@
       });
     });
     pageAnim(view);
+    // Платёжный календарь — в свой контейнер после того, как обработчики Плана уже
+    // навешаны (контейнер на тот момент пуст, чужие строки не перехватим). compact —
+    // без своего статбара.
+    var calBox = el('plan-cal');
+    if (calBox) renderFinCalendarInto(calBox, true);
   }
 
   // План против факта: одна полоса вместо голых цифр. Анкер экрана — сразу видно,
@@ -25982,7 +26002,13 @@
     });
   }
 
-  function renderFinCalendar(view) {
+  /* Платёжный календарь: отдельная страница fincalendar (view) и блок под Планом
+     выручки рисуются из одной функции, обработчики вешаются внутри переданного
+     контейнера. compact — встроенный режим (под Планом): свой статбар не рисуем, у
+     Плана он уже сверху, а вердикт несёт карточка «Приход против плановых выплат». */
+  function renderFinCalendar(view) { return renderFinCalendarInto(view); }
+  function renderFinCalendarInto(container, compact) {
+    var view = container;
     if (!FIN.calendar) {
       if (FIN.err) return finErrView(view);
       view.innerHTML = dashSkeleton(); finLoadCalendar(); return;
@@ -26029,7 +26055,8 @@
       ['Платежи по кредитам и долгам', out.debts],
     ], out.total, 'Итого к выплате');
 
-    view.innerHTML = bar + finCashBalanceCard(inc.total || 0, out.total || 0, c.net || 0) +
+    view.innerHTML = (compact ? '' : bar) +
+      finCashBalanceCard(inc.total || 0, out.total || 0, c.net || 0) +
       '<div class="grid">' +
       '<div class="sp6"><div class="card listcard">' +
         '<div class="list-tools sec-head"><span class="ic">' + ic('card', 14) + '</span>' +
