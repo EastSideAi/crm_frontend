@@ -32254,7 +32254,7 @@
         if (state.page === 'manage') renderView();
       });
     }
-    var wk = mgWeek();
+    var wk = mgAdd(mgWeek(), -7);  // план той недели, чьи цифры на экране
     if (can('planfact') && !(state._mgPlan && state._mgPlan[wk])) {
       state._mgPlan = state._mgPlan || {};
       state._mgPlan[wk] = 'wait';
@@ -32271,6 +32271,11 @@
 
   function renderManage(view) {
     var tab = mgTab();
+    var depts = ['', 'marketing', 'sales', 'product', 'edu', 'teach', 'finance', 'manage'];
+    var deptBar = tab !== 'rnp' ? '' : '<div class="list-quick mg-depts">' + depts.map(function (d) {
+      return '<button class="qchip' + ((state.mgDept || '') === d ? ' on' : '') + '" data-mgdept="' + d + '">' +
+        esc(d ? deptLabel(d) : 'Компания') + '</button>';
+    }).join('') + '</div>';
     var tabs = MG_TABS.filter(function (x) { return !x.cap || can(x.cap); });
     var head = '<div class="card mg-head">' +
       (tabs.length > 1 ? '<div class="list-quick mg-tabs">' + tabs.map(function (x) {
@@ -32281,39 +32286,41 @@
         '<span class="brd-label">' + esc(mgWeekLabel(mgWeek())) + '</span>' +
         '<button class="icobtn sm brd-arrow" data-mgw="1" title="Следующая неделя">' + ic('go', 15) + '</button>' +
         (state.mgShift ? '<button class="qchip" data-mgw="now">Эта неделя</button>' : '') +
-      '</div>' +
+      '</div>' + deptBar +
     '</div>';
     if (tab === 'leads') { view.innerHTML = '<div class="dash mg">' + head + mgLeadsHtml() + '</div>'; mgBind(view); return; }
 
     mgLoad();
-    var depts = ['', 'marketing', 'sales', 'product', 'edu', 'teach', 'finance', 'manage'];
-    var deptBar = '<div class="list-quick mg-depts">' + depts.map(function (d) {
-      return '<button class="qchip' + ((state.mgDept || '') === d ? ' on' : '') + '" data-mgdept="' + d + '">' +
-        esc(d ? deptLabel(d) : 'Компания') + '</button>';
-    }).join('') + '</div>';
     var m = state._mg && state._mg.key === mgKey() ? state._mg.d : undefined;
     if (m === undefined) {
-      view.innerHTML = '<div class="dash mg">' + head + deptBar + '<div class="card"><div class="sk-list">' +
+      view.innerHTML = '<div class="dash mg">' + head + '<div class="card"><div class="sk-list">' +
         '<div class="shim"></div><div class="shim"></div><div class="shim"></div></div></div></div>';
       mgBind(view); return;
     }
     if (m === null) {
-      view.innerHTML = '<div class="dash mg">' + head + deptBar + '<div class="card"><div class="empty">' +
+      view.innerHTML = '<div class="dash mg">' + head + '<div class="card"><div class="empty">' +
         'РНП не загрузился. Проверь сеть и <button class="bp ghost" data-mgreload="1">попробуй еще раз</button></div></div></div>';
       mgBind(view); return;
     }
-    view.innerHTML = '<div class="dash mg">' + head + deptBar +
+    view.innerHTML = '<div class="dash mg">' + head +
       mgPrevHtml(m) + mgNumsHtml(m) + mgHypsHtml(m) + mgDecHtml(m) + '</div>';
     mgBind(view);
   }
 
-  /* Цифры недели — лестница сквозной. Только для компании: по отделу сквозная
-     не делится, и честнее промолчать, чем показать цифру всей компании под
-     вывеской отдела. */
+  /* Цифры недели — лестница сквозной. По отделам она не делится, поэтому у
+     маркетинга и продаж (это их воронка) стоят цифры всей компании с прямой
+     подписью об этом, а остальным отделам блок не показываем. */
   function mgNumsHtml(m) {
-    if (state.mgDept) return '';
+    // Лестница сквозной — это цифры маркетинга и продаж. Остальным отделам она не про них.
+    if (state.mgDept && state.mgDept !== 'marketing' && state.mgDept !== 'sales') return '';
+    /* На встрече в понедельник смотрят итоги ЗАКРЫТОЙ недели, а гипотезы ставят на
+       открытую. Поэтому неделя экрана — та, на которую планируем, а цифры — за ту,
+       что перед ней, и рядом еще одна раньше. */
+    var wk = m.prev_week, end = mgAdd(wk, 6), pw = mgAdd(wk, -7);
     var box = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('chart', 14) + '</span>' +
-      '<div><div class="t">Цифры недели</div><div class="s">лестница сквозной аналитики, рядом прошлая неделя</div></div></div>';
+      '<div><div class="t">Цифры за ' + esc(mgWeekLabel(wk)) + '</div><div class="s">' +
+      (state.mgDept ? 'по всей компании: сквозная по отделам не делится. ' : 'лестница сквозной аналитики, ') +
+      'рядом неделя ' + esc(mgWeekLabel(pw)) + '</div></div></div>';
     if (!can('marketing')) {
       return box + '<div class="mg-note">Цифры сквозной открыты тем, у кого есть доступ к маркетингу. ' +
         'Гипотезы и решения ниже видны всем.</div></div>';
@@ -32323,7 +32330,6 @@
     if (cc === 'none' || !window.CROSSCUT || !window.CROSSCUT.week) {
       return box + '<div class="mg-note">Сквозная не посчиталась. Обнови страницу через минуту.</div></div>';
     }
-    var wk = m.week, end = m.week_end, pw = m.prev_week;
     var cur = window.CROSSCUT.week(cc, wk, end), prv = window.CROSSCUT.week(cc, pw, mgAdd(pw, 6));
     var plan = (state._mgPlan && state._mgPlan[wk] && state._mgPlan[wk] !== 'wait') ? state._mgPlan[wk] : {};
     var rows = [
@@ -32341,9 +32347,12 @@
     var anyPlan = rows.some(function (r) { return r[4] != null; });
     return box + '<div class="mg-tbl' + (anyPlan ? '' : ' noplan') + '">' +
       '<div class="mg-tr th"><span>Ступень</span>' + (anyPlan ? '<span class="r c-pl">План</span>' : '') +
-      '<span class="r">Неделя</span><span class="r">Прошлая</span><span class="r c-dl"></span></div>' +
+      '<span class="r">' + esc(mgDate(wk).getDate() + '–' + mgDate(end).getDate()) + '</span>' +
+      '<span class="r">' + esc(mgDate(pw).getDate() + '–' + mgDate(mgAdd(pw, 6)).getDate()) + '</span><span class="r c-dl"></span></div>' +
       rows.map(function (r) {
         var money = r[5], f = function (v) { return v == null ? '—' : money ? fmtMoney(Math.round(v)) + ' ₽' : mgNum(v); };
+        // Разница денег коротко, в тысячах: «−62 тыс.» читается быстрее, чем «−62 000 ₽».
+        var fd = function (v) { return money ? (Math.abs(v) >= 1000 ? Math.round(Math.abs(v) / 1000) + ' тыс.' : Math.round(Math.abs(v)) + ' ₽') : Math.abs(v); };
         var dl = r[2] - r[3], cls = !dl ? '' : dl > 0 ? 'up' : 'down';
         if (r[0] === 'Расход на рекламу') cls = '';
         var pl = r[4] != null && r[4] > 0 ? (r[2] >= r[4] ? 'ok' : r[2] >= r[4] * .7 ? 'risk' : 'miss') : '';
@@ -32351,7 +32360,7 @@
           (anyPlan ? '<span class="r num mute c-pl">' + (r[4] != null ? f(Math.round(r[4] * 10) / 10) : '') + '</span>' : '') +
           '<span class="r num big ' + pl + '">' + f(r[2]) + '</span>' +
           '<span class="r num mute">' + f(r[3]) + '</span>' +
-          '<span class="r c-dl">' + (dl && !money ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + Math.abs(dl) + '</span>' : '') + '</span></div>';
+          '<span class="r c-dl">' + (dl && cls ? '<span class="mg-d ' + cls + '">' + (dl > 0 ? '+' : '−') + fd(dl) + '</span>' : '') + '</span></div>';
       }).join('') + '</div>' +
       (anyPlan ? '<div class="mg-note">План недели — доля месячного плана из «План-факта» по дням.</div>' : '') +
     '</div>';
@@ -32372,7 +32381,7 @@
         '<div class="mg-hw">' + esc(h.assignee_name || 'без ответственного') +
           (h.dept ? ' · ' + esc(deptLabel(h.dept)) : '') + (h.overdue ? ' · <span class="miss">срок прошел</span>' : '') + '</div>' +
       '</div>' + res +
-      (h.verdict ? '' : '<button class="bp ghost sm" data-mgcheck="' + h.task_id + '">Итог</button>') +
+      (h.verdict ? '<span class="mg-btnph"></span>' : '<button class="bp ghost sm" data-mgcheck="' + h.task_id + '">Итог</button>') +
     '</div>';
   }
   function mgTree(list, prefix) {
@@ -32412,7 +32421,7 @@
     var open = dec.filter(function (d) { return d.status !== 'done'; }).length;
     var html = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('task', 14) + '</span>' +
       '<div><div class="t">Решения встреч</div><div class="s">' +
-      (dec.length ? 'открыто ' + open + (late ? ', из них просрочено ' + late : '') + '. Висят здесь, пока не закроют' : 'решения из протоколов встреч') +
+      (dec.length ? 'открыто ' + open + (late ? ', из них просрочено ' + late : '') + '. Открытые висят здесь, пока не закроют, закрытые за неделю видны для отчета' : 'решения из протоколов встреч') +
       '</div></div></div>';
     if (raw.length) {
       html += '<div class="mg-raw">' + raw.map(function (x) {
@@ -32427,7 +32436,7 @@
       return '<div class="mg-dec' + (d.parent_id ? ' sub' : '') + (d.overdue ? ' late' : '') + '" data-mgtask="' + d.id + '" role="button" tabindex="0">' +
         '<div class="mg-hb"><div class="mg-ht">' + esc(d.title) + '</div>' +
         '<div class="mg-hw">' + esc(d.assignee_name || 'без ответственного') + (d.dept ? ' · ' + esc(deptLabel(d.dept)) : '') +
-          (d.due_at ? ' · до ' + esc(fmtDay(d.due_at)) : '') + (d.fresh ? '' : ' · <span class="miss">с прошлых встреч</span>') + '</div></div>' +
+          (d.due_at ? ' · до ' + esc(fmtDay(d.due_at)) : '') + (d.fresh ? ' · <span class="mg-new">новое</span>' : '') + '</div></div>' +
         '<span class="sev st-' + esc(d.status) + (d.overdue ? ' mg-late' : '') + '">' + esc(d.overdue ? 'просрочено' : (MG_ST[d.status] || d.status)) + '</span></div>';
     }).join('') + '</div></div>';
   }
@@ -32436,13 +32445,23 @@
     var m = state._mg && state._mg.d; if (!m) return;
     var h = (m.hyps || []).concat(m.prev_hyps || []).filter(function (x) { return x.task_id === id; })[0];
     if (!h) return;
+    var sure = '';
     openSheet('Итог гипотезы', h.title + ' · ' + h.metric + ', цель ' + mgNum(h.target), [
       ['fact', 'number', 'Факт', h.fact != null ? h.fact : ''],
-      ['verdict', 'pick', 'Вывод', [['worked', 'Сработала: делаем нормой'], ['failed', 'Не сработала: снимаем']]],
+      // Вывода по умолчанию нет: «сработала» первой строкой молча закрывала бы провал.
+      ['verdict', 'pick', 'Вывод', [['', 'Выбери вывод'], ['worked', 'Сработала: делаем нормой'], ['failed', 'Не сработала: снимаем']]],
       ['text', 'text', 'Что поняли (по желанию)', '']
     ], function (v, close) {
       if (v.fact === '') return 'Впиши факт: без цифры вывод не проверить';
-      api('/admin/api/rnp/hyp/' + id, { method: 'PATCH', body: JSON.stringify({ fact: Number(v.fact), verdict: v.verdict, text: v.text || null }) })
+      if (!v.verdict) return 'Выбери вывод: сработала гипотеза или нет';
+      var hit = Number(v.fact) >= Number(h.target);
+      var odd = (v.verdict === 'worked') !== hit;
+      if (odd && sure !== v.fact + v.verdict) {
+        sure = v.fact + v.verdict;
+        return hit ? 'Факт дошел до цели, а вывод «не сработала». Если так и есть, нажми еще раз'
+          : 'Факт ' + mgNum(Number(v.fact)) + ' при цели ' + mgNum(h.target) + ', а вывод «сработала». Если так и есть, нажми еще раз';
+      }
+      api('/admin/api/rnp/hyp/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fact: Number(v.fact), verdict: v.verdict, text: v.text || null }) })
         .then(function (r) {
           close(); state._mg = null; renderView();
           showToast(r.hyp.status === 'done' ? 'Итог записан, цель закрыта' : 'Итог записан, цель ушла на приемку постановщику');
@@ -32454,7 +32473,9 @@
     loadTaskPeople(function (people) {
       var deps = [['', 'Компания']].concat(['marketing', 'sales', 'product', 'edu', 'teach', 'finance', 'manage', 'hr']
         .map(function (d) { return [d, deptLabel(d)]; }));
-      if (state.mgDept) deps.sort(function (a) { return a[0] === state.mgDept ? -1 : 0; });
+      // Первый вариант списка и есть выбор по умолчанию: ставим туда открытый отдел.
+      if (state.mgDept) deps = deps.filter(function (a) { return a[0] === state.mgDept; })
+        .concat(deps.filter(function (a) { return a[0] !== state.mgDept; }));
       var parents = [['', 'Своя гипотеза']].concat((m.hyps || []).filter(function (h) { return !h.parent_task_id; })
         .map(function (h) { return [String(h.task_id), 'Раскладка гипотезы: ' + h.title]; }));
       var who = [['', 'Я сам']].concat(people.map(function (p) { return [String(p.id), p.name]; }));
@@ -32470,7 +32491,7 @@
         if ((v.title || '').trim().length < 3) return 'Опиши гипотезу одной фразой';
         if ((v.metric || '').trim().length < 2) return 'Назови цифру, по которой поймем, сработало ли';
         if (v.target === '') return 'Поставь цель: без нее неделю не проверить';
-        api('/admin/api/rnp/hyp', { method: 'POST', body: JSON.stringify({
+        api('/admin/api/rnp/hyp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
           title: v.title.trim(), metric: v.metric.trim(), target: Number(v.target),
           base: v.base === '' ? null : Number(v.base), dept: v.dept || '', week: m.week,
           assignee_id: v.who ? Number(v.who) : null, parent_task_id: v.parent ? Number(v.parent) : null
@@ -32487,7 +32508,8 @@
   /* Чистка лидов недели (Ольга до встречи РНП). Подсказку причины дает сервер по
      оплатам и общим контактам, решает человек: подсказка сама ничего не вычеркивает. */
   function mgLeadsHtml() {
-    var wk = mgWeek();
+    // Чистят ту же закрытую неделю, чьи цифры смотрят на встрече, а не открытую.
+    var wk = mgAdd(mgWeek(), -7);
     if (!state._mgLeads || state._mgLeads.week !== wk) {
       if (state._mgLeadsLoad !== wk) {
         state._mgLeadsLoad = wk;
@@ -32502,13 +32524,14 @@
     var R = d.reasons || {};
     var hinted = d.leads.filter(function (l) { return l.hint && !l.not_lead; }).length;
     var html = '<div class="card mg-card"><div class="sec-head pad"><span class="ic">' + ic('leads', 14) + '</span>' +
-      '<div><div class="t">Новые лиды недели: в счете ' + d.counted + ' из ' + d.leads.length + '</div>' +
+      '<div><div class="t">Лиды за ' + esc(mgWeekLabel(wk)) + ': в счете ' + d.counted + ' из ' + d.leads.length + '</div>' +
       '<div class="s">' + (hinted ? 'система подозревает ' + hinted + ': проверь и подтверди' : 'отметь тех, кто не новый лид: текущих клиентов, дубли, спам') +
       '</div></div></div>';
     if (!d.leads.length) return html + '<div class="mg-note">За эту неделю новых карточек нет.</div></div>';
     return html + '<div class="mg-list">' + d.leads.map(function (l) {
       var chips = Object.keys(R).map(function (k) {
-        return '<button class="qchip' + (l.not_lead === k ? ' on' : '') + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
+        return '<button class="qchip' + (l.not_lead === k ? ' on' : '') + (!l.not_lead && l.hint === k ? ' hint' : '') +
+          '" aria-pressed="' + (l.not_lead === k) + '" data-mgnl="' + esc(l.id) + '" data-r="' + k + '">' + esc(R[k]) + '</button>';
       }).join('');
       return '<div class="mg-lead' + (l.not_lead ? ' off' : '') + '">' +
         '<div class="mg-hb"><div class="mg-ht"><a href="#lead/' + esc(l.id) + '" data-mglead="' + esc(l.id) + '">' + esc(l.name || 'Без имени') + '</a></div>' +
@@ -32539,7 +32562,11 @@
     view.querySelectorAll('[data-mgtask]').forEach(function (r) {
       var go = function () { openTask(Number(r.dataset.mgtask)); };
       r.addEventListener('click', go);
-      r.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+      // Только сама строка: Enter на вложенной кнопке «Итог» не должен открывать еще и задачу.
+      r.addEventListener('keydown', function (e) {
+        if (e.target !== r || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault(); go();
+      });
     });
     view.querySelectorAll('[data-mgmeet]').forEach(function (b) {
       b.addEventListener('click', function () { openMeetingImport([Number(b.dataset.mgmeet)]); });
@@ -32551,7 +32578,7 @@
       b.addEventListener('click', function () {
         var id = b.dataset.mgnl, l = (state._mgLeads.leads || []).filter(function (x) { return x.id === id; })[0];
         var reason = l && l.not_lead === b.dataset.r ? null : b.dataset.r;
-        api('/admin/api/rnp/leads/' + id + '/not-lead', { method: 'POST', body: JSON.stringify({ reason: reason }) })
+        api('/admin/api/rnp/leads/' + id + '/not-lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason }) })
           .then(function () {
             l.not_lead = reason;
             state._mgLeads.counted = state._mgLeads.leads.filter(function (x) { return !x.not_lead; }).length;

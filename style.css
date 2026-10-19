@@ -12732,8 +12732,8 @@ video.cs-media { background: #000; }
    подпись людей под ней, чип статуса справа. Своих цветов нет: факт против плана
    красится -ink тройкой (ok / risk / miss), просрочка — red-ink. */
 .mg-head { display: flex; align-items: center; gap: 16px; padding: 14px 20px; flex-wrap: wrap; }
-.mg-head .mg-tabs { margin: 0; }
-.mg-depts { margin: -6px 0 0; }
+.mg-head .list-quick, .mg-nl { padding: 0; border: 0; }
+.mg-head .mg-depts { flex-basis: 100%; border-top: 1px solid var(--line); padding-top: 12px; }
 .mg-card { overflow: hidden; }
 .mg-note { padding: 0 24px 20px; font-size: 13px; color: var(--ink-2); line-height: 1.5; max-width: 72ch; }
 .mg-pad { padding: 0 24px 20px; display: grid; gap: 10px; }
@@ -12778,14 +12778,19 @@ video.cs-media { background: #000; }
 .mg-ht a { color: inherit; text-decoration: none; }
 .mg-ht a:hover { color: var(--blue); }
 .mg-hm { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
-.mg-hm b { color: var(--ink); font-weight: 600; }
+.mg-hm b { color: var(--ink-2); font-weight: 500; }
+.mg-hm b.ok, .mg-hm b.miss { font-weight: 600; }
 .mg-hm b.ok { color: var(--green-ink); } .mg-hm b.miss { color: var(--red-ink); }
 .mg-hw { font-size: 12px; color: var(--ink-3); margin-top: 3px; font-weight: 500; }
 .mg-hw .miss { color: var(--red-ink); font-weight: 600; }
 .mg-hyp .sev, .mg-dec .sev { flex: none; }
 .sev.mg-late { color: var(--red-ink); background: var(--red-soft); }
 .sev.mg-fail { color: var(--ink-2); }
-.mg-hyp .bp.sm { flex: none; }
+.mg-hyp .bp.sm { flex: none; width: 64px; justify-content: center; }
+/* место кнопки «Итог» держим и без нее: иначе чипы статусов гуляют по строкам */
+.mg-btnph { flex: none; width: 64px; }
+.mg-new { color: var(--blue); font-weight: 600; }
+.mg-tr .num { white-space: nowrap; }
 .mg-prev .sec-head .ic { background: var(--amber-soft); color: var(--amber-ink); }
 
 .mg-raw { padding: 0 24px 16px; display: grid; gap: 8px; }
@@ -12799,13 +12804,22 @@ video.cs-media { background: #000; }
 .mg-hint { color: var(--amber-ink); font-weight: 600; }
 .mg-nl { margin: 0; gap: 6px; }
 .mg-nl .qchip { padding: 6px 11px; }
+/* подсказка системы: подтверждается одним нажатием, поэтому чип обведен */
+.mg-nl .qchip.hint { box-shadow: inset 0 0 0 1px var(--amber); color: var(--amber-ink); }
 
 @media (max-width: 760px) {
-  .mg-tr, .mg-tbl.noplan .mg-tr { grid-template-columns: minmax(0, 1fr) 70px 56px; gap: 8px; padding: 10px 12px; }
+  .mg-tr, .mg-tbl.noplan .mg-tr { grid-template-columns: minmax(0, 1fr) 78px 70px; gap: 8px; padding: 10px 12px; }
+  .mg-btnph { display: none; }
   .mg-tr .c-pl, .mg-tr .c-dl { display: none; }
   .mg-tr .num.big { font-size: 17px; }
   .mg-hyp, .mg-dec, .mg-lead { padding: 12px 16px; flex-wrap: wrap; }
   .mg-hyp.sub, .mg-dec.sub { padding-left: 32px; }
+  /* Текст гипотезы на всю ширину, статус и «Итог» уходят строкой ниже под текст:
+     в одну строку им на 390px достается колонка в пять слов. */
+  .mg-hyp { align-items: flex-start; row-gap: 10px; }
+  .mg-hyp .mg-hb { flex: 1 1 calc(100% - 60px); }
+  .mg-hyp > .sev { margin-left: 54px; }
+  .mg-dec .mg-hb, .mg-lead .mg-hb { flex-basis: 100%; }
   .mg-note, .mg-raw { padding-left: 16px; padding-right: 16px; }
   .mg-head { padding: 12px 14px; }
   .mg-head .brd-nav { margin-left: 0; }
