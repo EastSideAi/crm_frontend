@@ -3616,7 +3616,7 @@
         var vtbAcc = null;
         (sh.accounts || []).forEach(function (a) { if (a.id === 'vtb') vtbAcc = a; });
         ph = 'Период <b>' + esc(per.name) + '</b>, ' + (per.open ? 'открыт' : 'закрыт') +
-          '. Сверху итоги периода, ниже каскад ведомости. ' +
+          '. Сверху каскад и фонды, ниже итоги периода. ' +
           'К распределению <b>' + finRub(sh.cascade.dividends) + '</b>, на расчетном счете <b>' +
           finRub(vtbAcc ? vtbAcc.live : (sh.metrics ? sh.metrics.on_vtb : 0)) + '</b>.' +
           ((sh.warnings || []).length
@@ -20735,27 +20735,29 @@
         : '') +
     '</div>';
 
-    // Итоги периода — сверху Ведомости (владелец 19.10.2026: вердикт по периоду и
-    // каскад про один период, их свели на один экран). Рисуются из той же функции, что
-    // страница finmetrics, в свой контейнер #sheet-metrics ниже.
-    var metricsHead = '<div class="sec-head fin-metrics-head" style="margin:2px 4px 10px"><span class="ic">' + ic('chart', 14) + '</span>' +
+    // Порядок экрана (владелец 19.10.2026, уточнение): главные ячейки — Ведомость
+    // периода (каскад, фонды, остатки по счетам) — наверху; Итоги периода уходят вниз,
+    // это вердикт, его смотрят после. Итоги рисуются из той же функции, что страница
+    // finmetrics, в свой контейнер #sheet-metrics внизу.
+    var metricsHead = '<div class="sec-head fin-metrics-head" style="margin:28px 4px 10px"><span class="ic">' + ic('chart', 14) + '</span>' +
       '<div><div class="t">Итоги периода</div>' +
       '<div class="s">вердикт по этой ведомости: сколько заработали и хватает ли денег ее закрыть</div>' +
       '</div></div>';
-    var sheetHead = '<div class="sec-head fin-sheet-head" style="margin:26px 4px 10px"><span class="ic">' + ic('coins', 14) + '</span>' +
+    var sheetHead = '<div class="sec-head fin-sheet-head" style="margin:2px 4px 10px"><span class="ic">' + ic('coins', 14) + '</span>' +
       '<div><div class="t">Ведомость периода</div>' +
       '<div class="s">каскад распределения, фонды и остатки по счетам</div>' +
       '</div></div>';
     // «Плановая позиция периода» — справа от каскада (Роман 25.09): верхом правой
     // колонки, вёрсткой повторяет каскад слева.
-    view.innerHTML = metricsHead + '<div id="sheet-metrics"></div>' + sheetHead +
+    view.innerHTML = sheetHead +
       bar + head + '<div class="grid">' +
       '<div class="sp7">' + casc + direct + '</div>' +
       // Главное правой колонки наверх (владелец 19.10.2026): фонды и остатки по счетам —
       // то, на что смотрят каждый раз; плановая позиция, кэшфлоу, EBITDA и налог — ниже.
       '<div class="sp5">' + fundsCard + finAccountsCard(s, editable) + warn +
         planCard + cashCard + ebitdaCard + taxCard +
-      '</div></div>';
+      '</div></div>' +
+      metricsHead + '<div id="sheet-metrics"></div>';
 
     // Живой пересчет планового налога: 8% от вписанного дохода. Доступно и на просмотре —
     // это калькулятор, а не правка ведомости.
@@ -20818,7 +20820,7 @@
       el('fp-ext').addEventListener('click', function () { finExtendForm(s.period); });
       el('fp-close').addEventListener('click', function () { finCloseForm(s); });
     }
-    // Итоги периода сверху — после того как каркас Ведомости в DOM (контейнер существует).
+    // Итоги периода внизу — после того как каркас Ведомости в DOM (контейнер существует).
     var mBox = el('sheet-metrics');
     if (mBox) renderFinMetricsInto(mBox, true);
     pageAnim(view);
