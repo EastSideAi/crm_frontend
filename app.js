@@ -825,7 +825,7 @@
     }
     // ответственный мог быть отключен (уволен) — не молчим об этом, иначе поле
     // выглядит пустым и человек думает, что ответственного не назначали
-    if (sel && !known) out += '<option value="' + esc(sel) + '" selected>сотрудник отключен</option>';
+    if (sel && !known) out += '<option value="' + esc(sel) + '" selected>исполнитель отключен</option>';
     return out;
   }
   function warm(id) {
@@ -3556,7 +3556,7 @@
       // периодов — ветка до !per, иначе повисло бы «Загружаю ведомость».
       else if (state.page === 'finpaycheck') {
         ph = 'Перед тем как платить преподавателям — сверка: сколько человек наработал по ' +
-          'табелю школы и сколько ему уже выплачено. Остаток горит красным, и пока он есть, ' +
+          'реестру занятий и сколько ему уже выплачено. Остаток горит красным, и пока он есть, ' +
           'ведомость к выплатам не готова. Всё, что всплыло, пишется в журнал.';
       }
       // Поставщики — тоже правило, а не цифра периода: у кого вообще просим счет.
@@ -5357,8 +5357,8 @@
         : acCalcRow('Точка 4: довели до зачисления на грант', s.enr) +
           acCalcRow('Точка 4: сила гранта', s.pow)) +
       (!s.safe && !s.p4 ? '<li class="ac-chint">Платное и «никуда» точку 4 не закрывают: цель, записанная на точке 1, — грант</li>' : '') +
-      acCalcRow('Премия за вуз уровня А', s.bonus) +
-      (s.bonus ? '' : '<li class="ac-chint">Премия идет только при трех условиях сразу: коэффициент 1,00, вуз уровня А и полный грант</li>') +
+      acCalcRow('Бонус за вуз уровня А', s.bonus) +
+      (s.bonus ? '' : '<li class="ac-chint">Бонус идет только при трех условиях сразу: коэффициент 1,00, вуз уровня А и полный грант</li>') +
       acCalcRow('За одного ученика', s.one, 'sum') +
       acCalcRow('За ' + c.n + ' ' + acStudWord(c.n), s.all) +
       acCalcRow('Консультации по стратегии, ' + c.cons + ' × 3 000 ₽', s.cons) +
@@ -5943,18 +5943,18 @@
     var body;
     if (!all.length) {
       body = '<div class="att-empty">' + ic('award', 22) +
-        '<div>В команде пока некого учить. Заведите сотрудника в разделе «Команда».</div></div>';
+        '<div>В команде пока некого учить. Заведите человека в разделе «Команда».</div></div>';
     } else {
       body = '<div class="list-tools acc-find">' +
         '<div class="searchwrap' + (state.accQ ? ' has-val' : '') + '">' + ic('search', 15) +
-          '<input id="acc-q" class="search" type="search" placeholder="Найти сотрудника" ' +
+          '<input id="acc-q" class="search" type="search" placeholder="Найти исполнителя" ' +
           'autocomplete="off" value="' + esc(state.accQ || '') + '">' +
           '<button class="s-clear" id="acc-qx">' + ic('x', 12) + '</button></div>' +
         '<span class="acc-cnt">' + (q ? 'нашлось ' + total : total + ' в команде') + '</span></div>' +
         (total ? '' : '<div class="att-empty">' + ic('award', 22) +
           '<div>Никого не нашли. Проверьте написание или очистите поиск.</div></div>') +
         (total ? '<div class="att-tablewrap"><table class="att-table acc-table"><thead><tr>' +
-        '<th>Сотрудник</th>' +
+        '<th>Исполнитель</th>' +
         cs.map(function (c) { return '<th class="att-c">' + esc(c.title) + '</th>'; }).join('') +
         '</tr></thead><tbody>' + us.map(function (u) {
           var role = (ROLES[u.role] && ROLES[u.role].label) || u.role || '';
@@ -11113,7 +11113,7 @@
       '<div class="mo-stat"><b class="num">' + (t.carried || 0) + '</b><span>' + plural(t.carried || 0, 'перенос', 'переноса', 'переносов') + '</span></div>' +
       '<div class="mo-stat"><b class="num">' + stuckN + '</b><span>застряло</span></div></div>';
     function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
-    var head = '<div class="trow ts-grid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+    var head = '<div class="trow ts-grid thead"><span class="th">Исполнитель</span><span class="th">Взял</span><span class="th">Сделано</span>' +
       '<span class="th">План</span><span class="th">Вовремя</span><span class="th">Переносы</span><span class="th">Застряло</span><span class="th">Недели</span><span class="th">Серия</span></div>';
     var rows = (d.people || []).map(function (p) {
       return '<div class="trow ts-grid" data-uid="' + p.id + '">' +
@@ -11217,7 +11217,7 @@
     if (q) list = list.filter(function (r) { return (r.name + ' ' + r.label + ' ' + (r.text || '')).toLowerCase().indexOf(q) !== -1; });
     var byWeek = {}, order = [];
     list.forEach(function (r) { var k = (r.period || 'week') + ':' + r.starts; if (!byWeek[k]) { byWeek[k] = { label: r.label, rows: [] }; order.push(k); } byWeek[k].rows.push(r); });
-    var head = '<div class="trow rp-grid thead"><span class="th">Сотрудник</span><span class="th">Сделано</span>' +
+    var head = '<div class="trow rp-grid thead"><span class="th">Исполнитель</span><span class="th">Сделано</span>' +
       '<span class="th">План</span><span class="th">Перенос</span><span class="th">Итог</span></div>';
     var body = order.map(function (k) {
       var g = byWeek[k];
@@ -11362,7 +11362,7 @@
         '<span><b class="num">' + (t.tomorrow || 0) + '</b> на ' + esc(d.tomorrow_label || 'завтра') + '</span>' +
         (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> ' + plural(t.overdue, 'просрочена', 'просрочены', 'просрочено') + '</span>' : '') +
       '</div>';
-      head = '<div class="trow tp-grid thead"><span class="th">Сотрудник</span><span class="th">Сейчас</span>' +
+      head = '<div class="trow tp-grid thead"><span class="th">Исполнитель</span><span class="th">Сейчас</span>' +
         '<span class="th">Сделано</span><span class="th">' + esc(d.tomorrow_label === 'завтра' ? 'Завтра' : 'Дальше · ' + d.tomorrow_label) + '</span></div>';
       body = people.map(function (p) {
         // Пустая клетка — прочерк, и только он: «осталось на сегодня» живет в
@@ -11397,7 +11397,7 @@
         (t.overdue ? '<span class="bad"><b class="num">' + t.overdue + '</b> просрочено</span>' : '') +
         (t.await_review ? '<span class="warn"><b class="num">' + t.await_review + '</b> ' + plural(t.await_review, 'неделя ждет приемки', 'недели ждут приемки', 'недель ждут приемки') + '</span>' : '') +
       '</div>';
-      head = '<div class="trow tp-wgrid thead"><span class="th">Сотрудник</span><span class="th">Взял</span><span class="th">Сделано</span>' +
+      head = '<div class="trow tp-wgrid thead"><span class="th">Исполнитель</span><span class="th">Взял</span><span class="th">Сделано</span>' +
         '<span class="th">Застряло</span><span class="th">Просрочено</span><span class="th">Неделя</span></div>';
       function n(v, cls, l) { return '<span class="brd-n num ' + (v ? cls : 'zero') + '" data-l="' + l + '">' + v + '</span>'; }
       body = people.map(function (p) {
@@ -12395,7 +12395,7 @@
                   (period === 'week'
                     ? 'Неделя еще идет. Отчет и приемка появятся, когда она будет закрыта.'
                     : 'Период еще идет. Отчет и приемка появятся после него.') + '</div>'
-              : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот сотрудник еще не сдал отчет за период.') + '</div>') +
+              : '<div class="empty">' + (period === 'week' ? 'Неделя еще не закрыта.' : 'Этот человек еще не сдал отчет за период.') + '</div>') +
         '</div>' +
         (rep
           ? '<div class="al-foot rv-foot">' +
@@ -16182,7 +16182,7 @@
        детские анкеты и деньги, ему хватает внешнего кабинета. */
     var lu = d && d.linked_user;
     var team = (d && d.team) || [];
-    var teamOpts = '<option value="">— выберите сотрудника —</option>' +
+    var teamOpts = '<option value="">— выберите исполнителя —</option>' +
       team.map(function (u) {
         return '<option value="' + esc(u.login) + '">' + esc(u.name || u.login) +
           ' · ' + esc(u.login) + '</option>';
@@ -16195,7 +16195,7 @@
             esc(lu.login) + '</div>' +
           '<div class="cz-inv-h">У человека в CRM открыт раздел «Моя работа»: свои задания, ' +
             'план и акты. Отдельный кабинет по ссылке ему не нужен.</div></div>'
-        : '<div class="cz-inv"><div class="cz-inv-s">Не связана. Если это наш сотрудник ' +
+        : '<div class="cz-inv"><div class="cz-inv-s">Не связана. Если это наш исполнитель ' +
             'с логином в CRM, свяжите — и свои задания он будет вести здесь, без второго входа.</div>' +
           '<div class="cz-link-row"><span class="al-selwrap"><select id="cz-user" class="al-sel">' +
             teamOpts + '</select></span>' +
@@ -16393,7 +16393,7 @@
                       ['inactive', 'Не действует']],
                      'Нужно только когда реестр молчит: обычно статус приходит из ЕГРИП сам')
             : '') +
-          czField('job', 'Должность', c.job, 'Ассистент, СММ, Видео, Тьюторство') +
+          czField('job', 'Роль', c.job, 'Ассистент, СММ, Видео, Тьюторство') +
           czField('phone', 'Телефон', c.phone, '+7 900 000-00-00') +
           czField('email', 'Почта', c.email, 'name@mail.ru') +
           czField('connected_at', 'Дата подключения', c.connected_at, '', 'date') +
@@ -16413,11 +16413,11 @@
                 'по-другому.</div>' +
             '</div>' +
           '</details>' +
-          /* Должность — не ярлык для списка: от нее зависит перечень услуг в
+          /* Роль — не ярлык для списка: от нее зависит перечень услуг в
              Приложении № 1 к договору этого человека (у ассистента и монтажера они
              разные). Пишем словами каталога услуг, чтобы не завести второй справочник
              тех же четырех слов. */
-          '<div class="cz-src">Должность выбирает перечень услуг в Приложении № 1 к его ' +
+          '<div class="cz-src">Роль выбирает перечень услуг в Приложении № 1 к его ' +
             'договору. Пишите так же, как названа категория в разделе «Услуги».</div>' +
         '</div>' +
         '<div class="m-sec"><div class="m-sec-h">Данные исполнителя' +
@@ -21423,7 +21423,7 @@
      'finmodel_edit|finmodel_sales'],
     ['лист-маркетинга', 'Лист маркетинга', 'реклама с фонда маркетинга',
      'finmodel_edit|finmodel_marketing'],
-    ['лист-продукта', 'Лист продукта', 'команда продукта по должностям',
+    ['лист-продукта', 'Лист продукта', 'команда продукта по ролям',
      'finmodel_edit|finmodel_product'],
     ['лист-краткосрочки', 'Лист краткосрочки', 'расход с фонда краткосрочки',
      'finmodel_edit'],
@@ -22851,9 +22851,9 @@
             '</select>') +
         '</div>';
     } else {
-      var whoLabel = form === 'лист-продукта' ? 'Сотрудник <i>*</i>' : 'Получатель <i>*</i>';
+      var whoLabel = form === 'лист-продукта' ? 'Исполнитель <i>*</i>' : 'Получатель <i>*</i>';
       var itemField = form === 'лист-продукта'
-        ? f('Должность <i>*</i>', '<select id="fl-item" class="al-in">' +
+        ? f('Роль <i>*</i>', '<select id="fl-item" class="al-in">' +
             FIN_ROLES.map(function (r) {
               return '<option' + (s.item === r ? ' selected' : '') + '>' + esc(r) + '</option>';
             }).join('') + '</select>')
@@ -25164,7 +25164,7 @@
   function finPayCheckNoteInner() {
     return '<div class="fin-note calm">' + ic('info', 15) +
       '<span>Школьный модуль в этой базе недоступен — сверять нечего. Проверка работает ' +
-      'на боевой версии, где есть табель преподавателей.</span></div>';
+      'на боевой версии, где есть реестр занятий преподавателей.</span></div>';
   }
 
   // Отдельный экран для устаревших прямых ссылок (#page/finpaycheck); в меню его больше
@@ -25184,7 +25184,7 @@
     var tableCard = '<div class="card listcard">' +
       '<div class="list-tools sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
       '<div><div class="t">Наработал против выплачено</div>' +
-      '<div class="s">накопительно: весь заработок по табелю против всех выплат в ведомости</div>' +
+      '<div class="s">накопительно: весь заработок по реестру занятий против всех выплат в ведомости</div>' +
       '</div></div>' + d.head + d.body + '</div>';
     view.innerHTML = d.statbar + '<div class="card listcard">' + d.bannerInner + '</div>' +
       tableCard + d.unmCard + d.jrCard;
@@ -25207,7 +25207,7 @@
     }).join('');
     var headTools = '<div class="list-tools"><div>' +
       '<div class="t fe-t">Проверка выплат преподавателям</div>' +
-      '<div class="s fe-s">накопительно: весь заработок по табелю против всех выплат</div>' +
+      '<div class="s fe-s">накопительно: весь заработок по реестру занятий против всех выплат</div>' +
       '</div></div><div class="list-quick">' + chips + '</div>';
     if (!FIN.teachercheck.available) {
       view.innerHTML = '<div class="card listcard">' + headTools +
@@ -25349,7 +25349,7 @@
           'не дает, поэтому незнакомому уходит письмо.</p>' +
           '<p>Руками заводят тех, кто счет не присылает: Селектел, Тензор, Рег.Ру. ' +
           'Там же, в карточке сервиса, галочка и почта.</p>' +
-          '<p>Своим — зарплата, самозанятые, налоги, фонды — система не пишет никогда, ' +
+          '<p>Своим — выплаты команде, самозанятые, налоги, фонды — система не пишет никогда, ' +
           'даже если человек попал в список.</p>' +
         '</div></div></div></div>';
 
@@ -27833,7 +27833,7 @@
        только его хеш, второй раз взять неоткуда. */
     var made = state._teamMade;
     var madeHtml = made ? '<div class="tm-made">' +
-        '<div class="tm-made-h">' + ic('check', 14) + 'Сотрудник заведен: ' + esc(made.user.name) + '</div>' +
+        '<div class="tm-made-h">' + ic('check', 14) + 'Исполнитель заведен: ' + esc(made.user.name) + '</div>' +
         '<div class="tm-made-b">Логин <b>' + esc(made.user.login) + '</b> · пароль <b>' + esc(made.password) + '</b></div>' +
         '<div class="tm-made-s">Передайте пароль лично и попросите сменить его после первого входа. ' +
           'Здесь он больше не появится — мы храним только его отпечаток.</div>' +
@@ -27911,8 +27911,8 @@
         '<button class="qchip" id="tm-tg" title="Личные ссылки на бота задач">' + ic('bot', 13) + 'Бот задач</button>' +
         '<button class="qchip" id="tm-guide" title="Поставить всем задачу пройти обучение">' +
           ic('compass', 13) + '<span>Обучение всем</span></button>' +
-        (d ? '' : '<button class="bp sm tm-new" id="tm-new" aria-label="Добавить сотрудника">' +
-          ic('plus', 14) + '<span>Добавить сотрудника</span></button>')) +
+        (d ? '' : '<button class="bp sm tm-new" id="tm-new" aria-label="Добавить исполнителя">' +
+          ic('plus', 14) + '<span>Добавить исполнителя</span></button>')) +
       '</div>' + (ro ? '' : gdSum + madeHtml + formHtml) +
       '<div class="tm-list">' + (rows || '<div class="empty">Пока только базовые аккаунты.</div>') + '</div>' +
       (ro ? '' : hierHtml +
@@ -35111,7 +35111,7 @@
       '<div class="po-sub">Сначала платим, до всякого деления</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ w3"><thead><tr><th class="po-rl">Статья</th>' +
         '<th>В месяц</th><th>За сезон</th></tr></thead><tbody>' + beforeRows + '</tbody></table></div>' +
-      '<div class="po-note">Эти две строки считаются сами из окладов, процентов с продаж и подписок ' +
+      '<div class="po-note">Эти две строки считаются сами из фиксов, процентов с продаж и подписок ' +
         'ниже по вкладке. Править их тут нечего: меняются они там, где заводятся сами расходы.</div>' +
       '<div class="po-sub">Потом откладываем с каждой оплаты</div>' +
       '<div class="po-tblwrap"><table class="po-tbl econ w6"><thead><tr><th class="po-rl">Фонд</th>' +
@@ -35127,7 +35127,7 @@
         '<th>Когда уходит</th><th>Накопится за сезон</th><th>Уходит из фонда</th><th>Свободно</th></tr></thead>' +
       '<tbody>' + payRows + '</tbody></table></div>' +
       '<div class="po-note">Расходы не висят в воздухе: каждая строка себестоимости, каждая ставка ' +
-        'с оплаты и каждый оклад привязаны к своему кошельку, и здесь видно, сколько кошелек собрал и ' +
+        'с оплаты и каждый фикс привязаны к своему кошельку, и здесь видно, сколько кошелек собрал и ' +
         'сколько из него уже уходит. Свободно — то, чем отдел реально распоряжается; минус значит, ' +
         'что доли фонду не хватает на его же расходы.</div>' +
       '<div class="po-note" data-ec="fundfoot"></div>' +
@@ -35164,7 +35164,7 @@
           '<div class="pc-s num" data-ec="y:profitm"></div></div>' +
       '</div>' +
       '<div class="po-note">В «потратили» входит все: себестоимость по каждому клиенту, ' +
-        'оклады команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
+        'фиксы команды, налоги и эквайринг, подписки. Дивиденды сюда не входят — это не ' +
         'расход, их берут уже из чистой прибыли.</div>' +
       '<div class="po-tabs po-econsegs"><div class="dperiod">' +
         ECON_SEGS.map(function (sg) {
@@ -45565,7 +45565,7 @@
             showToast('Комментарий сохранён');
             loadOrders();
           }, function (code) {
-            if (code === 403) return showToast('Комментарий к взносу правит сотрудник с доступом к финансам');
+            if (code === 403) return showToast('Комментарий к взносу правит человек с доступом к финансам');
             showToast('Не получилось — проверь сеть');
           });
       };
@@ -45680,7 +45680,7 @@
               b.disabled = false; b.textContent = 'получить ссылку на оплату';
               var d = (err && err.body && err.body.detail) || '';
               if (code === 409) return showToast(d || 'По этому счету ссылку выдать нельзя');
-              if (code === 403) return showToast('Ссылку на оплату выдает только сотрудник с доступом к финансам');
+              if (code === 403) return showToast('Ссылку на оплату выдает только человек с доступом к финансам');
               showToast('Не получилось — проверь сеть');
             });
           });
