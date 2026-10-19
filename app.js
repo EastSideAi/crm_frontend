@@ -25761,10 +25761,16 @@
         // Оплаченный сервис зеленый, неоплаченному — кнопка (Роман 19.10.2026).
         // Факт тут можно вписать суммой в соседнем поле: кнопка нужна тем, у кого
         // списалось ровно по плану, а это обычный случай.
-        '<span class="sv-hint">' + esc(hint) +
+        '<span class="sv-hint"><span class="sv-hint-t">' + esc(hint) + '</span>' +
           (canFix && open
             ? '<span class="sv-paid">' +
-              finPaidCell(x.id, x.fact === null ? 'план' : 'факт', true) + '</span>'
+              finPaidCell(x.id, x.fact === null ? 'план' : 'факт', true) +
+              // Сервис больше не нужен — убираем его из плана прямо здесь (Роман
+              // 19.10.2026). У списавшегося кнопки нет: деньги уже ушли, и строка — факт.
+              (x.fact === null
+                ? '<button class="fsv-drop" data-svdrop="' + x.service_id +
+                  '" title="Убрать сервис из плана">убрать</button>'
+                : '') + '</span>'
             : '') + '</span>' +
       '</div>';
     }).join('');
@@ -25909,6 +25915,28 @@
             next_on: i.value || null, every: svc.every || 1, unit: svc.unit || null,
             active: svc.active,
           }, 'Дата сохранена');
+        });
+      });
+      // «Убрать» у плановой строки сервиса отключает сам сервис, а не стирает строку:
+      // план ведомости собирается из активных сервисов заново (generate_services), и удаленная
+      // строка вернулась бы на следующей правке любого сервиса. История при этом цела.
+      Array.prototype.forEach.call(view.querySelectorAll('[data-svdrop]'), function (b) {
+        b.addEventListener('click', function () {
+          var id = b.getAttribute('data-svdrop'), svc = null;
+          (r.services || []).forEach(function (x) { if (x.id === id) svc = x; });
+          if (!svc) return;
+          finConfirm('Убрать из плана?',
+            '«' + svc.name + '» уйдет из этой ведомости и больше не появится в новых. ' +
+            'Прошлые ведомости останутся как были. Вернуть — галочкой «Сервис в работе» ' +
+            'в справочнике снизу.',
+            'Убрать', function () {
+              finDo('/admin/api/fin/service', 'POST', {
+                id: svc.id, period_id: FIN.id, name: svc.name,
+                counterparty: svc.counterparty || '', amount: svc.amount,
+                next_on: svc.next_on || null, every: svc.every || 1,
+                unit: svc.unit || null, active: false,
+              }, 'Сервис убран из плана');
+            });
         });
       });
       Array.prototype.forEach.call(view.querySelectorAll('[data-pay]'), function (b) {

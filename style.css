@@ -7155,7 +7155,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    и кнопка выдавливала бы цифру на вторую строку. */
 .fl-act { margin-top: 6px; }
 .fl-act:empty { display: none; }
-.sv-paid { display: inline-flex; }
+.sv-paid { display: inline-flex; align-items: center; gap: 10px; }
+/* Убрать сервис из плана — действие редкое и необратимое одним кликом,
+   поэтому оно тише кнопки «Оплачен» рядом и краснеет только под курсором. */
+.fsv-drop { font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  border-bottom: 1px dashed var(--line-2); transition: color .12s, border-color .12s; }
+.fsv-drop:hover { color: var(--red); border-bottom-color: var(--red); }
 .trow.fsv-grid { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
 
 /* «Пополнили фонд» в каскаде и «Сошлось с банком» в фондах (Роман 19.10.2026).
@@ -7513,7 +7519,7 @@ button.fsp-via { cursor: pointer; }
 
 @media (max-width: 1100px) {
   .trow.fin-grid { grid-template-columns: 84px 1.4fr 140px 122px 84px !important; }
-  .fin-grid > :nth-child(4) { display: none; }
+  .fin-grid > .fo-acc { display: none; }
 }
 @media (max-width: 760px) {
   /* На телефоне строка операции — карточка: слева что и откуда, справа сумма. */
@@ -7750,14 +7756,23 @@ button.fsp-via { cursor: pointer; }
 .al-card.ct-slim { max-width: 440px; }
 
 @media (max-width: 1100px) {
-  .trow.fsv-grid { grid-template-columns: 1.4fr 112px 112px !important; }
-  .fsv-grid .sv-hint { display: none; }
+  /* Узкому экрану прячется сама подсказка словами, а не вся колонка: вместе с ней
+     уходили кнопки «Оплачен» и «убрать», и с ноутбука строку было нечем закрыть. */
+  .trow.fsv-grid { grid-template-columns: 1.3fr 104px 104px auto !important; }
+  .fsv-grid .sv-hint-t { display: none; }
 }
 @media (max-width: 760px) {
   .fin-perbar { flex-direction: column; align-items: flex-start; gap: 12px; }
   .fp-act { width: 100%; }
   .fp-act .qchip { flex: 1; justify-content: center; }
-  .trow.fsv-grid { grid-template-columns: 1fr 96px 96px !important; gap: 6px 8px; }
+  /* На телефоне строка списания становится карточкой: название строкой сверху,
+     под ним план и факт, ниже действия. В одну строку четыре колонки не встают:
+     имя сервиса схлопывалось в ноль. */
+  .trow.fsv-grid { grid-template-columns: 1fr 88px 88px !important; gap: 8px;
+    height: auto; padding-top: 12px; padding-bottom: 12px; }
+  .fsv-grid .sv-what { grid-column: 1 / -1; }
+  .fsv-grid .sv-hint { grid-column: 1 / -1; flex-direction: row; align-items: center;
+    justify-content: flex-end; gap: 10px; }
   .fb-row { grid-template-columns: 1fr auto; gap: 4px 12px; }
   .fb-bar { grid-column: 1 / span 2; grid-row: 2; }
 }
