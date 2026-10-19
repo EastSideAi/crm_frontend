@@ -3431,6 +3431,29 @@ button.tr-crumb:hover { color: var(--blue); }
 .tsk-qmore:hover { color: var(--blue); }
 .tsk-qhint { margin-top: 6px; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
 
+/* Компаньон руководителя: раскладка цели на шаги. Тот же голубой блок
+   помощника, что в форме задачи (.al-ai): агент в CRM выглядит одинаково
+   везде. Внутри строка на шаг — галочка, название, кто и когда. */
+.cmp { margin-top: 12px; }
+.cmp[hidden] { display: none; }
+.cmp-wait .al-ai-h svg { animation: cmp-pulse 1.4s var(--ease) infinite; }
+@keyframes cmp-pulse { 50% { opacity: .35; transform: scale(.85); } }
+.cmp-list { display: flex; flex-direction: column; gap: 6px; }
+.cmp-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px;
+  border-radius: 12px; background: #fff; transition: opacity .15s; }
+.cmp-row.off { opacity: .5; }
+.cmp-on { flex: none; width: 16px; height: 16px; margin-top: 9px; accent-color: var(--blue); cursor: pointer; }
+.cmp-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cmp-d { font-size: 12px; line-height: 1.45; color: var(--ink-2); padding: 0 2px; }
+.cmp-meta { display: flex; gap: 6px; }
+.cmp-meta .cmp-who { flex: 1; min-width: 0; }
+.cmp-meta .cmp-due { flex: none; width: 150px; }
+@media (max-width: 600px) {
+  .cmp-meta { flex-wrap: wrap; }
+  .cmp-meta .cmp-due { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .cmp-wait .al-ai-h svg { animation: none; } }
+
 /* ── Карточка задачи: задача слева, разговор справа ────────────────────────
    Обсуждение лежало в подвале одной длинной колонки, и до него не долистывали
    (Павел 13.10.2026). Теперь карточка раскладывается на две колонки, а ширину

@@ -12812,6 +12812,123 @@
     if (off) off.addEventListener('click', function () { send({ due_clear: true }, 'Срок снят'); });
   }
 
+  /* Компаньон руководителя: раскладка цели на шаги по людям отдела.
+     Сервер только предлагает (POST /tasks/:id/steps/suggest), заводит человек:
+     каждый отмеченный шаг уходит обычной постановкой с parent_id, поэтому у
+     него те же права, неделя и уведомление исполнителю, что у шага руками.
+     Агент, который заводит задачи сам, за неделю засоряет задачник. */
+  function companionSplit(goal, box, btn, done) {
+    if (!box || btn.disabled) return;
+    btn.disabled = true;
+    box.hidden = false;
+    box.innerHTML = '<div class="al-ai cmp-wait">' +
+      '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньон раскладывает цель на шаги</div>' +
+      '<div class="al-ai-note">Смотрит на цель, срок и людей отдела. Обычно это 10-20 секунд.</div></div>';
+    var shut = function () { box.hidden = true; box.innerHTML = ''; btn.disabled = false; };
+    apiSend('/admin/api/tasks/' + goal.id + '/steps/suggest', 'POST', null, function (r) {
+      loadTaskPeople(function (people) { paint(r, people); });
+    }, function (code, e) {
+      shut();
+      showToast((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                'Компаньон не ответил, проверь интернет');
+    });
+
+    function paint(r, people) {
+      var steps = r.steps || [], team = r.team || [], qs = r.questions || [];
+      var today = isoDay(0);
+      var last = goal.due_at ? new Date(goal.due_at).toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }) : '';
+      var inTeam = {};
+      team.forEach(function (p) { inTeam[p.id] = 1; });
+      var others = people.filter(function (p) { return !inTeam[p.id]; });
+      var opts = function (sel) {
+        return '<option value="">не назначен</option>' +
+          '<optgroup label="Отдел">' + team.map(function (p) {
+            return '<option value="' + p.id + '"' + (p.id === sel ? ' selected' : '') + '>' +
+              esc(p.name) + ' · ' + p.open + ' в работе</option>';
+          }).join('') + '</optgroup>' +
+          (others.length ? '<optgroup label="Остальные">' + others.map(function (p) {
+            return '<option value="' + p.id + '"' + (p.id === sel ? ' selected' : '') + '>' +
+              esc(p.name || p.login) + '</option>';
+          }).join('') + '</optgroup>' : '');
+      };
+      if (!steps.length) {
+        box.innerHTML = '<div class="al-ai">' +
+          '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньону не хватило данных</div>' +
+          (r.note ? '<div class="al-ai-note">' + esc(r.note) + '</div>' : '') +
+          qs.map(function (q) { return '<div class="al-ai-note ask">' + esc(q) + '</div>'; }).join('') +
+          '<div class="al-ai-note">Допиши описание цели и нажми «Разложить» еще раз.</div>' +
+          '<div class="al-ai-row"><button class="al-cancel" type="button" data-cx>Закрыть</button></div></div>';
+        box.querySelector('[data-cx]').addEventListener('click', shut);
+        return;
+      }
+      box.innerHTML = '<div class="al-ai">' +
+        '<div class="al-ai-h">' + ic('spark', 13) + 'Компаньон предлагает ' + steps.length + ' ' +
+          plural(steps.length, 'шаг', 'шага', 'шагов') + '</div>' +
+        (r.note ? '<div class="al-ai-note">' + esc(r.note) + '</div>' : '') +
+        qs.map(function (q) { return '<div class="al-ai-note ask">' + esc(q) + '</div>'; }).join('') +
+        '<div class="cmp-list">' + steps.map(function (s, i) {
+          return '<div class="cmp-row" data-i="' + i + '">' +
+            '<input type="checkbox" class="cmp-on" checked aria-label="Завести этот шаг">' +
+            '<div class="cmp-body">' +
+              '<input class="al-in sm cmp-t" maxlength="200" value="' + esc(s.title) + '" aria-label="Шаг">' +
+              (s.details ? '<div class="cmp-d">' + esc(s.details) + '</div>' : '') +
+              '<div class="cmp-meta">' +
+                '<select class="al-in sm cmp-who" aria-label="Кто делает">' +
+                  opts(s.assignee_id || goal.assignee_id || null) + '</select>' +
+                '<input type="date" class="al-in sm cmp-due num" value="' + esc(s.due_date) + '"' +
+                  ' min="' + today + '"' + (last ? ' max="' + last + '"' : '') + ' aria-label="Срок">' +
+              '</div>' +
+            '</div></div>';
+        }).join('') + '</div>' +
+        '<div class="al-ai-row">' +
+          '<button class="bp" type="button" data-go></button>' +
+          '<button class="al-cancel" type="button" data-cx>Отмена</button>' +
+          '<span class="al-ai-note">Шаги придут людям в бот, как поставленные руками.</span>' +
+        '</div></div>';
+      var go = box.querySelector('[data-go]');
+      var rows = Array.prototype.slice.call(box.querySelectorAll('.cmp-row'));
+      var count = function () {
+        var n = rows.filter(function (row) { return row.querySelector('.cmp-on').checked; }).length;
+        go.textContent = n ? 'Завести ' + n + ' ' + plural(n, 'шаг', 'шага', 'шагов') : 'Ничего не выбрано';
+        go.disabled = !n;
+        rows.forEach(function (row) { row.classList.toggle('off', !row.querySelector('.cmp-on').checked); });
+      };
+      rows.forEach(function (row) { row.querySelector('.cmp-on').addEventListener('change', count); });
+      count();
+      box.querySelector('[data-cx]').addEventListener('click', shut);
+      go.addEventListener('click', function () {
+        var items = rows.filter(function (row) { return row.querySelector('.cmp-on').checked; }).map(function (row) {
+          var s = steps[+row.getAttribute('data-i')];
+          var who = row.querySelector('.cmp-who').value, day = row.querySelector('.cmp-due').value;
+          return { title: row.querySelector('.cmp-t').value.trim(), details: s.details || '',
+                   parent_id: goal.id, source: 'ai',
+                   assignee_id: who ? +who : null,
+                   due_at: day ? new Date(day + 'T23:59:59+03:00').toISOString() : (goal.due_at || null) };
+        });
+        if (items.some(function (x) { return !x.title; })) { showToast('У шага пустое название'); return; }
+        go.disabled = true; go.textContent = 'Завожу…';
+        var made = 0, failed = [];
+        // По одному, а не разом: у человека бывает предел недели, и отказ по
+        // одному шагу не должен ронять остальные.
+        (function next(i) {
+          if (i >= items.length) {
+            if (failed.length) showToast('Завел ' + made + ' из ' + items.length, failed[0]);
+            else showToast('Завел ' + made + ' ' + plural(made, 'шаг', 'шага', 'шагов'));
+            done();
+            return;
+          }
+          apiSend('/admin/api/tasks', 'POST', items[i], function () { made++; next(i + 1); },
+            function (code, e) {
+              failed.push('«' + items[i].title + '»: ' +
+                ((e && e.body && typeof e.body.detail === 'string' && e.body.detail) ||
+                 (code === 409 ? 'у человека полна неделя' : 'не завелся')));
+              next(i + 1);
+            });
+        })(0);
+      });
+    }
+  }
+
   function openTask(id, focusEv) {
     if (document.querySelector('.al-ov')) return;
     var ov = document.createElement('div');
@@ -12874,6 +12991,10 @@
       // Свой срок исполнитель двигает сам: раньше молча, позже — с сообщением
       // постановщику (Павел, 04.09.2026). Чужой — только cap tasks_due.
       var canDue = (can('tasks_due') || isAssignee) && t.status !== 'done' && t.status !== 'cancel';
+      // Компаньон руководителя: цель со встречи приходит одной строкой, и
+      // разложить ее на шаги по людям — самая долгая часть планерки отдела.
+      // Раскладывает тот, кто цель ведет или поставил: шаги ложатся на его людей.
+      var canSplit = (isAssignee || boss) && !t.parent_id && t.status !== 'done' && t.status !== 'cancel';
 
       // Кнопки — только те, что человек реально может нажать: серые запрещенные
       // кнопки учат тыкать наугад и получать отказ.
@@ -13154,7 +13275,9 @@
           (t.parent_id ? '' :
             '<div class="tsk-sec"><div class="tsk-l tsk-lrow">Шаги' +
               (steps.length ? '<span class="tsk-prog-n num">' + t.steps_done + ' из ' + t.steps_total + '</span>' : '') +
+              (canSplit ? '<button class="tsk-addstep" id="tk-split" type="button">' + ic('spark', 12) + 'Разложить</button>' : '') +
               '</div>' +
+              '<div class="cmp" id="tk-comp" hidden></div>' +
               (steps.length
                 ? '<div class="tsk-steps">' + steps.map(function (s) {
                     var sst = TASK_ST[s.status] || TASK_ST.wait;
@@ -13305,6 +13428,15 @@
           if (e.key === 'Enter') { e.preventDefault(); qsAdd(); }
         });
       }
+      var splitB = el('tk-split');
+      if (splitB) splitB.addEventListener('click', function () {
+        companionSplit(t, el('tk-comp'), splitB, function () {
+          state.tasks = null; state.myweek = null; state.myboard = null;
+          state.stuck = null; state.mymonth = null;
+          api('/admin/api/tasks/' + id).then(draw).catch(function () { close(); });
+          if (state.page === 'tasks') renderView();
+        });
+      });
       Array.prototype.forEach.call(ov.querySelectorAll('[data-step]'), function (b) {
         b.addEventListener('click', function () {
           var sid = +b.getAttribute('data-step');
