@@ -7080,6 +7080,16 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
 .ff-warn { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink);
   background: var(--amber-soft); padding: 6px 10px; border-radius: 9px; }
+/* «Отложили в период» — заметная строка, а не серая мелочь (владелец 19.10.2026).
+   Капс-лейбл слева, сумма зелёной плашкой справа (деньги в фонд); ноль — нейтрально. */
+.ff-set { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 8px; }
+.ff-set-l { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ff-set-v { font: 700 13.5px 'Manrope', 'Inter', sans-serif; letter-spacing: -.02em;
+  color: var(--green-ink); background: var(--green-soft);
+  padding: 3px 10px; border-radius: var(--r-pill); }
+.ff-set-v.zero { color: var(--ink-3); background: var(--fill); }
 /* Правка остатка фонда. Кнопка живет в строке мелочей, а не отдельным блоком:
    это редкое действие финансиста, а не то, ради чего люди открывают экран. */
 .ff-fix { font: 600 11.5px 'Manrope', sans-serif; color: var(--blue); background: none;
