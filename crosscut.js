@@ -151,7 +151,7 @@ window.CROSSCUT = (function () {
        Подпись кнопки «Кого считаем» берется отсюда же — иначе она врет: 10.10.2026
        фильтр уже считал октябрь, а на кнопке стоял сентябрь. */
     var LAUNCH = {
-      title: 'Интенсив 24–25 октября',
+      title: 'Интенсив 28–29 октября',
       from: '2026-10-01',
       camps: {'intensiv-okt': 1, 'diag': 1}
     };
@@ -202,7 +202,7 @@ window.CROSSCUT = (function () {
     /* Все числа одного периода считаются одним проходом: два счетчика на один
        вопрос однажды разойдутся, и экран начнет спорить сам с собой. */
     function agg(a, b){
-      var r = {leads: 0, visits: 0, regs: 0, watched: 0, signed: 0, meeting: 0, meetings: 0,
+      var r = {leads: 0, visits: 0, regs: 0, diagPlat: 0, watched: 0, signed: 0, meeting: 0, meetings: 0,
                invN: 0, invRub: 0, invCanceled: 0, invPaidN: 0,
                payN: 0, revenue: 0, payers: 0, withUtm: 0, withCamp: 0,
                revByDay: {}, invByDay: {}, payByDay: {}, payCntByDay: {}, doors: {}, utm: {}, camps: {},
@@ -224,19 +224,29 @@ window.CROSSCUT = (function () {
         var mine = inP(l.d, a, b);
         if (mine){
           r.visits++;
-          if (l.c){
+          /* «не новый лид» (Ольгина чистка перед РНП): карточка остается в базе,
+             но лидом не считается — это текущий клиент, дубль или спам */
+          if (l.c && !l.nl){
             r.leads++;
             var gk = l.g ? 'g' + l.g : 'x' + r.leads;
             if (!r.people[gk]){ r.people[gk] = 1; r.peopleN++; }
           }
-          if (l.c && l.s) r.withUtm++;
-          if (l.c && l.cp) r.withCamp++;
-          if (l.c){
+          if (l.c && !l.nl && l.s) r.withUtm++;
+          if (l.c && !l.nl && l.cp) r.withCamp++;
+          if (l.c && !l.nl){
             who('leads', l, {d: l.d});
             if (l.s) who('withUtm', l, {d: l.d});
           }
         }
-        if (inP(l.reg, a, b)){ r.regs++; if (l.w) r.watched++; who('regs', l, {d: l.reg}); }
+        /* Регистрации на любой интенсив: человек с сентябрьского эфира, записавшийся
+           на октябрьский, — это две регистрации в двух периодах. Старый срез без rg
+           отдает одну дату в reg. */
+        var regs = l.rg || (l.reg ? [[l.reg, l.w ? 1 : 0]] : []);
+        regs.forEach(function(x){
+          if (!inP(x[0], a, b)) return;
+          r.regs++; if (x[1]) r.watched++; who('regs', l, {d: x[0]});
+        });
+        if (inP(l.dg, a, b)){ r.diagPlat++; who('diagPlat', l, {d: l.dg}); }
         if (inP(l.sb, a, b)) r.signed++;
         var myCalls = (l.cl || []).filter(function(c){ return inP(c, a, b); }).length;
         if (myCalls){
@@ -365,6 +375,14 @@ window.CROSSCUT = (function () {
       var p = prevRange();
       PRV = p[0] < FIRST && p[1] < FIRST ? null : agg(p[0], p[1]);
     }
+
+    /* Отсюда и ниже начинается экран. В CRM-сборке ровно перед этой строкой стоит
+       ранний выход `if (!ROOT) return {agg: agg, launch: LAUNCH};` — его вставляет
+       build_crm.py: раздел «Управление» зовет CROSSCUT.week и считает тем же agg, без
+       рисования. Здесь, на странице-черновике, такой return стоять не может — код
+       лежит на верхнем уровне скрипта, и браузер отказался бы разбирать всю страницу. */
+
+    if (!ROOT) return {agg: agg, launch: LAUNCH};
 
     /* ── Паспорта цифр: что считаем, откуда, как проверить руками ────────────── */
     var PASSPORTS = {
@@ -589,6 +607,7 @@ window.CROSSCUT = (function () {
         {t: 'Лиды', s: 'люди, оставившие контакт', n: d.leads},
         {t: 'Начали бесплатную диагностику', s: 'вошли в воронку теста в боте', n: d.diagStart},
         {t: 'Завершили диагностику', s: 'дошли до результата', n: d.diagDone},
+        {t: 'Получили разбор на платформе', s: 'анкета и разбор шансов на сайте', n: d.diagPlat},
         {t: 'Записались к тьютору-диагносту', s: 'выбрали время разбора', n: d.signed},
         {t: 'Разбор состоялся', s: 'встреча прошла', n: d.meeting},
         {t: 'Получили счет', s: 'счет выставлен', n: d.invN},
@@ -735,6 +754,7 @@ window.CROSSCUT = (function () {
       var rowsD = [
         ['Начали бесплатную диагностику', 'вошли в воронку теста в боте', d.diagStart, 0],
         ['Завершили бесплатную диагностику', 'дошли до результата', d.diagDone, 0],
+        ['Получили разбор на платформе', 'анкета и разбор шансов на сайте', d.diagPlat, 0],
         ['Записались на разбор к тьютору-диагносту', 'выбрали время', d.signed, 0],
         ['Разбор состоялся', 'людей, у кого встреча прошла', d.meeting, 0],
         ['Дошли до счета', 'счет выставлен', d.invN, 0],
@@ -940,6 +960,9 @@ window.CROSSCUT = (function () {
   }
 
   return {
+    /* Счет без экрана: РНП в разделе «Управление» берет те же цифры за свою неделю.
+       Вторую формулу не заводим — ступени РНП обязаны сходиться со сквозной. */
+    week: function (data, from, to) { return build(null, data).agg(from, to); },
     render: function (box, data) {
       box.innerHTML = '<div class="crosscut">' + TPL + '</div>';
       build(box.querySelector('.crosscut'), data);
