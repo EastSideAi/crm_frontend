@@ -360,6 +360,9 @@
       clock: '<circle cx="10" cy="10" r="7.5"/><path d="M10 6v4.4l2.8 1.6"/>',
       chart: '<path d="M3.5 16.5v-6M8 16.5V7M12.5 16.5v-3.5M17 16.5V4"/>',
       // штурвал: «Управление» — куда ведем компанию на этой неделе
+      // Карта компании: узел в центре и четыре ветки. Своя, а не tree: дерево в
+      // наборе уже значит продуктовый портал, а здесь работа расходится от центра.
+      mindmap: '<circle cx="10" cy="10" r="2.6"/><circle cx="3.8" cy="4.8" r="1.8"/><circle cx="16.2" cy="4.8" r="1.8"/><circle cx="3.8" cy="15.2" r="1.8"/><circle cx="16.2" cy="15.2" r="1.8"/><path d="M8 8.3 5.2 6M12 8.3l2.8-2.3M8 11.7 5.2 14M12 11.7l2.8 2.3"/>',
       helm: '<circle cx="10" cy="10" r="5.5"/><circle cx="10" cy="10" r="1.6"/><path d="M10 2v6.4M10 11.6V18M2 10h6.4M11.6 10H18M4.3 4.3l4.6 4.6M11.1 11.1l4.6 4.6M15.7 4.3l-4.6 4.6M8.9 11.1l-4.6 4.6"/>',
       target: '<circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3.5"/><circle cx="10" cy="10" r=".5" fill="currentColor"/>',
       coins: '<circle cx="7" cy="7" r="4"/><path d="M11 4.3a4 4 0 1 1 0 7.4"/><path d="M5.5 7h3M7 5.5v3"/>',
@@ -2355,6 +2358,10 @@
     // гипотезы целями задачника, решения встреч и проверка прошлой недели. Открыт
     // всем с задачами: отдел ведет свою неделю здесь же, переключателем отдела.
     { id: 'manage', label: 'Управление', icon: 'helm', cap: 'tasks' },
+    // «Карта компании» — все цели отделов одной картой и вопросы, которые ждут
+    // решения (Виталий 19.10.2026). Cap выдает сервер по списку людей, а не роль:
+    // super_admin у нас семь, а карту сначала обкатывает один человек.
+    { id: 'cmap', label: 'Карта компании', icon: 'mindmap', cap: 'company_map' },
     { id: 'planfact', label: 'План-факт', icon: 'target', cap: 'planfact' },
     { id: 'tasks', label: 'Задачи', icon: 'task', cap: 'tasks' },
     /* EastSide Meeting — встречи команды: записи, конспекты, договоренности.
@@ -3128,6 +3135,7 @@
           : 'РНП недели: <b>сначала итоги прошлой недели</b>, потом цифры, гипотезы и решения встреч. Решение без задачи в задачнике не считается.') +
         '</span></div></div>';
     }
+    if (state.page === 'cmap') html = cmHeadHtml();
     if (state.page === 'prospects') {
       var prSeg = PR_SEGS[state.prSeg] ? state.prSeg : 'all';
       html = '<div><h2>Лиды</h2>' +
@@ -3728,6 +3736,7 @@
     else if (state.page === 'marketing') renderMarketing(view);
     else if (state.page === 'planfact') renderPlanFact(view);
     else if (state.page === 'manage') renderManage(view);
+    else if (state.page === 'cmap') renderCmap(view);
     else if (state.page === 'stories') renderStories(view);
     else if (state.page === 'gifts') renderGifts(view);
     else if (state.page === 'broadcasts') renderBroadcasts(view);
@@ -13021,6 +13030,12 @@
       // Обратно в «готово» возвращается то, что уже сдавали: правило «принимаем
       // только сданное» снятие приемки не отменяет.
       if (canAccept && t.status === 'return' && t.submitted_at) acts.push(['done', 'Принять', 'bp']);
+      // Вопрос руководителю: работа уперлась в решение, которое принимает не
+      // исполнитель. Вопрос встает на карту компании и уходит в бот; тот, кому
+      // карта открыта, сам на свои вопросы не отвечает, поэтому ему кнопки нет.
+      if ((isAssignee || isAuthor) && t.status !== 'done' && t.status !== 'cancel' && !can('company_map')) {
+        acts.push(['ask', 'Нужно решение', 'al-cancel']);
+      }
 
       /* Лента задачи — это разговор, и выглядеть должна разговором. Реплики
          людей идут пузырями тем же компонентом, что в «Диалогах» (.tg-msg /
@@ -13963,6 +13978,10 @@
       Array.prototype.forEach.call(ov.querySelectorAll('[data-act]'), function (b) {
         b.addEventListener('click', function () {
           var to = b.getAttribute('data-act');
+          if (to === 'ask') {
+            taskAskForm(ov, t, function () { api('/admin/api/tasks/' + id).then(draw); });
+            return;
+          }
           // Поле возврата уже открыто и текст набран — «Вернуть» отправляет его,
           // а не открывает поле второй раз (Павел 07.09.2026: «не могу вернуть»).
           if (to === 'return') { if (retMode && (say.value || '').trim()) send(); else setRet(true); return; }
@@ -34182,6 +34201,337 @@
      репозитории, а статика CRM раздается БЕЗ входа (§10.7): список всех людей
      компании с обязанностями открывался по прямой ссылке. ФИО вместе с
      должностью — персональные данные, и держать их открытыми нельзя. */
+  /* ── КАРТА КОМПАНИИ — вся работа одним взглядом ───────────────────────────
+     Виталий 19.10.2026: «я не успеваю за всеми нововведениями и информацией, хочу
+     в сжатом формате, с возможностью полноценно ознакомиться». Карта читает те же
+     цели, шаги и гипотезы, что задачник и РНП (eastside-backend
+     routers/company_map.py), и раскладывает их сверху вниз: компания, отдел, цель,
+     шаг. Своих данных у нее нет, кроме вопросов «ждет решения».
+
+     Не путать с «Картой» клиентов (`roadmap`): там семьи по этапам пути, здесь
+     работа команды. Поэтому и название другое.
+
+     Состояние узла и его причину считает сервер. Цвет на экране — только
+     следствие: зеленый идет, амбер отстает (причина словами рядом), синий ждет
+     решения руководителя. Синий здесь не второй акцент, а тот же «ожидание, не
+     авария», что у «Приглашен» в модуле самозанятых. */
+  var CM_ST = { ok: 'идет', lag: 'отстает', ask: 'ждет решения' };
+
+  function cmLoad(force) {
+    if (state._cmBusy || (state._cm && !force)) return;
+    state._cmBusy = true;
+    api('/admin/api/company-map').then(function (d) {
+      state._cmBusy = false; state._cm = d;
+      if (!state.cmDept) state.cmDept = cmFirstDept(d);
+      if (state.page === 'cmap') { renderHead(); renderView(); }
+    }).catch(function () {
+      state._cmBusy = false; state._cm = 'none';
+      if (state.page === 'cmap') renderView();
+    });
+  }
+  /* Открываем тот отдел, где больше всего работы для руководителя: сначала
+     вопросы к нему, потом отставание. Пустой экран с семью закрытыми ветками
+     заставил бы искать самому — ровно то, от чего карта и спасает. */
+  function cmFirstDept(d) {
+    var best = null, score = -1;
+    (d.depts || []).forEach(function (x) {
+      var s = x.ask * 1000 + x.lag;
+      if (s > score) { score = s; best = x.dept; }
+    });
+    return best == null ? '' : best;
+  }
+  function cmNodeLoad(id) {
+    state._cmNode = state._cmNode || {};
+    if (state._cmNode[id] && state._cmNode[id] !== 'wait') return;
+    state._cmNode[id] = 'wait';
+    api('/admin/api/company-map/node/' + id).then(function (d) {
+      state._cmNode[id] = d; if (state.page === 'cmap') renderView();
+    }).catch(function () {
+      state._cmNode[id] = 'none'; if (state.page === 'cmap') renderView();
+    });
+  }
+  function cmReload() {
+    state._cmNode = {};
+    cmLoad(true);
+  }
+
+  function cmDay(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    return pad(d.getDate()) + '.' + pad(d.getMonth() + 1);
+  }
+  function cmNum(v) { return v == null ? '—' : String(v).replace('.', ','); }
+
+  /* Шапка раздела: две строки, ради которых карта и заведена. Первая — сколько
+     всего и сколько ждет его. Вторая — одна главная дыра словами. */
+  function cmHeadHtml() {
+    var d = state._cm;
+    var line = 'Цели всех отделов одной картой: кто ведет, какая цифра, где застряло.';
+    if (d && d !== 'none') {
+      var t = d.total;
+      // Разбивка обязана складываться в итог: вопросов на одной цели бывает
+      // несколько, поэтому считаем цели, а не вопросы.
+      var askG = (d.goals || []).filter(function (g) { return g.state === 'ask'; }).length;
+      line = '<b>' + t.goals + ' ' + plural(t.goals, 'цель', 'цели', 'целей') + ' в работе</b>: ' +
+        t.ok + ' ' + plural(t.ok, 'идет', 'идут', 'идут') + ', ' + t.lag + ' ' +
+        plural(t.lag, 'отстает', 'отстают', 'отстают') +
+        (askG ? ', <b>' + askG + ' ' + plural(askG, 'ждет', 'ждут', 'ждут') + ' твоего решения</b>' : '') + '. ' +
+        (t.no_steps ? 'Главная дыра: у ' + t.no_steps + ' ' + plural(t.no_steps, 'цели', 'целей', 'целей') +
+          ' нет ни одного шага, значит по ним никто ничего не делает.'
+          : t.late ? 'Просрочено ' + t.late + ' ' + plural(t.late, 'цель', 'цели', 'целей') + '.' : '');
+    }
+    return '<div><h2>Карта компании</h2><div class="verdict"><span class="vspark">' + ic('mindmap', 13) +
+      '</span><span>' + line + '</span></div></div>';
+  }
+
+  function cmAsksHtml(d) {
+    var asks = d.asks || [];
+    if (!asks.length) return '';
+    var rows = asks.map(function (a) {
+      var open = state.cmBack === a.id;
+      return '<div class="cm-ask" data-cmask="' + a.id + '">' +
+        '<div class="cm-ask-b">' +
+          '<div class="cm-ask-q">' + esc(a.question) + '</div>' +
+          '<div class="cm-ask-m"><button type="button" class="cm-link" data-cmtask="' + a.task_id + '">' +
+            esc(a.goal_title ? a.goal_title + ' → ' + a.task_title : a.task_title) + '</button>' +
+            '<span class="cm-who">' + esc(a.asked_by_name || 'кто-то из команды') + ' · ' + esc(fmtWhen(a.asked_at)) + '</span></div>' +
+          (open ? '<div class="cm-ask-f"><textarea class="al-in cm-ask-ta" id="cm-back-' + a.id + '" rows="2" maxlength="2000" ' +
+              'placeholder="Что не так или что уточнить"></textarea>' +
+              '<div class="cm-ask-fb"><button class="al-cancel" data-cmcancel="1">Отмена</button>' +
+              '<button class="bp" data-cmsend="' + a.id + '">Вернуть</button></div></div>' : '') +
+        '</div>' +
+        (open ? '' : '<div class="cm-ask-acts"><button class="bp sm" data-cmok="' + a.id + '">Утвердить</button>' +
+          '<button class="bp ghost sm" data-cmback="' + a.id + '">Вернуть с вопросом</button></div>') +
+      '</div>';
+    }).join('');
+    return '<div class="card cm-asks"><div class="sec-head pad"><span class="ic">' + ic('hand', 14) + '</span>' +
+      '<div><div class="t">Ждут твоего решения</div><div class="s">ответ уйдет человеку в бот и ляжет в ленту задачи</div></div>' +
+      '<span class="cnt">' + asks.length + '</span></div>' + rows + '</div>';
+  }
+
+  function cmDots(x) {
+    return '<span class="cm-dots">' +
+      (x.ok ? '<span class="cm-dot ok" title="идут"><i></i>' + x.ok + '</span>' : '') +
+      (x.lag ? '<span class="cm-dot lag" title="отстают"><i></i>' + x.lag + '</span>' : '') +
+      (x.ask ? '<span class="cm-dot ask" title="ждут решения"><i></i>' + x.ask + '</span>' : '') + '</span>';
+  }
+
+  function cmTreeHtml(d) {
+    var t = d.total, depts = d.depts || [];
+    var root = '<div class="org-one"><div class="org-node k-owner flat cm-root">' +
+      '<b>EastSide</b><i>' + depts.length + ' ' + plural(depts.length, 'ветка', 'ветки', 'веток') + ': общие цели и отделы</i>' +
+      cmDots({ ask: depts.reduce(function (n, x) { return n + x.ask; }, 0), lag: t.lag, ok: t.ok }) +
+      '</div></div>';
+    var cols = depts.map(function (x) {
+      var on = x.dept === state.cmDept;
+      return '<div class="org-col"><span class="org-tick"></span>' +
+        '<button type="button" class="org-node cm-dept s-' + x.state + (on ? ' on' : '') + '" data-cmdept="' + esc(x.dept) + '" aria-pressed="' + on + '">' +
+          '<b>' + esc(x.label) + '</b>' +
+          '<i>' + esc(x.head ? x.head.name : x.dept ? 'руководитель не назначен' : 'без отдела') + '</i>' +
+          '<span class="cm-bar" title="шаги целей: ' + x.steps_done + ' из ' + x.steps_total + '"><span style="width:' + x.pct + '%"></span></span>' +
+          '<span class="cm-dl">' + x.goals + ' ' + plural(x.goals, 'цель', 'цели', 'целей') + cmDots(x) + '</span>' +
+        '</button></div>';
+    }).join('');
+    return '<div class="card org-board cm-board"><div class="org-tree">' + root +
+      '<div class="org-stem"></div><div class="org-cols cm-cols" style="--org-n:' + depts.length + '">' + cols + '</div></div>' +
+      '<div class="cm-legend"><span class="cm-dot ok"><i></i>идет</span><span class="cm-dot lag"><i></i>отстает</span>' +
+      '<span class="cm-dot ask"><i></i>ждет решения</span><span class="cm-lg-s">полоса: сколько шагов целей уже сделано</span></div></div>';
+  }
+
+  function cmMetric(g) {
+    if (g.hyp) {
+      var h = g.hyp;
+      // Неразрывные пробелы: «регистрации» не должно отрываться от «290 → 400».
+      return '<span class="cm-met"><b>' + esc(h.metric) + '</b>&nbsp;' +
+        (h.base != null ? cmNum(h.base) + '&nbsp;→&nbsp;' : '') + cmNum(h.target) +
+        // Факт до срока — это ход, а не провал: красным на карте горит только
+        // просрочка, иначе цель в процессе выглядит аварией.
+        (h.fact != null ? ' · <b' + (h.fact >= h.target ? ' class="ok"' : '') + '>факт ' + cmNum(h.fact) + '</b>' : '') + '</span>';
+    }
+    if (!g.steps_total) return '';
+    return '<span class="cm-met"><b>' + g.steps_done + ' из ' + g.steps_total + '</b> ' +
+      plural(g.steps_total, 'шага', 'шагов', 'шагов') + ' сделано' +
+      (g.steps_review ? ' · ' + g.steps_review + ' на приемке' : '') + '</span>';
+  }
+
+  function cmNodeHtml(g) {
+    var n = (state._cmNode || {})[g.id];
+    if (!n || n === 'wait') return '<div class="cm-body"><div class="sk-list"><div class="shim"></div><div class="shim"></div></div></div>';
+    if (n === 'none') return '<div class="cm-body"><div class="cm-note">Не загрузилось. <button class="cm-link" data-cmretry="' + g.id + '">Еще раз</button></div></div>';
+    var steps = n.steps.map(function (s) {
+      var st = TASK_ST[s.status] || TASK_ST.wait;
+      return '<button type="button" class="cm-step' + (s.late ? ' late' : '') + '" data-cmtask="' + s.id + '">' +
+        '<span class="cm-step-t">' + esc(s.title) + '</span>' +
+        '<span class="cm-step-m">' + esc(s.assignee_name || 'без исполнителя') +
+          (s.due_at ? ' · ' + (s.late ? 'просрочен с ' : 'до ') + cmDay(s.due_at) : '') + '</span>' +
+        '<span class="cm-step-c">' +
+          (s.asks_open ? '<span class="sev cm-askchip">' + ic('hand', 11) + 'ждет решения</span>' : '') +
+          '<span class="sev ' + st.cls + '">' + esc(st.label) + '</span></span></button>';
+    }).join('');
+    var asks = n.asks.filter(function (a) { return a.verdict; }).slice(0, 3).map(function (a) {
+      return '<div class="cm-hist"><b>' + esc(a.question) + '</b><span>' +
+        (a.verdict === 'ok' ? 'Утверждено' : 'Вернули с вопросом') + (a.answer ? ': ' + esc(a.answer) : '') +
+        ' · ' + esc(a.answered_by_name || '') + ' · ' + esc(fmtWhen(a.answered_at)) + '</span></div>';
+    }).join('');
+    var like = n.similar.map(function (s) {
+      return '<button type="button" class="cm-like" data-cmtask="' + s.id + '"><b>' + esc(s.title) + '</b>' +
+        '<span>' + esc(s.assignee_name || 'без ведущего') + (s.closed_at ? ' · закрыта ' + cmDay(s.closed_at) : '') + '</span></button>';
+    }).join('');
+    return '<div class="cm-body">' +
+      (n.goal.result_expect ? '<div class="cm-exp"><span class="po-lbl">Как поймем, что дошли</span>' + esc(n.goal.result_expect) + '</div>' : '') +
+      '<div class="cm-sec"><span class="po-lbl">Шаги</span>' +
+        (steps || '<div class="cm-note">Шагов нет. Открой цель и нажми «Разложить»: компаньон предложит шаги по людям отдела.</div>') + '</div>' +
+      (asks ? '<div class="cm-sec"><span class="po-lbl">Решения</span>' + asks + '</div>' : '') +
+      (like ? '<div class="cm-sec"><span class="po-lbl">Похожее уже делали</span>' + like + '</div>' : '') +
+      '<div class="cm-foot"><button class="bp ghost sm" data-cmtask="' + g.id + '">Открыть цель</button></div>' +
+    '</div>';
+  }
+
+  function cmGoalsHtml(d) {
+    var dept = (d.depts || []).filter(function (x) { return x.dept === state.cmDept; })[0];
+    if (!dept) return '';
+    var goals = (d.goals || []).filter(function (g) { return g.dept === dept.dept; });
+    var open = state.cmOpen;
+    var rows = goals.map(function (g) {
+      var on = open === g.id;
+      // Каждый факт называем один раз: «нет ведущего» и «нет шагов» живут чипом,
+      // просрочка — красной датой в строке, а не еще одним чипом рядом.
+      var late = g.why.indexOf('просрочена') !== -1;
+      var why = g.why.filter(function (w) { return w !== 'просрочена'; })
+        .map(function (w) { return '<span class="cm-why">' + esc(w) + '</span>'; }).join('');
+      var met = cmMetric(g);
+      var meta = [];
+      if (g.assignee_name) meta.push(esc(g.assignee_name));
+      if (g.due_at) meta.push(late ? '<span class="cm-late">просрочена с ' + cmDay(g.due_at) + '</span>' : 'до ' + cmDay(g.due_at));
+      if (met) meta.push(met);
+      return '<div class="cm-goal s-' + g.state + (on ? ' on' : '') + '">' +
+        '<button type="button" class="cm-grow" data-cmgoal="' + g.id + '" aria-expanded="' + on + '">' +
+          '<span class="cm-gb"><span class="cm-gt">' + esc(g.title) + '</span>' +
+            (meta.length ? '<span class="cm-gm">' + meta.join(' · ') + '</span>' : '') +
+            (why || g.asks_open ? '<span class="cm-whys">' +
+              (g.asks_open ? '<span class="cm-why ask">' + g.asks_open + ' ' + plural(g.asks_open, 'вопрос', 'вопроса', 'вопросов') + ' к тебе</span>' : '') +
+              why + '</span>' : '') +
+          '</span>' +
+          '<span class="org-plus">' + ic('plus', 13) + '</span>' +
+        '</button>' +
+        (on ? cmNodeHtml(g) : '') +
+      '</div>';
+    }).join('');
+    return '<div class="card cm-branch"><div class="sec-head pad"><div><div class="t">' + esc(dept.label) + '</div>' +
+      '<div class="s">' + esc(dept.head ? 'ведет ' + dept.head.name + ' · ' : '') + dept.goals + ' ' +
+        plural(dept.goals, 'цель', 'цели', 'целей') + ', сверху то, что ждет решения и отстает</div></div></div>' +
+      (rows || '<div class="cm-note">Живых целей нет.</div>') + '</div>';
+  }
+
+  function renderCmap(view) {
+    if (!state._cm) {
+      cmLoad();
+      view.innerHTML = '<div class="dash cm"><div class="card"><div class="sk-list"><div class="shim"></div><div class="shim"></div><div class="shim"></div></div></div></div>';
+      return;
+    }
+    if (state._cm === 'none') {
+      view.innerHTML = '<div class="dash cm"><div class="card"><div class="empty">Карта не загрузилась. ' +
+        '<button class="bp ghost" data-cmreload="1">Попробовать еще раз</button></div></div></div>';
+      view.querySelector('[data-cmreload]').addEventListener('click', function () { state._cm = null; renderView(); });
+      return;
+    }
+    var d = state._cm;
+    if (state.cmOpen) cmNodeLoad(state.cmOpen);
+    view.innerHTML = '<div class="dash cm">' + cmAsksHtml(d) + cmTreeHtml(d) + cmGoalsHtml(d) + '</div>';
+    cmBind(view);
+  }
+
+  function cmBind(view) {
+    view.querySelectorAll('[data-cmdept]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.cmDept = b.getAttribute('data-cmdept'); state.cmOpen = null; renderView();
+        var br = view.querySelector('.cm-branch');
+        var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        // На телефоне ветки идут столбиком, и список целей оказывается за экраном:
+        // нажатие без прокрутки выглядело бы как «ничего не случилось».
+        if (br && window.innerWidth <= 860) br.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+      });
+    });
+    view.querySelectorAll('[data-cmgoal]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-cmgoal');
+        state.cmOpen = state.cmOpen === id ? null : id;
+        renderView();
+        var again = view.querySelector('[data-cmgoal="' + id + '"]');
+        if (again) again.focus();
+      });
+    });
+    view.querySelectorAll('[data-cmtask]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); openTask(+b.getAttribute('data-cmtask')); });
+    });
+    view.querySelectorAll('[data-cmretry]').forEach(function (b) {
+      b.addEventListener('click', function () { delete state._cmNode[b.getAttribute('data-cmretry')]; renderView(); });
+    });
+    view.querySelectorAll('[data-cmback]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.cmBack = +b.getAttribute('data-cmback'); renderView();
+        var ta = el('cm-back-' + state.cmBack); if (ta) ta.focus();
+      });
+    });
+    view.querySelectorAll('[data-cmcancel]').forEach(function (b) {
+      b.addEventListener('click', function () { state.cmBack = null; renderView(); });
+    });
+    view.querySelectorAll('[data-cmok]').forEach(function (b) {
+      b.addEventListener('click', function () { cmAnswer(+b.getAttribute('data-cmok'), 'ok', '', b); });
+    });
+    view.querySelectorAll('[data-cmsend]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +b.getAttribute('data-cmsend'), ta = el('cm-back-' + id);
+        var txt = ta ? ta.value.trim() : '';
+        if (!txt) { if (ta) ta.focus(); showToast('Напиши, что не так: без этого человек будет гадать'); return; }
+        cmAnswer(id, 'back', txt, b);
+      });
+    });
+  }
+
+  function cmAnswer(id, verdict, answer, btn) {
+    btn.disabled = true;
+    apiSend('/admin/api/company-map/asks/' + id + '/answer', 'POST', { verdict: verdict, answer: answer }, function () {
+      state.cmBack = null;
+      showToast(verdict === 'ok' ? 'Утвердил, человек получит ответ в бот' : 'Вернул с вопросом, человек получит его в бот');
+      cmReload();
+    }, function (code, e) {
+      btn.disabled = false;
+      if (code === 409) { showToast('На этот вопрос уже ответили'); cmReload(); return; }
+      showToast((e && e.body && e.body.detail) || 'Не сохранилось, проверь сеть');
+    });
+  }
+
+  /* Вопрос руководителю из карточки задачи. Спрашивает тот, кто ведет работу:
+     поле встает на место кнопок карточки, отдельного окна поверх окна нет
+     (design.md §7.6, вложенные модалки). */
+  function taskAskForm(ov, t, reload) {
+    var foot = ov.querySelector('.tsk-acts');
+    if (!foot) return;
+    foot.innerHTML = '<div class="tsk-ask"><label class="tsk-askh" for="tk-askq">' + ic('hand', 13) +
+        'Вопрос руководителю по этой задаче</label>' +
+      '<textarea class="al-in tsk-askta" id="tk-askq" rows="2" maxlength="1000" ' +
+        'placeholder="Что нужно решить? Например: берем посевы на 60 тысяч или режем до 40"></textarea>' +
+      '<div class="tsk-askb"><span class="tsk-askn">Вопрос уйдет руководителю в бот и встанет на карту компании</span>' +
+        '<button class="al-cancel" id="tk-askx">Отмена</button><button class="bp" id="tk-asks">Спросить</button></div></div>';
+    var q = el('tk-askq');
+    q.focus();
+    el('tk-askx').addEventListener('click', reload);
+    el('tk-asks').addEventListener('click', function () {
+      var txt = q.value.trim();
+      if (txt.length < 5) { q.focus(); showToast('Напиши вопрос так, чтобы на него можно было ответить'); return; }
+      var b = this; b.disabled = true;
+      apiSend('/admin/api/company-map/asks', 'POST', { task_id: t.id, question: txt }, function () {
+        showToast('Вопрос ушел руководителю');
+        state._cm = null;
+        reload();
+      }, function (code, e) {
+        b.disabled = false;
+        showToast((e && e.body && e.body.detail) || 'Не отправилось, проверь сеть');
+      });
+    });
+  }
+
   function fetchOrg() {
     api('/admin/api/org')
       .then(function (d) { state._org = d; if (state.page === 'org') renderView(); })
