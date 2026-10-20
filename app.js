@@ -21325,11 +21325,14 @@
     var histBtn = pers.length > 1
       ? '<button class="qchip" id="ff-hist">' + (histOn ? 'Свернуть' : 'Вся история') + '</button>'
       : '';
-    var persCard = '<div class="card fin-block">' +
+    /* Свернутая карточка занимает ровно столько, сколько весит справка: компактный
+       паддинг и заголовок без подписи — одной строкой «По ведомостям» понятно, что
+       это (Роман 20.10.2026). Развернутая история возвращает обычный размер. */
+    var persCard = '<div class="card fin-block' + (histOn ? '' : ' tight') + '">' +
       '<div class="sec-head list-tools"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">По ведомостям</div>' +
-        '<div class="s">' + (histOn ? 'как фонд рос и на что уходил от периода к периоду'
-          : 'движение фонда в выбранной ведомости') + '</div></div>' + histBtn + '</div>' +
+        (histOn ? '<div class="s">как фонд рос и на что уходил от периода к периоду</div>' : '') +
+        '</div>' + histBtn + '</div>' +
       '<div class="fin-funds">' + persShown.map(function (p) {
         var editing = p.open && canFix && FIN.fundEdit === p.id;
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +

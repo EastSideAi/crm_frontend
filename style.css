@@ -6961,7 +6961,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fl-main { min-width: 0; }
 .fl-name { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fl-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+/* Подстрочник строки — это ОПИСАНИЕ расхода (за что, по какой статье, какой
+   комментарий), а не служебная сноска: 11.5px самым светлым чернилом читались как шум
+   и люди их просто не замечали (Роман 20.10.2026). Размер и цвет обычной подписи. */
+.fl-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
 /* Полоска доли — единственный «график» на экране: она отвечает на вопрос «а сколько
    это от общего», который иначе считают в уме. */
 .fl-bar { height: 4px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
@@ -7117,6 +7120,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    фонды стояли вкладками в верхней полосе, переносились там на вторую строку и
    выдавливали выбор периода (Роман 20.10.2026). */
 .fin-fundtabs { margin: 0 0 16px; }
+/* Компактная карточка: справка рядом с основной работой не должна весить столько же,
+   сколько она. Тот же материал и радиус, только воздух плотнее. */
+.fin-block.tight { padding: 15px 18px 16px; }
+.fin-block.tight .fin-funds { margin-top: 8px; }
+.fin-block.tight .ff-row { padding: 9px 0 2px; border-bottom: 0; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
 .ff-top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
@@ -7265,8 +7273,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fo-what { min-width: 0; }
 .fo-what b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fo-what i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal;
-  color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-what i { display: block; margin-top: 2px; font-size: 12.5px; font-style: normal;
+  color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fo-src, .fo-acc { font-size: 12.5px; color: var(--ink-2); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
