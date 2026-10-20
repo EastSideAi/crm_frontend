@@ -6925,6 +6925,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    якорь (итоговая строка) и максимально тихое все остальное: цифры выровнены по
    правому краю, подписи правил серые, разделители полупрозрачные. */
 .fin-casc { padding: 20px 24px 10px; }
+/* Переключатель Факт/План в шапке каскада — системный сегмент (.tabs), прижат вправо. */
+.fin-casc-seg { margin-left: auto; flex: none; align-self: center; }
 .fc-rows { margin-top: 12px; }
 .fc-row { display: flex; align-items: baseline; justify-content: space-between; gap: 20px;
   padding: 13px 0; border-bottom: 1px solid var(--line); }
