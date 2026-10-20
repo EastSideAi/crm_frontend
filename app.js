@@ -112,6 +112,7 @@
     glMode: 'cards', gantt: null,   // «Цели»: карточки или гант
     gtScale: 'week', gtFrom: '', gtTo: '',   // масштаб сетки ганта и окно дат («» — считаем от сегодня)
     ganttOpen: {},      // какие цели в ганте раскрыты до шагов
+    finOpen: {},        // какие справочные карточки финансов раскрыты (по умолчанию свернуты)
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
@@ -146,7 +147,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -161,6 +162,7 @@
         glMode: state.glMode || 'cards', gtScale: state.gtScale || 'week',
         gtFrom: state.gtFrom || '', gtTo: state.gtTo || '',
         ganttOpen: state.ganttOpen || {},
+        finOpen: state.finOpen || {},
         mxTab: state.mxTab || 'soon',
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
@@ -2601,6 +2603,38 @@
     // что компания должна ему.
     { id: 'mw', label: 'Моя работа' },
   ];
+  /* Разделы «Финансов» собраны в группы по ходу работы: сначала то, что вносят в
+     ведомость периода, потом планы, потом отчеты, в конце справочники. Шестнадцать
+     пунктов подряд одним списком читались как свалка — «Ведомость» выглядела так же,
+     как «Банки» (Роман 20.10.2026). Карта задает и порядок: пункт, которого в ней нет
+     (новый раздел), уходит в конец без заголовка — меню от этого не ломается.
+     Группа с одним доступным пунктом заголовка не получает: подпись над одиночкой
+     больше мешает, чем помогает. */
+  var FIN_GROUPS = [
+    { label: 'Ведомость периода',
+      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit',
+            'finpartners', 'finref'] },
+    { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
+    { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops'] },
+    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
+  ];
+  /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
+     ПЕРВОМ пункте каждой группы — рисует их renderSide, логика порядка живет здесь. */
+  function navGrouped(items, space) {
+    if (space !== 'fin') return items.map(function (it) { return { it: it, lab: '' }; });
+    var left = items.slice(), out = [];
+    FIN_GROUPS.forEach(function (g) {
+      var got = [];
+      g.ids.forEach(function (id) {
+        for (var i = 0; i < left.length; i++) {
+          if (left[i].id === id) { got.push(left[i]); left.splice(i, 1); return; }
+        }
+      });
+      got.forEach(function (it, i) { out.push({ it: it, lab: (i === 0 && got.length > 1) ? g.label : '' }); });
+    });
+    left.forEach(function (it) { out.push({ it: it, lab: '' }); });
+    return out;
+  }
   function navSpace(it) { return it.space || 'crm'; }
   // Иконка пространства на телефоне: вкладка перехода подписана словом, но узнают ее
   // по значку — одинаковые значки у разных пространств сводят его на нет.
@@ -2682,7 +2716,8 @@
     var nav = el('side-nav');
     if (nav) {
       var ho = inboxAttention();
-      nav.innerHTML = NAV.map(function (it) {
+      nav.innerHTML = navGrouped(NAV, space).map(function (row) {
+        var it = row.it;
         var extra = '';
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
@@ -2696,10 +2731,11 @@
         // Новое в CRM — не тревога: нейтральный счетчик, красное здесь только у просрочки.
         else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
-        return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+        return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
+          '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
-      Array.prototype.forEach.call(nav.children, function (b) {
+      Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
         b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
       });
     }
@@ -3009,42 +3045,18 @@
           renderTopbar(); renderView();
         });
       });
-    } else if (state.page === 'finfund') {
-      // У фонда переключатель не по периодам, а по фондам: экран смотрит накопление
-      // за все время, и период тут не контекст, а строка таблицы.
-      var flist = (FIN.fund && FIN.fund !== 'none' ? FIN.fund.funds : null) || [];
-      tb.innerHTML = flist.length
-        ? '<nav class="tabs">' + flist.map(function (f) {
-            return '<a class="tab' + (FIN.fundId === f.id ? ' on' : '') + '" data-ffund="' + esc(f.id) + '">' +
-              esc(f.name) + '</a>';
-          }).join('') + '</nav>'
-        : '<div class="freshchip"><span class="fok">' + ic('wallet', 11) + '</span>фонды</div>';
-      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
-        t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
-      });
-    } else if (state.page === 'finprograms') {
-      // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
-    } else if (state.page === 'finpartners') {
-      // Партнёр ведет клиента сквозь периоды — начисление не привязано к ведомости, чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>партнёрские выплаты</div>';
-    } else if (state.page === 'fintax') {
-      // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
-    } else if (state.page === 'finbanks') {
-      // Справочник банков не привязан к ведомости периода — только чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>правила по банкам</div>';
-    } else if (state.page === 'finpaycheck') {
-      // Сверка накопительная (весь заработок против всех выплат), не по периоду — чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('clock', 11) + '</span>проверка перед выплатами</div>';
-    } else if (state.page === 'finkb') {
-      // База знаний живет вне периода: это правила, а не цифры ведомости.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('doc', 11) + '</span>правила работы</div>';
-    } else if (state.page === 'finsup') {
-      // Поставщики живут вне ведомости: у кого просим счет — правило, а не цифра
-      // периода.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('team', 11) + '</span>у кого просим счет</div>';
+    } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
+               state.page === 'fintax' || state.page === 'finbanks' ||
+               state.page === 'finpaycheck' || state.page === 'finkb' ||
+               state.page === 'finsup') {
+      /* Эти экраны живут вне ведомости: программа, партнер и справочники идут сквозь
+         периоды, налог собирает год, сверка — весь заработок против всех выплат. Здесь
+         в полосе стоял чип с названием раздела — дубль заголовка под ним. Полоса сверху
+         отвечает на один вопрос, за какой период смотрим, и молчит там, где периода нет
+         (Роман 20.10.2026: глаза бегают, потому что сверху на каждом экране свое). */
+      tb.innerHTML = '';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
+               state.page === 'finfund' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
@@ -20076,6 +20088,7 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
+              fundHist: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
               calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
               payHist: null, payScope: 'period',
@@ -20439,6 +20452,9 @@
        раздел). Загрузчик сам перерисует экран, когда ответ придёт. */
     if (!FIN.calendar) finLoadCalendar();
     var cal = (FIN.calendar && FIN.calendar !== 'none') ? FIN.calendar : null;
+    /* Просроченные взносы клиентов тянем тем же ленивым запросом, что Платёжный
+       календарь: цифра кросс-периодная, и считать ее второй раз своей формулой нельзя. */
+    if (!FIN.forecast) finLoadForecast();
     var funds = (s.rules || []).filter(function (r) {
       return r.account_id !== 'shortterm' && r.account_id !== 'flex';
     });
@@ -20470,32 +20486,58 @@
        есть результат правила, и открывать ради нее отдельный экран незачем. */
     var canFix = can('finmodel_edit');
     var editable = canFix && s.period.open;
-    var rows = [{ cls: 'in', name: 'Доход к зачислению',
-                  why: 'все, что пришло за период, за вычетом комиссии эквайринга',
-                  v: c.income }];
+    /* Переключатель Факт/План (Роман 20.10.2026): тот же водопад, но от плана продаж —
+       видно, сколько отложим на фонды и дивиденды, если план выручки сойдется. План
+       считает бэкенд (plan_cascade) по тем же правилам фондов, только с плановыми
+       базами. В режиме «План» строки не редактируются (это прогноз, а не ведомость) и
+       отметок о переводе в фонд нет. */
+    var plan = s.plan_cascade || null;
+    var planOn = FIN.cascMode === 'план' && plan && s.period.open;
+    var cc = planOn ? plan : c;
+    var rows = [{ cls: 'in',
+                  name: planOn ? 'Плановый доход' : 'Доход к зачислению',
+                  why: planOn
+                    ? 'план продаж ' + finNum(plan.sales, 0) + ' + дебиторка ' +
+                      finNum(plan.receivables, 0) + ', что ждем за период'
+                    : 'все, что пришло за период, за вычетом комиссии эквайринга',
+                  v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -c.shortterm, rule: stRule });
+                v: -cc.shortterm, rule: planOn ? null : stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
-                why: 'от нее считаются проценты фондов', v: c.base });
+                why: 'от нее считаются проценты фондов', v: cc.base });
     funds.forEach(function (r) {
-      rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount, rule: r });
+      rows.push({ cls: 'out', name: r.name, why: r.explain,
+                  v: -(planOn ? r.plan_amount : r.amount),
+                  rule: planOn ? null : r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: 'факт из расчетных листов: мотивация, сервисы, реклама',
-                v: -c.direct });
-    rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: c.profit });
+                why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
+                            : 'факт из расчетных листов: мотивация, сервисы, реклама',
+                v: -cc.direct });
+    rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
-                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -c.flex,
-                rule: flexRule });
-    rows.push({ cls: 'total', name: 'Дивиденды', why: 'то, что остается к распределению',
-                v: c.dividends });
+                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -cc.flex,
+                rule: planOn ? null : flexRule });
+    rows.push({ cls: 'total', name: 'Дивиденды',
+                why: planOn ? 'то, что отложим к распределению по плану'
+                            : 'то, что остается к распределению',
+                v: cc.dividends });
 
+    var cascToggle = (plan && s.period.open)
+      ? '<div class="tabs fin-casc-seg">' +
+          '<button class="tab' + (planOn ? '' : ' on') + '" data-cascmode="факт">Факт</button>' +
+          '<button class="tab' + (planOn ? ' on' : '') + '" data-cascmode="план">План</button>' +
+        '</div>'
+      : '';
+    var cascSub = planOn
+      ? 'сколько отложим на фонды и дивиденды, если план продаж сойдется'
+      : 'каждый шаг считается от предыдущего — сверху вниз' +
+        (editable ? '. Правило фонда меняется по клику на строке' : '');
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">Каскад ведомости</div>' +
-        '<div class="s">каждый шаг считается от предыдущего — сверху вниз' +
-        (editable ? '. Правило фонда меняется по клику на строке' : '') + '</div></div></div>' +
+        '<div class="s">' + cascSub + '</div></div>' + cascToggle + '</div>' +
       '<div class="fc-rows">' + rows.map(function (r) {
         var live = editable && r.rule;
         /* Отчисление в фонд до закрытия ведомости стоит планом, а деньги переводят в
@@ -20636,6 +20678,36 @@
           '<span class="fc-name">Считаю плановые платежи…</span></div></div></div>') +
     '</div>';
 
+    /* «Клиенты должны» (Роман 20.10.2026: «наша задача показать, кто теперь должен»).
+       Та же просрочка рассрочки, что в Платёжном календаре, но итогом и на Ведомости:
+       за долгом ходили в отдельный раздел, поэтому его не видели. Дожимают продажи,
+       финансы показывают сумму и возраст. Карточки нет вовсе, когда долга нет: плашка
+       «0 ₽» читается как сделанная работа, а не как пустая строка. */
+    var fcast = (FIN.forecast && FIN.forecast !== 'none') ? FIN.forecast : null;
+    var debt = (fcast && fcast.overdue && fcast.overdue.count) ? fcast.overdue : null;
+    var debtLate = 0;
+    (debt ? debt.rows || [] : []).forEach(function (x) {
+      var n = x.due_on ? Math.round((new Date(fcast.today) - new Date(x.due_on)) / 86400000) : 0;
+      if (n > debtLate) debtLate = n;
+    });
+    var debtCard = debt
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Клиенты должны</div>' +
+          '<div class="s">просроченные взносы рассрочки: дожимают продажи, финансы показывают</div></div></div>' +
+        '<div class="fin-kv">' +
+          '<div class="fkv total"><span>Просрочено</span><b class="num">' + finRub(debt.total) + '</b></div>' +
+          '<div class="fkv"><span>Должников</span><b class="num">' + debt.count + '</b></div>' +
+          (debtLate > 0
+            ? '<div class="fkv"><span>Старший долг</span><b class="num">' + debtLate + ' ' +
+              plural(debtLate, 'день', 'дня', 'дней') + '</b></div>'
+            : '') +
+        '</div>' +
+        '<button class="qchip" id="debt-go" style="margin-top:12px">' +
+          ic('cal', 12) + 'Кто именно должен</button>' +
+      '</div>'
+      : '';
+
     /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
        прибыль до процентов и налогов — тот же результат, к которому ведет мост в
        «Итогах». Считает P&L (`pnl_totals`), без него блок не рисуем: две методики
@@ -20754,10 +20826,25 @@
       '<div class="sp7">' + casc + direct + '</div>' +
       // Главное правой колонки наверх (владелец 19.10.2026): фонды и остатки по счетам —
       // то, на что смотрят каждый раз; плановая позиция, кэшфлоу, EBITDA и налог — ниже.
+      /* Фонды, остатки и сверка перед закрытием — работа, они открыты всегда. Плановая
+         позиция, кэшфлоу, EBITDA и налог — справка: свернуты, цифра видна в заголовке. */
       '<div class="sp5">' + fundsCard + finAccountsCard(s, editable) + warn +
-        planCard + cashCard + ebitdaCard + taxCard +
+        finFold('plan', planCard, finRub(afterPlan)) + debtCard +
+        finFold('cash', cashCard, finRub(cash.flow)) +
+        finFold('ebitda', ebitdaCard, t ? finRub(t.operating) : '') +
+        finFold('tax', taxCard, finRub((c.income || 0) * TAX_RATE)) +
       '</div></div>' +
       metricsHead + '<div id="sheet-metrics"></div>';
+    finFoldBind(view);
+
+    // Переключатель Факт/План на каскаде: перерисовываем весь экран, чтобы карточка
+    // пересобралась в выбранном режиме. Режим держим на FIN, он переживает перерисовку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cascmode]'), function (n) {
+      n.addEventListener('click', function () {
+        FIN.cascMode = n.getAttribute('data-cascmode');
+        renderFinSheet(view);
+      });
+    });
 
     // Живой пересчет планового налога: 8% от вписанного дохода. Доступно и на просмотре —
     // это калькулятор, а не правка ведомости.
@@ -20767,6 +20854,8 @@
     });
     var taxLnk = el('tax-year-lnk');
     if (taxLnk) taxLnk.addEventListener('click', function () { setPage('fintax'); });
+    var debtLnk = el('debt-go');
+    if (debtLnk) debtLnk.addEventListener('click', function () { setPage('fincalendar'); });
 
     if (editable) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-frule]'), function (n) {
@@ -21182,9 +21271,14 @@
       { label: 'Остаток', value: finRub(pBal), sub: 'на конец ведомости' },
     ]);
 
+    /* Разбивка по программам — только у краткосрочки (Роман 20.10.2026). Программа
+       (Шэньчжэнь, Шанхай, Харбин) проставляется у расходов этого фонда, остальные
+       фонды живут общими статьями, и на них блок показывал пустоту с объяснением,
+       почему он пуст, — то есть занимал первый экран ничем. */
+    var withOff = FIN.fundId === 'shortterm';
     var maxInc = 0;
     named.forEach(function (o) { if (o.income > maxInc) maxInc = o.income; });
-    var byOff = '<div class="card fin-block">' +
+    var byOff = !withOff ? '' : '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
         '<div><div class="t">По программам</div>' +
         '<div class="s">продажи программы и сколько с фонда на нее ушло</div></div></div>' +
@@ -21259,11 +21353,30 @@
     /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
        есть раздел, а правит финансист. Кнопки, которая всегда откажет, тут не будет. */
     var canFix = can('finmodel_edit');
-    var persCard = '<div class="card fin-block">' +
-      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+    /* История по периодам — справка, а не работа: каждый день смотрят расходы фонда
+       слева, а не как он рос с января. Поэтому по умолчанию в карточке одна строка —
+       та ведомость, что выбрана сверху, — а вся лента открывается кнопкой (Роман
+       20.10.2026: «очень сильно бросается в глаза и может мешать основной работе»).
+       Правка остатка живет в строке открытой ведомости, поэтому, когда ее правят,
+       лента разворачивается сама — иначе кнопка «поправить остаток» пропала бы. */
+    var histOn = !!FIN.fundHist || !!FIN.fundEdit;
+    var persShown = pers;
+    if (!histOn && pers.length > 1) {
+      var one = pers.filter(function (p) { return p.id === selId; });
+      persShown = one.length ? one : pers.slice(-1);
+    }
+    var histBtn = pers.length > 1
+      ? '<button class="qchip" id="ff-hist">' + (histOn ? 'Свернуть' : 'Вся история') + '</button>'
+      : '';
+    /* Свернутая карточка занимает ровно столько, сколько весит справка: компактный
+       паддинг и заголовок без подписи — одной строкой «По ведомостям» понятно, что
+       это (Роман 20.10.2026). Развернутая история возвращает обычный размер. */
+    var persCard = '<div class="card fin-block' + (histOn ? '' : ' tight') + '">' +
+      '<div class="sec-head list-tools"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">По ведомостям</div>' +
-        '<div class="s">как фонд рос и на что уходил от периода к периоду</div></div></div>' +
-      '<div class="fin-funds">' + pers.map(function (p) {
+        (histOn ? '<div class="s">как фонд рос и на что уходил от периода к периоду</div>' : '') +
+        '</div>' + histBtn + '</div>' +
+      '<div class="fin-funds">' + persShown.map(function (p) {
         var editing = p.open && canFix && FIN.fundEdit === p.id;
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
@@ -21294,7 +21407,7 @@
       gaps.push('Заведена всего одна ведомость. Периоды после нее в систему не вносили, ' +
         'поэтому «за все время» — это на самом деле один период.');
     }
-    if (noOff && (noOff.income || noOff.spent)) {
+    if (withOff && noOff && (noOff.income || noOff.spent)) {
       gaps.push('У ' + noOff.count + ' ' + plural(noOff.count, 'операции', 'операций', 'операций') +
         ' фонда не проставлена программа. Пока поле пустое, план и факт по Шэньчжэню, ' +
         'Шанхаю и Харбину показать не из чего.');
@@ -21313,9 +21426,22 @@
         }).join('') + '</div></div>'
       : '';
 
-    view.innerHTML = bar + '<div class="grid">' +
+    /* Выбор фонда — чипами на самом экране, а не вкладками в верхней полосе: полоса
+       сверху отвечает за период (сводка этого экрана считается по выбранной ведомости),
+       а шесть фондов переносились в ней на вторую строку и выдавливали выбор периода
+       совсем (Роман 20.10.2026). Рецепт тот же, что у вкладок расчетных листов. */
+    var fundTabs = '<div class="list-quick fin-fundtabs">' + (f.funds || []).map(function (x) {
+      return '<button class="qchip' + (FIN.fundId === x.id ? ' on' : '') +
+        '" data-ffund="' + esc(x.id) + '">' + esc(x.name) + '</button>';
+    }).join('') + '</div>';
+    view.innerHTML = fundTabs + bar + '<div class="grid">' +
       '<div class="sp7">' + byOff + opsCard + '</div>' +
       '<div class="sp5">' + persCard + gapCard + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ffund]'), function (t) {
+      t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
+    });
+    var hist = el('ff-hist');
+    if (hist) hist.addEventListener('click', function () { FIN.fundHist = !FIN.fundHist; renderAll(); });
     var fix = el('ff-fix'), save = el('ff-save'), undo = el('ff-cancel'), sum = el('ff-sum');
     if (fix) fix.addEventListener('click', function () {
       var open = null;
@@ -21652,6 +21778,56 @@
   // (renderFinPayouts), сложенный внутрь раздела, а не форма ввода листа.
   var FIN_PAY_FORM = '__payouts__';
   // Ряд вкладок раздела (листы + псевдо-вкладки). Клики вешает finPayChipsWire.
+  /* Справочная карточка финансов: свернута по умолчанию, в заголовке остается главная
+     цифра, тело открывается кнопкой. Повод — Роман 20.10.2026: «мы сделали много
+     интересного, убирать не будем, но второстепенное отвлекает от основного». Поэтому
+     ничего не удаляем и не прячем насовсем: экран перестает быть лентой из полутора
+     десятков равных карточек, а справка открывается на один клик и запоминается.
+     Что считать справкой, решает ВЫЗОВ: тут только оболочка. */
+  /* Свернуто не все подряд: плановая позиция и плановый налог открыты сразу (Роман
+     20.10.2026) — на них смотрят, когда решают, чем платить, а не когда разбираются
+     задним числом. Человек свернул их руками — помним его выбор, а не дефолт. */
+  var FIN_FOLD_OPEN = { plan: 1, tax: 1 };
+  function finFold(id, html, headValue) {
+    if (!html) return '';
+    var open = state.finOpen[id] === undefined ? !!FIN_FOLD_OPEN[id] : !!state.finOpen[id];
+    return html.replace(/^<div class="card /,
+      '<div data-fold="' + id + '"' +
+      (headValue ? ' data-foldv="' + esc(headValue) + '"' : '') +
+      ' class="card fin-fold' + (open ? ' open' : '') + ' ');
+  }
+  /* Кнопка и свернутая цифра ставятся по готовому DOM, а не внутрь каждой карточки:
+     карточек восемь, они собираются в разных местах, и восемь правок разошлись бы. */
+  function finFoldBind(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.fin-fold'), function (card) {
+      var id = card.getAttribute('data-fold');
+      var head = card.querySelector('.sec-head');
+      if (!head || head.querySelector('.fin-foldb')) return;
+      var open = card.classList.contains('open');
+      if (!open) {
+        /* Цифра свернутой карточки — та, которую назвал вызов, иначе итоговая строка
+           блока. Наугад первую попавшуюся не берем: под заголовком «Движение денег»
+           легко оказалась бы сумма прихода, и человек прочитал бы ее как итог. */
+        var given = card.getAttribute('data-foldv');
+        var num = given || (card.querySelector('.fkv.total b.num') || {}).textContent;
+        if (num && String(num).trim()) {
+          var v = document.createElement('span');
+          v.className = 'fin-foldv num';
+          v.textContent = String(num).trim();
+          head.appendChild(v);
+        }
+      }
+      var b = document.createElement('button');
+      b.className = 'qchip fin-foldb';
+      b.textContent = open ? 'Свернуть' : 'Показать';
+      b.addEventListener('click', function () {
+        state.finOpen[id] = !open;
+        saveUi();
+        renderAll();
+      });
+      head.appendChild(b);
+    });
+  }
   function finTabChips(forms) {
     if (!forms || forms.length < 2) return '';
     return forms.map(function (f) {
@@ -26337,10 +26513,10 @@
   function finForecastCard(f) {
     var groups = [];
     if (f.overdue && f.overdue.count) {
-      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true));
+      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true, f.today));
     }
     (f.months || []).forEach(function (m) {
-      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false));
+      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false, f.today));
     });
     var body = groups.length ? groups.join('') :
       '<div class="empty">Ожидаемых платежей по рассрочке на ближайшие месяцы нет.</div>';
@@ -26352,14 +26528,19 @@
       body + '</div>';
   }
 
-  function finFcGroup(label, total, rows, warn) {
+  function finFcGroup(label, total, rows, warn, today) {
     var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
       '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
       '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
     var body = (rows || []).map(function (x) {
       var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
                            : '<span class="sev mini cz-wait">рассрочка</span>';
-      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+      /* У просроченного взноса главное не дата, а сколько человек уже тянет: по этой
+         цифре решают, звонить сегодня или ждать (Роман 20.10.2026). */
+      var late = (warn && today && x.due_on)
+        ? Math.round((new Date(today) - new Date(x.due_on)) / 86400000) : 0;
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '',
+                  late > 0 ? late + ' ' + plural(late, 'день', 'дня', 'дней') + ' просрочки' : '']
         .filter(Boolean).map(esc).join(' · ');
       var lead = x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '';
       return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
@@ -27032,9 +27213,13 @@
 
     // compact — Итоги сверху Ведомости: статбар убираем, у Ведомости свой наверху,
     // а те же четыре цифры дублируются в «Здоровье центра». Остается вердикт без полосы.
+    /* «Здоровье центра» — вердикт периода, он открыт. Мост до операционной прибыли,
+       разбор трат и дележка прибыли — разборы «почему так»: свернуты до цифры. */
     container.innerHTML = (compact ? '' : bar) + '<div class="grid">' +
-      '<div class="sp7">' + (bridge || kpi) + flow + '</div>' +
-      '<div class="sp5">' + (bridge ? kpi : '') + split + '</div></div>';
+      '<div class="sp7">' + (bridge ? finFold('bridge', bridge, finRub(t.operating)) : kpi) +
+        finFold('flow', flow, finRub(-(cash.out + cash.to_funds))) + '</div>' +
+      '<div class="sp5">' + (bridge ? kpi : '') + finFold('split', split) + '</div></div>';
+    finFoldBind(container);
     pageAnim(container);
   }
 
