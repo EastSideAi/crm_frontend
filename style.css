@@ -399,6 +399,9 @@ a { color: inherit; text-decoration: none; }
    сноска снизу: иначе подписи плывут каждая на своей высоте. */
 .statbar.lead .stat { display: flex; flex-direction: column; }
 .statbar.lead .stat .sd { margin-top: auto; padding-top: 10px; }
+/* Под главной цифрой стоит не сноска, а вторая сумма (доход до комиссии), поэтому
+   она читается в полный голос, а не серым шепотом. */
+.statbar.lead .stat.lead .sd .smut { font-size: 13px; color: var(--ink-2); }
 .stat { min-width: 0; text-align: left; padding: 16px 22px; position: relative; transition: background .12s; border-radius: 14px; }
 .stat + .stat::before { content: ''; position: absolute; left: 0; top: 16px; bottom: 16px; width: 1px; background: var(--line); }
 .stat.go { cursor: pointer; }
