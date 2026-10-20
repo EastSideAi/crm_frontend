@@ -20439,6 +20439,9 @@
        раздел). Загрузчик сам перерисует экран, когда ответ придёт. */
     if (!FIN.calendar) finLoadCalendar();
     var cal = (FIN.calendar && FIN.calendar !== 'none') ? FIN.calendar : null;
+    /* Просроченные взносы клиентов тянем тем же ленивым запросом, что Платёжный
+       календарь: цифра кросс-периодная, и считать ее второй раз своей формулой нельзя. */
+    if (!FIN.forecast) finLoadForecast();
     var funds = (s.rules || []).filter(function (r) {
       return r.account_id !== 'shortterm' && r.account_id !== 'flex';
     });
@@ -20636,6 +20639,36 @@
           '<span class="fc-name">Считаю плановые платежи…</span></div></div></div>') +
     '</div>';
 
+    /* «Клиенты должны» (Роман 20.10.2026: «наша задача показать, кто теперь должен»).
+       Та же просрочка рассрочки, что в Платёжном календаре, но итогом и на Ведомости:
+       за долгом ходили в отдельный раздел, поэтому его не видели. Дожимают продажи,
+       финансы показывают сумму и возраст. Карточки нет вовсе, когда долга нет: плашка
+       «0 ₽» читается как сделанная работа, а не как пустая строка. */
+    var fcast = (FIN.forecast && FIN.forecast !== 'none') ? FIN.forecast : null;
+    var debt = (fcast && fcast.overdue && fcast.overdue.count) ? fcast.overdue : null;
+    var debtLate = 0;
+    (debt ? debt.rows || [] : []).forEach(function (x) {
+      var n = x.due_on ? Math.round((new Date(fcast.today) - new Date(x.due_on)) / 86400000) : 0;
+      if (n > debtLate) debtLate = n;
+    });
+    var debtCard = debt
+      ? '<div class="card fin-block">' +
+        '<div class="sec-head"><span class="ic">' + ic('alert', 14) + '</span>' +
+          '<div><div class="t">Клиенты должны</div>' +
+          '<div class="s">просроченные взносы рассрочки: дожимают продажи, финансы показывают</div></div></div>' +
+        '<div class="fin-kv">' +
+          '<div class="fkv total"><span>Просрочено</span><b class="num">' + finRub(debt.total) + '</b></div>' +
+          '<div class="fkv"><span>Должников</span><b class="num">' + debt.count + '</b></div>' +
+          (debtLate > 0
+            ? '<div class="fkv"><span>Старший долг</span><b class="num">' + debtLate + ' ' +
+              plural(debtLate, 'день', 'дня', 'дней') + '</b></div>'
+            : '') +
+        '</div>' +
+        '<button class="qchip" id="debt-go" style="margin-top:12px">' +
+          ic('cal', 12) + 'Кто именно должен</button>' +
+      '</div>'
+      : '';
+
     /* EBITDA блоком на «Ведомости» (решение Романа 17.08.2026). Это операционная
        прибыль до процентов и налогов — тот же результат, к которому ведет мост в
        «Итогах». Считает P&L (`pnl_totals`), без него блок не рисуем: две методики
@@ -20755,7 +20788,7 @@
       // Главное правой колонки наверх (владелец 19.10.2026): фонды и остатки по счетам —
       // то, на что смотрят каждый раз; плановая позиция, кэшфлоу, EBITDA и налог — ниже.
       '<div class="sp5">' + fundsCard + finAccountsCard(s, editable) + warn +
-        planCard + cashCard + ebitdaCard + taxCard +
+        planCard + debtCard + cashCard + ebitdaCard + taxCard +
       '</div></div>' +
       metricsHead + '<div id="sheet-metrics"></div>';
 
@@ -20767,6 +20800,8 @@
     });
     var taxLnk = el('tax-year-lnk');
     if (taxLnk) taxLnk.addEventListener('click', function () { setPage('fintax'); });
+    var debtLnk = el('debt-go');
+    if (debtLnk) debtLnk.addEventListener('click', function () { setPage('fincalendar'); });
 
     if (editable) {
       Array.prototype.forEach.call(view.querySelectorAll('[data-frule]'), function (n) {
@@ -26337,10 +26372,10 @@
   function finForecastCard(f) {
     var groups = [];
     if (f.overdue && f.overdue.count) {
-      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true));
+      groups.push(finFcGroup('Просрочено', f.overdue.total, f.overdue.rows, true, f.today));
     }
     (f.months || []).forEach(function (m) {
-      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false));
+      if (m.count) groups.push(finFcGroup(m.label, m.total, m.rows, false, f.today));
     });
     var body = groups.length ? groups.join('') :
       '<div class="empty">Ожидаемых платежей по рассрочке на ближайшие месяцы нет.</div>';
@@ -26352,14 +26387,19 @@
       body + '</div>';
   }
 
-  function finFcGroup(label, total, rows, warn) {
+  function finFcGroup(label, total, rows, warn, today) {
     var head = '<div class="fl-row fl-2 cal-row total' + (warn ? ' warn' : '') + '">' +
       '<div class="fl-main"><span class="fl-name">' + esc(label) + '</span></div>' +
       '<div class="fl-v num">' + finRub(total || 0) + '</div></div>';
     var body = (rows || []).map(function (x) {
       var chip = x.overdue ? '<span class="sev mini cz-bad">просрочен</span>'
                            : '<span class="sev mini cz-wait">рассрочка</span>';
-      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '']
+      /* У просроченного взноса главное не дата, а сколько человек уже тянет: по этой
+         цифре решают, звонить сегодня или ждать (Роман 20.10.2026). */
+      var late = (warn && today && x.due_on)
+        ? Math.round((new Date(today) - new Date(x.due_on)) / 86400000) : 0;
+      var line = [x.item, x.due_on ? 'к ' + finDate(x.due_on) : '',
+                  late > 0 ? late + ' ' + plural(late, 'день', 'дня', 'дней') + ' просрочки' : '']
         .filter(Boolean).map(esc).join(' · ');
       var lead = x.case_id ? ' data-lead="' + esc(x.case_id) + '"' : '';
       return '<div class="fl-row fl-2 rp-row' + (x.case_id ? ' click' : '') + '"' + lead + '>' +
