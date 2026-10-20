@@ -37152,6 +37152,86 @@
       '</div></div>';
   }
 
+  /* ── рабочее окно тьютора: что сделать сегодня по ученикам ──
+     Та же логика, что у менеджера, но единица работы — ученик, а не сделка.
+     Ученики и заработок берём из доски мотивации (PB.my), задачи — из groupTasks. */
+  function tutorHomeHtml(c) {
+    var board = PB.my && !PB.my.failed ? PB.my : null;
+    var loaded = !!board;
+    var gt = groupTasks();
+    var over = gt.over, today = gt.today;
+    var qTotal = over.length + today.length;
+    var students = board ? (board.students || []) : [];
+    var pupils = students.length;
+    var earned = 0;
+    students.forEach(function (s) { earned += (s.money && s.money.earned) || 0; });
+    var tday = todayISO(0);
+
+    function tTag(l) {
+      var d = (Array.isArray(l.directions) && l.directions[0]) || '';
+      return '<span class="pb-tar">' + esc(d || 'ученик') + '</span>';
+    }
+    function qrow(it) {
+      return '<div class="trow ar-grid" data-id="' + it.lead.id + '">' + tTag(it.lead) +
+        '<div class="t-cell"><div class="t-ttl">' + esc(leadName(it.lead)) + '</div>' +
+        '<div class="t-sub">' + esc(it.task.text) + agMark(it.task, false) + '</div></div>' +
+        '<div class="t-when num">' + (it.task.due === tday ? 'сегодня' : '') + '</div>' +
+        '<div class="t-go">' + ic('go', 13) + '</div></div>';
+    }
+    var queueBody =
+      (over.length ? '<div class="dq-band over">Просрочено</div>' + over.map(qrow).join('') : '') +
+      (today.length ? '<div class="dq-band">Сегодня</div>' + today.map(qrow).join('') : '') +
+      (qTotal ? '' : '<div class="empty" style="padding:22px 24px">На сегодня по ученикам задач нет. Спокойно.</div>');
+    var queueCard = '<div class="card" style="overflow:hidden">' +
+      '<div class="sec-head" style="padding:20px 24px 14px"><span class="ic">' + ic('flame', 14) + '</span>' +
+      '<div><div class="t">Сейчас</div><div class="s">что сделать по ученикам: сначала просроченное, нажми на строку — откроется карточка</div></div>' +
+      '<span class="cnt num">' + qTotal + '</span></div>' +
+      '<div style="border-top:1px solid var(--line)">' + queueBody + '</div></div>';
+
+    var stuBody;
+    if (!loaded) stuBody = '<div class="empty" style="padding:18px 2px">Собираю учеников…</div>';
+    else if (!students.length) stuBody = '<div class="empty" style="padding:18px 2px">Учеников пока нет.</div>';
+    else stuBody = '<div class="th-list">' + students.slice(0, 10).map(function (s) {
+      var pts = s.points || [];
+      var done = pts.filter(function (p) { return p.closedAt; }).length;
+      var nextKey = s.next && s.next.key;
+      var rail = '<div class="pb-rail th-rail">' + pts.map(function (p, i) {
+        return '<span class="pb-dot' + (p.closedAt ? ' done' : '') + (p.key === nextKey ? ' on' : '') + '">' + (i + 1) + '</span>';
+      }).join('') + '</div>';
+      return '<div class="th-row"><div class="th-nm">' + esc(s.name) +
+        (s.tariff ? '<span class="pb-tar">' + esc(s.tariff) + '</span>' : '') + '</div>' +
+        rail + '<div class="th-pr num">' + done + '/5</div></div>';
+    }).join('') + '</div>';
+    var stuCard = '<div class="card" style="padding:22px 26px">' +
+      '<div class="sec-head"><span class="ic">' + ic('cap', 14) + '</span><div class="t">Мои ученики</div>' +
+      '<span class="cnt num">' + (loaded ? pupils : '') + '</span></div>' + stuBody + '</div>';
+
+    function navRow(page, icon, t1, t2) {
+      return '<div class="dq-nrow" data-nav="' + page + '" role="button" tabindex="0">' +
+        '<span class="dq-nico">' + ic(icon, 16) + '</span>' +
+        '<div class="dq-ntxt"><div class="dq-nt1">' + t1 + '</div><div class="dq-nt2">' + t2 + '</div></div>' +
+        '<span class="dq-chev">' + ic('go', 14) + '</span></div>';
+    }
+    var navCard = '<div class="card dq-nav" style="padding:22px 26px">' +
+      '<div class="sec-head"><div class="t">Куда нажимать</div></div>' +
+      '<div class="s" style="margin:-6px 0 6px">три экрана на каждый день</div>' +
+      navRow('leads', 'cap', 'Ученики', 'карточки и сопровождение') +
+      navRow('tasks', 'task', 'Задачи', 'что на сегодня по ученикам') +
+      navRow('points', 'target', 'Мотивация', 'заработок за месяц и по ученикам') + '</div>';
+
+    return '<div class="dash">' +
+      statBar([
+        { label: 'Ученики', value: loaded ? pupils : '—', sub: 'ведёшь' },
+        { tint: 'blue', label: 'Задачи сегодня', value: today.length, go: 'tasks', sub: today.length ? 'закрыть' : 'нет' },
+        { tint: over.length ? 'red' : '', label: 'Просрочено', value: over.length, go: 'tasks', sub: over.length ? 'вернуться сегодня' : 'чисто' },
+        { tint: 'green', label: 'Заработок месяца', value: loaded ? (fmtMoney(earned) + ' ₽') : '—', go: 'points', sub: 'в этом месяце' },
+      ]) +
+      '<div class="grid">' +
+        '<div class="sp7 vstack">' + queueCard + '</div>' +
+        '<div class="sp5 vstack">' + stuCard + navCard + '</div>' +
+      '</div></div>';
+  }
+
   function renderDash(view) {
     if (!can('clients')) { noClientsStub(view, 'dash'); return; }
     var P = state.dashPeriod;
@@ -37220,6 +37300,10 @@
       if (state.role === 'sales_manager' || state.role === 'manager') {
         /* ── рабочее окно менеджера продаж ── */
         view.innerHTML = salesHomeHtml(c, convClient, saleRows, convSale, weakest, saleSteps);
+      } else if (state.role === 'tutor' || state.role === 'tutor_sales') {
+        /* ── рабочее окно тьютора: что сделать сегодня по ученикам ── */
+        pbLoad();   // доска мотивации (scope my) — ученики и заработок месяца
+        view.innerHTML = tutorHomeHtml(c);
       } else {
       /* ── без доступа к воронке/пути: компактный дашборд «что делать» ── */
       view.innerHTML = '<div class="dash">' +
@@ -47080,6 +47164,23 @@
      правила отсечки 10/20 числа в браузере нет намеренно. */
   var PB = { my: null, all: null, pay: null, busy: false };
 
+  /* Личная мотивация менеджера продаж: его заработок за месяц из /motivation/my.
+     У тьютора мотивация — точки по ученикам, у менеджера — процент со своих сделок. */
+  var MM = { my: null, busy: false };
+  function mmLoad(force) {
+    if (MM.my && !force) return;
+    if (MM.busy) return;
+    MM.busy = true;
+    api('/admin/api/motivation/my').then(function (r) {
+      MM.my = r; MM.busy = false;
+      if (state.page === 'points') renderView();
+    }).catch(function () {
+      MM.my = { failed: true }; MM.busy = false;
+      if (state.page === 'points') renderView();
+    });
+  }
+  function isSalesManager() { return state.role === 'sales_manager' || state.role === 'manager'; }
+
   var PB_SEGS = [
     { id: 'my', label: 'Мои ученики' },
     { id: 'all', label: 'Все ученики', cap: 'zaezd_review' },
@@ -47103,10 +47204,10 @@
       : '/admin/api/tutor-points/board?scope=' + seg;
     api(url).then(function (r) {
       PB[key] = r; PB.busy = false;
-      if (state.page === 'points') renderView();
+      if (state.page === 'points' || state.page === 'dash') renderView();
     }).catch(function () {
       PB[key] = { failed: true }; PB.busy = false;
-      if (state.page === 'points') renderView();
+      if (state.page === 'points' || state.page === 'dash') renderView();
     });
   }
 
@@ -47199,7 +47300,8 @@
           (st.tariff ? '<span class="pb-tar">' + esc(st.tariff) + '</span>' : '') +
           (pbSeg() === 'all' ? who : '') + '</div>' +
         pbRail(st, p.key) +
-        '<div class="pb-sum"><b class="num">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+        '<div class="pb-sum"><b class="num pb-earned">' + fmtMoney(st.money.earned) + ' ₽</b>' +
+          (st.money.ahead > 0 ? '<span class="pb-ahead">впереди ' + fmtMoney(st.money.ahead) + ' ₽</span>' : '') +
           '<span>' + done + ' из 5 закрыто</span></div>' +
       '</div>' +
       pbPoint(st, p, n, pbPaid(st)) +
@@ -47257,6 +47359,7 @@
   }
 
   function renderPointsBoard(view) {
+    if (isSalesManager()) return renderManagerMot(view);
     var seg = pbSeg();
     if (seg === 'pay') return renderPayouts(view);
     var box = PB[seg];
@@ -47285,6 +47388,67 @@
     var top = seg === 'my' ? pbHero(box) : head;
     view.innerHTML = pbTabs() + top + list;
     pbWire(view);
+  }
+
+  /* Экран мотивации менеджера продаж: круг заработка за месяц + из чего он сложился.
+     Заработано — процент с пришедших оплат (и смены/бонусы руками); в работе — счета
+     на оплате. Стрик по скорости ответа появится, когда подключим чаты (бота). */
+  function renderManagerMot(view) {
+    var box = MM.my;
+    if (!box) { mmLoad(); view.innerHTML = '<div class="card"><div class="empty">Считаем твою мотивацию…</div></div>'; return; }
+    if (box.failed) {
+      view.innerHTML = '<div class="card"><div class="empty">Не загрузилось — похоже, отвалилась сеть. Обнови страницу.</div></div>';
+      return;
+    }
+    var earned = box.earned || 0, ahead = box.ahead || 0;
+    var planned = earned + ahead;
+    var pct = planned > 0 ? Math.round(earned / planned * 100) : 0;
+
+    var praise;
+    if (!earned && !ahead) praise = 'Как пойдут оплаты по твоим сделкам, тут появится заработок за месяц.';
+    else if (!earned) praise = 'Пока оплат нет, но в работе уже ' + fmtMoney(ahead) + ' ₽. Доведи сделки до оплаты — и они станут твоими.';
+    else praise = 'Красавчик, ' + fmtMoney(earned) + ' ₽ за месяц уже твои' +
+      (box.deals ? ' по ' + box.deals + ' ' + plural(box.deals, 'сделке', 'сделкам', 'сделкам') : '') + '.' +
+      (ahead > 0 ? ' В работе еще ' + fmtMoney(ahead) + ' ₽.' : '');
+
+    var hero = '<div class="card mh">' +
+      '<div class="mh-ringbox"><div class="mh-ring" style="--mp:' + pct + '%"><div class="mh-hole">' +
+        '<b class="num">' + fmtMoney(planned) + '</b><span>за месяц</span></div></div></div>' +
+      '<div class="mh-right">' +
+        '<div class="mh-legend">' +
+          '<div class="mh-leg"><span class="mh-dot g"></span>' +
+            '<span class="mh-lt">Заработано<i>оплаты и начисления</i></span>' +
+            '<b class="num mh-g">' + fmtMoney(earned) + ' ₽</b></div>' +
+          '<div class="mh-leg"><span class="mh-dot n"></span>' +
+            '<span class="mh-lt">В работе<i>счета на оплате</i></span>' +
+            '<b class="num">' + fmtMoney(ahead) + ' ₽</b></div>' +
+        '</div>' +
+        '<div class="mh-praise"><span class="mh-ai">ИИ</span><span>' + esc(praise) + '</span></div>' +
+      '</div></div>';
+
+    function roleWord(role) {
+      return role === 'closer' ? 'провел консультацию' : role === 'setter' ? 'довел в чате' : 'продал и довел';
+    }
+    function dealRow(ln, done) {
+      var sub = (ln.title ? esc(ln.title) : 'Оплата') + ' · ' + roleWord(ln.role) +
+        (ln.kind === 'refunded' ? ' · возврат' : '');
+      return '<div class="mm-row"><div class="mm-main"><div class="mm-nm">' + esc(ln.client || 'Клиент') + '</div>' +
+        '<div class="mm-what">' + sub + '</div></div>' +
+        '<div class="mm-sum"><b class="num ' + (done ? 'mm-earned' : 'mm-ahead') + '">' + fmtMoney(ln.rub) + ' ₽</b>' +
+        '<span>' + (done ? 'процент с оплаты' : 'впереди') + '</span></div></div>';
+    }
+    var lines = box.lines || [], pending = box.pending || [];
+    var earnedBlock = lines.length
+      ? '<div class="mm-h">Заработано</div><div class="mm-list">' + lines.map(function (l) { return dealRow(l, true); }).join('') + '</div>'
+      : '';
+    var aheadBlock = pending.length
+      ? '<div class="mm-h">В работе</div><div class="mm-list">' + pending.map(function (l) { return dealRow(l, false); }).join('') + '</div>'
+      : '';
+    var empty = (!lines.length && !pending.length)
+      ? '<div class="card"><div class="empty">Сделок за этот месяц пока нет. Как появятся оплаты — они встанут сюда.</div></div>'
+      : '';
+
+    view.innerHTML = hero + earnedBlock + aheadBlock + empty;
   }
 
   function renderPayouts(view) {
