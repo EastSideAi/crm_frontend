@@ -11686,6 +11686,21 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mh-right { width: 100%; }
 }
 
+/* Мотивация менеджера: заголовок группы и строки сделок (заработано / в работе). */
+.mm-h { font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+  color: var(--ink-3); margin: 18px 2px 8px; }
+.mm-list { display: flex; flex-direction: column; gap: 8px; }
+.mm-row { display: flex; align-items: center; gap: 14px; padding: 13px 18px; background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 14px; }
+.mm-main { flex: 1 1 auto; min-width: 0; }
+.mm-nm { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.mm-what { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.mm-sum { flex: 0 0 auto; text-align: right; min-width: 92px; }
+.mm-sum b { font-size: 16px; font-weight: 700; }
+.mm-sum b.mm-earned { color: var(--green-ink); }
+.mm-sum b.mm-ahead { color: var(--ink-2); }
+.mm-sum span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
 .pb-stu { padding: 0; margin-top: 12px; }
 .pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -11696,7 +11711,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pb-tar, .pb-who { font-size: 12px; color: var(--ink-3); }
 .pb-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
 .pb-sum b { font-size: 16px; font-weight: 700; }
+.pb-sum b.pb-earned { color: var(--green-ink); }
 .pb-sum span { font-size: 11.5px; color: var(--ink-3); }
+.pb-sum .pb-ahead { color: var(--ink-2); font-weight: 600; margin-top: 1px; }
+
+/* Рабочее окно тьютора: список учеников с прогрессом по точкам. */
+.th-list { margin-top: 8px; }
+.th-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+.th-row:first-child { border-top: 0; }
+.th-nm { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.th-pr { flex: 0 0 auto; font-size: 12px; color: var(--ink-3); }
+.th-rail { flex: 0 0 auto; }
 
 /* Полоса точек — и состояние, и навигация: закрытые залиты, открытая обведена. */
 .pb-rail { flex: 0 0 auto; display: flex; gap: 6px; }
