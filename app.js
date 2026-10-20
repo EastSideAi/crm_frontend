@@ -2610,9 +2610,10 @@
      больше мешает, чем помогает. */
   var FIN_GROUPS = [
     { label: 'Ведомость периода',
-      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit', 'finpartners'] },
+      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit',
+            'finpartners', 'finref'] },
     { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
-    { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops', 'finref'] },
+    { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops'] },
     { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
   ];
   /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
@@ -20085,6 +20086,7 @@
      цифра верная. */
   var FIN = { periods: null, id: null, sheet: null, ops: null, pnl: null, refs: null,
               fund: null, fundId: 'shortterm', fundEdit: null, fundBusy: false,
+              fundHist: false,
               lines: null, pnlp: null, form: 'доход', lineBusy: false, revplan: null,
               calendar: null, programs: null, spend: null, payouts: null, payBusy: false,
               payHist: null, payScope: 'period',
@@ -21308,11 +21310,27 @@
     /* Править остаток может не каждый, кто смотрит ведомость: смотрят все, у кого
        есть раздел, а правит финансист. Кнопки, которая всегда откажет, тут не будет. */
     var canFix = can('finmodel_edit');
+    /* История по периодам — справка, а не работа: каждый день смотрят расходы фонда
+       слева, а не как он рос с января. Поэтому по умолчанию в карточке одна строка —
+       та ведомость, что выбрана сверху, — а вся лента открывается кнопкой (Роман
+       20.10.2026: «очень сильно бросается в глаза и может мешать основной работе»).
+       Правка остатка живет в строке открытой ведомости, поэтому, когда ее правят,
+       лента разворачивается сама — иначе кнопка «поправить остаток» пропала бы. */
+    var histOn = !!FIN.fundHist || !!FIN.fundEdit;
+    var persShown = pers;
+    if (!histOn && pers.length > 1) {
+      var one = pers.filter(function (p) { return p.id === selId; });
+      persShown = one.length ? one : pers.slice(-1);
+    }
+    var histBtn = pers.length > 1
+      ? '<button class="qchip" id="ff-hist">' + (histOn ? 'Свернуть' : 'Вся история') + '</button>'
+      : '';
     var persCard = '<div class="card fin-block">' +
-      '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
+      '<div class="sec-head list-tools"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">По ведомостям</div>' +
-        '<div class="s">как фонд рос и на что уходил от периода к периоду</div></div></div>' +
-      '<div class="fin-funds">' + pers.map(function (p) {
+        '<div class="s">' + (histOn ? 'как фонд рос и на что уходил от периода к периоду'
+          : 'движение фонда в выбранной ведомости') + '</div></div>' + histBtn + '</div>' +
+      '<div class="fin-funds">' + persShown.map(function (p) {
         var editing = p.open && canFix && FIN.fundEdit === p.id;
         return '<div class="ff-row' + (p.alert ? ' warn' : '') + '">' +
           '<div class="ff-top"><span class="ff-name">' + esc(p.name) +
@@ -21376,6 +21394,8 @@
     Array.prototype.forEach.call(view.querySelectorAll('[data-ffund]'), function (t) {
       t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
     });
+    var hist = el('ff-hist');
+    if (hist) hist.addEventListener('click', function () { FIN.fundHist = !FIN.fundHist; renderAll(); });
     var fix = el('ff-fix'), save = el('ff-save'), undo = el('ff-cancel'), sum = el('ff-sum');
     if (fix) fix.addEventListener('click', function () {
       var open = null;
