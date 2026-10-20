@@ -2601,6 +2601,37 @@
     // что компания должна ему.
     { id: 'mw', label: 'Моя работа' },
   ];
+  /* Разделы «Финансов» собраны в группы по ходу работы: сначала то, что вносят в
+     ведомость периода, потом планы, потом отчеты, в конце справочники. Шестнадцать
+     пунктов подряд одним списком читались как свалка — «Ведомость» выглядела так же,
+     как «Банки» (Роман 20.10.2026). Карта задает и порядок: пункт, которого в ней нет
+     (новый раздел), уходит в конец без заголовка — меню от этого не ломается.
+     Группа с одним доступным пунктом заголовка не получает: подпись над одиночкой
+     больше мешает, чем помогает. */
+  var FIN_GROUPS = [
+    { label: 'Ведомость периода',
+      ids: ['finsheet', 'finincome', 'finspend', 'finopex', 'findirect', 'finedit', 'finpartners'] },
+    { label: 'Планы', ids: ['finplan', 'finplans', 'fincalendar', 'fintax'] },
+    { label: 'Отчеты', ids: ['finpnl', 'finfund', 'finmetrics', 'finops', 'finref'] },
+    { label: 'Справочники', ids: ['finprograms', 'finsup', 'finbanks', 'finkb'] },
+  ];
+  /* Пункты пространства в порядке групп. Возвращает плоский список с меткой группы на
+     ПЕРВОМ пункте каждой группы — рисует их renderSide, логика порядка живет здесь. */
+  function navGrouped(items, space) {
+    if (space !== 'fin') return items.map(function (it) { return { it: it, lab: '' }; });
+    var left = items.slice(), out = [];
+    FIN_GROUPS.forEach(function (g) {
+      var got = [];
+      g.ids.forEach(function (id) {
+        for (var i = 0; i < left.length; i++) {
+          if (left[i].id === id) { got.push(left[i]); left.splice(i, 1); return; }
+        }
+      });
+      got.forEach(function (it, i) { out.push({ it: it, lab: (i === 0 && got.length > 1) ? g.label : '' }); });
+    });
+    left.forEach(function (it) { out.push({ it: it, lab: '' }); });
+    return out;
+  }
   function navSpace(it) { return it.space || 'crm'; }
   // Иконка пространства на телефоне: вкладка перехода подписана словом, но узнают ее
   // по значку — одинаковые значки у разных пространств сводят его на нет.
@@ -2682,7 +2713,8 @@
     var nav = el('side-nav');
     if (nav) {
       var ho = inboxAttention();
-      nav.innerHTML = NAV.map(function (it) {
+      nav.innerHTML = navGrouped(NAV, space).map(function (row) {
+        var it = row.it;
         var extra = '';
         if (it.id === 'leads' && c.hot) extra = '<span class="bdg num">' + c.hot + '</span>';
         else if (it.id === 'leads') extra = '<span class="cnt num">' + c.all + '</span>';
@@ -2696,10 +2728,11 @@
         // Новое в CRM — не тревога: нейтральный счетчик, красное здесь только у просрочки.
         else if (it.id === 'news' && state.newsUnread) extra = '<span class="cnt num" title="непрочитано">' + state.newsUnread + '</span>';
         else if (mwBadge(it.id)) extra = '<span class="bdg num">' + mwBadge(it.id) + '</span>';
-        return '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
+        return (row.lab ? '<div class="navlab">' + esc(row.lab) + '</div>' : '') +
+          '<button class="navi' + (state.page === it.id ? ' on' : '') + '" data-p="' + it.id + '">' +
           ic(it.icon) + it.label + extra + '</button>';
       }).join('');
-      Array.prototype.forEach.call(nav.children, function (b) {
+      Array.prototype.forEach.call(nav.querySelectorAll('.navi'), function (b) {
         b.addEventListener('click', function () { setPage(b.getAttribute('data-p')); });
       });
     }
@@ -3009,42 +3042,18 @@
           renderTopbar(); renderView();
         });
       });
-    } else if (state.page === 'finfund') {
-      // У фонда переключатель не по периодам, а по фондам: экран смотрит накопление
-      // за все время, и период тут не контекст, а строка таблицы.
-      var flist = (FIN.fund && FIN.fund !== 'none' ? FIN.fund.funds : null) || [];
-      tb.innerHTML = flist.length
-        ? '<nav class="tabs">' + flist.map(function (f) {
-            return '<a class="tab' + (FIN.fundId === f.id ? ' on' : '') + '" data-ffund="' + esc(f.id) + '">' +
-              esc(f.name) + '</a>';
-          }).join('') + '</nav>'
-        : '<div class="freshchip"><span class="fok">' + ic('wallet', 11) + '</span>фонды</div>';
-      Array.prototype.forEach.call(tb.querySelectorAll('.tab'), function (t) {
-        t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
-      });
-    } else if (state.page === 'finprograms') {
-      // Программа идет сквозь периоды, период тут не контекст — только чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('globe', 11) + '</span>программы</div>';
-    } else if (state.page === 'finpartners') {
-      // Партнёр ведет клиента сквозь периоды — начисление не привязано к ведомости, чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>партнёрские выплаты</div>';
-    } else if (state.page === 'fintax') {
-      // Налог АУСН помесячный, экран собирает все месяцы года — год выбирается на самом экране.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('coins', 11) + '</span>налог помесячно</div>';
-    } else if (state.page === 'finbanks') {
-      // Справочник банков не привязан к ведомости периода — только чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('card', 11) + '</span>правила по банкам</div>';
-    } else if (state.page === 'finpaycheck') {
-      // Сверка накопительная (весь заработок против всех выплат), не по периоду — чип раздела.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('clock', 11) + '</span>проверка перед выплатами</div>';
-    } else if (state.page === 'finkb') {
-      // База знаний живет вне периода: это правила, а не цифры ведомости.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('doc', 11) + '</span>правила работы</div>';
-    } else if (state.page === 'finsup') {
-      // Поставщики живут вне ведомости: у кого просим счет — правило, а не цифра
-      // периода.
-      tb.innerHTML = '<div class="freshchip"><span class="fok">' + ic('team', 11) + '</span>у кого просим счет</div>';
+    } else if (state.page === 'finprograms' || state.page === 'finpartners' ||
+               state.page === 'fintax' || state.page === 'finbanks' ||
+               state.page === 'finpaycheck' || state.page === 'finkb' ||
+               state.page === 'finsup') {
+      /* Эти экраны живут вне ведомости: программа, партнер и справочники идут сквозь
+         периоды, налог собирает год, сверка — весь заработок против всех выплат. Здесь
+         в полосе стоял чип с названием раздела — дубль заголовка под ним. Полоса сверху
+         отвечает на один вопрос, за какой период смотрим, и молчит там, где периода нет
+         (Роман 20.10.2026: глаза бегают, потому что сверху на каждом экране свое). */
+      tb.innerHTML = '';
     } else if (state.page === 'finsheet' || state.page === 'finops' ||
+               state.page === 'finfund' ||
                state.page === 'finedit' || state.page === 'finref' ||
                state.page === 'finincome' || state.page === 'findirect' ||
                state.page === 'finplan' || state.page === 'fincalendar' ||
@@ -21217,9 +21226,14 @@
       { label: 'Остаток', value: finRub(pBal), sub: 'на конец ведомости' },
     ]);
 
+    /* Разбивка по программам — только у краткосрочки (Роман 20.10.2026). Программа
+       (Шэньчжэнь, Шанхай, Харбин) проставляется у расходов этого фонда, остальные
+       фонды живут общими статьями, и на них блок показывал пустоту с объяснением,
+       почему он пуст, — то есть занимал первый экран ничем. */
+    var withOff = FIN.fundId === 'shortterm';
     var maxInc = 0;
     named.forEach(function (o) { if (o.income > maxInc) maxInc = o.income; });
-    var byOff = '<div class="card fin-block">' +
+    var byOff = !withOff ? '' : '<div class="card fin-block">' +
       '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
         '<div><div class="t">По программам</div>' +
         '<div class="s">продажи программы и сколько с фонда на нее ушло</div></div></div>' +
@@ -21329,7 +21343,7 @@
       gaps.push('Заведена всего одна ведомость. Периоды после нее в систему не вносили, ' +
         'поэтому «за все время» — это на самом деле один период.');
     }
-    if (noOff && (noOff.income || noOff.spent)) {
+    if (withOff && noOff && (noOff.income || noOff.spent)) {
       gaps.push('У ' + noOff.count + ' ' + plural(noOff.count, 'операции', 'операций', 'операций') +
         ' фонда не проставлена программа. Пока поле пустое, план и факт по Шэньчжэню, ' +
         'Шанхаю и Харбину показать не из чего.');
@@ -21348,9 +21362,20 @@
         }).join('') + '</div></div>'
       : '';
 
-    view.innerHTML = bar + '<div class="grid">' +
+    /* Выбор фонда — чипами на самом экране, а не вкладками в верхней полосе: полоса
+       сверху отвечает за период (сводка этого экрана считается по выбранной ведомости),
+       а шесть фондов переносились в ней на вторую строку и выдавливали выбор периода
+       совсем (Роман 20.10.2026). Рецепт тот же, что у вкладок расчетных листов. */
+    var fundTabs = '<div class="list-quick fin-fundtabs">' + (f.funds || []).map(function (x) {
+      return '<button class="qchip' + (FIN.fundId === x.id ? ' on' : '') +
+        '" data-ffund="' + esc(x.id) + '">' + esc(x.name) + '</button>';
+    }).join('') + '</div>';
+    view.innerHTML = fundTabs + bar + '<div class="grid">' +
       '<div class="sp7">' + byOff + opsCard + '</div>' +
       '<div class="sp5">' + persCard + gapCard + '</div></div>';
+    Array.prototype.forEach.call(view.querySelectorAll('[data-ffund]'), function (t) {
+      t.addEventListener('click', function () { finSetFund(t.getAttribute('data-ffund')); });
+    });
     var fix = el('ff-fix'), save = el('ff-save'), undo = el('ff-cancel'), sum = el('ff-sum');
     if (fix) fix.addEventListener('click', function () {
       var open = null;

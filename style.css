@@ -7112,6 +7112,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .prg-archlist { margin-top: 4px; }
 
 .fin-funds { margin-top: 12px; }
+/* Ряд фондов на экране «Фонды» — тот же рецепт чипов, что у вкладок расчетных листов,
+   со своим отступом до сводки: ряд относится ко всему экрану, а не к карточке. Раньше
+   фонды стояли вкладками в верхней полосе, переносились там на вторую строку и
+   выдавливали выбор периода (Роман 20.10.2026). */
+.fin-fundtabs { margin: 0 0 16px; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
 .ff-top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
