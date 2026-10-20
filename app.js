@@ -20486,32 +20486,58 @@
        есть результат правила, и открывать ради нее отдельный экран незачем. */
     var canFix = can('finmodel_edit');
     var editable = canFix && s.period.open;
-    var rows = [{ cls: 'in', name: 'Доход к зачислению',
-                  why: 'все, что пришло за период, за вычетом комиссии эквайринга',
-                  v: c.income }];
+    /* Переключатель Факт/План (Роман 20.10.2026): тот же водопад, но от плана продаж —
+       видно, сколько отложим на фонды и дивиденды, если план выручки сойдется. План
+       считает бэкенд (plan_cascade) по тем же правилам фондов, только с плановыми
+       базами. В режиме «План» строки не редактируются (это прогноз, а не ведомость) и
+       отметок о переводе в фонд нет. */
+    var plan = s.plan_cascade || null;
+    var planOn = FIN.cascMode === 'план' && plan && s.period.open;
+    var cc = planOn ? plan : c;
+    var rows = [{ cls: 'in',
+                  name: planOn ? 'Плановый доход' : 'Доход к зачислению',
+                  why: planOn
+                    ? 'план продаж ' + finNum(plan.sales, 0) + ' + дебиторка ' +
+                      finNum(plan.receivables, 0) + ', что ждем за период'
+                    : 'все, что пришло за период, за вычетом комиссии эквайринга',
+                  v: cc.income }];
     rows.push({ cls: 'out', name: 'Фонд краткосрочки',
                 why: stRule ? stRule.explain : 'вычитается первым, до остальных фондов',
-                v: -c.shortterm, rule: stRule });
+                v: -cc.shortterm, rule: planOn ? null : stRule });
     rows.push({ cls: 'sum', name: 'База для отчислений',
-                why: 'от нее считаются проценты фондов', v: c.base });
+                why: 'от нее считаются проценты фондов', v: cc.base });
     funds.forEach(function (r) {
-      rows.push({ cls: 'out', name: r.name, why: r.explain, v: -r.amount, rule: r });
+      rows.push({ cls: 'out', name: r.name, why: r.explain,
+                  v: -(planOn ? r.plan_amount : r.amount),
+                  rule: planOn ? null : r });
     });
     rows.push({ cls: 'out', name: 'Прямые расходы',
-                why: 'факт из расчетных листов: мотивация, сервисы, реклама',
-                v: -c.direct });
-    rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: c.profit });
+                why: planOn ? 'плановые строки: мотивация, сервисы, реклама'
+                            : 'факт из расчетных листов: мотивация, сервисы, реклама',
+                v: -cc.direct });
+    rows.push({ cls: 'sum', name: 'Чистая прибыль', why: '', v: cc.profit });
     rows.push({ cls: 'out', name: 'Флекс-проджекта',
-                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -c.flex,
-                rule: flexRule });
-    rows.push({ cls: 'total', name: 'Дивиденды', why: 'то, что остается к распределению',
-                v: c.dividends });
+                why: flexRule ? flexRule.explain : '20% от чистой прибыли', v: -cc.flex,
+                rule: planOn ? null : flexRule });
+    rows.push({ cls: 'total', name: 'Дивиденды',
+                why: planOn ? 'то, что отложим к распределению по плану'
+                            : 'то, что остается к распределению',
+                v: cc.dividends });
 
+    var cascToggle = (plan && s.period.open)
+      ? '<div class="tabs fin-casc-seg">' +
+          '<button class="tab' + (planOn ? '' : ' on') + '" data-cascmode="факт">Факт</button>' +
+          '<button class="tab' + (planOn ? ' on' : '') + '" data-cascmode="план">План</button>' +
+        '</div>'
+      : '';
+    var cascSub = planOn
+      ? 'сколько отложим на фонды и дивиденды, если план продаж сойдется'
+      : 'каждый шаг считается от предыдущего — сверху вниз' +
+        (editable ? '. Правило фонда меняется по клику на строке' : '');
     var casc = '<div class="card fin-casc">' +
       '<div class="sec-head"><span class="ic">' + ic('coins', 14) + '</span>' +
         '<div><div class="t">Каскад ведомости</div>' +
-        '<div class="s">каждый шаг считается от предыдущего — сверху вниз' +
-        (editable ? '. Правило фонда меняется по клику на строке' : '') + '</div></div></div>' +
+        '<div class="s">' + cascSub + '</div></div>' + cascToggle + '</div>' +
       '<div class="fc-rows">' + rows.map(function (r) {
         var live = editable && r.rule;
         /* Отчисление в фонд до закрытия ведомости стоит планом, а деньги переводят в
@@ -20810,6 +20836,15 @@
       '</div></div>' +
       metricsHead + '<div id="sheet-metrics"></div>';
     finFoldBind(view);
+
+    // Переключатель Факт/План на каскаде: перерисовываем весь экран, чтобы карточка
+    // пересобралась в выбранном режиме. Режим держим на FIN, он переживает перерисовку.
+    Array.prototype.forEach.call(view.querySelectorAll('[data-cascmode]'), function (n) {
+      n.addEventListener('click', function () {
+        FIN.cascMode = n.getAttribute('data-cascmode');
+        renderFinSheet(view);
+      });
+    });
 
     // Живой пересчет планового налога: 8% от вписанного дохода. Доступно и на просмотре —
     // это калькулятор, а не правка ведомости.
@@ -21749,9 +21784,13 @@
      ничего не удаляем и не прячем насовсем: экран перестает быть лентой из полутора
      десятков равных карточек, а справка открывается на один клик и запоминается.
      Что считать справкой, решает ВЫЗОВ: тут только оболочка. */
+  /* Свернуто не все подряд: плановая позиция и плановый налог открыты сразу (Роман
+     20.10.2026) — на них смотрят, когда решают, чем платить, а не когда разбираются
+     задним числом. Человек свернул их руками — помним его выбор, а не дефолт. */
+  var FIN_FOLD_OPEN = { plan: 1, tax: 1 };
   function finFold(id, html, headValue) {
     if (!html) return '';
-    var open = !!state.finOpen[id];
+    var open = state.finOpen[id] === undefined ? !!FIN_FOLD_OPEN[id] : !!state.finOpen[id];
     return html.replace(/^<div class="card /,
       '<div data-fold="' + id + '"' +
       (headValue ? ' data-foldv="' + esc(headValue) + '"' : '') +
