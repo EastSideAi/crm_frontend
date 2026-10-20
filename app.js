@@ -112,6 +112,7 @@
     glMode: 'cards', gantt: null,   // «Цели»: карточки или гант
     gtScale: 'week', gtFrom: '', gtTo: '',   // масштаб сетки ганта и окно дат («» — считаем от сегодня)
     ganttOpen: {},      // какие цели в ганте раскрыты до шагов
+    finOpen: {},        // какие справочные карточки финансов раскрыты (по умолчанию свернуты)
     mxTab: 'soon',      // EastSide Meeting: ближайшие встречи или записи
     myboard: null, boardWho: 'mine', boardGoal: '', taskPrio: '', meetLog: null, meetOpen: {}, meetRooms: null, meetRoomsAt: 0,
     zoomWeek: {}, zoomWeekOff: 0, zoomKind: '', zoomView: 'week', zoomDayOff: 0, zoomAcc: '', zoomWin: {},
@@ -146,7 +147,7 @@
   };
   try {
     var savedUi = JSON.parse(localStorage.getItem(UI_LS) || '{}');
-    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
+    ['page', 'seg', 'taskSeg', 'viewMode', 'dashPeriod', 'dashFrom', 'dashTo', 'mkTab', 'mkDays', 'laSrc', 'taskPrio', 'attSeg', 'meetView', 'ptSeg', 'acTab', 'glMode', 'gtScale', 'gtFrom', 'gtTo', 'ganttOpen', 'finOpen', 'mxTab', 'pathGran', 'mgTab', 'mgDept'].forEach(function (k) { if (savedUi[k]) state[k] = savedUi[k]; });
     if (savedUi.filters) state.filters = { funnel: savedUi.filters.funnel || '', period: savedUi.filters.period || '' };
     // Булево через общий цикл не восстановить: там `if (savedUi[k])` и false
     // молча превратился бы в дефолт.
@@ -161,6 +162,7 @@
         glMode: state.glMode || 'cards', gtScale: state.gtScale || 'week',
         gtFrom: state.gtFrom || '', gtTo: state.gtTo || '',
         ganttOpen: state.ganttOpen || {},
+        finOpen: state.finOpen || {},
         mxTab: state.mxTab || 'soon',
         pathGran: state.pathGran || 'week',
         mgTab: state.mgTab || '', mgDept: state.mgDept || '',
@@ -20798,10 +20800,16 @@
       '<div class="sp7">' + casc + direct + '</div>' +
       // Главное правой колонки наверх (владелец 19.10.2026): фонды и остатки по счетам —
       // то, на что смотрят каждый раз; плановая позиция, кэшфлоу, EBITDA и налог — ниже.
+      /* Фонды, остатки и сверка перед закрытием — работа, они открыты всегда. Плановая
+         позиция, кэшфлоу, EBITDA и налог — справка: свернуты, цифра видна в заголовке. */
       '<div class="sp5">' + fundsCard + finAccountsCard(s, editable) + warn +
-        planCard + debtCard + cashCard + ebitdaCard + taxCard +
+        finFold('plan', planCard, finRub(afterPlan)) + debtCard +
+        finFold('cash', cashCard, finRub(cash.flow)) +
+        finFold('ebitda', ebitdaCard, t ? finRub(t.operating) : '') +
+        finFold('tax', taxCard, finRub((c.income || 0) * TAX_RATE)) +
       '</div></div>' +
       metricsHead + '<div id="sheet-metrics"></div>';
+    finFoldBind(view);
 
     // Живой пересчет планового налога: 8% от вписанного дохода. Доступно и на просмотре —
     // это калькулятор, а не правка ведомости.
@@ -21735,6 +21743,52 @@
   // (renderFinPayouts), сложенный внутрь раздела, а не форма ввода листа.
   var FIN_PAY_FORM = '__payouts__';
   // Ряд вкладок раздела (листы + псевдо-вкладки). Клики вешает finPayChipsWire.
+  /* Справочная карточка финансов: свернута по умолчанию, в заголовке остается главная
+     цифра, тело открывается кнопкой. Повод — Роман 20.10.2026: «мы сделали много
+     интересного, убирать не будем, но второстепенное отвлекает от основного». Поэтому
+     ничего не удаляем и не прячем насовсем: экран перестает быть лентой из полутора
+     десятков равных карточек, а справка открывается на один клик и запоминается.
+     Что считать справкой, решает ВЫЗОВ: тут только оболочка. */
+  function finFold(id, html, headValue) {
+    if (!html) return '';
+    var open = !!state.finOpen[id];
+    return html.replace(/^<div class="card /,
+      '<div data-fold="' + id + '"' +
+      (headValue ? ' data-foldv="' + esc(headValue) + '"' : '') +
+      ' class="card fin-fold' + (open ? ' open' : '') + ' ');
+  }
+  /* Кнопка и свернутая цифра ставятся по готовому DOM, а не внутрь каждой карточки:
+     карточек восемь, они собираются в разных местах, и восемь правок разошлись бы. */
+  function finFoldBind(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('.fin-fold'), function (card) {
+      var id = card.getAttribute('data-fold');
+      var head = card.querySelector('.sec-head');
+      if (!head || head.querySelector('.fin-foldb')) return;
+      var open = card.classList.contains('open');
+      if (!open) {
+        /* Цифра свернутой карточки — та, которую назвал вызов, иначе итоговая строка
+           блока. Наугад первую попавшуюся не берем: под заголовком «Движение денег»
+           легко оказалась бы сумма прихода, и человек прочитал бы ее как итог. */
+        var given = card.getAttribute('data-foldv');
+        var num = given || (card.querySelector('.fkv.total b.num') || {}).textContent;
+        if (num && String(num).trim()) {
+          var v = document.createElement('span');
+          v.className = 'fin-foldv num';
+          v.textContent = String(num).trim();
+          head.appendChild(v);
+        }
+      }
+      var b = document.createElement('button');
+      b.className = 'qchip fin-foldb';
+      b.textContent = open ? 'Свернуть' : 'Показать';
+      b.addEventListener('click', function () {
+        state.finOpen[id] = !open;
+        saveUi();
+        renderAll();
+      });
+      head.appendChild(b);
+    });
+  }
   function finTabChips(forms) {
     if (!forms || forms.length < 2) return '';
     return forms.map(function (f) {
@@ -27120,9 +27174,13 @@
 
     // compact — Итоги сверху Ведомости: статбар убираем, у Ведомости свой наверху,
     // а те же четыре цифры дублируются в «Здоровье центра». Остается вердикт без полосы.
+    /* «Здоровье центра» — вердикт периода, он открыт. Мост до операционной прибыли,
+       разбор трат и дележка прибыли — разборы «почему так»: свернуты до цифры. */
     container.innerHTML = (compact ? '' : bar) + '<div class="grid">' +
-      '<div class="sp7">' + (bridge || kpi) + flow + '</div>' +
-      '<div class="sp5">' + (bridge ? kpi : '') + split + '</div></div>';
+      '<div class="sp7">' + (bridge ? finFold('bridge', bridge, finRub(t.operating)) : kpi) +
+        finFold('flow', flow, finRub(-(cash.out + cash.to_funds))) + '</div>' +
+      '<div class="sp5">' + (bridge ? kpi : '') + finFold('split', split) + '</div></div>';
+    finFoldBind(container);
     pageAnim(container);
   }
 

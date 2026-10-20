@@ -7123,6 +7123,19 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Компактная карточка: справка рядом с основной работой не должна весить столько же,
    сколько она. Тот же материал и радиус, только воздух плотнее. */
 .fin-block.tight { padding: 15px 18px 16px; }
+/* Свернутая справочная карточка: от нее остается шапка с главной цифрой и кнопка.
+   Тело не удалено, а скрыто, — состояние помнится (state.finOpen). */
+.fin-fold:not(.open) > *:not(.sec-head) { display: none; }
+.fin-fold:not(.open) { padding: 15px 18px 16px; }
+.fin-fold:not(.open) .sec-head { margin-bottom: 0; }
+/* В свернутом виде подпись секции не нужна: заголовок и цифра отвечают на вопрос
+   «что это», а зачем оно — читают, когда открыли. */
+.fin-fold:not(.open) .sec-head .s { display: none; }
+.fin-foldv { margin-left: auto; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); white-space: nowrap; }
+.fin-foldv + .fin-foldb { margin-left: 10px; }
+.fin-foldb { margin-left: auto; }
+.fin-foldv ~ .fin-foldb { margin-left: 10px; }
 .fin-block.tight .fin-funds { margin-top: 8px; }
 .fin-block.tight .ff-row { padding: 9px 0 2px; border-bottom: 0; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
