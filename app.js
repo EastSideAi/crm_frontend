@@ -2889,7 +2889,7 @@
      новой вкладке, и ссылка на нее молча перестала бы работать. */
   var MK_TABS = [['dash', 'Воронка'], ['src', 'Источники'], ['cross', 'Сквозная'],
                  ['launch', 'Запуски'], ['efir', 'Эфиры'],
-                 ['spend', 'Расход'], ['plan', 'Декомпозиция'],
+                 ['ads', 'Реклама'], ['spend', 'Расход'], ['plan', 'Декомпозиция'],
                  ['links', 'Ссылки и сценарии']];
   function mkTabKnown(t) {
     return MK_TABS.filter(function (o) { return o[0] === t; }).length > 0;
@@ -3023,6 +3023,7 @@
           if (state.mkTab === 'spend') state._mkSpend = null;
           if (state.mkTab === 'launch') state._mkLaunch = null; /* всегда свежие цифры */
           if (state.mkTab === 'efir') state._mkEfir = null;   /* всегда свежие цифры */
+          if (state.mkTab === 'ads') state._mkAds = null;    /* всегда свежие цифры */
           saveUi(); renderTopbar(); renderView();
         });
       });
@@ -29828,6 +29829,157 @@
     '</div>';
   }
 
+  /* ── РЕКЛАМА — что платный трафик стоит и что приносит ─────────────────────
+     Ту же таблицу подрядчик вёл в гугл-доке руками: расход переносил из кабинета,
+     визиты из Метрики, регистрации спрашивал у нас. Три источника, три пары рук и
+     расхождения, которых никто не замечал. Здесь строка суток собрана роботом
+     (бэкенд, services/ads_report) и лежит рядом с остальными цифрами CRM.
+
+     Колонок в исходной таблице девятнадцать — на экран они не лезут и не нужны там
+     все сразу. Поэтому в строке дня главное (деньги, люди, цена), а остальное
+     раскрывается по клику: редкий вопрос не имеет права забивать частый. Выгрузки
+     в файл тут нет намеренно (Вера 21.10.2026): цифры живут в CRM, а не разъезжаются
+     копиями по чужим таблицам. */
+
+  function fetchMkAds() {
+    var days = state.mkDays || 30;
+    state._mkAdsLoad = days;
+    api('/admin/api/marketing/ads?days=' + (days || 366)).then(function (r) {
+      state._mkAds = r; state._mkAdsDays = days;
+      if (state.page === 'marketing') renderView();
+    }).catch(function (e) {
+      if (e.message === '403') return;
+      state._mkAds = 'none';
+      if (state.page === 'marketing') renderView();
+    });
+  }
+
+  /* Деньги с копейками: на дневном расходе в 7010,21 округление до рубля даёт
+     расхождение с кабинетом, и первый же вопрос подрядчика — «а почему не бьётся». */
+  function adsMoney(n) {
+    if (n === null || n === undefined) return '—';
+    var v = Math.round(n * 100) / 100;
+    var whole = fmtMoney(Math.floor(Math.abs(v)));
+    var cents = Math.round((Math.abs(v) - Math.floor(Math.abs(v))) * 100);
+    return (v < 0 ? '−' : '') + whole + ',' + (cents < 10 ? '0' : '') + cents;
+  }
+  function adsNum(n) { return (n === null || n === undefined) ? '—' : fmtMoney(n); }
+  function adsPct(n) { return (n === null || n === undefined) ? '—' : String(n).replace('.', ',') + '%'; }
+
+  function adsKpi(label, value, sub) {
+    return '<div class="ads-k"><div class="ads-kl">' + esc(label) + '</div>' +
+      '<div class="ads-kv num">' + value + '</div>' +
+      (sub ? '<div class="ads-ks">' + esc(sub) + '</div>' : '') + '</div>';
+  }
+
+  function adsDayCard(r) {
+    /* Развёрнутый день: всё, что не поместилось в строку, плюс расхождения.
+       Достижения цели рядом с людьми стоят намеренно — это тот самый случай, где
+       одна цифра вдвое меньше другой, и объяснить её надо на месте, а не в чате. */
+    var pairs = [
+      ['Посетителей', adsNum(r.visitors)],
+      ['Отправок формы', adsNum(r.reg_free_reaches)],
+      ['Регистраций в базе', adsNum(r.reg_db) + ' · с меткой ' + adsNum(r.reg_db_channel)],
+      ['Цена клика', adsMoney(r.cpc) + ' ₽'],
+      ['Бюджет с НДС', adsMoney(r.spend_nds) + ' ₽'],
+      ['Цена регистрации с НДС', adsMoney(r.reg_price_nds) + ' ₽'],
+      ['Клик → визит', adsPct(r.visit_cr)],
+      ['Визит → регистрация', adsPct(r.reg_cr)],
+      ['Тариф 690', adsNum(r.reg_paid) + (r.reg_paid_price ? ' по ' + adsMoney(r.reg_paid_price) + ' ₽' : '')]
+    ].map(function (p) {
+      return '<div class="ads-dp"><span>' + esc(p[0]) + '</span><b class="num">' + p[1] + '</b></div>';
+    }).join('');
+    var probs = (r.problems || []).map(function (t) {
+      return '<div class="ads-prob">' + esc(t) + '</div>';
+    }).join('');
+    return '<div class="ads-day">' + pairs + probs +
+      '<div class="ads-sync">собрано ' + esc(ago(r.synced_at)) + '</div></div>';
+  }
+
+  function renderMkAds(view) {
+    if (state._mkAdsLoad !== (state.mkDays || 30) || !state._mkAds) {
+      view.innerHTML = dashSkeleton();
+      fetchMkAds();
+      return;
+    }
+    if (state._mkAds === 'none') {
+      view.innerHTML = '<div class="card"><div class="empty">Не удалось загрузить рекламу — проверь сеть или доступ.</div></div>';
+      return;
+    }
+    var d = state._mkAds, rows = d.rows || [], t = d.total || {};
+    var open = state._mkAdsOpen || '';
+
+    var kpis =
+      adsKpi('Расход', adsMoney(t.spend) + ' ₽', 'с НДС ' + adsMoney(t.spend_nds) + ' ₽') +
+      adsKpi('Регистраций', adsNum(t.reg_total),
+             'бесплатно ' + adsNum(t.reg_free) + ' · за 690 ' + adsNum(t.reg_paid)) +
+      adsKpi('Цена регистрации', adsMoney(t.reg_price) + ' ₽',
+             'с НДС ' + adsMoney(t.reg_price_nds) + ' ₽') +
+      adsKpi('Показы и клики', adsNum(t.shows) + ' · ' + adsNum(t.clicks),
+             'CTR ' + adsPct(t.ctr) + ' · клик ' + adsMoney(t.cpc) + ' ₽') +
+      adsKpi('Визиты', adsNum(t.visits), 'из них в ботов ' +
+             adsNum((t.bot_vk || 0) + (t.bot_max || 0) + (t.bot_tg || 0)));
+
+    var list = rows.map(function (r) {
+      var isOpen = open === r.on_date;
+      return '<div class="ads-tr' + (isOpen ? ' on' : '') + (r.problems && r.problems.length ? ' warn' : '') +
+          '" data-adsday="' + esc(r.on_date) + '">' +
+          '<div class="ads-nm"><b>' + esc(dayFull(r.on_date)) + '</b>' +
+            '<small>' + adsNum(r.shows) + ' показов · CTR ' + adsPct(r.ctr) + '</small></div>' +
+          '<span class="ads-v num">' + adsMoney(r.spend) + '</span>' +
+          '<span class="ads-v num hidem">' + adsNum(r.clicks) + '</span>' +
+          '<span class="ads-v num hidem">' + adsNum(r.visits) + '</span>' +
+          '<span class="ads-v num">' + adsNum(r.reg_total) + '</span>' +
+          '<span class="ads-v num">' + adsMoney(r.reg_price) + '</span>' +
+          '<span class="ads-v num hidem">' + adsNum(r.bot_vk) + ' · ' + adsNum(r.bot_max) +
+            ' · ' + adsNum(r.bot_tg) + '</span>' +
+        '</div>' + (isOpen ? adsDayCard(r) : '');
+    }).join('');
+
+    view.innerHTML = '<div class="dash">' +
+      '<div class="card" style="padding:22px 26px">' +
+        '<div class="sec-head"><span class="ic">' + ic('chart', 14) + '</span>' +
+        '<div><div class="t">Платная реклама</div>' +
+        '<div class="s">собирается сама: кабинет ВК, Метрика и наша база, одна строка на сутки</div></div>' +
+        '<span style="flex:1"></span>' +
+        '<button class="mk-btn primary" id="ads-sync">' + ic('refresh', 12) + 'Пересобрать</button></div>' +
+        '<div class="ads-kpis">' + kpis + '</div>' +
+      '</div>' +
+      '<div class="card" style="overflow:hidden;margin-top:16px">' +
+        '<div class="sec-head" style="padding:20px 24px 16px"><span class="ic">' + ic('rows', 14) + '</span>' +
+        '<div><div class="t">По дням</div>' +
+        '<div class="s">нажми на день — покажу, из чего сложилась цифра и что не сошлось</div></div></div>' +
+        (list ? '<div class="ads-tbl"><div class="ads-th">' +
+            '<span>День</span><span>Расход</span><span class="hidem">Клики</span>' +
+            '<span class="hidem">Визиты</span><span>Рег.</span><span>Цена рег.</span>' +
+            '<span class="hidem">ВК · МАКС · ТГ</span></div>' + list + '</div>'
+          : '<div class="empty">За период строк нет. Нажми «Пересобрать» — соберу вчерашний день.</div>') +
+      '</div>' +
+    '</div>';
+
+    Array.prototype.forEach.call(view.querySelectorAll('[data-adsday]'), function (row) {
+      row.addEventListener('click', function () {
+        var day = row.getAttribute('data-adsday');
+        state._mkAdsOpen = (state._mkAdsOpen === day) ? '' : day;
+        renderView();
+      });
+    });
+
+    var sync = el('ads-sync');
+    if (sync) sync.addEventListener('click', function () {
+      sync.disabled = true;
+      api('/admin/api/marketing/ads/sync', { method: 'POST' }).then(function (r) {
+        var probs = (r && r.problems) || [];
+        showToast(probs.length ? 'Собрано, но не всё сошлось: ' + probs[0] : 'Вчерашний день пересобран');
+        state._mkAds = null;
+        renderView();
+      }).catch(function () {
+        sync.disabled = false;
+        showToast('Не удалось пересобрать — проверь сеть или доступ');
+      });
+    });
+  }
+
   function renderMkSpend(view) {
     if (state._mkSpendLoad !== (state.mkDays || 90) || !state._mkSpend) {
       view.innerHTML = dashSkeleton();
@@ -32599,6 +32751,7 @@
     if (state.mkTab === 'cross') { renderMkCross(view); return; }
     if (state.mkTab === 'launch') { renderMkLaunch(view); return; }
     if (state.mkTab === 'efir') { renderMkEfir(view); return; }
+    if (state.mkTab === 'ads') { renderMkAds(view); return; }
     if (state.mkTab === 'spend') { renderMkSpend(view); return; }
     if (state.mkTab === 'plan') { renderMkPlan(view); return; }
     if (state._cfLoad !== cfDays() || (state._cf && state._cfDays !== cfDays())) fetchCourseFunnel();
