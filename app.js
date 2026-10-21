@@ -29878,14 +29878,17 @@
        одна цифра вдвое меньше другой, и объяснить её надо на месте, а не в чате. */
     var pairs = [
       ['Посетителей', adsNum(r.visitors)],
-      ['Отправок формы', adsNum(r.reg_free_reaches)],
+      ['Отправок формы', adsNum(r.form_sent) + ' · нажатий ' + adsNum(r.form_reaches)],
+      ['Регистраций по цели', adsNum(r.reg_free) + ' · нажатий ' + adsNum(r.reg_free_reaches)],
       ['Регистраций в базе', adsNum(r.reg_db) + ' · с меткой ' + adsNum(r.reg_db_channel)],
       ['Подписки в ботов', adsNum((r.bot_vk || 0) + (r.bot_max || 0) + (r.bot_tg || 0)) +
         ' · с рекламы ' + adsNum(r.bot_ads)],
       ['Цена клика', adsMoney(r.cpc) + ' ₽'],
       ['Бюджет с НДС', adsMoney(r.spend_nds) + ' ₽'],
+      ['Цена регистрации', adsMoney(r.reg_price) + ' ₽'],
       ['Цена регистрации с НДС', adsMoney(r.reg_price_nds) + ' ₽'],
       ['Клик → визит', adsPct(r.visit_cr)],
+      ['Визит → отправка формы', adsPct(r.form_cr)],
       ['Визит → регистрация', adsPct(r.reg_cr)],
       ['Тариф 690', adsNum(r.reg_paid) + (r.reg_paid_price ? ' по ' + adsMoney(r.reg_paid_price) + ' ₽' : '')]
     ].map(function (p) {
@@ -29913,6 +29916,8 @@
 
     var kpis =
       adsKpi('Расход', adsMoney(t.spend) + ' ₽', 'с НДС ' + adsMoney(t.spend_nds) + ' ₽') +
+      adsKpi('Отправок формы', adsNum(t.form_sent),
+             t.form_price ? 'по ' + adsMoney(t.form_price) + ' ₽' : 'автоцель Метрики') +
       adsKpi('Регистраций', adsNum(t.reg_total),
              'бесплатно ' + adsNum(t.reg_free) + ' · за 690 ' + adsNum(t.reg_paid)) +
       adsKpi('Цена регистрации', adsMoney(t.reg_price) + ' ₽',
@@ -29932,8 +29937,8 @@
           '<span class="ads-v num">' + adsMoney(r.spend) + '</span>' +
           '<span class="ads-v num hidem">' + adsNum(r.clicks) + '</span>' +
           '<span class="ads-v num hidem">' + adsNum(r.visits) + '</span>' +
-          '<span class="ads-v num">' + adsNum(r.reg_total) + '</span>' +
-          '<span class="ads-v num">' + adsMoney(r.reg_price) + '</span>' +
+          '<span class="ads-v num">' + adsNum(r.form_sent) + '</span>' +
+          '<span class="ads-v num">' + adsMoney(r.form_price) + '</span>' +
           '<span class="ads-v num hidem">' + adsNum(r.bot_vk) + ' · ' + adsNum(r.bot_max) +
             ' · ' + adsNum(r.bot_tg) + '</span>' +
         '</div>' + (isOpen ? adsDayCard(r) : '');
@@ -29954,7 +29959,7 @@
         '<div class="s">нажми на день — покажу, из чего сложилась цифра и что не сошлось</div></div></div>' +
         (list ? '<div class="ads-tbl"><div class="ads-th">' +
             '<span>День</span><span>Расход</span><span class="hidem">Клики</span>' +
-            '<span class="hidem">Визиты</span><span>Рег.</span><span>Цена рег.</span>' +
+            '<span class="hidem">Визиты</span><span>Отпр. формы</span><span>Цена отпр.</span>' +
             '<span class="hidem">ВК · МАКС · ТГ</span></div>' + list + '</div>'
           : '<div class="empty">За период строк нет. Нажми «Пересобрать» — соберу вчерашний день.</div>') +
       '</div>' +

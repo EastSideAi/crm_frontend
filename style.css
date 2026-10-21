@@ -5720,9 +5720,11 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
     min-width: 0; overflow-wrap: anywhere; }
 }
 /* ── Реклама: суточная сводка по платным каналам ─────────────────────────────
-   Пять плиток итога и таблица по дням. Якорь экрана — плитки: на них смотрят
-   каждый день, в таблицу лезут, когда цифра удивила. */
-.ads-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
+   Плитки итога и таблица по дням. Якорь экрана — плитки: на них смотрят
+   каждый день, в таблицу лезут, когда цифра удивила. Число плиток в ряду считает
+   сама сетка (auto-fit): их стало шесть, и жесткая пятерка резала бы шестую. */
+.ads-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 10px; margin-top: 18px; }
 .ads-k { padding: 14px 16px; border-radius: var(--r-lg); background: var(--fill); }
 .ads-kl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase; color: var(--ink-3); }
@@ -5768,8 +5770,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 @media (max-width: 900px) {
   .ads-kpis { grid-template-columns: 1fr 1fr; }
   .ads-kv { font-size: 18px; }
-  /* На телефоне колонок остаётся четыре: день, деньги, люди, цена человека. Клики,
-     визиты и боты — разбор за столом, их прячем, а не ужимаем до нечитаемого. */
+  /* На телефоне колонок остается четыре: день, деньги, отправки формы и их цена.
+     Клики, визиты и боты — разбор за столом, их прячем, а не ужимаем до
+     нечитаемого. */
   .ads-th, .ads-tr { grid-template-columns: minmax(96px, 1.3fr) minmax(74px, .8fr)
                        minmax(38px, .35fr) minmax(74px, .7fr);
     gap: 8px; padding: 0 16px; }
@@ -5779,6 +5782,18 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
     min-width: 0; overflow-wrap: anywhere; }
   .ads-nm small { display: none; }
   .ads-day { grid-template-columns: 1fr; padding: 14px 16px 16px; }
+}
+
+/* На узком телефоне четырех колонок по прежним меркам не хватает: 320 пикселей
+   минус поля и промежутки дают 288, а колонки просили 306 — последняя цена
+   уезжала под край карточки. Ужимаем поля, промежутки и кегль цифр, а не прячем
+   еще одну колонку: без цены отправки строка не отвечает на свой вопрос. */
+@media (max-width: 420px) {
+  .ads-th, .ads-tr { grid-template-columns: minmax(84px, 1.2fr) minmax(60px, .8fr)
+                       minmax(28px, .3fr) minmax(58px, .7fr);
+    gap: 6px; padding: 0 12px; }
+  .ads-v { font-size: 12.5px; }
+  .ads-nm b { font-size: 13px; line-height: 1.25; }
 }
 
 /* попап кликов по дням */
