@@ -29837,8 +29837,9 @@
 
      Колонок в исходной таблице девятнадцать — на экран они не лезут и не нужны там
      все сразу. Поэтому в строке дня главное (деньги, люди, цена), а остальное
-     раскрывается по клику: редкий вопрос не имеет права забивать частый. Выгрузка
-     отдаёт всё: подрядчику нужен полный набор, и спорить об этом незачем. */
+     раскрывается по клику: редкий вопрос не имеет права забивать частый. Выгрузки
+     в файл тут нет намеренно (Вера 21.10.2026): цифры живут в CRM, а не разъезжаются
+     копиями по чужим таблицам. */
 
   function fetchMkAds() {
     var days = state.mkDays || 30;
@@ -29895,29 +29896,6 @@
       '<div class="ads-sync">собрано ' + esc(ago(r.synced_at)) + '</div></div>';
   }
 
-  function adsCsv(d) {
-    /* Выгрузка в том же порядке колонок, что в таблице подрядчика: файл открывают
-       рядом с его гугл-доком и сверяют глазами, строка к строке. */
-    var head = ['Дата', 'Расход', 'Переходы', 'Визиты', 'Конверсия кампаний',
-                'Конверсия визит-регистрация', 'Регистраций бесплатно',
-                'Цена регистрации бесплатно', 'Регистраций 690', 'Цена регистрации 690',
-                'Всего регистраций', 'Средняя цена', 'Бюджет с НДС', 'Средняя цена с НДС',
-                'Подписчик МАКС', 'Подписчик ВК', 'Подписчик ТГ', 'Показы', 'CTR'];
-    var cell = function (v) {
-      if (v === null || v === undefined) return '';
-      return String(v).replace('.', ',');
-    };
-    var lines = [head.join(';')];
-    (d.rows || []).slice().reverse().forEach(function (r) {
-      lines.push([r.on_date, r.spend, r.clicks, r.visits, r.visit_cr, r.reg_cr,
-                  r.reg_free, r.reg_free_price, r.reg_paid, r.reg_paid_price,
-                  r.reg_total, r.reg_price, r.spend_nds, r.reg_price_nds,
-                  r.bot_max, r.bot_vk, r.bot_tg, r.shows, r.ctr].map(cell).join(';'));
-    });
-    /* BOM: без него Excel читает файл как latin-1 и показывает кракозябры. */
-    return '﻿' + lines.join('\r\n');
-  }
-
   function renderMkAds(view) {
     if (state._mkAdsLoad !== (state.mkDays || 30) || !state._mkAds) {
       view.innerHTML = dashSkeleton();
@@ -29964,7 +29942,6 @@
         '<div><div class="t">Платная реклама</div>' +
         '<div class="s">собирается сама: кабинет ВК, Метрика и наша база, одна строка на сутки</div></div>' +
         '<span style="flex:1"></span>' +
-        '<button class="mk-btn" id="ads-csv">' + ic('rows', 12) + 'Выгрузить</button>' +
         '<button class="mk-btn primary" id="ads-sync">' + ic('refresh', 12) + 'Пересобрать</button></div>' +
         '<div class="ads-kpis">' + kpis + '</div>' +
       '</div>' +
@@ -30000,19 +29977,6 @@
         sync.disabled = false;
         showToast('Не удалось пересобрать — проверь сеть или доступ');
       });
-    });
-
-    var csv = el('ads-csv');
-    if (csv) csv.addEventListener('click', function () {
-      var blob = new Blob([adsCsv(d)], { type: 'text/csv;charset=utf-8' });
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'reklama-' + (rows.length ? rows[rows.length - 1].on_date : 'period') +
-                   '-' + (rows.length ? rows[0].on_date : '') + '.csv';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 0);
     });
   }
 
