@@ -29880,6 +29880,8 @@
       ['Посетителей', adsNum(r.visitors)],
       ['Отправок формы', adsNum(r.reg_free_reaches)],
       ['Регистраций в базе', adsNum(r.reg_db) + ' · с меткой ' + adsNum(r.reg_db_channel)],
+      ['Подписки в ботов', adsNum((r.bot_vk || 0) + (r.bot_max || 0) + (r.bot_tg || 0)) +
+        ' · с рекламы ' + adsNum(r.bot_ads)],
       ['Цена клика', adsMoney(r.cpc) + ' ₽'],
       ['Бюджет с НДС', adsMoney(r.spend_nds) + ' ₽'],
       ['Цена регистрации с НДС', adsMoney(r.reg_price_nds) + ' ₽'],
@@ -29917,8 +29919,9 @@
              'с НДС ' + adsMoney(t.reg_price_nds) + ' ₽') +
       adsKpi('Показы и клики', adsNum(t.shows) + ' · ' + adsNum(t.clicks),
              'CTR ' + adsPct(t.ctr) + ' · клик ' + adsMoney(t.cpc) + ' ₽') +
-      adsKpi('Визиты', adsNum(t.visits), 'из них в ботов ' +
-             adsNum((t.bot_vk || 0) + (t.bot_max || 0) + (t.bot_tg || 0)));
+      adsKpi('Визиты', adsNum(t.visits), 'подписок в ботов ' +
+             adsNum((t.bot_vk || 0) + (t.bot_max || 0) + (t.bot_tg || 0)) +
+             ' · с рекламы ' + adsNum(t.bot_ads || 0));
 
     var list = rows.map(function (r) {
       var isOpen = open === r.on_date;
