@@ -5714,6 +5714,68 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .mkd-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
     min-width: 0; overflow-wrap: anywhere; }
 }
+/* ── Реклама: суточная сводка по платным каналам ─────────────────────────────
+   Пять плиток итога и таблица по дням. Якорь экрана — плитки: на них смотрят
+   каждый день, в таблицу лезут, когда цифра удивила. */
+.ads-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
+.ads-k { padding: 14px 16px; border-radius: var(--r-lg); background: var(--fill); }
+.ads-kl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ads-kv { margin-top: 6px; font-size: 21px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ads-ks { margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
+
+.ads-tbl { border-top: 1px solid var(--line); }
+.ads-th, .ads-tr { display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(86px, .7fr) repeat(2, minmax(56px, .45fr))
+                         minmax(48px, .4fr) minmax(86px, .7fr) minmax(104px, .8fr);
+  padding: 0 24px; }
+.ads-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
+.ads-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.ads-th span:first-child { text-align: left; }
+.ads-tr { height: 56px; border-bottom: 1px solid var(--line); cursor: pointer;
+  position: relative; transition: background .14s var(--ease); }
+.ads-tr:hover { background: #FBFBFC; }
+.ads-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.ads-tr:hover::before, .ads-tr.on::before { opacity: 1; }
+/* День, где источники не сошлись, помечаем полосой, а не прячем: расхождение —
+   это то, ради чего строку вообще открывают. */
+.ads-tr.warn::before { background: var(--amber); opacity: 1; }
+.ads-nm b { display: block; font-size: 14px; font-weight: 600; color: var(--ink); }
+.ads-nm small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.ads-v { text-align: right; font-size: 14px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.ads-day { padding: 16px 24px 18px; background: var(--fill);
+  border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 22px; }
+.ads-dp { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding-bottom: 7px; border-bottom: 1px solid var(--line-2); }
+.ads-dp span { font-size: 12.5px; color: var(--ink-2); }
+.ads-dp b { font-size: 13.5px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ads-prob { grid-column: 1 / -1; padding: 9px 12px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+.ads-sync { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-3); }
+
+@media (max-width: 900px) {
+  .ads-kpis { grid-template-columns: 1fr 1fr; }
+  .ads-kv { font-size: 18px; }
+  /* На телефоне колонок остаётся четыре: день, деньги, люди, цена человека. Клики,
+     визиты и боты — разбор за столом, их прячем, а не ужимаем до нечитаемого. */
+  .ads-th, .ads-tr { grid-template-columns: minmax(96px, 1.3fr) minmax(74px, .8fr)
+                       minmax(38px, .35fr) minmax(74px, .7fr);
+    gap: 8px; padding: 0 16px; }
+  .ads-th span.hidem, .ads-tr .hidem { display: none; }
+  .ads-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+  .ads-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
+    min-width: 0; overflow-wrap: anywhere; }
+  .ads-nm small { display: none; }
+  .ads-day { grid-template-columns: 1fr; padding: 14px 16px 16px; }
+}
+
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
