@@ -413,6 +413,7 @@ a { color: inherit; text-decoration: none; }
    на соседнюю плитку при шести плитках на ширине 1280. */
 .stat .sv.tight { font-size: 31px; }
 .stat .sv.word { font-size: 26px; letter-spacing: -.02em; }
+/* .sv.long — четвертая ступень для сумм с копейками, она живет в медиазапросе 1180. */
 .stat.go:hover .sv { color: var(--blue); }
 .stat .sd { margin-top: 13px; min-height: 24px; display: flex; }
 .stat .sd .smut { font-size: 12.5px; color: var(--ink-3); }
@@ -5154,6 +5155,10 @@ body.inbox-mode .tg { height: 100%; width: 100%; }
      остается около 115px, а число в 38px при четырех знаках занимает 88px и лезет
      на соседнюю. Двумя рядами по три читается и остается колонкой. */
   .statbar.six { grid-template-columns: repeat(3, 1fr); }
+  /* Четыре плитки тут остаются в строке, но на 22px по бокам уже нет места:
+     при длинных суммах плитка вылезала за карточку. */
+  .stat, .statbar.five .stat { padding: 16px 16px; }
+  .stat .sv.long { font-size: 21px; letter-spacing: -.01em; }
 }
 @media (max-width: 960px) {
   body { overflow: auto; }
@@ -6982,6 +6987,8 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
    якорь (итоговая строка) и максимально тихое все остальное: цифры выровнены по
    правому краю, подписи правил серые, разделители полупрозрачные. */
 .fin-casc { padding: 20px 24px 10px; }
+/* Переключатель Факт/План в шапке каскада — системный сегмент (.tabs), прижат вправо. */
+.fin-casc-seg { margin-left: auto; flex: none; align-self: center; }
 .fc-rows { margin-top: 12px; }
 .fc-row { display: flex; align-items: baseline; justify-content: space-between; gap: 20px;
   padding: 13px 0; border-bottom: 1px solid var(--line); }
@@ -6992,8 +6999,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   color: var(--ink-3); max-width: 46ch; }
 .fc-v { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap;
   letter-spacing: -.02em; }
-/* Вычитания тише прибавлений: глаз должен цепляться за итоги, а не за каждую строку. */
-.fc-row.out .fc-v { color: var(--ink-2); font-weight: 600; }
+/* Вычитания тише прибавлений ВЕСОМ, а не цветом: серая цифра на светлой карточке
+   читается как выключенная (Роман 19.10.2026: «цифры серые, надо чтобы нормальные»). */
+.fc-row.out .fc-v { color: var(--ink); font-weight: 600; }
 /* Промежуточный итог — заливкой во всю ширину карточки, без рамки. */
 .fc-row.sum { margin: 0 -24px; padding: 14px 24px; background: var(--fill);
   border-bottom-color: var(--line-2); }
@@ -7017,7 +7025,10 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fl-main { min-width: 0; }
 .fl-name { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fl-sub { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+/* Подстрочник строки — это ОПИСАНИЕ расхода (за что, по какой статье, какой
+   комментарий), а не служебная сноска: 11.5px самым светлым чернилом читались как шум
+   и люди их просто не замечали (Роман 20.10.2026). Размер и цвет обычной подписи. */
+.fl-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
 /* Полоска доли — единственный «график» на экране: она отвечает на вопрос «а сколько
    это от общего», который иначе считают в уме. */
 .fl-bar { height: 4px; border-radius: var(--r-pill); background: var(--line); overflow: hidden; }
@@ -7030,6 +7041,9 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 /* Мелкий вариант статус-чипа .sev для инлайна у имени: та же семья и те же цвета
    (.cz-wait/.cz-ok/.cz-off), только компактнее — на будущие инлайн-чипы тоже он. */
 .sev.mini { padding: 2px 7px; font-size: 10.5px; border-radius: 6px; margin-left: 8px; }
+/* Строки календаря лежат прямо в карточке, у которой своих полей нет: суммы
+   упирались в край и знак ₽ подрезало. Поля — как у шапки этой же карточки. */
+.cal-row { padding-left: 16px; padding-right: 16px; }
 /* Платежный календарь: строка-итог отделяется весом и линией сверху, а не рамкой. */
 .cal-row.total { border-top: 1px solid var(--line-2); margin-top: 2px; }
 .cal-row.total .fl-name { font-weight: 700; }
@@ -7071,6 +7085,12 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fbal-net.ok { color: var(--green-ink); }
 .fbal-net.bad { color: var(--red-ink); }
 .fbal-net span { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
+/* На телефоне сумма (26px, без переноса) и подпись в одну строку не встают:
+   блок вылезал за карточку на 48px. Кладем столбиком. */
+@media (max-width: 560px) {
+  .fbal-head { flex-direction: column; gap: 10px; }
+  .fbal-net { font-size: 22px; text-align: left; }
+}
 .fbal-rows { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
 .fbal-r { display: grid; grid-template-columns: 74px 1fr auto; align-items: center; gap: 16px; }
 .fbal-l { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
@@ -7159,15 +7179,112 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .prg-archlist { margin-top: 4px; }
 
 .fin-funds { margin-top: 12px; }
+/* Ряд фондов на экране «Фонды» — тот же рецепт чипов, что у вкладок расчетных листов,
+   со своим отступом до сводки: ряд относится ко всему экрану, а не к карточке. Раньше
+   фонды стояли вкладками в верхней полосе, переносились там на вторую строку и
+   выдавливали выбор периода (Роман 20.10.2026). */
+.fin-fundtabs { margin: 0 0 16px; }
+/* Компактная карточка: справка рядом с основной работой не должна весить столько же,
+   сколько она. Тот же материал и радиус, только воздух плотнее. */
+.fin-block.tight { padding: 15px 18px 16px; }
+/* Свернутая справочная карточка: от нее остается шапка с главной цифрой и кнопка.
+   Тело не удалено, а скрыто, — состояние помнится (state.finOpen). */
+.fin-fold:not(.open) > *:not(.sec-head) { display: none; }
+.fin-fold:not(.open) { padding: 15px 18px 16px; }
+.fin-fold:not(.open) .sec-head { margin-bottom: 0; }
+/* В свернутом виде подпись секции не нужна: заголовок и цифра отвечают на вопрос
+   «что это», а зачем оно — читают, когда открыли. */
+.fin-fold:not(.open) .sec-head .s { display: none; }
+.fin-foldv { margin-left: auto; font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--ink); white-space: nowrap; }
+.fin-foldv + .fin-foldb { margin-left: 10px; }
+.fin-foldb { margin-left: auto; }
+.fin-foldv ~ .fin-foldb { margin-left: 10px; }
+.fin-block.tight .fin-funds { margin-top: 8px; }
+.fin-block.tight .ff-row { padding: 9px 0 2px; border-bottom: 0; }
 .ff-row { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .ff-row:last-child { border-bottom: 0; }
 .ff-top { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
 .ff-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
-.ff-v { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+.ff-v { font-size: 15px; font-weight: 700; letter-spacing: -.02em;
+  white-space: nowrap; flex: none; }
 .ff-sub { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px;
-  font-size: 11.5px; color: var(--ink-3); font-feature-settings: 'tnum'; }
+  font-size: 12.5px; color: var(--ink-2); font-feature-settings: 'tnum'; }
 .ff-warn { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: var(--amber-ink);
   background: var(--amber-soft); padding: 6px 10px; border-radius: 9px; }
+/* «Отложили в период» — заметная строка, а не серая мелочь (владелец 19.10.2026).
+   Капс-лейбл слева, сумма зелёной плашкой справа (деньги в фонд); ноль — нейтрально. */
+.ff-set { display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-top: 8px; }
+.ff-set-l { font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ff-set-v { font: 700 13.5px 'Manrope', 'Inter', sans-serif; letter-spacing: -.02em;
+  color: var(--green-ink); background: var(--green-soft);
+  padding: 3px 10px; border-radius: var(--r-pill); }
+.ff-set-v.zero { color: var(--ink-3); background: var(--fill); }
+/* «Оплачен» на строке расхода (Роман 19.10.2026): проведенная строка зеленая,
+   плановой даем кнопку. Заливка мягкая и без рамки — строк расхода на экране
+   десятки, и насыщенный зеленый превратил бы список в светофор. */
+.trow.paid, .fl-row.paid { background: var(--green-soft); }
+.trow.paid:hover, .fl-row.paid:hover { background: #DCF2E6; }
+/* Заливка тянется на всю ширину карточки: кусок цвета, не доходящий до краев,
+   читается как недорисованный блок. Отступы у карточки разные, отсюда две пары. */
+.fin-block > .fin-list .fl-row.paid { margin-left: -24px; margin-right: -24px;
+  padding-left: 24px; padding-right: 24px; }
+.listcard .fin-list .fl-row.paid { margin-left: -20px; margin-right: -20px;
+  padding-left: 20px; padding-right: 20px; }
+.fpaid { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+  font-weight: 700; color: var(--green-ink); white-space: nowrap; }
+.fpaid svg { width: 12px; height: 12px; }
+.fpaid-undo { font: 600 11px 'Manrope', sans-serif; color: var(--ink-3); background: none;
+  border: 0; padding: 0 0 0 6px; cursor: pointer; }
+.fpaid-undo:hover { color: var(--ink-2); text-decoration: underline; }
+.fpaid-btn { padding: 5px 11px; font-size: 11.5px; }
+.fpaid-btn svg { color: var(--green); }
+/* Строка трат фонда: действие под подписью, а не в колонке суммы — колонка узкая,
+   и кнопка выдавливала бы цифру на вторую строку. */
+.fl-act { margin-top: 6px; }
+.fl-act:empty { display: none; }
+.sv-paid { display: inline-flex; align-items: center; gap: 10px; }
+/* Убрать сервис из плана — действие редкое и необратимое одним кликом,
+   поэтому оно тише кнопки «Оплачен» рядом и краснеет только под курсором. */
+.fsv-drop { font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  background: none; border: none; padding: 2px 0; cursor: pointer;
+  border-bottom: 1px dashed var(--line-2); transition: color .12s, border-color .12s; }
+.fsv-drop:hover { color: var(--red); border-bottom-color: var(--red); }
+.trow.fsv-grid { height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; }
+
+/* «Пополнили фонд» в каскаде и «Сошлось с банком» в фондах (Роман 19.10.2026).
+   Проведенная строка красится мягкой зеленой заливкой во всю ширину карточки — тем
+   же приемом, что промежуточный итог, только цветом состояния, а не нейтральным.
+   Зеленый тут значит одно: деньги реально ушли по этой строке. */
+.fc-row.filled { margin: 0 -24px; padding-left: 24px; padding-right: 24px;
+  background: var(--green-soft); border-bottom-color: #D3EDDF; }
+.fc-fill { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px;
+  font-size: 12px; font-weight: 600; color: var(--green-ink); }
+.fc-fill svg { width: 12px; height: 12px; }
+.fc-fill.part { color: var(--amber-ink); }
+.fc-undo { margin-left: 8px; font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3);
+  background: none; border: 0; padding: 0; cursor: pointer;
+  border-bottom: 1px dashed var(--line-2); }
+.fc-undo:hover { color: var(--ink-2); }
+.fc-fillbtn { margin-top: 8px; }
+.fc-fillbtn svg { color: var(--green); }
+
+.ff-row.matched { margin: 0 -24px; padding-left: 24px; padding-right: 24px;
+  background: var(--green-soft); border-bottom-color: #D3EDDF; }
+.ff-bank { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+  margin-top: 8px; }
+.ff-ok { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+  font-weight: 600; color: var(--green-ink); }
+.ff-ok svg { width: 12px; height: 12px; }
+.ff-gap { font-size: 12px; font-weight: 600; color: var(--amber-ink); }
+.ff-match { padding: 6px 12px; }
+.ff-match svg { color: var(--green); }
+.ff-other { font: 600 11.5px 'Manrope', sans-serif; color: var(--ink-3); background: none;
+  border: 0; padding: 0; cursor: pointer; border-bottom: 1px dashed var(--line-2); }
+.ff-other:hover { color: var(--ink-2); }
+
 /* Правка остатка фонда. Кнопка живет в строке мелочей, а не отдельным блоком:
    это редкое действие финансиста, а не то, ради чего люди открывают экран. */
 .ff-fix { font: 600 11.5px 'Manrope', sans-serif; color: var(--blue); background: none;
@@ -7228,13 +7345,13 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
 .fg-v { font-weight: 700; letter-spacing: -.02em; text-align: right; white-space: nowrap; }
 
 /* Карта операций — плотная таблица: тут читают глазами вниз по колонке сумм. */
-.fin-grid { grid-template-columns: 92px 1.6fr 150px 190px 132px 88px; }
+.fin-grid { grid-template-columns: 92px 2.1fr 118px 152px 132px 88px; }
 .fo-date { font-size: 12.5px; color: var(--ink-2); }
 .fo-what { min-width: 0; }
 .fo-what b { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fo-what i { display: block; margin-top: 2px; font-size: 11.5px; font-style: normal;
-  color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-what i { display: block; margin-top: 2px; font-size: 12.5px; font-style: normal;
+  color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fo-src, .fo-acc { font-size: 12.5px; color: var(--ink-2); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .fo-sum { font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; text-align: right; }
@@ -7304,6 +7421,9 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 /* Пометка «откуда строка» в прямых расходах — тихая, серая: это не статус, а справка,
    что строку разложил расчетный лист или сервис, и править ее нужно там. */
 .fst.src { color: var(--ink-2); background: var(--fill); font-weight: 600; }
+/* В подстрочнике строки это уже не чип, а продолжение подписи: плашка посреди
+   текста читалась бы как отдельная сущность. */
+.fo-what i .fst.src { padding: 0; background: none; color: inherit; font: inherit; }
 /* Просроченный срок — единственный красный чип в семействе: по 54-ФЗ это уже штраф,
    и отличать его от «скоро» одним амбером нельзя. */
 .fst.bad { color: var(--red-ink); background: var(--red-soft); }
@@ -7325,6 +7445,10 @@ a.fin-rcp.off:hover { text-decoration: underline; }
 .tx-head span:nth-child(3), .tx-head span:nth-child(4),
 .tx-row .tx-inc, .tx-row .tx-tax { text-align: right; }
 .tx-row { padding: 11px 0; border-bottom: 1px solid var(--line); }
+/* У карточки-списка своих полей нет, и строки налога упирались в край:
+   последнюю цифру подрезало, а шапка стояла с отступом — таблица читалась съехавшей. */
+.tx-head, .tx-list { padding-left: 16px; padding-right: 16px; }
+.tx-list { padding-bottom: 8px; }
 .tx-row:last-child { border-bottom: 0; }
 /* глобальный .empty (text-align:center) протекал в .tx-row.empty и центровал
    месяц — держим название всегда по левому краю */
@@ -7485,7 +7609,7 @@ button.fsp-via { cursor: pointer; }
 
 @media (max-width: 1100px) {
   .trow.fin-grid { grid-template-columns: 84px 1.4fr 140px 122px 84px !important; }
-  .fin-grid > :nth-child(4) { display: none; }
+  .fin-grid > .fo-acc { display: none; }
 }
 @media (max-width: 760px) {
   /* На телефоне строка операции — карточка: слева что и откуда, справа сумма. */
@@ -7501,6 +7625,15 @@ button.fsp-via { cursor: pointer; }
   .fin-casc, .fin-block { padding-left: 16px; padding-right: 16px; }
   .fc-row.sum, .fc-row.total, .fkv.total { margin-left: -16px; margin-right: -16px;
     padding-left: 16px; padding-right: 16px; }
+  /* Заливка «пополнено» и «сошлось с банком» растянута на всю ширину карточки,
+     а на телефоне у карточки отступ 16px, не 24px: иначе строка вылезала за край. */
+  .fc-row.filled, .ff-row.matched { margin-left: -16px; margin-right: -16px;
+    padding-left: 16px; padding-right: 16px; }
+  .fin-block > .fin-list .fl-row.paid { margin-left: -16px; margin-right: -16px;
+    padding-left: 16px; padding-right: 16px; }
+  /* На телефоне колонка описания узкая, и «Мотивация отдела продаж» обрывалось
+     многоточием. Две строки читаются, обрезанное название — нет. */
+  .fo-what b { white-space: normal; }
 }
 /* Экран ввода: та же строка ведомости, но колонок меньше — здесь не разбираются
    в чужих операциях, а вносят свои, и счет с разделом уже сказаны формой. */
@@ -7521,6 +7654,9 @@ button.fsp-via { cursor: pointer; }
 .trow.fe-grid:hover .fd-del { opacity: .6; }
 .fd-del:hover { opacity: 1; background: var(--red-soft); color: var(--red); }
 @media (hover: none) { .fd-del { opacity: .5; } }
+/* Строка, которую нельзя удалить, держит место крестика пустым: иначе ее кнопка
+   «Оплачен» стоит на 28px правее соседней, и колонка действий выглядит съехавшей. */
+.fd-del.ghost { pointer-events: none; opacity: 0 !important; }
 /* Кнопка «добавить» стоит в одном ряду с чипами форм, но она действие, а не фильтр:
    синие чернила отделяют ее, не заводя третьего рецепта кнопки. */
 .qchip.add { display: inline-flex; align-items: center; gap: 5px; color: var(--blue);
@@ -7623,20 +7759,23 @@ button.fsp-via { cursor: pointer; }
 .fc-pen { display: inline-flex; margin-left: 6px; color: var(--ink-3); opacity: 0;
   transition: opacity .15s var(--ease); vertical-align: -1px; }
 .fc-row.click:hover .fc-pen { opacity: 1; }
-.obl-bar { height: 3px; margin-top: 7px; border-radius: var(--r-pill);
+.obl-bar { grid-column: 1 / -1; height: 3px; margin-top: 7px; border-radius: var(--r-pill);
   background: var(--line); overflow: hidden; }
 .obl-bar i { display: block; height: 100%; border-radius: inherit; background: var(--navy);
   transition: width .9s var(--ease); }
 
 /* Списания ведомости: план и факт стоят рядом и правятся на месте — вопрос
    «сколько ждали / сколько списалось» задают об одной строке, а не о двух. */
-.fsv-grid { grid-template-columns: 1.5fr 128px 128px 1fr; }
+.fsv-grid { grid-template-columns: 1.8fr 122px 122px .9fr; }
 /* Платеж по обязательству живет в узкой колонке: три колонки в ряд там режут
    название до многоточия. Сумма и действие уходят под собой, а название дышит. */
 .op-grid { grid-template-columns: 1fr auto; gap: 4px 14px; height: auto;
   padding-top: 12px; padding-bottom: 12px; align-items: center; }
 .op-grid .sv-what { grid-row: 1 / span 2; }
 .op-grid .sv-what b { white-space: normal; }
+/* Имя сервиса важнее одной строки: «OpenRouter, модели» обрезалось многоточием,
+   а строка списания и так растет по содержимому. */
+.fsv-grid .sv-what b { white-space: normal; }
 .op-grid .op-sum { grid-column: 2; grid-row: 1; }
 .op-grid .op-act { grid-column: 2; grid-row: 2; }
 /* Список внутри карточки-списка: у самой карточки полей нет — они у строк .trow.
@@ -7659,7 +7798,11 @@ button.fsp-via { cursor: pointer; }
   font-feature-settings: 'tnum'; transition: border-color .15s var(--ease); }
 .sv-num:focus { outline: 0; border-color: var(--blue); }
 .sv-num.is-fact { color: var(--green-ink); border-color: var(--green-soft); }
-.sv-hint { font-size: 11.5px; color: var(--ink-3); text-align: right; }
+/* Подсказка и под ней кнопка «Оплачен», обе по правому краю. Высота строки у
+   .trow фиксирована (58px), поэтому списаниям она отпущена: иначе кнопка вылезает
+   за край строки и ложится на соседнюю. */
+.sv-hint { display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  min-width: 0; font-size: 11.5px; color: var(--ink-3); text-align: right; }
 .trow.fsv-grid.warn .sv-hint { color: var(--amber-ink); font-weight: 600; }
 .trow.fsv-grid.done .sv-what b, .trow.op-grid.done .sv-what b { color: var(--ink-2); }
 .op-sum { text-align: right; font-size: 13.5px; font-weight: 700; letter-spacing: -.02em; }
@@ -7703,14 +7846,23 @@ button.fsp-via { cursor: pointer; }
 .al-card.ct-slim { max-width: 440px; }
 
 @media (max-width: 1100px) {
-  .trow.fsv-grid { grid-template-columns: 1.4fr 112px 112px !important; }
-  .fsv-grid .sv-hint { display: none; }
+  /* Узкому экрану прячется сама подсказка словами, а не вся колонка: вместе с ней
+     уходили кнопки «Оплачен» и «убрать», и с ноутбука строку было нечем закрыть. */
+  .trow.fsv-grid { grid-template-columns: 1.3fr 104px 104px auto !important; }
+  .fsv-grid .sv-hint-t { display: none; }
 }
 @media (max-width: 760px) {
   .fin-perbar { flex-direction: column; align-items: flex-start; gap: 12px; }
   .fp-act { width: 100%; }
   .fp-act .qchip { flex: 1; justify-content: center; }
-  .trow.fsv-grid { grid-template-columns: 1fr 96px 96px !important; gap: 6px 8px; }
+  /* На телефоне строка списания становится карточкой: название строкой сверху,
+     под ним план и факт, ниже действия. В одну строку четыре колонки не встают:
+     имя сервиса схлопывалось в ноль. */
+  .trow.fsv-grid { grid-template-columns: 1fr 88px 88px !important; gap: 8px;
+    height: auto; padding-top: 12px; padding-bottom: 12px; }
+  .fsv-grid .sv-what { grid-column: 1 / -1; }
+  .fsv-grid .sv-hint { grid-column: 1 / -1; flex-direction: row; align-items: center;
+    justify-content: flex-end; gap: 10px; }
   .fb-row { grid-template-columns: 1fr auto; gap: 4px 12px; }
   .fb-bar { grid-column: 1 / span 2; grid-row: 2; }
 }
@@ -11596,6 +11748,21 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   .mh-right { width: 100%; }
 }
 
+/* Мотивация менеджера: заголовок группы и строки сделок (заработано / в работе). */
+.mm-h { font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase;
+  color: var(--ink-3); margin: 18px 2px 8px; }
+.mm-list { display: flex; flex-direction: column; gap: 8px; }
+.mm-row { display: flex; align-items: center; gap: 14px; padding: 13px 18px; background: var(--card);
+  border: 1px solid var(--line-2); border-radius: 14px; }
+.mm-main { flex: 1 1 auto; min-width: 0; }
+.mm-nm { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.mm-what { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.mm-sum { flex: 0 0 auto; text-align: right; min-width: 92px; }
+.mm-sum b { font-size: 16px; font-weight: 700; }
+.mm-sum b.mm-earned { color: var(--green-ink); }
+.mm-sum b.mm-ahead { color: var(--ink-2); }
+.mm-sum span { display: block; font-size: 11px; color: var(--ink-3); margin-top: 1px; }
+
 .pb-stu { padding: 0; margin-top: 12px; }
 .pb-head { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
   border-bottom: 1px solid var(--line); flex-wrap: wrap; }
@@ -11606,7 +11773,18 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
 .pb-tar, .pb-who { font-size: 12px; color: var(--ink-3); }
 .pb-sum { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; }
 .pb-sum b { font-size: 16px; font-weight: 700; }
+.pb-sum b.pb-earned { color: var(--green-ink); }
 .pb-sum span { font-size: 11.5px; color: var(--ink-3); }
+.pb-sum .pb-ahead { color: var(--ink-2); font-weight: 600; margin-top: 1px; }
+
+/* Рабочее окно тьютора: список учеников с прогрессом по точкам. */
+.th-list { margin-top: 8px; }
+.th-row { display: flex; align-items: center; gap: 12px; padding: 11px 2px; border-top: 1px solid var(--line); }
+.th-row:first-child { border-top: 0; }
+.th-nm { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.th-pr { flex: 0 0 auto; font-size: 12px; color: var(--ink-3); }
+.th-rail { flex: 0 0 auto; }
 
 /* Полоса точек — и состояние, и навигация: закрытые залиты, открытая обведена. */
 .pb-rail { flex: 0 0 auto; display: flex; gap: 6px; }
