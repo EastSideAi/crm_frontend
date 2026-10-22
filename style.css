@@ -5736,6 +5736,83 @@ textarea.mk-inp { width: 100%; resize: vertical; line-height: 1.45; }
   .mkd-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
     min-width: 0; overflow-wrap: anywhere; }
 }
+/* ── Реклама: суточная сводка по платным каналам ─────────────────────────────
+   Плитки итога и таблица по дням. Якорь экрана — плитки: на них смотрят
+   каждый день, в таблицу лезут, когда цифра удивила. Число плиток в ряду считает
+   сама сетка (auto-fit): их стало шесть, и жесткая пятерка резала бы шестую. */
+.ads-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 10px; margin-top: 18px; }
+.ads-k { padding: 14px 16px; border-radius: var(--r-lg); background: var(--fill); }
+.ads-kl { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.ads-kv { margin-top: 6px; font-size: 21px; font-weight: 700; color: var(--ink);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ads-ks { margin-top: 3px; font-size: 11.5px; color: var(--ink-2); }
+
+.ads-tbl { border-top: 1px solid var(--line); }
+.ads-th, .ads-tr { display: grid; align-items: center; gap: 12px;
+  grid-template-columns: minmax(150px, 1.6fr) minmax(86px, .7fr) repeat(2, minmax(56px, .45fr))
+                         minmax(48px, .4fr) minmax(86px, .7fr) minmax(104px, .8fr);
+  padding: 0 24px; }
+.ads-th { height: 34px; border-bottom: 1px solid var(--line); background: var(--fill); }
+.ads-th span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); text-align: right; }
+.ads-th span:first-child { text-align: left; }
+.ads-tr { height: 56px; border-bottom: 1px solid var(--line); cursor: pointer;
+  position: relative; transition: background .14s var(--ease); }
+.ads-tr:hover { background: #FBFBFC; }
+.ads-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--blue); opacity: 0; transition: opacity .14s var(--ease); }
+.ads-tr:hover::before, .ads-tr.on::before { opacity: 1; }
+/* День, где источники не сошлись, помечаем полосой, а не прячем: расхождение —
+   это то, ради чего строку вообще открывают. */
+.ads-tr.warn::before { background: var(--amber); opacity: 1; }
+.ads-nm b { display: block; font-size: 14px; font-weight: 600; color: var(--ink); }
+.ads-nm small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-3); }
+.ads-v { text-align: right; font-size: 14px; font-weight: 600; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.ads-day { padding: 16px 24px 18px; background: var(--fill);
+  border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 22px; }
+.ads-dp { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding-bottom: 7px; border-bottom: 1px solid var(--line-2); }
+.ads-dp span { font-size: 12.5px; color: var(--ink-2); }
+.ads-dp b { font-size: 13.5px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ads-prob { grid-column: 1 / -1; padding: 9px 12px; border-radius: var(--r-lg);
+  background: var(--amber-soft); color: var(--amber-ink); font-size: 12.5px; line-height: 1.45; }
+.ads-sync { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-3); }
+
+@media (max-width: 900px) {
+  .ads-kpis { grid-template-columns: 1fr 1fr; }
+  .ads-kv { font-size: 18px; }
+  /* На телефоне колонок остается четыре: день, деньги, отправки формы и их цена.
+     Клики, визиты и боты — разбор за столом, их прячем, а не ужимаем до
+     нечитаемого. */
+  .ads-th, .ads-tr { grid-template-columns: minmax(96px, 1.3fr) minmax(74px, .8fr)
+                       minmax(38px, .35fr) minmax(74px, .7fr);
+    gap: 8px; padding: 0 16px; }
+  .ads-th span.hidem, .ads-tr .hidem { display: none; }
+  .ads-th { height: auto; min-height: 40px; padding-top: 6px; padding-bottom: 6px; }
+  .ads-th span { font-size: 9.5px; line-height: 1.15; white-space: normal;
+    min-width: 0; overflow-wrap: anywhere; }
+  .ads-nm small { display: none; }
+  .ads-day { grid-template-columns: 1fr; padding: 14px 16px 16px; }
+}
+
+/* На узком телефоне четырех колонок по прежним меркам не хватает: 320 пикселей
+   минус поля и промежутки дают 288, а колонки просили 306 — последняя цена
+   уезжала под край карточки. Ужимаем поля, промежутки и кегль цифр, а не прячем
+   еще одну колонку: без цены отправки строка не отвечает на свой вопрос. */
+@media (max-width: 420px) {
+  .ads-th, .ads-tr { grid-template-columns: minmax(84px, 1.2fr) minmax(60px, .8fr)
+                       minmax(28px, .3fr) minmax(58px, .7fr);
+    gap: 6px; padding: 0 12px; }
+  .ads-v { font-size: 12.5px; }
+  .ads-nm b { font-size: 13px; line-height: 1.25; }
+}
+
 /* попап кликов по дням */
 .mk-cd-chart { display: flex; align-items: flex-end; gap: 5px; height: 70px; }
 .mk-cd-bar { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--fill); border-radius: 4px; overflow: hidden; }
@@ -12514,6 +12591,133 @@ button.mw-tile:hover { border-color: #D4DAE6; transform: translateY(-1px); }
   border-radius: 1px; background: var(--blue); opacity: .55; }
 .org-src { margin: 4px 0 0; font-size: 11.5px; color: var(--ink-3); }
 .org-foot { font-size: 12px; color: var(--ink-3); padding: 0 2px 18px; }
+
+/* ── Процессы: карта сквозных процессов компании (renderProcesses) ──
+   Плитки процессов наверху — переключатель: процесс на экране один, иначе восемь
+   таблиц шагов складываются в простыню. Путь клиента идет одной лентой (четыре
+   процесса подряд, стрелка между ними — это и есть передача клиента дальше), остальные
+   процессы — тихим рядом под ней. */
+.prc-wrap { display: flex; flex-direction: column; gap: 18px; }
+.prc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.prc-top .sev { flex: none; margin-top: 6px; }
+.prc-map { display: flex; flex-direction: column; gap: 10px; }
+.prc-lbl2 { margin-top: 10px; }
+.prc-path { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.prc-rest { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.prc-tile { position: relative; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  padding: 13px 16px 14px; transition: background .12s var(--ease); }
+.prc-tile b { font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
+.prc-tile small { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.prc-tn { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.prc-path .prc-tile + .prc-tile { border-left: 1px solid var(--line); }
+.prc-path .prc-tile:not(:last-child)::after { content: ''; position: absolute; right: -6px; top: 50%; z-index: 1;
+  width: 10px; height: 10px; background: inherit; border-top: 1px solid var(--line-2); border-right: 1px solid var(--line-2);
+  transform: translateY(-50%) rotate(45deg); }
+.prc-path .prc-tile { background: var(--card); }
+.prc-path .prc-tile:hover { background: #FBFBFC; }
+.prc-rest .prc-tile { background: var(--card); border: 1px solid var(--line-2); border-radius: 12px; }
+.prc-rest .prc-tile:hover { background: #FBFBFC; }
+.prc-tile.on, .prc-path .prc-tile.on, .prc-rest .prc-tile.on { background: var(--blue-tint); }
+.prc-rest .prc-tile.on { border-color: #CFE0FF; }
+.prc-tile.on b { color: var(--blue-d); }
+.prc-tile:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.prc-cnt { position: absolute; top: 11px; right: 12px; font-style: normal; font-size: 11px; font-weight: 700;
+  min-width: 18px; padding: 1px 7px; border-radius: var(--r-pill); text-align: center;
+  background: var(--blue-tint); color: var(--blue); }
+.prc-cnt.zero { background: var(--fill); color: var(--ink-3); }
+
+.prc-filter { display: flex; align-items: center; gap: 12px; }
+.prc-selw { width: 240px; max-width: 100%; }
+.prc-person { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; padding: 16px 20px;
+  background: var(--card); border: 1px solid #CFE0FF; border-radius: var(--r-lg); }
+.prc-person { align-items: start; }
+.prc-person p { margin-top: 5px; font-size: 13px; line-height: 1.5; }
+.prc-in { list-style: none; margin-top: 5px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.prc-in button { font-weight: 600; color: var(--blue); }
+.prc-in button:hover { text-decoration: underline; }
+
+.prc-card { overflow: hidden; }
+.prc-head { padding: 20px 24px 18px; }
+.prc-head h3 { margin-top: 3px; font-size: 21px; font-weight: 700; letter-spacing: -.025em; line-height: 1.25; }
+.prc-meta { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 7px 16px; margin-top: 14px; font-size: 13.5px; }
+.prc-meta dt { color: var(--ink-2); }
+.prc-meta dd { line-height: 1.5; }
+.prc-q { color: var(--amber-ink); font-weight: 800; }
+.prc-agn { margin-top: 12px; font-size: 13px; color: var(--ink-2); }
+.prc-cols, .prc-step { display: grid; grid-template-columns: 34px minmax(0, 1.3fr) minmax(0, .9fr) minmax(0, 1.2fr); gap: 14px; }
+.prc-cols { padding: 9px 24px; background: var(--fill); border-top: 1px solid var(--line);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.prc-steps { list-style: none; }
+.prc-step { padding: 13px 24px; border-top: 1px solid var(--line); transition: opacity .15s var(--ease), background .15s var(--ease); }
+.prc-step.dim .prc-what b { color: var(--ink-2); font-weight: 500; }
+.prc-step.dim .prc-res { color: var(--ink-3); }
+.prc-step.dim .prc-tag { color: var(--ink-3); }
+.prc-step.mine { background: #F7F9FF; }
+.prc-n { font-weight: 700; color: var(--ink-3); }
+/* стык: работа переходит к другим людям — тонкая черта над номером, пояснение в подсказке */
+.prc-n.hand { position: relative; }
+.prc-n.hand::before { content: ''; position: absolute; left: 0; top: -7px; width: 14px; height: 2px;
+  border-radius: 2px; background: var(--amber); }
+.prc-what b { font-weight: 600; line-height: 1.4; }
+.prc-sub { text-align: left; display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--blue); }
+.prc-sub.off { color: var(--ink-3); font-weight: 500; }
+button.prc-sub:hover { color: var(--blue-d); text-decoration: underline; }
+.prc-pain { display: block; margin-top: 7px; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; line-height: 1.45;
+  color: var(--red-ink); background: var(--red-soft); }
+.prc-head > .prc-pain { margin-top: 12px; }
+.prc-who { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; }
+.prc-tag { font-size: 12px; font-weight: 600; line-height: 1.3; padding: 3px 8px; border-radius: 7px;
+  color: var(--ink-2); background: var(--fill); }
+.prc-tag.sys { background: transparent; border: 1px solid var(--line-2); padding: 2px 7px; color: var(--ink-3); }
+.prc-tag.ag { background: var(--blue-tint); color: var(--blue-d); font-weight: 500; }
+.prc-tag.q { color: var(--amber-ink); background: var(--amber-soft); }
+.prc-tag.me { background: var(--navy-soft); color: var(--navy); font-weight: 700; }
+.prc-res { font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.prc-foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; padding: 16px 24px 20px;
+  border-top: 1px solid var(--line); background: #FBFBFC; font-size: 13px; }
+.prc-foot ul { margin-top: 6px; padding-left: 18px; }
+.prc-foot li { margin: 3px 0; line-height: 1.45; }
+.prc-foot p { margin-top: 6px; color: var(--ink-2); }
+
+.prc-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.prc-box { padding: 18px 20px 20px; }
+.prc-disp, .prc-minor { margin-top: 10px; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.prc-disp { counter-reset: d; }
+.prc-disp li { position: relative; padding-left: 26px; }
+.prc-disp li::before { counter-increment: d; content: counter(d); position: absolute; left: 0; top: 0;
+  font-weight: 800; color: var(--amber-ink); }
+.prc-disp b, .prc-minor b { display: block; font-size: 13.5px; font-weight: 600; }
+.prc-disp span, .prc-minor span { font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+
+@media (max-width: 1100px) {
+  .prc-person { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .prc-path { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .prc-path .prc-tile:nth-child(3) { border-left: 0; }
+  .prc-path .prc-tile:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .prc-path .prc-tile::after { display: none; }
+  .prc-rest { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .prc-two, .prc-foot { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .prc-top { flex-direction: column; gap: 6px; }
+  .prc-top .sev { margin-top: 0; }
+  .prc-filter { flex-direction: column; align-items: stretch; gap: 6px; }
+  .prc-sel { min-width: 0; width: 100%; }
+  .prc-person { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .prc-head { padding: 18px 16px 16px; }
+  .prc-meta { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+  .prc-meta dd { margin-bottom: 7px; }
+  .prc-cols { display: none; }
+  .prc-step { grid-template-columns: 24px minmax(0, 1fr); gap: 6px 10px; padding: 13px 16px; }
+  .prc-who, .prc-res { grid-column: 2; }
+  .prc-foot { padding: 14px 16px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prc-tile, .prc-step { transition: none; }
+}
 
 /* на телефоне схема ложится столбиком: ряд из четырех карточек в 390px
    превращается в четыре колонки по одному слову */
