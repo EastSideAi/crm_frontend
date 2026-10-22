@@ -44464,6 +44464,9 @@
         '<span class="cl-ic">' + ic(isZoom ? 'play' : 'phone', 15) + '</span>' +
         '<div class="cl-m">' + esc(meta) + '</div>' +
         (st ? '<span class="cl-st ' + c.status + '">' + st + '</span>' : '') +
+        // Видео встречи лежит на канале школы закрытым роликом, ссылку дает сервер.
+        (c.video_url ? '<a class="icobtn" href="' + esc(c.video_url) + '" target="_blank" rel="noopener" ' +
+                  'title="Смотреть запись">' + ic('play', 14) + '</a>' : '') +
         (c.link ? '<a class="icobtn" href="' + esc(c.link) + '" target="_blank" rel="noopener" ' +
                   'title="' + (isZoom ? 'Открыть зум' : 'Открыть запись') + '">' + ic('ext', 14) + '</a>' : '') +
         '<button class="icobtn del" data-delcall="' + c.id + '" title="Удалить">' + ic('x', 14) + '</button>' +
