@@ -21360,16 +21360,18 @@
           'Добавить выплату</button>' : '') + '</div>' +
       ((f.operations || []).length
         ? '<div class="fin-list">' + f.operations.map(function (o) {
-            // Выплата подрядчику (ручной расход фонда) открывается на правку по клику;
-            // автострока и чужая статья (продукт в этом же фонде) — только показ.
-            var payRow = isContractors && o.source === 'фонд' && !o.auto;
+            // Ручной расход фонда открывается на правку по клику (o.editable с бэка:
+            // не автострока и не списание сервиса). У подрядчиков это выплата с
+            // реквизитами и чеком, у остальных фондов — обычная трата.
+            var editRow = !!o.editable;
+            var payRow = isContractors && editRow;
             var docChip = !payRow ? ''
               : (o.doc ? ' <span class="fst doc">' + ic('check', 11) +
                     esc(o.doc.name || 'документ') + '</span>'
                  : (o.status === 'факт' ? ' <span class="fst wait">нет документа</span>' : ''));
-            return '<div class="fl-row fl-2' + (payRow ? ' click' : '') +
+            return '<div class="fl-row fl-2' + (editRow ? ' click' : '') +
               (o.status === 'факт' ? ' paid' : '') + '"' +
-              (payRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
+              (editRow ? ' data-fpay="' + o.id + '"' : '') + '><div class="fl-main">' +
               '<span class="fl-name">' + esc(o.counterparty || o.item || 'без получателя') + '</span>' +
               '<span class="fl-sub">' + finDate(o.date) + ' · ' + esc(o.item || '—') +
               (o.offering ? ' · ' + esc(o.offering) : '') + docChip + '</span>' +
@@ -21490,14 +21492,19 @@
       else finLineForm(null, { form: 'фонд', section: FIN.fundId });
     });
     finPaidBind(view);
-    // Строки-выплаты фонда подрядчиков открываются на правку прямо здесь — форма выплаты
-    // в ведомости той строки (period_id), а не в текущей выбранной.
+    // Ручной расход фонда открывается на правку прямо здесь. Подрядчики — форма выплаты
+    // (реквизиты + чек) в ведомости той строки (period_id). Остальные фонды — обычная
+    // форма расхода, та же, что при заводе; список трат тут за выбранную ведомость,
+    // поэтому правка уходит в неё (finLineForm берёт текущий период).
     Array.prototype.forEach.call(view.querySelectorAll('[data-fpay]'), function (r) {
       r.addEventListener('click', function () {
         var id = r.getAttribute('data-fpay');
         var ops = (FIN.fund && FIN.fund.operations) || [];
         for (var i = 0; i < ops.length; i++) {
-          if (ops[i].id === id) return finPayoutForm(ops[i], { period_id: ops[i].period_id });
+          if (ops[i].id !== id) continue;
+          var o = ops[i];
+          if (isContractors) return finPayoutForm(o, { period_id: o.period_id });
+          return finLineForm(finFundOpToLine(o), { form: 'фонд' });
         }
       });
     });
@@ -22652,6 +22659,16 @@
   function finDirectToLine(it, blockId) {
     return { id: it.id, date: it.date, status: it.status, counterparty: it.counterparty,
       item: it.item, comment: it.comment, amount: it.amount, section: blockId,
+      included: true, payout_to: '', sale_amount: '', percent: '', product: '',
+      payment_id: '' };
+  }
+
+  // Строка расхода фонда (экран «Расходы фонда») → строка для формы расхода. Фонд, с
+  // которого платили, — это текущий открытый на экране фонд (FIN.fundId): список трат тут
+  // за него одного.
+  function finFundOpToLine(o) {
+    return { id: o.id, date: o.date, status: o.status, counterparty: o.counterparty,
+      item: o.item, comment: o.comment, amount: o.amount, section: FIN.fundId,
       included: true, payout_to: '', sale_amount: '', percent: '', product: '',
       payment_id: '' };
   }
