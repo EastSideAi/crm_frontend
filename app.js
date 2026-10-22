@@ -2269,7 +2269,7 @@
   // 'tasks_due' — двигать срок уже поставленной задачи. Отделен от 'tasks_all' по
   // правилу Павла от 19.08.2026: вести чужие задачи может руководитель, а
   // переносить срок — только суперадмин, иначе просрочка ничего не значит.
-  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
+  var CAP_ALL = ['dash', 'tasks', 'tasks_all', 'tasks_due', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'portal', 'students', 'templates', 'grants', 'marketing', 'ads', 'partners', 'team', 'team_view', 'org', 'contractors', 'cz_pay', 'finmodel', 'finmodel_edit', 'academy', 'academy_review', 'zaezdy', 'zaezd_review', 'sublogin', 'planfact', 'cabinet_invite'];
   var ROLES = {
     super_admin:   { label: 'Super Admin',           short: 'полный доступ',        caps: CAP_ALL.slice() },
     head:          { label: 'Руководитель',          short: 'вся компания',         caps: ['cabinet_invite', 'dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'products', 'students', 'templates', 'grants', 'marketing', 'partners', 'team', 'portal', 'contractors', 'finmodel', 'zaezdy', 'zaezd_review', 'academy', 'academy_review', 'planfact', 'org'] },
@@ -2306,6 +2306,10 @@
     producer:      { label: 'Продюсер',               short: 'маркетинг и продажи', caps: ['dash', 'tasks', 'tasks_all', 'inbox', 'clients', 'path', 'finance', 'analytics', 'marketing', 'portal', 'planfact', 'team_view', 'org'] },
     partner:       { label: 'Партнёр',                short: 'свои лиды',            caps: ['dash', 'tasks', 'partners'] },
     contractor:    { label: 'Подрядчик',              short: 'задачи',               caps: ['dash', 'tasks'] },
+    /* Подрядчик по рекламе (Вера 22.10.2026): одна дверь — вкладка «Реклама».
+       Весь раздел «Маркетинг» ему не отдаем: там сквозная воронка, оплаты клиентов
+       и план запуска, а внешнему человеку нужны его показы, клики и расход. */
+    ads_contractor: { label: 'Подрядчик по рекламе',  short: 'сводка рекламы',       caps: ['dash', 'ads'] },
     diagnostician: { label: 'Диагност',               short: 'диагностика',          caps: ['dash', 'tasks', 'clients', 'analytics', 'portal'] },
     curator:       { label: 'Тьютор (старая роль)',  short: 'устар., без ограничений', caps: ['cabinet_invite', 'dash', 'tasks', 'inbox', 'clients', 'students', 'templates', 'portal'] },
     grant_admin:   { label: 'Администратор гранта',   short: 'гранты',               caps: ['dash', 'tasks', 'grants', 'clients', 'portal'] },
@@ -2423,7 +2427,9 @@
        про продукты, другой про людей. Видят все, cap dash есть у каждой роли. */
     { id: 'org', label: 'Структура', icon: 'team', cap: 'org' },
     { id: 'grants', label: 'Гранты', icon: 'award', cap: 'grants' },
-    { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing' },
+    /* Две двери в один раздел: свои приходят по `marketing` и видят все вкладки,
+       подрядчик по трафику — по `ads`, и у него остается одна «Реклама» (mkTabsFor). */
+    { id: 'marketing', label: 'Маркетинг', icon: 'mega', cap: 'marketing|ads' },
     /* Цифры лежат подряд (просьба Веры 08.10.2026): «Маркетинг, Соцстатистика,
        Аналитика бота рядом друг с другом». До этого соцсети стояли через два
        пункта, а аналитика бота вообще в хвосте меню, за финансовыми разделами, и
@@ -2891,14 +2897,26 @@
                  ['launch', 'Запуски'], ['efir', 'Эфиры'],
                  ['ads', 'Реклама'], ['spend', 'Расход'], ['plan', 'Декомпозиция'],
                  ['links', 'Ссылки и сценарии']];
+  /* Какие вкладки «Маркетинга» человеку положены. У подрядчика по рекламе (cap `ads`
+     без `marketing`) остается одна «Реклама»: остальные вкладки — сквозная воронка,
+     оплаты клиентов, план запуска и ссылки бота, и внешнему человеку их не отдаем.
+     Право все равно проверяет сервер: спрятанная вкладка открывается прямой ссылкой. */
+  function mkTabsFor() {
+    if (can('marketing')) return MK_TABS;
+    return MK_TABS.filter(function (o) { return o[0] === 'ads'; });
+  }
   function mkTabKnown(t) {
-    return MK_TABS.filter(function (o) { return o[0] === t; }).length > 0;
+    return mkTabsFor().filter(function (o) { return o[0] === t; }).length > 0;
   }
   /* 'unit' — прежняя «Декомпозиция» (модель холодного трафика), снятая
      09.10.2026: экран заменен декомпозицией запуска. Старый ключ лежит в
      сохраненном UI у всей команды и в ссылках, поэтому ведем его на новую
      вкладку, а не роняем человека на дашборд. */
-  function mkTabOk(t) { return t === 'unit' ? 'plan' : (mkTabKnown(t) ? t : 'dash'); }
+  function mkTabOk(t) {
+    var def = mkTabsFor()[0] ? mkTabsFor()[0][0] : 'dash';
+    if (t === 'unit') t = 'plan';
+    return mkTabKnown(t) ? t : def;
+  }
 
   /* topbar: контекстные табы */
   function renderTopbar() {
@@ -3005,8 +3023,8 @@
          воронка курса (cfDays), уберешь — она замрет на последнем выбранном окне */
       /* «Воронка» и «Источники» — один ответ дашборда, две точки зрения: где теряем
          людей и куда уходят деньги. Ключ 'dash' сохранен: он лежит в сохраненном UI. */
-      var mkTabs = MK_TABS;
-      if (state.mkTab === 'unit') state.mkTab = 'plan';
+      var mkTabs = mkTabsFor();
+      state.mkTab = mkTabOk(state.mkTab);
       var mkPers = [[7, '7 дней'], [30, '30 дней'], [90, '90 дней'], [0, 'Всё время']];
       /* на «Запусках» периода нет: запуск меряется нарастающим итогом от старта */
       tb.innerHTML = '<nav class="tabs">' + mkTabs.map(function (o) {
@@ -32752,6 +32770,10 @@
   }
 
   function renderMarketing(view) {
+    /* Вкладка приезжает из сохраненного UI и из ссылки, поэтому нормализуем ее по
+       правам: иначе подрядчик по рекламе со старой ссылкой на «Сквозную» получал бы
+       экран, который его ручкам отвечает 403. */
+    state.mkTab = mkTabOk(state.mkTab);
     /* список людей принадлежит вкладке «Запуски»: на соседней он висел бы поверх
        чужого экрана и объяснял цифры, которых там нет */
     if (state._lpPeople && state.mkTab !== 'launch') launchPeopleClose();
