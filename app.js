@@ -23904,7 +23904,14 @@
      Начисление = ставка × оплаты клиента; ставку (5% от оплат по умолчанию или фикс
      за клиента) задают прямо тут. Считает вознаграждение сервер — своей копии правила
      во фронте нет. Экран сквозной: партнёр ведёт клиента не один период, своей полосы
-     периодов тут нет (как у «Программ»). */
+     периодов тут нет (как у «Программ»).
+
+     Партнёрской программы тут НЕТ и быть не должно (правка Романа 22.10.2026: «нахрена
+     она нужна в финансах, если у нас в другом месте всё реализовано»). Реферальную
+     ссылку партнёр берёт в своём кабинете и в боте, который его зарегистрировал, —
+     вторая кнопка с той же ссылкой в ведомости только размывала границу: здесь деньги,
+     а не работа с партнёрами. По той же причине экран не показывает заведённых
+     партнёров без клиентов: в ведомости они ничего не значат. */
   function finLoadPartners() {
     finBusy('partners', function (done) {
       api('/admin/api/partners/payouts').then(function (r) {
@@ -23936,13 +23943,10 @@
     if (FIN.partners === 'none') return finErrView(view);
     var P = FIN.partners;
     var allPartners = P.partners || [];
-    // С начислениями — полной карточкой (кому и за кого платим). Без клиентов — заведён,
-    // но ещё никого не привёл: показываем компактно, чтобы можно было скопировать ссылку
-    // и отдать партнёру (раньше таких прятали как шум, но теперь партнёров заводим здесь же).
+    // Показываем только тех, у кого есть приведённые клиенты: это разговор про деньги.
+    // Заведённый партнёр без клиентов — факт партнёрской программы, а не ведомости.
     var partners = allPartners.filter(function (p) { return (p.clients || []).length > 0; });
-    var idle = allPartners.filter(function (p) { return (p.clients || []).length === 0; });
     var def = finPartnerDefRate(P);
-    var partnerLink = function (code) { return MK_GO + encodeURIComponent(code || ''); };
 
     var totalDue = 0, clientsDue = 0;
     partners.forEach(function (p) {
@@ -24035,34 +24039,17 @@
               (p.clients.length) + ' ' +
               plural(p.clients.length, 'клиент', 'клиента', 'клиентов') + '</div></div>' +
           '<span class="list-count fin-count">к выплате <b>' + finRub(p.due || 0) + '</b></span>' +
-          '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-            '">' + ic('card', 12) + 'Ссылка</button>' +
         '</div>' +
         p.clients.map(clientRow).join('') +
         foot +
       '</div>';
     }).join('');
 
-    // Партнёры без клиентов — компактной карточкой: имя, код и кнопка скопировать ссылку,
-    // чтобы было видно, кому ещё не капало, и под рукой была его реф-ссылка.
-    var idleCards = idle.map(function (p) {
-      return '<div class="card listcard fs-seller"><div class="list-tools">' +
-        '<div><div class="t fe-t">' + esc(p.name || 'Партнёр') + '</div>' +
-          '<div class="s fe-s">код ' + esc(p.ref_code || '—') + ' · пока не привёл клиентов</div></div>' +
-        '<button class="qchip fpt-right" data-copylink="' + esc(partnerLink(p.ref_code)) +
-          '">' + ic('card', 12) + 'Скопировать ссылку</button>' +
-      '</div></div>';
-    }).join('');
-    var idleBlock = idleCards
-      ? '<div class="sec-head" style="margin:22px 4px 10px"><span class="ic">' + ic('team', 14) +
-        '</span><div><div class="t">Заведены, ждут клиентов</div>' +
-        '<div class="s">скопируйте ссылку и отдайте партнёру — как приведёт клиента, он поднимется наверх</div>' +
-        '</div></div>' + idleCards
-      : '';
-
-    var body = (cards || idleCards)
-      ? cards + idleBlock
-      : '<div class="card listcard"><div class="empty">Партнёров пока нет.</div></div>';
+    var body = cards
+      ? cards
+      : '<div class="card listcard"><div class="empty">' +
+        'Начислений пока нет: никто из партнёров не привёл оплатившего клиента.' +
+        '</div></div>';
 
     // Заголовок раздела и пояснение уже стоят в шапке страницы (renderHead) — второй
     // карточки «Партнёрские выплаты» тут не заводим, чтобы не повторять одно и то же.
@@ -24072,9 +24059,6 @@
 
     var rb = el('fpt-rate');
     if (rb) rb.addEventListener('click', function () { finPartnerRateForm(def); });
-    Array.prototype.forEach.call(view.querySelectorAll('[data-copylink]'), function (b) {
-      b.addEventListener('click', function () { copyText(b.getAttribute('data-copylink'), b); });
-    });
     Array.prototype.forEach.call(view.querySelectorAll('[data-req]'), function (b) {
       b.addEventListener('click', function () {
         var p = partners.filter(function (x) { return String(x.id) === b.getAttribute('data-req'); })[0];
